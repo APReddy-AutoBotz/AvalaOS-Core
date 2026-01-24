@@ -1,0 +1,19 @@
+# Rule: Core Feature Lockdown
+> Priority: CRITICAL
+
+Strictly follow these constraints for all agentic tasks. This ensures the "Golden Source of Truth" defined in `feature_inventory.md` is never compromised.
+
+### 1. Read-Only Protection
+The following files are LATCHED. You may READ them to understand context, but you are FORBIDDEN from writing to or modifying them without explicit, one-time permission:
+- `services/geminiProvider.ts` (Core AI Logic)
+- `services/prompts.ts` (Proprietary Prompts)
+- `components/widgets/*.tsx` (Dashboard UI)
+- `types.ts` & `data/docTemplates.ts` (Data Structure)
+
+### 2. Mandatory Approval Workflow
+- Before any file modification, you MUST generate an **Implementation Plan Artifact**.
+- You must wait for "User Approval" on the artifact before executing any `write_file` or `replace_content` commands.
+
+### 3. Checkpointing
+- For every approved change, you MUST perform a `git commit` with a clear message describing the change.
+- This creates a persistent "undo stack" for the developer.
