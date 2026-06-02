@@ -1,4 +1,4 @@
--- KlarityPM Delivery Role Policies
+-- AvalaOS Core Delivery Role Policies
 -- Adds role-aware server-side delivery mutation guards for Supabase/PostgreSQL.
 
 CREATE OR REPLACE FUNCTION public.has_org_permission(p_org_id UUID, p_permission TEXT)

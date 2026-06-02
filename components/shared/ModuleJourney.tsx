@@ -24,7 +24,7 @@ const moduleIcon: Record<ProductModuleKey, React.FC<{ className?: string }>> = {
 
 const moduleOutcome: Record<ProductModuleKey, string> = {
     assess: 'Decision pack',
-    docs: 'Approved docs',
+    docs: 'Governed docs',
     delivery: 'Executable backlog',
     monitor: 'Value insights',
 };
@@ -47,7 +47,7 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentVi
                     <p className="mt-1 text-sm font-black text-[#002C4B] dark:text-white">
                         {isSingleModule
                             ? `${visibleModules[0].label} module enabled`
-                            : 'Assess -> Docs -> Delivery -> Monitor'}
+                            : 'Avala Assess -> Avala Studio -> Avala Delivery Lite -> Avala Monitor'}
                     </p>
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto xl:justify-end">

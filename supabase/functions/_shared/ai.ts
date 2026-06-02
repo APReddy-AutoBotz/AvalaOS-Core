@@ -18,7 +18,7 @@ export const assertSupportedProvider = (provider: string): ProviderType => {
 };
 
 const buildDocumentPrompt = (projectDetails: ProjectDetails, fileName: string, sourceText: string | null) => `
-You are KlarityPM, an enterprise automation and AI delivery documentation assistant.
+You are AvalaOS Core, an enterprise governed AI and automation delivery documentation assistant.
 
 Generate a governed starter documentation pack for:
 - Company: ${projectDetails.company || 'Unknown'}
@@ -125,7 +125,7 @@ export const generateDocumentWithProvider = async (
   const apiKey = getProviderKey(provider);
   if (!apiKey) throw new Error(`${provider.toUpperCase()}_API_KEY is not configured server-side.`);
 
-  const system = 'You generate governed enterprise process documentation for KlarityPM. Return valid JSON only.';
+  const system = 'You generate governed enterprise process documentation for AvalaOS Core. Return valid JSON only.';
   const prompt = buildDocumentPrompt(projectDetails, fileName, sourceText);
   const result = provider === 'groq'
     ? await callGroqJson(apiKey, prompt, system)

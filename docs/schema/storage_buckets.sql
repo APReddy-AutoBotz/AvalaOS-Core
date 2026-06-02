@@ -1,4 +1,4 @@
--- KlarityPM Storage Buckets And Policies
+-- AvalaOS Core Storage Buckets And Policies
 -- Creates private buckets for source uploads and generated exports.
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -52,26 +52,26 @@ BEGIN
 END;
 $$;
 
-DROP POLICY IF EXISTS "Klarity members can read org storage objects" ON storage.objects;
-DROP POLICY IF EXISTS "Klarity members can upload source objects" ON storage.objects;
-DROP POLICY IF EXISTS "Klarity members can update source objects" ON storage.objects;
-DROP POLICY IF EXISTS "Klarity members can delete source objects" ON storage.objects;
+DROP POLICY IF EXISTS "Avala members can read org storage objects" ON storage.objects;
+DROP POLICY IF EXISTS "Avala members can upload source objects" ON storage.objects;
+DROP POLICY IF EXISTS "Avala members can update source objects" ON storage.objects;
+DROP POLICY IF EXISTS "Avala members can delete source objects" ON storage.objects;
 
-CREATE POLICY "Klarity members can read org storage objects" ON storage.objects
+CREATE POLICY "Avala members can read org storage objects" ON storage.objects
     FOR SELECT USING (
         bucket_id IN ('source-uploads', 'klarity-exports')
         AND public.storage_object_org_id(name) IS NOT NULL
         AND public.is_active_org_member(public.storage_object_org_id(name))
     );
 
-CREATE POLICY "Klarity members can upload source objects" ON storage.objects
+CREATE POLICY "Avala members can upload source objects" ON storage.objects
     FOR INSERT WITH CHECK (
         bucket_id = 'source-uploads'
         AND public.storage_object_org_id(name) IS NOT NULL
         AND public.is_active_org_member(public.storage_object_org_id(name))
     );
 
-CREATE POLICY "Klarity members can update source objects" ON storage.objects
+CREATE POLICY "Avala members can update source objects" ON storage.objects
     FOR UPDATE USING (
         bucket_id = 'source-uploads'
         AND public.storage_object_org_id(name) IS NOT NULL
@@ -83,7 +83,7 @@ CREATE POLICY "Klarity members can update source objects" ON storage.objects
         AND public.is_active_org_member(public.storage_object_org_id(name))
     );
 
-CREATE POLICY "Klarity members can delete source objects" ON storage.objects
+CREATE POLICY "Avala members can delete source objects" ON storage.objects
     FOR DELETE USING (
         bucket_id = 'source-uploads'
         AND public.storage_object_org_id(name) IS NOT NULL

@@ -1,4 +1,4 @@
--- KlarityPM Delivery Comments and Activity
+-- AvalaOS Core Delivery Comments and Activity
 -- Moves collaboration history out of task metadata into tenant-scoped, queryable tables.
 
 CREATE TABLE IF NOT EXISTS task_comments (

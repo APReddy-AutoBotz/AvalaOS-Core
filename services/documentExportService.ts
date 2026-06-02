@@ -46,7 +46,7 @@ const renderList = (items: unknown[]) => {
 };
 
 export const renderGeneratedArtifactsMarkdown = (artifacts: GeneratedArtifacts, template?: DocTemplate | null) => [
-  '# KlarityPM Generated Document',
+  '# AvalaOS Core Generated Document',
   '',
   `Template: ${template?.title || 'Selected template'}`,
   `Exported At: ${new Date().toISOString()}`,

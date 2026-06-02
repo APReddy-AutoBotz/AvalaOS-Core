@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 
-const APP_PREFIX = 'klarity-pm-v1';
+const APP_PREFIX = 'avalaos-core-v1';
 
 export const StorageKeys = {
     THEME: `${APP_PREFIX}-theme`,

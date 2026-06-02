@@ -190,7 +190,7 @@ const createArtifacts = (
         title: `PDD: ${projectName}`,
         sections: [
             { key: 'as-is', title: 'As-Is Process', content: 'Current work is split across email, spreadsheets, business applications, and manual status follow-ups.' },
-            { key: 'to-be', title: 'To-Be Process', content: 'KlarityPM routes work through assessed automation decisions, generated requirements, and a managed delivery backlog.' },
+            { key: 'to-be', title: 'To-Be Process', content: 'AvalaOS Core routes work through assessed automation decisions, generated requirements, governance review, and a managed delivery backlog.' },
             { key: 'controls', title: 'Controls and HITL', content: 'Human review remains mandatory for low-confidence inputs, policy exceptions, sensitive data, and high-impact approvals.' },
         ],
     },

@@ -4,40 +4,39 @@ type IconProps = {
     className?: string;
 };
 
-export const KlarityWordmark: React.FC<IconProps> = ({ className }) => (
-    <svg className={className} viewBox="0 0 300 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="KlarityPM">
-        <text x="0" y="68" fill="var(--kp-logo-word, #002C4B)" fontFamily="'Playfair Display', Georgia, serif" fontSize="62" fontWeight="800" letterSpacing="-2.7">Klarity</text>
-        <g transform="translate(107 11)">
+export const AvalaWordmark: React.FC<IconProps> = ({ className }) => (
+    <svg className={className} viewBox="0 0 330 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvalaOS Core">
+        <text x="0" y="68" fill="var(--kp-logo-word, #002C4B)" fontFamily="'Playfair Display', Georgia, serif" fontSize="62" fontWeight="800">Avala</text>
+        <g transform="translate(112 11)">
             <path d="M20 0V12" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
             <path d="M3 17L12 23" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
             <path d="M37 17L28 23" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
             <path d="M8 5L14 13" stroke="#E85D04" strokeWidth="4" strokeLinecap="round" />
             <path d="M32 5L26 13" stroke="#E85D04" strokeWidth="4" strokeLinecap="round" />
         </g>
-        <g transform="translate(197 17)">
-            <rect x="2" y="2" width="76" height="62" rx="11" fill="var(--kp-logo-pm-bg, rgba(255, 188, 3, 0.12))" stroke="#FFBC03" strokeWidth="5" />
-            <text x="14" y="48" fill="#FFBC03" fontFamily="Inter, sans-serif" fontSize="34" fontWeight="900" letterSpacing="-2">PM</text>
+        <g transform="translate(198 17)">
+            <rect x="2" y="2" width="112" height="62" rx="11" fill="var(--kp-logo-pm-bg, rgba(255, 188, 3, 0.12))" stroke="#FFBC03" strokeWidth="5" />
+            <text x="14" y="44" fill="#FFBC03" fontFamily="Inter, sans-serif" fontSize="26" fontWeight="900">CORE</text>
         </g>
     </svg>
 );
 
-export const KlarityLogo: React.FC<IconProps> = ({ className }) => (
+export const AvalaLogo: React.FC<IconProps> = ({ className }) => (
     <svg className={className} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <defs>
-            <linearGradient id="klarity-mark-core" x1="8" y1="7" x2="40" y2="41" gradientUnits="userSpaceOnUse">
+            <linearGradient id="avala-mark-core" x1="8" y1="7" x2="40" y2="41" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#002C4B" />
                 <stop offset="0.58" stopColor="#003F6B" />
                 <stop offset="1" stopColor="#FFBC03" />
             </linearGradient>
-            <linearGradient id="klarity-mark-edge" x1="12" y1="10" x2="36" y2="39" gradientUnits="userSpaceOnUse">
+            <linearGradient id="avala-mark-edge" x1="12" y1="10" x2="36" y2="39" gradientUnits="userSpaceOnUse">
                 <stop stopColor="white" stopOpacity="0.96" />
                 <stop offset="1" stopColor="white" stopOpacity="0.58" />
             </linearGradient>
         </defs>
         <rect x="4.5" y="4.5" width="39" height="39" rx="12" fill="#002C4B" />
-        <rect x="5.5" y="5.5" width="37" height="37" rx="11" stroke="url(#klarity-mark-core)" strokeWidth="2" />
-        <path d="M14.5 34V14H19V23.4L28.1 14H34L25 23.1L34.6 34H28.7L22 26.1L19 29.1V34H14.5Z" fill="url(#klarity-mark-edge)" />
-        <path d="M31.2 15.4L35.6 11L37 12.4L32.6 16.8L31.2 15.4Z" fill="#FFBC03" />
+        <rect x="5.5" y="5.5" width="37" height="37" rx="11" stroke="url(#avala-mark-core)" strokeWidth="2" />
+        <path d="M23.8 12.5L35.5 34H30.5L28.3 29.8H19.4L17.2 34H12.4L23.8 12.5ZM21.5 25.7H26.1L23.8 21L21.5 25.7Z" fill="url(#avala-mark-edge)" />
         <circle cx="36.3" cy="11.7" r="2.2" fill="#FFBC03" />
     </svg>
 );

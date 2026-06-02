@@ -459,6 +459,33 @@ export interface HandoffPack {
     approvalMetadata: { status: AssessStatus; generatedAt: string };
 }
 
+export type AvalaGovernAutonomyLevel =
+    | 'Observe'
+    | 'Advise'
+    | 'Act With Approval'
+    | 'Autonomous Within Guardrails';
+
+export type AvalaGovernRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical' | 'Blocked';
+
+export interface AvalaGovernLiteCard {
+    agentOrAutomationName: string;
+    mappedProcessId: string;
+    businessOwner: string;
+    technicalOwner: string;
+    technologyPattern: string;
+    systemsAccessed: string[];
+    toolsUsed: string[];
+    dataSensitivity: string;
+    autonomyLevel: AvalaGovernAutonomyLevel;
+    riskLevel: AvalaGovernRiskLevel;
+    allowedActions: string[];
+    blockedActions: string[];
+    humanApprovalRequired: boolean;
+    evidenceRequired: boolean;
+    reviewFrequency: string;
+    auditStatus: string;
+}
+
 export interface AssessmentScoreResult {
     scoreVersion: string; // e.g., "v1.0"
     calculatedAt: string; // ISO 8601

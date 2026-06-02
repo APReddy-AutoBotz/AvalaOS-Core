@@ -144,7 +144,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
             <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 flex justify-between items-start">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{currentOrganization.name}</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Workspace Settings & Foundation</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Avala Admin foundation</p>
                 </div>
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg p-4 text-right">
                     <div className="text-amber-700 dark:text-amber-400 font-semibold mb-1 uppercase text-xs tracking-wider">
@@ -214,7 +214,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                         <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Commercial configuration</p>
                         <h2 className="mt-1 text-xl font-black text-[#002C4B] dark:text-white">Enabled product modules</h2>
                         <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-                            Configure the workspace as Assess-only, Docs-only, Delivery-only, Monitor-only, any two-module bundle, or the complete Assess to Monitor suite.
+                            Configure the workspace as Avala Assess-only, Avala Studio-only, Avala Delivery Lite-only, Avala Monitor-only, any two-module bundle, or the complete governed lifecycle.
                         </p>
                     </div>
                     <button
@@ -536,7 +536,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     <div>
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Recommended Starter Packs</h2>
                         <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xl">
-                            Based on your Industry ({industry || 'Not set'}), KlarityPM Assess recommends pre-configured process templates to accelerate your discovery.
+                            Based on your Industry ({industry || 'Not set'}), Avala Assess recommends pre-configured process templates to accelerate discovery.
                         </p>
                     </div>
                     <button disabled className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-medium rounded-lg cursor-not-allowed border border-slate-300 dark:border-slate-600" title="Module 2 Feature">

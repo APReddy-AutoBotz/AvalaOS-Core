@@ -27,7 +27,7 @@ const ProcessingView: React.FC = () => {
         <div className="absolute inset-0 border-4 border-abz-indigo-500/20 rounded-full"></div>
         <div className="absolute inset-0 border-t-4 border-abz-indigo-500 rounded-full animate-spin"></div>
       </div>
-      <h2 className="mt-8 text-2xl font-bold text-text-light dark:text-text-dark">Klarity at Work...</h2>
+      <h2 className="mt-8 text-2xl font-bold text-text-light dark:text-text-dark">Avala Assess at Work...</h2>
       <p className="mt-2 text-slate-500 dark:text-slate-400">Please wait while we orchestrate your project documentation.</p>
 
       <div className="mt-12 text-left space-y-4">

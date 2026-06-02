@@ -1,4 +1,4 @@
--- KlarityPM Delivery App-ID Mapping
+-- AvalaOS Core Delivery App-ID Mapping
 -- Keeps PostgreSQL UUID primary keys while preserving stable UI IDs during the migration from prototype data.
 
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_id TEXT;

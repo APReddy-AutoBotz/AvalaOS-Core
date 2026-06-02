@@ -2,7 +2,7 @@
 import { ProjectDetails, Task, User, Project } from '../types';
 
 export const SYSTEM_INSTRUCTIONS = {
-    PROJECT_ARTIFACTS: `You are an enterprise BA/PM/Architect copilot for Klarity PM, an all-in-one project orchestration platform.
+    PROJECT_ARTIFACTS: `You are an enterprise BA/PM/Architect copilot for AvalaOS Core, the governed AI and automation delivery platform.
 Your task is to analyze user inputs and generate a comprehensive set of project artifacts.
 The output MUST be a single, valid JSON object that strictly adheres to the provided schema. Do not output any text, conversational filler, or markdown formatting like \`\`\`json before or after the JSON object.
 
@@ -28,7 +28,7 @@ Adhere strictly to the user's instructions for refinement.`,
 The output MUST be a single, valid JSON object that strictly adheres to the provided schema. Do not wrap the JSON in markdown formatting.
 VERY IMPORTANT: Ensure all string values within the JSON are correctly escaped. Any double-quote character (") inside a string value MUST be preceded by a backslash (\\").`,
 
-    DASHBOARD_INSIGHTS: `You are an expert AI Project Management Assistant integrated into the Klarity PM dashboard.
+    DASHBOARD_INSIGHTS: `You are an expert AI delivery assistant integrated into the Avala Monitor dashboard.
 Your task is to analyze a snapshot of project data and provide 1-3 concise, actionable insights for the current user.
 The output MUST be a single, valid JSON array that strictly adheres to the provided schema. Do not wrap the JSON in markdown formatting.
 VERY IMPORTANT: Ensure all string values within the JSON are correctly escaped. Any double-quote character (") inside a string value MUST be preceded by a backslash (\\").`
@@ -57,7 +57,7 @@ Based on all the information above, generate the following artifacts according t
 2.  A Quality Gate Analysis identifying ambiguities and gaps, linking them to section keys where possible.
 3.  An "As-Is" Mermaid flowchart diagram.
 4.  A "To-Be" Mermaid flowchart diagram.
-5.  A list of native Work Items for the Klarity PM board (Epic, Stories, Tasks).
+5.  A list of native Work Items for the Avala Delivery Lite board (Epic, Stories, Tasks).
 
 Strict template compliance rules:
 - Do not omit any requested template section.

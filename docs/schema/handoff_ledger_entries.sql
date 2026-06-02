@@ -1,4 +1,4 @@
--- KlarityPM Lifecycle Handoff Ledger Persistence
+-- AvalaOS Core Lifecycle Handoff Ledger Persistence
 -- Targets: PostgreSQL / Supabase
 -- Purpose: persist Assess -> Docs -> Delivery -> Monitor handoff events beyond browser storage.
 

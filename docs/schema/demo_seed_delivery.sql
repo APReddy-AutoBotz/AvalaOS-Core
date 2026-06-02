@@ -1,4 +1,4 @@
--- KlarityPM Delivery Demo Seed for Supabase
+-- AvalaOS Core Delivery Demo Seed for Supabase
 -- Seeds projects, epics, sprints, and tasks using stable app_id values from the prototype.
 
 DO $$

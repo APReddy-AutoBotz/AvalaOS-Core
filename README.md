@@ -1,35 +1,37 @@
-# KlarityPM
+# AvalaOS Core
 
-KlarityPM is the AI Delivery Brain for enterprise automation and AI teams. It helps organizations assess automation and AI opportunities, generate governed documentation, create traceable delivery work, and give leadership visibility from idea to execution.
+AvalaOS Core is the governed AI and automation delivery platform. It helps teams evaluate processes, generate delivery-ready documentation, govern agents and automations, manage human approvals, and prove decisions with evidence.
 
-Enterprise tagline: Governed automation and AI delivery workspace.
+Canonical tagline: Evaluate before you automate. Govern before you execute.
 
-Investor framing: Cursor for Automation and AI Delivery Teams.
-
-The product is currently a production-transition build. It demonstrates the Assess -> Docs -> Delivery -> Monitor lifecycle, but it is not yet production ready for enterprise pilot or GA use.
+AvalaOS Core is not a generic project management tool. It owns the governed path from process assessment to decision pack, documentation, delivery handoff, approvals, and portfolio visibility.
 
 ## Source Of Truth
 
-Start with the canonical documentation index:
+Start with the canonical documentation set:
 
-- [docs/00_DOCS_INDEX.md](docs/00_DOCS_INDEX.md)
-
-The active narrative docs are:
-
+- [Source of Truth](docs/00_SOURCE_OF_TRUTH.md)
 - [Product Strategy](docs/01_PRODUCT_STRATEGY.md)
 - [Product Requirements](docs/02_PRODUCT_REQUIREMENTS.md)
 - [Technical Architecture](docs/03_TECHNICAL_ARCHITECTURE.md)
-- [Implementation Roadmap](docs/04_IMPLEMENTATION_ROADMAP.md)
-- [Current Implementation Status](docs/05_CURRENT_IMPLEMENTATION_STATUS.md)
-- [Security And Enterprise Readiness](docs/06_SECURITY_ENTERPRISE_READINESS.md)
+- [MVP Roadmap](docs/04_MVP_ROADMAP.md)
+- [Implementation Status](docs/05_IMPLEMENTATION_STATUS.md)
+- [Security and Governance](docs/06_SECURITY_AND_GOVERNANCE.md)
+- [Avala Govern Framework](docs/07_AVALA_GOVERN_FRAMEWORK.md)
+- [Migration from historical prototype naming](docs/08_MIGRATION_FROM_KLARITYPM.md)
 
-Historical and superseded docs are kept in `docs/archive/`.
+## Platform Modules
+
+- Avala Assess: process intake, deterministic scoring, AI/RPA/workflow/HITL/agentic fitment, and decision packs.
+- Avala Studio: BRD, PRD, PDD, SDD, diagrams, work items, and editable governed documents.
+- Avala Govern Lite: governance cards for agents and automations with autonomy, risk, approvals, evidence, and blocked actions.
+- Avala Delivery Lite: approved work items, board, owners, status, blockers, and handoff lineage.
+- Avala Monitor: value, risk, blockers, and portfolio visibility.
+- Avala Admin / Avala AI Controls: organization, users, providers, BYOK/key reference, audit, and security settings.
 
 ## Golden Path
 
-Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Docs Handoff -> Generated Document -> Work Items -> Delivery Board -> Monitor Dashboard.
-
-KlarityPM should not drift into a generic project management tool. Its value is the governed handoff from assessment to documentation to delivery to executive monitoring.
+Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern Lite -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Lite Board -> Avala Monitor Dashboard.
 
 Assess scoring is deterministic. The current Assess engine annualizes business value from annual volume and average effort per case, then exposes annual manual effort, estimated saved hours, savings, build/run cost bands, payback, risk gates, HITL signals, and formula summaries in the Decision Pack.
 
@@ -55,6 +57,7 @@ npm run dev
 Run release checks:
 
 ```powershell
+npm run typecheck
 npm run test
 npm run build
 npm audit --audit-level=moderate
@@ -78,8 +81,8 @@ Authored Edge Function source:
 - `supabase/functions/export-document`
 - `supabase/functions/export-decision-pack`
 
-These functions still need Supabase deployment, environment secrets, and private storage buckets before they can be used in a live pilot. The AI governance migration has been applied to the live Supabase project.
+These functions still need Supabase deployment, environment secrets, and private storage buckets before they can be used in a live pilot.
 
-## Production Readiness Note
+## Repository Direction
 
-Do not treat this build as production ready until the blockers in [docs/05_CURRENT_IMPLEMENTATION_STATUS.md](docs/05_CURRENT_IMPLEMENTATION_STATUS.md) and [docs/06_SECURITY_ENTERPRISE_READINESS.md](docs/06_SECURITY_ENTERPRISE_READINESS.md) are resolved, especially server-side AI execution, BYOK handling, RLS enforcement, audit coverage, document export, and E2E coverage.
+This workspace is being prepared for `APReddy-AutoBotz/AvalaOS-Core`. Do not push changes from this migration to the historical prototype repository.

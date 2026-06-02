@@ -44,7 +44,7 @@ const ViewLoadingFallback = () => (
       <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Loading workspace</p>
       <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">Preparing this module...</h1>
       <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-        KlarityPM loads major product areas on demand so the first workspace opens faster.
+        AvalaOS Core loads major product areas on demand so the first workspace opens faster.
       </p>
     </div>
   </div>
@@ -244,7 +244,7 @@ function App() {
       targetType: 'Document Generation',
       targetId: 'pending-doc-generation',
       title: `${payload.processName} moved to Docs`,
-      summary: `Assessment decision ${payload.decision || 'ready'} was handed off for BRD, PRD, PDD, and diagram generation.`,
+      summary: `Assessment decision ${payload.decision || 'ready'} was handed off to Avala Studio for BRD, PRD, PDD, and diagram generation.`,
       evidenceRefs: [payload.processId, payload.assessmentId || 'assessment-pending'],
       metadata: {
         processId: payload.processId,
@@ -559,7 +559,7 @@ function App() {
           <div className="premium-surface rounded-3xl p-8 text-center">
             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Module not enabled</p>
             <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">This workspace is configured for a different module set.</h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Only enabled modules appear in navigation. Ask a workspace admin to update module access in Settings if this team needs the complete Assess, Docs, Delivery, and Monitor suite.</p>
+            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Only enabled modules appear in navigation. Ask an Avala Admin to update module access if this team needs the complete Avala Assess, Avala Studio, Avala Delivery Lite, and Avala Monitor suite.</p>
             <button onClick={() => setCurrentView(firstEnabledView(enabledModules))} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">
               Open Enabled Module
             </button>

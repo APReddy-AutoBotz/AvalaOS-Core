@@ -1,4 +1,4 @@
--- KlarityPM Timesheet Role Policies
+-- AvalaOS Core Timesheet Role Policies
 -- Depends on helper functions from delivery_role_policies.sql:
 --   public.is_active_org_member
 --   public.has_org_permission

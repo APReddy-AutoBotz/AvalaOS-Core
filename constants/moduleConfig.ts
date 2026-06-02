@@ -8,27 +8,27 @@ export const ALL_PRODUCT_MODULES: {
 }[] = [
     {
         key: 'assess',
-        label: 'Assess',
-        shortLabel: 'Assess',
-        description: 'Process intake, automation fit, AI/RPA/HITL decisions, governance review, and decision packs.',
+        label: 'Avala Assess',
+        shortLabel: 'Avala Assess',
+        description: 'Process intake, deterministic scoring, automation/AI/RPA/workflow/HITL/agentic fitment, and decision packs.',
     },
     {
         key: 'docs',
-        label: 'Docs',
-        shortLabel: 'Docs',
-        description: 'Generate and review BRD, PRD, PDD, diagrams, approval artifacts, and document templates.',
+        label: 'Avala Studio',
+        shortLabel: 'Avala Studio',
+        description: 'Generate and review BRD, PRD, PDD, SDD, diagrams, work items, and governed document templates.',
     },
     {
         key: 'delivery',
-        label: 'Delivery',
-        shortLabel: 'Delivery',
-        description: 'Backlog, sprint planning, delivery boards, resource capacity, automations, and execution tracking.',
+        label: 'Avala Delivery Lite',
+        shortLabel: 'Delivery Lite',
+        description: 'Approved work items, board, owners, status, blockers, and handoff lineage without replacing delivery systems.',
     },
     {
         key: 'monitor',
-        label: 'Monitor',
-        shortLabel: 'Monitor',
-        description: 'Executive portfolio visibility, reports, insights, health, risks, and value realization.',
+        label: 'Avala Monitor',
+        shortLabel: 'Avala Monitor',
+        description: 'Value, risk, blockers, portfolio visibility, and executive-ready signals.',
     },
 ];
 

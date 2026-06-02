@@ -163,8 +163,8 @@ const standardMermaid = (projectDetails: ProjectDetails, toBe = false) => {
 
 const assumptionIntro = (projectDetails: ProjectDetails, sectionTitle: string, sourceAvailable: boolean) =>
     sourceAvailable
-        ? `> **Needs validation:** KlarityPM generated this fallback section because the AI output did not map cleanly to **${sectionTitle}**. Validate it against the uploaded source before approval.`
-        : `> **Industry baseline starter draft:** No support material was uploaded. KlarityPM generated this section from common ${projectDetails.domain || 'enterprise process'} practices for **${projectDetails.project || 'the selected process'}**. Review and tailor before approval.`;
+        ? `> **Needs validation:** AvalaOS Core generated this fallback section because the AI output did not map cleanly to **${sectionTitle}**. Validate it against the uploaded source before approval.`
+        : `> **Industry baseline starter draft:** No support material was uploaded. AvalaOS Core generated this section from common ${projectDetails.domain || 'enterprise process'} practices for **${projectDetails.project || 'the selected process'}**. Review and tailor before approval.`;
 
 const createStandardSectionContent = (section: DocTemplate['sections'][number], projectDetails: ProjectDetails, sourceAvailable: boolean) => {
     const title = section.title.toLowerCase();
@@ -446,7 +446,7 @@ export function normalizeGeneratedArtifacts(raw: any, template: DocTemplate | un
             } else {
                 artifacts.qualityGate.ambiguityPoints = [
                     ...artifacts.qualityGate.ambiguityPoints,
-                    'No support material was uploaded. KlarityPM generated an industry baseline starter draft; all sections require SME/process-owner validation before approval.',
+                    'No support material was uploaded. AvalaOS Core generated an industry baseline starter draft; all sections require SME/process-owner validation before approval.',
                 ];
                 artifacts.qualityGate.gapPoints = [
                     ...artifacts.qualityGate.gapPoints,

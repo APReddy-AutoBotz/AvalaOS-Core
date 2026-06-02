@@ -1,4 +1,4 @@
--- KlarityPM RLS Regression Checks: Assess Review Events and Handoff Ledger
+-- AvalaOS Core RLS Regression Checks: Assess Review Events and Handoff Ledger
 -- Target: local Supabase/Postgres test database
 -- Usage: run after initial_schema.sql, assess_review_audit.sql, and handoff_ledger_entries.sql.
 -- The transaction rolls back all fixture data.

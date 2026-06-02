@@ -1,4 +1,4 @@
--- KlarityPM AI governance, provider configuration, generation jobs, and usage events.
+-- AvalaOS Core AI governance, provider configuration, generation jobs, and usage events.
 -- Purpose: support server-side AI execution without raw browser API keys.
 
 CREATE TABLE IF NOT EXISTS ai_provider_configs (

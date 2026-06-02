@@ -1,6 +1,6 @@
 {
-  "name": "Klarity PM",
-  "description": "The world’s most opinionated, intelligent, and beautiful platform for project orchestration + lifecycle documentation. It replaces Trello/Jira/ClickUp by combining elite boards & scheduling with native documentation generation (BRD/PRD/FRD/PDD/SDD/TDD) from transcripts or raw files.",
+  "name": "AvalaOS Core",
+  "description": "The governed AI and automation delivery platform for evaluating processes, generating governed documentation, managing approvals, and proving decisions with evidence.",
   "requestFramePermissions": [
     "camera",
     "microphone"

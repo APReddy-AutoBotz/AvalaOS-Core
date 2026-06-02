@@ -1,7 +1,7 @@
 # Spec Governance MCP
 
 ## Purpose
-Acts as the source-of-truth server for KlarityPM Assess rules, specs, formulas, and policy text.
+Acts as the source-of-truth server for Avala Assess rules, specs, formulas, and policy text.
 
 ## Resources
 - klaritypm_assess_revised_spec

@@ -8,7 +8,7 @@ import {
   ClipboardListIcon,
   DocumentTextIcon,
   KeyIcon,
-  KlarityWordmark,
+  AvalaWordmark,
   SparklesIcon,
   UsersIcon,
   ViewBoardsIcon,
@@ -17,10 +17,10 @@ import { useAuth } from './AuthProvider';
 import { isSupabaseConfigured } from '../../services/supabaseClient';
 
 const valuePillars = [
-  { label: 'Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
-  { label: 'Docs', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
-  { label: 'Delivery', detail: 'Traceable backlog', icon: ViewBoardsIcon },
-  { label: 'Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
+  { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
+  { label: 'Avala Studio', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
+  { label: 'Delivery Lite', detail: 'Traceable backlog', icon: ViewBoardsIcon },
+  { label: 'Avala Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
 ];
 
 const readinessRows = [
@@ -109,10 +109,10 @@ const LoginView: React.FC = () => {
               <div className="mb-8 flex items-start justify-between gap-4">
                 <div className="flex flex-col items-start gap-4">
                   <div className="glass-card bg-[#fffcf5]/80 px-4 py-2.5 rounded-2xl border border-white/80 shadow-md backdrop-blur-md flex items-center">
-                    <KlarityWordmark className="h-14 w-[205px]" />
+                    <AvalaWordmark className="h-14 w-[230px]" />
                   </div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#021f37]/80 ml-2">
-                    AI Delivery Brain for enterprise automation teams
+                    Governed AI & Automation Delivery OS
                   </div>
                 </div>
                 <div className="hidden glass-card px-4 py-2 rounded-2xl md:flex items-center gap-3 border border-white/60 shadow-sm bg-white/50 backdrop-blur-md">
@@ -134,10 +134,10 @@ const LoginView: React.FC = () => {
               <div className="grid flex-1 gap-10 xl:grid-cols-[1fr_1fr] xl:items-center mt-2">
                 <div className="pr-4">
                   <h1 className="max-w-xl font-serif text-5xl font-medium leading-[1.1] text-[#021f37] sm:text-6xl tracking-wide drop-shadow-sm">
-                    Assess. Document.<br/>Deliver. Monitor.
+                    Evaluate. Govern.<br/>Deliver. Prove.
                   </h1>
                   <p className="mt-6 max-w-sm text-[15px] font-medium leading-relaxed text-[#021f37]/80">
-                    Turn messy process input into deterministic recommendations, governed documents, traceable work items, and leadership visibility.
+                    Turn messy process input into deterministic recommendations, governed documents, approval-ready work items, and evidence-backed visibility.
                   </p>
 
                   <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
@@ -235,7 +235,7 @@ const LoginView: React.FC = () => {
                   </h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     {isDemoMode
-                      ? 'Explore role-aware Assess, Docs, Delivery, and Monitor flows with synthetic data.'
+                      ? 'Explore role-aware Avala Assess, Avala Studio, Avala Delivery Lite, and Avala Monitor flows with synthetic data.'
                       : 'Use your organization account to access governed assessments, documents, delivery work, and monitor views.'}
                   </p>
                 </div>

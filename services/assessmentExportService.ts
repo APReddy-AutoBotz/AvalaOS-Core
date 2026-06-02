@@ -30,7 +30,7 @@ export const renderAssessmentDecisionPackMarkdown = (assessment: Assessment, pro
   if (!scores) throw new Error('Assessment has not been scored yet.');
 
   return [
-    '# KlarityPM Assessment Decision Pack',
+    '# AvalaOS Core Assessment Decision Pack',
     '',
     `Process: ${processName}`,
     `Assessment ID: ${assessment.id}`,

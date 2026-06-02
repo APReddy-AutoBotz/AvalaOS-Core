@@ -64,7 +64,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Docs handoff</p>
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Studio handoff</p>
         <h2 className="mt-2 text-3xl md:text-4xl font-bold text-text-light dark:text-text-dark">Generate governed delivery documents</h2>
         <p className="mt-2 text-lg text-slate-600 dark:text-slate-300">
             Turn an approved decision pack, transcript, or process note into structured BRD/PDD artifacts, diagrams, quality gaps, and delivery-ready work items.
@@ -132,7 +132,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                     <CogIcon className="w-6 h-6" />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold">Advanced Options</h3>
+                    <h3 className="text-xl font-bold">Avala AI Controls</h3>
                     <p className="text-slate-500 dark:text-slate-400">Provider selection is available for demo only. BYOK moves server-side before pilot.</p>
                 </div>
                 <ChevronDownIcon className={`w-5 h-5 ml-auto transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
@@ -169,7 +169,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                 <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-abz-primary text-white font-bold text-lg">3</div>
                 <div>
                     <h3 className="text-xl font-bold">Source Material</h3>
-                    <p className="text-slate-500 dark:text-slate-400">Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, KlarityPM drafts a baseline from known industry patterns for review.</p>
+                    <p className="text-slate-500 dark:text-slate-400">Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, AvalaOS Core drafts a baseline from known industry patterns for review.</p>
                 </div>
             </div>
              <div className="pl-14">

@@ -1,13 +1,13 @@
-# KlarityPM Supabase Schema Migrations
+# AvalaOS Core Supabase Schema Migrations
 
 Last Updated: 2026-05-08
 
-This folder contains the SQL contracts used to move KlarityPM from prototype data into a Supabase/Postgres-backed production path.
+This folder contains the SQL contracts used to move AvalaOS Core from prototype data into a Supabase/Postgres-backed production path.
 
 This README is an operational migration guide. Canonical product status and roadmap decisions live in:
 
-- `../05_CURRENT_IMPLEMENTATION_STATUS.md`
-- `../04_IMPLEMENTATION_ROADMAP.md`
+- `../05_IMPLEMENTATION_STATUS.md`
+- `../04_MVP_ROADMAP.md`
 
 Do not commit database passwords, service-role keys, or project-specific secrets into these files. Apply migrations by setting `DATABASE_URL` in the shell environment and running:
 

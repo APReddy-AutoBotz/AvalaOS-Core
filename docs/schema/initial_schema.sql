@@ -1,4 +1,4 @@
--- KlarityPM Initial Production Schema (Phase 1)
+-- AvalaOS Core Initial Production Schema (Phase 1)
 -- Targets: PostgreSQL / Supabase
 
 -- 1. Organizations (Tenants)

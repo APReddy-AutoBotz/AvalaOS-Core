@@ -1,5 +1,5 @@
 import React from 'react';
-import { KlarityLogo, KlarityWordmark, MoonIcon, SunIcon, SparklesIcon, UserCircleIcon } from './icons';
+import { AvalaLogo, AvalaWordmark, MoonIcon, SunIcon, SparklesIcon, UserCircleIcon } from './icons';
 import { Project, Scope, Team, User } from '../../types';
 import ScopeSwitcher from './ScopeSwitcher';
 import { useAuth } from '../auth/AuthProvider';
@@ -22,21 +22,21 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onStartNew, current
   const { currentOrganization } = useOrganizationContext();
   const enabledModules = currentOrganization?.enabledModules;
   const primaryAction = isModuleEnabled('docs', enabledModules)
-    ? { title: 'AI Workspace', subtitle: 'Generate docs and insights' }
+    ? { title: 'Avala Studio', subtitle: 'Generate governed docs' }
     : isModuleEnabled('assess', enabledModules)
-      ? { title: 'Assess Workspace', subtitle: 'Open process decisions' }
+      ? { title: 'Avala Assess', subtitle: 'Open process decisions' }
       : isModuleEnabled('delivery', enabledModules)
-        ? { title: 'Delivery Workspace', subtitle: 'Open execution board' }
-        : { title: 'Monitor Workspace', subtitle: 'Open portfolio insights' };
+        ? { title: 'Avala Delivery Lite', subtitle: 'Open approved work' }
+        : { title: 'Avala Monitor', subtitle: 'Open portfolio signals' };
 
   return (
     <header className="header glass flex items-center justify-between h-[72px] sticky top-0 z-10 px-5">
       <div className="flex items-center gap-4">
         <div className="brand-lockup flex items-center gap-3 text-left lg:hidden">
-          <KlarityLogo className="h-9 w-9 flex-shrink-0" />
+          <AvalaLogo className="h-9 w-9 flex-shrink-0" />
           <div className="hidden sm:block">
-            <KlarityWordmark className="h-8 w-[126px]" />
-            <p className="brand-subline mt-1">Enterprise Intelligence</p>
+            <AvalaWordmark className="h-8 w-[142px]" />
+            <p className="brand-subline mt-1">Govern before you execute</p>
           </div>
         </div>
         <div className="h-6 w-px bg-slate-200 dark:bg-gray-700 hidden lg:block"></div>

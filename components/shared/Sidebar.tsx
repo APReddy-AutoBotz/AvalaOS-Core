@@ -20,8 +20,8 @@ import {
     BoltIcon,
     ClockIcon,
     ChartPieIcon,
-    KlarityLogo,
-    KlarityWordmark,
+    AvalaLogo,
+    AvalaWordmark,
 } from './icons';
 
 interface SidebarProps {
@@ -42,11 +42,11 @@ interface NavItem {
 }
 
 const sidebarItems: NavItem[] = [
-    { view: View.DASHBOARD, module: 'monitor', icon: HomeIcon, label: 'Command Center', scopes: [ScopeType.MY_WORK], permissions: [] },
-    { view: View.PROCESS_CATALOG, module: 'assess', icon: ClipboardListIcon, label: 'Assess Processes', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT, ScopeType.ORGANIZATION], permissions: ['process.create', 'assessment.create', 'assessment.edit', 'assessment.review', 'process.approve', 'strategy.read'] },
-    { view: View.DOCS_FORGE, module: 'docs', icon: DocumentTextIcon, label: 'Generate Docs', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'ai.configure'] },
+    { view: View.DASHBOARD, module: 'monitor', icon: HomeIcon, label: 'Avala Monitor', scopes: [ScopeType.MY_WORK], permissions: [] },
+    { view: View.PROCESS_CATALOG, module: 'assess', icon: ClipboardListIcon, label: 'Avala Assess', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT, ScopeType.ORGANIZATION], permissions: ['process.create', 'assessment.create', 'assessment.edit', 'assessment.review', 'process.approve', 'strategy.read'] },
+    { view: View.DOCS_FORGE, module: 'docs', icon: DocumentTextIcon, label: 'Avala Studio', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'ai.configure'] },
     { view: View.PORTFOLIO, module: 'monitor', icon: ChartPieIcon, label: 'Portfolio', scopes: [ScopeType.MY_WORK], permissions: ['portfolio.read', 'strategy.read'] },
-    { view: View.BOARDS, module: 'delivery', icon: ViewBoardsIcon, label: 'Delivery Board', scopes: [ScopeType.MY_WORK, ScopeType.PROJECT, ScopeType.TEAM], permissions: ['project.read', 'project.manage', 'task.read', 'task.update', 'task.update.own', 'defects.manage', 'uat.execute'] },
+    { view: View.BOARDS, module: 'delivery', icon: ViewBoardsIcon, label: 'Avala Delivery Lite', scopes: [ScopeType.MY_WORK, ScopeType.PROJECT, ScopeType.TEAM], permissions: ['project.read', 'project.manage', 'task.read', 'task.update', 'task.update.own', 'defects.manage', 'uat.execute'] },
 ];
 
 const advancedItems: NavItem[] = [
@@ -64,7 +64,7 @@ const advancedItems: NavItem[] = [
 
 const settingsItems: NavItem[] = [
     { view: View.TEMPLATE_LIBRARY, module: 'assess', icon: DocumentDuplicateIcon, label: 'Assessment Templates', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT, ScopeType.ORGANIZATION], permissions: ['process.create', 'assessment.create', 'assessment.edit', 'org.admin'] },
-    { view: View.TEMPLATE_STUDIO, module: 'docs', icon: CodeBracketIcon, label: 'Doc Template Studio', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'org.admin'] },
+    { view: View.TEMPLATE_STUDIO, module: 'docs', icon: CodeBracketIcon, label: 'Avala Studio Templates', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'org.admin'] },
 ]
 
 const Sidebar: React.FC<SidebarProps> = ({ currentScope, currentView, onViewChange, onScopeChange, collapsed }) => {
@@ -131,11 +131,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScope, currentView, onViewChan
         <aside className={`premium-sidebar flex flex-col transition-all duration-300 z-30 ${collapsed ? 'w-20' : 'w-72'}`}>
             <div className={`px-4 py-5 border-b border-slate-200/70 dark:border-slate-700/60 ${collapsed ? 'flex justify-center' : ''}`}>
                 <div className="brand-lockup flex items-center gap-3">
-                    <KlarityLogo className="h-10 w-10 shrink-0 drop-shadow-sm" />
+                    <AvalaLogo className="h-10 w-10 shrink-0 drop-shadow-sm" />
                     {!collapsed && (
                         <div className="min-w-0">
-                            <KlarityWordmark className="h-9 w-[142px]" />
-                            <div className="brand-subline mt-1">Process Intelligence OS</div>
+                            <AvalaWordmark className="h-9 w-[156px]" />
+                            <div className="brand-subline mt-1">Evaluate before you automate</div>
                         </div>
                     )}
                 </div>
@@ -161,10 +161,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScope, currentView, onViewChan
                         onViewChange(View.WORKSPACE);
                     }}
                     className={`w-full flex items-center gap-4 p-3 rounded-2xl text-sm font-semibold transition-colors nav-item ${currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-surface-dark'} ${collapsed ? 'justify-center' : ''}`}
-                    title="Settings"
+                    title="Avala Admin"
                 >
                     <CogIcon className="h-6 w-6 flex-shrink-0" />
-                    {!collapsed && <span>Settings</span>}
+                    {!collapsed && <span>Avala Admin</span>}
                 </button>}
             </div>
         </aside>

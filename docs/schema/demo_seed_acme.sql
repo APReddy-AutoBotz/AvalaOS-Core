@@ -1,4 +1,4 @@
--- KlarityPM Demo Seed for Supabase
+-- AvalaOS Core Demo Seed for Supabase
 -- Creates the Acme demo organization, demo personas, memberships, and Assess process catalog.
 -- Demo password for all users: demo123
 

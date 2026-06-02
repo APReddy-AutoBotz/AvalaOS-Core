@@ -45,7 +45,7 @@ const markdownList = (items: unknown[]) => {
 export const renderGeneratedDocumentMarkdown = (documentRow: Record<string, unknown>) => {
   const artifacts = asRecord(documentRow.artifacts);
   const lines = [
-    '# KlarityPM Generated Document',
+    '# AvalaOS Core Generated Document',
     '',
     `Document ID: ${documentRow.id || 'N/A'}`,
     `Project ID: ${documentRow.project_id || 'N/A'}`,
@@ -94,7 +94,7 @@ export const renderDecisionPackMarkdown = (assessmentRow: Record<string, unknown
   const businessValue = asRecord(decisionPack.businessValue);
 
   const lines = [
-    '# KlarityPM Assessment Decision Pack',
+    '# AvalaOS Core Assessment Decision Pack',
     '',
     `Assessment ID: ${assessmentRow.id || 'N/A'}`,
     `Process ID: ${assessmentRow.process_id || 'N/A'}`,

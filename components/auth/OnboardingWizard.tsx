@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KlarityLogo, SparklesIcon, BuildingOfficeIcon } from '../shared/icons';
+import { AvalaLogo, SparklesIcon, BuildingOfficeIcon } from '../shared/icons';
 
 interface OnboardingWizardProps {
   onComplete: (orgName: string) => void;
@@ -37,14 +37,14 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         <div className="p-10">
           <div className="flex justify-center mb-8">
             <div className="p-1 rounded-2xl">
-              <KlarityLogo className="w-16 h-16 drop-shadow-xl" />
+              <AvalaLogo className="w-16 h-16 drop-shadow-xl" />
             </div>
           </div>
 
           {step === 1 && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h2 className="brand-wordmark text-3xl text-center mb-2">Welcome to KlarityPM</h2>
-              <p className="text-center text-slate-500 dark:text-slate-300 mb-8 font-medium">Set up your enterprise process intelligence workspace.</p>
+              <h2 className="brand-wordmark text-3xl text-center mb-2">Welcome to AvalaOS Core</h2>
+              <p className="text-center text-slate-500 dark:text-slate-300 mb-8 font-medium">Set up your governed AI and automation delivery workspace.</p>
               
               <div className="space-y-6">
                 <div>
@@ -85,7 +85,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Your workspace '{orgName}' is being provisioned.</p>
                 </div>
                 <ul className="space-y-3">
-                  {['PostgreSQL Database Provisioned', 'RLS Security Policies Active', 'AI Discovery Engine Ready'].map((item, i) => (
+                  {['PostgreSQL database provisioned', 'RLS security policies active', 'Avala Assess ready'].map((item, i) => (
                     <li key={i} className="flex items-center gap-3 text-xs text-slate-500">
                       <div className="w-1 h-1 bg-emerald-500 rounded-full" />
                       {item}

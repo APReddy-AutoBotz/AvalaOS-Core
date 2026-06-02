@@ -1,4 +1,4 @@
--- KlarityPM Platform RLS Membership Policies
+-- AvalaOS Core Platform RLS Membership Policies
 -- Targets: PostgreSQL / Supabase
 -- Purpose: allow membership-based tenant policies to resolve the current user's active org memberships.
 

@@ -1,4 +1,4 @@
--- KlarityPM Assess Review and Audit Persistence
+-- AvalaOS Core Assess Review and Audit Persistence
 -- Targets: PostgreSQL / Supabase
 -- Purpose: make assessment review decisions, override reasons, and approval events append-only.
 
