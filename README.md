@@ -85,4 +85,4 @@ These functions still need Supabase deployment, environment secrets, and private
 
 ## Repository Direction
 
-This workspace is being prepared for `APReddy-AutoBotz/AvalaOS-Core`. Do not push changes from this migration to the historical prototype repository.
+This workspace is the AvalaOS Core repository. Do not push changes from this migration to the historical prototype repository.

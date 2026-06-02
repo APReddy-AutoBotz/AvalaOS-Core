@@ -1,7 +1,7 @@
 # Build Module From Spec
 
 ## Trigger
-Use when asked to implement a specific KlarityPM Assess module.
+Use when asked to implement a specific AvalaOS module from an approved source spec.
 
 ## Inputs
 - module_name
@@ -12,7 +12,7 @@ Use when asked to implement a specific KlarityPM Assess module.
 1. Read module scope from source spec.
 2. Extract user stories and acceptance criteria.
 3. List dependencies and interfaces.
-4. Scaffold files/components.
+4. Scaffold files/components only when implementation is explicitly approved.
 5. Implement only in-scope logic.
 6. Run acceptance checks.
 7. Produce proof artifacts:

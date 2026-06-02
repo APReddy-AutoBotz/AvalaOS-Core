@@ -1,6 +1,6 @@
 ---
 name: deterministic-scoring-guardian
-description: Use this skill when implementing or reviewing any score, weight, modifier, threshold, hard-stop, or recommendation calculation in KlarityPM Assess.
+description: Use this supplemental skill when implementing or reviewing any score, weight, modifier, threshold, hard-stop, or recommendation calculation in Avala Assess.
 ---
 
 Deterministic Scoring Guardian

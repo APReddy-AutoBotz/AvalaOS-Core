@@ -1,6 +1,6 @@
 ---
 name: assessment-form-architect
-description: Use this skill when designing or updating guided assessment forms for KlarityPM Assess.
+description: Use this supplemental skill when designing or updating guided assessment forms for Avala Assess.
 ---
 
 Assessment Form Architect

@@ -21,5 +21,3 @@ Use before releasing a module or major change.
 - Critical checks passed
 - Blocking issues listed if present
 - Release decision documented
-
-23 and 24

@@ -27,4 +27,4 @@ Avala Govern Lite is a lightweight model and card derived from existing assessme
 
 ## Repository Direction
 
-The codebase is being prepared for `APReddy-AutoBotz/AvalaOS-Core`. Existing internal module keys may remain `assess`, `docs`, `delivery`, `monitor`, and `admin` to avoid unnecessary refactor risk.
+This repository is AvalaOS Core. Existing internal module keys may remain `assess`, `docs`, `delivery`, `monitor`, and `admin` to avoid unnecessary refactor risk.

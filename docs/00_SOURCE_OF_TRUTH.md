@@ -16,6 +16,9 @@ This documentation set is the source of truth for product positioning, requireme
 - `docs/06_SECURITY_AND_GOVERNANCE.md`: security posture, AI controls, audit, and governance minimums.
 - `docs/07_AVALA_GOVERN_FRAMEWORK.md`: Avala Govern Lite and future govern expansion.
 - `docs/08_MIGRATION_FROM_KLARITYPM.md`: historical prototype name and migration constraints.
+- `docs/governance/avala-product-law.md`: canonical product law for governed delivery.
+- `docs/quality/readiness-gates.md`: milestone readiness gates and evidence requirements.
+- `.agent/README.md`: Codex operating system for milestone execution.
 
 ## Non-Negotiables
 
@@ -30,3 +33,7 @@ This documentation set is the source of truth for product positioning, requireme
 ## Golden Path
 
 Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern Lite -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Lite Board -> Avala Monitor Dashboard.
+
+## Build Control Pack
+
+M0.2 establishes the internal build control pack: root agent instructions, `.agent` operating rules and skills, architecture boundaries, governance models, readiness gates, ADRs, planning docs, demo scripts, and final evidence review. These controls guide future milestones but do not change product behavior by themselves.

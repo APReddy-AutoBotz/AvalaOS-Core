@@ -1,6 +1,6 @@
 ---
 name: delivery-conversion-planner
-description: Use this skill when converting approved KlarityPM Assess opportunities into KlarityPM Delivery initiatives, epics, and tasks.
+description: Use this supplemental skill when converting approved Avala Assess opportunities into Avala Delivery Lite initiatives, epics, and tasks.
 ---
 
 Delivery Conversion Planner

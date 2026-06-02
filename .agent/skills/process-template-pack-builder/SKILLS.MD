@@ -1,6 +1,6 @@
 ---
 name: process-template-pack-builder
-description: Use this skill when creating or updating process template packs, especially Finance & Procurement starter templates, in KlarityPM Assess.
+description: Use this supplemental skill when creating or updating Avala Assess process template packs.
 ---
 
 Process Template Pack Builder

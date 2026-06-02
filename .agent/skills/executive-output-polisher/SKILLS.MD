@@ -1,6 +1,6 @@
 ---
 name: executive-output-polisher
-description: Use this skill when turning approved deterministic outputs into leadership-ready report language for KlarityPM Assess.
+description: Use this supplemental skill when turning approved deterministic Avala Assess outputs into leadership-ready report language.
 ---
 
 Executive Output Polisher
