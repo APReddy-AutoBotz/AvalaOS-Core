@@ -5,7 +5,531 @@ export enum ScopeType {
     ORGANIZATION = 'organization',
 }
 
-export type Scope = 
+// ===================================
+// ORGANIZATION & PLATFORM FOUNDATION
+// ===================================
+
+export type SubscriptionTier = 'Free_Trial' | 'Premium' | 'Enterprise';
+export type OrgRole = 'Buyer' | 'Contributor' | 'Reviewer' | 'Admin';
+export type ProductModuleKey = 'assess' | 'docs' | 'delivery' | 'monitor';
+export type HandoffStatus = 'Draft' | 'Submitted' | 'Accepted' | 'Completed' | 'Blocked';
+export type HandoffSourceType = 'Assessment' | 'Decision Pack' | 'Document Generation' | 'Work Items' | 'Project' | 'Manual';
+
+export interface SubscriptionPolicy {
+    maxOrgs: number;
+    maxProcesses: number;
+    maxTemplates: number;
+    reportVisibility: 'Truncated' | 'Full';
+    hasExport: boolean;
+}
+
+export interface CompanyProfile {
+    industry: string;
+    size: string; // e.g., '1-50', '51-200', '201-1000', '1000+'
+    geography: string;
+    strategicGoals: string;
+}
+
+export interface OrgMember {
+    userId: string;
+    role: OrgRole;
+}
+
+export interface Organization {
+    id: string;
+    name: string;
+    profile: CompanyProfile;
+    subscriptionTier: SubscriptionTier;
+    members: OrgMember[];
+    enabledModules?: ProductModuleKey[];
+}
+
+export interface AuditLogEntry {
+    id: string;
+    orgId: string;
+    userId: string;
+    action: string;
+    entityId: string;
+    oldValues?: Record<string, any>;
+    newValues?: Record<string, any>;
+    timestamp: string; // ISO 8601
+}
+
+export interface HandoffLedgerEntry {
+    id: string;
+    orgId: string;
+    fromModule: ProductModuleKey;
+    toModule: ProductModuleKey;
+    status: HandoffStatus;
+    sourceType: HandoffSourceType;
+    sourceId: string;
+    targetType?: HandoffSourceType;
+    targetId?: string;
+    title: string;
+    summary: string;
+    createdAt: string;
+    createdBy: string;
+    evidenceRefs: string[];
+    metadata?: Record<string, string | number | boolean | string[] | undefined>;
+}
+
+// ===================================
+// ASSESS PROCESS TYPES
+// ===================================
+
+export type AssessStatus =
+    | 'Not Started'
+    | 'Draft'
+    | 'Ready for Review'
+    | 'In Review'
+    | 'Changes Requested'
+    | 'Approved'
+    | 'Rejected'
+    | 'Handed Off to Docs'
+    | 'Handed Off to Delivery'
+    | 'Archived'
+    | 'Recalculation Required'
+    | 'Completed';
+export type CriticalityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface AssessProcess {
+    id: string;
+    orgId: string;
+    name: string;
+    description: string;
+    ownerId: string;
+    department: string;
+    criticality: CriticalityLevel;
+    status: AssessStatus;
+    templateId?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ProcessTemplate {
+    id: string;
+    family: string; // e.g., 'Procure-to-Pay'
+    name: string;
+    description: string;
+    defaultFields: Record<string, any>;
+    protectedScoringFields: string[]; // Fields that cannot be removed
+    defaultRisks: string[];
+    recommendationHints: string[];
+    systemContextLayer: string[]; // e.g. ['SAP', 'Outlook']
+    optionalCustomFields: string[];
+}
+
+export interface TemplatePack {
+    id: string;
+    name: string;
+    description: string;
+    templates: ProcessTemplate[];
+    isPremium: boolean;
+}
+
+export type AssessmentSectionKey = 'processStructure' | 'workPattern' | 'dataProfile' | 'judgment' | 'systems' | 'risk' | 'evidenceAndAssumptions';
+
+export interface EvidenceItem {
+    id: string;
+    type:
+        | 'Process Map'
+        | 'SOP'
+        | 'System Screenshot'
+        | 'Sample Transaction'
+        | 'Export Report'
+        | 'System Log'
+        | 'Time Study'
+        | 'Meeting Transcript'
+        | 'Policy Document'
+        | 'Control Document'
+        | 'Exception Report'
+        | 'Business Case File'
+        | 'Other';
+    description: string;
+    url?: string;
+    owner?: string;
+    sensitivity?: 'Public' | 'Internal' | 'Confidential' | 'Restricted';
+    linkedField?: string;
+}
+
+export interface Assumption {
+    id: string;
+    category:
+        | 'Volume'
+        | 'Time/Motion'
+        | 'Cost'
+        | 'Risk'
+        | 'System Access'
+        | 'API Availability'
+        | 'Governance'
+        | 'Data Quality'
+        | 'Timeline';
+    description: string;
+    confidence?: number;
+    owner?: string;
+    reviewDate?: string;
+    validated?: boolean;
+    linkedField?: string;
+}
+
+export interface AssessmentResponses {
+    processStructure: {
+        standardization?: number;
+        ruleDeterminism?: number;
+        exceptionPredictability?: number;
+        processMaturity?: number;
+        sopAvailability?: number;
+        processMapAvailability?: number;
+        processVariants?: number;
+        handoffs?: number;
+        manualSteps?: number;
+        approvalSteps?: number;
+        processStability?: number;
+        changeFrequency?: number;
+        bottlenecks?: string;
+    };
+    workPattern: {
+        volume?: number;
+        rawVolumeValue?: number;
+        rawVolumePeriod?: 'Day' | 'Week' | 'Month' | 'Year';
+        manualEffort?: number;
+        rawEffortValue?: number;
+        rawEffortUnit?: 'Minutes' | 'Hours';
+        reworkPain?: number;
+        cycleTimePain?: number;
+        averageCycleTimeHours?: number;
+        waitTimePercentage?: number;
+        reworkFrequency?: number;
+        reworkEffortHours?: number;
+        fteInvolved?: number;
+        averageHourlyCost?: number;
+        customerImpact?: number;
+        expectedBenefitConfidence?: number;
+    };
+    dataProfile: {
+        inputStructure?: number;
+        unstructuredLoad?: number;
+        dataSensitivity?: number;
+        dataQuality?: number;
+        dataAvailability?: number;
+        dataOwnershipClarity?: number;
+        sourceOfTruthClarity?: number;
+        historicalDataAvailability?: number;
+        labelledTrainingData?: number;
+        piiOrFinancialData?: boolean;
+        retentionConstraints?: boolean;
+    };
+    judgment: {
+        judgmentIntensity?: number;
+        goalAmbiguity?: number;
+        domainExpertiseRequired?: number;
+        decisionSubjectivity?: number;
+        exceptionComplexity?: number;
+        humanInterpretationRequired?: number;
+        hallucinationTolerance?: number;
+        falsePositiveTolerance?: number;
+        falseNegativeTolerance?: number;
+        explainabilityNeed?: number;
+        reviewerRationaleNeed?: number;
+        autonomyLevel?: number;
+        autonomousExecutionAllowed?: boolean;
+        externalCommunicationAllowed?: boolean;
+        humanApprovalBeforeAction?: boolean;
+        rollbackPossible?: boolean;
+        killSwitchRequired?: boolean;
+        realTimeMonitoringRequired?: boolean;
+    };
+    systems: {
+        systemReadiness?: number;
+        orchestrationComplexity?: number;
+        primarySystems?: string;
+        secondarySystems?: string;
+        apiAvailability?: number;
+        apiQuality?: number;
+        uiStability?: number;
+        authenticationComplexity?: number;
+        accessRestrictions?: number;
+        testSystemAvailability?: number;
+        sandboxAvailability?: number;
+        integrationOwnership?: number;
+        realTimeNeed?: boolean;
+        externalPartyDependency?: boolean;
+        vendorDependency?: boolean;
+        loggingAvailability?: number;
+    };
+    risk: {
+        riskCriticality?: number;
+        governanceSensitivity?: number;
+        errorReversibility?: number;
+        regulatoryExposure?: number;
+        auditRequirement?: number;
+        financialImpactRisk?: number;
+        legalImpactRisk?: number;
+        customerImpactRisk?: number;
+        employeeImpactRisk?: number;
+        vulnerableUserImpact?: number;
+        biasFairnessConcern?: number;
+        securityConcern?: number;
+        promptInjectionExposure?: number;
+        modelDriftConcern?: number;
+        thirdPartyModelRisk?: number;
+    };
+}
+
+export interface AssessmentReviewState {
+    reviewerNotes?: Partial<Record<AssessmentSectionKey, string>>;
+    checkpoints?: Record<string, boolean>;
+    overrideReason?: string;
+    lastReviewedBy?: string;
+    lastReviewedAt?: string;
+    comments?: AssessmentReviewComment[];
+    approvalHistory?: AssessmentApprovalEvent[];
+    overrideReasons?: AssessmentApprovalEvent[];
+    lockedAt?: string;
+    lockedBy?: string;
+    lockReason?: string;
+}
+
+export type AssessmentReviewCommentType = 'Comment' | 'Change Request' | 'Approval' | 'Rejection' | 'Override' | 'Handoff';
+
+export interface AssessmentReviewComment {
+    id: string;
+    section?: AssessmentSectionKey;
+    authorId: string;
+    authorName?: string;
+    type: AssessmentReviewCommentType;
+    message: string;
+    createdAt: string;
+    resolved?: boolean;
+    linkedField?: string;
+}
+
+export interface AssessmentApprovalEvent {
+    id: string;
+    status: AssessStatus;
+    actorId: string;
+    actorName?: string;
+    reason?: string;
+    createdAt: string;
+}
+
+// ===================================
+// SCORING ENGINE TYPES (Module 4)
+// ===================================
+
+export type GatingOutcome =
+    | 'Needs Discovery'
+    | 'Process Redesign First'
+    | 'Monitor / Deprioritize'
+    | 'Deprioritize'
+    | 'Human-Led / Do Not Automate'
+    | 'Human-Led'
+    | 'Governance Review Required'
+    | 'No-Go';
+
+export type RiskTier = 'Minimal' | 'Limited' | 'Moderate' | 'High' | 'Unacceptable';
+export type GateDecision = 'Go' | 'Conditional Go' | 'No-Go' | 'Needs Discovery' | 'Governance Review Required' | 'Redesign First';
+export type ConfidenceBand = 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
+export type PriorityTier =
+    | 'Tier 1 - Strategic Quick Win'
+    | 'Tier 2 - Standard Backlog'
+    | 'Tier 3 - Monitor / Deprioritize'
+    | 'Blocked - Needs Discovery'
+    | 'Blocked - Governance Risk'
+    | 'Blocked - Redesign First';
+export type HandoffEligibility =
+    | 'Ready for Docs'
+    | 'Ready for Delivery'
+    | 'Ready for Docs, Not Delivery'
+    | 'Needs Discovery'
+    | 'Needs Governance Review'
+    | 'Needs Technical Review'
+    | 'Needs Process Redesign'
+    | 'Not Eligible';
+
+export interface EngineOutput {
+    engine: string;
+    engineVersion: string;
+    inputHash: string;
+    output: Record<string, unknown>;
+    createdAt: string;
+}
+
+export interface TechnologyFitScores {
+    RPA: number;
+    APIAutomation: number;
+    Workflow: number;
+    GenAI: number;
+    RAG: number;
+    DocumentIntelligence: number;
+    Agentic: number;
+    HITLControlTower: number;
+    ProcessRedesign: number;
+    HumanLed: number;
+}
+
+export interface OperatingModelRecommendation {
+    category: string;
+    primaryTechnology: string;
+    secondaryTechnology?: string;
+    executionLayer: string;
+    controlLayer: string;
+    governanceLayer: string;
+    requiredHumanOversight: string;
+    notRecommendedTechnologies: string[];
+    whyThis: string[];
+    whyNotOthers: string[];
+    cautionNotes: string[];
+    nextActions: string[];
+}
+
+export interface BusinessValueSummary {
+    rawValueScore: number;
+    annualVolume: number;
+    avgEffortHoursPerCase: number;
+    annualManualEffortHours: number;
+    annualEffortSavedHours: number;
+    averageHourlyCost: number;
+    annualLaborCost: number;
+    estimatedAnnualSavings: number;
+    estimatedBuildCost: number;
+    estimatedAnnualRunCost: number;
+    estimatedNetFirstYearSavings: number;
+    paybackBand: 'Less than 3 months' | '3 to 6 months' | '6 to 12 months' | '12+ months' | 'Not enough data';
+    buildComplexity: 'Low' | 'Medium' | 'High' | 'Very High';
+    runComplexity: 'Low' | 'Medium' | 'High' | 'Very High';
+    roiConfidence: ConfidenceBand;
+}
+
+export interface GovernanceSummary {
+    riskTier: RiskTier;
+    gateDecision: GateDecision;
+    requiredApprovalLevel: string;
+    auditControls: string[];
+    dataControls: string[];
+    monitoringControls: string[];
+    securityControls: string[];
+    modelProviderControls: string[];
+    redFlags: string[];
+}
+
+export interface DecisionPack {
+    executiveSummary: string;
+    finalDecision: GateDecision;
+    recommendedOperatingModel: OperatingModelRecommendation;
+    businessValue: BusinessValueSummary;
+    governance: GovernanceSummary;
+    confidenceBand: ConfidenceBand;
+    priorityTier: PriorityTier;
+    handoffEligibility: HandoffEligibility;
+    docsHandoffReadiness: HandoffEligibility;
+    deliveryHandoffReadiness: HandoffEligibility;
+    evidenceSummary: string[];
+    assumptionSummary: string[];
+    scoringFormulaSummary: string[];
+    reviewerComments: string[];
+    approvalHistory: string[];
+    auditTrailRef: string;
+}
+
+export interface HandoffPack {
+    assessmentId: string;
+    processId: string;
+    organizationId: string;
+    assessmentVersion: string;
+    scoreVersion: string;
+    recommendationCategory: string;
+    operatingModelRecommendation: OperatingModelRecommendation;
+    approvedDecision: GateDecision;
+    processSummary: string;
+    currentStateSummary: string;
+    painPoints: string[];
+    systemsInvolved: string[];
+    dataSources: string[];
+    evidenceReferences: string[];
+    assumptions: string[];
+    risks: string[];
+    governanceControls: string[];
+    hitlDesign: string;
+    businessValueEstimate: BusinessValueSummary;
+    requiredDocumentTypes: string[];
+    suggestedBacklogItems: { type: string; title: string; rationale: string }[];
+    openQuestions: string[];
+    reviewerNotes: string[];
+    approvalMetadata: { status: AssessStatus; generatedAt: string };
+}
+
+export interface AssessmentScoreResult {
+    scoreVersion: string; // e.g., "v1.0"
+    calculatedAt: string; // ISO 8601
+
+    gatesTriggered: GatingOutcome[];
+    primaryGatingOutcome: GatingOutcome | 'Passed';
+
+    techFitScores: {
+        RPA: number;
+        APIAutomation?: number;
+        Workflow: number;
+        GenAI: number;
+        RAG?: number;
+        DocumentIntelligence?: number;
+        Agentic: number;
+        HITLControlTower?: number;
+        ProcessRedesign?: number;
+        HumanLed?: number;
+    };
+    adjustedPriorityScores?: Record<string, number>;
+
+    supportingScores: {
+        rawValue: number;
+        annualManualEffortHours?: number;
+        annualEffortSavedHours?: number;
+        estimatedAnnualSavings?: number;
+        estimatedNetFirstYearSavings?: number;
+        hitlScore: number;
+        mandatoryHITL: boolean;
+        confidence: number;
+        processReadiness?: number;
+        dataReadiness?: number;
+        systemsReadiness?: number;
+        governanceRisk?: number;
+        implementationReadiness?: number;
+        handoffReadiness?: number;
+    };
+    riskTier?: RiskTier;
+    gateDecision?: GateDecision;
+    confidenceBand?: ConfidenceBand;
+    priorityTier?: PriorityTier;
+    handoffEligibility?: HandoffEligibility;
+    recommendation?: OperatingModelRecommendation;
+    decisionPack?: DecisionPack;
+    handoffPack?: HandoffPack;
+    engineOutputs?: EngineOutput[];
+}
+
+export interface Assessment {
+    id: string;
+    processId: string;
+    orgId: string;
+    status: AssessStatus;
+    metadata: {
+        completionQuality: number;
+        templateFit: boolean;
+        lastSavedAt: string;
+        stakeholderCoverage: number;
+        evidenceQuality: number;
+        assumptionQuality: number;
+    };
+    responses: AssessmentResponses;
+    evidenceItems: EvidenceItem[];
+    assumptions: Assumption[];
+    completionBySection: Record<AssessmentSectionKey, number>;
+    review?: AssessmentReviewState;
+    scores?: AssessmentScoreResult;
+}
+
+
+export type Scope =
     | { type: ScopeType.MY_WORK }
     | { type: ScopeType.ORGANIZATION }
     | { type: ScopeType.TEAM, id: string, name: string }
@@ -30,6 +554,10 @@ export enum View {
     TIMESHEETS = 'timesheets',
     PORTFOLIO = 'portfolio',
     WORKSPACE = 'workspace',
+    PROCESS_CATALOG = 'process_catalog',
+    TEMPLATE_LIBRARY = 'template_library',
+    PROCESS_DETAIL = 'process_detail',
+    GUIDED_ASSESSMENT = 'guided_assessment',
 }
 
 export interface User {
@@ -38,6 +566,12 @@ export interface User {
     email: string;
     avatarUrl?: string;
     skills?: string[];
+    roleTitle?: string;
+    orgRole?: OrgRole;
+    persona?: string;
+    defaultScope?: Scope;
+    defaultView?: View;
+    permissions?: string[];
 }
 
 export interface Team {
@@ -87,6 +621,7 @@ export interface Task {
     parentId?: string;
     subtaskIds?: string[];
     dependencyIds?: string[];
+    orderRank?: number;
     comments?: Comment[];
     userStories?: UserStory[];
     activityLog?: ActivityLogItem[];
@@ -353,7 +888,7 @@ export interface AiInsight {
 // AI PROVIDER TYPES
 // ===================================
 
-export type AiProviderType = 'gemini' | 'openai';
+export type AiProviderType = 'gemini' | 'openai' | 'groq';
 
 export interface IAiProvider {
     generateProjectArtifacts(

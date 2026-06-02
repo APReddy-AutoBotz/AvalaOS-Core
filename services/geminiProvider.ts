@@ -1,52 +1,57 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import {
     GeneratedArtifacts, ProjectDetails, Task, User, AiSprintPlan, Project, AiInsight, IAiProvider
 } from '../types';
 import { MOCK_DOC_TEMPLATES } from '../data/docTemplates';
 import { SYSTEM_INSTRUCTIONS, PROMPTS } from './prompts';
+import { buildTemplateStructurePrompt, cleanAndParseJson, normalizeGeneratedArtifacts } from './docGenerationGuard';
 
-/**
- * Cleans and parses a JSON string that might be wrapped in markdown or have other extraneous text.
- * @param rawText The raw text response from the API.
- * @returns A parsed JSON object of type T.
- * @throws An error if the JSON is invalid after cleanup.
- */
-function cleanAndParseJson<T>(rawText: string): T {
-    let jsonText = rawText.trim();
+const Type = {
+    OBJECT: 'OBJECT',
+    STRING: 'STRING',
+    ARRAY: 'ARRAY',
+} as const;
 
-    // Remove markdown code blocks if present
-    const markdownRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
-    const match = jsonText.match(markdownRegex);
-
-    if (match && match[1]) {
-        jsonText = match[1].trim();
-    } else {
-        // Fallback: Find the first '{' or '[' and last '}' or ']'
-        const firstBrace = jsonText.indexOf('{');
-        const firstBracket = jsonText.indexOf('[');
-        const startIndex = firstBrace !== -1 && firstBracket !== -1
-            ? Math.min(firstBrace, firstBracket)
-            : Math.max(firstBrace, firstBracket);
-
-        const lastBrace = jsonText.lastIndexOf('}');
-        const lastBracket = jsonText.lastIndexOf(']');
-        const endIndex = Math.max(lastBrace, lastBracket);
-
-        if (startIndex !== -1 && endIndex !== -1) {
-            jsonText = jsonText.substring(startIndex, endIndex + 1);
-        }
-    }
-
-    try {
-        return JSON.parse(jsonText);
-    } catch (e: any) {
-        console.error("Failed to parse Gemini JSON response:", e.message);
-        console.error("Raw response text:", rawText);
-        console.error("Cleaned response text that failed parsing:", jsonText);
-        throw new Error(`Invalid JSON response from the API. Please check the console for details.`);
-    }
+interface GeminiGenerateContentConfig {
+    systemInstruction?: string;
+    responseMimeType?: string;
+    responseSchema?: unknown;
 }
 
+async function generateGeminiText(apiKey: string, prompt: string, config: GeminiGenerateContentConfig = {}) {
+    const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                systemInstruction: config.systemInstruction
+                    ? { parts: [{ text: config.systemInstruction }] }
+                    : undefined,
+                generationConfig: {
+                    responseMimeType: config.responseMimeType,
+                    responseSchema: config.responseSchema,
+                },
+            }),
+        }
+    );
+
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Gemini request failed with status ${response.status}: ${message}`);
+    }
+
+    const payload = await response.json();
+    const text = payload?.candidates?.[0]?.content?.parts
+        ?.map((part: { text?: string }) => part.text || '')
+        .join('');
+
+    if (!text) {
+        throw new Error('Gemini response did not include text content.');
+    }
+
+    return text;
+}
 
 const docSectionSchema = {
     type: Type.OBJECT,
@@ -185,10 +190,10 @@ const insightsSchema = {
 };
 
 export class GeminiProvider implements IAiProvider {
-    private ai: GoogleGenAI;
+    private apiKey: string;
 
     constructor(apiKey: string) {
-        this.ai = new GoogleGenAI({ apiKey });
+        this.apiKey = apiKey;
     }
 
     async generateProjectArtifacts(
@@ -198,13 +203,7 @@ export class GeminiProvider implements IAiProvider {
     ): Promise<GeneratedArtifacts> {
         const selectedTemplate = MOCK_DOC_TEMPLATES.find(t => t.id === projectDetails.templateId);
 
-        const templateStructurePrompt = selectedTemplate
-            ? selectedTemplate.sections.map(s =>
-                `  - Section Title: "${s.title}" (key: ${s.key})\n` +
-                `    - Description: ${s.description}\n` +
-                `    - AI Instructions: ${s.promptInjection || 'Generate content based on standard best practices for this section.'}`
-            ).join('\n')
-            : 'Default BRD/FRD/PDD structure.';
+        const templateStructurePrompt = buildTemplateStructurePrompt(selectedTemplate);
 
         // Chunk the source content for citation purposes
         const chunkedContent = fileContent
@@ -214,22 +213,24 @@ export class GeminiProvider implements IAiProvider {
         const prompt = PROMPTS.projectArtifacts(
             projectDetails,
             selectedTemplate ? selectedTemplate.title : 'General Purpose',
+            selectedTemplate ? selectedTemplate.artifactKey : 'brd',
             templateStructurePrompt,
             fileName,
             chunkedContent
         );
 
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTIONS.PROJECT_ARTIFACTS,
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-            },
+        const text = await generateGeminiText(this.apiKey, prompt, {
+            systemInstruction: SYSTEM_INSTRUCTIONS.PROJECT_ARTIFACTS,
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
         });
 
-        const parsedJson = cleanAndParseJson<any>(response.text);
+        const parsedJson = normalizeGeneratedArtifacts(
+            cleanAndParseJson<any>(text),
+            selectedTemplate,
+            projectDetails,
+            { sourceAvailable: Boolean(fileContent?.trim()) }
+        );
 
         const fullArtifacts: GeneratedArtifacts = {
             ...parsedJson,
@@ -250,15 +251,9 @@ export class GeminiProvider implements IAiProvider {
     ): Promise<string> {
         const prompt = PROMPTS.refineSection(originalContent, refinementPrompt);
 
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTIONS.REFINE_SECTION,
-            },
+        return generateGeminiText(this.apiKey, prompt, {
+            systemInstruction: SYSTEM_INSTRUCTIONS.REFINE_SECTION,
         });
-
-        return response.text;
     }
 
     async generateSprintPlan(
@@ -290,17 +285,13 @@ export class GeminiProvider implements IAiProvider {
             JSON.stringify(serializedTasks, null, 2)
         );
 
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTIONS.SPRINT_PLAN,
-                responseMimeType: "application/json",
-                responseSchema: sprintPlanSchema,
-            },
+        const text = await generateGeminiText(this.apiKey, prompt, {
+            systemInstruction: SYSTEM_INSTRUCTIONS.SPRINT_PLAN,
+            responseMimeType: "application/json",
+            responseSchema: sprintPlanSchema,
         });
 
-        return cleanAndParseJson<AiSprintPlan>(response.text);
+        return cleanAndParseJson<AiSprintPlan>(text);
     }
 
     async generateDashboardInsights(
@@ -329,16 +320,12 @@ export class GeminiProvider implements IAiProvider {
             JSON.stringify(relevantTasks, null, 2)
         );
 
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTIONS.DASHBOARD_INSIGHTS,
-                responseMimeType: "application/json",
-                responseSchema: insightsSchema,
-            },
+        const text = await generateGeminiText(this.apiKey, prompt, {
+            systemInstruction: SYSTEM_INSTRUCTIONS.DASHBOARD_INSIGHTS,
+            responseMimeType: "application/json",
+            responseSchema: insightsSchema,
         });
 
-        return cleanAndParseJson<AiInsight[]>(response.text);
+        return cleanAndParseJson<AiInsight[]>(text);
     }
 }

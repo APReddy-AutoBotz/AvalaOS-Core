@@ -20,6 +20,12 @@ export const StorageKeys = {
     DOC_GENERATIONS: `${APP_PREFIX}-doc-generations`,
     API_KEY: `${APP_PREFIX}-api-key`,
     AI_PROVIDER: `${APP_PREFIX}-ai-provider`,
+    ORGANIZATION: `${APP_PREFIX}-organization`,
+    AUDIT_LOGS: `${APP_PREFIX}-audit-logs`,
+    HANDOFF_LEDGER: `${APP_PREFIX}-handoff-ledger`,
+    ASSESS_PROCESSES: `${APP_PREFIX}-assess-processes`,
+    ASSESSMENTS: `${APP_PREFIX}-assessments`,
+    ASSESS_GOVERNANCE_CONFIG: `${APP_PREFIX}-assess-governance-config`,
 };
 
 export class StorageService {

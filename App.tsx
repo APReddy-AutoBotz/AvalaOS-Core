@@ -1,47 +1,91 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import Sidebar from './components/Sidebar';
-import Header from './components/Header';
-import MyWorkView from './components/MyWorkView';
-import ProjectView from './components/ProjectView';
-import TeamView from './components/TeamView';
-import DocsForgeView from './components/DocsForgeView';
-import TemplateStudioView from './components/TemplateStudioView';
-import CustomDashboardView from './components/CustomDashboardView';
-import ReportsView from './components/ReportsView';
-import DocsView from './components/DocsView';
-import PortfolioView from './components/PortfolioView';
-import WorkspaceView from './components/WorkspaceView';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import Sidebar from './components/shared/Sidebar';
+import Header from './components/shared/Header';
+import ModuleJourney from './components/shared/ModuleJourney';
 import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, Team, DocTemplate, Automation, TimesheetEntry, GeneratedArtifacts, ApprovalStatus, Filters, ProjectLifecycleStage, DocumentGeneration, ProjectDetails, WorkItem, TaskType, DocumentArtifactKeys, DocumentSection, AiProviderType } from './types';
-import { MOCK_USERS, MOCK_TEAMS, MOCK_PROJECTS, MOCK_TASKS, MOCK_EPICS, MOCK_SPRINTS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES, MOCK_DOCUMENT_GENERATIONS } from './data/mockData';
+import { MOCK_USERS, MOCK_TEAMS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES } from './data/mockData';
 import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
-import TaskDetailModal from './components/TaskDetailModal';
-import ProjectSelectorModal from './components/ProjectSelectorModal';
+import { useAuth } from './components/auth/AuthProvider';
+import LoginView from './components/auth/LoginView';
+import { useOrganizationContext } from './components/auth/OrganizationProvider';
+import OnboardingWizard from './components/auth/OnboardingWizard';
+import { useDelivery } from './components/delivery/DeliveryProvider';
+import { useDocs } from './components/docs/DocsProvider';
 
 
 import { StorageKeys, usePersistentState } from './services/storage';
+import { firstEnabledView, isViewEnabled, isModuleEnabled } from './constants/moduleConfig';
+import { useHandoffLedger } from './services/handoffLedgerService';
+import { isSupabaseConfigured } from './services/supabaseClient';
+import { mapDemoTeamsForSupabase, mapDemoUsersForSupabase } from './services/demoIdentity';
+import { timesheetAdapter } from './services/adapters/timesheetAdapter';
+
+const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
+const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
+const TeamView = React.lazy(() => import('./components/delivery/TeamView'));
+const WorkspaceView = React.lazy(() => import('./components/delivery/WorkspaceView'));
+const TaskDetailModal = React.lazy(() => import('./components/delivery/TaskDetailModal'));
+const ProjectSelectorModal = React.lazy(() => import('./components/delivery/ProjectSelectorModal'));
+const DocsForgeView = React.lazy(() => import('./components/docs/DocsForgeView'));
+const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateStudioView'));
+const DocsView = React.lazy(() => import('./components/docs/DocsView'));
+const CustomDashboardView = React.lazy(() => import('./components/shared/CustomDashboardView'));
+const PortfolioView = React.lazy(() => import('./components/shared/PortfolioView'));
+const OrganizationSetupView = React.lazy(() => import('./components/auth/OrganizationSetupView'));
+const ProcessCatalogView = React.lazy(() => import('./components/assess/ProcessCatalogView'));
+const TemplateLibraryView = React.lazy(() => import('./components/assess/TemplateLibraryView'));
+const ProcessDetailStubView = React.lazy(() => import('./components/assess/ProcessDetailStubView'));
+const GuidedAssessmentView = React.lazy(() => import('./components/assess/GuidedAssessmentView'));
+
+const ViewLoadingFallback = () => (
+  <div className="mx-auto max-w-3xl p-8">
+    <div className="premium-surface rounded-3xl p-8 text-center">
+      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Loading workspace</p>
+      <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">Preparing this module...</h1>
+      <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
+        KlarityPM loads major product areas on demand so the first workspace opens faster.
+      </p>
+    </div>
+  </div>
+);
 
 function App() {
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // App State
-  const [currentUser] = usePersistentState<User>(StorageKeys.CURRENT_USER, MOCK_USERS[0]);
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const { currentOrganization, organizations, loading: orgLoading, createOrg } = useOrganizationContext();
   const [currentScope, setCurrentScope] = usePersistentState<Scope>(StorageKeys.SCOPE, { type: ScopeType.MY_WORK });
   const [currentView, setCurrentView] = usePersistentState<View>(StorageKeys.VIEW, View.DASHBOARD);
   const [quickFilter, setQuickFilter] = useState<Filters | null>(null);
+  const lastAppliedUserId = useRef<string | null>(null);
 
   // Data State
-  const [tasks, setTasks] = usePersistentState<Task[]>(StorageKeys.TASKS, MOCK_TASKS);
-  const [projects, setProjects] = usePersistentState<Project[]>(StorageKeys.PROJECTS, MOCK_PROJECTS);
-  const [epics, setEpics] = usePersistentState<Epic[]>(StorageKeys.EPICS, MOCK_EPICS);
-  const [sprints, setSprints] = usePersistentState<Sprint[]>(StorageKeys.SPRINTS, MOCK_SPRINTS);
+  const {
+    tasks,
+    projects,
+    epics,
+    sprints,
+    addTask: deliveryAddTask,
+    addTasks: deliveryAddTasks,
+    addEpics: deliveryAddEpics,
+    updateProject: deliveryUpdateProject,
+    updateSprint: deliveryUpdateSprint,
+    updateTask: deliveryUpdateTask,
+    updateTaskStatus: deliveryUpdateTaskStatus,
+    updateTaskSprint: deliveryUpdateTaskSprint,
+    reorderTask: deliveryReorderTask,
+    deleteTask: deliveryDeleteTask,
+  } = useDelivery();
   const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, MOCK_TEAMS);
   const [users, setUsers] = usePersistentState<User[]>(StorageKeys.USERS, MOCK_USERS);
   const [docTemplates, setDocTemplates] = usePersistentState<DocTemplate[]>(StorageKeys.DOC_TEMPLATES, MOCK_DOC_TEMPLATES);
   const [automations, setAutomations] = usePersistentState<Automation[]>(StorageKeys.AUTOMATIONS, MOCK_AUTOMATIONS);
-  const [timesheetEntries, setTimesheetEntries] = usePersistentState<TimesheetEntry[]>(StorageKeys.TIMESHEETS, MOCK_TIMESHEET_ENTRIES);
-  const [documentGenerations, setDocumentGenerations] = usePersistentState<DocumentGeneration[]>(StorageKeys.DOC_GENERATIONS, MOCK_DOCUMENT_GENERATIONS);
+  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>(MOCK_TIMESHEET_ENTRIES);
+  const { documentGenerations, saveGeneration: deliverySaveGeneration } = useDocs();
+  const { entries: handoffEntries, recordHandoff } = useHandoffLedger();
 
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
   const [tempArtifacts, setTempArtifacts] = useState<GeneratedArtifacts | null>(null);
@@ -51,8 +95,12 @@ function App() {
   const [isImportProjectSelectorOpen, setImportProjectSelectorOpen] = useState(false);
 
   // AI Provider State
-  const [userApiKey, setUserApiKey] = usePersistentState<string>(StorageKeys.API_KEY, '');
-  const [aiProviderType, setAiProviderType] = usePersistentState<AiProviderType>(StorageKeys.AI_PROVIDER, 'gemini');
+  const [userApiKey, setUserApiKey] = useState('');
+  const [aiProviderType, setAiProviderType] = usePersistentState<AiProviderType>(StorageKeys.AI_PROVIDER, 'groq');
+
+  // Assess Detail State
+  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
+  const enabledModules = currentOrganization?.enabledModules;
 
 
   useEffect(() => {
@@ -63,6 +111,41 @@ function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.removeItem(StorageKeys.API_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (aiProviderType === 'openai') {
+      setAiProviderType('groq');
+    }
+  }, [aiProviderType, setAiProviderType]);
+
+  useEffect(() => {
+    if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
+
+    if (isSupabaseConfigured()) {
+      setUsers(mapDemoUsersForSupabase(MOCK_USERS));
+      setTeams(mapDemoTeamsForSupabase(MOCK_TEAMS));
+    }
+
+    if (currentUser.defaultScope) {
+      setCurrentScope(currentUser.defaultScope);
+    }
+    if (currentUser.defaultView) {
+      setCurrentView(currentUser.defaultView);
+    }
+
+    lastAppliedUserId.current = currentUser.id;
+  }, [currentUser, setCurrentScope, setCurrentView]);
+
+  useEffect(() => {
+    if (!currentOrganization) return;
+    timesheetAdapter.getEntries(currentOrganization.id)
+      .then(setTimesheetEntries)
+      .catch(error => console.error('Failed to fetch timesheets:', error));
+  }, [currentOrganization]);
+
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
@@ -70,13 +153,13 @@ function App() {
   const handleScopeChange = (scope: Scope) => {
     setCurrentScope(scope);
     // Reset view to a sensible default for the new scope
-    if (scope.type === ScopeType.MY_WORK) setCurrentView(View.DASHBOARD);
-    if (scope.type === ScopeType.PROJECT) setCurrentView(View.BOARDS);
-    if (scope.type === ScopeType.TEAM) setCurrentView(View.TEAMS);
+    if (scope.type === ScopeType.MY_WORK) setCurrentView(isViewEnabled(View.DASHBOARD, enabledModules) ? View.DASHBOARD : firstEnabledView(enabledModules));
+    if (scope.type === ScopeType.PROJECT) setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
+    if (scope.type === ScopeType.TEAM) setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
   };
 
   const handleViewChange = (view: View) => {
-    setCurrentView(view);
+    setCurrentView(isViewEnabled(view, enabledModules) ? view : firstEnabledView(enabledModules));
   };
 
   const handleDashboardStatClick = (filter: Filters) => {
@@ -87,10 +170,20 @@ function App() {
     setCurrentView(View.LIST);
   };
 
-  const handleStartNewDoc = () => {
-    // Always go to the forge, regardless of current scope.
-    // We'll handle project selection later if needed.
-    setCurrentView(View.DOCS_FORGE);
+  const handlePrimaryAction = () => {
+    if (isModuleEnabled('docs', enabledModules)) {
+      setCurrentView(View.DOCS_FORGE);
+      return;
+    }
+    if (isModuleEnabled('assess', enabledModules)) {
+      setCurrentView(View.PROCESS_CATALOG);
+      return;
+    }
+    if (isModuleEnabled('delivery', enabledModules)) {
+      setCurrentView(View.BOARDS);
+      return;
+    }
+    setCurrentView(View.DASHBOARD);
   };
 
   const handleProjectSelectedForDocForge = (project: Project) => {
@@ -100,91 +193,120 @@ function App() {
   };
 
   // Data manipulation handlers
+  const surfaceDeliveryError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : 'This delivery action could not be completed.';
+    window.alert(message);
+  };
+
   const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
-    setTasks(prevTasks => prevTasks.map(task => task.id === taskId ? { ...task, status: newStatus } : task));
+    deliveryUpdateTaskStatus(taskId, newStatus).catch(surfaceDeliveryError);
   };
 
   const handleUpdateProjectLifecycleStage = (projectId: string, newStage: ProjectLifecycleStage) => {
-    setProjects(prevProjects => prevProjects.map(p => p.id === projectId ? { ...p, lifecycleStage: newStage } : p));
+    const project = projects.find(item => item.id === projectId);
+    if (!project) return;
+    deliveryUpdateProject({ ...project, lifecycleStage: newStage }).catch(surfaceDeliveryError);
   };
 
   const handleUpdateTask = (updatedTask: Task) => {
-    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    deliveryUpdateTask(updatedTask).catch(surfaceDeliveryError);
   };
 
   const handleAddTask = (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => {
-    const newTask: Task = {
-      ...taskDetails,
-      id: `task-${Date.now()}`,
-      title: taskDetails.title,
-      description: taskDetails.description || '',
-      status: taskDetails.status || 'To Do',
-      priority: taskDetails.priority || 'Medium',
-      type: taskDetails.type || 'Task',
-      projectId: taskDetails.projectId,
-      assigneeIds: taskDetails.assigneeIds || [],
-      startDate: taskDetails.startDate || new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    };
-    setTasks(prev => [...prev, newTask]);
+    deliveryAddTask(taskDetails).catch(surfaceDeliveryError);
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-    if (selectedTask?.id === taskId) {
-      setSelectedTask(null);
-    }
+    deliveryDeleteTask(taskId)
+      .then(() => {
+        if (selectedTask?.id === taskId) {
+          setSelectedTask(null);
+        }
+      })
+      .catch(surfaceDeliveryError);
   };
 
   const handleUpdateTaskSprint = (taskId: string, sprintId: string | null) => {
-    setTasks(tasks.map(t => t.id === taskId ? { ...t, sprintId: sprintId || undefined } : t));
+    deliveryUpdateTaskSprint(taskId, sprintId).catch(surfaceDeliveryError);
   };
 
-  const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
-    // This is a simplified reorder. A real app would adjust order properties.
-    console.log(`Reordering ${taskIdToMove} before ${referenceTaskId} in epic ${newEpicId}`);
-    setTasks(prevTasks => {
-      const taskToMove = prevTasks.find(t => t.id === taskIdToMove);
-      if (!taskToMove) return prevTasks;
+  const handleUpdateSprint = (sprint: Sprint) => {
+    deliveryUpdateSprint(sprint).catch(surfaceDeliveryError);
+  };
 
-      const otherTasks = prevTasks.filter(t => t.id !== taskIdToMove);
-      taskToMove.epicId = newEpicId !== 'unassigned' ? newEpicId : undefined;
-
-      if (!referenceTaskId) {
-        return [...otherTasks, taskToMove];
-      }
-
-      const refIndex = otherTasks.findIndex(t => t.id === referenceTaskId);
-      otherTasks.splice(refIndex, 0, taskToMove);
-      return otherTasks;
+  const handleAssessToDocsHandoff = (payload: { processId: string; processName: string; assessmentId?: string; decision?: string }) => {
+    recordHandoff({
+      fromModule: 'assess',
+      toModule: 'docs',
+      status: 'Submitted',
+      sourceType: 'Decision Pack',
+      sourceId: payload.assessmentId || payload.processId,
+      targetType: 'Document Generation',
+      targetId: 'pending-doc-generation',
+      title: `${payload.processName} moved to Docs`,
+      summary: `Assessment decision ${payload.decision || 'ready'} was handed off for BRD, PRD, PDD, and diagram generation.`,
+      evidenceRefs: [payload.processId, payload.assessmentId || 'assessment-pending'],
+      metadata: {
+        processId: payload.processId,
+        decision: payload.decision,
+      },
     });
+    setCurrentView(View.DOCS_FORGE);
+  };
+
+  useEffect(() => {
+    if (!currentOrganization || currentScope.type === ScopeType.ORGANIZATION) return;
+    if (currentView === View.TEAMS) {
+      setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
+      return;
+    }
+    if (currentView === View.REPORTS) {
+      setCurrentView(isViewEnabled(View.DASHBOARD, enabledModules) ? View.DASHBOARD : firstEnabledView(enabledModules));
+      return;
+    }
+    if (!isViewEnabled(currentView, enabledModules)) {
+      setCurrentView(firstEnabledView(enabledModules));
+    }
+  }, [currentOrganization, currentScope.type, currentView, enabledModules, setCurrentView]);
+
+  const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
+    deliveryReorderTask(taskIdToMove, referenceTaskId, newEpicId).catch(surfaceDeliveryError);
   };
 
   const handleUpdateTimesheet = (userId: string, taskId: string, date: string, hours: number) => {
+    if (!currentOrganization || !currentUser) return;
+    const canManageTimesheets = currentUser.permissions?.some(permission => ['project.manage', 'timesheets.approve'].includes(permission));
+    const canLogOwnTime = userId === currentUser.id && currentUser.permissions?.includes('timesheets.log');
+    if (!canManageTimesheets && !canLogOwnTime) {
+      surfaceDeliveryError(new Error('You do not have permission to log or approve timesheet entries.'));
+      return;
+    }
+
+    const existingEntry = timesheetEntries.find(entry => entry.userId === userId && entry.taskId === taskId && entry.date === date);
+    const optimisticEntry: TimesheetEntry = existingEntry || { id: `ts-${Date.now()}`, userId, taskId, date, hours };
+
     setTimesheetEntries(prev => {
-      const existingEntryIndex = prev.findIndex(e => e.userId === userId && e.taskId === taskId && e.date === date);
-      if (existingEntryIndex > -1) {
-        if (hours === 0) {
-          // Remove entry if hours are zero
-          return prev.filter((_, index) => index !== existingEntryIndex);
-        }
-        // Update existing entry
-        const updatedEntries = [...prev];
-        updatedEntries[existingEntryIndex] = { ...updatedEntries[existingEntryIndex], hours };
-        return updatedEntries;
-      } else if (hours > 0) {
-        // Add new entry
-        const newEntry: TimesheetEntry = {
-          id: `ts-${Date.now()}`,
-          userId,
-          taskId,
-          date,
-          hours,
-        };
-        return [...prev, newEntry];
+      if (hours === 0) {
+        return prev.filter(entry => !(entry.userId === userId && entry.taskId === taskId && entry.date === date));
       }
-      return prev;
+      const nextEntry = { ...optimisticEntry, hours };
+      const hasExistingEntry = prev.some(entry => entry.id === nextEntry.id);
+      return hasExistingEntry ? prev.map(entry => entry.id === nextEntry.id ? nextEntry : entry) : [...prev, nextEntry];
     });
+
+    const persistence = hours === 0
+      ? timesheetAdapter.deleteEntry(currentOrganization.id, userId, taskId, date).then(() => undefined)
+      : timesheetAdapter.saveEntry({ ...optimisticEntry, hours }, currentOrganization.id);
+
+    persistence
+      .then(saved => {
+        if (!saved) return;
+        setTimesheetEntries(prev => prev.map(entry => entry.id === optimisticEntry.id ? saved : entry));
+      })
+      .catch(error => {
+        surfaceDeliveryError(error);
+        timesheetAdapter.getEntries(currentOrganization.id).then(setTimesheetEntries).catch(console.error);
+      });
   };
 
   const handleUpdateApprovalStatus = (userId: string, status: ApprovalStatus, comments?: string) => {
@@ -201,19 +323,15 @@ function App() {
       return;
     }
 
-    setDocumentGenerations(prevGens => {
-      return prevGens.map(gen => {
-        if (gen.id === generationId) {
-          const newApprovals = gen.artifacts.approvals.map(approver =>
+    const gen = documentGenerations.find(g => g.id === generationId);
+    if (gen) {
+        const newApprovals = gen.artifacts.approvals.map(approver =>
             approver.userId === userId
               ? { ...approver, status, comments: status === 'Rejected' ? comments : undefined, approvedAt: status === 'Approved' ? new Date().toISOString() : null }
               : approver
           );
-          return { ...gen, artifacts: { ...gen.artifacts, approvals: newApprovals } };
-        }
-        return gen;
-      });
-    });
+        deliverySaveGeneration({ ...gen, artifacts: { ...gen.artifacts, approvals: newApprovals } });
+    }
   };
 
   const handleResubmitForApproval = (userId: string) => {
@@ -230,23 +348,19 @@ function App() {
       return;
     }
 
-    setDocumentGenerations(prevGens => {
-      return prevGens.map(gen => {
-        if (gen.id === generationId) {
-          const newApprovals = gen.artifacts.approvals.map(approver =>
+    const gen = documentGenerations.find(g => g.id === generationId);
+    if (gen) {
+        const newApprovals = gen.artifacts.approvals.map(approver =>
             approver.userId === userId
               ? { ...approver, status: 'Pending' as ApprovalStatus, comments: undefined, approvedAt: null }
               : approver
           );
-          return { ...gen, artifacts: { ...gen.artifacts, approvals: newApprovals } };
-        }
-        return gen;
-      });
-    });
+        deliverySaveGeneration({ ...gen, artifacts: { ...gen.artifacts, approvals: newApprovals } });
+    }
   };
 
 
-  const handleImportWorkItems = (itemsToImport: WorkItem[], projectId: string) => {
+  const handleImportWorkItems = async (itemsToImport: WorkItem[], projectId: string) => {
     const newEpics: Epic[] = [];
     const newTasks: Task[] = [];
     const tempEpicTitleToNewId = new Map<string, string>();
@@ -275,8 +389,26 @@ function App() {
       }
     });
 
-    setEpics(prev => [...prev, ...newEpics]);
-    setTasks(prev => [...prev, ...newTasks]);
+    await deliveryAddEpics(newEpics);
+    await deliveryAddTasks(newTasks);
+
+    recordHandoff({
+      fromModule: 'docs',
+      toModule: 'delivery',
+      status: 'Accepted',
+      sourceType: 'Work Items',
+      sourceId: activeGenerationId || 'temporary-document-generation',
+      targetType: 'Project',
+      targetId: projectId,
+      title: `${itemsToImport.length} generated work items imported`,
+      summary: `Generated document work items were accepted into ${projects.find(p => p.id === projectId)?.name || 'the selected project'} backlog.`,
+      evidenceRefs: itemsToImport.map(item => item.title),
+      metadata: {
+        itemCount: itemsToImport.length,
+        epicCount: newEpics.length,
+        taskCount: newTasks.length,
+      },
+    });
 
     alert(`${newEpics.length} epic(s) and ${newTasks.length} task(s) have been imported to your backlog.`);
 
@@ -287,7 +419,7 @@ function App() {
   const handleInitiateImport = (itemsToImport: WorkItem[]) => {
     // If we are already in a project, import directly.
     if (currentScope.type === ScopeType.PROJECT) {
-      handleImportWorkItems(itemsToImport, currentScope.id);
+      handleImportWorkItems(itemsToImport, currentScope.id).catch(surfaceDeliveryError);
       // If this was a temporary artifact session, we can now persist it.
       if (tempArtifacts) {
         const newGeneration: DocumentGeneration = {
@@ -297,7 +429,7 @@ function App() {
           templateId: 'unknown', // This info is lost in the temp state, could be improved
           artifacts: tempArtifacts,
         };
-        setDocumentGenerations(prev => [...prev, newGeneration]);
+        deliverySaveGeneration(newGeneration);
         setTempArtifacts(null);
       }
     } else {
@@ -317,10 +449,10 @@ function App() {
       templateId: 'unknown', // This info is lost in the temp state, could be improved
       artifacts: tempArtifacts,
     };
-    setDocumentGenerations(prev => [...prev, newGeneration]);
+    deliverySaveGeneration(newGeneration);
 
     // 2. Import the work items into the selected project
-    handleImportWorkItems(tempArtifacts.workItems, project.id);
+    handleImportWorkItems(tempArtifacts.workItems, project.id).catch(surfaceDeliveryError);
 
     // 3. Clean up and close modal
     setTempArtifacts(null);
@@ -343,13 +475,10 @@ function App() {
     if (tempArtifacts) {
       setTempArtifacts(processArtifacts(tempArtifacts));
     } else if (activeGenerationId) {
-      setDocumentGenerations(prevGens =>
-        prevGens.map(gen =>
-          gen.id === activeGenerationId
-            ? { ...gen, artifacts: processArtifacts(gen.artifacts) }
-            : gen
-        )
-      );
+      const gen = documentGenerations.find(g => g.id === activeGenerationId);
+      if (gen) {
+        deliverySaveGeneration({ ...gen, artifacts: processArtifacts(gen.artifacts) });
+      }
     }
   };
 
@@ -412,7 +541,7 @@ function App() {
       color: ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'][epics.length % 6]
     };
 
-    setEpics(prev => [...prev, newEpic]);
+    deliveryAddEpics([newEpic]).catch(surfaceDeliveryError);
 
     // Switch to project scope and backlog view
     const project = projects.find(p => p.id === generation.projectId);
@@ -424,9 +553,53 @@ function App() {
   };
 
   const renderCurrentView = () => {
+    if (currentScope.type !== ScopeType.ORGANIZATION && !isViewEnabled(currentView, enabledModules)) {
+      return (
+        <div className="mx-auto max-w-3xl p-8">
+          <div className="premium-surface rounded-3xl p-8 text-center">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Module not enabled</p>
+            <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">This workspace is configured for a different module set.</h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Only enabled modules appear in navigation. Ask a workspace admin to update module access in Settings if this team needs the complete Assess, Docs, Delivery, and Monitor suite.</p>
+            <button onClick={() => setCurrentView(firstEnabledView(enabledModules))} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">
+              Open Enabled Module
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // If we are currently viewing a specific process detail
+    if (currentView === View.PROCESS_DETAIL && selectedProcessId) {
+      return <ProcessDetailStubView
+        processId={selectedProcessId}
+        onBack={() => setCurrentView(View.PROCESS_CATALOG)}
+        onStartAssessment={(id) => { setSelectedProcessId(id); setCurrentView(View.GUIDED_ASSESSMENT); }}
+        onGenerateDocs={handleAssessToDocsHandoff}
+      />;
+    }
+
+    if (currentView === View.GUIDED_ASSESSMENT && selectedProcessId && currentScope.type !== ScopeType.ORGANIZATION) {
+       // Using orgId from the current context. Assuming projects belong to current org if in project scope, but Process is strictly an org-level concept.
+       // The process has an orgId. We need to use the current selected organization, but the scope might be Team/Project.
+       // Actually, Module 1 defined Assess views mostly in Organization scope, so we use currentOrganization context globally.
+       return <GuidedAssessmentView processId={selectedProcessId} onExit={() => setCurrentView(View.PROCESS_DETAIL)} />;
+    }
+
+    // Global Assess Views
+    if (currentView === View.PROCESS_CATALOG) {
+      return <ProcessCatalogView onViewDetail={(id) => { setSelectedProcessId(id); setCurrentView(View.PROCESS_DETAIL); }} />;
+    }
+    if (currentView === View.TEMPLATE_LIBRARY) {
+      return <TemplateLibraryView />;
+    }
+
+    if (currentScope.type === ScopeType.ORGANIZATION) {
+      return <OrganizationSetupView currentUser={currentUser} allUsers={users} />;
+    }
+
     switch (currentView) {
       case View.DASHBOARD:
-        return <CustomDashboardView currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} sprints={sprintsForScope} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} userApiKey={userApiKey} aiProviderType={aiProviderType} />;
+        return <CustomDashboardView currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} userApiKey={userApiKey} aiProviderType={aiProviderType} />;
       case View.PORTFOLIO:
         return <PortfolioView projects={projects} tasks={tasks} users={users} onUpdateProjectStage={handleUpdateProjectLifecycleStage} onScopeChange={handleScopeChange} onViewChange={handleViewChange} />;
       case View.DOCS_FORGE:
@@ -440,9 +613,16 @@ function App() {
                 id: `docgen-${Date.now()}`, projectId: currentScope.id,
                 generatedAt: new Date().toISOString(), templateId: projectDetails.templateId, artifacts: artifacts,
               };
-              setDocumentGenerations(prev => [...prev, newGeneration]);
-              setActiveGenerationId(newGeneration.id);
-              setTempArtifacts(null);
+              setTempArtifacts(artifacts);
+              setActiveGenerationId(null);
+              deliverySaveGeneration(newGeneration)
+                .then(saved => {
+                  if (saved) {
+                    setActiveGenerationId(saved.id);
+                    setTempArtifacts(null);
+                  }
+                })
+                .catch(surfaceDeliveryError);
             } else {
               // Globally generated, hold artifacts in temp state
               setTempArtifacts(artifacts);
@@ -451,7 +631,6 @@ function App() {
             setCurrentView(View.WORKSPACE);
           }}
           userApiKey={userApiKey}
-          onUserApiKeyChange={setUserApiKey}
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
         />;
@@ -468,6 +647,7 @@ function App() {
 
         return <WorkspaceView
           artifacts={artifactsToShow}
+          generationId={activeGeneration?.id || null}
           template={template}
           error={null}
           onDone={() => {
@@ -486,8 +666,6 @@ function App() {
       }
       case View.TEMPLATE_STUDIO:
         return <TemplateStudioView templates={docTemplates} onCreate={(t) => setDocTemplates(p => [...p, { ...t, id: `template-${Date.now()}` }])} onUpdate={(t) => setDocTemplates(p => p.map(pt => pt.id === t.id ? t : pt))} onDelete={(id) => setDocTemplates(p => p.filter(pt => pt.id !== id))} />;
-      case View.REPORTS:
-        return <ReportsView />;
       case View.DOCS:
         return <DocsView generations={documentGenerations.filter(g => g.projectId === (currentScope as any).id)} templates={docTemplates} onViewGeneration={(id) => {
           setActiveGenerationId(id);
@@ -507,7 +685,7 @@ function App() {
             aiProviderType={aiProviderType}
             onUpdateTaskStatus={handleUpdateTaskStatus} onUpdateTask={handleUpdateTask} onSelectTask={setSelectedTask}
             // Fix: Pass `handleReorderTask` to the `onReorderTask` prop. The original code had a typo `onReorderTask`.
-            onUpdateTaskSprint={handleUpdateTaskSprint} onReorderTask={handleReorderTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask}
+            onUpdateTaskSprint={handleUpdateTaskSprint} onUpdateSprint={handleUpdateSprint} onReorderTask={handleReorderTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask}
             onCreateAutomation={(a) => setAutomations(p => [...p, { ...a, id: `auto-${Date.now()}` }])} onUpdateAutomation={(a) => setAutomations(p => p.map(pa => pa.id === a.id ? a : pa))} onDeleteAutomation={(id) => setAutomations(p => p.filter(pa => pa.id !== id))} onToggleAutomation={(id, isEnabled) => setAutomations(p => p.map(pa => pa.id === id ? { ...pa, isEnabled } : pa))}
             onUpdateTimesheet={handleUpdateTimesheet}
             onViewGeneration={(generationId: string) => {
@@ -518,52 +696,81 @@ function App() {
           />;
         }
         if (currentScope.type === ScopeType.TEAM && teams.find(t => t.id === currentScope.id)) {
-          return <TeamView view={currentView} team={teams.find(t => t.id === currentScope.id)!} members={usersForScope} tasks={tasksForScope} projects={projectsForScope} epics={epicsForScope} onUpdateTaskStatus={handleUpdateTaskStatus} onSelectTask={setSelectedTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} />;
+          return <TeamView view={currentView} team={teams.find(t => t.id === currentScope.id)!} members={usersForScope} currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} epics={epicsForScope} onUpdateTaskStatus={handleUpdateTaskStatus} onSelectTask={setSelectedTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} />;
         }
         return <div className="p-8">Select a scope to get started.</div>;
     }
   };
 
+  if (authLoading || orgLoading) {
+    return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-abz-ink-950 text-slate-500 font-medium">Loading workspace...</div>;
+  }
+
+  if (!currentUser) {
+    return <LoginView />;
+  }
+
+  if (organizations.length === 0) {
+    return <OnboardingWizard onComplete={(name) => createOrg(name)} />;
+  }
+
   return (
-    <div className="flex h-screen bg-slate-100 dark:bg-abz-ink-950 text-text-light dark:text-text-dark font-sans">
+    <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans">
       <Sidebar
         currentScope={currentScope}
         currentView={currentView}
         onViewChange={handleViewChange}
+        onScopeChange={handleScopeChange}
         collapsed={isSidebarCollapsed}
       />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden relative">
         <Header
           theme={theme}
           toggleTheme={toggleTheme}
-          onStartNew={handleStartNewDoc}
+          onStartNew={handlePrimaryAction}
           currentScope={currentScope}
           onScopeChange={handleScopeChange}
           currentUser={currentUser}
+          teams={teams}
+          projects={projects}
         />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {renderCurrentView()}
+        {currentScope.type !== ScopeType.ORGANIZATION && (
+          <ModuleJourney
+            enabledModules={enabledModules}
+            currentView={currentView}
+            onNavigate={handleViewChange}
+          />
+        )}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 view-transition-enter view-transition-enter-active">
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            {renderCurrentView()}
+          </React.Suspense>
         </main>
       </div>
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          allTasks={tasks}
-          project={projects.find(p => p.id === selectedTask.projectId)}
-          epic={epics.find(e => e.id === selectedTask.epicId)}
-          users={users}
-          onClose={() => setSelectedTask(null)}
-          onUpdateTask={handleUpdateTask}
-          onAddTask={(subtask) => setTasks(prev => [...prev, subtask])}
-          onDeleteTask={handleDeleteTask}
-        />
-      )}
-      <ProjectSelectorModal
-        isOpen={isImportProjectSelectorOpen}
-        onClose={() => setImportProjectSelectorOpen(false)}
-        projects={projects}
-        onProjectSelect={handleProjectSelectedForImport}
-      />
+      <React.Suspense fallback={null}>
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            allTasks={tasks}
+            project={projects.find(p => p.id === selectedTask.projectId)}
+            epic={epics.find(e => e.id === selectedTask.epicId)}
+            users={users}
+            currentUser={currentUser}
+            onClose={() => setSelectedTask(null)}
+            onUpdateTask={handleUpdateTask}
+            onAddTask={handleAddTask}
+            onDeleteTask={handleDeleteTask}
+          />
+        )}
+        {isImportProjectSelectorOpen && (
+          <ProjectSelectorModal
+            isOpen={isImportProjectSelectorOpen}
+            onClose={() => setImportProjectSelectorOpen(false)}
+            projects={projects}
+            onProjectSelect={handleProjectSelectedForImport}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 }

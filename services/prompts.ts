@@ -10,14 +10,14 @@ MOST IMPORTANT RULE: All string values within the JSON must be correctly escaped
 
 Your thought process for each request MUST be:
 1.  **PII Scan:** First, scan the entire "Source Content" for Personally Identifiable Information (PII) like names, emails, phone numbers. In all generated output, replace any found PII with generic placeholders (e.g., [Name], [Email]).
-2.  **Evidence-First Analysis:** For every section you generate, you MUST ground your claims in the provided "Source Content". The source is pre-chunked with labels like "[SOURCE 1]", "[SOURCE 2]", etc.
-3.  **Citation Generation:** In your JSON output, for each generated "section", you must include a "citations" array. This array should contain strings of the source chunk labels you used to generate that section's content (e.g., "citations": ["[SOURCE 3]", "[SOURCE 5]"]). If a section is purely introductory or generated from general knowledge, the citations array can be empty.
+2.  **Evidence-First Analysis:** When source content is provided, ground factual claims in the provided "Source Content". The source is pre-chunked with labels like "[SOURCE 1]", "[SOURCE 2]", etc. When no meaningful source content is provided, generate an industry-standard starter draft from widely accepted enterprise BA/PM/process documentation practice and clearly label it as assumption-based.
+3.  **Citation Generation:** In your JSON output, for each generated "section", you must include a "citations" array. This array should contain strings of the source chunk labels you used to generate that section's content (e.g., "citations": ["[SOURCE 3]", "[SOURCE 5]"]). If no source content is available or a section is generated from standard industry practice, use an empty citations array and state in the content that it is an industry baseline starter draft requiring SME validation.
 4.  **Quality Gate Analysis:** When generating the 'qualityGate' section, if an ambiguity or gap relates to a specific document section, include that section's 'key' in parentheses at the end of the point. Example: "The SLA for invoice processing is not defined (tobe_reporting)".
 5.  **Final JSON Generation:** Finally, generate the single, valid, and fully-escaped JSON object according to the schema.
 
 - Use Markdown for all "content" fields.
 - For "mermaidCode", if node text contains special characters (like parentheses), it must be in quotes. If the node text itself contains a double quote, use the HTML entity &quot; inside the Mermaid string. Example: \`A["User clicks the &quot;Submit&quot; button"]\`.
-- Every statement MUST be grounded in the provided sources.
+- Source-backed statements MUST be grounded in the provided sources. When there are no sources, create a useful industry baseline starter draft, mark assumptions clearly, and avoid pretending the content is validated.
 - The output should be professional, crisp, and testable.`,
 
     REFINE_SECTION: `You are an expert document editor. Your task is to rewrite a given piece of text based on a user's prompt.
@@ -35,28 +35,36 @@ VERY IMPORTANT: Ensure all string values within the JSON are correctly escaped. 
 };
 
 export const PROMPTS = {
-    projectArtifacts: (projectDetails: ProjectDetails, templateTitle: string, templateStructure: string, fileName: string, chunkedContent: string) => `
+    projectArtifacts: (projectDetails: ProjectDetails, templateTitle: string, templateArtifactKey: string, templateStructure: string, fileName: string, chunkedContent: string) => `
 Project Details:
 - Company: ${projectDetails.company}
 - Project Name: ${projectDetails.project}
 - Domain: ${projectDetails.domain}
 
 Selected Document Template: ${templateTitle}
+Selected Artifact Key: ${templateArtifactKey}
 Template Structure to follow:
 ${templateStructure}
 
 Source Document Name: ${fileName}
 Source Content (Chunked):
 ---
-${chunkedContent}
+${chunkedContent || 'No support material was uploaded. Generate an industry baseline starter draft using the project name, company, domain, selected template, and common enterprise documentation standards.'}
 ---
 
 Based on all the information above, generate the following artifacts according to your system instructions:
-1.  Generate the primary document (${templateTitle || 'BRD/FRD/PDD'}) by populating the correct key in the JSON output ('brd', 'frd', or 'pdd'). Ensure its sections align with the requested template structure, follow per-section instructions, and include citations.
+1.  Generate the primary document (${templateTitle || 'BRD/FRD/PDD'}) by populating the '${templateArtifactKey}' key in the JSON output. The primary document MUST contain every section listed in "Template Structure to follow", using the exact section keys and section titles.
 2.  A Quality Gate Analysis identifying ambiguities and gaps, linking them to section keys where possible.
 3.  An "As-Is" Mermaid flowchart diagram.
 4.  A "To-Be" Mermaid flowchart diagram.
 5.  A list of native Work Items for the Klarity PM board (Epic, Stories, Tasks).
+
+Strict template compliance rules:
+- Do not omit any requested template section.
+- If source content is thin or absent, still create a complete, editable starter section using project context and industry-standard process patterns. Clearly label it as an assumption-based baseline that requires SME validation.
+- Diagram/map sections in the primary document should include a fenced \`\`\`mermaid code block, and the same process maps must also be present in the top-level diagrams.asIs and diagrams.toBe fields.
+- Work items must be implementation-ready and should include at least one Epic and multiple Stories/Tasks.
+- For no-source generation, the Quality Gate should not say every section is missing. Instead, include one clear gap that source evidence is needed before approval, plus a short list of recommended materials to upload.
 `,
 
     refineSection: (originalContent: string, refinementPrompt: string) => `

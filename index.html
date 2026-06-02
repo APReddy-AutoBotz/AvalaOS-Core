@@ -3,64 +3,15 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='4.5' y='4.5' width='39' height='39' rx='12' fill='%23002C4B'/%3E%3Crect x='5.5' y='5.5' width='37' height='37' rx='11' stroke='%23FFBC03' stroke-width='2' fill='none'/%3E%3Cpath d='M14.5 34V14H19V23.4L28.1 14H34L25 23.1L34.6 34H28.7L22 26.1L19 29.1V34H14.5Z' fill='white'/%3E%3Ccircle cx='36.3' cy='11.7' r='2.2' fill='%23FFBC03'/%3E%3C/svg%3E" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Klarity PM</title>
+  <title>KlarityPM | Governed Automation and AI Delivery Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@500;600;700;800&family=Playfair+Display:wght@600;700;800;900&display=swap"
     rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Outfit', 'sans-serif'],
-          },
-          colors: {
-            'abz-primary': '#6366F1', // Indigo 500
-            abz: {
-              indigo: { 100: '#E0E7FF', 500: '#6366F1', 600: '#4F46E5', 700: '#4338CA' },
-              teal: { 400: '#2DD4BF', 500: '#14B8A6', 600: '#0D9488' },
-              amber: { 500: '#F59E0B' },
-              red: { 500: '#EF4444' },
-              emerald: { 500: '#10B981' },
-              violet: { 500: '#8B5CF6' },
-              azure: { 500: '#3B82F6' },
-              pink: { 500: '#EC4899' },
-              slate: { 500: '#64748B' },
-              ink: { 800: '#1E1E1E', 900: '#0A0A0A', 950: '#050505' },
-              cloud: { 50: '#F8FAFC', 100: '#F1F5F9', 200: '#E2E8F0' }
-            },
-            'surface-dark': '#0A0A0A',
-            'text-light': '#0A0A0A',
-            'text-dark': '#F1F5F9',
-          },
-          borderRadius: { 'xl': '1rem', '2xl': '1.25rem', '3xl': '1.5rem' },
-          boxShadow: {
-            soft: '0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)',
-            elev1: '0 1px 2px rgba(0,0,0,0.06)',
-            elev2: '0 10px 24px rgba(0,0,0,.08)',
-            elev3: '0 14px 34px rgba(0,0,0,0.12)',
-          },
-          ringWidth: { '3': '3px', },
-          ringColor: { DEFAULT: '#6366F1', },
-          keyframes: {
-            shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
-            glow: { '0%,100%': { boxShadow: '0 0 0 rgba(99,102,241,0)' }, '50%': { boxShadow: '0 0 24px rgba(99,102,241,0.35)' } }
-          },
-          animation: {
-            shimmer: 'shimmer 8s linear infinite',
-            glow: 'glow 2.4s ease-in-out infinite'
-          },
-        }
-      }
-    }
-  </script>
   <style>
     /* Fix double scrollbar issue - only the main content should scroll */
     html,
@@ -82,7 +33,7 @@
       --abz-cloud-50: #F8FAFC;
       --abz-cloud-100: #F1F5F9;
       --abz-indigo-500: #6366F1;
-      --abz-indigo-600: #4F46E5;
+      --abz-indigo-600: #073B60;
       --abz-violet-500: #8B5CF6;
       --abz-azure-500: #3B82F6;
       --abz-teal-500: #14B8A6;
@@ -156,8 +107,8 @@
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, #4F46E5 0%, #8B5CF6 55%, #38BDF8 100%);
-      color: #fff;
+      background: linear-gradient(135deg, #FFE08A 0%, #FFBC03 58%, #E4A600 100%);
+      color: #002C4B;
       border: 0;
       border-radius: 12px;
       padding: .65rem 1rem;
@@ -172,7 +123,7 @@
 
     .btn-primary:active {
       transform: translateY(0);
-      box-shadow: 0 6px 16px rgba(79, 70, 229, .25);
+      box-shadow: 0 6px 16px rgba(255, 188, 3, .28);
     }
 
     .btn-primary:disabled {
@@ -544,7 +495,7 @@
   <link rel="stylesheet" href="/index.css">
 </head>
 
-<body class="app-bg font-sans text-sm selection:bg-abz-indigo-500 selection:text-white">
+<body class="app-bg font-sans text-sm selection:bg-[#ffbc03]/40 selection:text-[#002C4B]">
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

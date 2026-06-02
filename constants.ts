@@ -117,7 +117,7 @@ export const INVOICE_PROCESSING_ARTIFACTS: GeneratedArtifacts = {
         sections: [
             {
                 key: 'asis_overview',
-                title: '2.1 Process Overview',
+                title: 'Process Overview',
                 content: 'The current process involves Accounts Payable clerks manually monitoring an inbox for invoices. They open each PDF, extract key information (Invoice #, Date, Amount, PO #), and enter it into an Excel tracker. They then log into SAP to validate the PO number and post the invoice for payment.'
             },
             {

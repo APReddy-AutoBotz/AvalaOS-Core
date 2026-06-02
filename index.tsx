@@ -1,7 +1,12 @@
 
 import React from 'react';
+import './index.css';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { AuthProvider } from './components/auth/AuthProvider';
+import { OrganizationProvider } from './components/auth/OrganizationProvider';
+import { DeliveryProvider } from './components/delivery/DeliveryProvider';
+import { DocsProvider } from './components/docs/DocsProvider';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +16,14 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <OrganizationProvider>
+        <DeliveryProvider>
+          <DocsProvider>
+            <App />
+          </DocsProvider>
+        </DeliveryProvider>
+      </OrganizationProvider>
+    </AuthProvider>
   </React.StrictMode>
 );
