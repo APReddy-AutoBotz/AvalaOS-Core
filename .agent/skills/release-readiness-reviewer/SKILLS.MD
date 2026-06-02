@@ -1,6 +1,6 @@
 ---
 name: release-readiness-reviewer
-description: Use this skill before releasing a KlarityPM Assess module or major change to verify logic, UX, gating, and handoffs.
+description: Use this supplemental skill before releasing an AvalaOS module or major change to verify logic, UX, gating, and handoffs.
 ---
 
 Release Readiness Reviewer

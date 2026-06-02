@@ -1,6 +1,6 @@
 ---
 name: recommendation-engine-enforcer
-description: Use this skill when converting scores into primary and secondary technology recommendations in KlarityPM Assess.
+description: Use this supplemental skill when converting deterministic Avala Assess scores into primary and secondary technology recommendations.
 ---
 
 Recommendation Engine Enforcer

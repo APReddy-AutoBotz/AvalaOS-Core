@@ -1,6 +1,6 @@
 ---
 name: acceptance-criteria-enforcer
-description: Use this skill when validating a KlarityPM Assess module against user stories and acceptance criteria before it is marked complete.
+description: Use this supplemental skill when validating an AvalaOS module against user stories and acceptance criteria before it is marked complete.
 ---
 
 Acceptance Criteria Enforcer

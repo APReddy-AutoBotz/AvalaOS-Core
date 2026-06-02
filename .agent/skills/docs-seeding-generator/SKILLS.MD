@@ -1,6 +1,6 @@
 ---
 name: docs-seeding-generator
-description: Use this skill when converting approved KlarityPM Assess outputs into draft BRD, PRD, PDD, or SDD starter payloads.
+description: Use this supplemental skill when converting approved Avala Assess outputs into draft BRD, PRD, PDD, or SDD starter payloads.
 ---
 
 Docs Seeding Generator

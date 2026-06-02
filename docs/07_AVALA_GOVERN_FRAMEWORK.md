@@ -25,10 +25,11 @@ Avala Govern Lite is the lightweight governance layer added to the post-assessme
 
 ## Autonomy Levels
 
-- Observe
-- Advise
-- Act With Approval
-- Autonomous Within Guardrails
+- L1 Observe
+- L2 Advise
+- L3 Act With Approval
+- L4 Autonomous Within Guardrails
+- L5 Blocked / Not Allowed
 
 ## Risk Levels
 
@@ -49,3 +50,11 @@ The current implementation derives a lightweight card from existing assessment a
 - MCP controls.
 - A2A controls.
 - Replacing deterministic scoring or reviewer approvals.
+
+## Control References
+
+- `docs/governance/agent-autonomy-levels.md`
+- `docs/governance/agent-risk-model.md`
+- `docs/governance/agent-registry-model.md`
+- `docs/governance/hitl-policy-model.md`
+- `docs/governance/evidence-requirements-model.md`

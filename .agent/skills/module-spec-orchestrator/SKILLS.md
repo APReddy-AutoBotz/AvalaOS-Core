@@ -1,12 +1,12 @@
 ---
 name: module-spec-orchestrator
-description: Use this skill when building a KlarityPM Assess module from the approved source spec. It extracts one module only, defines scope, dependencies, file plan, acceptance checks, and prevents scope creep.
+description: Use this supplemental skill when building an AvalaOS module from an approved source spec. It extracts one module only, defines scope, dependencies, file plan, acceptance checks, and prevents scope creep.
 ---
 
 Module Spec Orchestrator
 
 ## Goal
-Build exactly one module from the approved KlarityPM Assess source spec, with clear scope boundaries and traceable outputs.
+Build exactly one module from the approved AvalaOS source spec, with clear scope boundaries and traceable outputs.
 
 ## Inputs
 - Module name
