@@ -1,4 +1,4 @@
-import { Assessment } from '../types';
+import { Assessment, AvalaGovernLiteCard } from '../types';
 
 type DecisionPackExportFormat = 'json' | 'markdown';
 
@@ -25,7 +25,58 @@ const formatList = (items: unknown[]) => {
   }).join('\n');
 };
 
-export const renderAssessmentDecisionPackMarkdown = (assessment: Assessment, processName = 'Process') => {
+const renderGovernLiteMarkdown = (governCard?: AvalaGovernLiteCard) => {
+  if (!governCard) return ['## Avala Govern Lite', '', '- Not available for this export.', ''];
+
+  return [
+    '## Avala Govern Lite',
+    '',
+    `Governance Status: ${governCard.governanceStatus}`,
+    `Agent / Automation: ${governCard.agentOrAutomationName}`,
+    `Mapped Process: ${governCard.mappedProcessId}`,
+    `Business Owner: ${governCard.businessOwner}`,
+    `Technical Owner: ${governCard.technicalOwner}`,
+    `Technology Pattern: ${governCard.technologyPattern}`,
+    `Systems Accessed: ${governCard.systemsAccessed.join(', ') || 'Not documented'}`,
+    `Tools Used: ${governCard.toolsUsed.join(', ') || 'Not documented'}`,
+    `Data Sensitivity: ${governCard.dataSensitivity}`,
+    `Autonomy Level: ${governCard.autonomyLevel}`,
+    `Risk Level: ${governCard.riskLevel}`,
+    `Approval Policy: ${governCard.approvalPolicy}`,
+    `Evidence Policy: ${governCard.evidencePolicy}`,
+    `Review Frequency: ${governCard.reviewFrequency}`,
+    `Audit Status: ${governCard.auditStatus}`,
+    `Next Governance Action: ${governCard.nextGovernanceAction}`,
+    governCard.blockedReason ? `Blocked Reason: ${governCard.blockedReason}` : '',
+    '',
+    '### Autonomy Rationale',
+    '',
+    formatList(governCard.autonomyRationale),
+    '',
+    '### Risk Rationale',
+    '',
+    formatList(governCard.riskRationale),
+    '',
+    '### Approval Rationale',
+    '',
+    formatList(governCard.approvalRationale),
+    '',
+    '### Evidence Gaps',
+    '',
+    formatList(governCard.evidenceGaps),
+    '',
+    '### Allowed Actions',
+    '',
+    formatList(governCard.allowedActions),
+    '',
+    '### Blocked Actions',
+    '',
+    formatList(governCard.blockedActions),
+    '',
+  ].filter(line => line !== '');
+};
+
+export const renderAssessmentDecisionPackMarkdown = (assessment: Assessment, processName = 'Process', governCard?: AvalaGovernLiteCard) => {
   const scores = assessment.scores;
   if (!scores) throw new Error('Assessment has not been scored yet.');
 
@@ -78,6 +129,7 @@ export const renderAssessmentDecisionPackMarkdown = (assessment: Assessment, pro
       ...(scores.handoffPack?.governanceControls || []),
     ]),
     '',
+    ...renderGovernLiteMarkdown(governCard),
     '## Gate Outcomes',
     '',
     formatList(scores.gatesTriggered || []),
@@ -107,7 +159,7 @@ export const renderAssessmentDecisionPackMarkdown = (assessment: Assessment, pro
   ].join('\n');
 };
 
-export const renderAssessmentDecisionPackJson = (assessment: Assessment, processName = 'Process') =>
+export const renderAssessmentDecisionPackJson = (assessment: Assessment, processName = 'Process', governCard?: AvalaGovernLiteCard) =>
   JSON.stringify({
     processName,
     assessmentId: assessment.id,
@@ -118,6 +170,7 @@ export const renderAssessmentDecisionPackJson = (assessment: Assessment, process
     evidenceItems: assessment.evidenceItems,
     assumptions: assessment.assumptions,
     review: assessment.review,
+    avalaGovernLite: governCard,
     exportedAt: new Date().toISOString(),
     exportMode: 'local-demo',
   }, null, 2);
@@ -126,11 +179,12 @@ export const downloadAssessmentDecisionPack = (
   assessment: Assessment,
   processName: string | undefined,
   format: DecisionPackExportFormat,
+  governCard?: AvalaGovernLiteCard,
 ) => {
   const isJson = format === 'json';
   const content = isJson
-    ? renderAssessmentDecisionPackJson(assessment, processName)
-    : renderAssessmentDecisionPackMarkdown(assessment, processName);
+    ? renderAssessmentDecisionPackJson(assessment, processName, governCard)
+    : renderAssessmentDecisionPackMarkdown(assessment, processName, governCard);
   const blob = new Blob([content], { type: isJson ? 'application/json' : 'text/markdown' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

@@ -15,8 +15,10 @@ import {
     getReviewerCheckpointsForSectionFromConfig,
     useAssessGovernanceConfig,
 } from '../../services/assessGovernanceService';
+import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadAssessmentDecisionPack } from '../../services/assessmentExportService';
+import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
 
 export const CONVERSION_RATES = {
     WORKING_DAYS_PER_YEAR: 260,
@@ -227,7 +229,12 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                 const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference);
                 window.open(signedUrl, '_blank', 'noopener,noreferrer');
             } else {
-                downloadAssessmentDecisionPack(assessment, processContext?.name, format);
+                downloadAssessmentDecisionPack(
+                    assessment,
+                    processContext?.name,
+                    format,
+                    processContext ? buildAvalaGovernLiteCard(assessment, processContext) : undefined,
+                );
             }
             setErrorMsg(null);
         } catch (err: any) {
@@ -769,6 +776,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
     const fieldOptions = getAssessFieldOptions(assessment);
     const currentTemplateRule = getAssessTemplateRuleFromConfig(currentProcess?.templateId, assessGovernanceConfig);
     const isLockedAssessment = LOCKED_ASSESSMENT_STATUSES.has(assessment.status);
+    const governCard = assessment.scores && currentProcess ? buildAvalaGovernLiteCard(assessment, currentProcess) : null;
 
     const addEvidenceItem = () => {
         if (!evidenceDraft.description.trim()) {
@@ -1017,6 +1025,8 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                     </div>
                                 </div>
                             </div>
+
+                            {governCard && <AvalaGovernLiteCardPanel governCard={governCard} />}
 
                             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                                 <div className="card p-5">

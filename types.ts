@@ -460,12 +460,20 @@ export interface HandoffPack {
 }
 
 export type AvalaGovernAutonomyLevel =
-    | 'Observe'
-    | 'Advise'
-    | 'Act With Approval'
-    | 'Autonomous Within Guardrails';
+    | 'L1 Observe'
+    | 'L2 Advise'
+    | 'L3 Act With Approval'
+    | 'L4 Autonomous Within Guardrails'
+    | 'L5 Blocked / Not Allowed';
 
 export type AvalaGovernRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical' | 'Blocked';
+export type AvalaGovernStatus = 'Ready for Review' | 'Approval Required' | 'Evidence Review Required' | 'Blocked';
+
+export interface AvalaGovernEvidenceGap {
+    label: string;
+    severity: AvalaGovernRiskLevel;
+    nextAction: string;
+}
 
 export interface AvalaGovernLiteCard {
     agentOrAutomationName: string;
@@ -478,12 +486,21 @@ export interface AvalaGovernLiteCard {
     dataSensitivity: string;
     autonomyLevel: AvalaGovernAutonomyLevel;
     riskLevel: AvalaGovernRiskLevel;
+    autonomyRationale: string[];
+    riskRationale: string[];
+    approvalPolicy: string;
+    approvalRationale: string[];
+    evidencePolicy: string;
+    evidenceGaps: AvalaGovernEvidenceGap[];
     allowedActions: string[];
     blockedActions: string[];
     humanApprovalRequired: boolean;
     evidenceRequired: boolean;
     reviewFrequency: string;
     auditStatus: string;
+    governanceStatus: AvalaGovernStatus;
+    blockedReason?: string;
+    nextGovernanceAction: string;
 }
 
 export interface AssessmentScoreResult {
