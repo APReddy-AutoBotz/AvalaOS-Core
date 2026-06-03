@@ -62,6 +62,7 @@ export const VIEW_MODULE_MAP: Partial<Record<View, ProductModuleKey>> = {
     [View.BACKLOG]: 'delivery',
     [View.SPRINT_PLANNING]: 'delivery',
     [View.AUTOMATIONS]: 'delivery',
+    [View.DELIVERY_PACK]: 'delivery',
     [View.TIMESHEETS]: 'delivery',
 
     [View.DASHBOARD]: 'monitor',

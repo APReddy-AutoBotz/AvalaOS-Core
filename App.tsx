@@ -681,6 +681,7 @@ function App() {
             view={currentView} project={projectsForScope[0]} tasks={tasksForScope} epics={epicsForScope} sprints={sprintsForScope}
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
+            handoffEntries={handoffEntries}
             userApiKey={userApiKey}
             aiProviderType={aiProviderType}
             onUpdateTaskStatus={handleUpdateTaskStatus} onUpdateTask={handleUpdateTask} onSelectTask={setSelectedTask}

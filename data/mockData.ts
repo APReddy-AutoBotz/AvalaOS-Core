@@ -130,6 +130,17 @@ export const MOCK_SPRINTS: Sprint[] = [
     { id: 'sprint-5', name: 'Onboarding Discovery', projectId: 'proj-3', startDate: '2026-04-22', endDate: '2026-05-05', status: 'Active', goal: 'Map onboarding requests, approval paths, and provisioning bottlenecks.', capacity: 26 },
 ];
 
+const MONTH_END_CLOSE_LINEAGE = {
+    deliveryPackId: 'pack-month-end-close',
+    processId: 'proc-close-pack',
+    assessmentId: 'assess-proc-close-pack',
+    documentGenerationId: 'docgen-5',
+    handoffLedgerEntryIds: ['handoff-close-assess-docs', 'handoff-close-docs-delivery'],
+    evidenceRefs: ['ev-close-map', 'ev-close-sop', 'ev-close-sample'],
+    sourceLabel: 'Month-End Close Evidence Pack',
+    sourceStatus: 'Accepted',
+};
+
 export const MOCK_TASKS: Task[] = [
     { id: 'task-101', title: 'Map current invoice intake paths', description: 'Document email, supplier portal, shared drive, and manual handoff intake paths with volume split and owners.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-1', epicId: 'epic-101', sprintId: 'sprint-1', assigneeIds: ['user-2', 'user-7'], startDate: '2026-04-15', dueDate: '2026-04-17', storyPoints: 3 },
     { id: 'task-102', title: 'Build OCR confidence threshold rules', description: 'Define confidence bands for auto-post, AP review, and vendor clarification queues.', status: 'In Progress', priority: 'High', type: 'Task', projectId: 'proj-1', epicId: 'epic-101', sprintId: 'sprint-1', assigneeIds: ['user-6'], startDate: '2026-04-18', dueDate: '2026-04-29', storyPoints: 8, dependencyIds: ['task-101'] },
@@ -150,9 +161,9 @@ export const MOCK_TASKS: Task[] = [
     { id: 'task-402', title: 'Assess agent decision boundaries', description: 'Document what the agent can decide, recommend, or must escalate to an adjuster.', status: 'To Do', priority: 'High', type: 'Story', projectId: 'proj-4', epicId: 'epic-402', assigneeIds: ['user-1', 'user-4'], startDate: '2026-05-03', dueDate: '2026-05-15', storyPoints: 13 },
     { id: 'task-403', title: 'Design adjuster review queue', description: 'Create review states for high-value, low-confidence, and legally sensitive claim packets.', status: 'On Hold', priority: 'Medium', type: 'Task', projectId: 'proj-4', epicId: 'epic-403', assigneeIds: ['user-3'], startDate: '2026-05-08', dueDate: '2026-05-20', storyPoints: 5 },
 
-    { id: 'task-501', title: 'Collect close evidence sources', description: 'Inventory reconciliation files, sign-off emails, variance comments, and system screenshots used in close.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-5', epicId: 'epic-501', assigneeIds: ['user-7', 'user-2'], startDate: '2026-04-01', dueDate: '2026-04-05', storyPoints: 3 },
-    { id: 'task-502', title: 'Build control pack approval checklist', description: 'Create required review items for reconciliations, material variances, and controller sign-off.', status: 'Ready for Release', priority: 'High', type: 'Story', projectId: 'proj-5', epicId: 'epic-502', assigneeIds: ['user-7', 'user-5'], startDate: '2026-04-08', dueDate: '2026-04-22', storyPoints: 8 },
-    { id: 'task-503', title: 'Create executive close dashboard metrics', description: 'Expose close readiness, missing evidence, late approvals, and unresolved material variances.', status: 'Testing', priority: 'Medium', type: 'Task', projectId: 'proj-5', epicId: 'epic-503', assigneeIds: ['user-8'], startDate: '2026-04-16', dueDate: '2026-04-29', storyPoints: 5 },
+    { id: 'task-501', title: 'Collect close evidence sources', description: 'Inventory reconciliation files, sign-off emails, variance comments, and system screenshots used in close.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-5', epicId: 'epic-501', assigneeIds: ['user-7', 'user-2'], startDate: '2026-04-01', dueDate: '2026-04-05', storyPoints: 3, sourceLineage: MONTH_END_CLOSE_LINEAGE },
+    { id: 'task-502', title: 'Build control pack approval checklist', description: 'Create required review items for reconciliations, material variances, and controller sign-off.', status: 'Ready for Release', priority: 'High', type: 'Story', projectId: 'proj-5', epicId: 'epic-502', assigneeIds: ['user-7', 'user-5'], startDate: '2026-04-08', dueDate: '2026-04-22', storyPoints: 8, sourceLineage: MONTH_END_CLOSE_LINEAGE },
+    { id: 'task-503', title: 'Create executive close dashboard metrics', description: 'Expose close readiness, missing evidence, late approvals, and unresolved material variances.', status: 'Testing', priority: 'Medium', type: 'Task', projectId: 'proj-5', epicId: 'epic-503', assigneeIds: ['user-8'], startDate: '2026-04-16', dueDate: '2026-04-29', storyPoints: 5, sourceLineage: MONTH_END_CLOSE_LINEAGE },
 ];
 
 export const MOCK_AUTOMATIONS: Automation[] = [
@@ -232,6 +243,22 @@ export const MOCK_DOCUMENT_GENERATIONS: DocumentGeneration[] = [
             [
                 { type: 'Epic', title: 'Onboarding Workflow Foundation', description: 'Create the intake, approval, and task orchestration foundation.', acceptanceCriteria: ['Request intake captures role, location, start date, and manager', 'Provisioning tasks are generated from role templates'] },
                 { type: 'Task', title: 'Create role-based provisioning checklist', description: 'Define access and equipment rules by employee role.', acceptanceCriteria: ['Checklist supports exceptions', 'Managers can see incomplete readiness items'] },
+            ],
+        ),
+    },
+    {
+        id: 'docgen-5',
+        projectId: 'proj-5',
+        generatedAt: '2026-04-26T18:10:00.000Z',
+        templateId: MOCK_DOC_TEMPLATES.find(t => t.artifactKey === 'pdd')?.id || 'pdd.v1',
+        artifacts: createArtifacts(
+            'Month-End Close Control Pack',
+            'finance close operations',
+            'Finance owners need a governed evidence pack that references reconciliations, sign-offs, variance explanations, and close readiness metadata without exporting source document bodies.',
+            [
+                { type: 'Epic', title: 'Close Evidence Collection', description: 'Collect and reference close evidence sources for review.', acceptanceCriteria: ['Evidence references use IDs and summaries only', 'Owner review status is visible before handoff'] },
+                { type: 'Story', title: 'Build control pack approval checklist', description: 'Create required review items for reconciliations, material variances, and controller sign-off.', acceptanceCriteria: ['Checklist includes owner, evidence reference, and status', 'Open blockers are visible in the handoff view'] },
+                { type: 'Task', title: 'Create executive close dashboard metrics', description: 'Expose close readiness, missing evidence, late approvals, and unresolved material variances.', acceptanceCriteria: ['Metrics reference source systems by name only', 'No raw confidential source content is exported'] },
             ],
         ),
     },
