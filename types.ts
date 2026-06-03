@@ -503,6 +503,139 @@ export interface AvalaGovernLiteCard {
     nextGovernanceAction: string;
 }
 
+export type DeliveryPackStatus =
+    | 'Ready for Review'
+    | 'Approval Required'
+    | 'Evidence Review Required'
+    | 'Blocked'
+    | 'Lineage Incomplete';
+
+export type DeliveryPackLineageStatus = 'Linked' | 'Partial' | 'Missing';
+export type DeliveryPackChecklistStatus = 'Complete' | 'Action Required' | 'Missing' | 'Not Required';
+export type DeliveryPackBlockerSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface TaskSourceLineageMetadata {
+    deliveryPackId?: string;
+    processId?: string;
+    assessmentId?: string;
+    documentGenerationId?: string;
+    handoffLedgerEntryIds?: string[];
+    evidenceRefs?: string[];
+    sourceLabel?: string;
+    sourceStatus?: string;
+}
+
+export interface DeliveryPackSourceRef {
+    id: string;
+    type: HandoffSourceType | 'Delivery Pack';
+    title: string;
+    module?: ProductModuleKey;
+    status?: string;
+    createdAt?: string;
+    metadata?: Record<string, string | number | boolean | string[] | undefined>;
+}
+
+export interface DeliveryPackDecisionSummary {
+    assessmentId?: string;
+    processId?: string;
+    scoreVersion?: string;
+    calculatedAt?: string;
+    finalDecision?: GateDecision;
+    recommendationCategory?: string;
+    primaryTechnology?: string;
+    riskTier?: RiskTier;
+    gateDecision?: GateDecision;
+    confidenceBand?: ConfidenceBand;
+    priorityTier?: PriorityTier;
+    handoffEligibility?: HandoffEligibility;
+}
+
+export interface DeliveryPackDocumentRef {
+    id: string;
+    title: string;
+    templateId: string;
+    generatedAt: string;
+    artifactKeys: string[];
+    qualityGateStatus: DeliveryPackChecklistStatus;
+    approvalStatus: DeliveryPackChecklistStatus;
+    summary: string;
+    sectionCount: number;
+    workItemCount: number;
+    sourceRef?: DeliveryPackSourceRef;
+}
+
+export interface DeliveryPackWorkItemRef {
+    id: string;
+    title: string;
+    type: TaskType;
+    status: TaskStatus;
+    priority: TaskPriority;
+    ownerNames: string[];
+    blockerSummary?: string;
+    sourceLineage?: TaskSourceLineageMetadata;
+    lineageStatus: DeliveryPackLineageStatus;
+    evidenceRefs: string[];
+}
+
+export interface DeliveryPackChecklistItem {
+    id: string;
+    label: string;
+    status: DeliveryPackChecklistStatus;
+    owner?: string;
+    source: string;
+    detail: string;
+}
+
+export interface DeliveryPackBlocker {
+    id: string;
+    label: string;
+    severity: DeliveryPackBlockerSeverity;
+    source: string;
+    detail: string;
+}
+
+export interface DeliveryPackAuditEvent {
+    id: string;
+    label: string;
+    sourceType: HandoffSourceType;
+    sourceId: string;
+    targetType?: HandoffSourceType;
+    targetId?: string;
+    status: HandoffStatus;
+    createdAt: string;
+    createdBy: string;
+    evidenceRefs: string[];
+}
+
+export interface DeliveryPackExportMetadata {
+    generatedAt: string;
+    exportedAt: string;
+    exportMode: 'local-demo' | 'review';
+    sourceCount: number;
+    omittedContentPolicy: string;
+}
+
+export interface DeliveryPack {
+    id: string;
+    title: string;
+    organizationId: string;
+    projectId: string;
+    projectName: string;
+    status: DeliveryPackStatus;
+    processRef?: DeliveryPackSourceRef;
+    assessmentRef?: DeliveryPackSourceRef;
+    sources: DeliveryPackSourceRef[];
+    decisionSummary?: DeliveryPackDecisionSummary;
+    governLite?: AvalaGovernLiteCard;
+    documents: DeliveryPackDocumentRef[];
+    workItems: DeliveryPackWorkItemRef[];
+    approvalChecklist: DeliveryPackChecklistItem[];
+    evidenceChecklist: DeliveryPackChecklistItem[];
+    blockers: DeliveryPackBlocker[];
+    auditSummary: DeliveryPackAuditEvent[];
+    exportMetadata: DeliveryPackExportMetadata;
+}
+
 export interface AssessmentScoreResult {
     scoreVersion: string; // e.g., "v1.0"
     calculatedAt: string; // ISO 8601
@@ -595,6 +728,7 @@ export enum View {
     DOCS_FORGE = 'docs_forge',
     TEMPLATE_STUDIO = 'template_studio',
     AUTOMATIONS = 'automations',
+    DELIVERY_PACK = 'delivery_pack',
     TIMESHEETS = 'timesheets',
     PORTFOLIO = 'portfolio',
     WORKSPACE = 'workspace',
@@ -669,6 +803,7 @@ export interface Task {
     comments?: Comment[];
     userStories?: UserStory[];
     activityLog?: ActivityLogItem[];
+    sourceLineage?: TaskSourceLineageMetadata;
 }
 
 export interface Epic {

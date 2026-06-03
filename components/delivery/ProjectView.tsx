@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Project, Task, Epic, Sprint, User, Automation, TimesheetEntry, TaskStatus, DocumentGeneration, DocTemplate, AiProviderType } from '../../types';
+import { View, Project, Task, Epic, Sprint, User, Automation, TimesheetEntry, TaskStatus, DocumentGeneration, DocTemplate, AiProviderType, HandoffLedgerEntry } from '../../types';
 import BoardsView from './BoardsView';
 import TaskListView from './TaskListView';
 import GanttChartView from './GanttChartView';
@@ -12,6 +12,7 @@ import AutomationsView from './AutomationsView';
 import TimesheetsView from './TimesheetsView';
 import ReportsView from '../shared/ReportsView';
 import DocsView from '../docs/DocsView';
+import DeliveryPackView from './DeliveryPackView';
 
 interface ProjectViewProps {
     view: View;
@@ -25,6 +26,7 @@ interface ProjectViewProps {
     timesheetEntries: TimesheetEntry[];
     docTemplates: DocTemplate[];
     documentGenerations: DocumentGeneration[];
+    handoffEntries: HandoffLedgerEntry[];
     userApiKey: string | null;
     aiProviderType: AiProviderType;
     onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
@@ -46,7 +48,7 @@ interface ProjectViewProps {
 const ProjectView: React.FC<ProjectViewProps> = (props) => {
     const { 
         view, project, tasks, epics, sprints, users, currentUser, automations, timesheetEntries, 
-        docTemplates, documentGenerations, userApiKey, aiProviderType,
+        docTemplates, documentGenerations, handoffEntries, userApiKey, aiProviderType,
         onUpdateTaskStatus, onUpdateTask, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onReorderTask, onAddTask, onDeleteTask,
         onCreateAutomation, onUpdateAutomation, onDeleteAutomation, onToggleAutomation, onUpdateTimesheet,
         onViewGeneration
@@ -85,6 +87,8 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
                 return <WorkloadView tasks={tasks} users={users.filter(u => tasks.some(t => t.assigneeIds.includes(u.id)))} />;
             case View.AUTOMATIONS:
                 return <AutomationsView project={project} automations={automations} users={users} onCreate={onCreateAutomation} onUpdate={onUpdateAutomation} onDelete={onDeleteAutomation} onToggle={onToggleAutomation} />;
+            case View.DELIVERY_PACK:
+                return <DeliveryPackView project={project} tasks={tasks} users={users} docTemplates={docTemplates} documentGenerations={documentGenerations} handoffEntries={handoffEntries} />;
             case View.TIMESHEETS:
                 return <TimesheetsView project={project} tasks={tasks} currentUser={currentUser} timesheetEntries={timesheetEntries} onUpdateTimesheet={onUpdateTimesheet} />;
             case View.REPORTS:
