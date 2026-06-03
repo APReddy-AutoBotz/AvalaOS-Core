@@ -142,6 +142,67 @@ console.log('Running Avala Govern Lite service regression tests...');
 
 {
   const assessment = createAssessment({
+    scores: {
+      ...baseScores,
+      riskTier: 'Limited',
+      gateDecision: 'Go',
+      supportingScores: {
+        ...baseScores.supportingScores,
+        mandatoryHITL: false,
+      },
+    },
+    responses: {
+      ...createAssessment().responses,
+      judgment: {
+        autonomyLevel: 4,
+        autonomousExecutionAllowed: true,
+        externalCommunicationAllowed: false,
+        humanApprovalBeforeAction: false,
+        rollbackPossible: true,
+      },
+    },
+  });
+
+  const card = buildAvalaGovernLiteCard(assessment, baseProcess);
+
+  assert.equal(card.riskLevel, 'Medium');
+  assert.equal(card.humanApprovalRequired, true);
+  assert.equal(card.approvalPolicy, 'Process owner approval required before handoff');
+  assert.equal(card.governanceStatus, 'Approval Required');
+}
+
+{
+  const assessment = createAssessment({
+    scores: {
+      ...baseScores,
+      gateDecision: 'Go',
+      supportingScores: {
+        ...baseScores.supportingScores,
+        mandatoryHITL: true,
+      },
+    },
+    responses: {
+      ...createAssessment().responses,
+      judgment: {
+        autonomyLevel: 4,
+        autonomousExecutionAllowed: true,
+        externalCommunicationAllowed: false,
+        humanApprovalBeforeAction: false,
+        rollbackPossible: true,
+      },
+    },
+  });
+
+  const card = buildAvalaGovernLiteCard(assessment, baseProcess);
+
+  assert.equal(card.riskLevel, 'Low');
+  assert.equal(card.humanApprovalRequired, true);
+  assert.equal(card.governanceStatus, 'Approval Required');
+  assert.ok(card.approvalRationale.some((reason) => reason.includes('Assess HITL output')));
+}
+
+{
+  const assessment = createAssessment({
     metadata: {
       completionQuality: 92,
       templateFit: true,

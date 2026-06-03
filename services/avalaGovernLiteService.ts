@@ -227,9 +227,12 @@ export const buildAvalaGovernLiteCard = (
   );
   const dataSensitivity = highestDataSensitivity(assessment);
   const blocked = hasBlockedGate(assessment) || riskLevel === 'Blocked';
+  const mandatoryHITL = Boolean(assessment.scores?.supportingScores?.mandatoryHITL);
   const humanApprovalRequired = Boolean(
     assessment.responses.judgment.humanApprovalBeforeAction
+    || mandatoryHITL
     || isHighDataSensitivity(dataSensitivity, assessment)
+    || riskLevel === 'Medium'
     || riskLevel === 'High'
     || riskLevel === 'Critical'
     || riskLevel === 'Blocked'
@@ -248,6 +251,8 @@ export const buildAvalaGovernLiteCard = (
   const riskRationale = riskRationaleFor(assessment, process, riskLevel, dataSensitivity);
   const approvalRationale = unique([
     humanApprovalRequired ? 'Approval is required by risk, gate, or judgment policy.' : 'No mandatory approval trigger is active.',
+    mandatoryHITL ? 'Assess HITL output marks human-in-the-loop approval as mandatory.' : '',
+    riskLevel === 'Medium' ? 'Medium risk requires process owner approval before handoff.' : '',
     riskLevel === 'High' || riskLevel === 'Critical' ? `${riskLevel} risk requires owner review.` : '',
     assessment.responses.judgment.humanApprovalBeforeAction ? 'Assessment input requires human approval before action.' : '',
     assessment.scores?.gateDecision && assessment.scores.gateDecision !== 'Go' ? `Gate decision ${assessment.scores.gateDecision} requires approval handling.` : '',
