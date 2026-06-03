@@ -5,11 +5,11 @@ import { useTemplateService } from '../../services/templateService';
 import { useAssessmentService } from '../../services/assessmentService';
 import { Assessment } from '../../types';
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
+import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { isModuleEnabled } from '../../constants/moduleConfig';
 import {
     ArrowLeftIcon,
-    BanIcon,
     ChartPieIcon,
     CheckCircleIcon,
     ClipboardDocumentListIcon,
@@ -171,83 +171,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 ))}
             </div>
 
-            {governCard && (
-                <section className="premium-surface overflow-hidden rounded-3xl border border-[#002C4B]/10">
-                    <div className="grid gap-0 lg:grid-cols-[0.78fr_1.22fr]">
-                        <div className="bg-[#002C4B] p-6 text-white">
-                            <div className="flex items-center gap-3">
-                                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 text-[#ffbc03]">
-                                    <ClipboardDocumentListIcon className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Govern Lite</p>
-                                    <h2 className="text-xl font-black">{governCard.agentOrAutomationName}</h2>
-                                </div>
-                            </div>
-                            <p className="mt-4 text-sm font-semibold leading-6 text-white/72">
-                                Lightweight governance card for approval, evidence, and blocked-action review. This does not execute agents or change deterministic scoring.
-                            </p>
-                            <div className="mt-5 grid grid-cols-2 gap-3">
-                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Autonomy</p>
-                                    <p className="mt-2 text-sm font-black leading-5 text-[#ffdf77]">{governCard.autonomyLevel}</p>
-                                </div>
-                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Risk</p>
-                                    <p className="mt-2 text-sm font-black leading-5">{governCard.riskLevel}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            <div className="grid gap-4 md:grid-cols-4">
-                                {[
-                                    ['Approval required', governCard.humanApprovalRequired ? 'Yes' : 'No'],
-                                    ['Evidence required', governCard.evidenceRequired ? 'Yes' : 'No'],
-                                    ['Data sensitivity', governCard.dataSensitivity],
-                                    ['Review frequency', governCard.reviewFrequency],
-                                ].map(([label, value]) => (
-                                    <div key={label} className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200/80 dark:bg-slate-900/60 dark:ring-slate-800">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-                                        <p className="mt-2 text-sm font-black text-slate-900 dark:text-white">{value}</p>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="mt-5 grid gap-5 lg:grid-cols-2">
-                                <div>
-                                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Blocked actions</p>
-                                    <ul className="mt-3 space-y-2">
-                                        {governCard.blockedActions.map(action => (
-                                            <li key={action} className="flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/20 dark:text-rose-100">
-                                                <BanIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                                                <span>{action}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <div>
-                                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Governance record</p>
-                                    <div className="mt-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                                        <div className="grid gap-3 text-sm">
-                                            <div className="flex justify-between gap-4">
-                                                <span className="font-bold text-slate-500">Mapped process</span>
-                                                <span className="font-black text-slate-900 dark:text-white">{governCard.mappedProcessId}</span>
-                                            </div>
-                                            <div className="flex justify-between gap-4">
-                                                <span className="font-bold text-slate-500">Technology pattern</span>
-                                                <span className="font-black text-slate-900 dark:text-white">{governCard.technologyPattern}</span>
-                                            </div>
-                                            <div className="flex justify-between gap-4">
-                                                <span className="font-bold text-slate-500">Audit status</span>
-                                                <span className="font-black text-slate-900 dark:text-white">{governCard.auditStatus}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            )}
+            {governCard && <AvalaGovernLiteCardPanel governCard={governCard} />}
 
             {scores ? (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_0.75fr]">
