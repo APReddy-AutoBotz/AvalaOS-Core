@@ -1,33 +1,10 @@
 # M3 Server-Side AI BYOK Hardening Plan
 
-## Goal
+This earlier M3 planning stub is superseded by the AP-reviewed M3.0 planning record.
 
-Harden server-side AI execution, provider controls, key references, audit, and deployment readiness.
+Use these current planning records instead:
 
-## Scope
+- `docs/planning/m3-server-side-ai-byok-hardening-implementation-plan.md`
+- `docs/planning/m3-slice-roadmap.md`
 
-Supabase Edge Function readiness, provider test path, usage audit, secure exports, and BYOK/key-reference model.
-
-## Explicit Out Of Scope
-
-Browser-side provider secrets, AI score decisions, new scoring formulas, and compliance certification claims.
-
-## Files Allowed
-
-AI boundary docs, approved server-side AI services, Supabase function sources, tests, and runbooks.
-
-## Acceptance Criteria
-
-Pilot and production AI paths are server-side, auditable, and controlled by approved provider configuration.
-
-## Verification Commands
-
-`npm run typecheck`, `npm run test`, `npm run build`, targeted AI service smoke checks when configured.
-
-## Risks
-
-Secret leakage, unclear provider ownership, unaudited usage.
-
-## Stop Conditions
-
-Raw browser provider keys, unlogged AI usage, or AI changing deterministic decisions.
+M3 is approved as a roadmap, not as one implementation PR. M3.0 is planning-only and does not implement AI behavior, provider behavior, scoring, Health, schema, Supabase Function, package, dependency, Admin UI, runtime-agent, MCP/A2A, external execution, or compliance-claim changes.
