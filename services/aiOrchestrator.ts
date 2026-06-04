@@ -1,5 +1,6 @@
 import { getAiProvider, getAiProviderApiKey } from './geminiService';
 import { aiEdgeClient, isAiEdgeEnabled } from './aiEdgeClient';
+import { getAiExecutionPolicy, resolveAiMode } from './aiMode';
 import { AiProviderType, ProjectDetails, GeneratedArtifacts } from '../types';
 
 const providerLabel: Record<AiProviderType, string> = {
@@ -45,6 +46,16 @@ const appendFallbackNote = (artifacts: GeneratedArtifacts, attemptedProvider: Ai
   };
 };
 
+const getCurrentAiExecutionPolicy = () =>
+  getAiExecutionPolicy({
+    modeResolution: resolveAiMode({
+      configuredMode: import.meta.env.VITE_AVALA_AI_MODE,
+      isDev: import.meta.env.DEV,
+      isProd: import.meta.env.PROD,
+    }),
+    edgeEnabled: isAiEdgeEnabled(),
+  });
+
 export const aiOrchestrator = {
   async generateArtifacts(
     providerType: AiProviderType, 
@@ -53,7 +64,13 @@ export const aiOrchestrator = {
     fileContent: string | null, 
     fileName: string
   ): Promise<GeneratedArtifacts> {
-    if (isAiEdgeEnabled()) {
+    const aiPolicy = getCurrentAiExecutionPolicy();
+
+    if (aiPolicy.status === 'blocked') {
+      throw aiPolicy.error;
+    }
+
+    if (aiPolicy.boundary === 'edge') {
       return aiEdgeClient.generateDocument({
         providerType,
         projectDetails,
@@ -62,7 +79,7 @@ export const aiOrchestrator = {
       });
     }
 
-    // Transitional dev/demo fallback. Pilot and production must enable Edge Functions.
+    console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
     const provider = getAiProvider(providerType, userApiKey, false);
     try {
       return await provider.generateProjectArtifacts(projectDetails, fileContent, fileName);
@@ -96,7 +113,13 @@ export const aiOrchestrator = {
     currentContent: string,
     instructions: string
   ): Promise<string> {
-    if (isAiEdgeEnabled()) {
+    const aiPolicy = getCurrentAiExecutionPolicy();
+
+    if (aiPolicy.status === 'blocked') {
+      throw aiPolicy.error;
+    }
+
+    if (aiPolicy.boundary === 'edge') {
       return aiEdgeClient.refineSection({
         providerType,
         sectionTitle,
@@ -105,7 +128,7 @@ export const aiOrchestrator = {
       });
     }
 
-    // Transitional dev/demo fallback. Pilot and production must enable Edge Functions.
+    console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
     const provider = getAiProvider(providerType, userApiKey, false);
     return await provider.refineSectionContent(currentContent, `${sectionTitle}\n\n${instructions}`);
   }
