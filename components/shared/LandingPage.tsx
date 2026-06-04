@@ -13,7 +13,7 @@ interface LandingPageProps {
 const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange }) => {
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
     company: 'ACME Operations',
-    project: 'Vendor Query Management / AP Invoice Automation',
+    project: 'Evidence-backed Finance Operations Handoff',
     domain: 'Finance Operations',
     templateId: docTemplates[0]?.id || '',
   });
