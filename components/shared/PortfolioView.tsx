@@ -75,7 +75,7 @@ const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, o
                         Executive portfolio
                     </div>
                     <h2 className="text-3xl font-black text-text-light dark:text-text-dark">Portfolio Board</h2>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">Lifecycle, health, delivery load, and risk signal across all active programs.</p>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">Portfolio value, risk, blockers, and evidence-backed handoff status across active programs.</p>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-2 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/60">

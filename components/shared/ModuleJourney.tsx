@@ -25,7 +25,7 @@ const moduleIcon: Record<ProductModuleKey, React.FC<{ className?: string }>> = {
 const moduleOutcome: Record<ProductModuleKey, string> = {
     assess: 'Decision pack',
     docs: 'Governed docs',
-    delivery: 'Executable backlog',
+    delivery: 'Evidence-backed handoff',
     monitor: 'Value insights',
 };
 
