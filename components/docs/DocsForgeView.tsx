@@ -38,7 +38,7 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
         } catch (err: any) {
             let errorMessage = `Error generating artifacts: ${err.message || "An unknown error occurred."}`;
             if (userApiKey && (err.message?.includes("API key not valid") || err.message?.includes("403"))) {
-                 errorMessage = "The custom API key you provided appears to be invalid. Please check the key and try again, or clear it to use the default key.";
+                 errorMessage = "Avala Studio could not complete generation with the selected settings. Review the settings and try again.";
             }
             console.error("Error generating artifacts:", err);
             alert(errorMessage);

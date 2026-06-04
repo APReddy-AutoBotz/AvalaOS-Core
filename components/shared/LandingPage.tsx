@@ -64,10 +64,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Studio handoff</p>
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Evaluate before you automate. Govern before you execute.</p>
         <h2 className="mt-2 text-3xl md:text-4xl font-bold text-text-light dark:text-text-dark">Generate governed delivery documents</h2>
         <p className="mt-2 text-lg text-slate-600 dark:text-slate-300">
-            Turn an approved decision pack, transcript, or process note into structured BRD/PDD artifacts, diagrams, quality gaps, and delivery-ready work items.
+            Move approved source context through Assess, Govern, Studio, Delivery Pack, and Monitor with reviewable documents and evidence-backed handoff.
         </p>
       </div>
 
@@ -133,7 +133,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                 </div>
                 <div>
                     <h3 className="text-xl font-bold">Avala AI Controls</h3>
-                    <p className="text-slate-500 dark:text-slate-400">Provider selection is available for demo only. BYOK moves server-side before pilot.</p>
+                    <p className="text-slate-500 dark:text-slate-400">Review generation settings for governed drafts before document handoff.</p>
                 </div>
                 <ChevronDownIcon className={`w-5 h-5 ml-auto transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -150,9 +150,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                         <div className="flex items-start gap-3">
                             <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
                             <div>
-                                <p className="font-bold">BYOK is disabled in this demo path.</p>
+                                <p className="font-bold">Generated drafts remain reviewable handoff artifacts.</p>
                                 <p className="mt-1 text-xs leading-5">
-                                    Enterprise BYOK will use a server-side encrypted key reference. Raw API keys are not accepted in the browser.
+                                    Validate source context, evidence, and owner approval before continuing to Delivery Pack.
                                 </p>
                             </div>
                         </div>
