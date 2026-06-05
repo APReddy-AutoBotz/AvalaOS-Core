@@ -15,6 +15,7 @@
     "test:govern-lite": "node scripts/runTypeScriptTest.mjs services/avalaGovernLiteService.ts services/assessmentExportService.ts services/avalaGovernLiteService.test.ts",
     "test:delivery-pack": "node scripts/runTypeScriptTest.mjs services/avalaGovernLiteService.ts services/deliveryPackService.ts services/deliveryPackExportService.ts services/deliveryPackService.test.ts",
     "test:ai-boundary": "node scripts/runTypeScriptTest.mjs types.ts services/aiMode.ts services/aiMode.test.ts",
+    "test:ai-boundary-static": "node scripts/check-ai-boundary.mjs",
     "test:supabase:delivery": "node scripts/supabaseDeliverySmoke.mjs",
     "test:supabase:delivery-roles": "node scripts/supabaseDeliveryRoleSmoke.mjs",
     "test:rls:assess": "node scripts/applySupabaseMigrations.mjs docs/schema/rls_regression_assess_handoff.sql",
