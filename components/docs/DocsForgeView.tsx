@@ -9,12 +9,11 @@ interface DocsForgeViewProps {
     docTemplates: DocTemplate[];
     onCancel: () => void;
     onComplete: (projectDetails: ProjectDetails, artifacts: GeneratedArtifacts) => void;
-    userApiKey: string;
     aiProviderType: AiProviderType;
     onAiProviderTypeChange: (provider: AiProviderType) => void;
 }
 
-const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, onCancel, onComplete, userApiKey, aiProviderType, onAiProviderTypeChange }) => {
+const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, onCancel, onComplete, aiProviderType, onAiProviderTypeChange }) => {
     const [isProcessing, setIsProcessing] = useState(false);
 
     const handleProjectCreate = async (projectDetails: ProjectDetails, file: File | null) => {
@@ -28,7 +27,6 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
         
             const artifacts = await aiOrchestrator.generateArtifacts(
                 aiProviderType, 
-                userApiKey, 
                 projectDetails, 
                 fileContent, 
                 file?.name || "N/A"
@@ -37,7 +35,7 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
 
         } catch (err: any) {
             let errorMessage = `Error generating artifacts: ${err.message || "An unknown error occurred."}`;
-            if (userApiKey && (err.message?.includes("API key not valid") || err.message?.includes("403"))) {
+            if (err.message?.includes("API key not valid") || err.message?.includes("403")) {
                  errorMessage = "Avala Studio could not complete generation with the selected settings. Review the settings and try again.";
             }
             console.error("Error generating artifacts:", err);

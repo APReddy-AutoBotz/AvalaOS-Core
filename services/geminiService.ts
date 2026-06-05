@@ -2,20 +2,22 @@ import { AiProviderType, IAiProvider } from '../types';
 import { GeminiProvider } from './geminiProvider';
 import { GroqProvider } from './groqProvider';
 
-export function getAiProviderApiKey(providerType: AiProviderType, userApiKey: string | null, allowUserKey = false): string | undefined {
+// Browser provider fallback is gated by aiOrchestrator to explicit local-demo/internal-dev modes.
+// Do not accept user-provided raw browser keys here; pilot/production must use server-side Edge AI.
+export function getAiProviderApiKey(providerType: AiProviderType): string | undefined {
     if (providerType === 'openai') {
         return undefined;
     }
 
     if (providerType === 'groq') {
-        return (allowUserKey && userApiKey && userApiKey.trim()) || import.meta.env.VITE_GROQ_API_KEY;
+        return import.meta.env.VITE_GROQ_API_KEY;
     }
 
-    return (allowUserKey && userApiKey && userApiKey.trim()) || import.meta.env.VITE_GEMINI_API_KEY;
+    return import.meta.env.VITE_GEMINI_API_KEY;
 }
 
-export function getAiProvider(providerType: AiProviderType, userApiKey: string | null, allowUserKey = false): IAiProvider {
-    const apiKeyToUse = getAiProviderApiKey(providerType, userApiKey, allowUserKey);
+export function getAiProvider(providerType: AiProviderType): IAiProvider {
+    const apiKeyToUse = getAiProviderApiKey(providerType);
 
     if (providerType === 'openai') {
         throw new Error("OpenAI provider is disabled until the server-side AI provider boundary is implemented.");

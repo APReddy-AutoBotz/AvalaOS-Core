@@ -37,7 +37,6 @@ interface WorkspaceViewProps {
   onResubmitForApproval: (userId: string) => void;
   onInitiateImport: (items: WorkItem[]) => void;
   onRefineSection: (artifactKey: DocumentArtifactKeys, sectionKey: string, newContent: string) => void;
-  userApiKey: string | null;
   aiProviderType: AiProviderType;
 }
 
@@ -84,7 +83,7 @@ const toSafeFileName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'avalaos-core-document';
 
-const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, userApiKey, aiProviderType }) => {
+const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType }) => {
   const { currentOrganization } = useOrganizationContext();
   const [activeTab, setActiveTab] = useState<RightPanelTab>('quality');
   const [exportingDocument, setExportingDocument] = useState<'json' | 'markdown' | null>(null);
@@ -397,7 +396,6 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
             onRefineSection(template.artifactKey, refineModalState.section.key, newContent);
           }
         }}
-       userApiKey={userApiKey}
         aiProviderType={aiProviderType}
       />
       <Modal

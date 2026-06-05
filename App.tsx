@@ -95,7 +95,6 @@ function App() {
   const [isImportProjectSelectorOpen, setImportProjectSelectorOpen] = useState(false);
 
   // AI Provider State
-  const [userApiKey, setUserApiKey] = useState('');
   const [aiProviderType, setAiProviderType] = usePersistentState<AiProviderType>(StorageKeys.AI_PROVIDER, 'groq');
 
   // Assess Detail State
@@ -599,7 +598,7 @@ function App() {
 
     switch (currentView) {
       case View.DASHBOARD:
-        return <CustomDashboardView currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} userApiKey={userApiKey} aiProviderType={aiProviderType} />;
+        return <CustomDashboardView currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
       case View.PORTFOLIO:
         return <PortfolioView projects={projects} tasks={tasks} users={users} onUpdateProjectStage={handleUpdateProjectLifecycleStage} onScopeChange={handleScopeChange} onViewChange={handleViewChange} />;
       case View.DOCS_FORGE:
@@ -630,7 +629,6 @@ function App() {
             }
             setCurrentView(View.WORKSPACE);
           }}
-          userApiKey={userApiKey}
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
         />;
@@ -660,7 +658,6 @@ function App() {
           onResubmitForApproval={handleResubmitForApproval}
           onInitiateImport={handleInitiateImport}
           onRefineSection={handleRefineSection}
-          userApiKey={userApiKey}
           aiProviderType={aiProviderType}
         />
       }
@@ -682,8 +679,6 @@ function App() {
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
-            userApiKey={userApiKey}
-            aiProviderType={aiProviderType}
             onUpdateTaskStatus={handleUpdateTaskStatus} onUpdateTask={handleUpdateTask} onSelectTask={setSelectedTask}
             // Fix: Pass `handleReorderTask` to the `onReorderTask` prop. The original code had a typo `onReorderTask`.
             onUpdateTaskSprint={handleUpdateTaskSprint} onUpdateSprint={handleUpdateSprint} onReorderTask={handleReorderTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask}
