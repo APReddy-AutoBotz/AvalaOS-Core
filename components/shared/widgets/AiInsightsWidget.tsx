@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Task, Project, AiInsight, AiProviderType } from '../../../types';
+import { User, Task, Project, AiInsight } from '../../../types';
 import WidgetWrapper from './WidgetWrapper';
 import {
     SparklesIcon, ArrowPathIcon, ExclamationTriangleIcon, LightBulbIcon,
@@ -10,8 +10,6 @@ interface AiInsightsWidgetProps {
     currentUser: User;
     tasks: Task[];
     projects: Project[];
-    userApiKey: string | null;
-    aiProviderType: AiProviderType;
 }
 
 const insightTypeMap: Record<AiInsight['type'], { icon: React.FC<{ className: string }>, color: string }> = {
@@ -21,7 +19,7 @@ const insightTypeMap: Record<AiInsight['type'], { icon: React.FC<{ className: st
     'bottleneck': { icon: BoltIcon, color: 'text-abz-violet-500' },
 };
 
-const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks, projects, userApiKey, aiProviderType }) => {
+const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks, projects }) => {
     const [insights, setInsights] = useState<AiInsight[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

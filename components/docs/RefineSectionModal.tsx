@@ -9,11 +9,10 @@ interface RefineSectionModalProps {
     onClose: () => void;
     section: DocumentSection | null;
     onSave: (newContent: string) => void;
-    userApiKey: string | null;
     aiProviderType: AiProviderType;
 }
 
-const RefineSectionModal: React.FC<RefineSectionModalProps> = ({ isOpen, onClose, section, onSave, userApiKey, aiProviderType }) => {
+const RefineSectionModal: React.FC<RefineSectionModalProps> = ({ isOpen, onClose, section, onSave, aiProviderType }) => {
     const [prompt, setPrompt] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [refinedContent, setRefinedContent] = useState<string | null>(null);
@@ -37,7 +36,6 @@ const RefineSectionModal: React.FC<RefineSectionModalProps> = ({ isOpen, onClose
         try {
             const newContent = await aiOrchestrator.refineSection(
                 aiProviderType, 
-                userApiKey, 
                 section.title, 
                 section.content, 
                 prompt

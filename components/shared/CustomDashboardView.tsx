@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Task, Project, Sprint, Filters, WidgetType, WidgetDefinition, WidgetConfigs, WidgetConfig, AiProviderType, HandoffLedgerEntry } from '../../types';
+import { User, Task, Project, Sprint, Filters, WidgetType, WidgetDefinition, WidgetConfigs, WidgetConfig, HandoffLedgerEntry } from '../../types';
 import { CogIcon } from './icons';
 import HandoffLedgerPanel from './HandoffLedgerPanel';
 
@@ -19,8 +19,6 @@ interface CustomDashboardViewProps {
     sprints: Sprint[];
     onSelectTask: (task: Task) => void;
     onStatClick: (filter: Filters) => void;
-    userApiKey: string | null;
-    aiProviderType: AiProviderType;
     handoffEntries?: HandoffLedgerEntry[];
 }
 

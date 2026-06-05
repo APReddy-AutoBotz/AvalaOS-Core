@@ -27,8 +27,6 @@ interface ProjectViewProps {
     docTemplates: DocTemplate[];
     documentGenerations: DocumentGeneration[];
     handoffEntries: HandoffLedgerEntry[];
-    userApiKey: string | null;
-    aiProviderType: AiProviderType;
     onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
     onUpdateTask: (updatedTask: Task) => void;
     onSelectTask: (task: Task) => void;
@@ -48,7 +46,7 @@ interface ProjectViewProps {
 const ProjectView: React.FC<ProjectViewProps> = (props) => {
     const { 
         view, project, tasks, epics, sprints, users, currentUser, automations, timesheetEntries, 
-        docTemplates, documentGenerations, handoffEntries, userApiKey, aiProviderType,
+        docTemplates, documentGenerations, handoffEntries,
         onUpdateTaskStatus, onUpdateTask, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onReorderTask, onAddTask, onDeleteTask,
         onCreateAutomation, onUpdateAutomation, onDeleteAutomation, onToggleAutomation, onUpdateTimesheet,
         onViewGeneration
@@ -80,8 +78,6 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
                             onAddTask={onAddTask} 
                             onDeleteTask={onDeleteTask} 
                             onUpdateTask={onUpdateTask}
-                            userApiKey={userApiKey}
-                            aiProviderType={aiProviderType}
                         />;
             case View.WORKLOAD:
                 return <WorkloadView tasks={tasks} users={users.filter(u => tasks.some(t => t.assigneeIds.includes(u.id)))} />;

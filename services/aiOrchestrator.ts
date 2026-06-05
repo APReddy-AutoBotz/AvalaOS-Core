@@ -59,7 +59,6 @@ const getCurrentAiExecutionPolicy = () =>
 export const aiOrchestrator = {
   async generateArtifacts(
     providerType: AiProviderType, 
-    userApiKey: string | null, 
     projectDetails: ProjectDetails, 
     fileContent: string | null, 
     fileName: string
@@ -80,7 +79,7 @@ export const aiOrchestrator = {
     }
 
     console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
-    const provider = getAiProvider(providerType, userApiKey, false);
+    const provider = getAiProvider(providerType);
     try {
       return await provider.generateProjectArtifacts(projectDetails, fileContent, fileName);
     } catch (error) {
@@ -89,12 +88,12 @@ export const aiOrchestrator = {
       }
 
       for (const fallbackProviderType of fallbackOrder(providerType)) {
-        const fallbackKey = getAiProviderApiKey(fallbackProviderType, null, false);
+        const fallbackKey = getAiProviderApiKey(fallbackProviderType);
         if (!fallbackKey) continue;
 
         try {
           console.warn(`${providerLabel[providerType]} generation failed. Falling back to ${providerLabel[fallbackProviderType]}.`, error);
-          const fallbackProvider = getAiProvider(fallbackProviderType, null, false);
+          const fallbackProvider = getAiProvider(fallbackProviderType);
           const artifacts = await fallbackProvider.generateProjectArtifacts(projectDetails, fileContent, fileName);
           return appendFallbackNote(artifacts, providerType, fallbackProviderType, error);
         } catch (fallbackError) {
@@ -108,7 +107,6 @@ export const aiOrchestrator = {
 
   async refineSection(
     providerType: AiProviderType,
-    userApiKey: string | null,
     sectionTitle: string,
     currentContent: string,
     instructions: string
@@ -129,7 +127,7 @@ export const aiOrchestrator = {
     }
 
     console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
-    const provider = getAiProvider(providerType, userApiKey, false);
+    const provider = getAiProvider(providerType);
     return await provider.refineSectionContent(currentContent, `${sectionTitle}\n\n${instructions}`);
   }
 };

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Project, Task, Sprint, User, AiSprintPlan, AiProviderType } from '../../types';
+import { Project, Task, Sprint, User, AiSprintPlan } from '../../types';
 import TaskCard from './TaskCard';
 import InlineTaskCreator from './InlineTaskCreator';
 import { MOCK_EPICS } from '../../data/mockData'; // temp import
@@ -18,8 +18,6 @@ interface SprintPlanningViewProps {
     onAddTask: (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => void;
     onDeleteTask: (taskId: string) => void;
     onUpdateTask: (updatedTask: Task) => void;
-    userApiKey: string | null;
-    aiProviderType: AiProviderType;
 }
 
 const formatDate = (dateString: string) => {
@@ -34,7 +32,7 @@ const getDaysBetween = (startDate: string, endDate: string): number => {
     return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 };
 
-const SprintPlanningView: React.FC<SprintPlanningViewProps> = ({ project, tasks, sprints, users, showProjectLabel = false, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onAddTask, onDeleteTask, onUpdateTask, userApiKey, aiProviderType }) => {
+const SprintPlanningView: React.FC<SprintPlanningViewProps> = ({ project, tasks, sprints, users, showProjectLabel = false, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onAddTask, onDeleteTask, onUpdateTask }) => {
     const [draggedOverId, setDraggedOverId] = useState<string | null>(null);
     const [isPlanning, setIsPlanning] = useState(false);
     const [sprintPlan, setSprintPlan] = useState<AiSprintPlan | null>(null);
