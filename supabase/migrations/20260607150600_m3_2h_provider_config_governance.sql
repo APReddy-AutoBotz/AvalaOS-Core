@@ -73,6 +73,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ai_provider_configs_key_ref_id_fkey'
+          AND conrelid = 'ai_provider_configs'::regclass
     ) THEN
         ALTER TABLE ai_provider_configs
             ADD CONSTRAINT ai_provider_configs_key_ref_id_fkey
