@@ -1,3 +1,9 @@
+declare const Deno: {
+  env: {
+    get: (key: string) => string | undefined;
+  };
+};
+
 type AuthUser = {
   id: string;
   email?: string;

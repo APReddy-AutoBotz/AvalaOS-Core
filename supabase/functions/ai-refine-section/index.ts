@@ -1,6 +1,7 @@
 import { completeAiJob, createAiJob, recordAiUsage } from '../_shared/audit.ts';
-import { assertSupportedProvider, refineSectionWithProvider } from '../_shared/ai.ts';
+import { refineSectionWithProvider } from '../_shared/ai.ts';
 import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
+import { runProviderGovernedOperation } from '../_shared/providerResolverIntegration.ts';
 import { getAuthUser, resolveOrgId } from '../_shared/supabase.ts';
 
 Deno.serve(async (request) => {
@@ -17,34 +18,53 @@ Deno.serve(async (request) => {
     userId = user.id;
     const body = await request.json();
     orgId = await resolveOrgId(user.id, body.organizationId);
-    provider = assertSupportedProvider(body.providerType || 'groq');
 
     const sectionTitle = body.sectionTitle || 'Document section';
     const currentContent = body.currentContent || '';
     const instructions = body.instructions || '';
     if (!instructions.trim()) throw new Error('Refinement instruction is required.');
 
-    const job = await createAiJob({
+    const governed = await runProviderGovernedOperation({
+      operation: 'refine_section',
       orgId,
-      userId,
-      jobType: 'refine_section',
-      provider,
-      inputRefs: {
-        documentId: body.documentId,
-        versionId: body.versionId,
-        sectionId: body.sectionId,
-        sectionTitle,
+      actorId: userId,
+      requestedProvider: body.providerType || body.requestedProvider,
+      requestedProviderConfigId: body.providerConfigId,
+      workspaceId: body.workspaceId,
+      evidenceRef: body.evidenceRef,
+      correlationId: body.correlationId,
+      scannerReference: 'supabase/functions/ai-refine-section/index.ts',
+      runAllowed: async ({ provider: resolvedProvider, apiKey }) => {
+        provider = resolvedProvider;
+        const job = await createAiJob({
+          orgId: orgId!,
+          userId: userId!,
+          jobType: 'refine_section',
+          provider,
+          inputRefs: {
+            documentId: body.documentId,
+            versionId: body.versionId,
+            sectionId: body.sectionId,
+            sectionTitle,
+          },
+        });
+        jobId = job?.id;
+
+        return refineSectionWithProvider(provider, sectionTitle, currentContent, instructions, apiKey);
       },
     });
-    jobId = job?.id;
 
-    const result = await refineSectionWithProvider(provider, sectionTitle, currentContent, instructions);
+    if (governed.status === 'blocked') {
+      return jsonResponse(governed.body, governed.httpStatus);
+    }
+
+    const result = governed.value;
 
     await recordAiUsage({
       orgId,
       userId,
       jobId,
-      provider,
+      provider: governed.provider,
       model: result.usage.model,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,

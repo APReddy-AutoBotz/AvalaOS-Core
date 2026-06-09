@@ -7,7 +7,8 @@ export type ProjectDetails = {
   templateId?: string;
 };
 
-const getProviderKey = (provider: ProviderType) => {
+const getProviderKey = (provider: ProviderType, explicitServerKey?: string) => {
+  if (explicitServerKey) return explicitServerKey;
   if (provider === 'groq') return Deno.env.get('GROQ_API_KEY');
   return Deno.env.get('GEMINI_API_KEY');
 };
@@ -121,8 +122,9 @@ export const generateDocumentWithProvider = async (
   projectDetails: ProjectDetails,
   fileName: string,
   sourceText: string | null,
+  explicitServerKey?: string,
 ) => {
-  const apiKey = getProviderKey(provider);
+  const apiKey = getProviderKey(provider, explicitServerKey);
   if (!apiKey) throw new Error(`${provider.toUpperCase()}_API_KEY is not configured server-side.`);
 
   const system = 'You generate governed enterprise process documentation for AvalaOS Core. Return valid JSON only.';
@@ -142,8 +144,9 @@ export const refineSectionWithProvider = async (
   sectionTitle: string,
   currentContent: string,
   instructions: string,
+  explicitServerKey?: string,
 ) => {
-  const apiKey = getProviderKey(provider);
+  const apiKey = getProviderKey(provider, explicitServerKey);
   if (!apiKey) throw new Error(`${provider.toUpperCase()}_API_KEY is not configured server-side.`);
 
   const system = 'You refine one section of a governed enterprise document. Return the revised section text only.';
