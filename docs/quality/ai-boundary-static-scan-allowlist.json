@@ -107,14 +107,14 @@
     {
       "pattern": "GROQ_API_KEY",
       "path": "supabase/functions/_shared/ai.ts",
-      "lines": [11],
+      "lines": [12],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "M3.2 owns provider config and key-reference hardening for server-side execution."
     },
     {
       "pattern": "GEMINI_API_KEY",
       "path": "supabase/functions/_shared/ai.ts",
-      "lines": [12],
+      "lines": [13],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "M3.2 owns provider config and key-reference hardening for server-side execution."
     },

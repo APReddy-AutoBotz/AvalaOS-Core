@@ -1,6 +1,7 @@
 import { completeAiJob, createAiJob, recordAiUsage } from '../_shared/audit.ts';
-import { assertSupportedProvider, generateDocumentWithProvider } from '../_shared/ai.ts';
+import { generateDocumentWithProvider } from '../_shared/ai.ts';
 import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
+import { runProviderGovernedOperation } from '../_shared/providerResolverIntegration.ts';
 import { getAuthUser, resolveOrgId } from '../_shared/supabase.ts';
 
 Deno.serve(async (request) => {
@@ -17,35 +18,55 @@ Deno.serve(async (request) => {
     userId = user.id;
     const body = await request.json();
     orgId = await resolveOrgId(user.id, body.organizationId);
-    provider = assertSupportedProvider(body.providerType || 'groq');
 
     const projectDetails = body.projectDetails || {};
     const source = body.source || {};
-    const job = await createAiJob({
+    const governed = await runProviderGovernedOperation({
+      operation: 'generate_document',
       orgId,
-      userId,
-      jobType: 'generate_document',
-      provider,
-      inputRefs: {
-        templateId: projectDetails.templateId,
-        fileName: source.fileName || 'N/A',
-        sourceProvided: Boolean(source.text?.trim()),
+      actorId: userId,
+      requestedProvider: body.providerType || body.requestedProvider,
+      requestedProviderConfigId: body.providerConfigId,
+      workspaceId: body.workspaceId,
+      evidenceRef: body.evidenceRef,
+      correlationId: body.correlationId,
+      scannerReference: 'supabase/functions/ai-generate-document/index.ts',
+      runAllowed: async ({ provider: resolvedProvider, apiKey }) => {
+        provider = resolvedProvider;
+        const job = await createAiJob({
+          orgId: orgId!,
+          userId: userId!,
+          jobType: 'generate_document',
+          provider,
+          inputRefs: {
+            templateId: projectDetails.templateId,
+            fileName: source.fileName || 'N/A',
+            sourceProvided: Boolean(source.text?.trim()),
+          },
+        });
+        jobId = job?.id;
+
+        return generateDocumentWithProvider(
+          provider,
+          projectDetails,
+          source.fileName || 'N/A',
+          source.text || null,
+          apiKey,
+        );
       },
     });
-    jobId = job?.id;
 
-    const result = await generateDocumentWithProvider(
-      provider,
-      projectDetails,
-      source.fileName || 'N/A',
-      source.text || null,
-    );
+    if (governed.status === 'blocked') {
+      return jsonResponse(governed.body, governed.httpStatus);
+    }
+
+    const result = governed.value;
 
     await recordAiUsage({
       orgId,
       userId,
       jobId,
-      provider,
+      provider: governed.provider,
       model: result.usage.model,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
