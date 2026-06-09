@@ -9,6 +9,7 @@ import {
   ProviderResolverOperation,
 } from './providerResolver';
 import { runProviderGovernedOperation } from './providerResolverIntegration';
+import type { ProviderGovernedOperationDeps } from './providerResolverIntegration';
 import { resolveProviderSecretForDecision } from './providerSecretAdapter';
 
 console.log('Starting M3.2n resolver Edge Function integration regression suite...');
@@ -105,6 +106,10 @@ const assertNoSensitiveFields = (value: unknown) => {
       assert.equal(child.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
       assert.equal(child.includes('DATABASE_URL'), false);
       assert.equal(child.includes('Supabase REST request failed'), false);
+      assert.equal(child.includes('PostgREST'), false);
+      assert.equal(child.includes('postgrest'), false);
+      assert.equal(child.includes('Authorization'), false);
+      assert.equal(child.includes('Bearer'), false);
       assert.equal(child.includes('ai_provider_key_refs'), false);
       assert.equal(child.includes('ai_provider_configs'), false);
       assert.equal(child.includes('ai_workspace_provider_policies'), false);
@@ -112,6 +117,8 @@ const assertNoSensitiveFields = (value: unknown) => {
       assert.equal(child.includes('secret_ref'), false);
       assert.equal(child.includes('mock-provider-key'), false);
       assert.equal(child.includes('providerPayload'), false);
+      assert.equal(child.includes('stack'), false);
+      assert.equal(child.includes('raw secret lookup error'), false);
       return;
     }
     if (!child || typeof child !== 'object') return;
@@ -130,6 +137,8 @@ const runScenario = async (
     policies?: ProviderPolicyRow[];
     auditFails?: boolean;
     secretFails?: boolean;
+    secretThrows?: boolean;
+    useDefaultSecretLookup?: boolean;
     keyRef?: ProviderKeyRefRow | null;
     throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
   } = {},
@@ -139,6 +148,39 @@ const runScenario = async (
   let createJobCalls = 0;
   let secretCalls = 0;
   let auditCalls = 0;
+
+  const deps: ProviderGovernedOperationDeps = {
+    getMode: () => 'pilot',
+    resolverDeps: buildDeps(operation, {
+      policies: options.policies,
+      keyRef: options.keyRef,
+      order,
+      throwAt: options.throwAt,
+    }),
+    persistAudit: async (event) => {
+      auditCalls += 1;
+      order.push(`audit:${event.status}`);
+      assertNoSensitiveFields(event);
+      if (options.auditFails) throw new Error('audit unavailable');
+      return { status: 'persisted' };
+    },
+  };
+
+  if (!options.useDefaultSecretLookup) {
+    deps.resolveSecret = async (decision) => {
+      secretCalls += 1;
+      order.push('secret');
+      if (options.secretThrows) {
+        throw new Error(
+          'PostgREST raw secret lookup error: ai_provider_key_refs secret_ref Authorization Bearer mock-provider-key stack',
+        );
+      }
+      if (options.secretFails) {
+        return { status: 'blocked', failureClass: 'key_reference_ineligible', correlationId: decision.correlationId };
+      }
+      return { status: 'resolved', provider: 'groq', correlationId: decision.correlationId, apiKey: 'mock-provider-key' };
+    };
+  }
 
   const result = await runProviderGovernedOperation({
     operation,
@@ -154,30 +196,7 @@ const runScenario = async (
       providerCalls += 1;
       return { ok: true };
     },
-  }, {
-    getMode: () => 'pilot',
-    resolverDeps: buildDeps(operation, {
-      policies: options.policies,
-      keyRef: options.keyRef,
-      order,
-      throwAt: options.throwAt,
-    }),
-    persistAudit: async (event) => {
-      auditCalls += 1;
-      order.push(`audit:${event.status}`);
-      assertNoSensitiveFields(event);
-      if (options.auditFails) throw new Error('audit unavailable');
-      return { status: 'persisted' };
-    },
-    resolveSecret: async (decision) => {
-      secretCalls += 1;
-      order.push('secret');
-      if (options.secretFails) {
-        return { status: 'blocked', failureClass: 'key_reference_ineligible', correlationId: decision.correlationId };
-      }
-      return { status: 'resolved', provider: 'groq', correlationId: decision.correlationId, apiKey: 'mock-provider-key' };
-    },
-  });
+  }, deps);
 
   assertNoSensitiveFields(result);
   return { result, order, providerCalls, createJobCalls, secretCalls, auditCalls };
@@ -256,6 +275,24 @@ const main = async () => {
   assert.equal(secretFailure.createJobCalls, 0);
   assert.equal(secretFailure.providerCalls, 0);
   assert.equal(secretFailure.result.body.failureClass, 'key_reference_ineligible');
+
+  const injectedSecretException = await runScenario('generate_document', { secretThrows: true });
+  assert.equal(injectedSecretException.result.status, 'blocked');
+  assert.equal(injectedSecretException.secretCalls, 1);
+  assert.equal(injectedSecretException.auditCalls, 1);
+  assert.equal(injectedSecretException.createJobCalls, 0);
+  assert.equal(injectedSecretException.providerCalls, 0);
+  assert.equal(injectedSecretException.result.body.failureClass, 'key_reference_ineligible');
+  assertNoSensitiveFields(injectedSecretException.result);
+
+  const defaultSecretException = await runScenario('generate_document', { useDefaultSecretLookup: true });
+  assert.equal(defaultSecretException.result.status, 'blocked');
+  assert.equal(defaultSecretException.secretCalls, 0);
+  assert.equal(defaultSecretException.auditCalls, 1);
+  assert.equal(defaultSecretException.createJobCalls, 0);
+  assert.equal(defaultSecretException.providerCalls, 0);
+  assert.equal(defaultSecretException.result.body.failureClass, 'key_reference_ineligible');
+  assertNoSensitiveFields(defaultSecretException.result);
 
   for (const throwAt of ['membership', 'policy', 'config', 'keyRef'] as const) {
     const resolverFailure = await runScenario('generate_document', { throwAt });

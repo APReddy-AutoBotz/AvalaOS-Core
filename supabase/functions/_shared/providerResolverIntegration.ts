@@ -169,7 +169,13 @@ export const runProviderGovernedOperation = async <T>(
     return safeFailure('audit_context_unsafe', decision.correlationId);
   }
 
-  const secret = await (deps.resolveSecret || resolveProviderSecretForDecision)(decision);
+  let secret: ProviderSecretLookupResult;
+  try {
+    secret = await (deps.resolveSecret || resolveProviderSecretForDecision)(decision);
+  } catch {
+    return safeFailure('key_reference_ineligible', decision.correlationId);
+  }
+
   if (secret.status === 'blocked') {
     return safeFailure(secret.failureClass, secret.correlationId);
   }
