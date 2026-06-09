@@ -111,10 +111,34 @@ export const evaluateProviderSecretLookupEligibility = (
   };
 };
 
-const safeEnvRefPattern = /^[A-Z][A-Z0-9_]{2,127}$/;
+const reservedEnvRefs = new Set([
+  'SUPABASE_URL',
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'DATABASE_URL',
+  'GROQ_API_KEY',
+  'GEMINI_API_KEY',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'AZURE_OPENAI_API_KEY',
+  'JWT_SECRET',
+]);
+
+const providerSecretRefPatterns: Record<ProviderResolverProvider, RegExp> = {
+  groq: /^AVALA_PROVIDER_SECRET_GROQ_[A-Z0-9_]+$/,
+  gemini: /^AVALA_PROVIDER_SECRET_GEMINI_[A-Z0-9_]+$/,
+};
 
 const isExpired = (expiresAt: string | null | undefined, now: Date) =>
   Boolean(expiresAt && new Date(expiresAt).getTime() <= now.getTime());
+
+const isAllowedProviderSecretRef = (
+  provider: ProviderResolverProvider,
+  secretRef: string,
+) => {
+  if (reservedEnvRefs.has(secretRef)) return false;
+  return providerSecretRefPatterns[provider].test(secretRef);
+};
 
 const readServerEnv = (name: string) => {
   const runtime = globalThis as typeof globalThis & {
@@ -172,7 +196,10 @@ export const resolveProviderSecretForDecision = async (
     };
   }
 
-  if (keyRef.resolver_type !== 'server_reference' || !safeEnvRefPattern.test(keyRef.secret_ref)) {
+  if (
+    keyRef.resolver_type !== 'server_reference'
+    || !isAllowedProviderSecretRef(allowedDecision.provider, keyRef.secret_ref)
+  ) {
     return {
       status: 'blocked',
       failureClass: 'secret_reference_unsafe',

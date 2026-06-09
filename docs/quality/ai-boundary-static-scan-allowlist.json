@@ -119,6 +119,20 @@
       "futureAction": "M3.2 owns provider config and key-reference hardening for server-side execution."
     },
     {
+      "pattern": "GROQ_API_KEY",
+      "path": "supabase/functions/_shared/providerSecretAdapter.ts",
+      "lines": [119],
+      "reason": "server-side Edge/Supabase environment reference",
+      "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
+    },
+    {
+      "pattern": "GEMINI_API_KEY",
+      "path": "supabase/functions/_shared/providerSecretAdapter.ts",
+      "lines": [120],
+      "reason": "server-side Edge/Supabase environment reference",
+      "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
+    },
+    {
       "pattern": "localStorage",
       "path": "services/storage.ts",
       "lines": [34, 44, 51],

@@ -63,23 +63,36 @@ const buildDeps = (operation: ProviderResolverOperation, options: {
   policies?: ProviderPolicyRow[];
   keyRef?: ProviderKeyRefRow | null;
   order?: string[];
+  throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
 } = {}): ProviderResolverDeps => ({
   now: () => now,
   createCorrelationId: () => 'generated-correlation-id',
   queryMembershipAndRoles: async () => {
     options.order?.push('resolver:membership');
+    if (options.throwAt === 'membership') {
+      throw new Error('Supabase REST request failed: organization_members raw response body');
+    }
     return membership;
   },
   queryProviderPolicy: async () => {
     options.order?.push('resolver:policy');
+    if (options.throwAt === 'policy') {
+      throw new Error('Supabase REST request failed: ai_workspace_provider_policies raw response body');
+    }
     return options.policies === undefined ? [policyFor(operation)] : options.policies;
   },
   queryProviderConfig: async () => {
     options.order?.push('resolver:config');
+    if (options.throwAt === 'config') {
+      throw new Error('Supabase REST request failed: ai_provider_configs raw response body');
+    }
     return config;
   },
   queryProviderKeyRef: async () => {
     options.order?.push('resolver:keyRef');
+    if (options.throwAt === 'keyRef') {
+      throw new Error('Supabase REST request failed: ai_provider_key_refs raw response body secret_ref');
+    }
     return options.keyRef === undefined ? keyRef : options.keyRef;
   },
 });
@@ -88,6 +101,15 @@ const assertNoSensitiveFields = (value: unknown) => {
   const walk = (child: unknown): void => {
     if (typeof child === 'string') {
       assert.equal(child.includes('SERVER_PROVIDER_SECRET_REF'), false);
+      assert.equal(child.includes('AVALA_PROVIDER_SECRET_'), false);
+      assert.equal(child.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+      assert.equal(child.includes('DATABASE_URL'), false);
+      assert.equal(child.includes('Supabase REST request failed'), false);
+      assert.equal(child.includes('ai_provider_key_refs'), false);
+      assert.equal(child.includes('ai_provider_configs'), false);
+      assert.equal(child.includes('ai_workspace_provider_policies'), false);
+      assert.equal(child.includes('organization_members raw'), false);
+      assert.equal(child.includes('secret_ref'), false);
       assert.equal(child.includes('mock-provider-key'), false);
       assert.equal(child.includes('providerPayload'), false);
       return;
@@ -109,6 +131,7 @@ const runScenario = async (
     auditFails?: boolean;
     secretFails?: boolean;
     keyRef?: ProviderKeyRefRow | null;
+    throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
   } = {},
 ) => {
   const order: string[] = [];
@@ -133,7 +156,12 @@ const runScenario = async (
     },
   }, {
     getMode: () => 'pilot',
-    resolverDeps: buildDeps(operation, { policies: options.policies, keyRef: options.keyRef, order }),
+    resolverDeps: buildDeps(operation, {
+      policies: options.policies,
+      keyRef: options.keyRef,
+      order,
+      throwAt: options.throwAt,
+    }),
     persistAudit: async (event) => {
       auditCalls += 1;
       order.push(`audit:${event.status}`);
@@ -155,10 +183,10 @@ const runScenario = async (
   return { result, order, providerCalls, createJobCalls, secretCalls, auditCalls };
 };
 
-const allowedDecision = (): AllowedProviderResolverDecision => ({
+const allowedDecision = (provider: 'groq' | 'gemini' = 'groq'): AllowedProviderResolverDecision => ({
   status: 'allowed',
   futureSecretLookupEligible: true,
-  provider: 'groq',
+  provider,
   providerConfigId: configId,
   keyRefId,
   keyRefResolverType: 'server_reference',
@@ -172,7 +200,7 @@ const allowedDecision = (): AllowedProviderResolverDecision => ({
     schemaVersion: 1,
     eventType: 'ai_provider_resolver_decision',
     orgId,
-    provider: 'groq',
+    provider,
     providerConfigId: configId,
     keyRefId,
     operation: 'generate_document',
@@ -229,6 +257,19 @@ const main = async () => {
   assert.equal(secretFailure.providerCalls, 0);
   assert.equal(secretFailure.result.body.failureClass, 'key_reference_ineligible');
 
+  for (const throwAt of ['membership', 'policy', 'config', 'keyRef'] as const) {
+    const resolverFailure = await runScenario('generate_document', { throwAt });
+    assert.equal(resolverFailure.result.status, 'blocked');
+    assert.equal(resolverFailure.result.body.error, 'AI provider governance controls blocked this request.');
+    assert.equal(resolverFailure.result.body.failureClass, 'provider_call_blocked');
+    assert.equal(Boolean(resolverFailure.result.body.correlationId), true);
+    assert.equal(resolverFailure.secretCalls, 0);
+    assert.equal(resolverFailure.createJobCalls, 0);
+    assert.equal(resolverFailure.providerCalls, 0);
+    assert.equal(resolverFailure.auditCalls, 0);
+    assertNoSensitiveFields(resolverFailure.result);
+  }
+
   const baseDecision = allowedDecision();
   const manual = await resolveProviderSecretForDecision(baseDecision, {
     lookupKeyRef: async () => ({
@@ -236,7 +277,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'manual_placeholder',
-      secret_ref: 'SERVER_PROVIDER_SECRET_REF',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
       status: 'active',
     }),
   });
@@ -249,7 +290,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'external_secret_reference',
-      secret_ref: 'SERVER_PROVIDER_SECRET_REF',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
       status: 'active',
     }),
   });
@@ -269,19 +310,94 @@ const main = async () => {
   assert.equal(unsafe.status, 'blocked');
   if (unsafe.status === 'blocked') assert.equal(unsafe.failureClass, 'secret_reference_unsafe');
 
+  for (const secretRef of ['SUPABASE_SERVICE_ROLE_KEY', 'DATABASE_URL']) {
+    const reserved = await resolveProviderSecretForDecision(baseDecision, {
+      lookupKeyRef: async () => ({
+        id: keyRefId,
+        org_id: orgId,
+        provider: 'groq',
+        resolver_type: 'server_reference',
+        secret_ref: secretRef,
+        status: 'active',
+      }),
+      readEnv: () => {
+        throw new Error('reserved secret ref must not be read');
+      },
+    });
+    assert.equal(reserved.status, 'blocked');
+    if (reserved.status === 'blocked') assert.equal(reserved.failureClass, 'secret_reference_unsafe');
+  }
+
+  const wrongGroqPrefix = await resolveProviderSecretForDecision(baseDecision, {
+    lookupKeyRef: async () => ({
+      id: keyRefId,
+      org_id: orgId,
+      provider: 'groq',
+      resolver_type: 'server_reference',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY',
+      status: 'active',
+    }),
+    readEnv: () => {
+      throw new Error('wrong provider prefix must not be read');
+    },
+  });
+  assert.equal(wrongGroqPrefix.status, 'blocked');
+  if (wrongGroqPrefix.status === 'blocked') {
+    assert.equal(wrongGroqPrefix.failureClass, 'secret_reference_unsafe');
+  }
+
+  const geminiDecision = allowedDecision('gemini');
+  const wrongGeminiPrefix = await resolveProviderSecretForDecision(geminiDecision, {
+    lookupKeyRef: async () => ({
+      id: keyRefId,
+      org_id: orgId,
+      provider: 'gemini',
+      resolver_type: 'server_reference',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
+      status: 'active',
+    }),
+    readEnv: () => {
+      throw new Error('wrong provider prefix must not be read');
+    },
+  });
+  assert.equal(wrongGeminiPrefix.status, 'blocked');
+  if (wrongGeminiPrefix.status === 'blocked') {
+    assert.equal(wrongGeminiPrefix.failureClass, 'secret_reference_unsafe');
+  }
+
   const resolved = await resolveProviderSecretForDecision(baseDecision, {
     lookupKeyRef: async () => ({
       id: keyRefId,
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'server_reference',
-      secret_ref: 'SERVER_PROVIDER_SECRET_REF',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
       status: 'active',
     }),
-    readEnv: () => 'mock-provider-key',
+    readEnv: (name) => {
+      assert.equal(name, 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY');
+      return 'mock-provider-key';
+    },
   });
   assert.equal(resolved.status, 'resolved');
   if (resolved.status === 'resolved') assert.equal(resolved.apiKey, 'mock-provider-key');
+
+  const resolvedGemini = await resolveProviderSecretForDecision(geminiDecision, {
+    lookupKeyRef: async () => ({
+      id: keyRefId,
+      org_id: orgId,
+      provider: 'gemini',
+      resolver_type: 'server_reference',
+      secret_ref: 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY',
+      status: 'active',
+    }),
+    readEnv: (name) => {
+      assert.equal(name, 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY');
+      return 'mock-provider-key';
+    },
+  });
+  assert.equal(resolvedGemini.status, 'resolved');
+  if (resolvedGemini.status === 'resolved') assert.equal(resolvedGemini.apiKey, 'mock-provider-key');
 
   console.log('M3.2n resolver Edge Function integration regression suite passed.');
 };

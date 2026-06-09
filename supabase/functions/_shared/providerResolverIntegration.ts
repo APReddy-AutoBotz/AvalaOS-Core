@@ -71,6 +71,18 @@ const readServerMode = () => {
   return runtime.Deno?.env?.get?.('AVALA_AI_RUNTIME_MODE');
 };
 
+const hasSafeCorrelationIdShape = (value: string) => /^[a-zA-Z0-9._:-]{8,128}$/.test(value);
+
+const createSafeCorrelationId = () => {
+  const cryptoApi = globalThis.crypto as Crypto | undefined;
+  return cryptoApi?.randomUUID?.() || `corr-${Date.now().toString(36)}`;
+};
+
+const resolveSafeCorrelationId = (value?: string | null) => {
+  const candidate = value?.trim();
+  return candidate && hasSafeCorrelationIdShape(candidate) ? candidate : createSafeCorrelationId();
+};
+
 const safeFailure = (
   failureClass: SafeFailureClass,
   correlationId: string,
@@ -116,22 +128,28 @@ export const runProviderGovernedOperation = async <T>(
   const resolverDeps = deps.resolverDeps || buildProviderResolverDbDeps();
   const mode = (deps.getMode || readServerMode)();
   const requestedProvider = input.requestedProvider?.trim() || 'groq';
+  const correlationId = resolveSafeCorrelationId(input.correlationId);
 
-  const decision = await resolveProviderForOperation({
-    mode,
-    operation: input.operation,
-    requestedProvider,
-    requestedProviderConfigId: input.requestedProviderConfigId,
-    orgId: input.orgId,
-    workspaceId: input.workspaceId,
-    actorId: input.actorId,
-    correlationId: input.correlationId,
-    evidenceRef: input.evidenceRef,
-    scannerClassification: {
-      status: 'classified',
-      reference: input.scannerReference,
-    },
-  }, resolverDeps);
+  let decision: ProviderResolverDecision;
+  try {
+    decision = await resolveProviderForOperation({
+      mode,
+      operation: input.operation,
+      requestedProvider,
+      requestedProviderConfigId: input.requestedProviderConfigId,
+      orgId: input.orgId,
+      workspaceId: input.workspaceId,
+      actorId: input.actorId,
+      correlationId,
+      evidenceRef: input.evidenceRef,
+      scannerClassification: {
+        status: 'classified',
+        reference: input.scannerReference,
+      },
+    }, resolverDeps);
+  } catch {
+    return safeFailure('provider_call_blocked', correlationId);
+  }
 
   if (decision.status === 'blocked') {
     try {
