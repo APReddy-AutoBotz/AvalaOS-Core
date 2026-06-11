@@ -5,11 +5,11 @@ import {
   ProviderResolverOperation,
   ProviderResolverProvider,
   resolveProviderForOperation,
-} from './providerResolver';
-import { ProviderResolverAuditEventShell } from './providerResolverAudit';
-import { persistProviderResolverAuditEvent } from './providerResolverAuditDb';
-import { buildProviderResolverDbDeps } from './providerResolverDb';
-import { ProviderSecretLookupResult, resolveProviderSecretForDecision } from './providerSecretAdapter';
+} from './providerResolver.ts';
+import { ProviderResolverAuditEventShell } from './providerResolverAudit.ts';
+import { persistProviderResolverAuditEvent } from './providerResolverAuditDb.ts';
+import { buildProviderResolverDbDeps } from './providerResolverDb.ts';
+import { ProviderSecretLookupResult, resolveProviderSecretForDecision } from './providerSecretAdapter.ts';
 
 type SafeFailureClass =
   | 'mode_not_allowed'

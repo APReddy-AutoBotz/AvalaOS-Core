@@ -2,8 +2,8 @@ import {
   AllowedProviderResolverDecision,
   ProviderResolverDecision,
   ProviderResolverProvider,
-} from './providerResolver';
-import { postgrest } from './supabase';
+} from './providerResolver.ts';
+import { postgrest } from './supabase.ts';
 
 export type ProviderSecretLookupEligibility =
   | {

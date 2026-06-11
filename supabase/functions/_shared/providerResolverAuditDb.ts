@@ -1,5 +1,5 @@
-import { ProviderResolverAuditEventShell, assertAuditMetadataIsSafe } from './providerResolverAudit';
-import { insertRow } from './supabase';
+import { ProviderResolverAuditEventShell, assertAuditMetadataIsSafe } from './providerResolverAudit.ts';
+import { insertRow } from './supabase.ts';
 
 const toAuditStatus = (status: ProviderResolverAuditEventShell['status']) =>
   status === 'allowed' ? 'recorded' : status;

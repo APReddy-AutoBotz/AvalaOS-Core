@@ -3,7 +3,7 @@ import {
   ProviderResolverAuditMetadataError,
   ProviderResolverAuditMetadataValue,
   buildProviderResolverAuditEventShell,
-} from './providerResolverAudit';
+} from './providerResolverAudit.ts';
 
 export type ProviderResolverProvider = 'gemini' | 'groq';
 export type ProviderResolverMode = 'pilot' | 'production';
