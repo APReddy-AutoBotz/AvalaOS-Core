@@ -7,8 +7,8 @@ import {
   ProviderKeyRefRow,
   ProviderPolicyRow,
   ProviderResolverDeps,
-} from './providerResolver';
-import { postgrest } from './supabase';
+} from './providerResolver.ts';
+import { postgrest } from './supabase.ts';
 
 type MembershipRow = {
   status: string;
