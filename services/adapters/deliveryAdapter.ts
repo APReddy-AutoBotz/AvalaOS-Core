@@ -79,6 +79,7 @@ const fromTaskRow = (row: any): Task => ({
   comments: (row.task_comments || []).map(fromCommentRow).sort((a: Comment, b: Comment) => a.createdAt.localeCompare(b.createdAt)) || row.metadata?.comments,
   userStories: row.metadata?.userStories,
   activityLog: (row.task_activity_events || []).map(fromActivityRow).sort((a: ActivityLogItem, b: ActivityLogItem) => a.createdAt.localeCompare(b.createdAt)) || row.metadata?.activityLog,
+  sourceLineage: row.metadata?.sourceLineage,
 });
 
 async function getEntityUuid(table: string, orgId: string, appId?: string) {
@@ -300,6 +301,7 @@ export const deliveryAdapter = {
         dependencyIds: task.dependencyIds,
         orderRank: task.orderRank,
         userStories: task.userStories,
+        sourceLineage: task.sourceLineage,
       },
     };
 

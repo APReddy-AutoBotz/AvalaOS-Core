@@ -13,13 +13,13 @@ import OnboardingWizard from './components/auth/OnboardingWizard';
 import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
 
-
 import { StorageKeys, usePersistentState } from './services/storage';
 import { firstEnabledView, isViewEnabled, isModuleEnabled } from './constants/moduleConfig';
 import { useHandoffLedger } from './services/handoffLedgerService';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { mapDemoTeamsForSupabase, mapDemoUsersForSupabase } from './services/demoIdentity';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
+import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -376,7 +376,24 @@ function App() {
   };
 
 
-  const handleImportWorkItems = async (itemsToImport: WorkItem[], projectId: string) => {
+  const handleImportWorkItems = async (
+    itemsToImport: WorkItem[],
+    projectId: string,
+    importSource: {
+      artifacts?: GeneratedArtifacts | null;
+      generationId?: string | null;
+      generationCreatedAt?: string;
+    } = {},
+  ) => {
+    const importedAt = new Date().toISOString();
+    const handoffLedgerEntryId = `handoff-docs-delivery-${Date.now()}`;
+    const activeGeneration = activeGenerationId
+      ? documentGenerations.find(generation => generation.id === activeGenerationId)
+      : undefined;
+    const sourceArtifacts = importSource.artifacts ?? activeGeneration?.artifacts ?? null;
+    const sourceGenerationId = importSource.generationId || activeGeneration?.id || activeGenerationId || undefined;
+    const sourceCreatedAt = importSource.generationCreatedAt || importedAt;
+    const sourceContext = sourceArtifacts?.sourceContext;
     const newEpics: Epic[] = [];
     const newTasks: Task[] = [];
     const tempEpicTitleToNewId = new Map<string, string>();
@@ -396,11 +413,19 @@ function App() {
         lastSeenEpicId = tempEpicTitleToNewId.get(item.title);
       } else if (item.type === 'Story' || item.type === 'Task') {
         const descriptionWithAC = `${item.description}${item.acceptanceCriteria.length > 0 ? `\n\nAcceptance Criteria:\n${item.acceptanceCriteria.map(ac => `- ${ac}`).join('\n')}` : ''}`;
+        const sourceLineage = buildDocsToDeliveryLineage({
+          artifacts: sourceArtifacts,
+          generationId: sourceGenerationId,
+          workItem: item,
+          createdAt: sourceCreatedAt,
+          handoffLedgerEntryIds: [handoffLedgerEntryId],
+        });
         newTasks.push({
           id: `task-${Date.now()}-${index}`, title: item.title, description: descriptionWithAC, status: 'To Do',
           priority: 'Medium', type: item.type as TaskType, projectId: projectId, epicId: lastSeenEpicId,
           assigneeIds: [], startDate: new Date().toISOString().split('T')[0],
           dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          sourceLineage,
         });
       }
     });
@@ -408,46 +433,82 @@ function App() {
     await deliveryAddEpics(newEpics);
     await deliveryAddTasks(newTasks);
 
-    recordHandoff({
+    const evidenceRefs = collectDocsToDeliveryEvidenceRefs(newTasks.map(task => task.sourceLineage));
+    const assumptionRefs = Array.from(new Set(newTasks.flatMap(task => task.sourceLineage?.assumptionRefs || [])));
+    const lineageCounts = summarizeDocsToDeliveryLineageCompleteness(newTasks.map(task => task.sourceLineage));
+    const projectName = projects.find(p => p.id === projectId)?.name || 'the selected project';
+
+    await recordHandoff({
+      id: handoffLedgerEntryId,
       fromModule: 'docs',
       toModule: 'delivery',
       status: 'Accepted',
       sourceType: 'Work Items',
-      sourceId: activeGenerationId || 'temporary-document-generation',
+      sourceId: sourceGenerationId || 'temporary-document-generation',
       targetType: 'Project',
       targetId: projectId,
       title: `${itemsToImport.length} generated work items imported`,
-      summary: `Generated document work items were accepted into ${projects.find(p => p.id === projectId)?.name || 'the selected project'} backlog.`,
-      evidenceRefs: itemsToImport.map(item => item.title),
+      summary: `Generated document work items were accepted into ${projectName} backlog.`,
+      evidenceRefs,
       metadata: {
         itemCount: itemsToImport.length,
         epicCount: newEpics.length,
         taskCount: newTasks.length,
+        sourceGenerationId,
+        sourceProcessId: sourceContext?.processId,
+        sourceAssessmentId: sourceContext?.assessmentId,
+        sourceContextLabel: sourceContext?.sourceLabel,
+        lineageCompleteCount: lineageCounts.complete,
+        lineagePartialCount: lineageCounts.partial,
+        lineageMissingCount: lineageCounts.missing,
+        evidenceRefCount: evidenceRefs.length,
+        assumptionRefCount: assumptionRefs.length,
+        importedWorkItemTitles: itemsToImport.map(item => item.title),
       },
     });
 
     alert(`${newEpics.length} epic(s) and ${newTasks.length} task(s) have been imported to your backlog.`);
 
-    handleScopeChange({ type: ScopeType.PROJECT, id: projectId, name: projects.find(p => p.id === projectId)!.name });
+    handleScopeChange({ type: ScopeType.PROJECT, id: projectId, name: projectName });
     setCurrentView(View.BACKLOG);
   };
 
   const handleInitiateImport = (itemsToImport: WorkItem[]) => {
     // If we are already in a project, import directly.
     if (currentScope.type === ScopeType.PROJECT) {
-      handleImportWorkItems(itemsToImport, currentScope.id).catch(surfaceDeliveryError);
-      // If this was a temporary artifact session, we can now persist it.
-      if (tempArtifacts) {
-        const newGeneration: DocumentGeneration = {
-          id: `docgen-${Date.now()}`,
-          projectId: currentScope.id,
-          generatedAt: new Date().toISOString(),
-          templateId: 'unknown', // This info is lost in the temp state, could be improved
-          artifacts: tempArtifacts,
-        };
-        deliverySaveGeneration(newGeneration);
-        setTempArtifacts(null);
-      }
+      const runProjectImport = async () => {
+        const artifactsToImport = tempArtifacts;
+        if (artifactsToImport) {
+          const newGeneration: DocumentGeneration = {
+            id: `docgen-${Date.now()}`,
+            projectId: currentScope.id,
+            generatedAt: new Date().toISOString(),
+            templateId: 'unknown',
+            artifacts: artifactsToImport,
+          };
+          const savedGeneration = await deliverySaveGeneration(newGeneration);
+          const finalizedGeneration = savedGeneration || newGeneration;
+          await handleImportWorkItems(itemsToImport, currentScope.id, {
+            artifacts: finalizedGeneration.artifacts,
+            generationId: finalizedGeneration.id,
+            generationCreatedAt: finalizedGeneration.generatedAt,
+          });
+          setActiveGenerationId(finalizedGeneration.id);
+          setTempArtifacts(null);
+          return;
+        }
+
+        const activeGeneration = activeGenerationId
+          ? documentGenerations.find(generation => generation.id === activeGenerationId)
+          : undefined;
+        await handleImportWorkItems(itemsToImport, currentScope.id, {
+          artifacts: activeGeneration?.artifacts || null,
+          generationId: activeGeneration?.id || activeGenerationId,
+          generationCreatedAt: activeGeneration?.generatedAt,
+        });
+      };
+
+      runProjectImport().catch(surfaceDeliveryError);
     } else {
       // If it's a global generation, open the project selector.
       setImportProjectSelectorOpen(true);
@@ -455,24 +516,32 @@ function App() {
   };
 
   const handleProjectSelectedForImport = (project: Project) => {
-    if (!tempArtifacts) return;
+    const artifactsToImport = tempArtifacts;
+    if (!artifactsToImport) return;
 
-    // 1. Persist the DocumentGeneration artifact
-    const newGeneration: DocumentGeneration = {
-      id: `docgen-${Date.now()}`,
-      projectId: project.id,
-      generatedAt: new Date().toISOString(),
-      templateId: 'unknown', // This info is lost in the temp state, could be improved
-      artifacts: tempArtifacts,
+    const runGlobalImport = async () => {
+      const newGeneration: DocumentGeneration = {
+        id: `docgen-${Date.now()}`,
+        projectId: project.id,
+        generatedAt: new Date().toISOString(),
+        templateId: 'unknown',
+        artifacts: artifactsToImport,
+      };
+      const savedGeneration = await deliverySaveGeneration(newGeneration);
+      const finalizedGeneration = savedGeneration || newGeneration;
+
+      await handleImportWorkItems(artifactsToImport.workItems, project.id, {
+        artifacts: finalizedGeneration.artifacts,
+        generationId: finalizedGeneration.id,
+        generationCreatedAt: finalizedGeneration.generatedAt,
+      });
+
+      setActiveGenerationId(finalizedGeneration.id);
+      setTempArtifacts(null);
+      setImportProjectSelectorOpen(false);
     };
-    deliverySaveGeneration(newGeneration);
 
-    // 2. Import the work items into the selected project
-    handleImportWorkItems(tempArtifacts.workItems, project.id).catch(surfaceDeliveryError);
-
-    // 3. Clean up and close modal
-    setTempArtifacts(null);
-    setImportProjectSelectorOpen(false);
+    runGlobalImport().catch(surfaceDeliveryError);
   };
 
   const handleRefineSection = (artifactKey: DocumentArtifactKeys, sectionKey: string, newContent: string) => {

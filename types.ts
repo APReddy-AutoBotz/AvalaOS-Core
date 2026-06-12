@@ -581,16 +581,31 @@ export type DeliveryPackStatus =
 export type DeliveryPackLineageStatus = 'Linked' | 'Partial' | 'Missing';
 export type DeliveryPackChecklistStatus = 'Complete' | 'Action Required' | 'Missing' | 'Not Required';
 export type DeliveryPackBlockerSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
+export type DeliverySourceLineageCompleteness = 'complete' | 'partial' | 'missing';
 
 export interface TaskSourceLineageMetadata {
     deliveryPackId?: string;
     processId?: string;
     assessmentId?: string;
     documentGenerationId?: string;
+    sourceModule?: 'docs';
+    upstreamSourceModule?: 'assess';
+    sourceType?: 'Generated Work Item' | 'Generated Document' | 'Avala Studio';
+    sourceGenerationId?: string;
+    sourceArtifactKey?: string;
+    sourceArtifactTitle?: string;
+    sourceWorkItemTitle?: string;
+    sourceContextLabel?: string;
+    sourceDecisionPackRef?: string;
+    sourceHandoffPackRef?: string;
     handoffLedgerEntryIds?: string[];
     evidenceRefs?: string[];
+    assumptionRefs?: string[];
     sourceLabel?: string;
     sourceStatus?: string;
+    lineageCompleteness?: DeliverySourceLineageCompleteness;
+    lineageNotes?: string[];
+    createdAt?: string;
 }
 
 export interface DeliveryPackSourceRef {
