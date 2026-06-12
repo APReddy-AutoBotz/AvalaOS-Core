@@ -60,6 +60,7 @@ export const buildDocsToDeliveryLineage = ({
   const lineageNotes = compactStrings([
     !normalizedGenerationId ? 'No document generation id was available at import time.' : undefined,
     !sourceContext ? 'No Assess source context was attached to this generated artifact.' : undefined,
+    !sourceContext ? 'Docs-only generation is not Assess-backed evidence.' : undefined,
     sourceContext && evidenceRefs.length === 0 ? 'Assess source context did not include evidence reference ids.' : undefined,
   ]);
 

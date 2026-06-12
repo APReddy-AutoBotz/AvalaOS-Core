@@ -101,6 +101,7 @@ assert.equal(docsOnlyLineage.processId, undefined);
 assert.equal(docsOnlyLineage.assessmentId, undefined);
 assert.deepEqual(docsOnlyLineage.evidenceRefs, []);
 assert.ok(docsOnlyLineage.lineageNotes?.some(note => note.includes('No Assess source context')));
+assert.ok(docsOnlyLineage.lineageNotes?.includes('Docs-only generation is not Assess-backed evidence.'));
 
 const missingLineage = buildDocsToDeliveryLineage({
   artifacts: null,
