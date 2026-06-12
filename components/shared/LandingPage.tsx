@@ -19,7 +19,7 @@ const DEFAULT_PROJECT_DETAILS = {
 
 const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange, sourceContext }) => {
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
-    company: sourceContext ? 'Avala Assess' : DEFAULT_PROJECT_DETAILS.company,
+    company: DEFAULT_PROJECT_DETAILS.company,
     project: sourceContext?.processName || DEFAULT_PROJECT_DETAILS.project,
     domain: sourceContext?.recommendationCategory || DEFAULT_PROJECT_DETAILS.domain,
     templateId: docTemplates[0]?.id || '',
@@ -34,7 +34,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
 
     setProjectDetails(prev => ({
       ...prev,
-      company: prev.company === DEFAULT_PROJECT_DETAILS.company ? 'Avala Assess' : prev.company,
       project: prev.project === DEFAULT_PROJECT_DETAILS.project ? sourceContext.processName : prev.project,
       domain: prev.domain === DEFAULT_PROJECT_DETAILS.domain ? (sourceContext.recommendationCategory || DEFAULT_PROJECT_DETAILS.domain) : prev.domain,
       templateId: prev.templateId || docTemplates[0]?.id || '',

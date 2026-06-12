@@ -158,6 +158,9 @@ function App() {
   };
 
   const handleViewChange = (view: View) => {
+    if (view === View.DOCS_FORGE) {
+      setAssessToStudioSourceContext(null);
+    }
     setCurrentView(isViewEnabled(view, enabledModules) ? view : firstEnabledView(enabledModules));
   };
 
@@ -171,6 +174,7 @@ function App() {
 
   const handlePrimaryAction = () => {
     if (isModuleEnabled('docs', enabledModules)) {
+      setAssessToStudioSourceContext(null);
       setCurrentView(View.DOCS_FORGE);
       return;
     }
@@ -187,6 +191,7 @@ function App() {
 
   const handleProjectSelectedForDocForge = (project: Project) => {
     handleScopeChange({ type: ScopeType.PROJECT, id: project.id, name: project.name });
+    setAssessToStudioSourceContext(null);
     setCurrentView(View.DOCS_FORGE);
     setIsProjectSelectorOpen(false);
   };

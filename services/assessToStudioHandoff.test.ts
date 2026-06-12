@@ -4,6 +4,7 @@ import {
   buildAssessToStudioHandoffPayload,
   getAssessToStudioSourceContextSummary,
   renderAssessToStudioSourceContext,
+  withoutAssessToStudioSourceContext,
 } from './assessToStudioHandoff';
 import {
   Assessment,
@@ -309,5 +310,13 @@ const artifacts: GeneratedArtifacts = {
 const artifactsWithSource = attachAssessToStudioSourceContext(artifacts, payload);
 assert.equal(artifactsWithSource.sourceContext?.assessmentId, 'assessment-1');
 assert.equal(artifacts.sourceContext, undefined);
+
+const manualArtifacts = attachAssessToStudioSourceContext(artifactsWithSource, null);
+assert.equal(manualArtifacts.sourceContext, undefined);
+assert.equal(artifactsWithSource.sourceContext?.assessmentId, 'assessment-1');
+
+const clearedArtifacts = withoutAssessToStudioSourceContext(artifactsWithSource);
+assert.equal(clearedArtifacts.sourceContext, undefined);
+assert.equal(artifactsWithSource.sourceContext?.assessmentId, 'assessment-1');
 
 console.log('Assess-to-Studio handoff payload regression passed.');

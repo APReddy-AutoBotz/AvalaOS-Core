@@ -215,6 +215,12 @@ export const renderAssessToStudioSourceContext = (payload: AssessToStudioHandoff
   ].join('\n');
 };
 
+export const withoutAssessToStudioSourceContext = (artifacts: GeneratedArtifacts): GeneratedArtifacts => {
+  const artifactsWithoutSourceContext = { ...artifacts };
+  delete artifactsWithoutSourceContext.sourceContext;
+  return artifactsWithoutSourceContext;
+};
+
 export const attachAssessToStudioSourceContext = (
   artifacts: GeneratedArtifacts,
   sourceContext?: AssessToStudioHandoffPayload | null,
@@ -224,4 +230,4 @@ export const attachAssessToStudioSourceContext = (
       ...artifacts,
       sourceContext,
     }
-    : artifacts;
+    : withoutAssessToStudioSourceContext(artifacts);
