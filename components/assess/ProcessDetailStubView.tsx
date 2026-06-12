@@ -10,6 +10,7 @@ import {
     getBacklogSeedItems,
     getDecisionGovernanceControlItems,
     getDecisionRationaleItems,
+    getReadinessValue,
     getRequiredDocumentTypes,
 } from './decisionPackRenderModel';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
@@ -80,6 +81,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
     const governanceControlItems = getDecisionGovernanceControlItems(scores);
     const requiredDocumentTypes = getRequiredDocumentTypes(scores);
     const backlogSeedItems = getBacklogSeedItems(scores).slice(0, 4);
+    const readinessValue = getReadinessValue(scores, assessment?.metadata.completionQuality);
     const topFit = scores?.techFitScores
         ? Object.entries(scores.techFitScores)
             .filter(([, value]) => typeof value === 'number')
@@ -154,7 +156,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                         <div className="mt-6 grid grid-cols-2 gap-3">
                             <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
                                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Readiness</p>
-                                <p className="mt-2 text-3xl font-black">{Math.round(scores?.supportingScores.handoffReadiness || assessment?.metadata.completionQuality || 0)}</p>
+                                <p className="mt-2 text-3xl font-black">{readinessValue}</p>
                             </div>
                             <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
                                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Priority</p>

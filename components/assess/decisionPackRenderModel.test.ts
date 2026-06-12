@@ -3,11 +3,15 @@ import {
     getBacklogSeedItems,
     getDecisionGovernanceControlItems,
     getDecisionRationaleItems,
+    getReadinessValue,
     getRequiredDocumentTypes,
 } from './decisionPackRenderModel';
 import { AssessmentScoreResult } from '../../types';
 
 const baseScores = {
+    supportingScores: {
+        handoffReadiness: 87.4,
+    },
     decisionPack: {
         recommendedOperatingModel: {
             whyThis: [
@@ -51,6 +55,7 @@ assert.deepEqual(getBacklogSeedItems(baseScores).map(item => item.title), [
     'Implement workflow orchestration',
     'Validate controls',
 ]);
+assert.equal(getReadinessValue(baseScores, 20), 87);
 
 const handoffOnlyScores = {
     decisionPack: { governance: {} },
@@ -58,6 +63,7 @@ const handoffOnlyScores = {
 } as unknown as AssessmentScoreResult;
 
 assert.deepEqual(getDecisionGovernanceControlItems(handoffOnlyScores), ['Handoff control fallback']);
+assert.equal(getReadinessValue(handoffOnlyScores, 73.5), 74);
 
 const staleShapeScores = {
     decisionPack: {
@@ -72,6 +78,7 @@ assert.doesNotThrow(() => {
     assert.deepEqual(getDecisionGovernanceControlItems(staleShapeScores), []);
     assert.deepEqual(getRequiredDocumentTypes(staleShapeScores), []);
     assert.deepEqual(getBacklogSeedItems(staleShapeScores), []);
+    assert.equal(getReadinessValue(staleShapeScores, 44), 44);
 });
 
 console.log('Decision Pack render model contract regression passed.');

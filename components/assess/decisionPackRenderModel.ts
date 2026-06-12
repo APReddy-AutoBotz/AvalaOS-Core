@@ -26,6 +26,15 @@ const stringsFrom = (value: unknown): string[] => Array.isArray(value) ? uniqueS
 export const getDecisionRationaleItems = (scores?: AssessmentScoreResult | null): string[] =>
     stringsFrom(scores?.decisionPack?.recommendedOperatingModel?.whyThis);
 
+export const getReadinessValue = (scores?: AssessmentScoreResult | null, fallbackValue = 0): number => {
+    const readiness = scores?.supportingScores?.handoffReadiness;
+    const value = typeof readiness === 'number' && Number.isFinite(readiness)
+        ? readiness
+        : fallbackValue;
+
+    return Math.round(typeof value === 'number' && Number.isFinite(value) ? value : 0);
+};
+
 export const getDecisionGovernanceControlItems = (scores?: AssessmentScoreResult | null): string[] => {
     const governance = scores?.decisionPack?.governance;
     const decisionPackControls = uniqueStrings([
