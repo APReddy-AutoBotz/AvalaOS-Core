@@ -6,6 +6,12 @@ import { useAssessmentService } from '../../services/assessmentService';
 import { Assessment } from '../../types';
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
 import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
+import {
+    getBacklogSeedItems,
+    getDecisionGovernanceControlItems,
+    getDecisionRationaleItems,
+    getRequiredDocumentTypes,
+} from './decisionPackRenderModel';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { isModuleEnabled } from '../../constants/moduleConfig';
 import {
@@ -70,6 +76,10 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
     const scores = assessment?.scores;
     const governCard = assessment && scores ? buildAvalaGovernLiteCard(assessment, process) : null;
     const docsEnabled = isModuleEnabled('docs', orgContext?.enabledModules);
+    const decisionRationaleItems = getDecisionRationaleItems(scores);
+    const governanceControlItems = getDecisionGovernanceControlItems(scores);
+    const requiredDocumentTypes = getRequiredDocumentTypes(scores);
+    const backlogSeedItems = getBacklogSeedItems(scores).slice(0, 4);
     const topFit = scores?.techFitScores
         ? Object.entries(scores.techFitScores)
             .filter(([, value]) => typeof value === 'number')
@@ -184,17 +194,27 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-300">Why this model</p>
                                 <ul className="mt-3 space-y-3">
-                                    {scores.decisionPack?.whyThisRecommendation.map(item => (
+                                    {decisionRationaleItems.map(item => (
                                         <li key={item} className="rounded-2xl bg-emerald-50/80 p-4 text-sm font-semibold leading-6 text-emerald-950 ring-1 ring-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/60">{item}</li>
                                     ))}
+                                    {decisionRationaleItems.length === 0 && (
+                                        <li className="rounded-2xl bg-slate-50/80 p-4 text-sm font-semibold leading-6 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-400 dark:ring-slate-800">
+                                            Decision rationale is not available on this score record.
+                                        </li>
+                                    )}
                                 </ul>
                             </div>
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-600 dark:text-amber-300">Governance controls</p>
                                 <ul className="mt-3 space-y-3">
-                                    {scores.decisionPack?.governanceControls.map(item => (
+                                    {governanceControlItems.map(item => (
                                         <li key={item} className="rounded-2xl bg-[#ffbc03]/10 p-4 text-sm font-semibold leading-6 text-[#002C4B] ring-1 ring-[#ffbc03]/25 dark:text-[#ffefb0]">{item}</li>
                                     ))}
+                                    {governanceControlItems.length === 0 && (
+                                        <li className="rounded-2xl bg-slate-50/80 p-4 text-sm font-semibold leading-6 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-400 dark:ring-slate-800">
+                                            Governance controls are not available on this score record.
+                                        </li>
+                                    )}
                                 </ul>
                             </div>
                         </div>
@@ -217,20 +237,28 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Documents required</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                    {scores.handoffPack?.requiredDocumentTypes.map(docType => (
+                                    {requiredDocumentTypes.map(docType => (
                                         <span key={docType} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">{docType}</span>
                                     ))}
+                                    {requiredDocumentTypes.length === 0 && (
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-800">No document types recorded</span>
+                                    )}
                                 </div>
                             </div>
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Backlog seeds</p>
                                 <ul className="mt-3 space-y-2">
-                                    {scores.handoffPack?.suggestedBacklogItems.slice(0, 4).map(item => (
+                                    {backlogSeedItems.map(item => (
                                         <li key={item.title} className="rounded-xl border border-slate-200/80 p-3 dark:border-slate-800">
                                             <p className="text-sm font-black text-slate-900 dark:text-white">{item.title}</p>
                                             <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{item.type}</p>
                                         </li>
                                     ))}
+                                    {backlogSeedItems.length === 0 && (
+                                        <li className="rounded-xl border border-slate-200/80 p-3 text-sm font-semibold text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                                            No backlog seeds recorded.
+                                        </li>
+                                    )}
                                 </ul>
                             </div>
                         </div>
