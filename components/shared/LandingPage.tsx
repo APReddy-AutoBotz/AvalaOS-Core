@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { ProjectDetails, DocTemplate, AiProviderType } from '../../types';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { ProjectDetails, DocTemplate, AiProviderType, AssessToStudioHandoffPayload } from '../../types';
 import { UploadCloudIcon, FileIcon, XIcon, SparklesIcon, CogIcon, ChevronDownIcon, CheckCircleIcon } from './icons';
 
 interface LandingPageProps {
@@ -8,19 +8,38 @@ interface LandingPageProps {
   onCancel: () => void;
   aiProviderType: AiProviderType;
   onAiProviderTypeChange: (provider: AiProviderType) => void;
+  sourceContext?: AssessToStudioHandoffPayload | null;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange }) => {
+const DEFAULT_PROJECT_DETAILS = {
+  company: 'ACME Operations',
+  project: 'Evidence-backed Finance Operations Handoff',
+  domain: 'Finance Operations',
+};
+
+const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange, sourceContext }) => {
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
-    company: 'ACME Operations',
-    project: 'Evidence-backed Finance Operations Handoff',
-    domain: 'Finance Operations',
+    company: sourceContext ? 'Avala Assess' : DEFAULT_PROJECT_DETAILS.company,
+    project: sourceContext?.processName || DEFAULT_PROJECT_DETAILS.project,
+    domain: sourceContext?.recommendationCategory || DEFAULT_PROJECT_DETAILS.domain,
     templateId: docTemplates[0]?.id || '',
   });
   const [file, setFile] = useState<File | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!sourceContext) return;
+
+    setProjectDetails(prev => ({
+      ...prev,
+      company: prev.company === DEFAULT_PROJECT_DETAILS.company ? 'Avala Assess' : prev.company,
+      project: prev.project === DEFAULT_PROJECT_DETAILS.project ? sourceContext.processName : prev.project,
+      domain: prev.domain === DEFAULT_PROJECT_DETAILS.domain ? (sourceContext.recommendationCategory || DEFAULT_PROJECT_DETAILS.domain) : prev.domain,
+      templateId: prev.templateId || docTemplates[0]?.id || '',
+    }));
+  }, [docTemplates, sourceContext]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -169,7 +188,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                 <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-abz-primary text-white font-bold text-lg">3</div>
                 <div>
                     <h3 className="text-xl font-bold">Source Material</h3>
-                    <p className="text-slate-500 dark:text-slate-400">Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, AvalaOS Core drafts a baseline from known industry patterns for review.</p>
+                    <p className="text-slate-500 dark:text-slate-400">
+                      {sourceContext
+                        ? 'Assess source context is already attached. Optionally upload additional notes or a legacy document for reviewer context.'
+                        : 'Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, AvalaOS Core drafts a baseline from known industry patterns for review.'}
+                    </p>
                 </div>
             </div>
              <div className="pl-14">

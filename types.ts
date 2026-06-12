@@ -503,6 +503,74 @@ export interface AvalaGovernLiteCard {
     nextGovernanceAction: string;
 }
 
+export type AssessToStudioSourceType = 'Decision Pack / Handoff Pack';
+export type AssessToStudioEvidenceType =
+    | EvidenceItem['type']
+    | 'Assessment'
+    | 'Decision Pack'
+    | 'Handoff Pack'
+    | 'Avala Govern Lite';
+
+export interface AssessToStudioEvidenceRef {
+    id: string;
+    type: AssessToStudioEvidenceType;
+    description: string;
+    owner?: string;
+    sensitivity?: EvidenceItem['sensitivity'];
+    linkedField?: string;
+}
+
+export interface AssessToStudioAssumptionSummary {
+    id: string;
+    category: Assumption['category'];
+    description: string;
+    confidence?: number;
+    owner?: string;
+    validated?: boolean;
+    linkedField?: string;
+}
+
+export interface AssessToStudioGovernLiteSummary {
+    governanceStatus: AvalaGovernStatus;
+    riskLevel: AvalaGovernRiskLevel;
+    autonomyLevel: AvalaGovernAutonomyLevel;
+    approvalPolicy: string;
+    evidencePolicy: string;
+    nextGovernanceAction: string;
+    evidenceGaps: string[];
+    blockedActions: string[];
+}
+
+export interface AssessToStudioHandoffPayload {
+    sourceModule: 'assess';
+    targetModule: 'docs';
+    sourceType: AssessToStudioSourceType;
+    sourceLabel: string;
+    createdAt: string;
+    processId: string;
+    processName: string;
+    assessmentId: string;
+    assessmentStatus: AssessStatus;
+    gateDecision?: GateDecision;
+    riskTier?: RiskTier;
+    confidenceBand?: ConfidenceBand;
+    priorityTier?: PriorityTier;
+    recommendationCategory?: string;
+    operatingModelRecommendation?: OperatingModelRecommendation;
+    scoreVersion?: string;
+    calculatedAt?: string;
+    decisionPack?: DecisionPack;
+    handoffPack?: HandoffPack;
+    governLiteSummary?: AssessToStudioGovernLiteSummary;
+    evidenceRefs: AssessToStudioEvidenceRef[];
+    assumptionSummary: AssessToStudioAssumptionSummary[];
+    readiness: {
+        handoffEligibility?: HandoffEligibility;
+        docsHandoffReadiness?: HandoffEligibility;
+        deliveryHandoffReadiness?: HandoffEligibility;
+    };
+}
+
 export type DeliveryPackStatus =
     | 'Ready for Review'
     | 'Approval Required'
@@ -1000,6 +1068,7 @@ export interface GeneratedArtifacts {
     diagrams: DiagramsArtifact;
     workItems: WorkItem[];
     approvals: Approver[];
+    sourceContext?: AssessToStudioHandoffPayload;
 }
 
 export interface DocumentGeneration {

@@ -5,6 +5,7 @@ import { useTemplateService } from '../../services/templateService';
 import { useAssessmentService } from '../../services/assessmentService';
 import { Assessment } from '../../types';
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
+import { buildAssessToStudioHandoffPayload } from '../../services/assessToStudioHandoff';
 import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
 import {
     getBacklogSeedItems,
@@ -29,7 +30,7 @@ interface ProcessDetailStubViewProps {
     processId: string;
     onBack: () => void;
     onStartAssessment: (id: string) => void;
-    onGenerateDocs?: (payload: { processId: string; processName: string; assessmentId?: string; decision?: string }) => void;
+    onGenerateDocs?: (payload: NonNullable<ReturnType<typeof buildAssessToStudioHandoffPayload>>) => void;
 }
 
 const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs }) => {
@@ -76,6 +77,9 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
     const template = process.templateId ? getTemplateById(process.templateId) : null;
     const scores = assessment?.scores;
     const governCard = assessment && scores ? buildAvalaGovernLiteCard(assessment, process) : null;
+    const assessToStudioPayload = assessment && scores
+        ? buildAssessToStudioHandoffPayload({ process, assessment, governCard })
+        : null;
     const docsEnabled = isModuleEnabled('docs', orgContext?.enabledModules);
     const decisionRationaleItems = getDecisionRationaleItems(scores);
     const governanceControlItems = getDecisionGovernanceControlItems(scores);
@@ -128,15 +132,11 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                             </button>
                             {docsEnabled ? (
                                 <button
-                                    onClick={() => onGenerateDocs?.({
-                                        processId: process.id,
-                                        processName: process.name,
-                                        assessmentId: assessment?.id,
-                                        decision: scores?.gateDecision,
-                                    })}
-                                    className="rounded-xl px-5 py-3 text-sm font-black btn-ghost"
+                                    onClick={() => assessToStudioPayload && onGenerateDocs?.(assessToStudioPayload)}
+                                    disabled={!assessToStudioPayload}
+                                    className={`rounded-xl px-5 py-3 text-sm font-black btn-ghost ${assessToStudioPayload ? '' : 'cursor-not-allowed opacity-50'}`}
                                 >
-                                    Generate BRD / PDD
+                                    {assessToStudioPayload ? 'Generate BRD / PDD' : 'Score assessment before Studio handoff'}
                                 </button>
                             ) : (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-black text-slate-400 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-500">

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
 import ModuleJourney from './components/shared/ModuleJourney';
-import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, Team, DocTemplate, Automation, TimesheetEntry, GeneratedArtifacts, ApprovalStatus, Filters, ProjectLifecycleStage, DocumentGeneration, ProjectDetails, WorkItem, TaskType, DocumentArtifactKeys, DocumentSection, AiProviderType } from './types';
+import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, Team, DocTemplate, Automation, TimesheetEntry, GeneratedArtifacts, ApprovalStatus, Filters, ProjectLifecycleStage, DocumentGeneration, ProjectDetails, WorkItem, TaskType, DocumentArtifactKeys, DocumentSection, AiProviderType, AssessToStudioHandoffPayload } from './types';
 import { MOCK_USERS, MOCK_TEAMS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES } from './data/mockData';
 import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
@@ -89,6 +89,7 @@ function App() {
 
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
   const [tempArtifacts, setTempArtifacts] = useState<GeneratedArtifacts | null>(null);
+  const [assessToStudioSourceContext, setAssessToStudioSourceContext] = useState<AssessToStudioHandoffPayload | null>(null);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
@@ -109,7 +110,6 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
-
   useEffect(() => {
     localStorage.removeItem(StorageKeys.API_KEY);
   }, []);
@@ -233,21 +233,33 @@ function App() {
     deliveryUpdateSprint(sprint).catch(surfaceDeliveryError);
   };
 
-  const handleAssessToDocsHandoff = (payload: { processId: string; processName: string; assessmentId?: string; decision?: string }) => {
+  const handleAssessToDocsHandoff = (payload: AssessToStudioHandoffPayload) => {
+    setAssessToStudioSourceContext(payload);
     recordHandoff({
       fromModule: 'assess',
       toModule: 'docs',
       status: 'Submitted',
       sourceType: 'Decision Pack',
-      sourceId: payload.assessmentId || payload.processId,
+      sourceId: payload.assessmentId,
       targetType: 'Document Generation',
       targetId: 'pending-doc-generation',
       title: `${payload.processName} moved to Docs`,
-      summary: `Assessment decision ${payload.decision || 'ready'} was handed off to Avala Studio for BRD, PRD, PDD, and diagram generation.`,
-      evidenceRefs: [payload.processId, payload.assessmentId || 'assessment-pending'],
+      summary: `${payload.sourceType} context was handed off to Avala Studio for BRD, PRD, PDD, and diagram generation.`,
+      evidenceRefs: payload.evidenceRefs.map(ref => ref.id),
       metadata: {
         processId: payload.processId,
-        decision: payload.decision,
+        assessmentId: payload.assessmentId,
+        assessmentStatus: payload.assessmentStatus,
+        gateDecision: payload.gateDecision,
+        riskTier: payload.riskTier,
+        confidenceBand: payload.confidenceBand,
+        priorityTier: payload.priorityTier,
+        recommendationCategory: payload.recommendationCategory,
+        scoreVersion: payload.scoreVersion,
+        sourceLabel: payload.sourceLabel,
+        evidenceRefCount: payload.evidenceRefs.length,
+        assumptionCount: payload.assumptionSummary.length,
+        requiredDocumentTypes: payload.handoffPack?.requiredDocumentTypes,
       },
     });
     setCurrentView(View.DOCS_FORGE);
@@ -605,7 +617,10 @@ function App() {
         return <DocsForgeView
           project={currentScope.type === ScopeType.PROJECT ? projectsForScope[0] : null}
           docTemplates={docTemplates}
-          onCancel={() => setCurrentView(View.DASHBOARD)}
+          onCancel={() => {
+            setAssessToStudioSourceContext(null);
+            setCurrentView(View.DASHBOARD);
+          }}
           onComplete={(projectDetails: ProjectDetails, artifacts: GeneratedArtifacts) => {
             if (currentScope.type === ScopeType.PROJECT) {
               const newGeneration: DocumentGeneration = {
@@ -627,10 +642,12 @@ function App() {
               setTempArtifacts(artifacts);
               setActiveGenerationId(null);
             }
+            setAssessToStudioSourceContext(null);
             setCurrentView(View.WORKSPACE);
           }}
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
+          sourceContext={assessToStudioSourceContext}
         />;
       case View.WORKSPACE: {
         const activeGeneration = documentGenerations.find(g => g.id === activeGenerationId);
@@ -651,6 +668,7 @@ function App() {
           onDone={() => {
             setActiveGenerationId(null);
             setTempArtifacts(null);
+            setAssessToStudioSourceContext(null);
             setCurrentView(currentScope.type === ScopeType.PROJECT ? View.DOCS : View.DASHBOARD);
           }}
           users={users} currentUser={currentUser}
