@@ -19,6 +19,14 @@ import { mapDemoTeamsForSupabase, mapDemoUsersForSupabase } from './services/dem
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
 import { resolveViewAccess } from './services/viewAccessGuard';
+import {
+  areScopesEqual,
+  DEFAULT_PERSISTED_SCOPE,
+  DEFAULT_PERSISTED_VIEW,
+  normalizePersistedScope,
+  normalizePersistedView,
+  resolvePersistedViewScopeState,
+} from './services/viewStatePersistence';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -56,8 +64,22 @@ function App() {
   // App State
   const { user: currentUser, loading: authLoading } = useAuth();
   const { currentOrganization, organizations, loading: orgLoading, createOrg } = useOrganizationContext();
-  const [currentScope, setCurrentScope] = usePersistentState<Scope>(StorageKeys.SCOPE, { type: ScopeType.MY_WORK });
-  const [currentView, setCurrentView] = usePersistentState<View>(StorageKeys.VIEW, View.DASHBOARD);
+  const [persistedScope, setPersistedScope] = usePersistentState<unknown>(StorageKeys.SCOPE, DEFAULT_PERSISTED_SCOPE);
+  const [persistedView, setPersistedView] = usePersistentState<unknown>(StorageKeys.VIEW, DEFAULT_PERSISTED_VIEW);
+  const currentScope = useMemo(() => normalizePersistedScope(persistedScope), [persistedScope]);
+  const currentView = useMemo(() => normalizePersistedView(persistedView), [persistedView]);
+  const setCurrentScope = useCallback((nextScope: Scope | ((previous: Scope) => Scope)) => {
+    setPersistedScope(previous => typeof nextScope === 'function'
+      ? nextScope(normalizePersistedScope(previous))
+      : nextScope
+    );
+  }, [setPersistedScope]);
+  const setCurrentView = useCallback((nextView: View | ((previous: View) => View)) => {
+    setPersistedView(previous => typeof nextView === 'function'
+      ? nextView(normalizePersistedView(previous))
+      : nextView
+    );
+  }, [setPersistedView]);
   const [quickFilter, setQuickFilter] = useState<Filters | null>(null);
   const lastAppliedUserId = useRef<string | null>(null);
 
@@ -118,11 +140,7 @@ function App() {
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
-      if (previous.type !== scope.type) return scope;
-      if ('id' in previous || 'id' in scope) {
-        return ('id' in previous ? previous.id : undefined) === ('id' in scope ? scope.id : undefined) ? previous : scope;
-      }
-      return previous;
+      return areScopesEqual(previous, scope) ? previous : scope;
     });
   }, [setCurrentScope]);
 
@@ -322,18 +340,39 @@ function App() {
   };
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization || currentScope.type === ScopeType.ORGANIZATION) return;
+    if (guardLoading || !currentUser || !currentOrganization) return;
 
-    const access = resolveAppViewAccess(currentView, currentScope);
-    if (access.allowed || access.guardSeverity === 'wait') return;
+    const resolvedState = resolvePersistedViewScopeState({
+      view: persistedView,
+      scope: persistedScope,
+      user: currentUser,
+      authLoading: guardLoading,
+      organization: currentOrganization,
+      enabledModules,
+      preserveOrganizationWorkspace: true,
+    });
 
-    const fallbackScope = access.fallbackScope ?? currentScope;
-    setScopeIfChanged(fallbackScope);
+    if (resolvedState.access.guardSeverity === 'wait') return;
 
-    if (access.fallbackView !== currentView) {
-      setCurrentView(access.fallbackView);
+    if (resolvedState.scopeChanged || !areScopesEqual(currentScope, resolvedState.scope)) {
+      setCurrentScope(resolvedState.scope);
     }
-  }, [currentOrganization, currentScope, currentUser, currentView, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+
+    if (resolvedState.viewChanged || currentView !== resolvedState.view) {
+      setCurrentView(resolvedState.view);
+    }
+  }, [
+    currentOrganization,
+    currentScope,
+    currentUser,
+    currentView,
+    enabledModules,
+    guardLoading,
+    persistedScope,
+    persistedView,
+    setCurrentScope,
+    setCurrentView,
+  ]);
 
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     deliveryReorderTask(taskIdToMove, referenceTaskId, newEpicId).catch(surfaceDeliveryError);
