@@ -42,7 +42,7 @@ const AvalaGovernLiteCardPanel: React.FC<AvalaGovernLiteCardPanelProps> = ({ gov
             </div>
           </div>
           <p className="mt-4 text-sm font-semibold leading-6 text-white/72">
-            Review surface for controls, approvals, evidence, and blocked actions. It does not execute agents, update external systems, or change deterministic Assess scoring.
+            Control-card step between Assess and Studio: deterministic Decision Pack context, human review, evidence, assumptions, and governed handoff readiness. It does not execute agents, update external systems, or change deterministic Assess scoring.
           </p>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-white/10 bg-white/10 p-4">

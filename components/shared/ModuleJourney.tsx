@@ -3,6 +3,7 @@ import { ProductModuleKey, Scope, ScopeType, View } from '../../types';
 import {
     CheckCircleIcon,
     ClipboardListIcon,
+    ClipboardDocumentListIcon,
     DocumentTextIcon,
     ViewBoardsIcon,
     ChartPieIcon,
@@ -11,6 +12,7 @@ import { ALL_PRODUCT_MODULES, getEnabledModules, MODULE_HOME_VIEW } from '../../
 import { useAuth } from '../auth/AuthProvider';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { resolveViewAccess, VIEW_ACCESS_METADATA, type ViewAccessReason, type ViewAccessResult } from '../../services/viewAccessGuard';
+import { buildOperatingLifecycleSteps, formatOperatingLifecycleLabel } from './moduleJourneyModel';
 
 interface ModuleJourneyProps {
     enabledModules?: ProductModuleKey[];
@@ -24,13 +26,6 @@ const moduleIcon: Record<ProductModuleKey, React.FC<{ className?: string }>> = {
     docs: DocumentTextIcon,
     delivery: ViewBoardsIcon,
     monitor: ChartPieIcon,
-};
-
-const moduleOutcome: Record<ProductModuleKey, string> = {
-    assess: 'Decision pack',
-    docs: 'Governed docs',
-    delivery: 'Evidence-backed handoff',
-    monitor: 'Value insights',
 };
 
 const hiddenJourneyReasons: ViewAccessReason[] = [
@@ -78,7 +73,9 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentSc
             return { module, homeView, access };
         })
         .filter(item => item.access.allowed || !hiddenJourneyReasons.includes(item.access.reason));
-    const isSingleModule = visibleModules.length === 1;
+    const visibleModuleByKey = new Map(visibleModules.map(item => [item.module.key, item]));
+    const journeySteps = buildOperatingLifecycleSteps(visibleModules.map(item => item.module.key));
+    const isSingleModule = visibleModules.length === 1 && journeySteps.length === 1;
 
     if (visibleModules.length === 0) return null;
 
@@ -92,11 +89,39 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentSc
                     <p className="mt-1 text-sm font-black text-[#002C4B] dark:text-white">
                         {isSingleModule
                             ? `${visibleModules[0].module.label} module enabled`
-                            : 'Avala Assess -> Avala Studio -> Avala Delivery Lite -> Avala Monitor'}
+                            : formatOperatingLifecycleLabel(journeySteps)}
                     </p>
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto xl:justify-end">
-                    {visibleModules.map(({ module, homeView, access }, index) => {
+                    {journeySteps.map((step, index) => {
+                        if (step.kind === 'govern-lite') {
+                            return (
+                                <React.Fragment key={step.key}>
+                                    {index > 0 && (
+                                        <div className="hidden h-px min-w-6 flex-1 bg-slate-200 dark:bg-slate-800 md:block" />
+                                    )}
+                                    <div
+                                        role="listitem"
+                                        aria-label={`${step.label}: ${step.detail}`}
+                                        title={step.detail}
+                                        className="flex min-w-[210px] items-center gap-3 rounded-2xl border border-[#ffbc03]/45 bg-[#ffbc03]/10 px-4 py-3 text-left shadow-sm shadow-[#ffbc03]/5 dark:border-[#ffbc03]/30 dark:bg-[#ffbc03]/8"
+                                    >
+                                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#002C4B] text-[#ffbc03] dark:bg-[#ffbc03] dark:text-[#002C4B]">
+                                            <ClipboardDocumentListIcon className="h-5 w-5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-black text-[#002C4B] dark:text-[#ffefb0]">{step.shortLabel}</p>
+                                            <p className="truncate text-xs font-bold text-slate-600 dark:text-slate-300">{step.outcome}</p>
+                                        </div>
+                                    </div>
+                                </React.Fragment>
+                            );
+                        }
+
+                        const journeyItem = visibleModuleByKey.get(step.key);
+                        if (!journeyItem) return null;
+
+                        const { module, homeView, access } = journeyItem;
                         const Icon = moduleIcon[module.key];
                         const isActive = activeModule === module.key;
                         const isClickable = access.allowed;
@@ -123,7 +148,7 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentSc
                                     </div>
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-black text-slate-950 dark:text-white">{module.shortLabel}</p>
-                                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{moduleOutcome[module.key]}</p>
+                                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{step.outcome}</p>
                                     </div>
                                 </button>
                             </React.Fragment>

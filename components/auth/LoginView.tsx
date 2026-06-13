@@ -5,6 +5,7 @@ import {
   ChartBarIcon,
   ChartPieIcon,
   CheckCircleIcon,
+  ClipboardDocumentListIcon,
   ClipboardListIcon,
   DocumentTextIcon,
   KeyIcon,
@@ -18,6 +19,7 @@ import { isSupabaseConfigured } from '../../services/supabaseClient';
 
 const valuePillars = [
   { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
+  { label: 'Avala Govern Lite', detail: 'Decision Pack controls', icon: ClipboardDocumentListIcon },
   { label: 'Avala Studio', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
   { label: 'Delivery Lite', detail: 'Traceable backlog', icon: ViewBoardsIcon },
   { label: 'Avala Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
@@ -31,6 +33,7 @@ const readinessRows = [
 
 const proofPoints = [
   'Deterministic Assess scoring',
+  'Govern Lite human review and evidence controls',
   'Docs and delivery handoff lineage',
   'Leadership monitor and risk visibility',
   'Server-side AI governance path',
@@ -142,8 +145,8 @@ const LoginView: React.FC = () => {
 
                   <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
                     {valuePillars.map((pillar, i) => {
-                      const borders = ['border-[#002C4B]', 'border-[#ffbc03]', 'border-[#d99d00]', 'border-[#073B60]'];
-                      const iconBgs = ['bg-[#002C4B]/10 text-[#002C4B]', 'bg-[#ffbc03]/20 text-[#7a5600]', 'bg-[#ffbc03]/15 text-[#002C4B]', 'bg-[#073B60]/10 text-[#073B60]'];
+                      const borders = ['border-[#002C4B]', 'border-[#ffbc03]', 'border-[#d99d00]', 'border-[#073B60]', 'border-[#4f6f85]'];
+                      const iconBgs = ['bg-[#002C4B]/10 text-[#002C4B]', 'bg-[#ffbc03]/20 text-[#7a5600]', 'bg-[#ffbc03]/15 text-[#002C4B]', 'bg-[#073B60]/10 text-[#073B60]', 'bg-slate-100 text-[#002C4B]'];
                       return (
                         <div key={pillar.label} className={`glass-card p-5 rounded-2xl border-l-4 ${borders[i]} border-t border-r border-b border-white/60 shadow-lg flex items-center gap-5 hover:bg-white/40 transition-colors`}>
                           <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-sm ${iconBgs[i]}`}>
@@ -235,7 +238,7 @@ const LoginView: React.FC = () => {
                   </h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     {isDemoMode
-                      ? 'Explore role-aware Avala Assess, Avala Studio, Avala Delivery Lite, and Avala Monitor flows with synthetic data.'
+                      ? 'Explore role-aware Avala Assess, Avala Govern Lite, Avala Studio, Avala Delivery Lite, and Avala Monitor flows with synthetic data.'
                       : 'Use your organization account to access governed assessments, documents, delivery work, and monitor views.'}
                   </p>
                 </div>
