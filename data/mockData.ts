@@ -1,6 +1,9 @@
-import { User, Team, Project, Task, Epic, Sprint, Automation, TimesheetEntry, DocumentGeneration, AssessProcess, GeneratedArtifacts, ScopeType, View, AssessmentResponses, EvidenceItem, Assumption, ProductModuleKey } from '../types';
-import { INVOICE_PROCESSING_ARTIFACTS } from '../constants';
+import { User, Team, Project, Task, Epic, Sprint, Automation, TimesheetEntry, DocumentGeneration, AssessProcess, GeneratedArtifacts, ScopeType, View, AssessmentResponses, EvidenceItem, Assumption, ProductModuleKey, Assessment, HandoffLedgerEntry } from '../types';
 import { MOCK_DOC_TEMPLATES } from './docTemplates';
+import { calculateAssessmentScores } from '../services/scoringEngine';
+import { buildAvalaGovernLiteCard } from '../services/avalaGovernLiteService';
+import { buildAssessToStudioHandoffPayload } from '../services/assessToStudioHandoff';
+import { buildDocsToDeliveryLineage } from '../services/docsToDeliveryLineage';
 
 export const CANONICAL_DEMO_ORG_ID = 'org-1';
 export const CANONICAL_DEMO_ORG_NAME = 'Avala Demo Enterprise';
@@ -10,6 +13,12 @@ export const CANONICAL_AP_PROCESS_ID = 'proc-ap-invoice-exception';
 export const CANONICAL_AP_ASSESSMENT_ID = `assess-${CANONICAL_AP_PROCESS_ID}`;
 export const CANONICAL_AP_PROCESS_NAME = 'AP Invoice Exception Handling';
 export const CANONICAL_AP_WORKFLOW_NAME = 'AP Invoice Exception Workflow';
+export const CANONICAL_AP_PROJECT_ID = 'proj-ap-invoice-exception';
+export const CANONICAL_AP_DOCUMENT_GENERATION_ID = 'docgen-ap-invoice-exception';
+export const CANONICAL_AP_DELIVERY_PACK_ID = 'pack-ap-invoice-exception';
+export const CANONICAL_AP_HANDOFF_ASSESS_DOCS_ID = 'handoff-ap-assess-docs';
+export const CANONICAL_AP_HANDOFF_DOCS_DELIVERY_ID = 'handoff-ap-docs-delivery';
+export const CANONICAL_AP_STUDIO_GENERATED_AT = '2026-06-10T14:20:00.000Z';
 
 export const CANONICAL_DEMO_ORG_PROFILE = {
     industry: 'Finance Operations / Shared Services',
@@ -49,7 +58,7 @@ export const MOCK_LOGIN_PROFILES = [
         userId: 'user-9',
         password: 'demo123',
         label: 'Delivery Lead',
-        description: 'Preview delivery ownership for the later Studio, work item, Delivery Pack, and Monitor data milestone.',
+        description: 'Review AP work items, source lineage, Delivery Pack readiness, and Monitor status for the canonical workflow.',
         accent: 'from-blue-600 to-cyan-500',
         recommendedFor: 'Delivery review',
     },
@@ -95,28 +104,31 @@ export const MOCK_TEAMS: Team[] = [
 ];
 
 export const MOCK_PROJECTS: Project[] = [
-    { id: 'proj-1', name: 'AP Invoice Automation', description: 'Automate invoice intake, validation, exception routing, and SAP posting for Accounts Payable.', ownerId: 'user-9', lifecycleStage: 'Development', healthStatus: 'On Track' },
-    { id: 'proj-2', name: 'Customer Support AI Assist', description: 'GenAI-assisted case summarization, suggested responses, and human handoff for Tier 1 support.', ownerId: 'user-4', lifecycleStage: 'Testing', healthStatus: 'At Risk' },
-    { id: 'proj-3', name: 'Employee Onboarding Workflow', description: 'Workflow orchestration for HR, IT access, equipment, policy acknowledgements, and first-week tasks.', ownerId: 'user-2', lifecycleStage: 'Analysis & Design', healthStatus: 'On Track' },
-    { id: 'proj-4', name: 'Claims Intake Agentic Triage', description: 'Bounded agentic triage for claims intake, document classification, validation, and adjuster escalation.', ownerId: 'user-8', lifecycleStage: 'Planning', healthStatus: 'At Risk' },
-    { id: 'proj-5', name: 'Month-End Close Control Pack', description: 'Finance close documentation, reconciliations, evidence collection, and approval control automation.', ownerId: 'user-7', lifecycleStage: 'Deployment', healthStatus: 'On Track' },
-];
-
-export const MOCK_ASSESS_PROCESSES: AssessProcess[] = [
     {
-        id: CANONICAL_AP_PROCESS_ID,
-        orgId: CANONICAL_DEMO_ORG_ID,
-        name: CANONICAL_AP_PROCESS_NAME,
-        description: 'Finance operations receives invoice exceptions from vendor master mismatches, PO/GRN match gaps, approval routing ambiguity, exception aging, and manual SAP rework. Human owners approve risk, controls, and downstream delivery decisions before action.',
-        ownerId: 'user-7',
-        department: 'Finance Operations / Accounts Payable',
-        criticality: 'High',
-        status: 'Completed',
-        templateId: 'tpl-p2p-invoice-ingestion',
-        createdAt: '2026-04-02T09:00:00.000Z',
-        updatedAt: '2026-04-25T16:00:00.000Z',
+        id: CANONICAL_AP_PROJECT_ID,
+        name: CANONICAL_AP_WORKFLOW_NAME,
+        description: 'Governed delivery plan for AP invoice exceptions covering vendor master mismatch review, PO/GRN matching, owner approval routing, evidence capture, and Monitor readiness.',
+        ownerId: 'user-9',
+        lifecycleStage: 'Development',
+        healthStatus: 'On Track',
     },
 ];
+
+export const CANONICAL_AP_PROCESS: AssessProcess = {
+    id: CANONICAL_AP_PROCESS_ID,
+    orgId: CANONICAL_DEMO_ORG_ID,
+    name: CANONICAL_AP_PROCESS_NAME,
+    description: 'Finance operations receives invoice exceptions from vendor master mismatches, PO/GRN match gaps, approval routing ambiguity, exception aging, and manual SAP rework. Human owners approve risk, controls, and downstream delivery decisions before action.',
+    ownerId: 'user-7',
+    department: 'Finance Operations / Accounts Payable',
+    criticality: 'High',
+    status: 'Completed',
+    templateId: 'tpl-p2p-invoice-ingestion',
+    createdAt: '2026-04-02T09:00:00.000Z',
+    updatedAt: '2026-04-25T16:00:00.000Z',
+};
+
+export const MOCK_ASSESS_PROCESSES: AssessProcess[] = [CANONICAL_AP_PROCESS];
 
 export const CANONICAL_AP_ASSESSMENT_RESPONSES: AssessmentResponses = {
     processStructure: {
@@ -326,162 +338,432 @@ export const CANONICAL_AP_ASSUMPTIONS: Assumption[] = [
     },
 ];
 
-export const MOCK_EPICS: Epic[] = [
-    { id: 'epic-101', name: 'Capture and Classify Invoices', projectId: 'proj-1', color: '#0F766E' },
-    { id: 'epic-102', name: 'Validation and Exception Rules', projectId: 'proj-1', color: '#D97706' },
-    { id: 'epic-103', name: 'SAP Posting and Controls', projectId: 'proj-1', color: '#2563EB' },
-    { id: 'epic-201', name: 'Knowledge Retrieval and Guardrails', projectId: 'proj-2', color: '#7C3AED' },
-    { id: 'epic-202', name: 'Agent Assist Experience', projectId: 'proj-2', color: '#0891B2' },
-    { id: 'epic-203', name: 'Human Handoff and QA', projectId: 'proj-2', color: '#DC2626' },
-    { id: 'epic-301', name: 'Onboarding Intake and Approvals', projectId: 'proj-3', color: '#4F46E5' },
-    { id: 'epic-302', name: 'Provisioning Orchestration', projectId: 'proj-3', color: '#16A34A' },
-    { id: 'epic-303', name: 'Employee Readiness Experience', projectId: 'proj-3', color: '#CA8A04' },
-    { id: 'epic-401', name: 'Document Classification', projectId: 'proj-4', color: '#0E7490' },
-    { id: 'epic-402', name: 'Agentic Triage Controls', projectId: 'proj-4', color: '#BE123C' },
-    { id: 'epic-403', name: 'Adjuster Escalation Workflow', projectId: 'proj-4', color: '#4338CA' },
-    { id: 'epic-501', name: 'Evidence Collection', projectId: 'proj-5', color: '#059669' },
-    { id: 'epic-502', name: 'Close Review and Sign-off', projectId: 'proj-5', color: '#B45309' },
-    { id: 'epic-503', name: 'Control Pack Reporting', projectId: 'proj-5', color: '#2563EB' },
-];
-
-export const MOCK_SPRINTS: Sprint[] = [
-    { id: 'sprint-1', name: 'AP Automation Pilot', projectId: 'proj-1', startDate: '2026-04-15', endDate: '2026-04-28', status: 'Active', goal: 'Prove invoice capture, PO match, and exception routing with real AP samples.', capacity: 34 },
-    { id: 'sprint-2', name: 'AP Posting Hardening', projectId: 'proj-1', startDate: '2026-04-29', endDate: '2026-05-12', status: 'Upcoming', goal: 'Harden SAP posting, controls, and audit evidence before UAT.', capacity: 31 },
-    { id: 'sprint-3', name: 'Support AI UAT', projectId: 'proj-2', startDate: '2026-04-08', endDate: '2026-04-21', status: 'Completed', goal: 'Validate draft replies and escalation triggers with support leads.', capacity: 29 },
-    { id: 'sprint-4', name: 'Support AI Governance Fixes', projectId: 'proj-2', startDate: '2026-04-22', endDate: '2026-05-05', status: 'Active', goal: 'Close guardrail findings before pilot expansion.', capacity: 24 },
-    { id: 'sprint-5', name: 'Onboarding Discovery', projectId: 'proj-3', startDate: '2026-04-22', endDate: '2026-05-05', status: 'Active', goal: 'Map onboarding requests, approval paths, and provisioning bottlenecks.', capacity: 26 },
-];
-
-const MONTH_END_CLOSE_LINEAGE = {
-    deliveryPackId: 'pack-month-end-close',
-    processId: 'proc-close-pack',
-    assessmentId: 'assess-proc-close-pack',
-    documentGenerationId: 'docgen-5',
-    handoffLedgerEntryIds: ['handoff-close-assess-docs', 'handoff-close-docs-delivery'],
-    evidenceRefs: ['ev-close-map', 'ev-close-sop', 'ev-close-sample'],
-    sourceLabel: 'Month-End Close Evidence Pack',
-    sourceStatus: 'Accepted',
+export const CANONICAL_AP_ASSESSMENT_METADATA: Assessment['metadata'] = {
+    completionQuality: 100,
+    templateFit: true,
+    lastSavedAt: CANONICAL_AP_PROCESS.updatedAt,
+    stakeholderCoverage: 4,
+    evidenceQuality: 5,
+    assumptionQuality: 5,
 };
 
-export const MOCK_TASKS: Task[] = [
-    { id: 'task-101', title: 'Map current invoice intake paths', description: 'Document email, supplier portal, shared drive, and manual handoff intake paths with volume split and owners.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-1', epicId: 'epic-101', sprintId: 'sprint-1', assigneeIds: ['user-2', 'user-7'], startDate: '2026-04-15', dueDate: '2026-04-17', storyPoints: 3 },
-    { id: 'task-102', title: 'Build OCR confidence threshold rules', description: 'Define confidence bands for auto-post, AP review, and vendor clarification queues.', status: 'In Progress', priority: 'High', type: 'Task', projectId: 'proj-1', epicId: 'epic-101', sprintId: 'sprint-1', assigneeIds: ['user-6'], startDate: '2026-04-18', dueDate: '2026-04-29', storyPoints: 8, dependencyIds: ['task-101'] },
-    { id: 'task-103', title: 'PO match exception policy review', description: 'Review policy for PO mismatch, duplicate invoice, blocked vendor, and tax variance exceptions.', status: 'In Review', priority: 'High', type: 'Story', projectId: 'proj-1', epicId: 'epic-102', sprintId: 'sprint-1', assigneeIds: ['user-7', 'user-1'], startDate: '2026-04-19', dueDate: '2026-04-28', storyPoints: 5 },
-    { id: 'task-104', title: 'SAP posting connector smoke test', description: 'Run controlled posting into SAP sandbox and capture audit evidence for approvals.', status: 'To Do', priority: 'High', type: 'Task', projectId: 'proj-1', epicId: 'epic-103', sprintId: 'sprint-2', assigneeIds: ['user-6', 'user-8'], startDate: '2026-04-29', dueDate: '2026-05-06', storyPoints: 8 },
-    { id: 'task-105', title: 'Bug: duplicate invoice check misses credit memos', description: 'Credit memo documents with negative values bypass the duplicate check rule.', status: 'Blocked', priority: 'Medium', type: 'Bug', projectId: 'proj-1', epicId: 'epic-102', sprintId: 'sprint-1', assigneeIds: ['user-5', 'user-6'], reporterId: 'user-7', startDate: '2026-04-24', dueDate: '2026-04-30', storyPoints: 3 },
+export const CANONICAL_AP_ASSESSMENT_SCORES = calculateAssessmentScores(
+    CANONICAL_AP_ASSESSMENT_RESPONSES,
+    CANONICAL_AP_ASSESSMENT_METADATA,
+    {
+        assessmentId: CANONICAL_AP_ASSESSMENT_ID,
+        processId: CANONICAL_AP_PROCESS.id,
+        organizationId: CANONICAL_AP_PROCESS.orgId,
+        processName: CANONICAL_AP_PROCESS.name,
+        processDescription: CANONICAL_AP_PROCESS.description,
+        department: CANONICAL_AP_PROCESS.department,
+        evidenceItems: CANONICAL_AP_EVIDENCE_ITEMS,
+        assumptions: CANONICAL_AP_ASSUMPTIONS,
+        status: 'Approved',
+    },
+);
 
-    { id: 'task-201', title: 'Review knowledge base gaps for top 30 intents', description: 'Identify missing or stale support policy articles before the AI assistant pilot.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-2', epicId: 'epic-201', sprintId: 'sprint-3', assigneeIds: ['user-4', 'user-2'], startDate: '2026-04-08', dueDate: '2026-04-12', storyPoints: 5 },
-    { id: 'task-202', title: 'Configure PII redaction in case summaries', description: 'Mask customer IDs, payment references, and sensitive free-text values before prompt construction.', status: 'Testing', priority: 'High', type: 'Task', projectId: 'proj-2', epicId: 'epic-201', sprintId: 'sprint-4', assigneeIds: ['user-4', 'user-8'], startDate: '2026-04-22', dueDate: '2026-04-30', storyPoints: 8 },
-    { id: 'task-203', title: 'Design agent handoff banner for support reps', description: 'Show why a case needs human review and what the model already checked.', status: 'In Progress', priority: 'Medium', type: 'Task', projectId: 'proj-2', epicId: 'epic-202', sprintId: 'sprint-4', assigneeIds: ['user-3'], startDate: '2026-04-23', dueDate: '2026-05-02', storyPoints: 5 },
-    { id: 'task-204', title: 'Validate escalation triggers with compliance', description: 'Confirm mandatory human handoff for refund disputes, legal threats, and vulnerable customer signals.', status: 'In Review', priority: 'High', type: 'Story', projectId: 'proj-2', epicId: 'epic-203', sprintId: 'sprint-4', assigneeIds: ['user-1', 'user-5'], startDate: '2026-04-22', dueDate: '2026-04-29', storyPoints: 5 },
+export const CANONICAL_AP_ASSESSMENT: Assessment = {
+    id: CANONICAL_AP_ASSESSMENT_ID,
+    processId: CANONICAL_AP_PROCESS.id,
+    orgId: CANONICAL_AP_PROCESS.orgId,
+    status: 'Approved',
+    metadata: CANONICAL_AP_ASSESSMENT_METADATA,
+    responses: CANONICAL_AP_ASSESSMENT_RESPONSES,
+    evidenceItems: CANONICAL_AP_EVIDENCE_ITEMS,
+    assumptions: CANONICAL_AP_ASSUMPTIONS,
+    completionBySection: {
+        processStructure: 100,
+        workPattern: 100,
+        dataProfile: 100,
+        judgment: 100,
+        systems: 100,
+        risk: 100,
+        evidenceAndAssumptions: 100,
+    },
+    review: {
+        lastReviewedBy: 'user-7',
+        lastReviewedAt: '2026-04-25T16:00:00.000Z',
+        comments: [
+            {
+                id: 'review-ap-owner-approval',
+                authorId: 'user-7',
+                authorName: 'Priya Nair',
+                type: 'Approval',
+                message: 'AP process owner approval recorded for demo source context; finance owner review remains required before posting, payment release, vendor communication, or external action.',
+                createdAt: '2026-04-25T16:00:00.000Z',
+                resolved: true,
+                linkedField: 'judgment.humanApprovalBeforeAction',
+            },
+        ],
+        approvalHistory: [
+            {
+                id: 'approval-ap-owner',
+                status: 'Approved',
+                actorId: 'user-7',
+                actorName: 'Priya Nair',
+                reason: 'Canonical demo assessment is approved for governed Studio drafting and delivery planning only.',
+                createdAt: '2026-04-25T16:00:00.000Z',
+            },
+        ],
+    },
+    scores: CANONICAL_AP_ASSESSMENT_SCORES,
+};
 
-    { id: 'task-301', title: 'Facilitate onboarding process discovery workshop', description: 'Run a joint HR, IT, facilities, and manager workshop to capture current delays and handoffs.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-3', epicId: 'epic-301', sprintId: 'sprint-5', assigneeIds: ['user-2', 'user-3'], startDate: '2026-04-22', dueDate: '2026-04-24', storyPoints: 3 },
-    { id: 'task-302', title: 'Draft onboarding BRD from transcript notes', description: 'Use discovery notes to generate a first BRD covering request intake, approvals, SLAs, and exceptions.', status: 'In Progress', priority: 'High', type: 'Story', projectId: 'proj-3', epicId: 'epic-301', sprintId: 'sprint-5', assigneeIds: ['user-2'], startDate: '2026-04-24', dueDate: '2026-05-01', storyPoints: 5 },
-    { id: 'task-303', title: 'Prototype access provisioning checklist', description: 'Create role-based checklist rules for application access, equipment, and manager readiness.', status: 'To Do', priority: 'Medium', type: 'Task', projectId: 'proj-3', epicId: 'epic-302', sprintId: 'sprint-5', assigneeIds: ['user-8'], startDate: '2026-04-29', dueDate: '2026-05-05', storyPoints: 5 },
+export const CANONICAL_AP_GOVERN_LITE_CARD = buildAvalaGovernLiteCard(CANONICAL_AP_ASSESSMENT, CANONICAL_AP_PROCESS);
 
-    { id: 'task-401', title: 'Define claims document taxonomy', description: 'Create classes for FNOL form, policy, medical bill, photo evidence, police report, and missing evidence notice.', status: 'To Do', priority: 'High', type: 'Task', projectId: 'proj-4', epicId: 'epic-401', assigneeIds: ['user-8', 'user-4'], startDate: '2026-05-01', dueDate: '2026-05-10', storyPoints: 8 },
-    { id: 'task-402', title: 'Assess agent decision boundaries', description: 'Document what the agent can decide, recommend, or must escalate to an adjuster.', status: 'To Do', priority: 'High', type: 'Story', projectId: 'proj-4', epicId: 'epic-402', assigneeIds: ['user-1', 'user-4'], startDate: '2026-05-03', dueDate: '2026-05-15', storyPoints: 13 },
-    { id: 'task-403', title: 'Design adjuster review queue', description: 'Create review states for high-value, low-confidence, and legally sensitive claim packets.', status: 'On Hold', priority: 'Medium', type: 'Task', projectId: 'proj-4', epicId: 'epic-403', assigneeIds: ['user-3'], startDate: '2026-05-08', dueDate: '2026-05-20', storyPoints: 5 },
+const requireCanonicalStudioSourceContext = () => {
+    const payload = buildAssessToStudioHandoffPayload({
+        process: CANONICAL_AP_PROCESS,
+        assessment: CANONICAL_AP_ASSESSMENT,
+        governCard: CANONICAL_AP_GOVERN_LITE_CARD,
+        createdAt: '2026-04-25T16:15:00.000Z',
+    });
+    if (!payload) throw new Error('Canonical AP Studio source context could not be built.');
+    return payload;
+};
 
-    { id: 'task-501', title: 'Collect close evidence sources', description: 'Inventory reconciliation files, sign-off emails, variance comments, and system screenshots used in close.', status: 'Done', priority: 'High', type: 'Task', projectId: 'proj-5', epicId: 'epic-501', assigneeIds: ['user-7', 'user-2'], startDate: '2026-04-01', dueDate: '2026-04-05', storyPoints: 3, sourceLineage: MONTH_END_CLOSE_LINEAGE },
-    { id: 'task-502', title: 'Build control pack approval checklist', description: 'Create required review items for reconciliations, material variances, and controller sign-off.', status: 'Ready for Release', priority: 'High', type: 'Story', projectId: 'proj-5', epicId: 'epic-502', assigneeIds: ['user-7', 'user-5'], startDate: '2026-04-08', dueDate: '2026-04-22', storyPoints: 8, sourceLineage: MONTH_END_CLOSE_LINEAGE },
-    { id: 'task-503', title: 'Create executive close dashboard metrics', description: 'Expose close readiness, missing evidence, late approvals, and unresolved material variances.', status: 'Testing', priority: 'Medium', type: 'Task', projectId: 'proj-5', epicId: 'epic-503', assigneeIds: ['user-8'], startDate: '2026-04-16', dueDate: '2026-04-29', storyPoints: 5, sourceLineage: MONTH_END_CLOSE_LINEAGE },
+export const CANONICAL_AP_STUDIO_SOURCE_CONTEXT = requireCanonicalStudioSourceContext();
+
+const CANONICAL_AP_GENERATED_WORK_ITEMS: GeneratedArtifacts['workItems'] = [
+    {
+        type: 'Epic',
+        title: 'AP Invoice Exception Workflow Foundation',
+        description: 'Create the governed workflow foundation for invoice exceptions, owner review, evidence capture, and SAP handoff readiness.',
+        acceptanceCriteria: [
+            'Work item candidates trace to the AP assessment, Decision Pack, Handoff Pack, and evidence refs.',
+            'Finance owner review remains required before posting, payment release, vendor communication, or external action.',
+        ],
+    },
+    {
+        type: 'Story',
+        title: 'Route PO mismatch exceptions to AP owner review',
+        description: 'Route PO/GRN mismatch and tax variance exceptions into an AP owner review queue with evidence and status context.',
+        acceptanceCriteria: [
+            'Exception route captures invoice, PO, vendor, and policy evidence reference IDs.',
+            'AP owner review state is visible before any downstream handoff.',
+        ],
+    },
+    {
+        type: 'Story',
+        title: 'Validate duplicate invoice and blocked vendor checks',
+        description: 'Define duplicate invoice, blocked vendor, and vendor master mismatch checks with human review for ambiguous cases.',
+        acceptanceCriteria: [
+            'Duplicate and blocked-vendor checks reference the AP policy evidence ID.',
+            'Ambiguous cases stay in review until the finance owner records a decision.',
+        ],
+    },
+    {
+        type: 'Task',
+        title: 'Configure SAP posting handoff evidence',
+        description: 'Prepare SAP sandbox handoff evidence and control notes for review by delivery and finance owners.',
+        acceptanceCriteria: [
+            'Handoff evidence references the SAP sample and exception handling SOP.',
+            'No raw customer source content is included in the generated artifact.',
+        ],
+    },
+    {
+        type: 'Task',
+        title: 'Add exception aging monitor signal',
+        description: 'Add a demo readiness signal for exception aging, review queue status, and handoff evidence counts.',
+        acceptanceCriteria: [
+            'Monitor signal is presented as demo readiness content, not live production telemetry.',
+            'Signal derives from AP delivery tasks and handoff metadata already in the demo fixture.',
+        ],
+    },
 ];
 
-export const MOCK_AUTOMATIONS: Automation[] = [
-    { id: 'auto-1', name: 'Route low OCR confidence invoices', description: 'When a high-priority invoice validation task is blocked, add AP owner context for review.', projectId: 'proj-1', isEnabled: true, trigger: { type: 'task_status_changed', config: { toStatus: 'Blocked' } }, conditions: [{ field: 'priority', operator: 'is', value: 'Medium' }], actions: [{ id: 'action-1', type: 'add_comment', config: { comment: 'Review OCR confidence, vendor master match, and duplicate invoice rule before reprocessing.' } }] },
-    { id: 'auto-2', name: 'Send testing tasks to QA owner', description: 'When delivery work enters Testing, assign Emily White and add the control checklist.', projectId: 'proj-2', isEnabled: true, trigger: { type: 'task_status_changed', config: { toStatus: 'Testing' } }, conditions: [], actions: [{ id: 'action-2a', type: 'set_assignee', config: { assigneeIds: ['user-5'] } }, { id: 'action-2b', type: 'add_comment', config: { comment: 'QA checklist: privacy redaction, human handoff, source citation, and policy alignment.' } }] },
-    { id: 'auto-3', name: 'Notify transformation lead on high-priority stories', description: 'Escalate high-priority stories to Sarah Chen when they enter review.', projectId: 'proj-1', isEnabled: false, trigger: { type: 'task_status_changed', config: { toStatus: 'In Review' } }, conditions: [{ field: 'priority', operator: 'is', value: 'High' }], actions: [{ id: 'action-3', type: 'add_comment', config: { comment: '@Sarah Chen, this high-priority story is ready for process governance review.' } }] },
-];
-
-export const MOCK_TIMESHEET_ENTRIES: TimesheetEntry[] = [
-    { id: 'ts-1', userId: 'user-6', taskId: 'task-102', date: '2026-04-24', hours: 7.5 },
-    { id: 'ts-2', userId: 'user-6', taskId: 'task-102', date: '2026-04-25', hours: 6 },
-    { id: 'ts-3', userId: 'user-7', taskId: 'task-103', date: '2026-04-25', hours: 3 },
-    { id: 'ts-4', userId: 'user-4', taskId: 'task-202', date: '2026-04-24', hours: 8 },
-    { id: 'ts-5', userId: 'user-3', taskId: 'task-203', date: '2026-04-26', hours: 4.5 },
-    { id: 'ts-6', userId: 'user-2', taskId: 'task-302', date: '2026-04-26', hours: 5 },
-    { id: 'ts-7', userId: 'user-8', taskId: 'task-503', date: '2026-04-27', hours: 6 },
-];
-
-const createArtifacts = (
-    projectName: string,
-    domain: string,
-    summary: string,
-    workItems: GeneratedArtifacts['workItems'],
-): GeneratedArtifacts => ({
-    ...INVOICE_PROCESSING_ARTIFACTS,
+export const CANONICAL_AP_DOCUMENT_ARTIFACTS: GeneratedArtifacts = {
     brd: {
-        title: `BRD: ${projectName}`,
+        title: `BRD: ${CANONICAL_AP_PROCESS_NAME}`,
         sections: [
-            { key: 'executive-summary', title: 'Executive Summary', content: summary, citations: ['Discovery workshop transcript', 'Process assessment scorecard'] },
-            { key: 'business-objectives', title: 'Business Objectives', content: `Improve ${domain} cycle time, reduce avoidable manual work, and provide auditable human-in-the-loop checkpoints.` },
-            { key: 'scope', title: 'Scope', content: 'The initial release covers intake, validation, exception routing, approval visibility, and operational reporting.' },
+            {
+                key: 'executive-summary',
+                title: 'Executive Summary',
+                content: 'This review artifact summarizes the AP Invoice Exception Handling opportunity for human review. It uses the completed Avala Assess record, evidence refs, and assumptions to align finance owners and delivery teams before downstream work begins.',
+                citations: ['ev-ap-exception-report', 'ev-ap-owner-review'],
+            },
+            {
+                key: 'business-objectives',
+                title: 'Business Objectives',
+                content: 'Reduce exception aging, route PO/GRN and vendor master mismatches consistently, and preserve owner approval before payment release, posting, or vendor communication.',
+                citations: ['as-ap-volume', 'as-ap-controls'],
+            },
+            {
+                key: 'scope',
+                title: 'Scope And Review Boundary',
+                content: 'The demo scope covers invoice exception intake, evidence-backed triage, owner review, SAP handoff readiness, and Monitor readiness signals. It does not represent a production execution path or a compliance approval.',
+                citations: ['ev-ap-sop', 'ev-ap-po-policy'],
+            },
         ],
     },
     pdd: {
-        title: `PDD: ${projectName}`,
+        title: `PDD: ${CANONICAL_AP_PROCESS_NAME}`,
         sections: [
-            { key: 'as-is', title: 'As-Is Process', content: 'Current work is split across email, spreadsheets, business applications, and manual status follow-ups.' },
-            { key: 'to-be', title: 'To-Be Process', content: 'AvalaOS Core routes work through assessed automation decisions, generated requirements, governance review, and a managed delivery backlog.' },
-            { key: 'controls', title: 'Controls and HITL', content: 'Human review remains mandatory for low-confidence inputs, policy exceptions, sensitive data, and high-impact approvals.' },
+            {
+                key: 'as-is',
+                title: 'As-Is Process',
+                content: 'AP analysts triage invoice exceptions across intake queues, SAP payment-block views, vendor master checks, and policy references before escalating ambiguous cases to the AP process owner.',
+                citations: ['ev-ap-exception-map', 'ev-ap-sap-sample'],
+            },
+            {
+                key: 'to-be',
+                title: 'To-Be Process',
+                content: 'A governed queue classifies exceptions, attaches evidence reference IDs, and routes owner-review cases before delivery handoff or SAP posting preparation.',
+                citations: ['ev-ap-sop', 'ev-ap-po-policy'],
+            },
+            {
+                key: 'controls',
+                title: 'Controls And Human Review',
+                content: 'Finance owner review remains mandatory for posting, payment release, vendor communication, and delivery handoff decisions. Generated documents remain review artifacts.',
+                citations: ['ev-ap-owner-review', 'as-ap-controls'],
+            },
         ],
     },
-    workItems,
+    frd: {
+        title: `FRD: ${CANONICAL_AP_PROCESS_NAME}`,
+        sections: [
+            {
+                key: 'functional-requirements',
+                title: 'Functional Requirements',
+                content: 'Capture invoice exception category, vendor master state, PO/GRN match result, tax variance indicator, evidence reference IDs, review owner, and handoff status.',
+                citations: ['ev-ap-exception-report', 'ev-ap-po-policy'],
+            },
+            {
+                key: 'workflow-requirements',
+                title: 'Workflow Requirements',
+                content: 'Route exceptions to AP owner review, capture rationale, retain source evidence refs, and create delivery work item candidates with read-only lineage.',
+                citations: ['ev-ap-owner-review', 'as-ap-controls'],
+            },
+            {
+                key: 'monitor-requirements',
+                title: 'Monitor Requirements',
+                content: 'Show demo readiness status for exception aging, open review items, evidence refs, and handoff metadata. These are seeded demo signals, not live production analytics.',
+                citations: ['as-ap-data-quality', 'ev-ap-exception-report'],
+            },
+        ],
+    },
+    qualityGate: {
+        title: `Quality Gate: ${CANONICAL_AP_PROCESS_NAME}`,
+        ambiguityPoints: [
+            'Confirm whether tax variance thresholds differ by geography before pilot configuration.',
+            'Confirm SAP sandbox access owner before any implementation validation.',
+        ],
+        gapPoints: [
+            'Generated artifacts require AP owner and control reviewer sign-off before export or downstream delivery reliance.',
+        ],
+    },
+    diagrams: {
+        asIs: {
+            title: 'As-Is AP Exception Flow',
+            mermaidCode: 'flowchart LR\n  Intake[Invoice intake] --> Match[PO/GRN and vendor checks]\n  Match --> Exception[Exception queue]\n  Exception --> Owner[AP owner review]\n  Owner --> SAP[SAP payment-block update]',
+        },
+        toBe: {
+            title: 'To-Be Governed AP Exception Flow',
+            mermaidCode: 'flowchart LR\n  Assess[Avala Assess source] --> Studio[Avala Studio review artifacts]\n  Studio --> Delivery[Delivery work items with lineage]\n  Delivery --> Pack[Delivery Pack review]\n  Pack --> Monitor[Avala Monitor demo readiness]',
+        },
+    },
+    workItems: CANONICAL_AP_GENERATED_WORK_ITEMS,
+    approvals: [
+        {
+            userId: 'user-7',
+            role: 'Accountable',
+            status: 'Pending',
+            approvedAt: null,
+            comments: 'AP owner must review generated documents before export or downstream reliance.',
+        },
+        {
+            userId: 'user-5',
+            role: 'Consulted',
+            status: 'Pending',
+            approvedAt: null,
+            comments: 'Control reviewer must confirm evidence refs and UAT/control checkpoints.',
+        },
+    ],
+    sourceContext: CANONICAL_AP_STUDIO_SOURCE_CONTEXT,
+};
+
+const createCanonicalSourceLineage = (workItem: GeneratedArtifacts['workItems'][number]) => ({
+    ...buildDocsToDeliveryLineage({
+        artifacts: CANONICAL_AP_DOCUMENT_ARTIFACTS,
+        generationId: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+        workItem,
+        createdAt: CANONICAL_AP_STUDIO_GENERATED_AT,
+        handoffLedgerEntryIds: [CANONICAL_AP_HANDOFF_ASSESS_DOCS_ID, CANONICAL_AP_HANDOFF_DOCS_DELIVERY_ID],
+    }),
+    deliveryPackId: CANONICAL_AP_DELIVERY_PACK_ID,
 });
+
+export const CANONICAL_AP_HANDOFF_LEDGER_ENTRIES: HandoffLedgerEntry[] = [
+    {
+        id: CANONICAL_AP_HANDOFF_ASSESS_DOCS_ID,
+        orgId: CANONICAL_DEMO_ORG_ID,
+        fromModule: 'assess',
+        toModule: 'docs',
+        status: 'Accepted',
+        sourceType: 'Assessment',
+        sourceId: CANONICAL_AP_ASSESSMENT_ID,
+        targetType: 'Document Generation',
+        targetId: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+        title: `${CANONICAL_AP_PROCESS_NAME} Assess to Studio handoff`,
+        summary: 'Accepted demo handoff from completed Assess source context to the canonical governed document pack.',
+        createdAt: '2026-04-25T16:15:00.000Z',
+        createdBy: 'user-2',
+        evidenceRefs: CANONICAL_AP_STUDIO_SOURCE_CONTEXT.evidenceRefs.map(ref => ref.id),
+        metadata: {
+            processId: CANONICAL_AP_PROCESS_ID,
+            assessmentId: CANONICAL_AP_ASSESSMENT_ID,
+            documentGenerationId: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+            scoreVersion: CANONICAL_AP_ASSESSMENT_SCORES.scoreVersion,
+            sourceLabel: CANONICAL_AP_STUDIO_SOURCE_CONTEXT.sourceLabel,
+        },
+    },
+    {
+        id: CANONICAL_AP_HANDOFF_DOCS_DELIVERY_ID,
+        orgId: CANONICAL_DEMO_ORG_ID,
+        fromModule: 'docs',
+        toModule: 'delivery',
+        status: 'Accepted',
+        sourceType: 'Document Generation',
+        sourceId: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+        targetType: 'Project',
+        targetId: CANONICAL_AP_PROJECT_ID,
+        title: `${CANONICAL_AP_WORKFLOW_NAME} Docs to Delivery handoff`,
+        summary: 'Accepted demo handoff from the generated review artifact pack to delivery work items with source lineage and evidence refs.',
+        createdAt: '2026-06-10T14:35:00.000Z',
+        createdBy: 'user-2',
+        evidenceRefs: CANONICAL_AP_STUDIO_SOURCE_CONTEXT.evidenceRefs.map(ref => ref.id),
+        metadata: {
+            processId: CANONICAL_AP_PROCESS_ID,
+            assessmentId: CANONICAL_AP_ASSESSMENT_ID,
+            documentGenerationId: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+            projectId: CANONICAL_AP_PROJECT_ID,
+            deliveryPackId: CANONICAL_AP_DELIVERY_PACK_ID,
+        },
+    },
+];
+
+export const MOCK_EPICS: Epic[] = [
+    { id: 'epic-ap-foundation', name: 'AP Invoice Exception Workflow Foundation', projectId: CANONICAL_AP_PROJECT_ID, color: '#0F766E' },
+    { id: 'epic-ap-controls', name: 'AP Exception Controls and Evidence', projectId: CANONICAL_AP_PROJECT_ID, color: '#D97706' },
+    { id: 'epic-ap-monitor', name: 'AP Monitor Readiness', projectId: CANONICAL_AP_PROJECT_ID, color: '#2563EB' },
+];
+
+export const MOCK_SPRINTS: Sprint[] = [
+    { id: 'sprint-ap-1', name: 'AP Exception Foundation Review', projectId: CANONICAL_AP_PROJECT_ID, startDate: '2026-06-10', endDate: '2026-06-24', status: 'Active', goal: 'Review canonical AP exception work items, evidence refs, source lineage, and Delivery Pack readiness.', capacity: 30 },
+    { id: 'sprint-ap-2', name: 'AP Monitor Readiness Review', projectId: CANONICAL_AP_PROJECT_ID, startDate: '2026-06-25', endDate: '2026-07-08', status: 'Upcoming', goal: 'Validate Monitor readiness signals and handoff evidence review before buyer-demo rehearsal.', capacity: 24 },
+];
+
+export const MOCK_TASKS: Task[] = [
+    {
+        id: 'task-ap-101',
+        title: 'Route PO mismatch exceptions to AP owner review',
+        description: 'Configure the AP owner review path for PO/GRN mismatch and tax variance exceptions, using evidence refs and owner rationale before handoff.',
+        status: 'In Review',
+        priority: 'High',
+        type: 'Story',
+        projectId: CANONICAL_AP_PROJECT_ID,
+        epicId: 'epic-ap-foundation',
+        sprintId: 'sprint-ap-1',
+        assigneeIds: ['user-7', 'user-2'],
+        reporterId: 'user-2',
+        startDate: '2026-06-10',
+        dueDate: '2026-06-18',
+        storyPoints: 5,
+        sourceLineage: createCanonicalSourceLineage(CANONICAL_AP_GENERATED_WORK_ITEMS[1]),
+    },
+    {
+        id: 'task-ap-102',
+        title: 'Validate duplicate invoice and blocked vendor checks',
+        description: 'Define duplicate invoice, blocked vendor, and vendor master mismatch checks with AP reviewer rationale for ambiguous cases.',
+        status: 'In Progress',
+        priority: 'High',
+        type: 'Story',
+        projectId: CANONICAL_AP_PROJECT_ID,
+        epicId: 'epic-ap-controls',
+        sprintId: 'sprint-ap-1',
+        assigneeIds: ['user-5', 'user-6'],
+        reporterId: 'user-7',
+        startDate: '2026-06-11',
+        dueDate: '2026-06-21',
+        storyPoints: 8,
+        dependencyIds: ['task-ap-101'],
+        sourceLineage: createCanonicalSourceLineage(CANONICAL_AP_GENERATED_WORK_ITEMS[2]),
+    },
+    {
+        id: 'task-ap-103',
+        title: 'Configure SAP posting handoff evidence',
+        description: 'Prepare SAP sandbox handoff evidence and review notes for AP and delivery owners without exposing raw customer source content.',
+        status: 'Testing',
+        priority: 'Medium',
+        type: 'Task',
+        projectId: CANONICAL_AP_PROJECT_ID,
+        epicId: 'epic-ap-controls',
+        sprintId: 'sprint-ap-1',
+        assigneeIds: ['user-6', 'user-8'],
+        reporterId: 'user-9',
+        startDate: '2026-06-12',
+        dueDate: '2026-06-24',
+        storyPoints: 5,
+        dependencyIds: ['task-ap-102'],
+        sourceLineage: createCanonicalSourceLineage(CANONICAL_AP_GENERATED_WORK_ITEMS[3]),
+    },
+    {
+        id: 'task-ap-104',
+        title: 'Add exception aging monitor signal',
+        description: 'Seed a demo readiness signal for exception aging, review queue status, evidence count, and handoff metadata using AP delivery data.',
+        status: 'Ready for Release',
+        priority: 'Medium',
+        type: 'Task',
+        projectId: CANONICAL_AP_PROJECT_ID,
+        epicId: 'epic-ap-monitor',
+        sprintId: 'sprint-ap-2',
+        assigneeIds: ['user-9', 'user-1'],
+        reporterId: 'user-2',
+        startDate: '2026-06-18',
+        dueDate: '2026-06-28',
+        storyPoints: 3,
+        dependencyIds: ['task-ap-101', 'task-ap-103'],
+        sourceLineage: createCanonicalSourceLineage(CANONICAL_AP_GENERATED_WORK_ITEMS[4]),
+    },
+    {
+        id: 'task-ap-105',
+        title: 'Review AP workflow foundation with control reviewer',
+        description: 'Confirm BRD, PDD, FRD, evidence refs, assumptions, and delivery work item lineage before the buyer-demo rehearsal.',
+        status: 'Done',
+        priority: 'High',
+        type: 'Task',
+        projectId: CANONICAL_AP_PROJECT_ID,
+        epicId: 'epic-ap-foundation',
+        sprintId: 'sprint-ap-1',
+        assigneeIds: ['user-5', 'user-7'],
+        reporterId: 'user-9',
+        startDate: '2026-06-10',
+        dueDate: '2026-06-13',
+        storyPoints: 3,
+        sourceLineage: createCanonicalSourceLineage(CANONICAL_AP_GENERATED_WORK_ITEMS[0]),
+    },
+];
+
+export const MOCK_AUTOMATIONS: Automation[] = [
+    { id: 'auto-ap-1', name: 'Flag AP evidence review on blocked work', description: 'When AP delivery work is blocked, add AP owner context for evidence and control review.', projectId: CANONICAL_AP_PROJECT_ID, isEnabled: true, trigger: { type: 'task_status_changed', config: { toStatus: 'Blocked' } }, conditions: [{ field: 'priority', operator: 'is', value: 'High' }], actions: [{ id: 'action-ap-1', type: 'add_comment', config: { comment: 'Review AP evidence refs, owner rationale, vendor master status, and handoff traceability before rework.' } }] },
+    { id: 'auto-ap-2', name: 'Notify control reviewer on AP testing', description: 'When AP work enters Testing, assign Emily White and add the control checklist.', projectId: CANONICAL_AP_PROJECT_ID, isEnabled: true, trigger: { type: 'task_status_changed', config: { toStatus: 'Testing' } }, conditions: [], actions: [{ id: 'action-ap-2a', type: 'set_assignee', config: { assigneeIds: ['user-5'] } }, { id: 'action-ap-2b', type: 'add_comment', config: { comment: 'Control checklist: evidence refs, owner approval, SAP sandbox note, and Monitor readiness signal.' } }] },
+    { id: 'auto-ap-3', name: 'Notify buyer viewer on AP review readiness', description: 'Escalate high-priority AP stories to Sarah Chen when they enter review.', projectId: CANONICAL_AP_PROJECT_ID, isEnabled: false, trigger: { type: 'task_status_changed', config: { toStatus: 'In Review' } }, conditions: [{ field: 'priority', operator: 'is', value: 'High' }], actions: [{ id: 'action-ap-3', type: 'add_comment', config: { comment: '@Sarah Chen, this high-priority AP story is ready for buyer-demo review.' } }] },
+];
+
+export const MOCK_TIMESHEET_ENTRIES: TimesheetEntry[] = [
+    { id: 'ts-ap-1', userId: 'user-6', taskId: 'task-ap-102', date: '2026-06-12', hours: 6.5 },
+    { id: 'ts-ap-2', userId: 'user-7', taskId: 'task-ap-101', date: '2026-06-13', hours: 2 },
+    { id: 'ts-ap-3', userId: 'user-5', taskId: 'task-ap-105', date: '2026-06-13', hours: 3 },
+    { id: 'ts-ap-4', userId: 'user-9', taskId: 'task-ap-104', date: '2026-06-14', hours: 4 },
+];
 
 export const MOCK_DOCUMENT_GENERATIONS: DocumentGeneration[] = [
     {
-        id: 'docgen-1',
-        projectId: 'proj-1',
-        generatedAt: '2026-04-25T14:20:00.000Z',
+        id: CANONICAL_AP_DOCUMENT_GENERATION_ID,
+        projectId: CANONICAL_AP_PROJECT_ID,
+        generatedAt: CANONICAL_AP_STUDIO_GENERATED_AT,
         templateId: MOCK_DOC_TEMPLATES.find(t => t.artifactKey === 'pdd')?.id || 'pdd.v1',
-        artifacts: INVOICE_PROCESSING_ARTIFACTS,
-    },
-    {
-        id: 'docgen-2',
-        projectId: 'proj-2',
-        generatedAt: '2026-04-23T11:10:00.000Z',
-        templateId: MOCK_DOC_TEMPLATES.find(t => t.artifactKey === 'brd')?.id || 'brd.v1',
-        artifacts: createArtifacts(
-            'Customer Support AI Assist',
-            'support operations',
-            'Customer support leaders need a governed AI assistant that summarizes cases, drafts policy-aligned responses, and escalates sensitive conversations to humans.',
-            [
-                { type: 'Epic', title: 'Governed AI Support Assistant', description: 'Deliver a bounded assistant for support reps.', acceptanceCriteria: ['PII is redacted before model calls', 'Draft replies cite approved policy sources'] },
-                { type: 'Story', title: 'Show source citations on every draft reply', description: 'As a support rep, I need citations so I can trust the suggested answer.', acceptanceCriteria: ['Every generated reply includes at least one source link', 'Low-confidence answers require manual review'] },
-            ],
-        ),
-    },
-    {
-        id: 'docgen-3',
-        projectId: 'proj-3',
-        generatedAt: '2026-04-26T09:45:00.000Z',
-        templateId: MOCK_DOC_TEMPLATES.find(t => t.artifactKey === 'brd')?.id || 'brd.v1',
-        artifacts: createArtifacts(
-            'Employee Onboarding Workflow',
-            'employee onboarding',
-            'HR and IT need one guided workflow for onboarding requests, approvals, equipment, access provisioning, and manager readiness.',
-            [
-                { type: 'Epic', title: 'Onboarding Workflow Foundation', description: 'Create the intake, approval, and task orchestration foundation.', acceptanceCriteria: ['Request intake captures role, location, start date, and manager', 'Provisioning tasks are generated from role templates'] },
-                { type: 'Task', title: 'Create role-based provisioning checklist', description: 'Define access and equipment rules by employee role.', acceptanceCriteria: ['Checklist supports exceptions', 'Managers can see incomplete readiness items'] },
-            ],
-        ),
-    },
-    {
-        id: 'docgen-5',
-        projectId: 'proj-5',
-        generatedAt: '2026-04-26T18:10:00.000Z',
-        templateId: MOCK_DOC_TEMPLATES.find(t => t.artifactKey === 'pdd')?.id || 'pdd.v1',
-        artifacts: createArtifacts(
-            'Month-End Close Control Pack',
-            'finance close operations',
-            'Finance owners need a governed evidence pack that references reconciliations, sign-offs, variance explanations, and close readiness metadata without exporting source document bodies.',
-            [
-                { type: 'Epic', title: 'Close Evidence Collection', description: 'Collect and reference close evidence sources for review.', acceptanceCriteria: ['Evidence references use IDs and summaries only', 'Owner review status is visible before handoff'] },
-                { type: 'Story', title: 'Build control pack approval checklist', description: 'Create required review items for reconciliations, material variances, and controller sign-off.', acceptanceCriteria: ['Checklist includes owner, evidence reference, and status', 'Open blockers are visible in the handoff view'] },
-                { type: 'Task', title: 'Create executive close dashboard metrics', description: 'Expose close readiness, missing evidence, late approvals, and unresolved material variances.', acceptanceCriteria: ['Metrics reference source systems by name only', 'No raw confidential source content is exported'] },
-            ],
-        ),
+        artifacts: CANONICAL_AP_DOCUMENT_ARTIFACTS,
     },
 ];

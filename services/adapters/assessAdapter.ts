@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { AssessProcess, Assessment, AssessmentReviewComment, AssessmentResponses, EvidenceItem, Assumption, AssessStatus } from '../../types';
 import {
   CANONICAL_AP_ASSUMPTIONS,
+  CANONICAL_AP_ASSESSMENT,
   CANONICAL_AP_ASSESSMENT_RESPONSES,
   CANONICAL_AP_EVIDENCE_ITEMS,
   CANONICAL_AP_PROCESS_ID,
@@ -159,6 +160,8 @@ const demoAssumptions = (process: AssessProcess): Assumption[] =>
     ];
 
 const buildDemoAssessment = (process: AssessProcess): Assessment => {
+  if (process.id === CANONICAL_AP_PROCESS_ID) return CANONICAL_AP_ASSESSMENT;
+
   const responses = responseFixtures[process.id] || defaultResponses;
   const evidenceItems = demoEvidence(process);
   const assumptions = demoAssumptions(process);
