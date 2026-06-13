@@ -878,6 +878,7 @@ function App() {
         {currentScope.type !== ScopeType.ORGANIZATION && (
           <ModuleJourney
             enabledModules={enabledModules}
+            currentScope={currentScope}
             currentView={currentView}
             onNavigate={handleViewChange}
           />

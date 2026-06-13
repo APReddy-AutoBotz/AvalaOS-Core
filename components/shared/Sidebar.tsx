@@ -1,8 +1,8 @@
 import React from 'react';
-import { ProductModuleKey, View, Scope, ScopeType } from '../../types';
+import { View, Scope, ScopeType } from '../../types';
 import { useAuth } from '../auth/AuthProvider';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
-import { isModuleEnabled } from '../../constants/moduleConfig';
+import { resolveViewAccess, type ViewAccessReason } from '../../services/viewAccessGuard';
 import { Tooltip } from './ui/Tooltip';
 import {
     HomeIcon,
@@ -35,56 +35,77 @@ interface SidebarProps {
 
 interface NavItem {
     view: View;
-    module: ProductModuleKey;
     icon: React.FC<{ className?: string }>;
     label: string;
-    scopes: ScopeType[];
-    permissions: string[];
 }
 
 const sidebarItems: NavItem[] = [
-    { view: View.DASHBOARD, module: 'monitor', icon: HomeIcon, label: 'Avala Monitor', scopes: [ScopeType.MY_WORK], permissions: [] },
-    { view: View.PROCESS_CATALOG, module: 'assess', icon: ClipboardListIcon, label: 'Avala Assess', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT, ScopeType.ORGANIZATION], permissions: ['process.create', 'assessment.create', 'assessment.edit', 'assessment.review', 'process.approve', 'strategy.read'] },
-    { view: View.DOCS_FORGE, module: 'docs', icon: DocumentTextIcon, label: 'Avala Studio', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'ai.configure'] },
-    { view: View.PORTFOLIO, module: 'monitor', icon: ChartPieIcon, label: 'Portfolio', scopes: [ScopeType.MY_WORK], permissions: ['portfolio.read', 'strategy.read'] },
-    { view: View.BOARDS, module: 'delivery', icon: ViewBoardsIcon, label: 'Avala Delivery Lite', scopes: [ScopeType.MY_WORK, ScopeType.PROJECT, ScopeType.TEAM], permissions: ['project.read', 'project.manage', 'task.read', 'task.update', 'task.update.own', 'defects.manage', 'uat.execute'] },
+    { view: View.DASHBOARD, icon: HomeIcon, label: 'Avala Monitor' },
+    { view: View.PROCESS_CATALOG, icon: ClipboardListIcon, label: 'Avala Assess' },
+    { view: View.DOCS_FORGE, icon: DocumentTextIcon, label: 'Avala Studio' },
+    { view: View.PORTFOLIO, icon: ChartPieIcon, label: 'Portfolio' },
+    { view: View.BOARDS, icon: ViewBoardsIcon, label: 'Avala Delivery Lite' },
 ];
 
 const advancedItems: NavItem[] = [
-    { view: View.LIST, module: 'delivery', icon: ClipboardListIcon, label: 'Work List', scopes: [ScopeType.MY_WORK, ScopeType.PROJECT, ScopeType.TEAM], permissions: ['task.read', 'task.update', 'task.update.own', 'project.read', 'project.manage'] },
-    { view: View.BACKLOG, module: 'delivery', icon: DocumentDuplicateIcon, label: 'Backlog', scopes: [ScopeType.PROJECT], permissions: ['backlog.read', 'backlog.manage', 'project.manage'] },
-    { view: View.ROADMAP, module: 'delivery', icon: MapIcon, label: 'Roadmap', scopes: [ScopeType.PROJECT], permissions: ['roadmap.read', 'roadmap.manage', 'portfolio.read', 'project.manage'] },
-    { view: View.CALENDAR, module: 'delivery', icon: CalendarDaysIcon, label: 'Calendar', scopes: [ScopeType.MY_WORK, ScopeType.PROJECT], permissions: ['task.read', 'project.read', 'project.manage', 'uat.execute', 'training.review'] },
-    { view: View.GANTT, module: 'delivery', icon: ChartBarIcon, label: 'Timeline', scopes: [ScopeType.PROJECT], permissions: ['roadmap.read', 'roadmap.manage', 'project.manage', 'portfolio.read'] },
-    { view: View.WORKLOAD, module: 'delivery', icon: UsersIcon, label: 'Capacity', scopes: [ScopeType.PROJECT], permissions: ['capacity.read', 'project.manage'] },
-    { view: View.SPRINT_PLANNING, module: 'delivery', icon: FireIcon, label: 'Sprints', scopes: [ScopeType.PROJECT], permissions: ['sprint.manage', 'backlog.manage', 'project.manage'] },
-    { view: View.DELIVERY_PACK, module: 'delivery', icon: ClipboardDocumentListIcon, label: 'Delivery Pack', scopes: [ScopeType.PROJECT], permissions: ['project.read', 'project.manage', 'task.read', 'backlog.read', 'docs.read', 'approvals.review'] },
-    { view: View.TIMESHEETS, module: 'delivery', icon: ClockIcon, label: 'Timesheets', scopes: [ScopeType.PROJECT], permissions: ['timesheets.log', 'timesheets.read', 'timesheets.approve'] },
-    { view: View.AUTOMATIONS, module: 'delivery', icon: BoltIcon, label: 'Automations', scopes: [ScopeType.PROJECT], permissions: ['automation.view', 'automation.execute', 'automation.edit'] },
-    { view: View.DOCS, module: 'docs', icon: DocumentTextIcon, label: 'Document Vault', scopes: [ScopeType.PROJECT], permissions: ['docs.read', 'docs.review', 'docs.generate', 'docs.approve'] },
+    { view: View.LIST, icon: ClipboardListIcon, label: 'Work List' },
+    { view: View.BACKLOG, icon: DocumentDuplicateIcon, label: 'Backlog' },
+    { view: View.ROADMAP, icon: MapIcon, label: 'Roadmap' },
+    { view: View.CALENDAR, icon: CalendarDaysIcon, label: 'Calendar' },
+    { view: View.GANTT, icon: ChartBarIcon, label: 'Timeline' },
+    { view: View.WORKLOAD, icon: UsersIcon, label: 'Capacity' },
+    { view: View.SPRINT_PLANNING, icon: FireIcon, label: 'Sprints' },
+    { view: View.DELIVERY_PACK, icon: ClipboardDocumentListIcon, label: 'Delivery Pack' },
+    { view: View.TIMESHEETS, icon: ClockIcon, label: 'Timesheets' },
+    { view: View.AUTOMATIONS, icon: BoltIcon, label: 'Automations' },
+    { view: View.DOCS, icon: DocumentTextIcon, label: 'Document Vault' },
 ];
 
 const settingsItems: NavItem[] = [
-    { view: View.TEMPLATE_LIBRARY, module: 'assess', icon: DocumentDuplicateIcon, label: 'Assessment Templates', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT, ScopeType.ORGANIZATION], permissions: ['process.create', 'assessment.create', 'assessment.edit', 'org.admin'] },
-    { view: View.TEMPLATE_STUDIO, module: 'docs', icon: CodeBracketIcon, label: 'Avala Studio Templates', scopes: [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT], permissions: ['docs.generate', 'docs.review', 'org.admin'] },
+    { view: View.TEMPLATE_LIBRARY, icon: DocumentDuplicateIcon, label: 'Assessment Templates' },
+    { view: View.TEMPLATE_STUDIO, icon: CodeBracketIcon, label: 'Avala Studio Templates' },
 ]
 
+const hiddenGuardReasons: ViewAccessReason[] = [
+    'auth_loading',
+    'unauthenticated',
+    'no_organization',
+    'setup_required',
+    'disabled_module',
+    'missing_permission',
+    'stale_persisted_view',
+    'deferred_view',
+    'admin_decision_pending',
+];
+
+const formatScopeLabel = (scope: ScopeType) => {
+    if (scope === ScopeType.MY_WORK) return 'My Work';
+    return scope.charAt(0).toUpperCase() + scope.slice(1);
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ currentScope, currentView, onViewChange, onScopeChange, collapsed }) => {
-    const { user } = useAuth();
-    const { currentOrganization } = useOrganizationContext();
+    const { user, loading: authLoading } = useAuth();
+    const { currentOrganization, loading: orgLoading } = useOrganizationContext();
     const userPermissions = user?.permissions || [];
     const isAdmin = user?.orgRole === 'Admin';
+    const guardLoading = authLoading || orgLoading;
 
-    const hasAccess = (item: { permissions?: string[] }) => {
-        if (isAdmin) return true;
-        if (!item.permissions || item.permissions.length === 0) return true;
-        return item.permissions.some(permission => userPermissions.includes(permission));
+    const getItemAccess = (view: View) => {
+        return resolveViewAccess({
+            user,
+            authLoading: guardLoading,
+            organization: currentOrganization,
+            enabledModules: currentOrganization?.enabledModules,
+            view,
+            scope: currentScope,
+        });
     };
 
     const renderNavItem = (item: NavItem) => {
-        if (!isModuleEnabled(item.module, currentOrganization?.enabledModules)) return null;
-        if (!hasAccess(item)) return null;
-        const isEnabled = item.scopes.includes(currentScope.type);
+        const access = getItemAccess(item.view);
+        if (!access.allowed && hiddenGuardReasons.includes(access.reason)) return null;
+
+        const isEnabled = access.allowed;
 
         // Special handling for dashboard/team views to not be active in other scopes
         const isActive = (currentView === item.view) &&
@@ -115,11 +136,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentScope, currentView, onViewChan
             return buttonElement;
         }
 
-        const availableIn = item.scopes
-            .map(s => {
-                if (s === 'my_work') return 'My Work';
-                return s.charAt(0).toUpperCase() + s.slice(1);
-            })
+        const availableIn = access.requiredScope
+            .map(formatScopeLabel)
             .join(', ');
 
         return (

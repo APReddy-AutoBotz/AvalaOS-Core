@@ -1,5 +1,5 @@
 import React from 'react';
-import { ProductModuleKey, View } from '../../types';
+import { ProductModuleKey, Scope, ScopeType, View } from '../../types';
 import {
     CheckCircleIcon,
     ClipboardListIcon,
@@ -7,10 +7,14 @@ import {
     ViewBoardsIcon,
     ChartPieIcon,
 } from './icons';
-import { ALL_PRODUCT_MODULES, getEnabledModules, MODULE_HOME_VIEW, VIEW_MODULE_MAP } from '../../constants/moduleConfig';
+import { ALL_PRODUCT_MODULES, getEnabledModules, MODULE_HOME_VIEW } from '../../constants/moduleConfig';
+import { useAuth } from '../auth/AuthProvider';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
+import { resolveViewAccess, VIEW_ACCESS_METADATA, type ViewAccessReason, type ViewAccessResult } from '../../services/viewAccessGuard';
 
 interface ModuleJourneyProps {
     enabledModules?: ProductModuleKey[];
+    currentScope: Scope;
     currentView: View;
     onNavigate: (view: View) => void;
 }
@@ -29,10 +33,51 @@ const moduleOutcome: Record<ProductModuleKey, string> = {
     monitor: 'Value insights',
 };
 
-const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentView, onNavigate }) => {
+const hiddenJourneyReasons: ViewAccessReason[] = [
+    'auth_loading',
+    'unauthenticated',
+    'no_organization',
+    'setup_required',
+    'disabled_module',
+    'missing_permission',
+    'stale_persisted_view',
+    'deferred_view',
+    'admin_decision_pending',
+];
+
+const formatScopeLabel = (scope: ScopeType) => {
+    if (scope === ScopeType.MY_WORK) return 'My Work';
+    return scope.charAt(0).toUpperCase() + scope.slice(1);
+};
+
+const blockedJourneyTitle = (access: ViewAccessResult) => {
+    if (access.reason === 'invalid_scope' && access.requiredScope.length > 0) {
+        return `Available in ${access.requiredScope.map(formatScopeLabel).join(', ')} scope`;
+    }
+    return 'Not available in the current workspace';
+};
+
+const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentScope, currentView, onNavigate }) => {
+    const { user, loading: authLoading } = useAuth();
+    const { currentOrganization, loading: orgLoading } = useOrganizationContext();
     const enabled = getEnabledModules(enabledModules);
-    const activeModule = VIEW_MODULE_MAP[currentView];
-    const visibleModules = ALL_PRODUCT_MODULES.filter(module => enabled.includes(module.key));
+    const activeModule = VIEW_ACCESS_METADATA[currentView]?.module;
+    const guardLoading = authLoading || orgLoading;
+    const visibleModules = ALL_PRODUCT_MODULES
+        .filter(module => enabled.includes(module.key))
+        .map(module => {
+            const homeView = MODULE_HOME_VIEW[module.key];
+            const access = resolveViewAccess({
+                user,
+                authLoading: guardLoading,
+                organization: currentOrganization,
+                enabledModules: enabled,
+                view: homeView,
+                scope: currentScope,
+            });
+            return { module, homeView, access };
+        })
+        .filter(item => item.access.allowed || !hiddenJourneyReasons.includes(item.access.reason));
     const isSingleModule = visibleModules.length === 1;
 
     if (visibleModules.length === 0) return null;
@@ -46,14 +91,15 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentVi
                     </p>
                     <p className="mt-1 text-sm font-black text-[#002C4B] dark:text-white">
                         {isSingleModule
-                            ? `${visibleModules[0].label} module enabled`
+                            ? `${visibleModules[0].module.label} module enabled`
                             : 'Avala Assess -> Avala Studio -> Avala Delivery Lite -> Avala Monitor'}
                     </p>
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto xl:justify-end">
-                    {visibleModules.map((module, index) => {
+                    {visibleModules.map(({ module, homeView, access }, index) => {
                         const Icon = moduleIcon[module.key];
                         const isActive = activeModule === module.key;
+                        const isClickable = access.allowed;
                         return (
                             <React.Fragment key={module.key}>
                                 {index > 0 && (
@@ -61,10 +107,15 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentVi
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => onNavigate(MODULE_HOME_VIEW[module.key])}
+                                    onClick={() => isClickable && onNavigate(homeView)}
+                                    disabled={!isClickable}
+                                    aria-disabled={!isClickable}
+                                    title={isClickable ? module.label : blockedJourneyTitle(access)}
                                     className={`group flex min-w-[190px] items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${isActive
                                         ? 'border-[#ffbc03]/70 bg-[#ffbc03]/12 shadow-lg shadow-[#ffbc03]/10'
-                                        : 'border-slate-200/80 bg-white/72 hover:border-[#ffbc03]/40 hover:bg-[#ffbc03]/8 dark:border-slate-800 dark:bg-slate-900/54'
+                                        : isClickable
+                                            ? 'border-slate-200/80 bg-white/72 hover:border-[#ffbc03]/40 hover:bg-[#ffbc03]/8 dark:border-slate-800 dark:bg-slate-900/54'
+                                            : 'cursor-not-allowed border-slate-200/70 bg-white/50 opacity-60 dark:border-slate-800 dark:bg-slate-900/40'
                                         }`}
                                 >
                                     <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${isActive ? 'bg-[#ffbc03] text-[#002C4B]' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'}`}>
