@@ -1,18 +1,30 @@
 import assert from 'node:assert/strict';
 
-import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_ASSESS_PROCESSES, MOCK_DOCUMENT_GENERATIONS } from '../data/mockData';
+import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_DOCUMENT_GENERATIONS } from '../data/mockData';
 import { MOCK_DOC_TEMPLATES } from '../data/docTemplates';
 import { buildDeliveryPack } from './deliveryPackService';
 import {
   renderDeliveryPackJson,
   renderDeliveryPackMarkdown,
 } from './deliveryPackExportService';
-import { Assessment, AssessmentScoreResult, Task } from '../types';
+import { Assessment, AssessmentScoreResult, AssessProcess, Task } from '../types';
 
 const monthEndProject = MOCK_PROJECTS.find(project => project.id === 'proj-5')!;
 const monthEndTasks = MOCK_TASKS.filter(task => task.projectId === 'proj-5');
-const monthEndProcess = MOCK_ASSESS_PROCESSES.find(process => process.id === 'proc-close-pack')!;
 const monthEndDocuments = MOCK_DOCUMENT_GENERATIONS.filter(generation => generation.projectId === 'proj-5');
+const monthEndProcess: AssessProcess = {
+  id: 'proc-close-pack',
+  orgId: 'org-1',
+  name: 'Month-End Close Control Pack',
+  description: 'Small support fixture retained only for Delivery Pack regression coverage until canonical AP delivery data is implemented.',
+  ownerId: 'user-7',
+  department: 'Finance Operations',
+  criticality: 'Critical',
+  status: 'Completed',
+  templateId: 'tpl-finance-control-pack',
+  createdAt: '2026-04-01T09:00:00.000Z',
+  updatedAt: '2026-04-26T18:10:00.000Z',
+};
 
 const baseScores: AssessmentScoreResult = {
   scoreVersion: 'm2-test-v1',
