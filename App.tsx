@@ -312,7 +312,10 @@ function App() {
         requiredDocumentTypes: payload.handoffPack?.requiredDocumentTypes,
       },
     });
-    const handoffAllowed = applyGuardedView(View.DOCS_FORGE);
+    const docsForgeScope: Scope = currentScope.type === ScopeType.ORGANIZATION
+      ? { type: ScopeType.MY_WORK }
+      : currentScope;
+    const handoffAllowed = applyGuardedView(View.DOCS_FORGE, docsForgeScope);
     if (!handoffAllowed) {
       setAssessToStudioSourceContext(null);
     }
