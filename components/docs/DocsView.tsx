@@ -43,7 +43,7 @@ const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGener
                         <SparklesIcon className="h-8 w-8" />
                     </div>
                     <h3 className="mt-5 text-lg font-black text-slate-950 dark:text-white">No documents yet</h3>
-                    <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Use the AI Workspace to generate the first governed document set.</p>
+                    <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Use Avala Studio to draft the first governed document set from reviewed source context.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

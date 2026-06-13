@@ -136,7 +136,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                                     disabled={!assessToStudioPayload}
                                     className={`rounded-xl px-5 py-3 text-sm font-black btn-ghost ${assessToStudioPayload ? '' : 'cursor-not-allowed opacity-50'}`}
                                 >
-                                    {assessToStudioPayload ? 'Generate BRD / PDD' : 'Score assessment before Studio handoff'}
+                                    {assessToStudioPayload ? 'Open Avala Studio handoff' : 'Complete scoring before Studio handoff'}
                                 </button>
                             ) : (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-black text-slate-400 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-500">

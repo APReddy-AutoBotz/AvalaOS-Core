@@ -28,7 +28,7 @@ const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks,
         setIsLoading(true);
         setError(null);
         setInsights([]);
-        setError('AI insights require the server-side AI workflow and are disabled in this pilot-safe client path.');
+        setError('Monitor insights are not enabled in this workspace. Assessment, Studio drafting, Delivery, and handoff evidence remain available for review.');
         setIsLoading(false);
     };
 
@@ -52,18 +52,17 @@ const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks,
         }
 
         if (error) {
-            const isQuotaError = error.includes('429') || error.includes('quota') || error.includes('exceeded');
             return (
                 <div className="p-4 text-center">
                     <ExclamationTriangleIcon className="w-10 h-10 mx-auto text-abz-amber-500 mb-2" />
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                        {isQuotaError ? 'API quota exceeded. Please try again later.' : 'Could not load insights.'}
+                        {error}
                     </p>
                     <button
                         onClick={fetchInsights}
                         className="mt-2 text-xs text-abz-primary hover:underline"
                     >
-                        Try again
+                        Recheck
                     </button>
                 </div>
             );
@@ -73,8 +72,8 @@ const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks,
             return (
                 <div className="text-center py-8">
                     <SparklesIcon className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-                    <h4 className="mt-4 font-semibold">No special insights right now.</h4>
-                    <p className="text-sm text-slate-500">Everything looks to be on track!</p>
+                    <h4 className="mt-4 font-semibold">No monitor signals yet.</h4>
+                    <p className="text-sm text-slate-500">Handoff and delivery activity will appear here when available.</p>
                 </div>
             )
         }
@@ -99,7 +98,7 @@ const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks,
     }
 
     return (
-        <WidgetWrapper icon={SparklesIcon} title="AI Insights" isConfigurable={false}>
+        <WidgetWrapper icon={SparklesIcon} title="Monitor Insights" isConfigurable={false}>
             <div className="relative">
                 <button onClick={fetchInsights} disabled={isLoading} className="absolute top-[-48px] right-[10px] p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                     <ArrowPathIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />

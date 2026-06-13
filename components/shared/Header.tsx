@@ -21,10 +21,10 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onStartNew, current
   const { signOut } = useAuth();
   const { currentOrganization } = useOrganizationContext();
   const enabledModules = currentOrganization?.enabledModules;
-  const primaryAction = isModuleEnabled('docs', enabledModules)
-    ? { title: 'Avala Studio', subtitle: 'Generate governed docs' }
-    : isModuleEnabled('assess', enabledModules)
-      ? { title: 'Avala Assess', subtitle: 'Open process decisions' }
+  const primaryAction = isModuleEnabled('assess', enabledModules)
+    ? { title: 'Avala Assess', subtitle: 'Start with process evaluation' }
+    : isModuleEnabled('docs', enabledModules)
+      ? { title: 'Avala Studio', subtitle: 'Draft governed documents' }
       : isModuleEnabled('delivery', enabledModules)
         ? { title: 'Avala Delivery Lite', subtitle: 'Open approved work' }
         : { title: 'Avala Monitor', subtitle: 'Open portfolio signals' };
