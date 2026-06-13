@@ -17,7 +17,7 @@ export const FITTRACK_GENERATED_DATA: GeneratedArtifacts = {
             {
                 key: 'nfrs',
                 title: "3. Non-Functional Requirements",
-                content: "- **Performance:** API responses must be under 200ms.\n- **Security:** User data must be encrypted at rest and in transit. Must be compliant with GDPR.\n- **Scalability:** The system must support up to 250,000 users without performance degradation."
+                content: "- **Performance:** API responses must be under 200ms.\n- **Security:** User data must be encrypted at rest and in transit. Privacy obligations must be reviewed before pilot use.\n- **Scalability:** The system must support up to 250,000 users without performance degradation."
             }
         ]
     },
@@ -113,17 +113,17 @@ export const INVOICE_PROCESSING_ARTIFACTS: GeneratedArtifacts = {
     brd: { title: 'BRD: N/A for this project type', sections: [] },
     frd: { title: 'FRD: N/A for this project type', sections: [] },
     pdd: {
-        title: "PDD: AP Invoice Automation",
+        title: "PDD: AP Invoice Exception Handling",
         sections: [
             {
                 key: 'asis_overview',
                 title: 'Process Overview',
-                content: 'The current process involves Accounts Payable clerks manually monitoring an inbox for invoices. They open each PDF, extract key information (Invoice #, Date, Amount, PO #), and enter it into an Excel tracker. They then log into SAP to validate the PO number and post the invoice for payment.'
+                content: 'The current process involves Accounts Payable analysts monitoring invoice intake channels, validating PO/GRN matches, checking vendor master exceptions, and routing unresolved cases to finance owner review before any payment-block update.'
             },
             {
                 key: 'asis_steps',
                 title: '2.4 Detailed As-Is Process Steps',
-                content: '1. AP Clerk opens `invoices@company.com` mailbox.\n2. Opens unread email and saves PDF invoice to a shared drive.\n3. Opens the PDF and an Excel tracking sheet.\n4. Manually types invoice data into the Excel sheet.\n5. Logs into SAP ECC.\n6. Navigates to transaction `FB60`.\n7. Enters invoice data from Excel into SAP fields.\n8. If PO is invalid, emails the business approver.\n9. If PO is valid, posts the invoice.'
+                content: '1. AP analyst reviews invoice intake from email, supplier portal, and shared drive sources.\n2. Analyst captures invoice number, amount, vendor, PO, GRN, tax, and duplicate-check details.\n3. Analyst compares invoice data against SAP ECC, vendor master, and PO/GRN matching reports.\n4. Exceptions are routed to the AP process owner with evidence and assumptions.\n5. Finance owner review is required before any payment-block update, vendor communication, or external action.'
             }
         ]
     },
@@ -131,13 +131,13 @@ export const INVOICE_PROCESSING_ARTIFACTS: GeneratedArtifacts = {
         title: "Quality Gate Analysis",
         ambiguityPoints: [
             "What is the exact logic for matching PO numbers?",
-            "How should the bot handle invoices without a PO number?",
+            "How should invoices without a PO number be routed for human review?",
             "What is the SLA for processing an invoice?"
         ],
         gapPoints: [
             "The process for handling duplicate invoices is not defined.",
             "No requirements for an audit trail or logging.",
-            "The notification process for failed automations is not specified."
+            "The notification process for failed validation or blocked handoff is not specified."
         ]
     },
     diagrams: {
@@ -153,22 +153,22 @@ flowchart TD
 `
         },
         toBe: {
-            title: "To-Be Automated Invoice Process",
+            title: "To-Be AP Exception Handling Process",
             mermaidCode: `
 flowchart TD
-    subgraph "RPA Bot"
-        A["Monitor Inputs (Email/Portal)"] --> B["Extract Invoice Data (OCR)"];
-        B --> C["Validate Data vs Business Rules"];
-        C --> D{"Validation OK?"};
+    subgraph "Avala Studio Review Artifact"
+        A["Review AP source context"] --> B["Draft exception handling workflow"];
+        B --> C["Attach evidence and assumptions"];
+        C --> D{"Owner review complete?"};
     end
-    subgraph "SAP System"
-        D -- Yes --> E["Post Invoice Automatically"];
+    subgraph "Avala Delivery Lite"
+        D -- Yes --> E["Create traceable AP work items"];
     end
-    subgraph "Human in the Loop (AP Clerk)"
+    subgraph "Human Review"
         D -- No --> F["Review Exception in Queue"];
-        F --> G{"Approve or Reject"};
+        F --> G{"Approve or request changes"};
         G -- Approve --> E;
-        G -- Reject --> H["Notify Vendor"];
+        G -- Request Changes --> H["Update evidence and assumptions"];
     end
 `
         }
@@ -176,15 +176,15 @@ flowchart TD
     workItems: [
         {
             type: "Epic",
-            title: "Invoice Ingestion & Processing",
-            description: "Automate the end-to-end process of receiving, validating, and posting invoices in SAP.",
-            acceptanceCriteria: ["Invoices are processed automatically without manual intervention for standard cases.", "Exceptions are routed to humans for review.", "A full audit trail is maintained."]
+            title: "AP Invoice Exception Workflow Foundation",
+            description: "Prepare the governed workflow for receiving, validating, and reviewing AP invoice exceptions.",
+            acceptanceCriteria: ["AP exception intake is mapped from source context.", "Exceptions are routed to humans for review.", "A full evidence trail is maintained."]
         },
         {
             type: "Story",
-            title: "Automated Invoice Data Extraction",
-            description: "As an AP Clerk, I want the system to automatically read invoice PDFs from an email inbox and extract key data fields, so I don't have to do manual data entry.",
-            acceptanceCriteria: ["Bot monitors a specific email inbox for new messages with PDF attachments.", "Bot extracts Invoice #, Date, Amount, and PO # from the PDF.", "Extracted data is stored in a structured format (e.g., queue item)."]
+            title: "Review invoice exception source context",
+            description: "As an AP process owner, I want invoice exception artifacts to carry Assess evidence and assumptions so that downstream work stays reviewable.",
+            acceptanceCriteria: ["Review artifacts reference the canonical AP assessment.", "Evidence refs include invoice exception and owner-review records.", "Payment-block or vendor-facing actions remain human-reviewed."]
         }
     ],
     approvals: [

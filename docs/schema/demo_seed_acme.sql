@@ -1,5 +1,5 @@
--- AvalaOS Core Demo Seed for Supabase
--- Creates the Acme demo organization, demo personas, memberships, and Assess process catalog.
+-- AvalaOS Core canonical demo seed for Supabase
+-- Creates Avala Demo Enterprise, demo personas, memberships, and the AP Assess process.
 -- Demo password for all users: demo123
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -15,15 +15,15 @@ BEGIN
     INSERT INTO organizations (id, name, slug, is_trial, settings)
     VALUES (
         v_org_id,
-        'Acme Global Operations',
-        'acme-global-operations',
+        'Avala Demo Enterprise',
+        'avala-demo-enterprise',
         false,
         '{
             "profile": {
-                "industry": "Shared Services, Finance Operations, Customer Operations",
+                "industry": "Finance Operations / Shared Services",
                 "size": "1000+",
                 "geography": "North America, Europe, India",
-                "strategicGoals": "Scale automation safely, reduce manual cycle time, and govern AI adoption across enterprise processes."
+                "strategicGoals": "Evaluate AP invoice exceptions, govern handoff readiness, and prove evidence-backed delivery before execution."
             },
             "enabledModules": ["assess", "docs", "delivery", "monitor"]
         }'::jsonb
@@ -39,21 +39,21 @@ BEGIN
     VALUES
         (v_admin_role_id, v_org_id, 'Admin', '["org.admin","users.manage","roles.manage","integrations.manage","security.manage","byok.manage","audit.read"]'::jsonb),
         (v_buyer_role_id, v_org_id, 'Buyer', '["portfolio.read","reports.read","approvals.review","strategy.read"]'::jsonb),
-        (v_contributor_role_id, v_org_id, 'Contributor', '["project.read","task.read","assessment.create","assessment.edit","docs.generate","docs.read","workitems.import"]'::jsonb),
-        (v_reviewer_role_id, v_org_id, 'Reviewer', '["project.read","task.read","assessment.review","docs.read","approvals.review","controls.review"]'::jsonb)
+        (v_contributor_role_id, v_org_id, 'Contributor', '["project.read","team.read","task.read","backlog.read","roadmap.read","capacity.read","assessment.create","assessment.edit","process.create","docs.generate","docs.read","workitems.import","comments.manage"]'::jsonb),
+        (v_reviewer_role_id, v_org_id, 'Reviewer', '["project.read","portfolio.read","task.read","assessment.review","process.approve","docs.read","docs.approve","approvals.review","controls.review"]'::jsonb)
     ON CONFLICT (org_id, name) DO UPDATE SET permissions = EXCLUDED.permissions;
 
     WITH demo_users(id, email, full_name, role_title, org_role, role_id) AS (
         VALUES
-            ('00000000-0000-4000-8000-000000000001'::uuid, 'sarah.chen@acmeoperations.com', 'Sarah Chen', 'Chief Transformation Officer', 'Buyer', v_buyer_role_id),
-            ('00000000-0000-4000-8000-000000000002'::uuid, 'maya.patel@acmeoperations.com', 'Maya Patel', 'Lead Business Analyst', 'Contributor', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000003'::uuid, 'owen.brooks@acmeoperations.com', 'Owen Brooks', 'Change & Experience Lead', 'Reviewer', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000004'::uuid, 'david.rodriguez@acmeoperations.com', 'David Rodriguez', 'AI Solutions Lead', 'Contributor', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000005'::uuid, 'emily.white@acmeoperations.com', 'Emily White', 'QA & UAT Manager', 'Reviewer', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000006'::uuid, 'frank.miller@acmeoperations.com', 'Frank Miller', 'Automation Developer', 'Contributor', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000007'::uuid, 'priya.nair@acmeoperations.com', 'Priya Nair', 'Finance Process Owner', 'Reviewer', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000008'::uuid, 'henry.wilson@acmeoperations.com', 'Henry Wilson', 'Enterprise Platform Admin', 'Admin', v_admin_role_id),
-            ('00000000-0000-4000-8000-000000000009'::uuid, 'alicia.morgan@acmeoperations.com', 'Alicia Morgan', 'Senior Project Manager', 'Contributor', v_contributor_role_id)
+            ('00000000-0000-4000-8000-000000000001'::uuid, 'sarah.chen@avala-demo.example', 'Sarah Chen', 'Buyer Viewer', 'Buyer', v_buyer_role_id),
+            ('00000000-0000-4000-8000-000000000002'::uuid, 'maya.patel@avala-demo.example', 'Maya Patel', 'Process Analyst', 'Contributor', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000003'::uuid, 'owen.brooks@avala-demo.example', 'Owen Brooks', 'Change Reviewer', 'Reviewer', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000004'::uuid, 'david.rodriguez@avala-demo.example', 'David Rodriguez', 'Solution Contributor', 'Contributor', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000005'::uuid, 'emily.white@avala-demo.example', 'Emily White', 'Control Reviewer', 'Reviewer', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000006'::uuid, 'frank.miller@avala-demo.example', 'Frank Miller', 'Automation Contributor', 'Contributor', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000007'::uuid, 'priya.nair@avala-demo.example', 'Priya Nair', 'AP Process Owner', 'Reviewer', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000008'::uuid, 'henry.wilson@avala-demo.example', 'Henry Wilson', 'Platform Admin', 'Admin', v_admin_role_id),
+            ('00000000-0000-4000-8000-000000000009'::uuid, 'alicia.morgan@avala-demo.example', 'Alicia Morgan', 'Delivery Lead', 'Contributor', v_contributor_role_id)
     )
     INSERT INTO auth.users (
         id,
@@ -99,15 +99,15 @@ BEGIN
 
     WITH demo_users(id, email, full_name, role_id) AS (
         VALUES
-            ('00000000-0000-4000-8000-000000000001'::uuid, 'sarah.chen@acmeoperations.com', 'Sarah Chen', v_buyer_role_id),
-            ('00000000-0000-4000-8000-000000000002'::uuid, 'maya.patel@acmeoperations.com', 'Maya Patel', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000003'::uuid, 'owen.brooks@acmeoperations.com', 'Owen Brooks', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000004'::uuid, 'david.rodriguez@acmeoperations.com', 'David Rodriguez', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000005'::uuid, 'emily.white@acmeoperations.com', 'Emily White', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000006'::uuid, 'frank.miller@acmeoperations.com', 'Frank Miller', v_contributor_role_id),
-            ('00000000-0000-4000-8000-000000000007'::uuid, 'priya.nair@acmeoperations.com', 'Priya Nair', v_reviewer_role_id),
-            ('00000000-0000-4000-8000-000000000008'::uuid, 'henry.wilson@acmeoperations.com', 'Henry Wilson', v_admin_role_id),
-            ('00000000-0000-4000-8000-000000000009'::uuid, 'alicia.morgan@acmeoperations.com', 'Alicia Morgan', v_contributor_role_id)
+            ('00000000-0000-4000-8000-000000000001'::uuid, 'sarah.chen@avala-demo.example', 'Sarah Chen', v_buyer_role_id),
+            ('00000000-0000-4000-8000-000000000002'::uuid, 'maya.patel@avala-demo.example', 'Maya Patel', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000003'::uuid, 'owen.brooks@avala-demo.example', 'Owen Brooks', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000004'::uuid, 'david.rodriguez@avala-demo.example', 'David Rodriguez', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000005'::uuid, 'emily.white@avala-demo.example', 'Emily White', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000006'::uuid, 'frank.miller@avala-demo.example', 'Frank Miller', v_contributor_role_id),
+            ('00000000-0000-4000-8000-000000000007'::uuid, 'priya.nair@avala-demo.example', 'Priya Nair', v_reviewer_role_id),
+            ('00000000-0000-4000-8000-000000000008'::uuid, 'henry.wilson@avala-demo.example', 'Henry Wilson', v_admin_role_id),
+            ('00000000-0000-4000-8000-000000000009'::uuid, 'alicia.morgan@avala-demo.example', 'Alicia Morgan', v_contributor_role_id)
     )
     INSERT INTO profiles (id, email, full_name)
     SELECT id, email, full_name
@@ -136,13 +136,19 @@ BEGIN
         role_id = EXCLUDED.role_id,
         status = EXCLUDED.status;
 
+    DELETE FROM assess_processes
+    WHERE org_id = v_org_id
+      AND id IN (
+        'aaaaaaaa-0000-4000-8000-000000000001',
+        'aaaaaaaa-0000-4000-8000-000000000002',
+        'aaaaaaaa-0000-4000-8000-000000000003',
+        'aaaaaaaa-0000-4000-8000-000000000004',
+        'aaaaaaaa-0000-4000-8000-000000000005'
+      );
+
     INSERT INTO assess_processes (id, org_id, name, description, owner_id, department, criticality, status, template_id, created_at, updated_at)
     VALUES
-        ('aaaaaaaa-0000-4000-8000-000000000001', v_org_id, 'Vendor Invoice Intake and SAP Posting', 'Invoices arrive through email, shared drives, and supplier portals, then AP validates PO match, tax, duplicates, and posts approved invoices to SAP.', '00000000-0000-4000-8000-000000000007', 'Finance', 'High', 'Completed', 'tpl-p2p-invoice-ingestion', '2026-04-02T09:00:00.000Z', '2026-04-25T16:00:00.000Z'),
-        ('aaaaaaaa-0000-4000-8000-000000000002', v_org_id, 'Tier 1 Support Case Summarization', 'Support agents summarize incoming cases, search policy articles, draft replies, and escalate sensitive issues to senior specialists.', '00000000-0000-4000-8000-000000000004', 'Customer Operations', 'Medium', 'Draft', NULL, '2026-04-05T10:30:00.000Z', '2026-04-24T12:15:00.000Z'),
-        ('aaaaaaaa-0000-4000-8000-000000000003', v_org_id, 'New Hire Onboarding Request Flow', 'HR coordinates offer acceptance, laptop procurement, access provisioning, policy acknowledgement, and manager readiness before day one.', '00000000-0000-4000-8000-000000000002', 'Human Resources', 'High', 'Draft', NULL, '2026-04-07T08:45:00.000Z', '2026-04-23T14:00:00.000Z'),
-        ('aaaaaaaa-0000-4000-8000-000000000004', v_org_id, 'Claims Intake Document Triage', 'Claims packets are classified, checked for missing evidence, routed by risk and complexity, and escalated to adjusters when judgment is required.', '00000000-0000-4000-8000-000000000008', 'Operations', 'Critical', 'Not Started', NULL, '2026-04-12T11:00:00.000Z', '2026-04-12T11:00:00.000Z'),
-        ('aaaaaaaa-0000-4000-8000-000000000005', v_org_id, 'Month-End Close Evidence Pack', 'Finance teams collect reconciliations, approvals, variance explanations, and control evidence before executive close sign-off.', '00000000-0000-4000-8000-000000000007', 'Finance', 'High', 'Completed', NULL, '2026-03-28T09:20:00.000Z', '2026-04-26T18:10:00.000Z')
+        ('aaaaaaaa-0000-4000-8000-000000000001', v_org_id, 'AP Invoice Exception Handling', 'Accounts Payable reviews invoice intake, PO/GRN matching gaps, duplicate risks, vendor master issues, tax variances, and payment-block decisions before downstream work begins.', '00000000-0000-4000-8000-000000000007', 'Finance Operations / Accounts Payable', 'High', 'Completed', 'tpl-p2p-invoice-ingestion', '2026-06-10T09:00:00.000Z', '2026-06-13T16:00:00.000Z')
     ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         description = EXCLUDED.description,

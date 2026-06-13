@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   CANONICAL_AP_ASSUMPTIONS,
@@ -247,5 +248,46 @@ const unsupportedCompliancePhrases = [
 ];
 assert.equal(canonicalSeedText.includes(healthRepoLabel), false);
 assert.equal(unsupportedCompliancePhrases.some(phrase => canonicalSeedText.includes(phrase)), false);
+
+const buyerVisibleDemoSources = [
+  'components/auth/LoginView.tsx',
+  'constants.ts',
+  'docs/demo/primary-demo-story.md',
+  'docs/demo/wow-demo-script.md',
+  'docs/demo/m4.2d-buyer-demo-golden-path-validation-runbook.md',
+  'docs/schema/demo_seed_acme.sql',
+  'docs/schema/demo_seed_delivery.sql',
+];
+const legacyBuyerDemoStories = [
+  'AP Invoice Automation',
+  'Customer Support AI Assist',
+  'Employee Onboarding Workflow',
+  'Claims Intake Agentic Triage',
+  'Month-End Close Control Pack',
+  'Month-End Close Evidence Pack',
+  'Vendor Invoice Intake and SAP Posting',
+  'Tier 1 Support Case Summarization',
+  'New Hire Onboarding Request Flow',
+  'Claims Intake Document Triage',
+];
+
+for (const sourcePath of buyerVisibleDemoSources) {
+  const sourceText = fs.readFileSync(sourcePath, 'utf8');
+  assert.ok(
+    sourceText.includes(CANONICAL_AP_PROCESS_NAME) || sourceText.includes(CANONICAL_AP_WORKFLOW_NAME),
+    `${sourcePath} should reference the canonical AP demo story.`,
+  );
+  for (const legacyStory of legacyBuyerDemoStories) {
+    assert.equal(
+      sourceText.includes(legacyStory),
+      false,
+      `${sourcePath} should not present legacy buyer-demo story "${legacyStory}".`,
+    );
+  }
+}
+
+const loginCopy = fs.readFileSync('components/auth/LoginView.tsx', 'utf8');
+assert.ok(loginCopy.includes('Avala Delivery Lite'));
+assert.ok(loginCopy.includes('Demo story'));
 
 console.log('Canonical demo seed foundation regression passed.');

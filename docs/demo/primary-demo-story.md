@@ -4,26 +4,26 @@ Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 ## Story
 
-A finance team wants to evaluate the Month-End Close Evidence Pack before investing in automation. The prepared demo shows how AvalaOS moves from deterministic assessment to governed handoff without relying on live generation during the walkthrough.
+A finance operations team wants to evaluate the `AP Invoice Exception Handling` process before investing in downstream delivery work. The prepared demo shows how AvalaOS moves from deterministic assessment to Govern Lite control context, Studio review artifacts, Delivery Lite work items, a Delivery Pack, and Monitor readiness signals without relying on live generation during the walkthrough.
 
 ## Flow
 
-1. Process Intake records Month-End Close volume, effort, systems, pain points, constraints, and evidence references.
+1. Avala Assess records AP exception volume, effort, systems, pain points, constraints, evidence references, and assumptions.
 2. Deterministic Assessment calculates fit, value, risk, and recommendation outputs from the prepared evidence.
-3. Recommended Operating Model explains why the close evidence process needs governed automation, human approval, and reviewable handoff.
+3. Decision Pack explains the recommendation, controls, evidence, assumptions, and handoff readiness for the AP story.
 4. Avala Govern Lite records owner, autonomy, risk, allowed actions, blocked actions, approval, evidence, and audit status.
-5. Avala Studio shows prepared editable BRD/PDD-style documents and work item references from approved source data.
+5. Avala Studio shows prepared editable BRD/PDD/FRD-style review artifacts and work item references from approved source context.
 6. Approval/Evidence Rules identify what must be reviewed before handoff.
-7. Delivery Pack shows source lineage, approval/evidence checklists, blockers, work items, and Markdown/JSON exports.
-8. Monitor shows portfolio value, risk, blockers, decision status, and evidence-backed handoff visibility.
+7. Avala Delivery Lite shows source lineage, approval/evidence checklists, blockers, work items, and Delivery Pack review output.
+8. Avala Monitor shows AP project/task readiness signals, blockers, decision status, and evidence-backed handoff visibility.
 
 ## Presenter Notes
 
-- Use the prepared Month-End Close Evidence Pack data for external demos.
+- Use the prepared AP Invoice Exception Handling data for external demos.
 - Start from deterministic assessment and evidence, then show Govern Lite before any handoff.
 - Use prepared Studio documents instead of relying on live generation during the walkthrough.
 - Live Studio generation is optional only when approved provider controls are configured.
-- Close the demo by showing Monitor as portfolio visibility into value, risk, blockers, and evidence-backed handoff.
+- Close the demo by showing Monitor as AP readiness visibility into value, risk, blockers, and evidence-backed handoff.
 
 ## Proof Point
 
