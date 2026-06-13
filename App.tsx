@@ -241,7 +241,7 @@ function App() {
   };
 
   const handlePrimaryAction = () => {
-    const primaryCandidates = [View.DOCS_FORGE, View.PROCESS_CATALOG, View.BOARDS, View.DASHBOARD];
+    const primaryCandidates = [View.PROCESS_CATALOG, View.DOCS_FORGE, View.BOARDS, View.DASHBOARD];
     const allowedCandidate = primaryCandidates.find(view => resolveAppViewAccess(view, currentScope).allowed);
     const targetView = allowedCandidate ?? primaryCandidates[0];
 

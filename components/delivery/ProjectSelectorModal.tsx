@@ -15,7 +15,7 @@ const ProjectSelectorModal: React.FC<ProjectSelectorModalProps> = ({ isOpen, onC
         <Modal isOpen={isOpen} onClose={onClose} title="Select a Project">
             <div className="space-y-2">
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                    The AI Assistant generates documents within the context of a specific project. Please choose a project to continue.
+                    Avala Studio drafts documents within a selected project context. Choose a project to keep the handoff and delivery records traceable.
                 </p>
                 <div className="max-h-80 overflow-y-auto space-y-2 pr-2">
                     {projects.map(project => (

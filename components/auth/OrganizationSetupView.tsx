@@ -158,7 +158,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                         </div>
                     )}
                     <button className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline">
-                        Upgrade to Premium
+                        Review workspace configuration
                     </button>
                 </div>
             </div>
@@ -539,8 +539,8 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                             Based on your Industry ({industry || 'Not set'}), Avala Assess recommends pre-configured process templates to accelerate discovery.
                         </p>
                     </div>
-                    <button disabled className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-medium rounded-lg cursor-not-allowed border border-slate-300 dark:border-slate-600" title="Module 2 Feature">
-                        Browse Catalog (Coming Soon)
+                    <button disabled className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-medium rounded-lg cursor-not-allowed border border-slate-300 dark:border-slate-600" title="Catalog browsing is not enabled in this workspace configuration">
+                        Browse Catalog (Not enabled)
                     </button>
                 </div>
             </section>

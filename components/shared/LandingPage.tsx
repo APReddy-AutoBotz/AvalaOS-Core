@@ -97,7 +97,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                 <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-abz-primary text-white font-bold text-lg">1</div>
                 <div>
                     <h3 className="text-xl font-bold">Handoff Template</h3>
-                    <p className="text-slate-500 dark:text-slate-400">Choose the governed document format for this automation or AI initiative.</p>
+                    <p className="text-slate-500 dark:text-slate-400">Choose the governed document format for this automation initiative.</p>
                 </div>
             </div>
             <div className="pl-14 space-y-6">
@@ -150,15 +150,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                     <CogIcon className="w-6 h-6" />
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold">Avala AI Controls</h3>
-                    <p className="text-slate-500 dark:text-slate-400">Review generation settings for governed drafts before document handoff.</p>
+                    <h3 className="text-xl font-bold">Avala Studio Controls</h3>
+                    <p className="text-slate-500 dark:text-slate-400">Review draft-generation settings for governed documents before handoff.</p>
                 </div>
                 <ChevronDownIcon className={`w-5 h-5 ml-auto transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
             </button>
             {isAdvancedOpen && (
                 <div className="pl-14 space-y-6">
                     <div>
-                        <label htmlFor="aiProviderType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">AI Provider</label>
+                        <label htmlFor="aiProviderType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Draft provider</label>
                          <select name="aiProviderType" id="aiProviderType" value={aiProviderType} onChange={(e) => onAiProviderTypeChange(e.target.value as AiProviderType)} className="mt-1 block w-full px-3 py-2 bg-white dark:bg-abz-ink-900 border border-slate-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-abz-primary focus:border-abz-primary">
                             <option value="gemini">Google Gemini</option>
                             <option value="groq">Groq (LPU Inference)</option>
@@ -244,7 +244,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                 className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-3 text-md font-semibold btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <SparklesIcon className="w-6 h-6" />
-                Generate Governed Docs
+                Generate governed document pack
             </button>
         </div>
       </form>

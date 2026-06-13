@@ -8,6 +8,8 @@ const TemplateLibraryView: React.FC = () => {
     const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
     const totalTemplates = availablePacks.reduce((sum, pack) => sum + pack.templates.length, 0);
     const unlockedTemplates = availablePacks.reduce((sum, pack) => sum + (pack.isLocked ? 0 : pack.templates.length), 0);
+    const buyerSafePackDescription = (description: string) =>
+        description.replace('(Premium Pack)', '(Requires workspace configuration)');
 
     return (
         <div className="mx-auto max-w-7xl space-y-6 p-6 pb-20">
@@ -45,7 +47,7 @@ const TemplateLibraryView: React.FC = () => {
                                     <h2 className="text-xl font-black text-slate-950 dark:text-white">{pack.name}</h2>
                                     {pack.isPremium && (
                                         <span className="rounded-full bg-[#ffbc03]/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#002C4B] ring-1 ring-[#ffbc03]/35 dark:text-[#ffcf45]">
-                                            Premium Pack
+                                            Workspace Pack
                                         </span>
                                     )}
                                     {pack.isLocked && (
@@ -54,7 +56,7 @@ const TemplateLibraryView: React.FC = () => {
                                         </span>
                                     )}
                                 </div>
-                                <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-400">{pack.description}</p>
+                                <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-400">{buyerSafePackDescription(pack.description)}</p>
                             </div>
                             <span className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800">
                                 {pack.templates.length} templates
@@ -88,7 +90,7 @@ const TemplateLibraryView: React.FC = () => {
                                                     : 'bg-[#ffbc03] text-[#002C4B] shadow-lg shadow-[#ffbc03]/15 hover:-translate-y-0.5'
                                                 }`}
                                         >
-                                            Use Template
+                                            {pack.isLocked ? 'Requires workspace configuration' : 'Use Template'}
                                         </button>
                                     </div>
                                 ))}

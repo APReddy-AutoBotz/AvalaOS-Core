@@ -26,7 +26,7 @@ const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     { id: WidgetType.WELCOME, title: 'Welcome Banner', description: 'A personalized greeting for the user.', gridArea: 'welcome' },
     { id: WidgetType.STATS, title: 'Quick Stats', description: 'High-level counts of your active, due soon, and overdue tasks.', gridArea: 'stats' },
     { id: WidgetType.MY_TASKS, title: 'My Tasks', description: 'A focused list of your most important upcoming and overdue tasks.', gridArea: 'mytasks' },
-    { id: WidgetType.AI_INSIGHTS, title: 'AI Insights', description: 'Proactive analysis and suggestions from your AI assistant.', gridArea: 'aiinsights' },
+    { id: WidgetType.AI_INSIGHTS, title: 'Monitor Insights', description: 'Reviewable signals from governed delivery and handoff activity.', gridArea: 'aiinsights' },
     { id: WidgetType.PROJECT_HEALTH, title: 'Project Health', description: 'An at-a-glance overview of the status of all your projects.', gridArea: 'phealth' },
     { id: WidgetType.BURNDOWN_CHART, title: 'Sprint Burndown', description: 'Chart showing the progress of the current active sprint.', gridArea: 'burndown' },
     { id: WidgetType.TASKS_BY_STATUS, title: 'Tasks by Status', description: 'A bar chart showing how your tasks are distributed across different statuses.', gridArea: 'status' },

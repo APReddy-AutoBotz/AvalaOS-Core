@@ -48,10 +48,7 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
             onComplete(projectDetails, attachAssessToStudioSourceContext(artifacts, sourceContext));
 
         } catch (err: any) {
-            let errorMessage = `Error generating artifacts: ${err.message || "An unknown error occurred."}`;
-            if (err.message?.includes("API key not valid") || err.message?.includes("403")) {
-                 errorMessage = "Avala Studio could not complete generation with the selected settings. Review the settings and try again.";
-            }
+            const errorMessage = "Avala Studio could not complete generation with the selected settings. Review the source context, draft provider settings, and workspace configuration before trying again.";
             console.error("Error generating artifacts:", err);
             alert(errorMessage);
             setIsProcessing(false);

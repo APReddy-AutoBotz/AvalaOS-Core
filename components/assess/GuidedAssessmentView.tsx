@@ -903,7 +903,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                 onClick={handleComplete}
                                 className="w-full rounded-xl bg-[#ffbc03] py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00]"
                             >
-                                Run Decision Engine
+                                Calculate deterministic score
                             </button>
                         </>
                     ) : (
@@ -998,8 +998,8 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                         <button disabled={isLockedAssessment} onClick={() => runStatusAction(approveAssessment, 'Assessment approved.', 'approve')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
                                         <button disabled={isLockedAssessment} onClick={() => runStatusAction(requestChanges, 'Changes requested.', 'changes')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Request Changes</button>
                                         <button disabled={isLockedAssessment} onClick={() => runStatusAction(rejectAssessment, 'Assessment rejected.', 'reject')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Reject</button>
-                                        <button disabled={isLockedAssessment && assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDocs, 'Docs handoff snapshot generated.', 'docs')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Generate Docs Pack</button>
-                                        <button disabled={isLockedAssessment && assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDelivery, 'Delivery handoff snapshot generated.', 'delivery')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Create Delivery Backlog</button>
+                                        <button disabled={isLockedAssessment && assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDocs, 'Docs handoff snapshot generated.', 'docs')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Record Studio handoff snapshot</button>
+                                        <button disabled={isLockedAssessment && assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDelivery, 'Delivery handoff snapshot generated.', 'delivery')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Record Delivery handoff snapshot</button>
                                     </div>
                                     <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
                                         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Decision Pack export</p>
@@ -1392,7 +1392,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                             
                             <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
                                 <h3 className="text-lg font-black text-[#002C4B] dark:text-white">Handoff Readiness Preview</h3>
-                                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">The decision engine will convert this assessment into a Docs and Delivery handoff pack after scoring.</p>
+                                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">After deterministic scoring, AvalaOS records a Docs and Delivery handoff pack for human review.</p>
                                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                     {['BRD / PRD / PDD candidates', 'Risk and control matrix', 'Backlog seed items', 'Open questions for reviewers'].map(item => (
                                         <div key={item} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-black text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
@@ -1422,7 +1422,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                 </button>
                             ) : (
                                 <button onClick={handleComplete} className="rounded-xl bg-[#ffbc03] px-8 py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00]">
-                                    Run Decision Engine
+                                    Calculate deterministic score
                                 </button>
                             )}
                         </div>

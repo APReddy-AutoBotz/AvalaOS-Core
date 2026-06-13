@@ -289,6 +289,9 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
               </button>
             </div>
         </div>
+        <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
+          Exports are review artifacts. Confirm source lineage, evidence refs, and approvals before sharing outside this workspace.
+        </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div ref={mainContentRef} className="lg:col-span-2 bg-white dark:bg-surface-dark rounded-2xl shadow-soft border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -325,10 +328,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                       <button
                           onClick={() => setRefineModalState({ isOpen: true, section: section })}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:text-abz-primary hover:border-abz-primary/50 bg-white/80"
-                          title="Refine with AI"
+                          title="Refine draft section"
                       >
                           <SparklesIcon className="w-4 h-4" />
-                          Refine
+                          Refine Draft
                       </button>
                     </div>
                 </div>
@@ -582,6 +585,9 @@ const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: 
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
                 Lineage: {lineageSummary}
             </div>
+            <p className="text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
+                Import preserves available lineage on selected work items. Treat partial lineage as review-needed until the export policy milestone is implemented.
+            </p>
             {!deliveryEnabled && (
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-400 dark:ring-slate-800">
                     Avala Delivery Lite is not enabled. Work items are still generated for review, but backlog import is unavailable for this workspace.

@@ -59,6 +59,9 @@ const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onC
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                     Review the generated work items. Uncheck any items you don't want to import.
                 </p>
+                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
+                    Imported items retain available source lineage and evidence refs. Docs-only lineage remains partial and is not Assess-backed evidence.
+                </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-abz-ink">
                     <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
