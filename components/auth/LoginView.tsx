@@ -21,7 +21,7 @@ const valuePillars = [
   { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
   { label: 'Avala Govern Lite', detail: 'Decision Pack controls', icon: ClipboardDocumentListIcon },
   { label: 'Avala Studio', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
-  { label: 'Delivery Lite', detail: 'Traceable backlog', icon: ViewBoardsIcon },
+  { label: 'Avala Delivery Lite', detail: 'Traceable backlog', icon: ViewBoardsIcon },
   { label: 'Avala Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
 ];
 
@@ -167,7 +167,7 @@ const LoginView: React.FC = () => {
                   <div className="mb-8 flex items-start justify-between gap-4">
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#021f37]/60">Decision cockpit</div>
-                      <div className="mt-1.5 text-2xl font-bold text-[#021f37] tracking-tight">AP Invoice Automation</div>
+                      <div className="mt-1.5 text-2xl font-bold text-[#021f37] tracking-tight">AP Invoice Exception Handling</div>
                     </div>
                   </div>
 
@@ -375,8 +375,8 @@ const LoginView: React.FC = () => {
                 </div>
                 <div className="rounded-2xl border border-white/60 bg-white/40 p-3">
                   <ChartPieIcon className="mx-auto mb-1 h-5 w-5 text-[#073B60]" />
-                  <div className="text-lg font-bold text-[#021f37]">5</div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">Demo programs</div>
+                  <div className="text-lg font-bold text-[#021f37]">1</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">Demo story</div>
                 </div>
               </div>
               ) : (
