@@ -1,4 +1,5 @@
 import { HandoffLedgerEntry } from '../../types';
+import { CANONICAL_AP_HANDOFF_LEDGER_ENTRIES } from '../../data/mockData';
 import { StorageKeys, StorageService } from '../storage';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 
@@ -58,10 +59,18 @@ const toRow = (entry: HandoffLedgerEntry) => ({
 
 const loadLocalLedger = () => StorageService.load<HandoffLedgerEntry[]>(StorageKeys.HANDOFF_LEDGER, []);
 
+const mergeCanonicalLocalLedger = (entries: HandoffLedgerEntry[]) => {
+  const storedIds = new Set(entries.map(entry => entry.id));
+  return [
+    ...entries,
+    ...CANONICAL_AP_HANDOFF_LEDGER_ENTRIES.filter(entry => !storedIds.has(entry.id)),
+  ];
+};
+
 export const handoffLedgerAdapter = {
   async list(orgId: string): Promise<HandoffLedgerEntry[]> {
     if (!isSupabaseConfigured()) {
-      return loadLocalLedger().filter(entry => entry.orgId === orgId);
+      return mergeCanonicalLocalLedger(loadLocalLedger()).filter(entry => entry.orgId === orgId);
     }
 
     const { data, error } = await supabase
