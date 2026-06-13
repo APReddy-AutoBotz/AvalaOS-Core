@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
 import ModuleJourney from './components/shared/ModuleJourney';
@@ -14,12 +13,12 @@ import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
 
 import { StorageKeys, usePersistentState } from './services/storage';
-import { firstEnabledView, isViewEnabled, isModuleEnabled } from './constants/moduleConfig';
 import { useHandoffLedger } from './services/handoffLedgerService';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { mapDemoTeamsForSupabase, mapDemoUsersForSupabase } from './services/demoIdentity';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
+import { resolveViewAccess } from './services/viewAccessGuard';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -94,6 +93,7 @@ function App() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [isImportProjectSelectorOpen, setImportProjectSelectorOpen] = useState(false);
+  const organizationScopeTransition = useRef(false);
 
   // AI Provider State
   const [aiProviderType, setAiProviderType] = usePersistentState<AiProviderType>(StorageKeys.AI_PROVIDER, 'groq');
@@ -114,6 +114,50 @@ function App() {
     localStorage.removeItem(StorageKeys.API_KEY);
   }, []);
 
+  const guardLoading = authLoading || orgLoading;
+
+  const setScopeIfChanged = useCallback((scope: Scope) => {
+    setCurrentScope(previous => {
+      if (previous.type !== scope.type) return scope;
+      if ('id' in previous || 'id' in scope) {
+        return ('id' in previous ? previous.id : undefined) === ('id' in scope ? scope.id : undefined) ? previous : scope;
+      }
+      return previous;
+    });
+  }, [setCurrentScope]);
+
+  const resolveAppViewAccess = useCallback((view: View, scope: Scope = currentScope) => {
+    return resolveViewAccess({
+      user: currentUser,
+      authLoading: guardLoading,
+      organization: currentOrganization,
+      enabledModules,
+      view,
+      scope,
+    });
+  }, [currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+
+  const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
+    if (guardLoading) return false;
+
+    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE) {
+      setScopeIfChanged(requestedScope);
+      setCurrentView(view);
+      return true;
+    }
+
+    const access = resolveAppViewAccess(view, requestedScope);
+    if (access.guardSeverity === 'wait') return false;
+
+    const nextScope = access.allowed ? requestedScope : access.fallbackScope ?? requestedScope;
+    const nextView = access.allowed ? view : access.fallbackView;
+
+    setScopeIfChanged(nextScope);
+    setCurrentView(nextView);
+
+    return access.allowed;
+  }, [currentScope, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+
   useEffect(() => {
     if (aiProviderType === 'openai') {
       setAiProviderType('groq');
@@ -121,6 +165,7 @@ function App() {
   }, [aiProviderType, setAiProviderType]);
 
   useEffect(() => {
+    if (guardLoading) return;
     if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
 
     if (isSupabaseConfigured()) {
@@ -128,15 +173,15 @@ function App() {
       setTeams(mapDemoTeamsForSupabase(MOCK_TEAMS));
     }
 
-    if (currentUser.defaultScope) {
-      setCurrentScope(currentUser.defaultScope);
-    }
+    const defaultScope = currentUser.defaultScope ?? currentScope;
+    setScopeIfChanged(defaultScope);
+
     if (currentUser.defaultView) {
-      setCurrentView(currentUser.defaultView);
+      applyGuardedView(currentUser.defaultView, defaultScope);
     }
 
     lastAppliedUserId.current = currentUser.id;
-  }, [currentUser, setCurrentScope, setCurrentView]);
+  }, [applyGuardedView, currentScope, currentUser, guardLoading, setScopeIfChanged]);
 
   useEffect(() => {
     if (!currentOrganization) return;
@@ -150,49 +195,49 @@ function App() {
   };
 
   const handleScopeChange = (scope: Scope) => {
-    setCurrentScope(scope);
-    // Reset view to a sensible default for the new scope
-    if (scope.type === ScopeType.MY_WORK) setCurrentView(isViewEnabled(View.DASHBOARD, enabledModules) ? View.DASHBOARD : firstEnabledView(enabledModules));
-    if (scope.type === ScopeType.PROJECT) setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
-    if (scope.type === ScopeType.TEAM) setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
+    if (scope.type === ScopeType.ORGANIZATION) {
+      organizationScopeTransition.current = true;
+      setScopeIfChanged(scope);
+      setCurrentView(View.WORKSPACE);
+      return;
+    }
+
+    organizationScopeTransition.current = false;
+    const defaultView = scope.type === ScopeType.MY_WORK ? View.DASHBOARD : View.BOARDS;
+    applyGuardedView(defaultView, scope);
   };
 
   const handleViewChange = (view: View) => {
     if (view === View.DOCS_FORGE) {
       setAssessToStudioSourceContext(null);
     }
-    setCurrentView(isViewEnabled(view, enabledModules) ? view : firstEnabledView(enabledModules));
+
+    const requestedScope: Scope = organizationScopeTransition.current ? { type: ScopeType.ORGANIZATION } : currentScope;
+    organizationScopeTransition.current = false;
+    applyGuardedView(view, requestedScope);
   };
 
   const handleDashboardStatClick = (filter: Filters) => {
-    if (currentScope.type !== ScopeType.MY_WORK) {
-      setCurrentScope({ type: ScopeType.MY_WORK });
-    }
     setQuickFilter(filter);
-    setCurrentView(View.LIST);
+    applyGuardedView(View.LIST, { type: ScopeType.MY_WORK });
   };
 
   const handlePrimaryAction = () => {
-    if (isModuleEnabled('docs', enabledModules)) {
+    const primaryCandidates = [View.DOCS_FORGE, View.PROCESS_CATALOG, View.BOARDS, View.DASHBOARD];
+    const allowedCandidate = primaryCandidates.find(view => resolveAppViewAccess(view, currentScope).allowed);
+    const targetView = allowedCandidate ?? primaryCandidates[0];
+
+    if (targetView === View.DOCS_FORGE) {
       setAssessToStudioSourceContext(null);
-      setCurrentView(View.DOCS_FORGE);
-      return;
     }
-    if (isModuleEnabled('assess', enabledModules)) {
-      setCurrentView(View.PROCESS_CATALOG);
-      return;
-    }
-    if (isModuleEnabled('delivery', enabledModules)) {
-      setCurrentView(View.BOARDS);
-      return;
-    }
-    setCurrentView(View.DASHBOARD);
+
+    applyGuardedView(targetView);
   };
 
   const handleProjectSelectedForDocForge = (project: Project) => {
-    handleScopeChange({ type: ScopeType.PROJECT, id: project.id, name: project.name });
+    const projectScope: Scope = { type: ScopeType.PROJECT, id: project.id, name: project.name };
     setAssessToStudioSourceContext(null);
-    setCurrentView(View.DOCS_FORGE);
+    applyGuardedView(View.DOCS_FORGE, projectScope);
     setIsProjectSelectorOpen(false);
   };
 
@@ -267,23 +312,28 @@ function App() {
         requiredDocumentTypes: payload.handoffPack?.requiredDocumentTypes,
       },
     });
-    setCurrentView(View.DOCS_FORGE);
+    const docsForgeScope: Scope = currentScope.type === ScopeType.ORGANIZATION
+      ? { type: ScopeType.MY_WORK }
+      : currentScope;
+    const handoffAllowed = applyGuardedView(View.DOCS_FORGE, docsForgeScope);
+    if (!handoffAllowed) {
+      setAssessToStudioSourceContext(null);
+    }
   };
 
   useEffect(() => {
-    if (!currentOrganization || currentScope.type === ScopeType.ORGANIZATION) return;
-    if (currentView === View.TEAMS) {
-      setCurrentView(isViewEnabled(View.BOARDS, enabledModules) ? View.BOARDS : firstEnabledView(enabledModules));
-      return;
+    if (guardLoading || !currentUser || !currentOrganization || currentScope.type === ScopeType.ORGANIZATION) return;
+
+    const access = resolveAppViewAccess(currentView, currentScope);
+    if (access.allowed || access.guardSeverity === 'wait') return;
+
+    const fallbackScope = access.fallbackScope ?? currentScope;
+    setScopeIfChanged(fallbackScope);
+
+    if (access.fallbackView !== currentView) {
+      setCurrentView(access.fallbackView);
     }
-    if (currentView === View.REPORTS) {
-      setCurrentView(isViewEnabled(View.DASHBOARD, enabledModules) ? View.DASHBOARD : firstEnabledView(enabledModules));
-      return;
-    }
-    if (!isViewEnabled(currentView, enabledModules)) {
-      setCurrentView(firstEnabledView(enabledModules));
-    }
-  }, [currentOrganization, currentScope.type, currentView, enabledModules, setCurrentView]);
+  }, [currentOrganization, currentScope, currentUser, currentView, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
 
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     deliveryReorderTask(taskIdToMove, referenceTaskId, newEpicId).catch(surfaceDeliveryError);
@@ -469,8 +519,7 @@ function App() {
 
     alert(`${newEpics.length} epic(s) and ${newTasks.length} task(s) have been imported to your backlog.`);
 
-    handleScopeChange({ type: ScopeType.PROJECT, id: projectId, name: projectName });
-    setCurrentView(View.BACKLOG);
+    applyGuardedView(View.BACKLOG, { type: ScopeType.PROJECT, id: projectId, name: projectName });
   };
 
   const handleInitiateImport = (itemsToImport: WorkItem[]) => {
@@ -631,22 +680,23 @@ function App() {
     // Switch to project scope and backlog view
     const project = projects.find(p => p.id === generation.projectId);
     if (project) {
-      handleScopeChange({ type: ScopeType.PROJECT, id: project.id, name: project.name });
-      setCurrentView(View.BACKLOG); // Ensure View.BACKLOG exists in your View enum
+      applyGuardedView(View.BACKLOG, { type: ScopeType.PROJECT, id: project.id, name: project.name });
       alert(`Epic "${title}" created!`);
     }
   };
 
   const renderCurrentView = () => {
-    if (currentScope.type !== ScopeType.ORGANIZATION && !isViewEnabled(currentView, enabledModules)) {
+    const currentAccess = resolveAppViewAccess(currentView, currentScope);
+
+    if (currentScope.type !== ScopeType.ORGANIZATION && !currentAccess.allowed && currentAccess.guardSeverity !== 'wait') {
       return (
         <div className="mx-auto max-w-3xl p-8">
           <div className="premium-surface rounded-3xl p-8 text-center">
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Module not enabled</p>
-            <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">This workspace is configured for a different module set.</h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Only enabled modules appear in navigation. Ask an Avala Admin to update module access if this team needs the complete Avala Assess, Avala Studio, Avala Delivery Lite, and Avala Monitor suite.</p>
-            <button onClick={() => setCurrentView(firstEnabledView(enabledModules))} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">
-              Open Enabled Module
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Workspace unavailable</p>
+            <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">This workspace is not available in the current access context.</h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Open an available workspace for the current user, scope, and enabled module set.</p>
+            <button onClick={() => applyGuardedView(currentAccess.fallbackView, currentAccess.fallbackScope ?? currentScope)} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">
+              Open Available Workspace
             </button>
           </div>
         </div>
@@ -657,8 +707,8 @@ function App() {
     if (currentView === View.PROCESS_DETAIL && selectedProcessId) {
       return <ProcessDetailStubView
         processId={selectedProcessId}
-        onBack={() => setCurrentView(View.PROCESS_CATALOG)}
-        onStartAssessment={(id) => { setSelectedProcessId(id); setCurrentView(View.GUIDED_ASSESSMENT); }}
+        onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
+        onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
       />;
     }
@@ -667,12 +717,12 @@ function App() {
        // Using orgId from the current context. Assuming projects belong to current org if in project scope, but Process is strictly an org-level concept.
        // The process has an orgId. We need to use the current selected organization, but the scope might be Team/Project.
        // Actually, Module 1 defined Assess views mostly in Organization scope, so we use currentOrganization context globally.
-       return <GuidedAssessmentView processId={selectedProcessId} onExit={() => setCurrentView(View.PROCESS_DETAIL)} />;
+       return <GuidedAssessmentView processId={selectedProcessId} onExit={() => applyGuardedView(View.PROCESS_DETAIL)} />;
     }
 
     // Global Assess Views
     if (currentView === View.PROCESS_CATALOG) {
-      return <ProcessCatalogView onViewDetail={(id) => { setSelectedProcessId(id); setCurrentView(View.PROCESS_DETAIL); }} />;
+      return <ProcessCatalogView onViewDetail={(id) => { setSelectedProcessId(id); applyGuardedView(View.PROCESS_DETAIL); }} />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
       return <TemplateLibraryView />;
@@ -693,7 +743,7 @@ function App() {
           docTemplates={docTemplates}
           onCancel={() => {
             setAssessToStudioSourceContext(null);
-            setCurrentView(View.DASHBOARD);
+            applyGuardedView(View.DASHBOARD, { type: ScopeType.MY_WORK });
           }}
           onComplete={(projectDetails: ProjectDetails, artifacts: GeneratedArtifacts) => {
             if (currentScope.type === ScopeType.PROJECT) {
@@ -717,7 +767,7 @@ function App() {
               setActiveGenerationId(null);
             }
             setAssessToStudioSourceContext(null);
-            setCurrentView(View.WORKSPACE);
+            applyGuardedView(View.WORKSPACE);
           }}
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
@@ -743,7 +793,10 @@ function App() {
             setActiveGenerationId(null);
             setTempArtifacts(null);
             setAssessToStudioSourceContext(null);
-            setCurrentView(currentScope.type === ScopeType.PROJECT ? View.DOCS : View.DASHBOARD);
+            applyGuardedView(
+              currentScope.type === ScopeType.PROJECT ? View.DOCS : View.DASHBOARD,
+              currentScope.type === ScopeType.PROJECT ? currentScope : { type: ScopeType.MY_WORK },
+            );
           }}
           users={users} currentUser={currentUser}
           onUpdateApprovalStatus={handleUpdateApprovalStatus}
@@ -759,7 +812,7 @@ function App() {
         return <DocsView generations={documentGenerations.filter(g => g.projectId === (currentScope as any).id)} templates={docTemplates} onViewGeneration={(id) => {
           setActiveGenerationId(id);
           setTempArtifacts(null);
-          setCurrentView(View.WORKSPACE);
+          applyGuardedView(View.WORKSPACE);
         }} />;
       default:
         if (currentScope.type === ScopeType.MY_WORK) {
@@ -779,7 +832,7 @@ function App() {
             onViewGeneration={(generationId: string) => {
               setTempArtifacts(null);
               setActiveGenerationId(generationId);
-              setCurrentView(View.WORKSPACE);
+              applyGuardedView(View.WORKSPACE);
             }}
           />;
         }
