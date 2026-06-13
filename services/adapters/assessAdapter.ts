@@ -1,6 +1,12 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { AssessProcess, Assessment, AssessmentReviewComment, AssessmentResponses, EvidenceItem, Assumption, AssessStatus } from '../../types';
-import { MOCK_ASSESS_PROCESSES } from '../../data/mockData';
+import {
+  CANONICAL_AP_ASSUMPTIONS,
+  CANONICAL_AP_ASSESSMENT_RESPONSES,
+  CANONICAL_AP_EVIDENCE_ITEMS,
+  CANONICAL_AP_PROCESS_ID,
+  MOCK_ASSESS_PROCESSES,
+} from '../../data/mockData';
 import { calculateAssessmentScores } from '../scoringEngine';
 import { StorageKeys, StorageService } from '../storage';
 
@@ -122,38 +128,7 @@ const toAssessmentRow = (assessment: Assessment) => ({
 let demoProcesses = [...MOCK_ASSESS_PROCESSES];
 
 const responseFixtures: Record<string, AssessmentResponses> = {
-  'proc-ap-invoice': {
-    processStructure: { standardization: 4, ruleDeterminism: 5, exceptionPredictability: 4, processMaturity: 4 },
-    workPattern: { volume: 62000, manualEffort: 0.18, averageHourlyCost: 58, reworkPain: 4, cycleTimePain: 4 },
-    dataProfile: { inputStructure: 76, unstructuredLoad: 4, dataSensitivity: 3 },
-    judgment: { judgmentIntensity: 2, goalAmbiguity: 2 },
-    systems: { systemReadiness: 4, orchestrationComplexity: 3 },
-    risk: { riskCriticality: 4, governanceSensitivity: 4, errorReversibility: 4 },
-  },
-  'proc-support-ai': {
-    processStructure: { standardization: 3, ruleDeterminism: 2, exceptionPredictability: 3, processMaturity: 3 },
-    workPattern: { volume: 18000, manualEffort: 0.17, averageHourlyCost: 52, reworkPain: 3, cycleTimePain: 4 },
-    dataProfile: { inputStructure: 48, unstructuredLoad: 5, dataSensitivity: 4 },
-    judgment: { judgmentIntensity: 4, goalAmbiguity: 3 },
-    systems: { systemReadiness: 4, orchestrationComplexity: 4 },
-    risk: { riskCriticality: 3, governanceSensitivity: 4, errorReversibility: 3 },
-  },
-  'proc-hr-onboarding': {
-    processStructure: { standardization: 3, ruleDeterminism: 4, exceptionPredictability: 3, processMaturity: 3 },
-    workPattern: { volume: 9000, manualEffort: 0.65, averageHourlyCost: 48, reworkPain: 4, cycleTimePain: 5 },
-    dataProfile: { inputStructure: 82, unstructuredLoad: 2, dataSensitivity: 4 },
-    judgment: { judgmentIntensity: 3, goalAmbiguity: 2 },
-    systems: { systemReadiness: 3, orchestrationComplexity: 4 },
-    risk: { riskCriticality: 4, governanceSensitivity: 4, errorReversibility: 3 },
-  },
-  'proc-close-pack': {
-    processStructure: { standardization: 4, ruleDeterminism: 4, exceptionPredictability: 3, processMaturity: 4 },
-    workPattern: { volume: 7200, manualEffort: 0.75, averageHourlyCost: 68, reworkPain: 4, cycleTimePain: 3 },
-    dataProfile: { inputStructure: 68, unstructuredLoad: 4, dataSensitivity: 4 },
-    judgment: { judgmentIntensity: 3, goalAmbiguity: 2 },
-    systems: { systemReadiness: 4, orchestrationComplexity: 3 },
-    risk: { riskCriticality: 5, governanceSensitivity: 5, errorReversibility: 3 },
-  },
+  [CANONICAL_AP_PROCESS_ID]: CANONICAL_AP_ASSESSMENT_RESPONSES,
 };
 
 const defaultResponses: AssessmentResponses = {
@@ -165,17 +140,23 @@ const defaultResponses: AssessmentResponses = {
   risk: { riskCriticality: 3, governanceSensitivity: 3, errorReversibility: 3 },
 };
 
-const demoEvidence = (process: AssessProcess): EvidenceItem[] => [
-  { id: `ev-${process.id}-map`, type: 'Process Map', description: `${process.name} current-state flow and exception paths captured from discovery.` },
-  { id: `ev-${process.id}-sop`, type: 'SOP', description: `${process.department} operating procedure and control checkpoints reviewed.` },
-  { id: `ev-${process.id}-sample`, type: 'System Screenshot', description: `Representative system evidence validated with the process owner.` },
-];
+const demoEvidence = (process: AssessProcess): EvidenceItem[] =>
+  process.id === CANONICAL_AP_PROCESS_ID
+    ? CANONICAL_AP_EVIDENCE_ITEMS
+    : [
+      { id: `ev-${process.id}-map`, type: 'Process Map', description: `${process.name} current-state flow and exception paths captured from discovery.` },
+      { id: `ev-${process.id}-sop`, type: 'SOP', description: `${process.department} operating procedure and control checkpoints reviewed.` },
+      { id: `ev-${process.id}-sample`, type: 'System Screenshot', description: `Representative system evidence validated with the process owner.` },
+    ];
 
-const demoAssumptions = (process: AssessProcess): Assumption[] => [
-  { id: `as-${process.id}-volume`, category: 'Volume', description: 'Volume is based on the latest operating month and should be refreshed before delivery sizing.' },
-  { id: `as-${process.id}-cost`, category: 'Cost', description: 'Benefit model assumes current manual handling cost and rework effort remain materially unchanged.' },
-  { id: `as-${process.id}-risk`, category: 'Risk', description: `${process.criticality} criticality requires control owner confirmation before automated execution.` },
-];
+const demoAssumptions = (process: AssessProcess): Assumption[] =>
+  process.id === CANONICAL_AP_PROCESS_ID
+    ? CANONICAL_AP_ASSUMPTIONS
+    : [
+      { id: `as-${process.id}-volume`, category: 'Volume', description: 'Volume is based on the latest operating month and should be refreshed before delivery sizing.' },
+      { id: `as-${process.id}-cost`, category: 'Cost', description: 'Benefit model assumes current manual handling cost and rework effort remain materially unchanged.' },
+      { id: `as-${process.id}-risk`, category: 'Risk', description: `${process.criticality} criticality requires control owner confirmation before automated execution.` },
+    ];
 
 const buildDemoAssessment = (process: AssessProcess): Assessment => {
   const responses = responseFixtures[process.id] || defaultResponses;
@@ -211,6 +192,58 @@ const buildDemoAssessment = (process: AssessProcess): Assessment => {
   };
 
   if (isCompleted) {
+    if (process.id === CANONICAL_AP_PROCESS_ID) {
+      assessment.review = {
+        reviewerNotes: {
+          processStructure: 'AP owner confirmed the exception map covers vendor master, PO/GRN, duplicate, tax variance, and routing paths.',
+          evidenceAndAssumptions: 'Evidence references are demo-only summaries with owners and linked fields; no raw customer source content is included.',
+          risk: 'Finance owner approval remains required before posting, payment release, or external communication.',
+        },
+        checkpoints: {
+          evidenceOwnersRecorded: true,
+          humanApprovalRequired: true,
+          downstreamDeliveryDecisionOwnedByFinance: true,
+        },
+        lastReviewedBy: 'user-7',
+        lastReviewedAt: '2026-04-25T16:20:00.000Z',
+        comments: [
+          {
+            id: 'comment-ap-owner-approval',
+            section: 'risk',
+            authorId: 'user-7',
+            authorName: 'Priya Nair',
+            type: 'Approval',
+            message: 'Approved for governed documentation handoff. Human approval remains mandatory before downstream delivery or payment action.',
+            createdAt: '2026-04-25T16:20:00.000Z',
+            linkedField: 'judgment.humanApprovalBeforeAction',
+          },
+          {
+            id: 'comment-ap-control-review',
+            section: 'evidenceAndAssumptions',
+            authorId: 'user-5',
+            authorName: 'Emily White',
+            type: 'Comment',
+            message: 'Evidence references are sufficient for the demo Decision Pack and Govern Lite card; delivery export policy remains a later milestone.',
+            createdAt: '2026-04-25T16:28:00.000Z',
+            linkedField: 'risk.auditRequirement',
+          },
+        ],
+        approvalHistory: [
+          {
+            id: 'approval-ap-owner',
+            status: 'Approved',
+            actorId: 'user-7',
+            actorName: 'Priya Nair',
+            reason: 'Risk, controls, and evidence posture accepted for governed documentation handoff.',
+            createdAt: '2026-04-25T16:20:00.000Z',
+          },
+        ],
+        lockedAt: '2026-04-25T16:30:00.000Z',
+        lockedBy: 'user-7',
+        lockReason: 'Canonical demo assessment seed approved for deterministic score rendering.',
+      };
+    }
+
     assessment.scores = calculateAssessmentScores(responses, metadata, {
       assessmentId: assessment.id,
       processId: process.id,

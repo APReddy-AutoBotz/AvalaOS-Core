@@ -1,7 +1,13 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { MOCK_USERS } from '../../data/mockData';
+import {
+  CANONICAL_DEMO_ENABLED_MODULES,
+  CANONICAL_DEMO_ORG_ID,
+  CANONICAL_DEMO_ORG_NAME,
+  CANONICAL_DEMO_ORG_PROFILE,
+  CANONICAL_DEMO_ORG_SLUG,
+  MOCK_USERS,
+} from '../../data/mockData';
 import { OrgRole, ProductModuleKey } from '../../types';
-import { DEFAULT_ENABLED_MODULES } from '../../constants/moduleConfig';
 import { StorageKeys, StorageService } from '../storage';
 
 const mockOrgModulesKey = `${StorageKeys.ORGANIZATION}-enabled-modules`;
@@ -10,18 +16,13 @@ export const orgAdapter = {
   async getOrganizations(userId: string) {
     if (!isSupabaseConfigured()) {
       return [{
-        id: 'org-1',
-        name: 'Acme Global Operations',
-        slug: 'acme-global-operations',
+        id: CANONICAL_DEMO_ORG_ID,
+        name: CANONICAL_DEMO_ORG_NAME,
+        slug: CANONICAL_DEMO_ORG_SLUG,
         is_trial: false,
         settings: {
-          profile: {
-            industry: 'Shared Services, Finance Operations, Customer Operations',
-            size: '1000+',
-            geography: 'North America, Europe, India',
-            strategicGoals: 'Scale automation safely, reduce manual cycle time, and govern AI adoption across enterprise processes.',
-          },
-          enabledModules: StorageService.load<ProductModuleKey[]>(mockOrgModulesKey, DEFAULT_ENABLED_MODULES),
+          profile: CANONICAL_DEMO_ORG_PROFILE,
+          enabledModules: StorageService.load<ProductModuleKey[]>(mockOrgModulesKey, CANONICAL_DEMO_ENABLED_MODULES),
         },
         members: MOCK_USERS.map(user => ({ userId: user.id, role: user.orgRole || 'Contributor' })),
       }];
