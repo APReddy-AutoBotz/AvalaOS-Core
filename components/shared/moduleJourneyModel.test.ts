@@ -12,16 +12,21 @@ assert.deepEqual(
     fullLifecycle.map(step => step.label),
     [
         'Avala Assess',
-        'Avala Govern Lite',
+        'Avala Govern',
         'Avala Studio',
-        'Avala Delivery Lite',
+        'Avala Delivery',
         'Avala Monitor',
     ],
 );
 
 assert.equal(
     formatOperatingLifecycleLabel(fullLifecycle),
-    'Avala Assess -> Avala Govern Lite -> Avala Studio -> Avala Delivery Lite -> Avala Monitor',
+    'Avala Assess -> Avala Govern -> Avala Studio -> Avala Delivery -> Avala Monitor',
+);
+
+assert.equal(
+    fullLifecycle.some(step => step.label.includes('Lite') || step.shortLabel.includes('Lite')),
+    false,
 );
 
 const governLiteStep = fullLifecycle.find(step => step.kind === 'govern-lite');

@@ -161,7 +161,7 @@ flowchart TD
         B --> C["Attach evidence and assumptions"];
         C --> D{"Owner review complete?"};
     end
-    subgraph "Avala Delivery Lite"
+    subgraph "Avala Delivery"
         D -- Yes --> E["Create traceable AP work items"];
     end
     subgraph "Human Review"

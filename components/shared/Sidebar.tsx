@@ -44,7 +44,7 @@ const sidebarItems: NavItem[] = [
     { view: View.PROCESS_CATALOG, icon: ClipboardListIcon, label: 'Avala Assess' },
     { view: View.DOCS_FORGE, icon: DocumentTextIcon, label: 'Avala Studio' },
     { view: View.PORTFOLIO, icon: ChartPieIcon, label: 'Portfolio' },
-    { view: View.BOARDS, icon: ViewBoardsIcon, label: 'Avala Delivery Lite' },
+    { view: View.BOARDS, icon: ViewBoardsIcon, label: 'Avala Delivery' },
 ];
 
 const advancedItems: NavItem[] = [

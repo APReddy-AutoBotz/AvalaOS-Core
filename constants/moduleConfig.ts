@@ -20,8 +20,8 @@ export const ALL_PRODUCT_MODULES: {
     },
     {
         key: 'delivery',
-        label: 'Avala Delivery Lite',
-        shortLabel: 'Delivery Lite',
+        label: 'Avala Delivery',
+        shortLabel: 'Avala Delivery',
         description: 'Approved work items, board, owners, status, blockers, and handoff lineage without replacing delivery systems.',
     },
     {

@@ -37,7 +37,7 @@ const AvalaGovernLiteCardPanel: React.FC<AvalaGovernLiteCardPanelProps> = ({ gov
               <ClipboardDocumentListIcon className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Govern Lite</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Govern</p>
               <h2 className="text-xl font-black">{governCard.agentOrAutomationName}</h2>
             </div>
           </div>

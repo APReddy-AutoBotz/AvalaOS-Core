@@ -16,8 +16,8 @@ export interface ModuleLifecycleStep {
 export interface GovernLiteLifecycleStep {
     kind: 'govern-lite';
     key: GovernLiteLifecycleStepKey;
-    label: 'Avala Govern Lite';
-    shortLabel: 'Govern Lite';
+    label: 'Avala Govern';
+    shortLabel: 'Avala Govern';
     outcome: 'Decision controls';
     detail: string;
     visualOnly: true;
@@ -37,8 +37,8 @@ const moduleLabelByKey = new Map(ALL_PRODUCT_MODULES.map(module => [module.key, 
 export const GOVERN_LITE_LIFECYCLE_STEP: GovernLiteLifecycleStep = {
     kind: 'govern-lite',
     key: GOVERN_LITE_LIFECYCLE_STEP_KEY,
-    label: 'Avala Govern Lite',
-    shortLabel: 'Govern Lite',
+    label: 'Avala Govern',
+    shortLabel: 'Avala Govern',
     outcome: 'Decision controls',
     detail: 'Deterministic Decision Pack, control card, human review, evidence, assumptions, and governed handoff to Studio.',
     visualOnly: true,

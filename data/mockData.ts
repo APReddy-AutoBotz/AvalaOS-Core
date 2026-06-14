@@ -50,7 +50,7 @@ export const MOCK_LOGIN_PROFILES = [
         userId: 'user-7',
         password: 'demo123',
         label: 'AP Process Owner',
-        description: 'Review deterministic scores, evidence, assumptions, Decision Pack content, and Govern Lite controls.',
+        description: 'Review deterministic scores, evidence, assumptions, Decision Pack content, and Avala Govern controls.',
         accent: 'from-emerald-500 to-teal-500',
         recommendedFor: 'Business owner',
     },
