@@ -26,7 +26,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onStartNew, current
     : isModuleEnabled('docs', enabledModules)
       ? { title: 'Avala Studio', subtitle: 'Draft governed documents' }
       : isModuleEnabled('delivery', enabledModules)
-        ? { title: 'Avala Delivery Lite', subtitle: 'Open approved work' }
+        ? { title: 'Avala Delivery', subtitle: 'Open approved work' }
         : { title: 'Avala Monitor', subtitle: 'Open portfolio signals' };
 
   return (

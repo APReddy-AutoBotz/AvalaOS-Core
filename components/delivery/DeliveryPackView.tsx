@@ -162,7 +162,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Section title="Decision And Govern Lite" icon={ClipboardDocumentListIcon}>
+        <Section title="Decision And Avala Govern" icon={ClipboardDocumentListIcon}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
               <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Assess Decision</div>
@@ -174,7 +174,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
               </dl>
             </div>
             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Govern Lite Snapshot</div>
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Avala Govern Snapshot</div>
               {pack.governLite ? (
                 <dl className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Status</dt><dd className="font-bold text-slate-900 dark:text-white">{pack.governLite.governanceStatus}</dd></div>
@@ -183,7 +183,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
                   <div className="pt-2 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">{pack.governLite.nextGovernanceAction}</div>
                 </dl>
               ) : (
-                <p className="mt-3 text-sm font-semibold text-slate-500">No Govern Lite snapshot is linked for this project.</p>
+                <p className="mt-3 text-sm font-semibold text-slate-500">No Avala Govern snapshot is linked for this project.</p>
               )}
             </div>
           </div>

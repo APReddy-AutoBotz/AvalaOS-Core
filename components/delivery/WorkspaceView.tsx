@@ -590,7 +590,7 @@ const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: 
             </p>
             {!deliveryEnabled && (
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-400 dark:ring-slate-800">
-                    Avala Delivery Lite is not enabled. Work items are still generated for review, but backlog import is unavailable for this workspace.
+                    Avala Delivery is not enabled. Work items are still generated for review, but backlog import is unavailable for this workspace.
                 </div>
             )}
             {artifacts.workItems.map((item, index) => (

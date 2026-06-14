@@ -19,9 +19,9 @@ import { isSupabaseConfigured } from '../../services/supabaseClient';
 
 const valuePillars = [
   { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
-  { label: 'Avala Govern Lite', detail: 'Decision Pack controls', icon: ClipboardDocumentListIcon },
+  { label: 'Avala Govern', detail: 'Decision Pack controls', icon: ClipboardDocumentListIcon },
   { label: 'Avala Studio', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
-  { label: 'Avala Delivery Lite', detail: 'Traceable backlog', icon: ViewBoardsIcon },
+  { label: 'Avala Delivery', detail: 'Traceable backlog', icon: ViewBoardsIcon },
   { label: 'Avala Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
 ];
 
@@ -33,7 +33,7 @@ const readinessRows = [
 
 const proofPoints = [
   'Deterministic Assess scoring',
-  'Govern Lite human review and evidence controls',
+  'Avala Govern human review and evidence controls',
   'Docs and delivery handoff lineage',
   'Leadership monitor and risk visibility',
   'Server-side AI governance path',
@@ -117,6 +117,9 @@ const LoginView: React.FC = () => {
                   <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#021f37]/80 ml-2">
                     Governed AI & Automation Delivery OS
                   </div>
+                  <div className="ml-2 max-w-sm text-xs font-bold leading-5 text-[#021f37]/70">
+                    AvalaOS = Assess. Validate. Align. Launch. Audit.
+                  </div>
                 </div>
                 <div className="hidden glass-card px-4 py-2 rounded-2xl md:flex items-center gap-3 border border-white/60 shadow-sm bg-white/50 backdrop-blur-md">
                   <div className="relative">
@@ -141,6 +144,9 @@ const LoginView: React.FC = () => {
                   </h1>
                   <p className="mt-6 max-w-sm text-[15px] font-medium leading-relaxed text-[#021f37]/80">
                     Turn messy process input into deterministic recommendations, governed documents, approval-ready work items, and evidence-backed visibility.
+                  </p>
+                  <p className="mt-3 max-w-sm text-sm font-bold leading-6 text-[#021f37]/70">
+                    Assess. Validate. Align. Launch. Audit. Evaluate before you automate. Govern before you execute.
                   </p>
 
                   <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
@@ -238,7 +244,7 @@ const LoginView: React.FC = () => {
                   </h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     {isDemoMode
-                      ? 'Explore role-aware Avala Assess, Avala Govern Lite, Avala Studio, Avala Delivery Lite, and Avala Monitor flows with synthetic data.'
+                      ? 'Explore role-aware Avala Assess, Avala Govern, Avala Studio, Avala Delivery, and Avala Monitor flows with synthetic data.'
                       : 'Use your organization account to access governed assessments, documents, delivery work, and monitor views.'}
                   </p>
                 </div>

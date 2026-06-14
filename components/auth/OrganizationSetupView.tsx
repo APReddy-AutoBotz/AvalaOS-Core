@@ -214,7 +214,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                         <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Commercial configuration</p>
                         <h2 className="mt-1 text-xl font-black text-[#002C4B] dark:text-white">Enabled product modules</h2>
                         <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-                            Configure the workspace as Avala Assess-only, Avala Studio-only, Avala Delivery Lite-only, Avala Monitor-only, any two-module bundle, or the complete governed lifecycle.
+                            Configure the workspace as Avala Assess-only, Avala Studio-only, Avala Delivery-only, Avala Monitor-only, any two-module bundle, or the complete governed lifecycle.
                         </p>
                     </div>
                     <button
