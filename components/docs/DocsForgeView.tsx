@@ -92,7 +92,7 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
                         </div>
                     </div>
                     <p className="mt-4 text-xs font-semibold leading-5 opacity-75">
-                        Studio will use this read-only Assess context as source evidence for editable drafts. Scores, gates, risk tiers, and recommendations remain owned by the deterministic assessment record and human review.
+                        Studio will use this read-only Assess context as source evidence for editable review drafts that require human sign-off. Scores, gates, risk tiers, and recommendations remain owned by the deterministic assessment record and human review.
                     </p>
                 </div>
             )}

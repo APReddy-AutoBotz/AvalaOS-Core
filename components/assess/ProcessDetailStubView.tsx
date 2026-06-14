@@ -232,7 +232,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                                 <p className="text-sm font-black">{docsEnabled ? 'Ready for Avala Studio governed documents' : 'Avala Studio handoff unavailable in this workspace'}</p>
                                 <p className="mt-1 text-xs font-semibold leading-5 opacity-80">
                                     {docsEnabled
-                                        ? 'Use the reviewed Decision Pack and Avala Govern context for BRD, PRD, PDD, diagrams, and approval artifacts.'
+                                        ? 'Use the reviewed Decision Pack and Avala Govern context for editable BRD, PRD, PDD, diagrams, and human sign-off artifacts.'
                                         : 'Enable Avala Studio in Avala Admin to continue from assessment decision into document generation.'}
                                 </p>
                             </div>

@@ -20,9 +20,9 @@ import { isSupabaseConfigured } from '../../services/supabaseClient';
 const valuePillars = [
   { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
   { label: 'Avala Govern', detail: 'Decision Pack controls', icon: ClipboardDocumentListIcon },
-  { label: 'Avala Studio', detail: 'BRD, PDD, handoff pack', icon: DocumentTextIcon },
+  { label: 'Avala Studio', detail: 'Editable review drafts', icon: DocumentTextIcon },
   { label: 'Avala Delivery', detail: 'Traceable backlog', icon: ViewBoardsIcon },
-  { label: 'Avala Monitor', detail: 'Value, risk, blockers', icon: ChartBarIcon },
+  { label: 'Avala Monitor', detail: 'Readiness, lineage, blockers', icon: ChartBarIcon },
 ];
 
 const readinessRows = [
@@ -35,7 +35,7 @@ const proofPoints = [
   'Deterministic Assess scoring',
   'Avala Govern human review and evidence controls',
   'Docs and delivery handoff lineage',
-  'Leadership monitor and risk visibility',
+  'Monitor readiness, lineage, blocker, and value signals',
   'Server-side AI governance path',
 ];
 
@@ -118,7 +118,7 @@ const LoginView: React.FC = () => {
                     Governed AI & Automation Delivery OS
                   </div>
                   <div className="ml-2 max-w-sm text-xs font-bold leading-5 text-[#021f37]/70">
-                    AvalaOS = Assess. Validate. Align. Launch. Audit.
+                    AvalaOS = Assess. Validate. Align. Launch. Audit. It governs handoff and does not execute bots, RPA jobs, agents, or external systems.
                   </div>
                 </div>
                 <div className="hidden glass-card px-4 py-2 rounded-2xl md:flex items-center gap-3 border border-white/60 shadow-sm bg-white/50 backdrop-blur-md">
@@ -143,10 +143,10 @@ const LoginView: React.FC = () => {
                     Evaluate. Govern.<br/>Deliver. Prove.
                   </h1>
                   <p className="mt-6 max-w-sm text-[15px] font-medium leading-relaxed text-[#021f37]/80">
-                    Turn messy process input into deterministic recommendations, governed documents, approval-ready work items, and evidence-backed visibility.
+                    Turn messy process input into deterministic recommendations, editable review drafts, human-reviewed work items, and evidence-backed readiness visibility.
                   </p>
                   <p className="mt-3 max-w-sm text-sm font-bold leading-6 text-[#021f37]/70">
-                    Assess. Validate. Align. Launch. Audit. Evaluate before you automate. Govern before you execute.
+                    Assess. Validate. Align. Launch. Audit. AvalaOS is the governance and delivery operating model around execution systems.
                   </p>
 
                   <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">

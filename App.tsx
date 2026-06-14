@@ -817,7 +817,7 @@ function App() {
         const artifactsToShow = activeGeneration?.artifacts || tempArtifacts;
 
         if (!artifactsToShow) {
-          return <div className="p-8 text-center">Could not find document generation data. Please return to the docs repository.</div>;
+          return <div className="p-8 text-center">Avala Studio could not find document generation data for this workspace view. Return to Avala Studio or Document Vault and open a generated review draft with source context attached.</div>;
         }
         // Template finding might be less reliable for global generations
         const templateId = activeGeneration?.templateId || 'brd.v1';

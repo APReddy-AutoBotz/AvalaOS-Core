@@ -151,7 +151,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
           </div>
         </div>
         <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
-          Delivery Pack exports are review artifacts. Review incomplete lineage or missing evidence refs before external sharing.
+          Delivery Pack exports are review artifacts that require human sign-off. Review incomplete lineage or missing evidence refs before external sharing.
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Sources" value={pack.sources.length} detail="Assess, Studio, Delivery, and handoff references" />

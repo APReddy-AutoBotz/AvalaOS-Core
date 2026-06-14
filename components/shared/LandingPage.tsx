@@ -85,7 +85,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Evaluate before you automate. Govern before you execute.</p>
         <h2 className="mt-2 text-3xl md:text-4xl font-bold text-text-light dark:text-text-dark">Generate governed delivery documents</h2>
         <p className="mt-2 text-lg text-slate-600 dark:text-slate-300">
-            Move approved source context through Assess, Govern, Studio, Delivery Pack, and Monitor with reviewable documents and evidence-backed handoff.
+            Move reviewed source context through Assess, Govern, Studio, Delivery Pack, and Monitor with editable drafts, human sign-off, and evidence-backed handoff.
         </p>
       </div>
 
@@ -168,9 +168,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                         <div className="flex items-start gap-3">
                             <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
                             <div>
-                                <p className="font-bold">Generated drafts remain reviewable handoff artifacts.</p>
+                                <p className="font-bold">Generated drafts remain editable review artifacts.</p>
                                 <p className="mt-1 text-xs leading-5">
-                                    Validate source context, evidence, and owner approval before continuing to Delivery Pack.
+                                    Validate source context, evidence, and owner human sign-off before continuing to Delivery Pack.
                                 </p>
                             </div>
                         </div>
@@ -190,7 +190,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
                     <p className="text-slate-500 dark:text-slate-400">
                       {sourceContext
                         ? 'Assess source context is already attached. Optionally upload additional notes or a legacy document for reviewer context.'
-                        : 'Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, AvalaOS Core drafts a baseline from known industry patterns for review.'}
+                        : 'Upload a decision pack, transcript, notes, or legacy document. If nothing is uploaded, AvalaOS Core creates an editable, assumption-based starter draft that requires SME validation.'}
                     </p>
                 </div>
             </div>
