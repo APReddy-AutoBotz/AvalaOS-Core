@@ -10,6 +10,7 @@ import {
     MapIcon,
     DocumentTextIcon,
     ChartBarIcon,
+    ClipboardDocumentIcon,
     CogIcon,
     DocumentDuplicateIcon,
     ClipboardDocumentListIcon,
@@ -43,7 +44,7 @@ const sidebarItems: NavItem[] = [
     { view: View.DASHBOARD, icon: HomeIcon, label: 'Avala Monitor' },
     { view: View.PROCESS_CATALOG, icon: ClipboardListIcon, label: 'Avala Assess' },
     { view: View.DOCS_FORGE, icon: DocumentTextIcon, label: 'Avala Studio' },
-    { view: View.PORTFOLIO, icon: ChartPieIcon, label: 'Portfolio' },
+    { view: View.PORTFOLIO, icon: ChartPieIcon, label: 'Avala Portfolio' },
     { view: View.BOARDS, icon: ViewBoardsIcon, label: 'Avala Delivery' },
 ];
 
@@ -58,7 +59,7 @@ const advancedItems: NavItem[] = [
     { view: View.DELIVERY_PACK, icon: ClipboardDocumentListIcon, label: 'Delivery Pack' },
     { view: View.TIMESHEETS, icon: ClockIcon, label: 'Timesheets' },
     { view: View.AUTOMATIONS, icon: BoltIcon, label: 'Automations' },
-    { view: View.DOCS, icon: DocumentTextIcon, label: 'Document Vault' },
+    { view: View.DOCS, icon: ClipboardDocumentIcon, label: 'Document Vault' },
 ];
 
 const settingsItems: NavItem[] = [

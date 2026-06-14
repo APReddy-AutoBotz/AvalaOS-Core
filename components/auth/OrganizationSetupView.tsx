@@ -571,7 +571,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">
                                         {member.role === 'Admin' ? 'Full Configuration & Billing' :
                                             member.role === 'Buyer' ? 'Dashboard & Approvals View' :
-                                                member.role === 'Contributor' ? 'Submit PDDs & Evidence' : 'View Only'}
+                                                member.role === 'Contributor' ? 'Submit PDDs & Evidence' : 'Review Access'}
                                     </td>
                                 </tr>
                             ))}

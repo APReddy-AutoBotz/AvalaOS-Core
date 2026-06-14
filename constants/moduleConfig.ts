@@ -16,7 +16,7 @@ export const ALL_PRODUCT_MODULES: {
         key: 'docs',
         label: 'Avala Studio',
         shortLabel: 'Avala Studio',
-        description: 'Generate and review BRD, PRD, PDD, SDD, diagrams, work items, and governed document templates.',
+        description: 'Draft editable review documents, diagrams, work items, and governed templates for human sign-off.',
     },
     {
         key: 'delivery',
@@ -28,7 +28,7 @@ export const ALL_PRODUCT_MODULES: {
         key: 'monitor',
         label: 'Avala Monitor',
         shortLabel: 'Avala Monitor',
-        description: 'Value, risk, blockers, portfolio visibility, and executive-ready signals.',
+        description: 'Readiness, lineage, blockers, value signals, and executive-ready handoff visibility.',
     },
 ];
 

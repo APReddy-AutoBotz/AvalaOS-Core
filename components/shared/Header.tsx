@@ -27,7 +27,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onStartNew, current
       ? { title: 'Avala Studio', subtitle: 'Draft governed documents' }
       : isModuleEnabled('delivery', enabledModules)
         ? { title: 'Avala Delivery', subtitle: 'Open approved work' }
-        : { title: 'Avala Monitor', subtitle: 'Open portfolio signals' };
+        : { title: 'Avala Monitor', subtitle: 'Open readiness and blocker signals' };
 
   return (
     <header className="header glass flex items-center justify-between h-[72px] sticky top-0 z-10 px-5">
@@ -77,7 +77,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onStartNew, current
             onClick={signOut}
             className="rounded-xl px-2.5 py-1.5 text-xs font-black text-[#002C4B] transition-colors hover:bg-[#ffbc03]/15 dark:text-[#ffcf45] dark:hover:bg-[#ffbc03]/10"
           >
-            Switch
+            Sign Out
           </button>
         </div>
       </div>
