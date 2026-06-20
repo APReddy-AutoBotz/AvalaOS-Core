@@ -175,7 +175,6 @@ BEGIN
             ADD CONSTRAINT projects_org_id_fkey
             FOREIGN KEY (org_id)
             REFERENCES organizations(id)
-            ON DELETE CASCADE
             NOT VALID;
     END IF;
 
