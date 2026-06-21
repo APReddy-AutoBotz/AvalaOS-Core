@@ -1,4 +1,4 @@
-name: KlarityPM CI
+name: AvalaOS Core CI
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   verify:
-    name: Build, Typecheck, and Deterministic Tests
+    name: AvalaOS Core Quality Gates
     runs-on: ubuntu-latest
 
     steps:
@@ -26,11 +26,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        run: npm audit --audit-level=moderate
+
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Assess scoring regression
-        run: npm run test:requirements
+      - name: Static AI boundary scan
+        run: npm run test:ai-boundary-static
+
+      - name: Secret hygiene scan
+        run: npm run test:secret-hygiene
+
+      - name: Regression and policy tests
+        run: npm run test
 
       - name: Production build
         run: npm run build
