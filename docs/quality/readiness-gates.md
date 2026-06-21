@@ -28,7 +28,9 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | M5.2g | Delivery work item ownership migration plan | Complete | Plan and post-merge verification exist on main. |
 | M5.2g-a | Delivery work item authority migration | Complete as authority groundwork | Evidence and post-merge verification exist on main; `delivery_work_items` is fail-closed with RLS enabled and no policies, so this is not tenant-isolation proof. |
 | M5.3 | RLS policy design and test plan | Complete as plan | Does not implement policies or prove tenant isolation. |
-| M5.3a | RLS policy implementation and tenant-isolation tests | Planned | Requires approved scope after authority boundaries are confirmed. |
+| M5.3a | RLS policy implementation and isolation test plan refresh | Complete as docs-only plan refresh | Narrows future policy scope to applied authority tables; no SQL migrations, RLS policies, helper functions, tests, tenant-isolation proof, or hosted pilot readiness. |
+| M5.3a-1 | RLS helper and SELECT policy implementation plan | Complete as docs-only plan | PR #90 accepted planning only for helper functions and identity/org/workspace/membership SELECT policies; no RLS implementation occurred. |
+| M5.3a-1a | Local RLS validation harness plan | Planned | Next safe milestone; required before verified tenant isolation can be claimed. |
 | M5.4 | Audit and evidence operations | Planned | Requires explicit scope and verification. |
 | M5.5 | Secure export and storage readiness | Planned | Requires explicit scope and verification. |
 | M5.6 | Deployment, runbooks, and pilot evidence | Planned | Required before pilot readiness acceptance. |

@@ -37,7 +37,7 @@ When a historical evidence file conflicts with current canonical docs, preserve 
 - M5.0 enterprise Supabase readiness, M5.1 environment and secret hygiene, M5.2 auth/org/workspace planning, and M5.3 RLS policy design/test planning have evidence on main.
 - M5.2 authority work continued after the M5.3 planning slice. M5.2a through M5.2g-a are treated as prerequisite authority and ownership groundwork for future RLS implementation, not as RLS proof.
 - M5.2g-a created the `delivery_work_items` authority table with RLS enabled and no policies, and its post-merge verification is present on main. That is fail-closed readiness only. It does not prove tenant isolation and does not make Delivery runtime production-ready.
-- M5.3 remains a design and test plan for RLS policy implementation. Actual policy implementation, tenant-isolation tests, and deployment evidence require a later approved milestone.
+- M5.3 remains a design and test plan for RLS policy implementation. M5.3a and M5.3a-1 add docs-only RLS planning detail for applied authority, helper design, SELECT policy direction, and validation gates. They do not implement SQL migrations, RLS policies, helper functions, tests, tenant-isolation proof, or hosted pilot readiness.
 - KlarityFlow Health remains separate from AvalaOS Core. Health proof-pack docs are historical or planning references unless a later approved Health milestone is explicitly opened.
 
 ## Non-Negotiables
@@ -66,6 +66,7 @@ M0.2 established the internal build control pack: root agent instructions, `.age
 ## Next Safe Sequence
 
 1. Treat M5.2 authority through M5.2g-a as accepted prerequisite groundwork with the fail-closed caveat preserved.
-2. Confirm that M5.2 authority boundaries are sufficient for RLS implementation.
-3. Implement M5.3a RLS policies and tenant-isolation tests in a later explicitly approved milestone.
-4. Continue M5 enterprise readiness with audit, export, deployment, runbook, and pilot-evidence milestones only after their scope is approved.
+2. Treat M5.3a and M5.3a-1 as accepted docs-only RLS planning records, not RLS implementation.
+3. Plan M5.3a-1a Local RLS Validation Harness next, only after explicit approval.
+4. Implement RLS helpers, policies, and tenant-isolation tests only after the local validation path and implementation scope are approved.
+5. Continue M5 enterprise readiness with audit, export, deployment, runbook, and pilot-evidence milestones only after their scope is approved.
