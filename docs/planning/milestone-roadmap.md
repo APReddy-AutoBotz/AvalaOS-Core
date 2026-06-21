@@ -25,13 +25,17 @@ This roadmap is the active milestone sequence after the documentation consistenc
 | 2 | M5.1 Environment config and secret hygiene | Complete | Keep browser-side secrets out of pilot/production. |
 | 3 | M5.2 Auth/org/workspace schema planning | Complete | Use as authority planning baseline. |
 | 4 | M5.2a-M5.2g-a Authority/ownership groundwork | Complete through current evidence | Treat as prerequisites for RLS, not as RLS proof. |
-| 5 | M5.3 RLS policy design/test plan | Complete as plan | Implement only in later approved M5.3a work. |
-| 6 | M5.3a RLS policy implementation and tenant-isolation tests | Planned | Requires accepted M5.2 authority boundaries and AP approval. |
-| 7 | M5.4-M5.6 Audit, export, deployment, runbook readiness | Planned | Requires separate approved milestones and evidence. |
+| 5 | M5.3 RLS policy design/test plan | Complete as plan | Use as the durable RLS design baseline; it does not implement policies. |
+| 6 | M5.3a RLS policy implementation and isolation test plan refresh | Complete as docs-only plan refresh | Narrows future RLS scope to applied authority tables; no implementation or tenant-isolation proof. |
+| 7 | M5.3a-1 RLS helper and SELECT policy implementation plan | Complete as docs-only plan | PR #90 accepted the helper/SELECT policy plan only; no SQL migrations, policies, helper functions, or tests were implemented. |
+| 8 | M5.3a-1a Local RLS Validation Harness Plan | Planned | Next safe milestone; define repeatable local validation before any RLS implementation claim. |
+| 9 | M5.4-M5.6 Audit, export, deployment, runbook readiness | Planned | Requires separate approved milestones and evidence. |
 
 ## Sequencing Rule
 
-Later M5.2 authority slices can close after the M5.3 plan because M5.3 is not implementation. Actual RLS implementation must wait for sufficient authority boundaries and explicit approval.
+Later M5.2 authority slices can close after the M5.3 plan because M5.3 is not implementation. M5.3a and M5.3a-1 are also planning-only records. Actual RLS implementation must wait for sufficient authority boundaries, a local validation decision, and explicit approval.
+
+M5.3a-1a is the next safe milestone. It must remain a local validation harness plan unless AP explicitly approves implementation work. No current roadmap entry proves tenant isolation or hosted pilot readiness.
 
 ## Health Boundary
 
