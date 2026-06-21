@@ -4,6 +4,10 @@
 
 Avala Govern Lite is the lightweight governance layer added to the post-assessment flow. It gives reviewers a compact card for the agent or automation being considered before any downstream execution or delivery handoff.
 
+## Naming Boundary
+
+Avala Govern Lite remains the canonical name for the current governance surface. "Lite" means scoped governance card and control visibility, not stale branding. Future expansion into richer policy objects, runtime controls, MCP controls, A2A controls, or live monitoring requires an explicitly approved milestone.
+
 ## Minimum Card Fields
 
 - `agentOrAutomationName`

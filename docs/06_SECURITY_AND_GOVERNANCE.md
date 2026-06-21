@@ -2,7 +2,7 @@
 
 ## Security Position
 
-AvalaOS Core is suitable for controlled product demonstration and development validation. Enterprise pilot readiness requires verified server-side AI execution, BYOK/key reference controls, RLS enforcement, audit coverage, secure exports, and deployment runbooks.
+AvalaOS Core is suitable for controlled product demonstration and development validation. Enterprise pilot readiness requires verified server-side AI execution, BYOK/key reference controls, RLS enforcement, tenant-isolation tests, audit coverage, secure exports, and deployment runbooks.
 
 ## AI Controls
 
@@ -17,10 +17,22 @@ AvalaOS Core is suitable for controlled product demonstration and development va
 - Sensitive evidence requires reviewer attention.
 - Generated baseline sections must state when source material was absent or thin.
 - Handoff decisions should preserve source, owner, decision, and evidence references.
+- Historical evidence docs under `docs/quality/` prove what was verified at the time, but current canonical docs define the active product baseline.
+
+## Enterprise Readiness Controls
+
+- M5.2 authority and ownership groundwork is a prerequisite for tenant-isolation policy work.
+- M5.2g-a `delivery_work_items` authority table readiness is fail-closed because RLS is enabled with no policies. This is not evidence of usable tenant isolation.
+- M5.3 documents RLS policy design and test planning only. Policy implementation, tests, and post-merge proof require a later approved milestone.
+- No documentation cleanup may imply deployment readiness, RLS enforcement, or compliance certification without supporting evidence.
 
 ## Governance Controls
 
 Avala Govern Lite records autonomy, risk, approval, evidence, allowed actions, blocked actions, review frequency, and audit status. It is a governance surface, not a runtime execution controller.
+
+## Health Boundary
+
+KlarityFlow Health remains a separate proof vertical. Health proof-pack records must not be treated as core AvalaOS implementation evidence unless AP explicitly opens Health scope.
 
 ## Compliance Language
 

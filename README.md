@@ -19,6 +19,20 @@ Start with the canonical documentation set:
 - [Security and Governance](docs/06_SECURITY_AND_GOVERNANCE.md)
 - [Avala Govern Framework](docs/07_AVALA_GOVERN_FRAMEWORK.md)
 - [Migration from historical prototype naming](docs/08_MIGRATION_FROM_KLARITYPM.md)
+- [Task Ledger](docs/task-ledger.md)
+- [Readiness Gates](docs/quality/readiness-gates.md)
+- [Milestone Roadmap](docs/planning/milestone-roadmap.md)
+
+Historical evidence files under `docs/quality/` are immutable records. They provide proof for closed milestones, but they do not override the canonical source-of-truth docs above.
+
+## Current Baseline
+
+- M0 through M4.5 are closed as migration, build-control, Govern Lite, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
+- M5 enterprise readiness is active. M5.0 through M5.3 planning and M5.2 authority slices through M5.2g-a are present on main.
+- M5.2g-a created the `delivery_work_items` authority table with RLS enabled and no policies. This is fail-closed readiness only; it is not tenant-isolation proof or hosted Delivery runtime readiness.
+- M5.3 is an RLS policy design and test plan. RLS implementation, tenant-isolation tests, and policy proof require a later approved milestone.
+- Avala Govern Lite and Avala Delivery Lite remain canonical scoped module names. "Lite" means governed, intentionally bounded surfaces; it is not stale prototype branding.
+- KlarityFlow Health remains a separate proof vertical and must not be merged into core platform scope without explicit approval.
 
 ## Platform Modules
 
@@ -81,7 +95,7 @@ Authored Edge Function source:
 - `supabase/functions/export-document`
 - `supabase/functions/export-decision-pack`
 
-These functions still need Supabase deployment, environment secrets, and private storage buckets before they can be used in a live pilot.
+These functions still need Supabase deployment, environment secrets, private storage buckets, RLS policy implementation, and tenant-isolation proof before they can be used in a live pilot.
 
 ## Repository Direction
 

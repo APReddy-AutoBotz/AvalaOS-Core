@@ -1,11 +1,36 @@
 # Task Ledger
 
+This ledger records the current canonical milestone status. Evidence links are historical records unless the Decision column says they are active blockers.
+
 | Milestone | Task ID | Status | Owner | Files | Acceptance | Evidence Link | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | M0 | M0-001 | Complete | AP/Codex | Migration docs, package metadata, main branch | AvalaOS Core migration complete | `docs/08_MIGRATION_FROM_KLARITYPM.md` | Accepted |
-| M0.2 | M02-001 | In progress | Codex | `AGENTS.md`, `.agent/**`, `docs/**` | Build Control Pack created and verified | `docs/quality/m0.2-final-evidence-review.md` | Pending verification |
-| M1 | M1-001 | Planned | AP/Codex | Govern Lite approved files | Govern Lite hardening complete | TBD | Pending |
-| M2 | M2-001 | Planned | AP/Codex | Delivery Lite approved files | Governed delivery pack complete | TBD | Pending |
-| M3 | M3-001 | Planned | AP/Codex | Server-side AI/BYOK approved files | AI/BYOK hardening complete | TBD | Pending |
-| M4 | M4-001 | Planned | AP/Codex | Demo approved files | Demo readiness complete | TBD | Pending |
-| M5 | M5-001 | Planned | AP/Codex | Health proof docs only unless approved | Health proof pack complete | TBD | Pending |
+| M0.2 | M02-001 | Complete | Codex | `AGENTS.md`, `.agent/**`, `docs/**` | Build Control Pack created and verified | `docs/quality/m0.2-final-evidence-review.md`; `docs/quality/m0.2-post-merge-verification.md` | Accepted |
+| M1 | M1-001 | Complete | AP/Codex | Govern Lite approved files | Govern Lite hardening complete | `docs/quality/m1-final-evidence-review.md`; `docs/quality/m1-post-merge-verification.md` | Accepted |
+| M2 | M2-001 | Complete | AP/Codex | Delivery Lite approved files | Governed delivery pack complete | `docs/quality/m2-final-evidence-review.md`; `docs/quality/m2-post-merge-verification.md`; `docs/quality/m2.1-post-merge-verification.md`; `docs/quality/m2.2-post-merge-verification.md` | Accepted |
+| M3 | M3-001 | Complete | AP/Codex | Server-side AI/BYOK approved files | AI/BYOK hardening complete | `docs/quality/m3.0-post-merge-verification.md`; `docs/quality/m3.1a-post-merge-verification.md`; `docs/quality/m3.2ab-provider-governance-deployment-closure-post-merge-verification.md` | Accepted |
+| M4 | M4-001 | Complete | AP/Codex | Buyer-demo approved files | Buyer-demo readiness complete | `docs/quality/m4.5-buyer-demo-rc-closure-m5-readiness-gate-post-merge-verification.md` | Accepted |
+| M5.0 | M50-001 | Complete | AP/Codex | Enterprise Supabase readiness planning docs | Enterprise Supabase readiness baseline accepted | `docs/quality/m5.0-enterprise-supabase-readiness-evidence.md`; `docs/quality/m5.0-enterprise-supabase-readiness-post-merge-verification.md` | Accepted as planning/readiness |
+| M5.1 | M51-001 | Complete | AP/Codex | Environment and secret hygiene docs/config scope | Secret hygiene evidence accepted | `docs/quality/m5.1-environment-config-secret-hygiene-evidence.md`; `docs/quality/m5.1-environment-config-secret-hygiene-post-merge-verification.md` | Accepted |
+| M5.2 | M52-001 | Complete | AP/Codex | Auth/org/workspace schema planning docs | Auth, organization, and workspace schema plan accepted | `docs/quality/m5.2-supabase-auth-organization-workspace-schema-plan-evidence.md`; `docs/quality/m5.2-supabase-auth-organization-workspace-schema-plan-post-merge-verification.md` | Accepted as plan |
+| M5.2a | M52A-001 | Complete | AP/Codex | Supabase auth/org/workspace migration evidence | Authority migration evidence accepted | `docs/quality/m5.2a-supabase-auth-org-workspace-schema-migration-evidence.md`; `docs/quality/m5.2a-supabase-auth-org-workspace-schema-migration-post-merge-verification.md` | Accepted |
+| M5.2b | M52B-001 | Complete | AP/Codex | Artifact ownership planning docs | Artifact ownership plan accepted | `docs/quality/m5.2b-artifact-ownership-columns-migration-plan-evidence.md`; `docs/quality/m5.2b-artifact-ownership-columns-migration-plan-post-merge-verification.md` | Accepted as plan |
+| M5.2c | M52C-001 | Complete | AP/Codex | Assess/Govern ownership migration evidence | Assess/Govern ownership migration accepted | `docs/quality/m5.2c-assess-govern-ownership-columns-migration-evidence.md`; `docs/quality/m5.2c-assess-govern-ownership-columns-migration-post-merge-verification.md` | Accepted |
+| M5.2d | M52D-001 | Complete | AP/Codex | Studio/docs ownership planning docs | Studio/docs ownership plan accepted | `docs/quality/m5.2d-studio-docs-ownership-columns-migration-plan-evidence.md`; `docs/quality/m5.2d-studio-docs-ownership-columns-migration-plan-post-merge-verification.md` | Accepted as plan |
+| M5.2d-a | M52DA-001 | Complete | AP/Codex | Studio/docs ownership migration evidence | Studio/docs ownership migration accepted | `docs/quality/m5.2d-a-studio-docs-ownership-migration-evidence.md`; `docs/quality/m5.2d-a-studio-docs-ownership-migration-post-merge-verification.md` | Accepted |
+| M5.2e | M52E-001 | Complete | AP/Codex | Delivery ownership planning docs | Delivery ownership plan accepted | `docs/quality/m5.2e-delivery-ownership-columns-migration-plan-evidence.md`; `docs/quality/m5.2e-delivery-ownership-columns-migration-plan-post-merge-verification.md` | Accepted as plan |
+| M5.2f | M52F-001 | Complete | AP/Codex | Project authority migration evidence | Project authority migration accepted | `docs/quality/m5.2f-project-authority-migration-evidence.md`; `docs/quality/m5.2f-project-authority-migration-post-merge-verification.md` | Accepted |
+| M5.2g | M52G-001 | Complete | AP/Codex | Delivery work item ownership planning docs | Delivery work item ownership migration plan accepted | `docs/quality/m5.2g-delivery-work-item-ownership-migration-planning-evidence.md`; `docs/quality/m5.2g-delivery-work-item-ownership-migration-plan-post-merge-verification.md` | Accepted as plan |
+| M5.2g-a | M52GA-001 | Complete as authority groundwork | AP/Codex | Delivery work item authority migration evidence | `delivery_work_items` authority table exists with RLS enabled and no policies; no runtime adapter promotion | `docs/quality/m5.2g-a-delivery-work-item-authority-migration-evidence.md`; `docs/quality/m5.2g-a-delivery-work-item-authority-migration-post-merge-verification.md` | Accepted as fail-closed authority readiness; not tenant-isolation proof |
+| M5.3 | M53-001 | Complete as plan | AP/Codex | RLS policy design and test-plan docs | RLS design/test plan accepted; no policy implementation implied | `docs/quality/m5.3-rls-policy-design-test-plan-evidence.md`; `docs/quality/m5.3-rls-policy-design-test-plan-post-merge-verification.md` | Accepted as plan |
+| Docs Audit | DOCS-001 | Complete | AP/Codex | Documentation audit docs | Docs consistency audit and post-merge verification accepted | `docs/quality/docs-consistency-audit.md`; `docs/quality/docs-consistency-audit-post-merge-verification.md` | Accepted |
+| SOT Cleanup | DOCS-002 | In progress | Codex | Canonical docs and planning/quality docs | Source-of-truth cleanup after docs audit | `docs/quality/source-of-truth-cleanup-after-docs-consistency-audit-evidence.md` | Pending PR review |
+| M5.3a | M53A-001 | Planned | AP/Codex | RLS policy implementation and tests | Tenant-isolation policies and tests implemented and verified | Not created | Requires explicit approval |
+| M5.4-M5.6 | M54-56-001 | Planned | AP/Codex | Audit, export, deployment, runbook readiness | Enterprise pilot readiness evidence complete | Not created | Requires explicit approval |
+
+## Active Decision Notes
+
+- M5.2g-a is not accepted as tenant-isolation proof. It is authority-table readiness with fail-closed RLS.
+- M5.3 is not RLS implementation. It is the accepted design/test plan for a later implementation milestone.
+- KlarityFlow Health is not an active AvalaOS Core milestone in this ledger.
+- TBD evidence placeholders are intentionally removed; future work uses "Not created" until evidence exists.
