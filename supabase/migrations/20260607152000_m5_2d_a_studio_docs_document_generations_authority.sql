@@ -50,6 +50,10 @@ ALTER TABLE document_generations ALTER COLUMN status SET DEFAULT 'generated';
 ALTER TABLE document_generations ALTER COLUMN created_at SET DEFAULT NOW();
 ALTER TABLE document_generations ALTER COLUMN updated_at SET DEFAULT NOW();
 
+-- Remove only known legacy draft Docs policies so RLS remains fail-closed
+-- after this migration. M5.2d-a does not create replacement policies.
+DROP POLICY IF EXISTS "Users can see org docs" ON document_generations;
+DROP POLICY IF EXISTS "Users can modify org docs" ON document_generations;
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -126,6 +130,42 @@ BEGIN
                 )
             ) NOT VALID;
     END IF;
+END $$;
+
+DO $$
+DECLARE
+    legacy_constraint_name TEXT;
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'document_generations_project_id_fkey'
+          AND conrelid = 'document_generations'::regclass
+    ) THEN
+        ALTER TABLE document_generations
+            DROP CONSTRAINT document_generations_project_id_fkey;
+    END IF;
+
+    FOREACH legacy_constraint_name IN ARRAY ARRAY[
+        'document_generations_org_id_fkey',
+        'document_generations_workspace_org_fkey',
+        'document_generations_project_org_fkey',
+        'document_generations_source_process_org_fkey',
+        'document_generations_source_assessment_org_fkey'
+    ] LOOP
+        IF EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = legacy_constraint_name
+              AND conrelid = 'document_generations'::regclass
+              AND confdeltype = 'c'
+        ) THEN
+            EXECUTE format(
+                'ALTER TABLE document_generations DROP CONSTRAINT %I',
+                legacy_constraint_name
+            );
+        END IF;
+    END LOOP;
 END $$;
 
 DO $$
