@@ -41,6 +41,17 @@ AvalaOS Core must support a complete governed lifecycle from assessment to monit
 - Manage organization profile, users, modules, provider settings, key references, audit, and security settings.
 - Do not reintroduce browser-stored provider keys for production or pilot behavior.
 
+## Module Naming Boundary
+
+Avala Govern Lite and Avala Delivery Lite remain canonical names for the current baseline. "Lite" indicates intentionally bounded governance and delivery scope. It does not mean obsolete branding, and it must not be removed through docs cleanup unless a later approved product milestone changes the module scope.
+
+## Enterprise Readiness Requirements
+
+- M5 authority, ownership, RLS, audit, export, and deployment readiness must be tracked as evidence-backed milestones.
+- M5.2 authority migrations and ownership columns are prerequisites for future tenant-isolation policy work, not proof that tenant isolation is complete.
+- M5.3 is the RLS policy design and test plan. Implementation and policy evidence require a later approved milestone.
+- KlarityFlow Health remains outside core AvalaOS scope unless explicitly approved as separate Health work.
+
 ## Acceptance Requirements
 
 - UI uses AvalaOS Core and Avala module names.

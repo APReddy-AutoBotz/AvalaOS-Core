@@ -21,6 +21,17 @@ Deterministic scoring is the authority for scores, gates, risk tiers, recommenda
 
 Pilot and production AI calls must run server-side through Supabase Edge Functions or equivalent backend services. Browser-side AI provider execution and raw browser-stored provider keys are not acceptable for real customer data.
 
+## Enterprise Persistence Baseline
+
+The M5 enterprise-readiness track is building toward Supabase-backed tenant isolation and deployment readiness. Current accepted architecture state:
+
+- Supabase schema contracts, adapters, and Edge Function source files are authored.
+- M5.2 authority slices have added organization/workspace context and ownership groundwork across core domains.
+- M5.2f established project authority, and M5.2g-a established the `delivery_work_items` authority table.
+- The M5.2g-a `delivery_work_items` table has RLS enabled with no policies. This is fail-closed readiness only and must not be represented as tenant-isolation proof.
+- Delivery runtime adapters still require an approved migration path before hosted Delivery runtime behavior can depend on the new `delivery_work_items` authority table.
+- M5.3 is a policy design and test plan. RLS policy implementation and isolation tests remain future milestone work.
+
 ## Governance Boundary
 
 Avala Govern Lite is a lightweight model and card derived from existing assessment/process data. It does not execute agents, monitor live runtime behavior, or add MCP/A2A controls in this phase.
