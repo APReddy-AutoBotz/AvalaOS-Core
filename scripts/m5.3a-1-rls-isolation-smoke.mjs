@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -75,8 +75,8 @@ const sqlForbiddenPatterns = [
     regex: /\bCREATE\s+TABLE\b/i,
   },
   {
-    id: 'durable-seed-insert',
-    regex: /\bINSERT\s+INTO\s+(?:profiles|organizations|workspaces|roles|organization_members|workspace_memberships)\b/i,
+    id: 'durable-transaction-commit',
+    regex: /(?:^|;)\s*COMMIT\b/im,
   },
   {
     id: 'artifact-policy-scope',
