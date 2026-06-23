@@ -36,7 +36,8 @@ VALUES
     ('role_workspace_a', gen_random_uuid()),
     ('role_workspace_b', gen_random_uuid()),
     ('role_org_b', gen_random_uuid()),
-    ('role_system', gen_random_uuid());
+    ('role_system', gen_random_uuid()),
+    ('role_workspace_system_flag', gen_random_uuid());
 
 CREATE TEMP TABLE m5_3a_1_metadata_checks (
     check_id TEXT PRIMARY KEY,
@@ -98,6 +99,32 @@ VALUES
           AND p.provolatile = 's'
           AND p.prosecdef = TRUE
     ), 'workspace-helper-hardening-mismatch'),
+    ('org_helper_search_path_hardened', EXISTS (
+        SELECT 1
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'is_active_org_member'
+          AND COALESCE(p.proconfig @> ARRAY['search_path=pg_catalog']::TEXT[], FALSE)
+    ), 'org-helper-search-path-mismatch'),
+    ('workspace_helper_search_path_hardened', EXISTS (
+        SELECT 1
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'is_active_workspace_member'
+          AND COALESCE(p.proconfig @> ARRAY['search_path=pg_catalog']::TEXT[], FALSE)
+    ), 'workspace-helper-search-path-mismatch'),
+    ('public_helper_execute_denied', NOT EXISTS (
+        SELECT 1
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) AS acl
+        WHERE n.nspname = 'public'
+          AND p.proname IN ('is_active_org_member', 'is_active_workspace_member')
+          AND acl.grantee = 0
+          AND acl.privilege_type = 'EXECUTE'
+    ), 'public-helper-execute-leak'),
     ('authenticated_helper_execute', EXISTS (
         SELECT 1
         FROM pg_roles r
@@ -190,7 +217,8 @@ VALUES
     ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_workspace_a'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'org_a'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'workspace_a'), 'M5.3a-1 Workspace A Role', 'm5-3a-1-workspace-a-role', 'workspace', '[]'::jsonb, 'active', false, NOW(), NOW()),
     ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_workspace_b'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'org_a'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'workspace_b'), 'M5.3a-1 Workspace B Role', 'm5-3a-1-workspace-b-role', 'workspace', '[]'::jsonb, 'active', false, NOW(), NOW()),
     ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_org_b'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'org_b'), NULL, 'M5.3a-1 Org B Role', 'm5-3a-1-org-b-role', 'organization', '[]'::jsonb, 'active', false, NOW(), NOW()),
-    ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system'), NULL, NULL, 'M5.3a-1 System Role', 'm5-3a-1-system-role', 'system', '[]'::jsonb, 'active', true, NOW(), NOW());
+    ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system'), NULL, NULL, 'M5.3a-1 System Role', 'm5-3a-1-system-role', 'system', '[]'::jsonb, 'active', true, NOW(), NOW()),
+    ((SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_workspace_system_flag'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'org_a'), (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'workspace_a'), 'M5.3a-1 Workspace System Flag Role', 'm5-3a-1-workspace-system-flag-role', 'workspace', '[]'::jsonb, 'active', true, NOW(), NOW());
 
 INSERT INTO public.organization_members (org_id, user_id, role_id, status, joined_at, created_at, updated_at)
 VALUES
@@ -334,8 +362,14 @@ SELECT
     'system_role_visibility_denied',
     'negative',
     'denied',
-    CASE WHEN (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system')) = 0 THEN 'passed' ELSE 'failed' END,
-    CASE WHEN (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system')) = 0 THEN 'system-role-denied' ELSE 'system-role-leak' END;
+    CASE WHEN (
+        (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system'))
+        + (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_workspace_system_flag'))
+    ) = 0 THEN 'passed' ELSE 'failed' END,
+    CASE WHEN (
+        (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_system'))
+        + (SELECT COUNT(*) FROM public.roles WHERE id = (SELECT local_id FROM m5_3a_1_fixture_ids WHERE actor_label = 'role_workspace_system_flag'))
+    ) = 0 THEN 'system-role-and-flag-denied' ELSE 'system-role-flag-leak' END;
 
 INSERT INTO m5_3a_1_scenario_results
 SELECT

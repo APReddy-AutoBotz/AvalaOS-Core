@@ -26,7 +26,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public, auth
+SET search_path = pg_catalog
 AS $$
     SELECT EXISTS (
         SELECT 1
@@ -49,7 +49,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public, auth
+SET search_path = pg_catalog
 AS $$
     SELECT EXISTS (
         SELECT 1
@@ -169,6 +169,7 @@ CREATE POLICY m5_3a_1_roles_select_scoped_active_member
     USING (
         status = 'active'
         AND deleted_at IS NULL
+        AND is_system = false
         AND (
             (
                 scope = 'organization'
@@ -190,4 +191,4 @@ COMMENT ON POLICY m5_3a_1_organization_members_select_own_active ON public.organ
 COMMENT ON POLICY m5_3a_1_workspace_memberships_select_own_active ON public.workspace_memberships IS 'M5.3a-1 SELECT-only policy. Own active non-deleted workspace membership only; parent organization and workspace must be active.';
 COMMENT ON POLICY m5_3a_1_organizations_select_active_member ON public.organizations IS 'M5.3a-1 SELECT-only policy. Organization metadata is readable only through active organization membership.';
 COMMENT ON POLICY m5_3a_1_workspaces_select_active_member ON public.workspaces IS 'M5.3a-1 SELECT-only policy. Workspace metadata is readable only through active workspace membership.';
-COMMENT ON POLICY m5_3a_1_roles_select_scoped_active_member ON public.roles IS 'M5.3a-1 SELECT-only policy. Active organization and workspace roles are scoped by active membership. System role visibility remains AP-deferred.';
+COMMENT ON POLICY m5_3a_1_roles_select_scoped_active_member ON public.roles IS 'M5.3a-1 SELECT-only policy. Active non-system organization and workspace roles are scoped by active membership. System role visibility remains AP-deferred.';
