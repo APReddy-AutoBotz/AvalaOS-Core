@@ -70,6 +70,8 @@ const contractForbiddenPatterns = [
   },
 ];
 
+const executableDbAssertionsImplemented = false;
+
 const parseArgs = (argv) => {
   const result = { localTarget: null, help: false };
 
@@ -174,10 +176,12 @@ if (!localTargetAccepted) {
   failureClassifications.push('local-target-proof-missing');
 }
 
+if (!executableDbAssertionsImplemented) {
+  failureClassifications.push('local-db-execution-not-implemented');
+}
+
 const uniqueFailureClassifications = [...new Set(failureClassifications)];
-const blockedCount = localTargetAccepted && uniqueFailureClassifications.length === 0
-  ? contract.scenarioCount
-  : contract.scenarioCount;
+const blockedCount = contract.scenarioCount;
 const status = uniqueFailureClassifications.length === 0
   ? 'contract-ready-local-target-accepted'
   : 'failed-closed';
