@@ -91,6 +91,66 @@ const sqlForbiddenPatterns = [
     id: 'secret-looking-sql-literal',
     regex: /https?:\/\/|postgres(?:ql)?:\/\/|\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b|\b(?:Bearer|bearer)\s+[A-Za-z0-9._~+/=-]{16,}/i,
   },
+  {
+    id: 'session-authorization',
+    regex: /\bSET\s+SESSION\s+AUTHORIZATION\b/i,
+  },
+  {
+    id: 'mutation-update',
+    regex: /\bUPDATE\b/i,
+  },
+  {
+    id: 'mutation-delete',
+    regex: /\bDELETE\b/i,
+  },
+  {
+    id: 'mutation-truncate',
+    regex: /\bTRUNCATE\b/i,
+  },
+  {
+    id: 'mutation-copy',
+    regex: /\bCOPY\b/i,
+  },
+  {
+    id: 'procedural-do-block',
+    regex: /^\s*DO\b/im,
+  },
+  {
+    id: 'procedural-call',
+    regex: /^\s*CALL\b/im,
+  },
+  {
+    id: 'durable-schema-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+SCHEMA\b/i,
+  },
+  {
+    id: 'durable-view-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+(?:MATERIALIZED\s+)?VIEW\b/i,
+  },
+  {
+    id: 'durable-trigger-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+TRIGGER\b/i,
+  },
+  {
+    id: 'durable-procedure-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+(?:OR\s+REPLACE\s+)?PROCEDURE\b/i,
+  },
+  {
+    id: 'durable-role-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+ROLE\b/i,
+  },
+  {
+    id: 'durable-user-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+USER\b/i,
+  },
+  {
+    id: 'durable-database-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+DATABASE\b/i,
+  },
+  {
+    id: 'durable-index-ddl',
+    regex: /\b(?:CREATE|ALTER|DROP)\s+(?:UNIQUE\s+)?INDEX\b/i,
+  },
 ];
 
 const outputForbiddenPatterns = [
@@ -179,6 +239,17 @@ const isAllowedTempGrant = (statement) => {
     || /^GRANT INSERT, SELECT ON TABLE m5_3a_2_scenario_results TO authenticated$/i.test(normalized);
 };
 
+const isAllowedRoleStatement = (statement) => {
+  const normalized = normalizeSqlStatement(statement);
+  return /^SET LOCAL ROLE authenticated$/i.test(normalized)
+    || /^RESET ROLE$/i.test(normalized);
+};
+
+const hasRoleOrSessionStatement = (statement) => /\b(?:SET(?:\s+LOCAL)?\s+ROLE|RESET\s+ROLE|SET\s+SESSION\s+AUTHORIZATION)\b/i.test(statement);
+
+const hasServiceRoleBehavior = (statement) => /\b(?:service[_-]?role|service\s+role)\b/i.test(statement)
+  && /\b(?:SET(?:\s+LOCAL)?\s+ROLE|SET\s+SESSION\s+AUTHORIZATION|GRANT|REVOKE|CREATE\s+ROLE|ALTER\s+ROLE|DROP\s+ROLE|CREATE\s+USER|ALTER\s+USER|DROP\s+USER)\b/i.test(statement);
+
 const validateSqlFile = (sqlPath) => {
   const failures = [];
   if (!fs.existsSync(sqlPath)) {
@@ -202,6 +273,20 @@ const validateSqlFile = (sqlPath) => {
   for (const pattern of sqlForbiddenPatterns) {
     if (pattern.regex.test(executableSql)) {
       failures.push(pattern.id);
+    }
+  }
+
+  for (const statement of splitSqlStatements(executableSql)) {
+    if (hasRoleOrSessionStatement(statement) && !isAllowedRoleStatement(statement)) {
+      failures.push('unsafe-role-or-session-statement');
+      break;
+    }
+  }
+
+  for (const statement of splitSqlStatements(executableSql)) {
+    if (hasServiceRoleBehavior(statement)) {
+      failures.push('service-role-sql-behavior');
+      break;
     }
   }
 
