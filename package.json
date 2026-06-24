@@ -33,7 +33,8 @@
     "test:supabase:delivery-roles": "node scripts/supabaseDeliveryRoleSmoke.mjs",
     "test:rls:assess": "node scripts/applySupabaseMigrations.mjs docs/schema/rls_regression_assess_handoff.sql",
     "db:migrate": "node scripts/applySupabaseMigrations.mjs",
-    "test:rls:m5.3a-1": "node scripts/m5.3a-1-rls-isolation-smoke.mjs"
+    "test:rls:m5.3a-1": "node scripts/m5.3a-1-rls-isolation-smoke.mjs",
+    "test:rls:m5.3a-2": "node scripts/m5.3a-2-artifact-isolation-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
