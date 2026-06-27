@@ -33,6 +33,7 @@ const allowedClassifications = new Set([
   'local-file-permission-blocked',
   'resource-limit-or-disk-blocked',
   'supabase-service-start-timeout',
+  'local-startup-timeout-with-oversized-output',
   'unknown-local-startup-failure',
   'classification-output-safety-failed',
 ]);
@@ -140,6 +141,7 @@ const classificationFamilies = {
   'local-file-permission-blocked': 'permission',
   'resource-limit-or-disk-blocked': 'resource',
   'supabase-service-start-timeout': 'health',
+  'local-startup-timeout-with-oversized-output': 'unknown',
   'unknown-local-startup-failure': 'unknown',
   'classification-output-safety-failed': 'unknown',
 };
@@ -500,6 +502,34 @@ const safetyBlockReasonFor = (signal) => {
   return 'none';
 };
 
+const isRedactedTimeoutOversizedSignal = (signal) => (
+  signal.outputSafetyResult === 'passed'
+  && signal.scratchCleanupResult === 'removed'
+  && signal.noSecretsConfirmation === 'passed'
+  && signal.noLocalPathConfirmation === 'passed'
+  && signal.noRawLogConfirmation === 'passed'
+  && signal.exitResultClass === 'timeout'
+  && signal.timeoutFlag === true
+  && signal.lineCountBucket === 'oversized'
+  && signal.safetyBlockReasonCategory === 'output-too-large'
+);
+
+const classifyFromRedactedSignal = ({ classification, confidence, signal }) => {
+  if (classification !== 'unknown-local-startup-failure') {
+    return { classification, confidence };
+  }
+
+  // Category-only refinement from sanitized fields; this does not infer root cause.
+  if (!isRedactedTimeoutOversizedSignal(signal)) {
+    return { classification, confidence };
+  }
+
+  return {
+    classification: 'local-startup-timeout-with-oversized-output',
+    confidence: 'low',
+  };
+};
+
 const buildRedactedSignal = ({
   startupAttempt,
   classification,
@@ -661,18 +691,6 @@ function emitResult({
     ? classification
     : 'classification-output-safety-failed';
 
-  const baseLines = [
-    `startup attempt: ${startupAttempt}`,
-    `classification: ${safeClassification}`,
-    `confidence: ${confidence}`,
-    `output safety: ${outputSafety}`,
-    `scratch cleanup: ${scratchCleanup}`,
-    'root cause inferred: no, only sanitized failure category reported',
-    'local DB availability: unresolved',
-    'schema availability: not proven',
-    'artifact SELECT isolation: not verified',
-    'tenant isolation: not newly verified',
-  ];
 
   const failClosedLines = [
     `startup attempt: ${startupAttempt}`,
@@ -692,7 +710,7 @@ function emitResult({
     process.exit(2);
   }
 
-  const signal = buildRedactedSignal({
+  const initialSignal = buildRedactedSignal({
     startupAttempt,
     classification: safeClassification,
     confidence,
@@ -701,6 +719,36 @@ function emitResult({
     rawOutput,
     startResult,
   });
+  const redactedClassification = classifyFromRedactedSignal({
+    classification: safeClassification,
+    confidence,
+    signal: initialSignal,
+  });
+  const signal = redactedClassification.classification === safeClassification
+    && redactedClassification.confidence === confidence
+    ? initialSignal
+    : buildRedactedSignal({
+      startupAttempt,
+      classification: redactedClassification.classification,
+      confidence: redactedClassification.confidence,
+      outputSafety,
+      scratchCleanup,
+      rawOutput,
+      startResult,
+    });
+
+  const baseLines = [
+    `startup attempt: ${startupAttempt}`,
+    `classification: ${redactedClassification.classification}`,
+    `confidence: ${redactedClassification.confidence}`,
+    `output safety: ${outputSafety}`,
+    `scratch cleanup: ${scratchCleanup}`,
+    'root cause inferred: no, only sanitized failure category reported',
+    'local DB availability: unresolved',
+    'schema availability: not proven',
+    'artifact SELECT isolation: not verified',
+    'tenant isolation: not newly verified',
+  ];
 
   const signalLines = validateRedactedSignal(signal) ? renderSignalLines(signal) : [];
   const lines = signalLines.length > 0 ? [...baseLines, ...signalLines] : failClosedLines;
