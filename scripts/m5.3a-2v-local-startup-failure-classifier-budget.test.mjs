@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  SAFE_OUTPUT_BYTE_BUDGET,
   SAFE_OUTPUT_LINE_BUDGET,
   buildBoundedStartupCapture,
   classifyBoundedOutput,
@@ -14,6 +15,10 @@ const repeatedSafeLines = (count) => Array.from(
   { length: count },
   () => 'safe-output-line',
 ).join('\n');
+
+const repeatedSafeTextBytes = (byteBudget) => 'safe-output-line'.repeat(
+  Math.ceil((byteBudget + 1) / 'safe-output-line'.length),
+);
 
 const createSyntheticResult = ({ output, startResult, outputSafety = 'passed', scratchCleanup = 'removed' }) => {
   const capture = buildBoundedStartupCapture([output]);
@@ -49,6 +54,25 @@ assert.ok(timeoutOversized.lines.includes('artifact SELECT isolation: not verifi
 assert.ok(timeoutOversized.lines.includes('tenant isolation: not newly verified'));
 assert.ok(!timeoutOversized.lines.some((line) => line.includes('safe-output-line')));
 
+const byteOnlyOversizedOutput = repeatedSafeTextBytes(SAFE_OUTPUT_BYTE_BUDGET);
+const timeoutByteOnlyOversized = createSyntheticResult({
+  output: byteOnlyOversizedOutput,
+  startResult: timeoutResult,
+});
+
+assert.equal(timeoutByteOnlyOversized.classification, 'local-startup-timeout-with-oversized-output');
+assert.equal(timeoutByteOnlyOversized.signal.confidence, 'low');
+assert.equal(timeoutByteOnlyOversized.signal.timeoutFlag, true);
+assert.equal(timeoutByteOnlyOversized.signal.outputSizeBucket, 'oversized');
+assert.notEqual(timeoutByteOnlyOversized.signal.lineCountBucket, 'oversized');
+assert.equal(timeoutByteOnlyOversized.signal.safetyBlockReasonCategory, 'output-too-large');
+assert.ok(timeoutByteOnlyOversized.lines.includes('root cause inferred: no, only sanitized failure category reported'));
+assert.ok(timeoutByteOnlyOversized.lines.includes('local DB availability: unresolved'));
+assert.ok(timeoutByteOnlyOversized.lines.includes('schema availability: not proven'));
+assert.ok(timeoutByteOnlyOversized.lines.includes('artifact SELECT isolation: not verified'));
+assert.ok(timeoutByteOnlyOversized.lines.includes('tenant isolation: not newly verified'));
+assert.ok(!timeoutByteOnlyOversized.lines.some((line) => line.includes('safe-output-line')));
+
 const nonTimeoutOversized = createSyntheticResult({
   output: oversizedOutput,
   startResult: nonzeroResult,
@@ -59,6 +83,18 @@ assert.equal(nonTimeoutOversized.signal.timeoutFlag, false);
 assert.equal(nonTimeoutOversized.signal.lineCountBucket, 'oversized');
 assert.equal(nonTimeoutOversized.signal.safetyBlockReasonCategory, 'output-too-large');
 assert.ok(!nonTimeoutOversized.lines.some((line) => line.includes('safe-output-line')));
+
+const nonTimeoutByteOnlyOversized = createSyntheticResult({
+  output: byteOnlyOversizedOutput,
+  startResult: nonzeroResult,
+});
+
+assert.equal(nonTimeoutByteOnlyOversized.classification, 'unknown-local-startup-failure');
+assert.equal(nonTimeoutByteOnlyOversized.signal.timeoutFlag, false);
+assert.equal(nonTimeoutByteOnlyOversized.signal.outputSizeBucket, 'oversized');
+assert.notEqual(nonTimeoutByteOnlyOversized.signal.lineCountBucket, 'oversized');
+assert.equal(nonTimeoutByteOnlyOversized.signal.safetyBlockReasonCategory, 'output-too-large');
+assert.ok(!nonTimeoutByteOnlyOversized.lines.some((line) => line.includes('safe-output-line')));
 
 const knownSafeOutput = createSyntheticResult({
   output: 'docker daemon is not running',

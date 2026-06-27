@@ -560,8 +560,11 @@ const isRedactedTimeoutOversizedSignal = (signal) => (
   && signal.noRawLogConfirmation === 'passed'
   && signal.exitResultClass === 'timeout'
   && signal.timeoutFlag === true
-  && signal.lineCountBucket === 'oversized'
   && signal.safetyBlockReasonCategory === 'output-too-large'
+  && (
+    signal.outputSizeBucket === 'oversized'
+    || signal.lineCountBucket === 'oversized'
+  )
 );
 
 const classifyFromRedactedSignal = ({ classification, confidence, signal }) => {
