@@ -2,12 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const scratchDir = path.join(repoRoot, '.agent', 'm5.3a-2k-local-stack-startup-classifier');
 const scratchFile = path.join(scratchDir, 'supabase-start.raw.log');
+
+const SAFE_OUTPUT_BYTE_BUDGET = 262144;
+const SAFE_OUTPUT_LINE_BUDGET = 500;
+const STARTUP_CAPTURE_MAX_BUFFER_BYTES = SAFE_OUTPUT_BYTE_BUDGET;
+const STARTUP_TIMEOUT_MS = 120000;
 
 const allowedArgs = new Set(['--classify', '--help']);
 const allowedClassifications = new Set([
@@ -403,7 +408,7 @@ const outputSizeBucketFor = (rawOutput) => {
   if (size === 0) return 'none';
   if (size <= 4096) return 'small';
   if (size <= 65536) return 'medium';
-  if (size <= 262144) return 'large';
+  if (size <= SAFE_OUTPUT_BYTE_BUDGET) return 'large';
   return 'oversized';
 };
 
@@ -414,8 +419,53 @@ const lineCountBucketFor = (rawOutput) => {
   if (lines === 0) return 'none';
   if (lines <= 25) return 'small';
   if (lines <= 100) return 'medium';
-  if (lines <= 500) return 'large';
+  if (lines <= SAFE_OUTPUT_LINE_BUDGET) return 'large';
   return 'oversized';
+};
+
+const outputBudgetStatusFor = (rawOutput) => {
+  if (typeof rawOutput !== 'string') {
+    return {
+      byteLength: 0,
+      lineCount: 0,
+      outputSizeBucket: 'unknown',
+      lineCountBucket: 'unknown',
+      outputBudgetPressure: false,
+    };
+  }
+
+  const byteLength = Buffer.byteLength(rawOutput, 'utf8');
+  const lineCount = rawOutput.length === 0
+    ? 0
+    : rawOutput.split(/\r?\n/).filter((line) => line.length > 0).length;
+
+  return {
+    byteLength,
+    lineCount,
+    outputSizeBucket: outputSizeBucketFor(rawOutput),
+    lineCountBucket: lineCountBucketFor(rawOutput),
+    outputBudgetPressure: byteLength > SAFE_OUTPUT_BYTE_BUDGET || lineCount > SAFE_OUTPUT_LINE_BUDGET,
+  };
+};
+
+const buildBoundedStartupCapture = (segments, { forceOutputBudgetPressure = false } = {}) => {
+  const rawOutput = segments
+    .filter((segment) => typeof segment === 'string' && segment.length > 0)
+    .join('\n');
+  const initialBudget = outputBudgetStatusFor(rawOutput);
+  const outputBudget = forceOutputBudgetPressure
+    ? {
+      ...initialBudget,
+      outputSizeBucket: 'oversized',
+      outputBudgetPressure: true,
+    }
+    : initialBudget;
+
+  return {
+    rawOutput: outputBudget.outputBudgetPressure ? '' : rawOutput,
+    scratchOutput: outputBudget.outputBudgetPressure ? 'redacted-output-budget-pressure\n' : rawOutput,
+    outputBudget,
+  };
 };
 
 const exitResultClassFor = (startResult) => {
@@ -510,8 +560,11 @@ const isRedactedTimeoutOversizedSignal = (signal) => (
   && signal.noRawLogConfirmation === 'passed'
   && signal.exitResultClass === 'timeout'
   && signal.timeoutFlag === true
-  && signal.lineCountBucket === 'oversized'
   && signal.safetyBlockReasonCategory === 'output-too-large'
+  && (
+    signal.outputSizeBucket === 'oversized'
+    || signal.lineCountBucket === 'oversized'
+  )
 );
 
 const classifyFromRedactedSignal = ({ classification, confidence, signal }) => {
@@ -538,6 +591,7 @@ const buildRedactedSignal = ({
   scratchCleanup,
   rawOutput = '',
   startResult = null,
+  outputBudget = null,
 }) => {
   const safeClassification = allowedClassifications.has(classification)
     ? classification
@@ -546,8 +600,8 @@ const buildRedactedSignal = ({
     startupAttemptStatus: startupAttempt === 'attempted' ? 'attempted' : 'not-attempted',
     exitResultClass: startupAttempt === 'attempted' ? exitResultClassFor(startResult) : 'unknown',
     commandPhaseClass: commandPhaseClassFor(safeClassification),
-    outputSizeBucket: outputSizeBucketFor(rawOutput),
-    lineCountBucket: lineCountBucketFor(rawOutput),
+    outputSizeBucket: outputBudget?.outputSizeBucket || outputSizeBucketFor(rawOutput),
+    lineCountBucket: outputBudget?.lineCountBucket || lineCountBucketFor(rawOutput),
     timeoutFlag: exitResultClassFor(startResult) === 'timeout',
     knownPatternFamilyCounts: countKnownPatternFamilies(rawOutput, safeClassification),
     sanitizedCategoryCandidates: matchedClassificationsFor(rawOutput, safeClassification),
@@ -673,12 +727,22 @@ const classifyRawOutput = (rawOutput, startResult) => {
     confidence: startResult.status === 0 ? 'low' : 'low',
   };
 };
+const classifyBoundedOutput = (capture, startResult) => {
+  if (capture?.outputBudget?.outputBudgetPressure) {
+    return {
+      classification: 'unknown-local-startup-failure',
+      confidence: 'low',
+    };
+  }
+
+  return classifyRawOutput(capture?.rawOutput || '', startResult);
+};
 
 const isOutputSafe = (lines) => lines.every((line) => (
   outputForbiddenPatterns.every((pattern) => !pattern.test(line))
 ));
 
-function emitResult({
+function createResult({
   startupAttempt,
   classification,
   confidence,
@@ -686,11 +750,11 @@ function emitResult({
   scratchCleanup = 'not-created',
   rawOutput = '',
   startResult = null,
+  outputBudget = null,
 }, preferredExitCode = 0) {
   const safeClassification = allowedClassifications.has(classification)
     ? classification
     : 'classification-output-safety-failed';
-
 
   const failClosedLines = [
     `startup attempt: ${startupAttempt}`,
@@ -706,8 +770,12 @@ function emitResult({
   ];
 
   if (scratchCleanup === 'failed') {
-    for (const line of failClosedLines) console.log(line);
-    process.exit(2);
+    return {
+      lines: failClosedLines,
+      exitCode: 2,
+      classification: 'classification-output-safety-failed',
+      outputIsSafe: false,
+    };
   }
 
   const initialSignal = buildRedactedSignal({
@@ -718,6 +786,7 @@ function emitResult({
     scratchCleanup,
     rawOutput,
     startResult,
+    outputBudget,
   });
   const redactedClassification = classifyFromRedactedSignal({
     classification: safeClassification,
@@ -735,6 +804,7 @@ function emitResult({
       scratchCleanup,
       rawOutput,
       startResult,
+      outputBudget,
     });
 
   const baseLines = [
@@ -755,84 +825,131 @@ function emitResult({
   const outputIsSafe = outputSafety === 'passed' && isOutputSafe(lines) && signalLines.length > 0;
 
   if (!outputIsSafe) {
-    for (const line of failClosedLines) console.log(line);
-    process.exit(2);
+    return {
+      lines: failClosedLines,
+      exitCode: 2,
+      classification: 'classification-output-safety-failed',
+      signal,
+      outputIsSafe: false,
+    };
   }
 
-  for (const line of lines) console.log(line);
-  process.exit(preferredExitCode);
+  return {
+    lines,
+    exitCode: preferredExitCode,
+    classification: redactedClassification.classification,
+    signal,
+    outputIsSafe: true,
+  };
 }
-const printHelp = () => {
-  console.log('Usage: node scripts/m5.3a-2k-local-stack-startup-failure-classifier.mjs --classify');
-  console.log('Output uses sanitized category values only.');
+
+function emitResult(options, preferredExitCode = 0) {
+  const result = createResult(options, preferredExitCode);
+  for (const line of result.lines) console.log(line);
+  process.exit(result.exitCode);
+}
+
+const writeScratchCapture = (capture) => {
+  fs.writeFileSync(scratchFile, capture.scratchOutput, 'utf8');
 };
 
-const args = parseArgs(process.argv.slice(2));
-
-if (args.help) {
-  printHelp();
-  process.exit(0);
+function printHelp() {
+  console.log('Usage: node scripts/m5.3a-2k-local-stack-startup-failure-classifier.mjs --classify');
+  console.log('Output uses sanitized category values only.');
 }
 
-if (!args.classify || args.unknownArgs.length > 0) {
-  emitResult({
-    startupAttempt: 'not-attempted',
-    classification: 'classification-output-safety-failed',
-    confidence: 'high',
-    outputSafety: 'failed',
-    scratchCleanup: removeScratch(),
-  }, 2);
-}
+function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
 
-const diagnosticResult = runDiagnostic();
-const precondition = preconditionClassification(diagnosticResult);
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
 
-if (precondition) {
-  emitResult({
-    startupAttempt: 'not-attempted',
-    classification: precondition.classification,
-    confidence: precondition.confidence,
-    scratchCleanup: removeScratch(),
-  }, precondition.classification === 'classification-output-safety-failed' ? 2 : 0);
-}
+  if (!args.classify || args.unknownArgs.length > 0) {
+    emitResult({
+      startupAttempt: 'not-attempted',
+      classification: 'classification-output-safety-failed',
+      confidence: 'high',
+      outputSafety: 'failed',
+      scratchCleanup: removeScratch(),
+    }, 2);
+  }
 
-let startResult;
-let rawOutput = '';
+  const diagnosticResult = runDiagnostic();
+  const precondition = preconditionClassification(diagnosticResult);
 
-try {
-  fs.rmSync(scratchDir, { recursive: true, force: true });
-  fs.mkdirSync(scratchDir, { recursive: true });
-  startResult = spawnSync('supabase', ['start'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    shell: false,
-    windowsHide: true,
-    timeout: 120000,
-  });
-  rawOutput = [
-    startResult.stdout || '',
-    startResult.stderr || '',
-    startResult.error?.code ? `error-code:${startResult.error.code}` : '',
-  ].join('\n');
-  fs.writeFileSync(scratchFile, rawOutput, 'utf8');
-} catch {
+  if (precondition) {
+    emitResult({
+      startupAttempt: 'not-attempted',
+      classification: precondition.classification,
+      confidence: precondition.confidence,
+      scratchCleanup: removeScratch(),
+    }, precondition.classification === 'classification-output-safety-failed' ? 2 : 0);
+  }
+
+  let startResult;
+  let capture = {
+    rawOutput: '',
+    scratchOutput: '',
+    outputBudget: outputBudgetStatusFor(''),
+  };
+
+  try {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+    fs.mkdirSync(scratchDir, { recursive: true });
+    startResult = spawnSync('supabase', ['start'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      timeout: STARTUP_TIMEOUT_MS,
+      maxBuffer: STARTUP_CAPTURE_MAX_BUFFER_BYTES,
+    });
+    capture = buildBoundedStartupCapture([
+      startResult.stdout || '',
+      startResult.stderr || '',
+      startResult.error?.code ? `error-code:${startResult.error.code}` : '',
+    ], { forceOutputBudgetPressure: startResult.error?.code === 'ENOBUFS' });
+    writeScratchCapture(capture);
+  } catch {
+    const cleanup = removeScratch();
+    emitResult({
+      startupAttempt: 'attempted',
+      classification: 'unknown-local-startup-failure',
+      confidence: 'low',
+      scratchCleanup: cleanup,
+    }, cleanup === 'failed' ? 2 : 0);
+  }
+
+  const classification = classifyBoundedOutput(capture, startResult);
   const cleanup = removeScratch();
+
   emitResult({
     startupAttempt: 'attempted',
-    classification: 'unknown-local-startup-failure',
-    confidence: 'low',
+    classification: classification.classification,
+    confidence: classification.confidence,
     scratchCleanup: cleanup,
+    rawOutput: capture.rawOutput,
+    outputBudget: capture.outputBudget,
+    startResult,
   }, cleanup === 'failed' ? 2 : 0);
 }
 
-const classification = classifyRawOutput(rawOutput, startResult);
-const cleanup = removeScratch();
+export {
+  SAFE_OUTPUT_BYTE_BUDGET,
+  SAFE_OUTPUT_LINE_BUDGET,
+  STARTUP_CAPTURE_MAX_BUFFER_BYTES,
+  buildBoundedStartupCapture,
+  buildRedactedSignal,
+  classifyBoundedOutput,
+  classifyFromRedactedSignal,
+  createResult,
+  outputBudgetStatusFor,
+  parseArgs,
+  validateRedactedSignal,
+};
 
-emitResult({
-  startupAttempt: 'attempted',
-  classification: classification.classification,
-  confidence: classification.confidence,
-  scratchCleanup: cleanup,
-  rawOutput,
-  startResult,
-}, cleanup === 'failed' ? 2 : 0);
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main();
+}
