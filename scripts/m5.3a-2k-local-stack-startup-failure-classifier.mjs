@@ -12,15 +12,27 @@ const scratchFile = path.join(scratchDir, 'supabase-start.raw.log');
 const allowedArgs = new Set(['--classify', '--help']);
 const allowedClassifications = new Set([
   'docker-command-unavailable',
+  'docker-context-unavailable',
   'docker-daemon-unavailable',
+  'docker-desktop-wsl-integration-blocked',
   'docker-permission-blocked',
+  'docker-credential-helper-blocked',
+  'docker-api-version-blocked',
   'supabase-cli-unavailable',
+  'supabase-cli-runtime-error',
   'local-config-missing',
   'local-config-invalid',
+  'local-port-conflict-suspected',
   'port-conflict-suspected',
   'image-pull-or-network-blocked',
+  'image-platform-or-architecture-blocked',
+  'compose-project-startup-blocked',
+  'container-healthcheck-timeout',
   'container-startup-blocked',
+  'local-volume-mount-blocked',
+  'local-file-permission-blocked',
   'resource-limit-or-disk-blocked',
+  'supabase-service-start-timeout',
   'unknown-local-startup-failure',
   'classification-output-safety-failed',
 ]);
@@ -63,6 +75,26 @@ const classifyPatterns = [
     ],
   },
   {
+    classification: 'docker-context-unavailable',
+    confidence: 'high',
+    patterns: [
+      /docker\s+context.*(?:not\s+found|does\s+not\s+exist|unavailable|invalid)/i,
+      /context\s+["']?[^"'\s]+["']?\s+(?:not\s+found|does\s+not\s+exist|unavailable|invalid)/i,
+      /current\s+docker\s+context.*(?:not\s+found|unavailable|invalid)/i,
+      /unable\s+to\s+resolve\s+docker\s+endpoint/i,
+    ],
+  },
+  {
+    classification: 'docker-desktop-wsl-integration-blocked',
+    confidence: 'medium',
+    patterns: [
+      /\bwsl\b.*(?:integration|distribution|distro).*(?:blocked|disabled|not\s+enabled|not\s+running|unavailable)/i,
+      /docker\s+desktop.*\bwsl\b.*(?:blocked|disabled|not\s+enabled|not\s+running|unavailable)/i,
+      /\bwsl\b.*docker.*(?:blocked|disabled|not\s+enabled|not\s+running|unavailable)/i,
+      /the\s+command\s+['"]?wsl(?:\.exe)?['"]?.*(?:failed|not\s+found|is\s+not\s+recognized)/i,
+    ],
+  },
+  {
     classification: 'docker-permission-blocked',
     confidence: 'high',
     patterns: [
@@ -70,6 +102,26 @@ const classifyPatterns = [
       /access\s+is\s+denied/i,
       /requires\s+elevated\s+privileges/i,
       /not\s+authorized/i,
+    ],
+  },
+  {
+    classification: 'docker-credential-helper-blocked',
+    confidence: 'medium',
+    patterns: [
+      /docker-credential-[a-z0-9_-]+/i,
+      /credential\s+(?:helper|store|manager).*(?:failed|error|not\s+found|unavailable|denied)/i,
+      /error\s+(?:saving|getting|retrieving)\s+credentials/i,
+      /credentials?.*(?:not\s+found|unavailable|denied|helper)/i,
+    ],
+  },
+  {
+    classification: 'docker-api-version-blocked',
+    confidence: 'medium',
+    patterns: [
+      /client\s+version.*server\s+version/i,
+      /api\s+version.*(?:too\s+new|too\s+old|unsupported|mismatch|not\s+supported)/i,
+      /docker\s+api.*(?:unsupported|mismatch|version)/i,
+      /server\s+api\s+version/i,
     ],
   },
   {
@@ -83,13 +135,36 @@ const classifyPatterns = [
     ],
   },
   {
-    classification: 'port-conflict-suspected',
+    classification: 'local-port-conflict-suspected',
     confidence: 'medium',
     patterns: [
       /address\s+already\s+in\s+use/i,
       /bind.*(?:failed|address)/i,
       /port.*(?:already\s+allocated|already\s+in\s+use|is\s+in\s+use)/i,
       /listen\s+tcp.*address/i,
+    ],
+  },
+  {
+    classification: 'local-volume-mount-blocked',
+    confidence: 'medium',
+    patterns: [
+      /(?:bind\s+)?mount.*(?:denied|failed|invalid|not\s+found|permission)/i,
+      /mounts?\s+denied/i,
+      /volume.*(?:failed|denied|permission|not\s+found|invalid)/i,
+      /file\s+sharing.*(?:disabled|not\s+enabled|denied)/i,
+      /drive.*(?:not\s+shared|sharing)/i,
+    ],
+  },
+  {
+    classification: 'local-file-permission-blocked',
+    confidence: 'medium',
+    patterns: [
+      /\beacces\b/i,
+      /\beperm\b/i,
+      /operation\s+not\s+permitted/i,
+      /permission\s+denied.*(?:file|directory|mkdir|open|read|write|unlink|rename)/i,
+      /access\s+is\s+denied.*(?:file|directory|mkdir|open|read|write|unlink|rename)/i,
+      /read-only\s+file\s+system/i,
     ],
   },
   {
@@ -107,6 +182,17 @@ const classifyPatterns = [
     ],
   },
   {
+    classification: 'image-platform-or-architecture-blocked',
+    confidence: 'medium',
+    patterns: [
+      /no\s+matching\s+manifest\s+for/i,
+      /platform.*(?:not\s+supported|unsupported|mismatch|no\s+match)/i,
+      /architecture.*(?:not\s+supported|unsupported|mismatch)/i,
+      /exec\s+format\s+error/i,
+      /image.*(?:platform|architecture).*(?:unsupported|mismatch|not\s+supported)/i,
+    ],
+  },
+  {
     classification: 'resource-limit-or-disk-blocked',
     confidence: 'medium',
     patterns: [
@@ -118,6 +204,37 @@ const classifyPatterns = [
     ],
   },
   {
+    classification: 'container-healthcheck-timeout',
+    confidence: 'medium',
+    patterns: [
+      /health\s*check.*(?:timeout|timed\s+out|failed|unhealthy)/i,
+      /healthcheck.*(?:timeout|timed\s+out|failed|unhealthy)/i,
+      /container.*(?:unhealthy|health.*failed)/i,
+      /timed\s+out\s+waiting.*(?:healthy|health)/i,
+    ],
+  },
+  {
+    classification: 'supabase-service-start-timeout',
+    confidence: 'medium',
+    patterns: [
+      /timed\s+out\s+waiting\s+for\s+(?:the\s+)?(?:supabase\s+)?(?:service|services|stack)/i,
+      /(?:supabase\s+)?(?:service|services|stack).*timed\s+out/i,
+      /waiting\s+for.*(?:service|services|stack).*(?:timeout|timed\s+out)/i,
+      /failed\s+to\s+start.*within.*timeout/i,
+    ],
+  },
+  {
+    classification: 'compose-project-startup-blocked',
+    confidence: 'medium',
+    patterns: [
+      /compose.*(?:project|service).*(?:failed|blocked|exited|unhealthy)/i,
+      /docker\s+compose.*(?:failed|error|exited)/i,
+      /dependency\s+failed\s+to\s+start/i,
+      /failed\s+to\s+create.*(?:container|service)/i,
+      /failed\s+to\s+recreate/i,
+    ],
+  },
+  {
     classification: 'container-startup-blocked',
     confidence: 'medium',
     patterns: [
@@ -125,6 +242,16 @@ const classifyPatterns = [
       /failed\s+to\s+start/i,
       /service.*(?:failed|unhealthy)/i,
       /healthcheck/i,
+    ],
+  },
+  {
+    classification: 'supabase-cli-runtime-error',
+    confidence: 'medium',
+    patterns: [
+      /supabase.*(?:panic|runtime\s+error|internal\s+error|unexpected\s+error)/i,
+      /fatal\s+error.*supabase/i,
+      /failed\s+to\s+run\s+supabase/i,
+      /supabase.*(?:exit\s+status|exited\s+with)/i,
     ],
   },
 ];
