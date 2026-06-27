@@ -53,6 +53,97 @@ const outputForbiddenPatterns = [
   /\b[0-9a-f]{12,64}\b/i,
 ];
 
+const signalFields = new Set([
+  'startupAttemptStatus',
+  'exitResultClass',
+  'commandPhaseClass',
+  'outputSizeBucket',
+  'lineCountBucket',
+  'timeoutFlag',
+  'knownPatternFamilyCounts',
+  'sanitizedCategoryCandidates',
+  'confidence',
+  'outputSafetyResult',
+  'scratchCleanupResult',
+  'safetyBlockReasonCategory',
+  'noSecretsConfirmation',
+  'noLocalPathConfirmation',
+  'noRawLogConfirmation',
+]);
+
+const signalEnums = {
+  startupAttemptStatus: new Set(['attempted', 'not-attempted']),
+  exitResultClass: new Set(['success', 'nonzero-exit', 'timeout', 'spawn-error', 'killed', 'unknown']),
+  commandPhaseClass: new Set([
+    'preflight',
+    'supabase-cli-invocation',
+    'image-resolution',
+    'image-pull',
+    'container-create',
+    'service-start',
+    'health-wait',
+    'cleanup',
+    'unknown',
+  ]),
+  outputSizeBucket: new Set(['none', 'small', 'medium', 'large', 'oversized', 'unknown']),
+  lineCountBucket: new Set(['none', 'small', 'medium', 'large', 'oversized', 'unknown']),
+  confidence: new Set(['high', 'medium', 'low']),
+  outputSafetyResult: new Set(['passed', 'failed']),
+  scratchCleanupResult: new Set(['removed', 'not-created', 'failed']),
+  safetyBlockReasonCategory: new Set([
+    'none',
+    'raw-output-unsafe',
+    'secret-like',
+    'local-path-like',
+    'target-like',
+    'container-image-id-like',
+    'raw-log-like',
+    'output-too-large',
+    'unknown',
+  ]),
+  noSecretsConfirmation: new Set(['passed', 'failed', 'unknown']),
+  noLocalPathConfirmation: new Set(['passed', 'failed', 'unknown']),
+  noRawLogConfirmation: new Set(['passed', 'failed', 'unknown']),
+};
+
+const patternFamilyLabels = [
+  'docker',
+  'supabase-cli',
+  'network',
+  'health',
+  'permission',
+  'config',
+  'resource',
+  'unknown',
+];
+
+const classificationFamilies = {
+  'docker-command-unavailable': 'docker',
+  'docker-context-unavailable': 'docker',
+  'docker-daemon-unavailable': 'docker',
+  'docker-desktop-wsl-integration-blocked': 'docker',
+  'docker-permission-blocked': 'permission',
+  'docker-credential-helper-blocked': 'docker',
+  'docker-api-version-blocked': 'docker',
+  'supabase-cli-unavailable': 'supabase-cli',
+  'supabase-cli-runtime-error': 'supabase-cli',
+  'local-config-missing': 'config',
+  'local-config-invalid': 'config',
+  'local-port-conflict-suspected': 'network',
+  'port-conflict-suspected': 'network',
+  'image-pull-or-network-blocked': 'network',
+  'image-platform-or-architecture-blocked': 'docker',
+  'compose-project-startup-blocked': 'docker',
+  'container-healthcheck-timeout': 'health',
+  'container-startup-blocked': 'docker',
+  'local-volume-mount-blocked': 'permission',
+  'local-file-permission-blocked': 'permission',
+  'resource-limit-or-disk-blocked': 'resource',
+  'supabase-service-start-timeout': 'health',
+  'unknown-local-startup-failure': 'unknown',
+  'classification-output-safety-failed': 'unknown',
+};
+
 const classifyPatterns = [
   {
     classification: 'docker-command-unavailable',
@@ -304,6 +395,188 @@ const removeScratch = () => {
   }
 };
 
+const outputSizeBucketFor = (rawOutput) => {
+  if (typeof rawOutput !== 'string') return 'unknown';
+  const size = Buffer.byteLength(rawOutput, 'utf8');
+  if (size === 0) return 'none';
+  if (size <= 4096) return 'small';
+  if (size <= 65536) return 'medium';
+  if (size <= 262144) return 'large';
+  return 'oversized';
+};
+
+const lineCountBucketFor = (rawOutput) => {
+  if (typeof rawOutput !== 'string') return 'unknown';
+  if (rawOutput.length === 0) return 'none';
+  const lines = rawOutput.split(/\r?\n/).filter((line) => line.length > 0).length;
+  if (lines === 0) return 'none';
+  if (lines <= 25) return 'small';
+  if (lines <= 100) return 'medium';
+  if (lines <= 500) return 'large';
+  return 'oversized';
+};
+
+const exitResultClassFor = (startResult) => {
+  if (!startResult) return 'unknown';
+  if (startResult.status === 0) return 'success';
+  if (startResult.error?.code === 'ETIMEDOUT') return 'timeout';
+  if (startResult.error) return 'spawn-error';
+  if (startResult.signal) return 'killed';
+  if (typeof startResult.status === 'number' && startResult.status !== 0) return 'nonzero-exit';
+  return 'unknown';
+};
+
+const commandPhaseClassFor = (classification) => {
+  if (classification === 'supabase-cli-unavailable' || classification === 'supabase-cli-runtime-error') {
+    return 'supabase-cli-invocation';
+  }
+  if (classification === 'local-config-missing' || classification === 'local-config-invalid') {
+    return 'preflight';
+  }
+  if (classification === 'image-pull-or-network-blocked' || classification === 'image-platform-or-architecture-blocked') {
+    return 'image-pull';
+  }
+  if (classification === 'compose-project-startup-blocked' || classification === 'container-startup-blocked') {
+    return 'container-create';
+  }
+  if (classification === 'container-healthcheck-timeout' || classification === 'supabase-service-start-timeout') {
+    return 'health-wait';
+  }
+  if (
+    classification === 'docker-command-unavailable'
+    || classification === 'docker-context-unavailable'
+    || classification === 'docker-daemon-unavailable'
+    || classification === 'docker-desktop-wsl-integration-blocked'
+    || classification === 'docker-permission-blocked'
+    || classification === 'docker-credential-helper-blocked'
+    || classification === 'docker-api-version-blocked'
+  ) {
+    return 'preflight';
+  }
+  return 'unknown';
+};
+
+const matchedClassificationsFor = (rawOutput, fallbackClassification) => {
+  const matches = [];
+  if (typeof rawOutput === 'string' && rawOutput.length > 0) {
+    for (const candidate of classifyPatterns) {
+      if (candidate.patterns.some((pattern) => pattern.test(rawOutput))) {
+        matches.push(candidate.classification);
+      }
+    }
+  }
+  const unique = [...new Set(matches.filter((value) => allowedClassifications.has(value)))];
+  return unique.length > 0 ? unique : [fallbackClassification];
+};
+
+const countKnownPatternFamilies = (rawOutput, classification) => {
+  const counts = Object.fromEntries(patternFamilyLabels.map((label) => [label, 0]));
+
+  if (typeof rawOutput === 'string' && rawOutput.length > 0) {
+    for (const candidate of classifyPatterns) {
+      const family = classificationFamilies[candidate.classification] || 'unknown';
+      if (candidate.patterns.some((pattern) => pattern.test(rawOutput))) {
+        counts[family] += 1;
+      }
+    }
+  }
+
+  if (Object.values(counts).every((count) => count === 0)) {
+    const family = classificationFamilies[classification] || 'unknown';
+    counts[family] = 1;
+  }
+
+  return counts;
+};
+
+const formatKnownPatternFamilyCounts = (counts) => patternFamilyLabels
+  .map((label) => `${label}=${Number.isSafeInteger(counts[label]) ? counts[label] : 0}`)
+  .join(',');
+
+const safetyBlockReasonFor = (signal) => {
+  if (signal.outputSizeBucket === 'oversized' || signal.lineCountBucket === 'oversized') return 'output-too-large';
+  if (signal.outputSafetyResult !== 'passed') return 'raw-output-unsafe';
+  if (signal.scratchCleanupResult === 'failed') return 'unknown';
+  return 'none';
+};
+
+const buildRedactedSignal = ({
+  startupAttempt,
+  classification,
+  confidence,
+  outputSafety,
+  scratchCleanup,
+  rawOutput = '',
+  startResult = null,
+}) => {
+  const safeClassification = allowedClassifications.has(classification)
+    ? classification
+    : 'classification-output-safety-failed';
+  const signal = {
+    startupAttemptStatus: startupAttempt === 'attempted' ? 'attempted' : 'not-attempted',
+    exitResultClass: startupAttempt === 'attempted' ? exitResultClassFor(startResult) : 'unknown',
+    commandPhaseClass: commandPhaseClassFor(safeClassification),
+    outputSizeBucket: outputSizeBucketFor(rawOutput),
+    lineCountBucket: lineCountBucketFor(rawOutput),
+    timeoutFlag: exitResultClassFor(startResult) === 'timeout',
+    knownPatternFamilyCounts: countKnownPatternFamilies(rawOutput, safeClassification),
+    sanitizedCategoryCandidates: matchedClassificationsFor(rawOutput, safeClassification),
+    confidence: signalEnums.confidence.has(confidence) ? confidence : 'low',
+    outputSafetyResult: outputSafety === 'passed' ? 'passed' : 'failed',
+    scratchCleanupResult: signalEnums.scratchCleanupResult.has(scratchCleanup) ? scratchCleanup : 'failed',
+    safetyBlockReasonCategory: 'none',
+    noSecretsConfirmation: outputSafety === 'passed' ? 'passed' : 'failed',
+    noLocalPathConfirmation: outputSafety === 'passed' ? 'passed' : 'failed',
+    noRawLogConfirmation: outputSafety === 'passed' ? 'passed' : 'failed',
+  };
+  signal.safetyBlockReasonCategory = safetyBlockReasonFor(signal);
+  return signal;
+};
+
+function renderSignalLines(signal) {
+  return [
+    `redacted signal startupAttemptStatus: ${signal.startupAttemptStatus}`,
+    `redacted signal exitResultClass: ${signal.exitResultClass}`,
+    `redacted signal commandPhaseClass: ${signal.commandPhaseClass}`,
+    `redacted signal outputSizeBucket: ${signal.outputSizeBucket}`,
+    `redacted signal lineCountBucket: ${signal.lineCountBucket}`,
+    `redacted signal timeoutFlag: ${signal.timeoutFlag ? 'true' : 'false'}`,
+    `redacted signal knownPatternFamilyCounts: ${formatKnownPatternFamilyCounts(signal.knownPatternFamilyCounts)}`,
+    `redacted signal sanitizedCategoryCandidates: ${signal.sanitizedCategoryCandidates.join(',')}`,
+    `redacted signal confidence: ${signal.confidence}`,
+    `redacted signal outputSafetyResult: ${signal.outputSafetyResult}`,
+    `redacted signal scratchCleanupResult: ${signal.scratchCleanupResult}`,
+    `redacted signal safetyBlockReasonCategory: ${signal.safetyBlockReasonCategory}`,
+    `redacted signal noSecretsConfirmation: ${signal.noSecretsConfirmation}`,
+    `redacted signal noLocalPathConfirmation: ${signal.noLocalPathConfirmation}`,
+    `redacted signal noRawLogConfirmation: ${signal.noRawLogConfirmation}`,
+  ];
+}
+
+const validateRedactedSignal = (signal) => {
+  const keys = Object.keys(signal);
+  if (keys.length !== signalFields.size) return false;
+  if (keys.some((key) => !signalFields.has(key))) return false;
+
+  for (const [field, allowed] of Object.entries(signalEnums)) {
+    if (!allowed.has(signal[field])) return false;
+  }
+
+  if (typeof signal.timeoutFlag !== 'boolean') return false;
+  if (!signal.knownPatternFamilyCounts || typeof signal.knownPatternFamilyCounts !== 'object') return false;
+
+  const familyKeys = Object.keys(signal.knownPatternFamilyCounts);
+  if (familyKeys.length !== patternFamilyLabels.length) return false;
+  if (familyKeys.some((key) => !patternFamilyLabels.includes(key))) return false;
+  if (Object.values(signal.knownPatternFamilyCounts).some((value) => !Number.isSafeInteger(value) || value < 0)) return false;
+
+  if (!Array.isArray(signal.sanitizedCategoryCandidates)) return false;
+  if (signal.sanitizedCategoryCandidates.length === 0) return false;
+  if (signal.sanitizedCategoryCandidates.some((value) => !allowedClassifications.has(value))) return false;
+
+  return isOutputSafe(renderSignalLines(signal));
+};
+
 const runDiagnostic = () => {
   const result = spawnSync(process.execPath, [
     path.join(scriptDir, 'm5.3a-2h-local-stack-availability-diagnostics.mjs'),
@@ -381,12 +654,14 @@ function emitResult({
   confidence,
   outputSafety = 'passed',
   scratchCleanup = 'not-created',
+  rawOutput = '',
+  startResult = null,
 }, preferredExitCode = 0) {
   const safeClassification = allowedClassifications.has(classification)
     ? classification
     : 'classification-output-safety-failed';
 
-  const lines = [
+  const baseLines = [
     `startup attempt: ${startupAttempt}`,
     `classification: ${safeClassification}`,
     `confidence: ${confidence}`,
@@ -399,28 +674,46 @@ function emitResult({
     'tenant isolation: not newly verified',
   ];
 
-  const outputIsSafe = outputSafety === 'passed' && isOutputSafe(lines);
+  const failClosedLines = [
+    `startup attempt: ${startupAttempt}`,
+    'classification: classification-output-safety-failed',
+    'confidence: high',
+    'output safety: failed',
+    `scratch cleanup: ${scratchCleanup}`,
+    'root cause inferred: no, only sanitized failure category reported',
+    'local DB availability: unresolved',
+    'schema availability: not proven',
+    'artifact SELECT isolation: not verified',
+    'tenant isolation: not newly verified',
+  ];
+
+  if (scratchCleanup === 'failed') {
+    for (const line of failClosedLines) console.log(line);
+    process.exit(2);
+  }
+
+  const signal = buildRedactedSignal({
+    startupAttempt,
+    classification: safeClassification,
+    confidence,
+    outputSafety,
+    scratchCleanup,
+    rawOutput,
+    startResult,
+  });
+
+  const signalLines = validateRedactedSignal(signal) ? renderSignalLines(signal) : [];
+  const lines = signalLines.length > 0 ? [...baseLines, ...signalLines] : failClosedLines;
+  const outputIsSafe = outputSafety === 'passed' && isOutputSafe(lines) && signalLines.length > 0;
+
   if (!outputIsSafe) {
-    const fallbackLines = [
-      `startup attempt: ${startupAttempt}`,
-      'classification: classification-output-safety-failed',
-      'confidence: high',
-      'output safety: failed',
-      `scratch cleanup: ${scratchCleanup}`,
-      'root cause inferred: no, only sanitized failure category reported',
-      'local DB availability: unresolved',
-      'schema availability: not proven',
-      'artifact SELECT isolation: not verified',
-      'tenant isolation: not newly verified',
-    ];
-    for (const line of fallbackLines) console.log(line);
+    for (const line of failClosedLines) console.log(line);
     process.exit(2);
   }
 
   for (const line of lines) console.log(line);
-  process.exit(scratchCleanup === 'failed' ? 2 : preferredExitCode);
+  process.exit(preferredExitCode);
 }
-
 const printHelp = () => {
   console.log('Usage: node scripts/m5.3a-2k-local-stack-startup-failure-classifier.mjs --classify');
   console.log('Output uses sanitized category values only.');
@@ -492,4 +785,6 @@ emitResult({
   classification: classification.classification,
   confidence: classification.confidence,
   scratchCleanup: cleanup,
+  rawOutput,
+  startResult,
 }, cleanup === 'failed' ? 2 : 0);
