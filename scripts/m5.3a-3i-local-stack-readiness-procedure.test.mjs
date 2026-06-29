@@ -166,6 +166,53 @@ expectFailClosed({
 
 expectFailClosed({
   ...baseReadyInput,
+  localStackReadinessBucket: 'fail-closed',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  failClosedReason: 'unknown',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  localStartupStatusBucket: 'failed',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  localStartupStatusBucket: 'unknown',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  serviceReadinessBucket: 'not-ready',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  outputSafetyResult: 'not-captured',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  readinessAttemptStatus: 'not-attempted',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  localStackReadinessBucket: 'not-ready',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
+  localStartupStatusBucket: 'failed',
+  localStackReadinessBucket: 'partial',
+  serviceReadinessBucket: 'partial-ready',
+}, 'unsupported-readiness-state');
+
+expectFailClosed({
+  ...baseReadyInput,
   runCount: 2,
 }, 'unsupported-readiness-state');
 

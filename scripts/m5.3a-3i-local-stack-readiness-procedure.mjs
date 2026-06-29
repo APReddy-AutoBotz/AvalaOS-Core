@@ -131,6 +131,77 @@ const readinessImplicationPresent = (input) => Boolean(
     || input.productionReadinessImplied
 );
 
+const failClosedBucketPresent = (input) => (
+  input.readinessAttemptStatus === 'fail-closed'
+    || input.localStartupStatusBucket === 'fail-closed'
+    || input.localStackReadinessBucket === 'fail-closed'
+    || input.serviceReadinessBucket === 'fail-closed'
+);
+
+const unsupportedConsistency = (input) => {
+  if (failClosedBucketPresent(input) && input.failClosedReason === 'none') {
+    return 'unsupported-readiness-state';
+  }
+
+  if (input.failClosedReason !== 'none') {
+    return 'unsupported-readiness-state';
+  }
+
+  if (input.localStackReadinessBucket === 'ready') {
+    const readyStateSupported = input.readinessAttemptStatus === 'attempted'
+      && input.localStartupStatusBucket === 'completed'
+      && input.serviceReadinessBucket === 'all-ready'
+      && input.outputSafetyResult === 'passed'
+      && input.cleanupResult !== 'failed';
+
+    if (!readyStateSupported) return 'unsupported-readiness-state';
+  }
+
+  if (input.localStackReadinessBucket === 'partial') {
+    const partialStateSupported = input.readinessAttemptStatus === 'attempted'
+      && ['completed', 'unknown'].includes(input.localStartupStatusBucket)
+      && ['partial-ready', 'unknown'].includes(input.serviceReadinessBucket)
+      && ['passed', 'not-captured'].includes(input.outputSafetyResult)
+      && input.cleanupResult !== 'failed';
+
+    if (!partialStateSupported) return 'unsupported-readiness-state';
+  }
+
+  if (
+    input.localStackReadinessBucket === 'not-ready'
+      && input.localStartupStatusBucket === 'completed'
+      && input.serviceReadinessBucket === 'all-ready'
+  ) {
+    return 'unsupported-readiness-state';
+  }
+
+  if (
+    input.localStackReadinessBucket === 'ready'
+      && ['failed', 'timeout', 'fail-closed', 'unknown'].includes(input.localStartupStatusBucket)
+  ) {
+    return 'unsupported-readiness-state';
+  }
+
+  if (
+    input.localStackReadinessBucket === 'ready'
+      && ['not-ready', 'fail-closed'].includes(input.serviceReadinessBucket)
+  ) {
+    return 'unsupported-readiness-state';
+  }
+
+  if (
+    input.readinessAttemptStatus === 'not-attempted'
+      && (
+        input.localStartupStatusBucket === 'completed'
+          || input.localStackReadinessBucket === 'ready'
+          || input.serviceReadinessBucket === 'all-ready'
+      )
+  ) {
+    return 'unsupported-readiness-state';
+  }
+
+  return null;
+};
 const failClosed = (reason) => ({
   ok: false,
   procedureName: PROCEDURE_NAME,
@@ -158,8 +229,9 @@ function createLocalStackReadinessProcedureResult(input = {}) {
   if (input.cleanupResult === 'failed') return failClosed('cleanup-failed');
   if (input.rootCauseInferred === true) return failClosed('root-cause-inference-needed');
   if (readinessImplicationPresent(input)) return failClosed('unsupported-readiness-state');
-  if (input.failClosedReason !== 'none') return failClosed(input.failClosedReason);
 
+  const unsupportedState = unsupportedConsistency(input);
+  if (unsupportedState) return failClosed(unsupportedState);
   return {
     ok: true,
     procedureName: PROCEDURE_NAME,
