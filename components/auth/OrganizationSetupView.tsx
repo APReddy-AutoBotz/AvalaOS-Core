@@ -4,6 +4,7 @@ import { useOrganization } from '../../services/organizationService';
 import { ALL_PRODUCT_MODULES, DEFAULT_ENABLED_MODULES } from '../../constants/moduleConfig';
 import { useAssessGovernanceConfig } from '../../services/assessGovernanceService';
 import { ASSESS_SECTIONS, ASSUMPTION_CATEGORIES, EVIDENCE_TYPES, getAssessFieldOptions } from '../../constants/assessQuestionBank';
+import TrustCenterPanel from '../admin/TrustCenterPanel';
 
 interface OrganizationSetupViewProps {
     currentUser: User;
@@ -162,6 +163,8 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </button>
                 </div>
             </div>
+
+            <TrustCenterPanel />
 
             {/* Company Profile Form */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
