@@ -325,7 +325,7 @@ console.log('Running Avala Govern Lite service regression tests...');
   const markdown = renderAssessmentDecisionPackMarkdown(assessment, baseProcess.name, governCard);
   const json = JSON.parse(renderAssessmentDecisionPackJson(assessment, baseProcess.name, governCard));
 
-  assert.ok(markdown.includes('## Avala Govern Lite'));
+  assert.ok(markdown.includes('## Avala Govern'));
   assert.ok(markdown.includes(`Autonomy Level: ${governCard.autonomyLevel}`));
   assert.equal(json.avalaGovernLite.autonomyLevel, governCard.autonomyLevel);
   assert.deepEqual(json.avalaGovernLite.blockedActions, governCard.blockedActions);

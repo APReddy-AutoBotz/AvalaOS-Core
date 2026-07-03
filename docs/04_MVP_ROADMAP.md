@@ -10,7 +10,7 @@ This roadmap reconciles the current accepted baseline after the docs consistency
 | --- | --- | --- |
 | M0 | Complete | AvalaOS Core migration, naming baseline, and historical prototype separation were established. |
 | M0.2 | Complete | Build Control Pack, agent rules, governance docs, planning docs, and evidence rules were established. |
-| M1 | Complete | Avala Govern Lite hardening established scoped governance cards and control models. |
+| M1 | Complete | Avala Govern hardening established scoped governance cards and control models. |
 | M2 | Complete | Governed Delivery Pack established handoff lineage from decisions to delivery work. |
 | M3 | Complete | Server-side AI/BYOK hardening moved the pilot direction away from browser-side provider execution. |
 | M4 through M4.5 | Complete | Buyer-demo readiness and M5 readiness gate evidence were closed. |

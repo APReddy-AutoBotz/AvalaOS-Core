@@ -18,18 +18,18 @@ AvalaOS Core must support a complete governed lifecycle from assessment to monit
 - Require human approval before downstream handoff.
 - Use server-side AI for pilot and production. Browser-side AI is local transitional behavior only.
 
-## Avala Govern Lite
+## Avala Govern
 
 - Add a visible governance card in the post-assessment Decision Pack or Handoff Pack flow.
 - Minimum fields: agent or automation name, mapped process, business owner, technical owner, technology pattern, systems accessed, tools used, data sensitivity, autonomy level, risk level, allowed actions, blocked actions, human approval required, evidence required, review frequency, audit status.
 - Show autonomy level, risk level, approval requirement, evidence requirement, and blocked actions.
-- Do not build runtime monitoring, agent execution, MCP controls, or A2A controls in this slice.
+- Do not build runtime monitoring, agent execution, bot execution, RPA job execution, external-system actions, MCP controls, or A2A controls in this slice.
 
-## Avala Delivery Lite
+## Avala Delivery
 
 - Import or review approved work item candidates.
-- Support board, owner, status, blockers, and handoff lineage.
-- Stay intentionally lighter than Jira-style project management.
+- Support governed workbench views for board, owner, status, blockers, handoff lineage, delivery packs, evidence checklists, and downstream delivery handoff.
+- Stay outside Jira replacement scope.
 
 ## Avala Monitor
 
@@ -41,9 +41,9 @@ AvalaOS Core must support a complete governed lifecycle from assessment to monit
 - Manage organization profile, users, modules, provider settings, key references, audit, and security settings.
 - Do not reintroduce browser-stored provider keys for production or pilot behavior.
 
-## Module Naming Boundary
+## Module Naming And Proof Boundary
 
-Avala Govern Lite and Avala Delivery Lite remain canonical names for the current baseline. "Lite" indicates intentionally bounded governance and delivery scope. It does not mean obsolete branding, and it must not be removed through docs cleanup unless a later approved product milestone changes the module scope.
+Avala Govern and Avala Delivery are the buyer-facing canonical names for the premium enterprise baseline. Proof boundaries must be carried through claim controls, Trust Center proof statuses, evidence references, limitation disclosures, and acceptance gates. Module names must not imply runtime execution, hosted readiness, production readiness, deployment readiness, RLS readiness, tenant-isolation proof, security readiness, buyer readiness, product readiness, release-candidate readiness, or compliance certification.
 
 ## Enterprise Readiness Requirements
 

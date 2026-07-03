@@ -75,17 +75,17 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           {step === 2 && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <h2 className="brand-wordmark text-3xl text-center mb-2">Almost there</h2>
-              <p className="text-center text-slate-500 dark:text-slate-300 mb-8 font-medium">Your workspace is ready for guided discovery.</p>
+              <p className="text-center text-slate-500 dark:text-slate-300 mb-8 font-medium">Your demo workspace is prepared for guided discovery.</p>
               
               <div className="premium-surface p-6 rounded-2xl mb-8">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="p-2 bg-emerald-500/10 rounded-lg">
                     <SparklesIcon className="w-6 h-6 text-emerald-500" />
                   </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Your workspace '{orgName}' is being provisioned.</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Your demo workspace '{orgName}' is being prepared.</p>
                 </div>
                 <ul className="space-y-3">
-                  {['PostgreSQL database provisioned', 'RLS security policies active', 'Avala Assess ready'].map((item, i) => (
+                  {['Demo workspace prepared', 'Evidence-first governance path available', 'Avala Assess demo flow available'].map((item, i) => (
                     <li key={i} className="flex items-center gap-3 text-xs text-slate-500">
                       <div className="w-1 h-1 bg-emerald-500 rounded-full" />
                       {item}

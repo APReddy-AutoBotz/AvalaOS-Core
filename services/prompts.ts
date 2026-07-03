@@ -57,7 +57,7 @@ Based on all the information above, generate the following artifacts according t
 2.  A Quality Gate Analysis identifying ambiguities and gaps, linking them to section keys where possible.
 3.  An "As-Is" Mermaid flowchart diagram.
 4.  A "To-Be" Mermaid flowchart diagram.
-5.  A list of native Work Items for the Avala Delivery Lite board (Epic, Stories, Tasks).
+5.  A list of native Work Items for the Avala Delivery workbench (Epic, Stories, Tasks).
 
 Strict template compliance rules:
 - Do not omit any requested template section.

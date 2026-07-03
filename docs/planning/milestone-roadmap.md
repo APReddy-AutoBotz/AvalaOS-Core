@@ -10,7 +10,7 @@ This roadmap is the active milestone sequence after the documentation consistenc
 | --- | --- | --- | --- |
 | Gate 0 | M0 Migration | Complete | AvalaOS naming, main branch, foundation tag, historical prototype separation. |
 | Gate 1 | M0.2 Build Control Pack | Complete | Agent rules, governance docs, readiness gates, evidence review. |
-| Gate 2 | M1 Govern Lite Hardening | Complete | Stronger governance card, registry fields, approval and evidence surfaces. |
+| Gate 2 | M1 Govern Hardening | Complete | Stronger governance card, registry fields, approval and evidence surfaces. |
 | Gate 3 | M2 Governed Delivery Pack | Complete | Traceable handoff from approved decisions to delivery work. |
 | Gate 4 | M3 Server-Side AI/BYOK Hardening | Complete | Server-side provider controls and audit-ready key reference model. |
 | Gate 5 | M4 Buyer Demo Readiness | Complete | Focused buyer-demo flow with evidence, governance, and claim-safe copy. |

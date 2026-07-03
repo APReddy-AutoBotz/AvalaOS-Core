@@ -28,7 +28,7 @@ AvalaOS Core is suitable for controlled product demonstration and development va
 
 ## Governance Controls
 
-Avala Govern Lite records autonomy, risk, approval, evidence, allowed actions, blocked actions, review frequency, and audit status. It is a governance surface, not a runtime execution controller.
+Avala Govern records autonomy, risk, approval, evidence, allowed actions, blocked actions, review frequency, and audit status. It is a governance and control-plane surface, not a runtime execution controller. It does not execute bots, agents, RPA jobs, external-system actions, MCP controls, A2A controls, or live runtime enforcement in the current baseline.
 
 ## Health Boundary
 

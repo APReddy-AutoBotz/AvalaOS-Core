@@ -221,7 +221,7 @@ const buildSources = (
     sources.push({
       id: `${project.id}-govern-lite`,
       type: 'Delivery Pack',
-      title: 'Avala Govern Lite snapshot',
+      title: 'Avala Govern snapshot',
       module: 'delivery',
       status: governLite.governanceStatus,
       metadata: {
@@ -277,10 +277,10 @@ const buildApprovalChecklist = (
   if (governLite) {
     items.push({
       id: 'govern-lite-human-approval',
-      label: 'Govern Lite human approval requirement',
+      label: 'Avala Govern human approval requirement',
       status: governLite.humanApprovalRequired ? 'Action Required' : 'Complete',
       owner: processOwner,
-      source: 'Avala Govern Lite',
+      source: 'Avala Govern',
       detail: governLite.approvalPolicy,
     });
   }
@@ -328,7 +328,7 @@ const buildEvidenceChecklist = (
       id: `govern-lite-evidence-gap-${index + 1}`,
       label: gap.label,
       status: 'Action Required',
-      source: 'Avala Govern Lite',
+      source: 'Avala Govern',
       detail: gap.nextAction,
     });
   });
@@ -336,9 +336,9 @@ const buildEvidenceChecklist = (
   if (governLite && governLite.evidenceGaps.length === 0) {
     items.push({
       id: 'govern-lite-evidence-policy',
-      label: 'Govern Lite evidence policy satisfied',
+      label: 'Avala Govern evidence policy satisfied',
       status: governLite.evidenceRequired ? 'Action Required' : 'Complete',
-      source: 'Avala Govern Lite',
+      source: 'Avala Govern',
       detail: governLite.evidencePolicy,
     });
   }
@@ -356,9 +356,9 @@ const buildBlockers = (
   if (governLite?.governanceStatus === 'Blocked') {
     blockers.push({
       id: 'govern-lite-blocked',
-      label: 'Govern Lite blocks downstream handoff',
+      label: 'Avala Govern blocks downstream handoff',
       severity: 'Critical',
-      source: 'Avala Govern Lite',
+      source: 'Avala Govern',
       detail: governLite.blockedReason || governLite.nextGovernanceAction,
     });
   }

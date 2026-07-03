@@ -32,10 +32,11 @@ The M5 enterprise-readiness track is building toward Supabase-backed tenant isol
 - Delivery runtime adapters still require an approved migration path before hosted Delivery runtime behavior can depend on the new `delivery_work_items` authority table.
 - M5.3 is a policy design and test plan. RLS policy implementation and isolation tests remain future milestone work.
 
-## Governance Boundary
+## Governance And Delivery Boundary
 
-Avala Govern Lite is a lightweight model and card derived from existing assessment/process data. It does not execute agents, monitor live runtime behavior, or add MCP/A2A controls in this phase.
+Avala Govern is a governance and control-plane model derived from existing assessment/process data. It does not execute agents, bots, RPA jobs, external-system actions, monitor live runtime behavior, or add MCP/A2A controls in this phase.
+
+Avala Delivery is the governed delivery workbench for approved work items, owners, blockers, handoff lineage, delivery packs, evidence checklists, and downstream delivery handoff. It is not a Jira replacement and does not claim hosted, deployment, production, RLS, tenant-isolation, or security readiness without future accepted evidence.
 
 ## Repository Direction
-
 This repository is AvalaOS Core. Existing internal module keys may remain `assess`, `docs`, `delivery`, `monitor`, and `admin` to avoid unnecessary refactor risk.

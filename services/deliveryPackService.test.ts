@@ -73,7 +73,7 @@ console.log('Running Delivery Pack service regression tests...');
   const approvalLabels = pack.approvalChecklist.map(item => item.label);
   const evidenceLabels = pack.evidenceChecklist.map(item => item.label);
 
-  assert.ok(approvalLabels.includes('Govern Lite human approval requirement'));
+  assert.ok(approvalLabels.includes('Avala Govern human approval requirement'));
   assert.ok(pack.approvalChecklist.some(item => item.status === 'Action Required'));
   assert.ok(evidenceLabels.includes('Assessment evidence references linked'));
   assert.ok(pack.evidenceChecklist.some(item => item.id === 'work-item-evidence-linked' && item.status === 'Complete'));
@@ -99,7 +99,7 @@ console.log('Running Delivery Pack service regression tests...');
   assert.ok(markdown.includes('# AvalaOS Core Governed Delivery Pack'));
   assert.ok(markdown.includes('## Source References'));
   assert.ok(markdown.includes('## Decision Summary'));
-  assert.ok(markdown.includes('## Avala Govern Lite'));
+  assert.ok(markdown.includes('## Avala Govern'));
   assert.ok(markdown.includes('## Studio Document References'));
   assert.ok(markdown.includes('## Delivery Work Items'));
   assert.ok(markdown.includes('## Approval Checklist'));
