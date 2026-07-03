@@ -68,6 +68,30 @@ for (const claimId of nonVerifiedClaimIds) {
   assert.notEqual(control.proofStatus, 'verified', `${claimId} must not be verified.`);
 }
 
+const blockedPlatformReadinessDomains: ReadonlySet<string> = new Set([
+  'security',
+  'tenant_isolation',
+  'export',
+  'deployment',
+  'operations',
+  'buyer_readiness',
+  'product_readiness',
+  'release_candidate',
+]);
+
+for (const control of snapshot.claimControls) {
+  if (blockedPlatformReadinessDomains.has(control.domain)) {
+    assert.notEqual(control.proofStatus, 'verified', `${control.id} must not be verified in ${control.domain}.`);
+  }
+}
+
+const assessScoringControl = snapshot.claimControls.find((control) => control.id === 'assess-deterministic-scoring');
+assert.ok(assessScoringControl);
+assert.equal(assessScoringControl.proofStatus, 'verified');
+assert.equal(assessScoringControl.proofBoundary, 'verified_with_evidence');
+assert.equal(assessScoringControl.domain, 'evidence');
+assert.match(assessScoringControl.blockedWording, /not describe deterministic scoring evidence as production readiness/i);
+
 const governState = snapshot.moduleCapabilityStates.find((state) => state.moduleKey === 'govern');
 assert.ok(governState);
 assert.equal(governState.moduleName, 'Avala Govern');

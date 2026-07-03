@@ -38,6 +38,7 @@ Approved safe checks run by task name:
 - Defines readiness domains for security, tenant isolation, AI controls, evidence, export, deployment, operations, buyer readiness, product readiness, and release-candidate readiness.
 - Adds a deterministic current-baseline Trust Center snapshot.
 - Tests confirm blocked readiness claims are not verified, Avala Govern and Avala Delivery use buyer-facing full names, limitation disclosures preserve execution and Jira-replacement boundaries, generated documents remain editable review drafts requiring human sign-off, and internal `Lite` identifiers are intentionally deferred.
+- PR #162 review amendment moved deterministic scoring verification into the `evidence` domain so it cannot imply product readiness in future Trust Center grouping.
 
 ## Proof-Boundary Confirmation
 

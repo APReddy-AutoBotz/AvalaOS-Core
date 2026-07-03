@@ -140,7 +140,7 @@ const claimControls: readonly ClaimControl[] = [
     blockedWording: 'Do not describe deterministic scoring evidence as production readiness or autonomous decision approval.',
     owner: 'Product Governance',
     lastReviewedDate: '2026-07-03',
-    domain: 'product_readiness',
+    domain: 'evidence',
   },
   {
     id: 'govern-control-plane-card',
