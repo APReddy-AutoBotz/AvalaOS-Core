@@ -29,6 +29,11 @@ const orgSetup = read('components/auth/OrganizationSetupView.tsx');
 assert.ok(orgSetup.includes('Review Access'), 'Reviewer-like access copy should be review-capable.');
 assert.equal(orgSetup.includes('View Only'), false, 'Reviewer-like access copy should not say View Only.');
 
+const trustCenterPanel = read('components/admin/TrustCenterPanel.tsx');
+assert.ok(trustCenterPanel.includes('Trust Center proof states do not imply production readiness'), 'Trust Center panel should preserve proof-state limitation copy.');
+assert.ok(trustCenterPanel.includes('No evidence records available.'), 'Trust Center panel should include safe empty evidence state.');
+assert.ok(trustCenterPanel.includes('No claim controls available.'), 'Trust Center panel should include safe empty claim-control state.');
+
 const moduleConfig = read('constants/moduleConfig.ts');
 assert.ok(moduleConfig.includes('Draft editable review documents'), 'Avala Studio module copy should frame drafts as editable review documents.');
 assert.ok(moduleConfig.includes('human sign-off'), 'Avala Studio module copy should require human sign-off.');
@@ -73,7 +78,9 @@ const currentBuyerFacingSources = [
   'components/auth/OnboardingWizard.tsx',
   'components/auth/LoginView.tsx',
   'components/shared/Sidebar.tsx',
+  'components/admin/TrustCenterPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
+  'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
   'services/deliveryPackService.ts',
