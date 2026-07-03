@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+
+import {
+  ADMIN_WORKBENCH_SECTIONS,
+  getAdminSectionByKey,
+  getDefaultAdminSection,
+  isAdminSectionKey,
+} from './adminWorkbenchModel';
+
+console.log('Running Admin Workbench model tests...');
+
+assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
+  'overview',
+  'organization',
+  'modules',
+  'trust_center',
+  'evidence_policy',
+  'users_roles',
+  'audit_security',
+  'ai_controls',
+]);
+
+assert.equal(getDefaultAdminSection().key, 'overview');
+
+const trustCenterSection = getAdminSectionByKey('trust_center');
+assert.ok(trustCenterSection);
+assert.equal(trustCenterSection.label, 'Trust Center');
+
+const aiControlsSection = getAdminSectionByKey('ai_controls');
+assert.ok(aiControlsSection);
+assert.doesNotMatch(
+  `${aiControlsSection.description}\n${aiControlsSection.proofSafeDisclosure || ''}`,
+  /production security readiness/i,
+);
+
+const unsupportedCopy = [
+  /production ready/i,
+  /security ready/i,
+  /compliance certified/i,
+  /tenant isolation verified/i,
+  /RLS ready/i,
+  /deployment ready/i,
+  /buyer ready/i,
+  /product ready/i,
+];
+
+const sectionCopy = ADMIN_WORKBENCH_SECTIONS
+  .flatMap(section => [section.label, section.shortLabel, section.description, section.proofSafeDisclosure || ''])
+  .join('\n');
+
+for (const pattern of unsupportedCopy) {
+  assert.doesNotMatch(sectionCopy, pattern);
+}
+
+assert.doesNotMatch(sectionCopy, /Avala Govern Lite/);
+assert.doesNotMatch(sectionCopy, /Avala Delivery Lite/);
+
+assert.equal(isAdminSectionKey('overview'), true);
+assert.equal(isAdminSectionKey('trust_center'), true);
+assert.equal(isAdminSectionKey('not_a_section'), false);
+assert.equal(getAdminSectionByKey('not_a_section'), undefined);
+
+console.log('Admin Workbench model tests passed.');

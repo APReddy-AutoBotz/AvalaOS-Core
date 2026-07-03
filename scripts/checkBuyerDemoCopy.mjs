@@ -5,6 +5,9 @@ const read = path => fs.readFileSync(path, 'utf8');
 const assertFileDoesNotInclude = (path, phrase, reason) => {
   assert.equal(read(path).includes(phrase), false, `${path} should not include "${phrase}". ${reason}`);
 };
+const assertFileDoesNotMatch = (path, pattern, reason) => {
+  assert.doesNotMatch(read(path), pattern, `${path} should not match ${pattern}. ${reason}`);
+};
 
 const header = read('components/shared/Header.tsx');
 assert.match(header, />\s*Sign Out\s*<\/button>/, 'Header profile action should say Sign Out.');
@@ -33,6 +36,18 @@ const trustCenterPanel = read('components/admin/TrustCenterPanel.tsx');
 assert.ok(trustCenterPanel.includes('Trust Center proof states do not imply production readiness'), 'Trust Center panel should preserve proof-state limitation copy.');
 assert.ok(trustCenterPanel.includes('No evidence records available.'), 'Trust Center panel should include safe empty evidence state.');
 assert.ok(trustCenterPanel.includes('No claim controls available.'), 'Trust Center panel should include safe empty claim-control state.');
+
+const adminWorkbench = read('components/admin/AdminWorkbench.tsx');
+assert.ok(adminWorkbench.includes('Admin Workbench'), 'Admin Workbench shell should render the Admin Workbench title.');
+assert.ok(adminWorkbench.includes('Read-only structure'), 'Admin Workbench shell should preserve read-only structure copy.');
+
+const adminOverview = read('components/admin/AdminOverviewPanel.tsx');
+assert.ok(adminOverview.includes('Trust Center proof states are evidence-gated'), 'Admin overview should preserve evidence-gated proof state copy.');
+assert.ok(adminOverview.includes('Review Trust Center blocked/evidence-required claims'), 'Admin overview should include the next admin decision list.');
+
+const adminWorkbenchModel = read('services/adminWorkbenchModel.ts');
+assert.ok(adminWorkbenchModel.includes("key: 'trust_center'"), 'Admin Workbench model should include the Trust Center section.');
+assert.ok(adminWorkbenchModel.includes("label: 'AI Controls'"), 'Admin Workbench model should include the AI Controls section.');
 
 const moduleConfig = read('constants/moduleConfig.ts');
 assert.ok(moduleConfig.includes('Draft editable review documents'), 'Avala Studio module copy should frame drafts as editable review documents.');
@@ -78,8 +93,12 @@ const currentBuyerFacingSources = [
   'components/auth/OnboardingWizard.tsx',
   'components/auth/LoginView.tsx',
   'components/shared/Sidebar.tsx',
+  'components/admin/AdminWorkbench.tsx',
+  'components/admin/AdminSectionNav.tsx',
+  'components/admin/AdminOverviewPanel.tsx',
   'components/admin/TrustCenterPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
+  'services/adminWorkbenchModel.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -105,6 +124,32 @@ const oldNameBannedSources = currentBuyerFacingSources.filter(path => path !== '
 for (const sourcePath of oldNameBannedSources) {
   assertFileDoesNotInclude(sourcePath, 'Avala Govern Lite', 'Use Avala Govern for buyer-facing copy.');
   assertFileDoesNotInclude(sourcePath, 'Avala Delivery Lite', 'Use Avala Delivery for buyer-facing copy.');
+}
+
+const adminWorkbenchBuyerFacingSources = [
+  'components/admin/AdminWorkbench.tsx',
+  'components/admin/AdminSectionNav.tsx',
+  'components/admin/AdminOverviewPanel.tsx',
+  'services/adminWorkbenchModel.ts',
+];
+
+const unsupportedAdminWorkbenchClaims = [
+  /production ready/i,
+  /security ready/i,
+  /compliance certified/i,
+  /tenant isolation verified/i,
+  /RLS active/i,
+  /RLS verified/i,
+  /RLS ready/i,
+  /deployment ready/i,
+  /buyer ready/i,
+  /product ready/i,
+];
+
+for (const sourcePath of adminWorkbenchBuyerFacingSources) {
+  for (const pattern of unsupportedAdminWorkbenchClaims) {
+    assertFileDoesNotMatch(sourcePath, pattern, 'Admin Workbench copy must remain proof-safe.');
+  }
 }
 
 const premiumRoadmap = read('docs/planning/premium-enterprise-acceptance-roadmap.md');
