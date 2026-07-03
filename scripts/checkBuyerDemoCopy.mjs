@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const read = path => fs.readFileSync(path, 'utf8');
+const assertFileDoesNotInclude = (path, phrase, reason) => {
+  assert.equal(read(path).includes(phrase), false, `${path} should not include "${phrase}". ${reason}`);
+};
 
 const header = read('components/shared/Header.tsx');
 assert.match(header, />\s*Sign Out\s*<\/button>/, 'Header profile action should say Sign Out.');
@@ -46,11 +49,66 @@ assert.ok(landing.includes('requires SME validation'), 'No-source fallback shoul
 const docsForge = read('components/docs/DocsForgeView.tsx');
 assert.ok(docsForge.includes('editable review drafts that require human sign-off'), 'Assess-to-Studio copy should require human sign-off.');
 
-const governLite = read('components/assess/AvalaGovernLiteCardPanel.tsx');
-assert.ok(governLite.includes('does not run bots, execute RPA jobs or agents, update external systems'), 'Govern Lite copy should state the execution boundary.');
+const govern = read('components/assess/AvalaGovernLiteCardPanel.tsx');
+assert.ok(govern.includes('does not run bots, execute RPA jobs or agents, update external systems'), 'Avala Govern copy should state the execution boundary.');
 
 const app = read('App.tsx');
 assert.ok(app.includes('Return to Avala Studio or Document Vault'), 'Missing document data fallback should guide the buyer back to Studio or Vault.');
 assert.ok(app.includes('source context attached'), 'Missing document data fallback should mention source context.');
+
+const currentBuyerFacingSources = [
+  'README.md',
+  'docs/00_SOURCE_OF_TRUTH.md',
+  'docs/01_PRODUCT_STRATEGY.md',
+  'docs/02_PRODUCT_REQUIREMENTS.md',
+  'docs/03_TECHNICAL_ARCHITECTURE.md',
+  'docs/05_IMPLEMENTATION_STATUS.md',
+  'docs/06_SECURITY_AND_GOVERNANCE.md',
+  'docs/07_AVALA_GOVERN_FRAMEWORK.md',
+  'docs/quality/readiness-gates.md',
+  'docs/planning/milestone-roadmap.md',
+  'docs/task-ledger.md',
+  'docs/planning/premium-enterprise-acceptance-roadmap.md',
+  'components/auth/OnboardingWizard.tsx',
+  'components/auth/LoginView.tsx',
+  'components/shared/Sidebar.tsx',
+  'components/assess/AvalaGovernLiteCardPanel.tsx',
+  'constants/moduleConfig.ts',
+  'services/assessmentExportService.ts',
+  'services/deliveryPackService.ts',
+  'services/deliveryPackExportService.ts',
+  'services/prompts.ts',
+];
+
+const blockedReadinessClaims = [
+  'PostgreSQL database provisioned',
+  'RLS security policies active',
+  'Avala Assess ready',
+  'Your workspace is ready for guided discovery.',
+];
+
+for (const sourcePath of currentBuyerFacingSources) {
+  for (const phrase of blockedReadinessClaims) {
+    assertFileDoesNotInclude(sourcePath, phrase, 'Unsupported onboarding or platform readiness wording must stay out of buyer-facing copy.');
+  }
+}
+
+const oldNameBannedSources = currentBuyerFacingSources.filter(path => path !== 'docs/planning/premium-enterprise-acceptance-roadmap.md');
+for (const sourcePath of oldNameBannedSources) {
+  assertFileDoesNotInclude(sourcePath, 'Avala Govern Lite', 'Use Avala Govern for buyer-facing copy.');
+  assertFileDoesNotInclude(sourcePath, 'Avala Delivery Lite', 'Use Avala Delivery for buyer-facing copy.');
+}
+
+const premiumRoadmap = read('docs/planning/premium-enterprise-acceptance-roadmap.md');
+assert.ok(premiumRoadmap.includes('Avala Govern and Avala Delivery are the buyer-facing canonical product names'), 'Premium roadmap should record the new naming decision.');
+assert.ok(premiumRoadmap.includes('Avala Govern Lite and Avala Delivery Lite'), 'Premium roadmap should document the prior names only in the naming-decision explanation.');
+assert.ok(premiumRoadmap.includes('does not execute bots, agents, RPA jobs, external-system actions'), 'Premium roadmap should preserve the Avala Govern execution boundary.');
+assert.ok(premiumRoadmap.includes('Avala Delivery is not a Jira replacement'), 'Premium roadmap should preserve the Avala Delivery scope boundary.');
+
+const onboarding = read('components/auth/OnboardingWizard.tsx');
+assert.ok(onboarding.includes('Demo workspace prepared'), 'Onboarding should use demo-safe workspace wording.');
+assert.ok(onboarding.includes('Evidence-first governance path available'), 'Onboarding should describe governance availability without RLS claims.');
+assert.ok(onboarding.includes('Avala Assess demo flow available'), 'Onboarding should describe the Assess demo flow without readiness claims.');
+assert.equal(/workspace is ready/i.test(onboarding), false, 'Onboarding should not use generic workspace readiness claims.');
 
 console.log('Buyer-demo copy regression passed.');

@@ -26,10 +26,10 @@ const formatList = (items: unknown[]) => {
 };
 
 const renderGovernLiteMarkdown = (governCard?: AvalaGovernLiteCard) => {
-  if (!governCard) return ['## Avala Govern Lite', '', '- Not available for this export.', ''];
+  if (!governCard) return ['## Avala Govern', '', '- Not available for this export.', ''];
 
   return [
-    '## Avala Govern Lite',
+    '## Avala Govern',
     '',
     `Governance Status: ${governCard.governanceStatus}`,
     `Agent / Automation: ${governCard.agentOrAutomationName}`,

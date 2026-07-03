@@ -1,12 +1,12 @@
 # Avala Govern Framework
 
-## Avala Govern Lite
+## Avala Govern
 
-Avala Govern Lite is the lightweight governance layer added to the post-assessment flow. It gives reviewers a compact card for the agent or automation being considered before any downstream execution or delivery handoff.
+Avala Govern is the governance and control-plane layer added to the post-assessment flow. It gives reviewers a compact card for the agent or automation being considered before any downstream execution or delivery handoff.
 
-## Naming Boundary
+## Naming And Proof Boundary
 
-Avala Govern Lite remains the canonical name for the current governance surface. "Lite" means scoped governance card and control visibility, not stale branding. Future expansion into richer policy objects, runtime controls, MCP controls, A2A controls, or live monitoring requires an explicitly approved milestone.
+Avala Govern is the buyer-facing canonical name for the current governance surface. Scope boundaries are handled through claim controls, evidence references, limitation disclosures, Trust Center proof statuses, and AP-approved acceptance gates. Future expansion into richer policy objects, runtime controls, MCP controls, A2A controls, or live monitoring requires an explicitly approved milestone.
 
 ## Minimum Card Fields
 
@@ -45,7 +45,7 @@ Avala Govern Lite remains the canonical name for the current governance surface.
 
 ## Current Scope
 
-The current implementation derives a lightweight card from existing assessment and process data. It displays autonomy level, risk level, human approval requirement, evidence requirement, blocked actions, and audit status in the Decision Pack flow.
+The current implementation derives a governance card from existing assessment and process data. It displays autonomy level, risk level, human approval requirement, evidence requirement, blocked actions, and audit status in the Decision Pack flow.
 
 ## Out Of Scope
 

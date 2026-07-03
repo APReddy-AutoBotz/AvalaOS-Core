@@ -27,25 +27,25 @@ Historical evidence files under `docs/quality/` are immutable records. They prov
 
 ## Current Baseline
 
-- M0 through M4.5 are closed as migration, build-control, Govern Lite, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
+- M0 through M4.5 are closed as migration, build-control, governance hardening, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
 - M5 enterprise readiness is active. M5.0 through M5.3 planning and M5.2 authority slices through M5.2g-a are present on main.
 - M5.2g-a created the `delivery_work_items` authority table with RLS enabled and no policies. This is fail-closed readiness only; it is not tenant-isolation proof or hosted Delivery runtime readiness.
 - M5.3 is an RLS policy design and test plan. RLS implementation, tenant-isolation tests, and policy proof require a later approved milestone.
-- Avala Govern Lite and Avala Delivery Lite remain canonical scoped module names. "Lite" means governed, intentionally bounded surfaces; it is not stale prototype branding.
+- Avala Govern and Avala Delivery are the buyer-facing canonical module names. Scope and proof boundaries are carried by claim controls, evidence gates, limitation disclosures, and Trust Center proof statuses, not by module names.
 - KlarityFlow Health remains a separate proof vertical and must not be merged into core platform scope without explicit approval.
 
 ## Platform Modules
 
 - Avala Assess: process intake, deterministic scoring, AI/RPA/workflow/HITL/agentic fitment, and decision packs.
 - Avala Studio: BRD, PRD, PDD, SDD, diagrams, work items, and editable governed documents.
-- Avala Govern Lite: governance cards for agents and automations with autonomy, risk, approvals, evidence, and blocked actions.
-- Avala Delivery Lite: approved work items, board, owners, status, blockers, and handoff lineage.
+- Avala Govern: governance and control-plane surfaces for agents and automations with autonomy, risk, approvals, evidence, allowed actions, blocked actions, AI/provider controls, and audit posture. It does not execute bots, agents, RPA jobs, or external-system actions in the current baseline.
+- Avala Delivery: governed delivery workbench for approved work items, owners, status, blockers, handoff lineage, delivery packs, and downstream delivery handoff. It is not a Jira replacement.
 - Avala Monitor: value, risk, blockers, and portfolio visibility.
 - Avala Admin / Avala AI Controls: organization, users, providers, BYOK/key reference, audit, and security settings.
 
 ## Golden Path
 
-Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern Lite -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Lite Board -> Avala Monitor Dashboard.
+Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Board -> Avala Monitor Dashboard.
 
 Assess scoring is deterministic. The current Assess engine annualizes business value from annual volume and average effort per case, then exposes annual manual effort, estimated saved hours, savings, build/run cost bands, payback, risk gates, HITL signals, and formula summaries in the Decision Pack.
 

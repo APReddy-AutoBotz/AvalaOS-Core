@@ -33,7 +33,7 @@ export const renderDeliveryPackMarkdown = (pack: DeliveryPack) => {
         ])
       : '- No assessment decision summary is linked.',
     '',
-    '## Avala Govern Lite',
+    '## Avala Govern',
     pack.governLite
       ? list([
           `Status: ${pack.governLite.governanceStatus}`,
@@ -43,7 +43,7 @@ export const renderDeliveryPackMarkdown = (pack: DeliveryPack) => {
           `Evidence Policy: ${pack.governLite.evidencePolicy}`,
           `Next Action: ${pack.governLite.nextGovernanceAction}`,
         ])
-      : '- No Govern Lite snapshot is linked.',
+      : '- No Avala Govern snapshot is linked.',
     '',
     '## Studio Document References',
     list(pack.documents.map(document => `${document.title} (${document.id}) - artifacts: ${document.artifactKeys.join(', ') || 'none'}; approval: ${document.approvalStatus}; quality: ${document.qualityGateStatus}; summary: ${document.summary}`)),

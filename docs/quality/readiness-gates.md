@@ -10,7 +10,7 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | --- | --- | --- | --- |
 | Gate 0 | Migration complete | Complete | Main normalized, migration docs, no old repo push. |
 | Gate 1 | Build Control Pack complete | Complete | M0.2 docs, skills, inventory, wording scan, verification. |
-| Gate 2 | Govern Lite hardening complete | Complete | Registry fields, approval/evidence rules, audit status. |
+| Gate 2 | Govern hardening complete | Complete | Registry fields, approval/evidence rules, audit status. |
 | Gate 3 | Governed Delivery Pack complete | Complete | Handoff lineage, owners, blockers, source evidence. |
 | Gate 4 | Server-side AI/BYOK hardening complete | Complete | Server-side execution direction, key references, usage audit, browser-key lockdown. |
 | Gate 5 | Buyer demo readiness complete | Complete | Demo story, verified flow, claim-safe copy, M5 readiness gate. |

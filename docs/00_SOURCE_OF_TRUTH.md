@@ -15,7 +15,7 @@ This documentation set is the active source of truth for product positioning, re
 - `docs/04_MVP_ROADMAP.md`: roadmap and enterprise-readiness sequencing.
 - `docs/05_IMPLEMENTATION_STATUS.md`: implemented, partial, blocked, and next-safe areas.
 - `docs/06_SECURITY_AND_GOVERNANCE.md`: security posture, AI controls, audit, and governance minimums.
-- `docs/07_AVALA_GOVERN_FRAMEWORK.md`: Avala Govern Lite and future govern expansion.
+- `docs/07_AVALA_GOVERN_FRAMEWORK.md`: Avala Govern boundaries and future govern expansion.
 - `docs/08_MIGRATION_FROM_KLARITYPM.md`: historical prototype name and migration constraints.
 - `docs/task-ledger.md`: milestone ledger, evidence links, and current decisions.
 - `docs/governance/avala-product-law.md`: canonical product law for governed delivery.
@@ -32,7 +32,7 @@ When a historical evidence file conflicts with current canonical docs, preserve 
 
 ## Current Accepted Baseline
 
-- M0 through M4.5 are closed as migration, build-control, Govern Lite, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
+- M0 through M4.5 are closed as migration, build-control, governance hardening, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
 - M5 enterprise readiness is the active readiness track after buyer-demo closure.
 - M5.0 enterprise Supabase readiness, M5.1 environment and secret hygiene, M5.2 auth/org/workspace planning, and M5.3 RLS policy design/test planning have evidence on main.
 - M5.2 authority work continued after the M5.3 planning slice. M5.2a through M5.2g-a are treated as prerequisite authority and ownership groundwork for future RLS implementation, not as RLS proof.
@@ -48,18 +48,22 @@ When a historical evidence file conflicts with current canonical docs, preserve 
 - AI must not decide final scores, gates, risk tiers, or recommendations.
 - Browser-stored API keys and browser-side AI are not acceptable for pilot or production behavior.
 - Server-side AI through Supabase Edge Functions remains the pilot and production direction.
-- Avala Govern Lite remains a scoped governance surface, not runtime agent execution.
-- Avala Delivery Lite remains a governed handoff and work item surface, not a full Jira replacement.
+- Avala Govern is a governance and control-plane surface, not runtime agent execution.
+- Avala Delivery is a governed delivery workbench, not a full Jira replacement.
 - No unsupported compliance claims are made.
 - The product should feel like a calm enterprise workbench, not a flashy AI toy.
 
-## Lite Naming Boundary
+## AP Naming Decision And Proof Boundary
 
-Avala Govern Lite and Avala Delivery Lite are currently canonical product names. "Lite" means intentionally scoped governance and delivery surfaces for the current product baseline. It is not old branding and should not be removed unless AP approves a broader product-scope change.
+Avala Govern and Avala Delivery are the buyer-facing canonical product names for the premium enterprise baseline. Scope boundaries are enforced through claim controls, Trust Center proof statuses, evidence references, limitation disclosures, and acceptance gates rather than buyer-facing module names.
+
+Avala Govern does not execute bots, agents, RPA jobs, external-system actions, MCP controls, A2A controls, or live runtime enforcement unless future AP-approved milestones implement and verify those capabilities.
+
+Avala Delivery governs approved work items, owners, blockers, handoff lineage, delivery packs, evidence checklists, and downstream delivery handoff. It is not a Jira replacement.
 
 ## Golden Path
 
-Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern Lite -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Lite Board -> Avala Monitor Dashboard.
+Organization -> Process Catalog -> Guided Assessment -> Deterministic Score -> Recommendation -> Decision Pack -> Avala Govern -> Avala Studio Handoff -> Generated Document -> Work Items -> Avala Delivery Board -> Avala Monitor Dashboard.
 
 ## Build Control Pack
 

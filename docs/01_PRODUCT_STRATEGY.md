@@ -14,8 +14,8 @@ Primary category language: Governed AI & Automation Delivery OS.
 
 - Avala Assess: process intake, deterministic scoring, automation/AI/RPA/workflow/HITL/agentic fitment, decision packs.
 - Avala Studio: BRD, PRD, PDD, SDD, diagrams, work items, editable governed documents.
-- Avala Govern Lite: governance card for agents and automations covering autonomy, risk, approvals, evidence, and blocked actions.
-- Avala Delivery Lite: approved work items, board, owners, status, blockers, handoff lineage.
+- Avala Govern: governance and control-plane surfaces for agents and automations covering autonomy, risk, approvals, evidence, allowed actions, blocked actions, AI/provider controls, and audit posture.
+- Avala Delivery: governed delivery workbench for approved work items, owners, status, blockers, handoff lineage, delivery packs, and downstream delivery handoff.
 - Avala Monitor: value, risk, blockers, portfolio visibility.
 - Avala Admin / Avala AI Controls: organization, users, providers, BYOK/key reference, audit, security settings.
 
@@ -24,6 +24,8 @@ Primary category language: Governed AI & Automation Delivery OS.
 AvalaOS Core should not compete directly with Jira, Azure DevOps, ServiceNow, UiPath, Power Automate, or execution runtimes. Those systems may manage tickets, workflow execution, RPA bots, service processes, or downstream engineering delivery.
 
 AvalaOS Core provides the governed control layer that explains what should be automated, why, with which controls, and what evidence supports the decision.
+
+Avala Govern does not execute bots, agents, RPA jobs, external-system actions, MCP controls, A2A controls, or live runtime enforcement in the current baseline. Avala Delivery is not a Jira replacement; it governs automation and AI delivery readiness around downstream delivery systems.
 
 ## Personas
 

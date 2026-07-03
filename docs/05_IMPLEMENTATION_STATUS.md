@@ -6,8 +6,8 @@
 - Avala Assess process catalog, guided assessment, deterministic scoring, Decision Pack, and handoff concepts.
 - Scoring regression test harness.
 - Avala Studio document generation workspace, editable sections, diagrams, approvals, exports, and work item candidates.
-- Avala Govern Lite card and governance control model for decision/handoff review.
-- Avala Delivery Lite board/backlog/work views and delivery policy tests.
+- Avala Govern card and governance control model for decision/handoff review.
+- Avala Delivery board/backlog/work views and delivery policy tests.
 - Supabase schema contracts, adapters, and Edge Function sources.
 - Browser-stored API key clearing and disabled BYOK demo path.
 - M0 through M4.5 documentation, control, hardening, and buyer-demo evidence baseline.
@@ -42,6 +42,6 @@
 ## Known Constraints
 
 - No scoring formula behavior was intentionally changed.
-- Delivery remains intentionally limited and should not expand into a full Jira replacement.
-- Runtime agent execution, MCP controls, A2A controls, and live runtime monitoring are out of scope for the current Govern Lite baseline.
+- Delivery remains a governed delivery workbench and should not expand into a full Jira replacement.
+- Runtime agent execution, bot execution, RPA job execution, external-system actions, MCP controls, A2A controls, and live runtime monitoring are out of scope for the current Avala Govern baseline.
 - Documentation cleanup does not imply production readiness, tenant-isolation proof, compliance certification, or Health implementation.
