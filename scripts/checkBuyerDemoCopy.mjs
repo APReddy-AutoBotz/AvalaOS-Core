@@ -62,6 +62,7 @@ const currentBuyerFacingSources = [
   'docs/01_PRODUCT_STRATEGY.md',
   'docs/02_PRODUCT_REQUIREMENTS.md',
   'docs/03_TECHNICAL_ARCHITECTURE.md',
+  'docs/04_MVP_ROADMAP.md',
   'docs/05_IMPLEMENTATION_STATUS.md',
   'docs/06_SECURITY_AND_GOVERNANCE.md',
   'docs/07_AVALA_GOVERN_FRAMEWORK.md',
