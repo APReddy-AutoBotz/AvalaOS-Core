@@ -4,6 +4,8 @@ import { useOrganization } from '../../services/organizationService';
 import { ALL_PRODUCT_MODULES, DEFAULT_ENABLED_MODULES } from '../../constants/moduleConfig';
 import { useAssessGovernanceConfig } from '../../services/assessGovernanceService';
 import { ASSESS_SECTIONS, ASSUMPTION_CATEGORIES, EVIDENCE_TYPES, getAssessFieldOptions } from '../../constants/assessQuestionBank';
+import AdminOverviewPanel from '../admin/AdminOverviewPanel';
+import AdminWorkbench from '../admin/AdminWorkbench';
 import TrustCenterPanel from '../admin/TrustCenterPanel';
 
 interface OrganizationSetupViewProps {
@@ -139,33 +141,35 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
 
     const getUserName = (id: string) => allUsers.find(u => u.id === id)?.name || id;
 
-    return (
-        <div className="max-w-4xl mx-auto p-6 space-y-8 pb-20">
-            {/* Header & Trial Status */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 flex justify-between items-start">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{currentOrganization.name}</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Avala Admin foundation</p>
-                </div>
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg p-4 text-right">
-                    <div className="text-amber-700 dark:text-amber-400 font-semibold mb-1 uppercase text-xs tracking-wider">
-                        {currentOrganization.subscriptionTier.replace('_', ' ')} Plan
-                    </div>
-                    {limits && (
-                        <div className="text-sm text-slate-600 dark:text-slate-300">
-                            Processes: 0 / {limits.maxProcesses}
-                            <br />
-                            Templates: 0 / {limits.maxTemplates}
-                        </div>
-                    )}
-                    <button className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline">
-                        Review workspace configuration
-                    </button>
-                </div>
+    const renderAdminFeedback = () => {
+        if (!validationError && !saveMessage) return null;
+
+        return (
+            <div className="mt-4 space-y-2" aria-live="polite">
+                {validationError && <div className="text-sm text-red-600 dark:text-red-400">{validationError}</div>}
+                {saveMessage && <div className="text-sm text-green-600 dark:text-green-400">{saveMessage}</div>}
             </div>
+        );
+    };
 
-            <TrustCenterPanel />
+    const planLabel = `${currentOrganization.subscriptionTier.replace('_', ' ')} Plan`;
 
+    return (
+        <AdminWorkbench
+            organizationName={currentOrganization.name}
+            planLabel={planLabel}
+            overview={
+                <AdminOverviewPanel
+                    organizationName={currentOrganization.name}
+                    planLabel={planLabel}
+                    enabledModuleCount={enabledModules.length}
+                    totalModuleCount={ALL_PRODUCT_MODULES.length}
+                    maxProcesses={limits?.maxProcesses}
+                    maxTemplates={limits?.maxTemplates}
+                />
+            }
+            organization={
+                <div className="space-y-6">
             {/* Company Profile Form */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Company Profile</h2>
@@ -201,8 +205,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </div>
                 </div>
 
-                {validationError && <div className="mt-4 text-sm text-red-600 dark:text-red-400">{validationError}</div>}
-                {saveMessage && <div className="mt-4 text-sm text-green-600 dark:text-green-400">{saveMessage}</div>}
+                {renderAdminFeedback()}
 
                 <div className="mt-6 flex justify-end">
                     <button onClick={handleSaveProfile} className="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-colors">
@@ -210,7 +213,24 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </button>
                 </div>
             </section>
-
+            {/* Starter Pack Hook */}
+            <section className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-6 border border-slate-200 dark:border-slate-700 border-dashed">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Recommended Starter Packs</h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xl">
+                            Based on your Industry ({industry || 'Not set'}), Avala Assess recommends pre-configured process templates to accelerate discovery.
+                        </p>
+                    </div>
+                    <button disabled className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-medium rounded-lg cursor-not-allowed border border-slate-300 dark:border-slate-600" title="Catalog browsing is not enabled in this workspace configuration">
+                        Browse Catalog (Not enabled)
+                    </button>
+                </div>
+            </section>
+                </div>
+            }
+            modules={
+                <div className="space-y-6">
             <section className="premium-surface rounded-3xl p-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -227,6 +247,8 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                         Save Modules
                     </button>
                 </div>
+
+                {renderAdminFeedback()}
 
                 <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                     {ALL_PRODUCT_MODULES.map(module => {
@@ -255,7 +277,11 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     })}
                 </div>
             </section>
-
+                </div>
+            }
+            trustCenter={<TrustCenterPanel />}
+            evidencePolicy={
+                <div className="space-y-6">
             <section className="premium-surface overflow-hidden rounded-3xl border border-[#002C4B]/10">
                 <div className="bg-[#002C4B] p-6 text-white">
                     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -532,22 +558,10 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </div>
                 </div>
             </section>
-
-            {/* Starter Pack Hook */}
-            <section className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-6 border border-slate-200 dark:border-slate-700 border-dashed">
-                <div className="flex items-start justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Recommended Starter Packs</h2>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xl">
-                            Based on your Industry ({industry || 'Not set'}), Avala Assess recommends pre-configured process templates to accelerate discovery.
-                        </p>
-                    </div>
-                    <button disabled className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-medium rounded-lg cursor-not-allowed border border-slate-300 dark:border-slate-600" title="Catalog browsing is not enabled in this workspace configuration">
-                        Browse Catalog (Not enabled)
-                    </button>
                 </div>
-            </section>
-
+            }
+            usersRoles={
+                <div className="space-y-6">
             {/* Role Management Stub */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Organization Members & Roles</h2>
@@ -582,7 +596,10 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </table>
                 </div>
             </section>
-
+                </div>
+            }
+            auditSecurity={
+                <div className="space-y-6">
             {/* Audit Log */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent Audit Log</h2>
@@ -618,7 +635,28 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </table>
                 </div>
             </section>
-        </div>
+                </div>
+            }
+            aiControls={
+                <section className="premium-surface rounded-3xl p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">AI Controls</p>
+                            <h2 className="mt-1 text-xl font-black text-[#002C4B] dark:text-white">Server-side AI and BYOK direction</h2>
+                            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
+                                Current governance documents keep provider resolution and BYOK controls on the server-side path. This section is a read-only pointer and does not add provider behavior, hosted control enforcement, or new security proof.
+                            </p>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                            Direction only
+                        </span>
+                    </div>
+                    <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                        Server-side AI/BYOK direction is documented; no provider implementation, credential surface, runtime adapter, or hosted enforcement is introduced by this Admin Workbench slice.
+                    </div>
+                </section>
+            }
+        />
     );
 };
 
