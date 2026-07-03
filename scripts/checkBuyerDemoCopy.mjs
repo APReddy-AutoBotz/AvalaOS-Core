@@ -39,7 +39,7 @@ assert.ok(trustCenterPanel.includes('No claim controls available.'), 'Trust Cent
 
 const adminWorkbench = read('components/admin/AdminWorkbench.tsx');
 assert.ok(adminWorkbench.includes('Admin Workbench'), 'Admin Workbench shell should render the Admin Workbench title.');
-assert.ok(adminWorkbench.includes('Read-only structure'), 'Admin Workbench shell should preserve read-only structure copy.');
+assert.ok(adminWorkbench.includes('Sectioned admin structure'), 'Admin Workbench shell should preserve proof-safe structure copy.');
 
 const adminOverview = read('components/admin/AdminOverviewPanel.tsx');
 assert.ok(adminOverview.includes('Trust Center proof states are evidence-gated'), 'Admin overview should preserve evidence-gated proof state copy.');

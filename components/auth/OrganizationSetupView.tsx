@@ -141,6 +141,17 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
 
     const getUserName = (id: string) => allUsers.find(u => u.id === id)?.name || id;
 
+    const renderAdminFeedback = () => {
+        if (!validationError && !saveMessage) return null;
+
+        return (
+            <div className="mt-4 space-y-2" aria-live="polite">
+                {validationError && <div className="text-sm text-red-600 dark:text-red-400">{validationError}</div>}
+                {saveMessage && <div className="text-sm text-green-600 dark:text-green-400">{saveMessage}</div>}
+            </div>
+        );
+    };
+
     const planLabel = `${currentOrganization.subscriptionTier.replace('_', ' ')} Plan`;
 
     return (
@@ -194,8 +205,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </div>
                 </div>
 
-                {validationError && <div className="mt-4 text-sm text-red-600 dark:text-red-400">{validationError}</div>}
-                {saveMessage && <div className="mt-4 text-sm text-green-600 dark:text-green-400">{saveMessage}</div>}
+                {renderAdminFeedback()}
 
                 <div className="mt-6 flex justify-end">
                     <button onClick={handleSaveProfile} className="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-colors">
@@ -237,6 +247,8 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                         Save Modules
                     </button>
                 </div>
+
+                {renderAdminFeedback()}
 
                 <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                     {ALL_PRODUCT_MODULES.map(module => {

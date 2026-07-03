@@ -49,13 +49,15 @@ The Admin Workbench now provides section navigation for:
 
 The existing Company Profile content is in Organization, enabled product modules are in Modules, the existing Trust Center panel is in Trust Center, Assess governance and evidence controls are in Evidence Policy, members are in Users / Roles, and recent audit logs are in Audit / Security. AI Controls is a read-only direction summary and does not add provider behavior.
 
+Review amendment: shared validation and save feedback remains visible near the Company Profile save action in Organization and near the Save Modules action in Modules after the section split. Existing save, toggle, and persistence behavior is unchanged.
+
 ## 5. Admin Model/Test Summary
 
 `services/adminWorkbenchModel.ts` defines section keys, section definitions, default section, section lookup, and key validation. `services/adminWorkbenchModel.test.ts` covers required ordering, default overview section, Trust Center label, AI Controls proof-safe disclosure, unsupported readiness/compliance phrase bans, old buyer-facing Lite name exclusion, valid key checks, and invalid key handling.
 
 ## 6. Naming/Copy Guardrail Summary
 
-`scripts/checkBuyerDemoCopy.mjs` includes the new Admin Workbench shell, navigation, overview panel, and model in buyer-facing copy scans. It also blocks unsupported readiness/compliance wording and old buyer-facing Lite names in those new Admin Workbench files.
+`scripts/checkBuyerDemoCopy.mjs` includes the new Admin Workbench shell, navigation, overview panel, and model in buyer-facing copy scans. It also blocks unsupported readiness/compliance wording and old buyer-facing Lite names in those new Admin Workbench files, and checks the shell uses proof-safe sectioned-structure wording.
 
 ## 7. Proof-Boundary Confirmation
 

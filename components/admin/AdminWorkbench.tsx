@@ -79,7 +79,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{activeSectionDefinition.description}</p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                Read-only structure
+                Sectioned admin structure
               </span>
             </div>
             {activeSectionDefinition.proofSafeDisclosure && (
