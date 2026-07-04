@@ -75,4 +75,4 @@ No readiness evidence was produced. Existing evidence references remain referenc
 
 ## Final Git Status
 
-Before commit, the working tree contained only the files listed in this evidence record. Generated provider-resolver test directories from the aggregate test were removed and are not part of the PR. Final status is expected to be clean after this evidence doc and the implementation files are committed and pushed.
+Final git status is clean after safe verification, generated provider-resolver test directories were removed and are not part of the PR, and the implementation/evidence files were committed and pushed to the PR branch.
