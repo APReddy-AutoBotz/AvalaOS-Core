@@ -45,6 +45,7 @@ const buyerAcceptanceReviewGatePresentation = read('services/buyerAcceptanceRevi
 const buyerAcceptanceAdminWalkthrough = read('services/buyerAcceptanceAdminWalkthrough.ts');
 const buyerAcceptanceAdminWalkthroughPanel = read('components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx');
 const buyerAcceptanceAdminWalkthroughPresentation = read('services/buyerAcceptanceAdminWalkthroughPresentation.ts');
+const buyerAcceptanceBrowserWalkthroughPlan = read('services/buyerAcceptanceBrowserWalkthroughPlan.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -57,6 +58,9 @@ assert.ok(buyerAcceptanceAdminWalkthrough.includes('buildBuyerAcceptanceAdminWal
 const buyerAcceptanceAdminWalkthroughBoundaryCopy = `${buyerAcceptanceAdminWalkthroughPanel}\n${buyerAcceptanceAdminWalkthroughPresentation}`;
 for (const phrase of ['read-only internal rehearsal', 'not browser automation', 'not screenshot evidence', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'export/PDF/download remains blocked']) {
   assert.ok(buyerAcceptanceAdminWalkthroughBoundaryCopy.includes(phrase), `Buyer Acceptance Admin Walkthrough UI/presentation should include proof-safe boundary phrase: ${phrase}`);
+}
+for (const phrase of ['browser walkthrough remains plan-only', 'no browser run was performed', 'no screenshot was captured', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceBrowserWalkthroughPlanSnapshot']) {
+  assert.ok(buyerAcceptanceBrowserWalkthroughPlan.includes(phrase), `Buyer Acceptance Browser Walkthrough plan should include proof-safe plan-only phrase: ${phrase}`);
 }
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -145,6 +149,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceReviewGatePresentation.ts',
   'services/buyerAcceptanceAdminWalkthrough.ts',
   'services/buyerAcceptanceAdminWalkthroughPresentation.ts',
+  'services/buyerAcceptanceBrowserWalkthroughPlan.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
