@@ -13,6 +13,7 @@ interface AdminWorkbenchProps {
   organization: React.ReactNode;
   modules: React.ReactNode;
   trustCenter: React.ReactNode;
+  buyerAcceptancePack: React.ReactNode;
   evidencePolicy: React.ReactNode;
   usersRoles: React.ReactNode;
   auditSecurity: React.ReactNode;
@@ -26,6 +27,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
   organization,
   modules,
   trustCenter,
+  buyerAcceptancePack,
   evidencePolicy,
   usersRoles,
   auditSecurity,
@@ -42,6 +44,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
     organization,
     modules,
     trust_center: trustCenter,
+    buyer_acceptance_pack: buyerAcceptancePack,
     evidence_policy: evidencePolicy,
     users_roles: usersRoles,
     audit_security: auditSecurity,
@@ -56,7 +59,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Admin</p>
             <h1 className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">Admin Workbench</h1>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-              Focused admin navigation for organization setup, module access, evidence policy, Trust Center review, users, audit signals, and AI control direction.
+              Focused admin navigation for organization setup, module access, Trust Center review, Buyer Acceptance Pack review, evidence policy, users, audit signals, and AI control direction.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
