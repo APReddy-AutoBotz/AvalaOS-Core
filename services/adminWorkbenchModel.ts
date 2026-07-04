@@ -3,6 +3,7 @@ export type AdminSectionKey =
   | 'organization'
   | 'modules'
   | 'trust_center'
+  | 'buyer_acceptance_pack'
   | 'evidence_policy'
   | 'users_roles'
   | 'audit_security'
@@ -42,6 +43,13 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     shortLabel: 'Trust',
     description: 'Inspect read-only claim controls, proof states, evidence references, and limitation disclosures.',
     proofSafeDisclosure: 'Trust Center proof states are evidence-gated and do not imply unsupported readiness claims.',
+  },
+  {
+    key: 'buyer_acceptance_pack',
+    label: 'Buyer Acceptance Pack',
+    shortLabel: 'Buyer Pack',
+    description: 'Review the read-only buyer acceptance pack foundation without treating it as readiness approval.',
+    proofSafeDisclosure: 'Buyer Acceptance Pack is read-only; it is not an approval, not an export, not a readiness artifact, not a compliance artifact, and no PDF/download generated.',
   },
   {
     key: 'evidence_policy',

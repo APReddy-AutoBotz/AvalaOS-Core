@@ -37,6 +37,15 @@ assert.ok(trustCenterPanel.includes('Trust Center proof states do not imply prod
 assert.ok(trustCenterPanel.includes('No evidence records available.'), 'Trust Center panel should include safe empty evidence state.');
 assert.ok(trustCenterPanel.includes('No claim controls available.'), 'Trust Center panel should include safe empty claim-control state.');
 
+const buyerAcceptancePackPanel = read('components/admin/BuyerAcceptancePackPanel.tsx');
+const buyerAcceptancePackPresentation = read('services/buyerAcceptancePackPresentation.ts');
+const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
+assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
+assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
+for (const phrase of ['not an approval', 'not an export', 'not a readiness artifact', 'not a compliance artifact', 'no PDF/download generated']) {
+  assert.ok(buyerAcceptancePackBoundaryCopy.includes(phrase), `Buyer Acceptance Pack UI/presentation should include proof-safe boundary phrase: ${phrase}`);
+}
+
 const adminWorkbench = read('components/admin/AdminWorkbench.tsx');
 assert.ok(adminWorkbench.includes('Admin Workbench'), 'Admin Workbench shell should render the Admin Workbench title.');
 assert.ok(adminWorkbench.includes('Sectioned admin structure'), 'Admin Workbench shell should preserve proof-safe structure copy.');
@@ -47,6 +56,7 @@ assert.ok(adminOverview.includes('Review Trust Center blocked/evidence-required 
 
 const adminWorkbenchModel = read('services/adminWorkbenchModel.ts');
 assert.ok(adminWorkbenchModel.includes("key: 'trust_center'"), 'Admin Workbench model should include the Trust Center section.');
+assert.ok(adminWorkbenchModel.includes("key: 'buyer_acceptance_pack'"), 'Admin Workbench model should include the Buyer Acceptance Pack section.');
 assert.ok(adminWorkbenchModel.includes("label: 'AI Controls'"), 'Admin Workbench model should include the AI Controls section.');
 
 const buyerAcceptancePackModel = read('services/buyerAcceptancePackModel.ts');
@@ -104,9 +114,11 @@ const currentBuyerFacingSources = [
   'components/admin/AdminSectionNav.tsx',
   'components/admin/AdminOverviewPanel.tsx',
   'components/admin/TrustCenterPanel.tsx',
+  'components/admin/BuyerAcceptancePackPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
   'services/adminWorkbenchModel.ts',
   'services/buyerAcceptancePackModel.ts',
+  'services/buyerAcceptancePackPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -138,6 +150,8 @@ const adminWorkbenchBuyerFacingSources = [
   'components/admin/AdminWorkbench.tsx',
   'components/admin/AdminSectionNav.tsx',
   'components/admin/AdminOverviewPanel.tsx',
+  'components/admin/TrustCenterPanel.tsx',
+  'components/admin/BuyerAcceptancePackPanel.tsx',
   'services/adminWorkbenchModel.ts',
 ];
 

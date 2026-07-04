@@ -14,6 +14,7 @@ assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
   'organization',
   'modules',
   'trust_center',
+  'buyer_acceptance_pack',
   'evidence_policy',
   'users_roles',
   'audit_security',
@@ -25,6 +26,14 @@ assert.equal(getDefaultAdminSection().key, 'overview');
 const trustCenterSection = getAdminSectionByKey('trust_center');
 assert.ok(trustCenterSection);
 assert.equal(trustCenterSection.label, 'Trust Center');
+
+const buyerAcceptancePackSection = getAdminSectionByKey('buyer_acceptance_pack');
+assert.ok(buyerAcceptancePackSection);
+assert.equal(buyerAcceptancePackSection.label, 'Buyer Acceptance Pack');
+assert.doesNotMatch(
+  buyerAcceptancePackSection.description + '\n' + (buyerAcceptancePackSection.proofSafeDisclosure || ''),
+  /approved for buyer use|readiness approved|export available|PDF available|download available|compliance certified|production ready/i,
+);
 
 const aiControlsSection = getAdminSectionByKey('ai_controls');
 assert.ok(aiControlsSection);
@@ -57,6 +66,7 @@ assert.doesNotMatch(sectionCopy, /Avala Delivery Lite/);
 
 assert.equal(isAdminSectionKey('overview'), true);
 assert.equal(isAdminSectionKey('trust_center'), true);
+assert.equal(isAdminSectionKey('buyer_acceptance_pack'), true);
 assert.equal(isAdminSectionKey('not_a_section'), false);
 assert.equal(getAdminSectionByKey('not_a_section'), undefined);
 

@@ -6,6 +6,7 @@ import { useAssessGovernanceConfig } from '../../services/assessGovernanceServic
 import { ASSESS_SECTIONS, ASSUMPTION_CATEGORIES, EVIDENCE_TYPES, getAssessFieldOptions } from '../../constants/assessQuestionBank';
 import AdminOverviewPanel from '../admin/AdminOverviewPanel';
 import AdminWorkbench from '../admin/AdminWorkbench';
+import BuyerAcceptancePackPanel from '../admin/BuyerAcceptancePackPanel';
 import TrustCenterPanel from '../admin/TrustCenterPanel';
 
 interface OrganizationSetupViewProps {
@@ -280,6 +281,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                 </div>
             }
             trustCenter={<TrustCenterPanel />}
+            buyerAcceptancePack={<BuyerAcceptancePackPanel />}
             evidencePolicy={
                 <div className="space-y-6">
             <section className="premium-surface overflow-hidden rounded-3xl border border-[#002C4B]/10">
