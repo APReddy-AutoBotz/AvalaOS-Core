@@ -14,6 +14,7 @@ interface AdminWorkbenchProps {
   modules: React.ReactNode;
   trustCenter: React.ReactNode;
   buyerAcceptancePack: React.ReactNode;
+  buyerAcceptanceReviewGate: React.ReactNode;
   evidencePolicy: React.ReactNode;
   usersRoles: React.ReactNode;
   auditSecurity: React.ReactNode;
@@ -28,6 +29,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
   modules,
   trustCenter,
   buyerAcceptancePack,
+  buyerAcceptanceReviewGate,
   evidencePolicy,
   usersRoles,
   auditSecurity,
@@ -45,6 +47,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
     modules,
     trust_center: trustCenter,
     buyer_acceptance_pack: buyerAcceptancePack,
+    buyer_acceptance_review_gate: buyerAcceptanceReviewGate,
     evidence_policy: evidencePolicy,
     users_roles: usersRoles,
     audit_security: auditSecurity,
