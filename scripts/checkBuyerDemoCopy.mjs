@@ -49,6 +49,13 @@ const adminWorkbenchModel = read('services/adminWorkbenchModel.ts');
 assert.ok(adminWorkbenchModel.includes("key: 'trust_center'"), 'Admin Workbench model should include the Trust Center section.');
 assert.ok(adminWorkbenchModel.includes("label: 'AI Controls'"), 'Admin Workbench model should include the AI Controls section.');
 
+const buyerAcceptancePackModel = read('services/buyerAcceptancePackModel.ts');
+assert.ok(buyerAcceptancePackModel.includes('Avala Govern'), 'Buyer Acceptance Pack model should preserve the Avala Govern full name.');
+assert.ok(buyerAcceptancePackModel.includes('Avala Delivery'), 'Buyer Acceptance Pack model should preserve the Avala Delivery full name.');
+assert.ok(buyerAcceptancePackModel.includes('draft foundation'), 'Buyer Acceptance Pack model should frame the pack as a draft foundation.');
+assert.ok(buyerAcceptancePackModel.includes('not an approval, export, readiness artifact, or compliance artifact'), 'Buyer Acceptance Pack model should preserve proof-safe pack boundary copy.');
+assert.equal(buyerAcceptancePackModel.includes("packStatus: 'approved_for_review'"), false, 'Buyer Acceptance Pack model should not mark the generated pack approved.');
+
 const moduleConfig = read('constants/moduleConfig.ts');
 assert.ok(moduleConfig.includes('Draft editable review documents'), 'Avala Studio module copy should frame drafts as editable review documents.');
 assert.ok(moduleConfig.includes('human sign-off'), 'Avala Studio module copy should require human sign-off.');
@@ -99,6 +106,7 @@ const currentBuyerFacingSources = [
   'components/admin/TrustCenterPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
   'services/adminWorkbenchModel.ts',
+  'services/buyerAcceptancePackModel.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
