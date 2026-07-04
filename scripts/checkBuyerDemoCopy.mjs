@@ -40,11 +40,17 @@ assert.ok(trustCenterPanel.includes('No claim controls available.'), 'Trust Cent
 const buyerAcceptancePackPanel = read('components/admin/BuyerAcceptancePackPanel.tsx');
 const buyerAcceptancePackPresentation = read('services/buyerAcceptancePackPresentation.ts');
 const buyerAcceptanceReviewGate = read('services/buyerAcceptanceReviewGate.ts');
+const buyerAcceptanceReviewGatePanel = read('components/admin/BuyerAcceptanceReviewGatePanel.tsx');
+const buyerAcceptanceReviewGatePresentation = read('services/buyerAcceptanceReviewGatePresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
 assert.ok(buyerAcceptanceReviewGate.includes('No export/PDF/download scope approved'), 'Buyer Acceptance Review Gate should keep export blocked.');
 assert.ok(buyerAcceptanceReviewGate.includes('buildBuyerAcceptanceReviewGateSnapshot'), 'Buyer Acceptance Review Gate should expose a deterministic snapshot builder.');
+const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
+for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
+  assert.ok(buyerAcceptanceReviewGateBoundaryCopy.includes(phrase), `Buyer Acceptance Review Gate UI/presentation should include proof-safe boundary phrase: ${phrase}`);
+}
 for (const phrase of ['not an approval', 'not an export', 'not a readiness artifact', 'not a compliance artifact', 'no PDF/download generated']) {
   assert.ok(buyerAcceptancePackBoundaryCopy.includes(phrase), `Buyer Acceptance Pack UI/presentation should include proof-safe boundary phrase: ${phrase}`);
 }
@@ -118,11 +124,13 @@ const currentBuyerFacingSources = [
   'components/admin/AdminOverviewPanel.tsx',
   'components/admin/TrustCenterPanel.tsx',
   'components/admin/BuyerAcceptancePackPanel.tsx',
+  'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
   'services/adminWorkbenchModel.ts',
   'services/buyerAcceptancePackModel.ts',
   'services/buyerAcceptancePackPresentation.ts',
   'services/buyerAcceptanceReviewGate.ts',
+  'services/buyerAcceptanceReviewGatePresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -156,6 +164,7 @@ const adminWorkbenchBuyerFacingSources = [
   'components/admin/AdminOverviewPanel.tsx',
   'components/admin/TrustCenterPanel.tsx',
   'components/admin/BuyerAcceptancePackPanel.tsx',
+  'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
   'services/adminWorkbenchModel.ts',
 ];
 

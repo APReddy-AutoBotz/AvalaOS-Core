@@ -4,6 +4,7 @@ export type AdminSectionKey =
   | 'modules'
   | 'trust_center'
   | 'buyer_acceptance_pack'
+  | 'buyer_acceptance_review_gate'
   | 'evidence_policy'
   | 'users_roles'
   | 'audit_security'
@@ -50,6 +51,13 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     shortLabel: 'Buyer Pack',
     description: 'Review the read-only buyer acceptance pack foundation without treating it as readiness approval.',
     proofSafeDisclosure: 'Buyer Acceptance Pack is read-only; it is not an approval, not an export, not a readiness artifact, not a compliance artifact, and no PDF/download generated.',
+  },
+  {
+    key: 'buyer_acceptance_review_gate',
+    label: 'Review Rehearsal Gate',
+    shortLabel: 'Review Gate',
+    description: 'Buyer and AP review rehearsal surface for blockers, questions, safe answers, and export-gating review.',
+    proofSafeDisclosure: 'Review Rehearsal Gate is read-only; it is not an approval, not an export, not readiness evidence, not compliance evidence, and no PDF/download generated.',
   },
   {
     key: 'evidence_policy',
