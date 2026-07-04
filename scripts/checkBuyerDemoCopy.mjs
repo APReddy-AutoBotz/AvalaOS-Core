@@ -43,6 +43,8 @@ const buyerAcceptanceReviewGate = read('services/buyerAcceptanceReviewGate.ts');
 const buyerAcceptanceReviewGatePanel = read('components/admin/BuyerAcceptanceReviewGatePanel.tsx');
 const buyerAcceptanceReviewGatePresentation = read('services/buyerAcceptanceReviewGatePresentation.ts');
 const buyerAcceptanceAdminWalkthrough = read('services/buyerAcceptanceAdminWalkthrough.ts');
+const buyerAcceptanceAdminWalkthroughPanel = read('components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx');
+const buyerAcceptanceAdminWalkthroughPresentation = read('services/buyerAcceptanceAdminWalkthroughPresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -52,6 +54,10 @@ assert.ok(buyerAcceptanceAdminWalkthrough.includes('Admin walkthrough can be reh
 assert.ok(buyerAcceptanceAdminWalkthrough.includes('No export/PDF/download scope approved'), 'Buyer Acceptance Admin Walkthrough should keep export/PDF/download blocked.');
 assert.ok(buyerAcceptanceAdminWalkthrough.includes('Readiness claims remain blocked'), 'Buyer Acceptance Admin Walkthrough should keep readiness claims blocked.');
 assert.ok(buyerAcceptanceAdminWalkthrough.includes('buildBuyerAcceptanceAdminWalkthroughSnapshot'), 'Buyer Acceptance Admin Walkthrough should expose a deterministic snapshot builder.');
+const buyerAcceptanceAdminWalkthroughBoundaryCopy = `${buyerAcceptanceAdminWalkthroughPanel}\n${buyerAcceptanceAdminWalkthroughPresentation}`;
+for (const phrase of ['read-only internal rehearsal', 'not browser automation', 'not screenshot evidence', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'export/PDF/download remains blocked']) {
+  assert.ok(buyerAcceptanceAdminWalkthroughBoundaryCopy.includes(phrase), `Buyer Acceptance Admin Walkthrough UI/presentation should include proof-safe boundary phrase: ${phrase}`);
+}
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
   assert.ok(buyerAcceptanceReviewGateBoundaryCopy.includes(phrase), `Buyer Acceptance Review Gate UI/presentation should include proof-safe boundary phrase: ${phrase}`);
@@ -130,6 +136,7 @@ const currentBuyerFacingSources = [
   'components/admin/TrustCenterPanel.tsx',
   'components/admin/BuyerAcceptancePackPanel.tsx',
   'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
+  'components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
   'services/adminWorkbenchModel.ts',
   'services/buyerAcceptancePackModel.ts',
@@ -137,6 +144,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceReviewGate.ts',
   'services/buyerAcceptanceReviewGatePresentation.ts',
   'services/buyerAcceptanceAdminWalkthrough.ts',
+  'services/buyerAcceptanceAdminWalkthroughPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -171,6 +179,7 @@ const adminWorkbenchBuyerFacingSources = [
   'components/admin/TrustCenterPanel.tsx',
   'components/admin/BuyerAcceptancePackPanel.tsx',
   'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
+  'components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx',
   'services/adminWorkbenchModel.ts',
 ];
 

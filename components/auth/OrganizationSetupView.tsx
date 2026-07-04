@@ -8,6 +8,7 @@ import AdminOverviewPanel from '../admin/AdminOverviewPanel';
 import AdminWorkbench from '../admin/AdminWorkbench';
 import BuyerAcceptancePackPanel from '../admin/BuyerAcceptancePackPanel';
 import BuyerAcceptanceReviewGatePanel from '../admin/BuyerAcceptanceReviewGatePanel';
+import BuyerAcceptanceAdminWalkthroughPanel from '../admin/BuyerAcceptanceAdminWalkthroughPanel';
 import TrustCenterPanel from '../admin/TrustCenterPanel';
 
 interface OrganizationSetupViewProps {
@@ -284,6 +285,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
             trustCenter={<TrustCenterPanel />}
             buyerAcceptancePack={<BuyerAcceptancePackPanel />}
             buyerAcceptanceReviewGate={<BuyerAcceptanceReviewGatePanel />}
+            buyerAcceptanceAdminWalkthrough={<BuyerAcceptanceAdminWalkthroughPanel />}
             evidencePolicy={
                 <div className="space-y-6">
             <section className="premium-surface overflow-hidden rounded-3xl border border-[#002C4B]/10">
