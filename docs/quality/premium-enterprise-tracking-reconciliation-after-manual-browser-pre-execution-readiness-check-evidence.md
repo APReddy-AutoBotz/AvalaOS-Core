@@ -43,6 +43,7 @@ The canonical tracking docs were updated to reflect the accepted baseline after 
 - Real DB/RLS/artifact, hosted, deployment, schema, provider, classifier, and real assertion execution remain unperformed.
 - Production, hosted, deployment, RLS, tenant-isolation, security, buyer, product, release-candidate, and compliance readiness remain unproven.
 - The next safe path is pause/review, then either another docs-only reconciliation if drift remains or a separate AP-approved manual browser go/no-go decision gate.
+- Amendment note: stale DOCS-002 task-ledger status was corrected from pending/in-progress to accepted/complete because PR #87 is closed and merged. This is tracking-only and does not imply runtime, DB/RLS/artifact, hosted, deployment, browser, approval, or readiness proof.
 
 ## Tracking Docs Updated
 

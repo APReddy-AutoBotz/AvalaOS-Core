@@ -35,7 +35,7 @@ This ledger records the current canonical milestone status. Evidence links are h
 | Premium Enterprise Tracking Reconciliation | PETR-001 | In review | Codex | Canonical tracking docs and reconciliation evidence | Reconcile source-of-truth, implementation status, roadmap, readiness gates, and task ledger after PR #175 closure | `docs/quality/premium-enterprise-tracking-reconciliation-after-manual-browser-pre-execution-readiness-check-evidence.md` | Draft PR expected; docs-only, no next execution milestone started |
 | M5.5-M5.6 | M55-56-001 | Planned | AP/Codex | Secure export, storage, deployment, runbook, and pilot evidence | Future enterprise pilot readiness evidence complete | Not created | Requires separate explicit approval |
 | Docs Audit | DOCS-001 | Complete | AP/Codex | Documentation audit docs | Docs consistency audit and post-merge verification accepted | `docs/quality/docs-consistency-audit.md`; `docs/quality/docs-consistency-audit-post-merge-verification.md` | Accepted |
-| SOT Cleanup | DOCS-002 | In progress | Codex | Canonical docs and planning/quality docs | Source-of-truth cleanup after docs audit | `docs/quality/source-of-truth-cleanup-after-docs-consistency-audit-evidence.md` | Pending PR review |
+| SOT Cleanup | DOCS-002 | Complete | Codex | Canonical docs and planning/quality docs | Source-of-truth cleanup after docs audit | `docs/quality/source-of-truth-cleanup-after-docs-consistency-audit-evidence.md`; `docs/quality/source-of-truth-cleanup-post-merge-verification.md` | Accepted |
 
 ## Active Decision Notes
 
