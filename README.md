@@ -28,9 +28,13 @@ Historical evidence files under `docs/quality/` are immutable records. They prov
 ## Current Baseline
 
 - M0 through M4.5 are closed as migration, build-control, governance hardening, governed-delivery, server-side AI/BYOK hardening, and buyer-demo readiness milestones.
-- M5 enterprise readiness is active. M5.0 through M5.3 planning and M5.2 authority slices through M5.2g-a are present on main.
+- M5 enterprise readiness is active. M5.0 through M5.3 planning, M5.2 authority slices through M5.2g-a, M5.3a synthetic-boundary reconciliation, and M5.4a-M5.4f enterprise planning evidence-pack records are present on main.
 - M5.2g-a created the `delivery_work_items` authority table with RLS enabled and no policies. This is fail-closed readiness only; it is not tenant-isolation proof or hosted Delivery runtime readiness.
 - M5.3 is an RLS policy design and test plan. RLS implementation, tenant-isolation tests, and policy proof require a later approved milestone.
+- M5.4a-M5.4f are closed as an enterprise planning evidence pack, not as production, hosted, deployment, security, buyer, product, release-candidate, compliance, RLS, or tenant-isolation readiness proof.
+- PR #161-#175 are accepted as the Premium Enterprise Buyer Acceptance, Trust Center, Admin Workbench, and Browser Walkthrough approval-boundary track through PR #175. PR #175 is a manual browser pre-execution readiness check for AP go/no-go decision only.
+- AP approval has not been granted for manual browser execution. Browser execution has not been approved or performed; no browser launched, automation ran, screenshots were captured, export/PDF/download artifacts were produced, browser/run evidence was created, approval workflow ran, or statuses changed.
+- Real DB/RLS/artifact, hosted, deployment, schema, provider, classifier, and real assertion execution remain unperformed. Production, hosted, deployment, RLS, tenant-isolation, security, buyer, product, release-candidate, and compliance readiness remain unproven.
 - Avala Govern and Avala Delivery are the buyer-facing canonical module names. Scope and proof boundaries are carried by claim controls, evidence gates, limitation disclosures, and Trust Center proof statuses, not by module names.
 - KlarityFlow Health remains a separate proof vertical and must not be merged into core platform scope without explicit approval.
 

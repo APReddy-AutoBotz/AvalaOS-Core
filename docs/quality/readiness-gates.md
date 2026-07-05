@@ -14,7 +14,7 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | Gate 3 | Governed Delivery Pack complete | Complete | Handoff lineage, owners, blockers, source evidence. |
 | Gate 4 | Server-side AI/BYOK hardening complete | Complete | Server-side execution direction, key references, usage audit, browser-key lockdown. |
 | Gate 5 | Buyer demo readiness complete | Complete | Demo story, verified flow, claim-safe copy, M5 readiness gate. |
-| Gate 6 | Enterprise readiness track | Active | M5 Supabase, RLS, audit, export, deployment, and runbook evidence. |
+| Gate 6 | Enterprise readiness track | Active | M5 Supabase, RLS, audit, export, deployment, runbook, and Premium Enterprise approval-boundary evidence. |
 | Gate 7 | Pilot readiness | Planned | Verified controls, tenant isolation, runbooks, deployment evidence, open-risk list. |
 
 ## M5 Enterprise Readiness Sub-Gates
@@ -34,8 +34,9 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | M5.3a-4 through M5.3a-8 | RLS/artifact evidence requirements, approval, and harness-design gates | Complete as docs-only planning/gate records | Evidence requirements and synthetic harness direction exist; no DB/RLS/artifact execution or readiness proof. |
 | M5.3a-9 | RLS and artifact evidence harness synthetic boundary implementation | Complete as synthetic/non-executing implementation | Synthetic boundary validator exists and synthetic-only tests passed; no real assertion execution or readiness evidence. |
 | M5.3a-10 | RLS and artifact evidence synthetic boundary closure reconciliation gate | Complete as docs-only reconciliation | M5.3a-9 reconciled as synthetic boundary only; local DB, schema, RLS, artifact SELECT isolation, tenant isolation, hosted readiness, production readiness, and local startup success remain unproven. |
-| M5.3a-11 | M5.3 tracking reconciliation after synthetic boundary closure | Active docs-only reconciliation | Correct tracking drift only; no DB/RLS/artifact execution, local-readiness reopening, or readiness claims. |
-| M5.4 | Audit and evidence operations | Planned | Requires explicit scope and verification. |
+| M5.3a-11 | M5.3 tracking reconciliation after synthetic boundary closure | Complete as docs-only reconciliation | Corrected tracking drift only; no DB/RLS/artifact execution, local-readiness reopening, or readiness claims. |
+| M5.4a-M5.4f | Enterprise planning evidence pack | Complete as planning evidence pack | Accepted planning records for audit/evidence, security/governance, hosted evidence, deployment/operations, product/buyer, and release-candidate boundaries; not readiness proof. |
+| PR #161-#175 | Premium Enterprise Buyer Acceptance / Trust Center / Admin Workbench / Browser Walkthrough approval-boundary track | Complete through PR #175 | PR #175 is a pre-execution readiness check for AP go/no-go decision only; no AP approval, browser execution approval, browser execution, screenshot/export/PDF/download artifact, approval workflow, or status change occurred. |
 | M5.5 | Secure export and storage readiness | Planned | Requires explicit scope and verification. |
 | M5.6 | Deployment, runbooks, and pilot evidence | Planned | Required before pilot readiness acceptance. |
 
@@ -43,10 +44,16 @@ No gate passes without evidence, verification, and AP acceptance where required.
 
 KlarityFlow Health is not Gate 6 for AvalaOS Core. It remains a separate proof vertical and may only move through Health-specific gates if explicitly approved.
 
-## Current M5.3a Proof Boundary
+## Current M5 Proof Boundary
 
-M5.3a-9 and M5.3a-10 do not approve real assertion execution or DB/RLS/artifact execution. No readiness evidence exists from those milestones.
+M5.3a-9, M5.3a-10, and M5.3a-11 do not approve real assertion execution or DB/RLS/artifact execution. No readiness evidence exists from those milestones.
 
 The local-readiness loop remains stopped. Local DB availability remains unresolved, schema is not proven, RLS is not proven, RLS helper behavior is not newly validated, artifact SELECT isolation is not verified, tenant isolation is not newly verified, hosted readiness is not proven, production readiness is not proven, and local startup success is not proven.
 
-Any future real evidence run requires a new explicit AP approval gate before execution.
+M5.4a-M5.4f are enterprise planning evidence-pack records only. They do not prove production, hosted, deployment, security, buyer, product, release-candidate, compliance, RLS, tenant-isolation, schema, artifact SELECT, local-readiness, or local startup readiness.
+
+PR #161-#175 are accepted as the Premium Enterprise approval-boundary track through PR #175. PR #175 remains a pre-execution readiness check for AP go/no-go decision only. AP approval has not been granted. Browser execution has not been approved or performed. No browser launched, no automation ran, no screenshots were captured, no screenshot folders were created, no export/PDF/download artifacts were produced, no browser/run evidence was created, no approval workflow ran, and no statuses changed.
+
+Real DB/RLS/artifact, hosted, deployment, schema, provider, classifier, and real assertion execution remain unperformed. Production, hosted, deployment, RLS, tenant-isolation, security, buyer, product, release-candidate, and compliance readiness remain unproven.
+
+Any future real evidence run or manual browser execution requires a new explicit AP approval gate before execution.
