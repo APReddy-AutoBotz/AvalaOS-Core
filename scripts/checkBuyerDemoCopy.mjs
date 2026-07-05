@@ -47,6 +47,7 @@ const buyerAcceptanceAdminWalkthroughPanel = read('components/admin/BuyerAccepta
 const buyerAcceptanceAdminWalkthroughPresentation = read('services/buyerAcceptanceAdminWalkthroughPresentation.ts');
 const buyerAcceptanceBrowserWalkthroughPlan = read('services/buyerAcceptanceBrowserWalkthroughPlan.ts');
 const buyerAcceptanceBrowserWalkthroughExecutionBoundary = read('services/buyerAcceptanceBrowserWalkthroughExecutionBoundary.ts');
+const buyerAcceptanceBrowserWalkthroughManualRunbook = read('services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -65,6 +66,9 @@ for (const phrase of ['browser walkthrough remains plan-only', 'no browser run w
 }
 for (const phrase of ['execution boundary remains contract-only', 'AP approval is required before execution', 'No browser was launched', 'no browser automation was run', 'no screenshot was captured', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceBrowserWalkthroughExecutionBoundarySnapshot']) {
   assert.ok(buyerAcceptanceBrowserWalkthroughExecutionBoundary.includes(phrase), `Buyer Acceptance Browser Walkthrough execution boundary should include proof-safe contract phrase: ${phrase}`);
+}
+for (const phrase of ['manual runbook remains template-only', 'AP approval is still required before execution', 'No browser was launched', 'no browser automation was run', 'no screenshot was captured', 'no evidence artifact was generated', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceBrowserWalkthroughManualRunbookSnapshot']) {
+  assert.ok(buyerAcceptanceBrowserWalkthroughManualRunbook.includes(phrase), `Buyer Acceptance Browser Walkthrough manual runbook should include proof-safe template phrase: ${phrase}`);
 }
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -155,6 +159,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceAdminWalkthroughPresentation.ts',
   'services/buyerAcceptanceBrowserWalkthroughPlan.ts',
   'services/buyerAcceptanceBrowserWalkthroughExecutionBoundary.ts',
+  'services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
