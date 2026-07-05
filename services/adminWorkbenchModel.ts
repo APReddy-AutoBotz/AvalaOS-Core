@@ -24,7 +24,7 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     key: 'overview',
     label: 'Overview',
     shortLabel: 'Overview',
-    description: 'Review organization context, module access, proof posture, and next admin decisions.',
+    description: 'Review organization context, module access, proof posture, evidence/approval/audit contract summaries, and next admin decisions.',
     proofSafeDisclosure: 'Trust Center proof states are evidence-gated and do not expand runtime or deployment scope.',
   },
   {

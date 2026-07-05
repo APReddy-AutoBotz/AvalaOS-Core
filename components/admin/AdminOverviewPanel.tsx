@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { buildEvidenceControlSnapshot } from '../../services/evidenceControlModel';
+import { getAdminEvidenceControlSummary } from '../../services/evidenceControlPresentation';
 import { buildCurrentTrustCenterSnapshot } from '../../services/trustCenterModel';
 import {
   getEvidenceRequiredOrBlockedClaims,
@@ -32,6 +34,11 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
   const snapshot = useMemo(() => buildCurrentTrustCenterSnapshot(), []);
   const proofSummary = useMemo(() => summarizeProofStatuses(snapshot), [snapshot]);
   const blockedOrEvidenceRequiredClaims = useMemo(() => getEvidenceRequiredOrBlockedClaims(snapshot), [snapshot]);
+  const evidenceControlSnapshot = useMemo(() => buildEvidenceControlSnapshot(), []);
+  const evidenceControlSummary = useMemo(
+    () => getAdminEvidenceControlSummary(evidenceControlSnapshot),
+    [evidenceControlSnapshot],
+  );
 
   return (
     <section className="premium-surface rounded-3xl p-6">
@@ -49,7 +56,7 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="mt-6 grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Enabled modules</p>
           <p className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">{enabledModuleCount} / {totalModuleCount}</p>
@@ -64,6 +71,13 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
             Processes: 0 / {maxProcesses ?? 'Not set'}
             <br />
             Templates: 0 / {maxTemplates ?? 'Not set'}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Control contracts</p>
+          <p className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">{evidenceControlSummary.surfaceCount}</p>
+          <p className="mt-2 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">
+            {evidenceControlSummary.executionApprovalGranted ? 'Execution approval recorded' : 'AP approval remains ungranted'}
           </p>
         </div>
       </div>
@@ -95,6 +109,34 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{evidenceControlSummary.headline}</h3>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
+              {evidenceControlSummary.summary}
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-right dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200">Blocked claims</p>
+            <p className="mt-1 text-lg font-black text-amber-900 dark:text-amber-100">{evidenceControlSummary.blockedClaimCount}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {evidenceControlSummary.approvalStateSummary
+            .filter(summary => summary.count > 0)
+            .map(summary => (
+              <div key={summary.state} className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-lg font-black text-[#002C4B] dark:text-white">{summary.count}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 dark:text-slate-400">{summary.label}</p>
+              </div>
+            ))}
+        </div>
+        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          {evidenceControlSummary.readOnlyNotice}
+        </p>
       </div>
     </section>
   );
