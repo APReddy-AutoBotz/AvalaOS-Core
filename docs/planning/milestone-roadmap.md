@@ -35,7 +35,12 @@ This roadmap is the active milestone sequence after the documentation consistenc
 | 12 | M5.3a-11 M5.3 tracking reconciliation after synthetic boundary closure | Complete as docs-only reconciliation | Corrected tracking drift only; no DB/RLS/artifact execution, local-readiness reopening, or readiness claims. |
 | 13 | M5.4a-M5.4f Enterprise planning evidence pack | Complete as planning evidence pack | Accepted as audit/evidence, security/governance, hosted evidence, deployment/operations, product/buyer, and release-candidate planning only; not readiness proof. |
 | 14 | PR #161-#175 Premium Enterprise Buyer Acceptance / Trust Center / Admin Workbench / Browser Walkthrough approval-boundary track | Complete through PR #175 | PR #175 is a pre-execution readiness check for AP go/no-go decision only; no AP approval or browser execution is granted. |
-| 15 | M5.5-M5.6 Secure export, deployment, runbook, and pilot evidence | Planned | Requires separate approved milestones and evidence; do not start from this reconciliation. |
+| 15 | M5.5a Enterprise Completion Control Gate | Current docs-only control gate | Groups remaining enterprise work after PR #176 into larger workstreams; does not approve execution or produce readiness evidence. |
+| 16 | M5.5b Evidence Surface, Approval Model, and Audit Contract Hardening | Planned | Read-only/control hardening only; no workflow execution or status changes without a separate AP gate. |
+| 17 | M5.5c Secure Export and Artifact Storage Design/Implementation Gate | Planned | Realigns the prior M5.5 secure export/storage intent into a larger gated track; no export/PDF/download artifacts without a separate AP gate. |
+| 18 | M5.6a RLS/Tenant-Isolation Implementation Preparation Gate | Planned | Prepares RLS and tenant-isolation implementation scope; no DB/RLS/artifact execution without a separate AP gate. |
+| 19 | M5.6b Hosted/Deployment/Operations Preparation Gate | Planned | Realigns the prior M5.6 deployment/runbook/pilot intent into a larger operations preparation track; no hosted/deployment validation without a separate AP gate. |
+| 20 | M5.7 First AP-Approved Evidence Execution Gate | Planned | First future evidence execution gate after AP chooses exact scope, run count, output boundaries, prohibited artifacts, stop conditions, and proof boundaries. |
 
 ## Sequencing Rule
 
@@ -45,11 +50,15 @@ M5.4a-M5.4f are closed as enterprise planning evidence-pack records only. They d
 
 PR #161-#175 are accepted as the Premium Enterprise Buyer Acceptance, Trust Center, Admin Workbench, and Browser Walkthrough approval-boundary track through PR #175. PR #175 remains a pre-execution readiness check for AP go/no-go decision only. AP approval has not been granted; browser execution has not been approved or performed; no browser launched, automation ran, screenshots were captured, export/PDF/download artifacts were produced, browser/run evidence was created, approval workflow ran, or statuses changed.
 
+M5.5a is a docs-only enterprise completion control gate after accepted PR #176 closure. It does not silently overwrite the prior M5.5-M5.6 meaning. Before M5.5a, current tracking treated M5.5-M5.6 as planned secure export, deployment, runbook, and pilot evidence work. M5.5a records a proposed grouped realignment into M5.5b, M5.5c, M5.6a, M5.6b, and M5.7 so future implementation can use fewer larger workstreams while keeping high-risk execution tracks separately approved.
+
 The M5.3a local-readiness loop remains stopped. No current roadmap entry proves local readiness, schema availability, RLS behavior, artifact SELECT isolation, tenant isolation, hosted pilot readiness, production readiness, deployment readiness, security readiness, buyer readiness, product readiness, release-candidate readiness, compliance readiness, or local startup success.
 
 ## Next Safe Path
 
-Pause for AP review. If further tracking drift is found, use a docs-only reconciliation follow-up. If AP wants to consider manual browser execution, open a separate AP-approved manual browser go/no-go decision gate that defines exact execution scope, run count, output boundaries, prohibited artifacts, stop conditions, and proof boundaries before execution. Direct browser execution is not recommended or approved by this reconciliation.
+After M5.5a, the recommended grouped sequence is M5.5b Evidence Surface, Approval Model, and Audit Contract Hardening; M5.5c Secure Export and Artifact Storage Design/Implementation Gate; M5.6a RLS/Tenant-Isolation Implementation Preparation Gate; M5.6b Hosted/Deployment/Operations Preparation Gate; and M5.7 First AP-Approved Evidence Execution Gate.
+
+Direct browser execution, DB/RLS/artifact execution, hosted/deployment validation, provider/classifier execution, approval workflow execution, screenshots, exports, PDFs, downloads, and readiness evidence remain unapproved unless a later separate AP gate defines exact execution scope, run count, output boundaries, prohibited artifacts, stop conditions, and proof boundaries before execution.
 
 ## Health Boundary
 

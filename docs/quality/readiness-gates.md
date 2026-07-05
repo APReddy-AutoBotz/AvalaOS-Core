@@ -37,8 +37,12 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | M5.3a-11 | M5.3 tracking reconciliation after synthetic boundary closure | Complete as docs-only reconciliation | Corrected tracking drift only; no DB/RLS/artifact execution, local-readiness reopening, or readiness claims. |
 | M5.4a-M5.4f | Enterprise planning evidence pack | Complete as planning evidence pack | Accepted planning records for audit/evidence, security/governance, hosted evidence, deployment/operations, product/buyer, and release-candidate boundaries; not readiness proof. |
 | PR #161-#175 | Premium Enterprise Buyer Acceptance / Trust Center / Admin Workbench / Browser Walkthrough approval-boundary track | Complete through PR #175 | PR #175 is a pre-execution readiness check for AP go/no-go decision only; no AP approval, browser execution approval, browser execution, screenshot/export/PDF/download artifact, approval workflow, or status change occurred. |
-| M5.5 | Secure export and storage readiness | Planned | Requires explicit scope and verification. |
-| M5.6 | Deployment, runbooks, and pilot evidence | Planned | Required before pilot readiness acceptance. |
+| M5.5a | Enterprise Completion Control Gate | Current docs-only control gate | Groups remaining enterprise work after PR #176 into larger workstreams; does not approve execution or produce readiness evidence. |
+| M5.5b | Evidence Surface, Approval Model, and Audit Contract Hardening | Planned | Read-only/control hardening only; no approval workflow execution or status changes without a separate AP gate. |
+| M5.5c | Secure Export and Artifact Storage Design/Implementation Gate | Planned | Realigns prior M5.5 secure export/storage readiness planning into a larger gated track; no export/PDF/download artifacts without a separate AP gate. |
+| M5.6a | RLS/Tenant-Isolation Implementation Preparation Gate | Planned | RLS and tenant-isolation preparation only until a later AP-approved DB/RLS/artifact evidence gate. |
+| M5.6b | Hosted/Deployment/Operations Preparation Gate | Planned | Realigns prior M5.6 deployment/runbook/pilot evidence planning into a larger operations preparation track; no hosted/deployment validation without a separate AP gate. |
+| M5.7 | First AP-Approved Evidence Execution Gate | Planned | Future execution gate only after AP approves exact scope, run count, output boundaries, prohibited artifacts, stop conditions, and proof boundaries. |
 
 ## Health Boundary
 
@@ -55,5 +59,7 @@ M5.4a-M5.4f are enterprise planning evidence-pack records only. They do not prov
 PR #161-#175 are accepted as the Premium Enterprise approval-boundary track through PR #175. PR #175 remains a pre-execution readiness check for AP go/no-go decision only. AP approval has not been granted. Browser execution has not been approved or performed. No browser launched, no automation ran, no screenshots were captured, no screenshot folders were created, no export/PDF/download artifacts were produced, no browser/run evidence was created, no approval workflow ran, and no statuses changed.
 
 Real DB/RLS/artifact, hosted, deployment, schema, provider, classifier, and real assertion execution remain unperformed. Production, hosted, deployment, RLS, tenant-isolation, security, buyer, product, release-candidate, and compliance readiness remain unproven.
+
+M5.5a is a docs-only enterprise completion control gate. It does not silently overwrite the prior M5.5-M5.6 meaning: prior tracking treated M5.5-M5.6 as planned secure export, deployment, runbook, and pilot evidence work. M5.5a records a grouped realignment into M5.5b, M5.5c, M5.6a, M5.6b, and M5.7, with high-risk proof tracks kept behind separate AP approval gates.
 
 Any future real evidence run or manual browser execution requires a new explicit AP approval gate before execution.
