@@ -49,6 +49,7 @@ const buyerAcceptanceBrowserWalkthroughPlan = read('services/buyerAcceptanceBrow
 const buyerAcceptanceBrowserWalkthroughExecutionBoundary = read('services/buyerAcceptanceBrowserWalkthroughExecutionBoundary.ts');
 const buyerAcceptanceBrowserWalkthroughManualRunbook = read('services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts');
 const buyerAcceptanceBrowserWalkthroughManualExecutionApproval = read('services/buyerAcceptanceBrowserWalkthroughManualExecutionApproval.ts');
+const buyerAcceptanceManualBrowserPreExecutionReadiness = read('services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -73,6 +74,9 @@ for (const phrase of ['manual runbook remains template-only', 'AP approval is st
 }
 for (const phrase of ['manual execution approval record remains template-only', 'AP approval has not been granted', 'no browser was launched', 'no browser automation was run', 'no screenshot was captured', 'no evidence artifact was generated', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceBrowserWalkthroughManualExecutionApprovalSnapshot']) {
   assert.ok(buyerAcceptanceBrowserWalkthroughManualExecutionApproval.includes(phrase), `Buyer Acceptance Browser Walkthrough manual execution approval record should include proof-safe template phrase: ${phrase}`);
+}
+for (const phrase of ['pre-execution readiness is decision-only', 'AP approval has not been granted', 'execution is not approved', 'no browser was launched', 'no browser automation was run', 'no screenshot was captured', 'no evidence artifact was generated', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceManualBrowserPreExecutionReadinessSnapshot']) {
+  assert.ok(buyerAcceptanceManualBrowserPreExecutionReadiness.includes(phrase), `Buyer Acceptance Manual Browser Pre-Execution Readiness should include proof-safe decision-only phrase: ${phrase}`);
 }
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -165,6 +169,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceBrowserWalkthroughExecutionBoundary.ts',
   'services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts',
   'services/buyerAcceptanceBrowserWalkthroughManualExecutionApproval.ts',
+  'services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
