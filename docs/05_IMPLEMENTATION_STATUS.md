@@ -19,6 +19,9 @@
 - M5.3a-4 through M5.3a-8 RLS/artifact readiness reconciliation, requirements, approval, and harness-design planning records.
 - M5.3a-9 synthetic/non-executing RLS and artifact evidence harness boundary validator and synthetic-only unit tests.
 - M5.3a-10 docs-only synthetic boundary closure reconciliation.
+- M5.3a-11 docs-only M5.3 tracking reconciliation after synthetic boundary closure.
+- M5.4a-M5.4f enterprise planning evidence pack, accepted as planning evidence and not readiness proof.
+- PR #161-#175 Premium Enterprise Buyer Acceptance, Trust Center, Admin Workbench, and Browser Walkthrough approval-boundary track through PR #175.
 
 ## Current Enterprise Persistence State
 
@@ -28,6 +31,9 @@
 - Delivery runtime adapters are not yet proven against the new `delivery_work_items` authority table in a hosted tenant-isolated path.
 - M5.3 through M5.3a-10 are planning, bounded local-readiness decision, synthetic-only boundary, and reconciliation records. They did not implement RLS policy SQL, prove schema availability, prove RLS behavior, verify artifact SELECT isolation, newly verify tenant isolation, prove hosted readiness, prove production readiness, or prove local startup success.
 - M5.3a-9 implemented only synthetic boundary controls and synthetic-only tests. M5.3a-10 reconciled that status as docs-only. No real assertion execution, DB/RLS/artifact execution, local-readiness reopening, or readiness evidence is approved by either milestone.
+- M5.4a-M5.4f closed the enterprise planning evidence pack only. They do not prove production, hosted, deployment, security, buyer, product, release-candidate, compliance, RLS, or tenant-isolation readiness.
+- PR #175 is a pre-execution readiness check for AP go/no-go decision only. AP approval has not been granted; browser execution has not been approved or performed; no browser launched, automation ran, screenshots were captured, export/PDF/download artifacts were produced, browser/run evidence was created, approval workflow ran, or statuses changed.
+- Real DB/RLS/artifact, hosted, deployment, schema, provider, classifier, and real assertion execution remain unperformed.
 - Any future real evidence run requires a new explicit AP approval milestone that defines exact assertion scope, run count, allowed output fields, prohibited output fields, stop conditions, and proof boundaries before execution.
 
 ## Partial Or Not Yet Accepted
@@ -35,6 +41,7 @@
 - Supabase-backed production path is authored but still needs live deployment validation for every environment.
 - RLS policies and tenant-isolation tests are not yet implemented and verified across the enterprise pilot path.
 - Real DB/RLS/artifact evidence execution is not accepted; verified tenant isolation, artifact SELECT isolation, schema readiness, and local readiness must not be claimed until an explicitly approved evidence path exists and passes.
+- Manual browser walkthrough execution is not approved or performed. Browser verification, screenshot proof, export/PDF/download readiness, approval workflow readiness, and buyer walkthrough completion must not be claimed until a separate AP-approved execution gate exists and passes.
 - Server-side AI direction exists, but local transitional demo paths may still be present.
 - Audit and export coverage exist in slices but are not complete enterprise operations coverage.
 - KlarityFlow Health remains a separate proof vertical, not an implemented AvalaOS Core module expansion.
@@ -45,3 +52,4 @@
 - Delivery remains a governed delivery workbench and should not expand into a full Jira replacement.
 - Runtime agent execution, bot execution, RPA job execution, external-system actions, MCP controls, A2A controls, and live runtime monitoring are out of scope for the current Avala Govern baseline.
 - Documentation cleanup does not imply production readiness, tenant-isolation proof, compliance certification, or Health implementation.
+- Premium Enterprise tracking reconciliation does not grant AP approval, approve browser execution, produce readiness evidence, or start the next execution milestone.
