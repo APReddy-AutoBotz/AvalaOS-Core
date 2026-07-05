@@ -50,6 +50,8 @@ const buyerAcceptanceBrowserWalkthroughExecutionBoundary = read('services/buyerA
 const buyerAcceptanceBrowserWalkthroughManualRunbook = read('services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts');
 const buyerAcceptanceBrowserWalkthroughManualExecutionApproval = read('services/buyerAcceptanceBrowserWalkthroughManualExecutionApproval.ts');
 const buyerAcceptanceManualBrowserPreExecutionReadiness = read('services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts');
+const evidenceControlModel = read('services/evidenceControlModel.ts');
+const evidenceControlPresentation = read('services/evidenceControlPresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -77,6 +79,12 @@ for (const phrase of ['manual execution approval record remains template-only', 
 }
 for (const phrase of ['pre-execution readiness is decision-only', 'AP approval has not been granted', 'execution is not approved', 'no browser was launched', 'no browser automation was run', 'no screenshot was captured', 'no evidence artifact was generated', 'no readiness evidence was produced', 'export/PDF/download remains blocked', 'buildBuyerAcceptanceManualBrowserPreExecutionReadinessSnapshot']) {
   assert.ok(buyerAcceptanceManualBrowserPreExecutionReadiness.includes(phrase), `Buyer Acceptance Manual Browser Pre-Execution Readiness should include proof-safe decision-only phrase: ${phrase}`);
+}
+for (const phrase of ['executionApprovalGranted', 'false', 'approvalState', 'prohibitedActions', 'blockedReadinessClaims', 'AUDIT_PROHIBITED_FIELDS', 'assertEvidenceControlSnapshotIsExecutionNeutral', 'assertProofBoundaryCopyIsClaimSafe', 'DEPRECATED_BUYER_FACING_LITE_NAMES']) {
+  assert.ok(evidenceControlModel.includes(phrase), `M5.5b evidence control model should preserve execution-neutral contract phrase: ${phrase}`);
+}
+for (const phrase of ['Read-only summary', 'AP approval remains ungranted', 'no approval, execution, screenshot, export, PDF, download, signoff, completion, status change, or readiness evidence action is exposed']) {
+  assert.ok(evidenceControlPresentation.includes(phrase), `M5.5b evidence control presentation should preserve proof-safe summary phrase: ${phrase}`);
 }
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -157,6 +165,7 @@ const currentBuyerFacingSources = [
   'components/admin/BuyerAcceptancePackPanel.tsx',
   'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
   'components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx',
+  'components/admin/AdminOverviewPanel.tsx',
   'components/assess/AvalaGovernLiteCardPanel.tsx',
   'services/adminWorkbenchModel.ts',
   'services/buyerAcceptancePackModel.ts',
@@ -170,6 +179,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceBrowserWalkthroughManualRunbook.ts',
   'services/buyerAcceptanceBrowserWalkthroughManualExecutionApproval.ts',
   'services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts',
+  'services/evidenceControlPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -205,7 +215,9 @@ const adminWorkbenchBuyerFacingSources = [
   'components/admin/BuyerAcceptancePackPanel.tsx',
   'components/admin/BuyerAcceptanceReviewGatePanel.tsx',
   'components/admin/BuyerAcceptanceAdminWalkthroughPanel.tsx',
+  'components/admin/AdminOverviewPanel.tsx',
   'services/adminWorkbenchModel.ts',
+  'services/evidenceControlPresentation.ts',
 ];
 
 const unsupportedAdminWorkbenchClaims = [
@@ -219,6 +231,15 @@ const unsupportedAdminWorkbenchClaims = [
   /deployment ready/i,
   /buyer ready/i,
   /product ready/i,
+  /release[- ]candidate ready/i,
+  /browser (verification|walkthrough) (complete|verified|passed)/i,
+  /screenshot (proof|evidence) (captured|available|ready)/i,
+  /export ready/i,
+  /PDF ready/i,
+  /download ready/i,
+  /approval (ready|complete)/i,
+  /approval workflow ready/i,
+  /workflow ready/i,
 ];
 
 for (const sourcePath of adminWorkbenchBuyerFacingSources) {
