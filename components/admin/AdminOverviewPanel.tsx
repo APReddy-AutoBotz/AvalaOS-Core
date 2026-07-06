@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { buildEvidenceControlSnapshot } from '../../services/evidenceControlModel';
+import { buildExportArtifactControlSnapshot } from '../../services/exportArtifactControlModel';
+import { getExportArtifactReadOnlySummary } from '../../services/exportArtifactControlPresentation';
 import { getAdminEvidenceControlSummary } from '../../services/evidenceControlPresentation';
 import { buildCurrentTrustCenterSnapshot } from '../../services/trustCenterModel';
 import {
@@ -39,6 +41,11 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
     () => getAdminEvidenceControlSummary(evidenceControlSnapshot),
     [evidenceControlSnapshot],
   );
+  const exportArtifactControlSnapshot = useMemo(() => buildExportArtifactControlSnapshot(), []);
+  const exportArtifactSummary = useMemo(
+    () => getExportArtifactReadOnlySummary(exportArtifactControlSnapshot),
+    [exportArtifactControlSnapshot],
+  );
 
   return (
     <section className="premium-surface rounded-3xl p-6">
@@ -56,7 +63,7 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Enabled modules</p>
           <p className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">{enabledModuleCount} / {totalModuleCount}</p>
@@ -80,7 +87,13 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
             {evidenceControlSummary.executionApprovalGranted ? 'Execution approval recorded' : 'AP approval remains ungranted'}
           </p>
         </div>
-      </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Export contracts</p>
+          <p className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">{exportArtifactSummary.artifactContractCount}</p>
+          <p className="mt-2 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">
+            {exportArtifactSummary.generatedArtifactsAllowed ? 'Artifact generation represented' : 'No artifacts generated'}
+          </p>
+        </div></div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
@@ -137,7 +150,9 @@ const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
         <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
           {evidenceControlSummary.readOnlyNotice}
         </p>
-      </div>
+        <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+          {exportArtifactSummary.readOnlyNotice}
+        </p></div>
     </section>
   );
 };
