@@ -24,6 +24,7 @@ assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
 ]);
 
 assert.equal(getDefaultAdminSection().key, 'overview');
+assert.match(getDefaultAdminSection().description, /RLS preparation contract summaries/);
 
 const trustCenterSection = getAdminSectionByKey('trust_center');
 assert.ok(trustCenterSection);
@@ -89,8 +90,12 @@ const unsupportedCopy = [
   /production ready/i,
   /security ready/i,
   /compliance certified/i,
-  /tenant isolation verified/i,
+  /tenant[- ]isolation (ready|verified|proven|passed)/i,
   /RLS ready/i,
+  /artifact SELECT (ready|verified|proven|passed)/i,
+  /schema (ready|verified|proven|available)/i,
+  /local (ready|verified|proven)/i,
+  /local startup success (achieved|verified|proven)/i,
   /deployment ready/i,
   /buyer ready/i,
   /product ready/i,
