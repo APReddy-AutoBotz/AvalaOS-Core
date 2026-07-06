@@ -54,7 +54,7 @@ const allCopy = snapshot.surfaces
   .join('\n');
 
 assert.doesNotMatch(allCopy, /Avala Govern Lite|Avala Delivery Lite/);
-assert.doesNotMatch(allCopy, /\bproduction ready\b|\bhosted ready\b|\bdeployment ready\b|\bsecurity ready\b|\bbuyer ready\b|\bproduct ready\b/i);
+assert.doesNotMatch(allCopy, /\bproduction ready\b|\bhosted ready\b|\bdeployment ready\b|\boperational ready\b|\bpilot ready\b|\bsecurity ready\b|\bbuyer ready\b|\bproduct ready\b/i);
 assert.doesNotMatch(allCopy, /\bbrowser walkthrough complete\b|\bscreenshot proof captured\b|\bexport ready\b|\bPDF ready\b|\bdownload ready\b|\bapproval workflow ready\b/i);
 assert.doesNotMatch(allCopy, /\btenant[- ]isolation (ready|verified|proven|passed)\b|\bartifact SELECT (ready|verified|proven|passed)\b|\bschema (ready|verified|proven|available)\b|\blocal (ready|verified|proven)\b/i);
 
@@ -94,6 +94,30 @@ assert.throws(
 );
 assert.throws(
   () => assertProofBoundaryCopyIsClaimSafe('The local startup success achieved signal can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The operational ready state can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The pilot readiness accepted signal can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The environment-verified marker can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The readiness check passed marker can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The rollback-ready state can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The backup ready state can be shown.'),
   /Unsupported readiness or proof claim/,
 );
 assert.doesNotThrow(() =>
