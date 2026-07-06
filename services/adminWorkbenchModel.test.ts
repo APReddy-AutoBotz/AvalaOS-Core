@@ -24,7 +24,7 @@ assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
 ]);
 
 assert.equal(getDefaultAdminSection().key, 'overview');
-assert.match(getDefaultAdminSection().description, /RLS and hosted\/deployment\/operations preparation contract summaries/);
+assert.match(getDefaultAdminSection().description, /RLS, hosted\/deployment\/operations preparation, M5\.7 gate-selection summaries/);
 
 const trustCenterSection = getAdminSectionByKey('trust_center');
 assert.ok(trustCenterSection);
