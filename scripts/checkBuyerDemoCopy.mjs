@@ -54,6 +54,7 @@ const evidenceControlModel = read('services/evidenceControlModel.ts');
 const evidenceControlPresentation = read('services/evidenceControlPresentation.ts');
 const exportArtifactControlModel = read('services/exportArtifactControlModel.ts');
 const exportArtifactControlPresentation = read('services/exportArtifactControlPresentation.ts');
+const rlsTenantIsolationPreparationPresentation = read('services/rlsTenantIsolationPreparationPresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -94,6 +95,10 @@ for (const phrase of ['generatedArtifactsAllowed', 'false', 'liveStorageExecutio
 for (const phrase of ['Read-only export/artifact summary', 'no export, PDF, download, storage write, signed URL, approval, browser, screenshot, status-change, or readiness evidence action is exposed', 'Read-only storage policy summary', 'no live storage access, storage object, signed URL, public link, file output, or readiness evidence action is exposed']) {
   assert.ok(exportArtifactControlPresentation.includes(phrase), `M5.5c export artifact control presentation should preserve proof-safe summary phrase: ${phrase}`);
 }
+for (const phrase of ['Read-only RLS preparation summary', 'no DB execution, RLS execution, artifact SELECT check, schema inspection, migration, approval, status change, or readiness evidence action is exposed', 'Read-only summary only; no AP approval, DB execution, RLS execution, artifact SELECT check, schema inspection, migration, Supabase stack, Docker, hosted validation, deployment validation, assertion run, status change, or readiness evidence action is exposed']) {
+  assert.ok(rlsTenantIsolationPreparationPresentation.includes(phrase), `M5.6a RLS tenant-isolation preparation presentation should preserve proof-safe summary phrase: ${phrase}`);
+}
+
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
   assert.ok(buyerAcceptanceReviewGateBoundaryCopy.includes(phrase), `Buyer Acceptance Review Gate UI/presentation should include proof-safe boundary phrase: ${phrase}`);
@@ -189,6 +194,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts',
   'services/evidenceControlPresentation.ts',
   'services/exportArtifactControlPresentation.ts',
+  'services/rlsTenantIsolationPreparationPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -228,16 +234,21 @@ const adminWorkbenchBuyerFacingSources = [
   'services/adminWorkbenchModel.ts',
   'services/evidenceControlPresentation.ts',
   'services/exportArtifactControlPresentation.ts',
+  'services/rlsTenantIsolationPreparationPresentation.ts',
 ];
 
 const unsupportedAdminWorkbenchClaims = [
   /production ready/i,
   /security ready/i,
   /compliance certified/i,
-  /tenant isolation verified/i,
+  /tenant[- ]isolation (ready|verified|proven|passed)/i,
   /RLS active/i,
   /RLS verified/i,
   /RLS ready/i,
+  /artifact SELECT (ready|verified|proven|passed)/i,
+  /schema (ready|verified|proven|available)/i,
+  /local (ready|verified|proven)/i,
+  /local startup success (achieved|verified|proven)/i,
   /deployment ready/i,
   /buyer ready/i,
   /product ready/i,

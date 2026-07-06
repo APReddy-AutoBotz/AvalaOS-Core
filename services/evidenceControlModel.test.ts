@@ -56,6 +56,7 @@ const allCopy = snapshot.surfaces
 assert.doesNotMatch(allCopy, /Avala Govern Lite|Avala Delivery Lite/);
 assert.doesNotMatch(allCopy, /\bproduction ready\b|\bhosted ready\b|\bdeployment ready\b|\bsecurity ready\b|\bbuyer ready\b|\bproduct ready\b/i);
 assert.doesNotMatch(allCopy, /\bbrowser walkthrough complete\b|\bscreenshot proof captured\b|\bexport ready\b|\bPDF ready\b|\bdownload ready\b|\bapproval workflow ready\b/i);
+assert.doesNotMatch(allCopy, /\btenant[- ]isolation (ready|verified|proven|passed)\b|\bartifact SELECT (ready|verified|proven|passed)\b|\bschema (ready|verified|proven|available)\b|\blocal (ready|verified|proven)\b/i);
 
 assert.throws(
   () => assertNoDeprecatedBuyerFacingLiteNames('Avala Govern Lite'),
@@ -77,6 +78,22 @@ assert.throws(
 );
 assert.throws(
   () => assertProofBoundaryCopyIsClaimSafe('The approval workflow ready state can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The tenant isolation verified state can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The artifact SELECT verified result can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The schema available marker can be shown.'),
+  /Unsupported readiness or proof claim/,
+);
+assert.throws(
+  () => assertProofBoundaryCopyIsClaimSafe('The local startup success achieved signal can be shown.'),
   /Unsupported readiness or proof claim/,
 );
 assert.doesNotThrow(() =>
