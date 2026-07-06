@@ -80,6 +80,13 @@ export const AUDIT_PROHIBITED_FIELDS = [
   'export_artifact_path',
   'pdf_artifact_path',
   'download_artifact_path',
+  'storage_object_path',
+  'signed_url',
+  'public_url',
+  'export_payload',
+  'pdf_payload',
+  'download_payload',
+  'binary_content',
 ] as const;
 
 export type AuditProhibitedField = typeof AUDIT_PROHIBITED_FIELDS[number];
@@ -105,6 +112,9 @@ export const BLOCKED_READINESS_CLAIMS = [
   'browser verification',
   'screenshot proof',
   'export/PDF/download readiness',
+  'artifact storage readiness',
+  'live storage proof',
+  'live signed URL proof',
   'walkthrough completion',
   'approval-workflow readiness',
 ] as const;
@@ -119,6 +129,10 @@ export const PROHIBITED_EXECUTION_ACTIONS = [
   'generate_export',
   'generate_pdf',
   'generate_download',
+  'create_real_evidence_artifact',
+  'perform_live_storage_read',
+  'perform_live_storage_write',
+  'generate_live_signed_url',
   'create_browser_run_evidence',
   'execute_approval_workflow',
   'change_approval_or_signoff_status',

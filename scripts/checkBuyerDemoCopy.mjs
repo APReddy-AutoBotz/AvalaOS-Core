@@ -52,6 +52,8 @@ const buyerAcceptanceBrowserWalkthroughManualExecutionApproval = read('services/
 const buyerAcceptanceManualBrowserPreExecutionReadiness = read('services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts');
 const evidenceControlModel = read('services/evidenceControlModel.ts');
 const evidenceControlPresentation = read('services/evidenceControlPresentation.ts');
+const exportArtifactControlModel = read('services/exportArtifactControlModel.ts');
+const exportArtifactControlPresentation = read('services/exportArtifactControlPresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -85,6 +87,12 @@ for (const phrase of ['executionApprovalGranted', 'false', 'approvalState', 'pro
 }
 for (const phrase of ['Read-only summary', 'AP approval remains ungranted', 'no approval, execution, screenshot, export, PDF, download, signoff, completion, status change, or readiness evidence action is exposed']) {
   assert.ok(evidenceControlPresentation.includes(phrase), `M5.5b evidence control presentation should preserve proof-safe summary phrase: ${phrase}`);
+}
+for (const phrase of ['generatedArtifactsAllowed', 'false', 'liveStorageExecutionAllowed', 'liveSignedUrlGenerationAllowed', 'EXPORT_PROHIBITED_METADATA_FIELDS', 'signed_url', 'storage_object_path', 'export_payload', 'pdf_payload', 'download_payload', 'assertExportArtifactSnapshotIsModelOnly', 'assertExportArtifactCopyIsClaimSafe']) {
+  assert.ok(exportArtifactControlModel.includes(phrase), `M5.5c export artifact control model should preserve model-only contract phrase: ${phrase}`);
+}
+for (const phrase of ['Read-only export/artifact summary', 'no export, PDF, download, storage write, signed URL, approval, browser, screenshot, status-change, or readiness evidence action is exposed', 'Read-only storage policy summary', 'no live storage access, storage object, signed URL, public link, file output, or readiness evidence action is exposed']) {
+  assert.ok(exportArtifactControlPresentation.includes(phrase), `M5.5c export artifact control presentation should preserve proof-safe summary phrase: ${phrase}`);
 }
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -180,6 +188,7 @@ const currentBuyerFacingSources = [
   'services/buyerAcceptanceBrowserWalkthroughManualExecutionApproval.ts',
   'services/buyerAcceptanceManualBrowserPreExecutionReadiness.ts',
   'services/evidenceControlPresentation.ts',
+  'services/exportArtifactControlPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -218,6 +227,7 @@ const adminWorkbenchBuyerFacingSources = [
   'components/admin/AdminOverviewPanel.tsx',
   'services/adminWorkbenchModel.ts',
   'services/evidenceControlPresentation.ts',
+  'services/exportArtifactControlPresentation.ts',
 ];
 
 const unsupportedAdminWorkbenchClaims = [
@@ -237,6 +247,12 @@ const unsupportedAdminWorkbenchClaims = [
   /export ready/i,
   /PDF ready/i,
   /download ready/i,
+  /storage ready/i,
+  /artifact storage ready/i,
+  /export\/PDF\/download readiness (proved|complete|verified|accepted|achieved)/i,
+  /artifact storage readiness (proved|complete|verified|accepted|achieved)/i,
+  /live storage (verified|available|active)/i,
+  /signed URL (available|created|ready)/i,
   /approval (ready|complete)/i,
   /approval workflow ready/i,
   /workflow ready/i,
