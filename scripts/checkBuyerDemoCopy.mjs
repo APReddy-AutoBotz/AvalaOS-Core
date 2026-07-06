@@ -55,6 +55,8 @@ const evidenceControlPresentation = read('services/evidenceControlPresentation.t
 const exportArtifactControlModel = read('services/exportArtifactControlModel.ts');
 const exportArtifactControlPresentation = read('services/exportArtifactControlPresentation.ts');
 const rlsTenantIsolationPreparationPresentation = read('services/rlsTenantIsolationPreparationPresentation.ts');
+const hostedDeploymentOperationsPreparationModel = read('services/hostedDeploymentOperationsPreparationModel.ts');
+const hostedDeploymentOperationsPreparationPresentation = read('services/hostedDeploymentOperationsPreparationPresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -98,6 +100,13 @@ for (const phrase of ['Read-only export/artifact summary', 'no export, PDF, down
 for (const phrase of ['Read-only RLS preparation summary', 'no DB execution, RLS execution, artifact SELECT check, schema inspection, migration, approval, status change, or readiness evidence action is exposed', 'Read-only summary only; no AP approval, DB execution, RLS execution, artifact SELECT check, schema inspection, migration, Supabase stack, Docker, hosted validation, deployment validation, assertion run, status change, or readiness evidence action is exposed']) {
   assert.ok(rlsTenantIsolationPreparationPresentation.includes(phrase), `M5.6a RLS tenant-isolation preparation presentation should preserve proof-safe summary phrase: ${phrase}`);
 }
+for (const phrase of ['modelOnly', 'apApprovalGranted', 'hostedExecutionApproved', 'hostedValidationPerformed', 'deploymentValidationPerformed', 'startupCheckPerformed', 'readinessCheckPerformed', 'rollbackExecutionPerformed', 'incidentExecutionPerformed', 'backupRestoreExecutionPerformed', 'pilotEvidenceProduced', 'readinessEvidenceProduced', 'HOSTED_DEPLOYMENT_PROHIBITED_OUTPUT_FIELDS', 'assertHostedDeploymentOperationsPreparationSnapshotIsExecutionNeutral', 'assertHostedDeploymentOperationsCopyIsClaimSafe']) {
+  assert.ok(hostedDeploymentOperationsPreparationModel.includes(phrase), `M5.6b hosted/deployment/operations preparation model should preserve execution-neutral contract phrase: ${phrase}`);
+}
+for (const phrase of ['Read-only environment-classification summary', 'no environment probe, hosted validation, deployment validation, startup check, readiness check, approval, status change, pilot evidence, or readiness evidence action is exposed', 'Read-only operational gate summary', 'no hosted run, deployment run, startup check, readiness check, rollback execution, incident execution, backup/restore execution, approval, status change, pilot evidence, or readiness evidence action is exposed', 'Read-only summary only; no AP approval, hosted validation, deployment validation, startup check, readiness check, Supabase stack, Docker, DB/RLS/artifact execution, schema inspection, provider/classifier execution, rollback execution, incident execution, backup/restore execution, browser execution, workflow execution, export/PDF/download generation, storage access, screenshot capture, status change, pilot evidence, or readiness evidence action is exposed']) {
+  assert.ok(hostedDeploymentOperationsPreparationPresentation.includes(phrase), `M5.6b hosted/deployment/operations preparation presentation should preserve proof-safe summary phrase: ${phrase}`);
+}
+
 
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -114,6 +123,8 @@ assert.ok(adminWorkbench.includes('Sectioned admin structure'), 'Admin Workbench
 const adminOverview = read('components/admin/AdminOverviewPanel.tsx');
 assert.ok(adminOverview.includes('Trust Center proof states are evidence-gated'), 'Admin overview should preserve evidence-gated proof state copy.');
 assert.ok(adminOverview.includes('Review Trust Center blocked/evidence-required claims'), 'Admin overview should include the next admin decision list.');
+assert.ok(adminOverview.includes('Operations prep gates'), 'Admin overview should include hosted/deployment/operations preparation card copy.');
+assert.ok(adminOverview.includes('Review hosted/deployment/operations preparation boundaries'), 'Admin overview should include hosted/deployment/operations next decision copy.');
 
 const adminWorkbenchModel = read('services/adminWorkbenchModel.ts');
 assert.ok(adminWorkbenchModel.includes("key: 'trust_center'"), 'Admin Workbench model should include the Trust Center section.');
@@ -195,6 +206,7 @@ const currentBuyerFacingSources = [
   'services/evidenceControlPresentation.ts',
   'services/exportArtifactControlPresentation.ts',
   'services/rlsTenantIsolationPreparationPresentation.ts',
+  'services/hostedDeploymentOperationsPreparationPresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -235,6 +247,8 @@ const adminWorkbenchBuyerFacingSources = [
   'services/evidenceControlPresentation.ts',
   'services/exportArtifactControlPresentation.ts',
   'services/rlsTenantIsolationPreparationPresentation.ts',
+  'services/hostedDeploymentOperationsPreparationModel.ts',
+  'services/hostedDeploymentOperationsPreparationPresentation.ts',
 ];
 
 const unsupportedAdminWorkbenchClaims = [
@@ -250,6 +264,15 @@ const unsupportedAdminWorkbenchClaims = [
   /local (ready|verified|proven)/i,
   /local startup success (achieved|verified|proven)/i,
   /deployment ready/i,
+  /operational ready/i,
+  /pilot ready/i,
+  /environment[- ]verified/i,
+  /startup check passed/i,
+  /readiness check passed/i,
+  /rollback[- ]ready/i,
+  /incident[- ]ready/i,
+  /backup[- ]ready/i,
+  /restore[- ]ready/i,
   /buyer ready/i,
   /product ready/i,
   /release[- ]candidate ready/i,
