@@ -57,6 +57,8 @@ const exportArtifactControlPresentation = read('services/exportArtifactControlPr
 const rlsTenantIsolationPreparationPresentation = read('services/rlsTenantIsolationPreparationPresentation.ts');
 const hostedDeploymentOperationsPreparationModel = read('services/hostedDeploymentOperationsPreparationModel.ts');
 const hostedDeploymentOperationsPreparationPresentation = read('services/hostedDeploymentOperationsPreparationPresentation.ts');
+const evidenceExecutionGateModel = read('services/evidenceExecutionGateModel.ts');
+const evidenceExecutionGatePresentation = read('services/evidenceExecutionGatePresentation.ts');
 const buyerAcceptancePackBoundaryCopy = `${buyerAcceptancePackPanel}\n${buyerAcceptancePackPresentation}`;
 assert.ok(buyerAcceptancePackPanel.includes('Buyer Acceptance Pack'), 'Buyer Acceptance Pack panel should render the section title.');
 assert.ok(buyerAcceptancePackPanel.includes('Open proof gaps'), 'Buyer Acceptance Pack panel should render open proof gaps.');
@@ -106,7 +108,12 @@ for (const phrase of ['modelOnly', 'apApprovalGranted', 'hostedExecutionApproved
 for (const phrase of ['Read-only environment-classification summary', 'no environment probe, hosted validation, deployment validation, startup check, readiness check, approval, status change, pilot evidence, or readiness evidence action is exposed', 'Read-only operational gate summary', 'no hosted run, deployment run, startup check, readiness check, rollback execution, incident execution, backup/restore execution, approval, status change, pilot evidence, or readiness evidence action is exposed', 'Read-only summary only; no AP approval, hosted validation, deployment validation, startup check, readiness check, Supabase stack, Docker, DB/RLS/artifact execution, schema inspection, provider/classifier execution, rollback execution, incident execution, backup/restore execution, browser execution, workflow execution, export/PDF/download generation, storage access, screenshot capture, status change, pilot evidence, or readiness evidence action is exposed']) {
   assert.ok(hostedDeploymentOperationsPreparationPresentation.includes(phrase), `M5.6b hosted/deployment/operations preparation presentation should preserve proof-safe summary phrase: ${phrase}`);
 }
-
+for (const phrase of ['recommendedFirstCandidateTrackId', 'manual_browser_walkthrough', 'apApprovalGranted', 'executionApproved', 'executionPerformed', 'browserExecutionPerformed', 'screenshotEvidenceProduced', 'exportPdfDownloadArtifactProduced', 'approvalWorkflowExecuted', 'statusChangedByWorkflow', 'readinessEvidenceProduced', 'postM57ExecutionMilestoneStarted', 'EVIDENCE_EXECUTION_PROHIBITED_OUTPUT_FIELDS', 'assertEvidenceExecutionGateSnapshotIsExecutionNeutral', 'assertEvidenceExecutionGateCopyIsClaimSafe']) {
+  assert.ok(evidenceExecutionGateModel.includes(phrase), `M5.7 evidence execution gate model should preserve candidate-only contract phrase: ${phrase}`);
+}
+for (const phrase of ['M5.7 first evidence execution gate selection', 'Manual Browser Walkthrough as the first candidate for AP review only', 'AP approval remains ungranted', 'no execution is represented', 'Read-only M5.7 summary only', 'no AP approval, execution approval, browser launch, browser automation, screenshot capture', 'readiness evidence, or post-M5.7 execution milestone action is exposed']) {
+  assert.ok(evidenceExecutionGatePresentation.includes(phrase), `M5.7 evidence execution gate presentation should preserve proof-safe summary phrase: ${phrase}`);
+}
 
 const buyerAcceptanceReviewGateBoundaryCopy = `${buyerAcceptanceReviewGatePanel}\n${buyerAcceptanceReviewGatePresentation}`;
 for (const phrase of ['read-only rehearsal gate', 'not an approval', 'not an export', 'not readiness evidence', 'not compliance evidence', 'no PDF/download generated', 'Export/PDF/download remains blocked']) {
@@ -125,6 +132,8 @@ assert.ok(adminOverview.includes('Trust Center proof states are evidence-gated')
 assert.ok(adminOverview.includes('Review Trust Center blocked/evidence-required claims'), 'Admin overview should include the next admin decision list.');
 assert.ok(adminOverview.includes('Operations prep gates'), 'Admin overview should include hosted/deployment/operations preparation card copy.');
 assert.ok(adminOverview.includes('Review hosted/deployment/operations preparation boundaries'), 'Admin overview should include hosted/deployment/operations next decision copy.');
+assert.ok(adminOverview.includes('M5.7 gate candidates'), 'Admin overview should include M5.7 gate candidate card copy.');
+assert.ok(adminOverview.includes('Review first evidence execution gate candidate boundaries'), 'Admin overview should include M5.7 next decision copy.');
 
 const adminWorkbenchModel = read('services/adminWorkbenchModel.ts');
 assert.ok(adminWorkbenchModel.includes("key: 'trust_center'"), 'Admin Workbench model should include the Trust Center section.');
@@ -207,6 +216,7 @@ const currentBuyerFacingSources = [
   'services/exportArtifactControlPresentation.ts',
   'services/rlsTenantIsolationPreparationPresentation.ts',
   'services/hostedDeploymentOperationsPreparationPresentation.ts',
+  'services/evidenceExecutionGatePresentation.ts',
   'services/trustCenterPresentation.ts',
   'constants/moduleConfig.ts',
   'services/assessmentExportService.ts',
@@ -249,6 +259,7 @@ const adminWorkbenchBuyerFacingSources = [
   'services/rlsTenantIsolationPreparationPresentation.ts',
   'services/hostedDeploymentOperationsPreparationModel.ts',
   'services/hostedDeploymentOperationsPreparationPresentation.ts',
+  'services/evidenceExecutionGatePresentation.ts',
 ];
 
 const unsupportedAdminWorkbenchClaims = [
@@ -290,6 +301,12 @@ const unsupportedAdminWorkbenchClaims = [
   /approval (ready|complete)/i,
   /approval workflow ready/i,
   /workflow ready/i,
+  /AP approval granted/i,
+  /AP-approved execution complete/i,
+  /browser walkthrough executed/i,
+  /browser executed/i,
+  /screenshot evidence produced/i,
+  /readiness evidence produced/i,
 ];
 
 for (const sourcePath of adminWorkbenchBuyerFacingSources) {
