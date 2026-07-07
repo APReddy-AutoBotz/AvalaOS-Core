@@ -114,8 +114,8 @@ function isCleanPersistedScope(value: unknown, normalizedScope: Scope) {
   );
 }
 
-function isOrganizationWorkspaceDecisionPath(view: View, scope: Scope) {
-  return view === View.WORKSPACE && scope.type === ScopeType.ORGANIZATION;
+function isOrganizationWorkspaceDecisionPath(view: View, scope: Scope, user: User | null) {
+  return view === View.WORKSPACE && scope.type === ScopeType.ORGANIZATION && user?.orgRole === 'Admin';
 }
 
 export function resolvePersistedViewScopeState({
@@ -144,7 +144,7 @@ export function resolvePersistedViewScopeState({
   if (
     access.allowed ||
     access.guardSeverity === 'wait' ||
-    (preserveOrganizationWorkspace && isOrganizationWorkspaceDecisionPath(normalizedView, normalizedScope))
+    (preserveOrganizationWorkspace && isOrganizationWorkspaceDecisionPath(normalizedView, normalizedScope, user))
   ) {
     return {
       view: normalizedView,

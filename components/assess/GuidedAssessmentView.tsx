@@ -73,6 +73,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
     const [showUnsavedModal, setShowUnsavedModal] = useState(false);
     const [pendingExitAction, setPendingExitAction] = useState<(() => void) | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [processUnavailable, setProcessUnavailable] = useState(false);
     const [evidenceDraft, setEvidenceDraft] = useState<{ type: EvidenceItem['type']; linkedField: string; description: string; owner: string; sensitivity: NonNullable<EvidenceItem['sensitivity']> }>({
         type: 'SOP',
         linkedField: '',
@@ -97,9 +98,19 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         if (!currentOrganization) return;
         
         const initAssessment = async () => {
-            const existing = await getAssessmentForProcess(processId);
             const processContext = getProcessById(processId, currentOrganization.id);
-            const templateRule = getAssessTemplateRuleFromConfig(processContext?.templateId, assessGovernanceConfig);
+            if (!processContext) {
+                setAssessment(null);
+                setOriginalAssessment(null);
+                setProcessUnavailable(true);
+                setErrorMsg('This process is not available in the current organization context. Return to the process catalog and select an available process.');
+                return;
+            }
+
+            setProcessUnavailable(false);
+            setErrorMsg(null);
+            const existing = await getAssessmentForProcess(processId);
+            const templateRule = getAssessTemplateRuleFromConfig(processContext.templateId, assessGovernanceConfig);
             
             if (existing) {
                 setAssessment(JSON.parse(JSON.stringify(existing)));
@@ -767,6 +778,21 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         );
     };
 
+    if (processUnavailable) {
+        return (
+            <div className="p-8 text-center">
+                <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-[11px] font-black uppercase tracking-normal text-slate-400">Assessment unavailable</p>
+                    <h1 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">This process is not available in the current organization context.</h1>
+                    <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Return to the process catalog and select an available process before opening guided assessment.</p>
+                    <button onClick={onExit} className="mt-6 rounded-lg bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">
+                        Back to Process Catalog
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!assessment || !currentOrganization) return <div className="p-8">Loading Assessment...</div>;
 
     const currentProcess = getProcessById(processId, currentOrganization.id);
@@ -929,7 +955,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                             <div className="premium-surface rounded-2xl p-6">
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div>
-                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Decision cockpit</p>
+                                        <p className="text-[11px] font-black uppercase tracking-normal text-slate-400">Decision cockpit</p>
                                         <h1 className="mt-1 text-3xl font-black font-display text-slate-900 dark:text-white">
                                             {assessment.scores.recommendation?.category || 'Deterministic Recommendation'}
                                         </h1>
