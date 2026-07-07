@@ -11,6 +11,7 @@ import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
+import { useProcessService } from './services/processService';
 
 import { StorageKeys, usePersistentState } from './services/storage';
 import { useHandoffLedger } from './services/handoffLedgerService';
@@ -27,6 +28,12 @@ import {
   normalizePersistedView,
   resolvePersistedViewScopeState,
 } from './services/viewStatePersistence';
+import {
+  buildProductNavigationSearch,
+  hasProductNavigationSearch,
+  parseProductNavigationSearch,
+  resolveProductNavigationState,
+} from './services/productNavigationState';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -100,6 +107,7 @@ function App() {
     reorderTask: deliveryReorderTask,
     deleteTask: deliveryDeleteTask,
   } = useDelivery();
+  const { processes, loading: processesLoading } = useProcessService();
   const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, MOCK_TEAMS);
   const [users, setUsers] = usePersistentState<User[]>(StorageKeys.USERS, MOCK_USERS);
   const [docTemplates, setDocTemplates] = usePersistentState<DocTemplate[]>(StorageKeys.DOC_TEMPLATES, MOCK_DOC_TEMPLATES);
@@ -123,6 +131,12 @@ function App() {
   // Assess Detail State
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const enabledModules = currentOrganization?.enabledModules;
+  const explicitNavigationIntent = useMemo(
+    () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
+    [],
+  );
+  const navigationHydrated = useRef(false);
+  const navigationWriteSuppressed = useRef(false);
 
 
   useEffect(() => {
@@ -158,7 +172,7 @@ function App() {
   const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
     if (guardLoading) return false;
 
-    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE) {
+    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && currentUser?.orgRole === 'Admin') {
       setScopeIfChanged(requestedScope);
       setCurrentView(view);
       return true;
@@ -174,7 +188,15 @@ function App() {
     setCurrentView(nextView);
 
     return access.allowed;
-  }, [currentScope, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+  }, [currentScope, currentUser, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+
+  const replaceProductNavigationSearch = useCallback((nextSearch: string) => {
+    if (typeof window === 'undefined') return;
+    const nextUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(null, '', nextUrl);
+    }
+  }, []);
 
   useEffect(() => {
     if (aiProviderType === 'openai') {
@@ -185,6 +207,7 @@ function App() {
   useEffect(() => {
     if (guardLoading) return;
     if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
+    if (explicitNavigationIntent && !navigationHydrated.current) return;
 
     if (isSupabaseConfigured()) {
       setUsers(mapDemoUsersForSupabase(MOCK_USERS));
@@ -199,7 +222,7 @@ function App() {
     }
 
     lastAppliedUserId.current = currentUser.id;
-  }, [applyGuardedView, currentScope, currentUser, guardLoading, setScopeIfChanged]);
+  }, [applyGuardedView, currentScope, currentUser, explicitNavigationIntent, guardLoading, setScopeIfChanged]);
 
   useEffect(() => {
     if (!currentOrganization) return;
@@ -215,8 +238,13 @@ function App() {
   const handleScopeChange = (scope: Scope) => {
     if (scope.type === ScopeType.ORGANIZATION) {
       organizationScopeTransition.current = true;
-      setScopeIfChanged(scope);
-      setCurrentView(View.WORKSPACE);
+      if (currentUser?.orgRole === 'Admin') {
+        setScopeIfChanged(scope);
+        setCurrentView(View.WORKSPACE);
+      } else {
+        organizationScopeTransition.current = false;
+        applyGuardedView(View.DASHBOARD, { type: ScopeType.MY_WORK });
+      }
       return;
     }
 
@@ -302,6 +330,16 @@ function App() {
   };
 
   const handleAssessToDocsHandoff = (payload: AssessToStudioHandoffPayload) => {
+    const docsForgeScope: Scope = currentScope.type === ScopeType.ORGANIZATION
+      ? { type: ScopeType.MY_WORK }
+      : currentScope;
+    const access = resolveAppViewAccess(View.DOCS_FORGE, docsForgeScope);
+    if (!access.allowed) {
+      setAssessToStudioSourceContext(null);
+      applyGuardedView(access.fallbackView, access.fallbackScope ?? docsForgeScope);
+      return;
+    }
+
     setAssessToStudioSourceContext(payload);
     recordHandoff({
       fromModule: 'assess',
@@ -330,13 +368,7 @@ function App() {
         requiredDocumentTypes: payload.handoffPack?.requiredDocumentTypes,
       },
     });
-    const docsForgeScope: Scope = currentScope.type === ScopeType.ORGANIZATION
-      ? { type: ScopeType.MY_WORK }
-      : currentScope;
-    const handoffAllowed = applyGuardedView(View.DOCS_FORGE, docsForgeScope);
-    if (!handoffAllowed) {
-      setAssessToStudioSourceContext(null);
-    }
+    applyGuardedView(View.DOCS_FORGE, docsForgeScope);
   };
 
   useEffect(() => {
@@ -374,6 +406,126 @@ function App() {
     setCurrentView,
   ]);
 
+  useEffect(() => {
+    if (guardLoading || !currentUser || !currentOrganization) return;
+    if (!explicitNavigationIntent || navigationHydrated.current) return;
+    if (processesLoading) return;
+
+    const resolvedNavigation = resolveProductNavigationState({
+      ...parseProductNavigationSearch(window.location.search),
+      user: currentUser,
+      authLoading: guardLoading,
+      organization: currentOrganization,
+      enabledModules,
+      processes,
+      projects,
+      documentGenerations,
+      preserveOrganizationWorkspace: true,
+    });
+
+    navigationWriteSuppressed.current = true;
+    setScopeIfChanged(resolvedNavigation.scope);
+    setCurrentView(resolvedNavigation.view);
+    setSelectedProcessId(resolvedNavigation.selectedProcessId);
+    setActiveGenerationId(resolvedNavigation.activeGenerationId);
+    if (resolvedNavigation.activeGenerationId) {
+      setTempArtifacts(null);
+    }
+    replaceProductNavigationSearch(buildProductNavigationSearch({
+      view: resolvedNavigation.view,
+      scope: resolvedNavigation.scope,
+      selectedProcessId: resolvedNavigation.selectedProcessId,
+      activeGenerationId: resolvedNavigation.activeGenerationId,
+    }));
+    navigationHydrated.current = true;
+  }, [
+    currentOrganization,
+    currentUser,
+    documentGenerations,
+    enabledModules,
+    explicitNavigationIntent,
+    guardLoading,
+    processes,
+    processesLoading,
+    projects,
+    replaceProductNavigationSearch,
+    setCurrentView,
+    setScopeIfChanged,
+  ]);
+
+  useEffect(() => {
+    if (guardLoading || !currentUser || !currentOrganization) return;
+    if (explicitNavigationIntent && !navigationHydrated.current) return;
+    if (processesLoading) return;
+
+    if (tempArtifacts && currentView === View.WORKSPACE) {
+      replaceProductNavigationSearch(buildProductNavigationSearch({
+        view: currentView,
+        scope: currentScope,
+        selectedProcessId: null,
+        activeGenerationId,
+      }));
+      return;
+    }
+
+    const resolvedNavigation = resolveProductNavigationState({
+      view: currentView,
+      scope: currentScope,
+      processId: selectedProcessId,
+      documentGenerationId: activeGenerationId,
+      user: currentUser,
+      authLoading: guardLoading,
+      organization: currentOrganization,
+      enabledModules,
+      processes,
+      projects,
+      documentGenerations,
+      preserveOrganizationWorkspace: true,
+    });
+
+    if (!areScopesEqual(currentScope, resolvedNavigation.scope)) {
+      setScopeIfChanged(resolvedNavigation.scope);
+    }
+    if (currentView !== resolvedNavigation.view) {
+      setCurrentView(resolvedNavigation.view);
+    }
+    if (selectedProcessId !== resolvedNavigation.selectedProcessId) {
+      setSelectedProcessId(resolvedNavigation.selectedProcessId);
+    }
+    if (!tempArtifacts && activeGenerationId !== resolvedNavigation.activeGenerationId) {
+      setActiveGenerationId(resolvedNavigation.activeGenerationId);
+    }
+
+    if (navigationWriteSuppressed.current) {
+      navigationWriteSuppressed.current = false;
+      return;
+    }
+
+    replaceProductNavigationSearch(buildProductNavigationSearch({
+      view: resolvedNavigation.view,
+      scope: resolvedNavigation.scope,
+      selectedProcessId: resolvedNavigation.selectedProcessId,
+      activeGenerationId: resolvedNavigation.activeGenerationId,
+    }));
+  }, [
+    activeGenerationId,
+    currentOrganization,
+    currentScope,
+    currentUser,
+    currentView,
+    documentGenerations,
+    enabledModules,
+    explicitNavigationIntent,
+    guardLoading,
+    processes,
+    processesLoading,
+    projects,
+    replaceProductNavigationSearch,
+    selectedProcessId,
+    setCurrentView,
+    setScopeIfChanged,
+    tempArtifacts,
+  ]);
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     deliveryReorderTask(taskIdToMove, referenceTaskId, newEpicId).catch(surfaceDeliveryError);
   };
@@ -813,7 +965,9 @@ function App() {
           sourceContext={assessToStudioSourceContext}
         />;
       case View.WORKSPACE: {
-        const activeGeneration = documentGenerations.find(g => g.id === activeGenerationId);
+        const activeGeneration = documentGenerations.find(g => g.id === activeGenerationId && (
+          currentScope.type !== ScopeType.PROJECT || g.projectId === currentScope.id
+        ));
         const artifactsToShow = activeGeneration?.artifacts || tempArtifacts;
 
         if (!artifactsToShow) {
@@ -849,6 +1003,8 @@ function App() {
         return <TemplateStudioView templates={docTemplates} onCreate={(t) => setDocTemplates(p => [...p, { ...t, id: `template-${Date.now()}` }])} onUpdate={(t) => setDocTemplates(p => p.map(pt => pt.id === t.id ? t : pt))} onDelete={(id) => setDocTemplates(p => p.filter(pt => pt.id !== id))} />;
       case View.DOCS:
         return <DocsView generations={documentGenerations.filter(g => g.projectId === (currentScope as any).id)} templates={docTemplates} onViewGeneration={(id) => {
+          const generation = documentGenerations.find(item => item.id === id && item.projectId === (currentScope as any).id);
+          if (!generation) return;
           setActiveGenerationId(id);
           setTempArtifacts(null);
           applyGuardedView(View.WORKSPACE);
@@ -869,6 +1025,8 @@ function App() {
             onCreateAutomation={(a) => setAutomations(p => [...p, { ...a, id: `auto-${Date.now()}` }])} onUpdateAutomation={(a) => setAutomations(p => p.map(pa => pa.id === a.id ? a : pa))} onDeleteAutomation={(id) => setAutomations(p => p.filter(pa => pa.id !== id))} onToggleAutomation={(id, isEnabled) => setAutomations(p => p.map(pa => pa.id === id ? { ...pa, isEnabled } : pa))}
             onUpdateTimesheet={handleUpdateTimesheet}
             onViewGeneration={(generationId: string) => {
+              const generation = documentGenerations.find(item => item.id === generationId && item.projectId === projectsForScope[0].id);
+              if (!generation) return;
               setTempArtifacts(null);
               setActiveGenerationId(generationId);
               applyGuardedView(View.WORKSPACE);
