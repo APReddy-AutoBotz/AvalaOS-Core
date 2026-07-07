@@ -3,6 +3,7 @@ import LandingPage from '../shared/LandingPage';
 import ProcessingView from '../assess/ProcessingView';
 import { aiOrchestrator } from '../../services/aiOrchestrator';
 import { GeneratedArtifacts, ProjectDetails, DocTemplate, Project, AiProviderType, AssessToStudioHandoffPayload } from '../../types';
+import type { ProductActionDecision } from '../../services/productActionPolicy';
 import {
     attachAssessToStudioSourceContext,
     getAssessToStudioSourceContextSummary,
@@ -17,13 +18,18 @@ interface DocsForgeViewProps {
     aiProviderType: AiProviderType;
     onAiProviderTypeChange: (provider: AiProviderType) => void;
     sourceContext?: AssessToStudioHandoffPayload | null;
+    generationDecision?: ProductActionDecision;
 }
 
-const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, onCancel, onComplete, aiProviderType, onAiProviderTypeChange, sourceContext }) => {
+const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, onCancel, onComplete, aiProviderType, onAiProviderTypeChange, sourceContext, generationDecision }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const sourceSummary = getAssessToStudioSourceContextSummary(sourceContext);
 
     const handleProjectCreate = async (projectDetails: ProjectDetails, file: File | null) => {
+        if (generationDecision && !generationDecision.allowed) {
+            alert(generationDecision.message);
+            return;
+        }
         setIsProcessing(true);
         
         try {
@@ -103,6 +109,8 @@ const DocsForgeView: React.FC<DocsForgeViewProps> = ({ project, docTemplates, on
                 aiProviderType={aiProviderType}
                 onAiProviderTypeChange={onAiProviderTypeChange}
                 sourceContext={sourceContext}
+                canSubmit={generationDecision?.allowed ?? true}
+                submitBlockedReason={generationDecision && !generationDecision.allowed ? generationDecision.message : undefined}
             />
         </div>
     );

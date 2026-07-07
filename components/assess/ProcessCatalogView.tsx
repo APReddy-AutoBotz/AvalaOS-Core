@@ -3,9 +3,11 @@ import { useProcessService } from '../../services/processService';
 import { useOrganization } from '../../services/organizationService';
 import ProcessCreationModal from './ProcessCreationModal';
 import { ChartBarIcon, CheckCircleIcon, ExclamationTriangleIcon, SparklesIcon } from '../shared/icons';
+import type { ProductActionDecision } from '../../services/productActionPolicy';
 
 interface ProcessCatalogViewProps {
     onViewDetail: (processId: string) => void;
+    createProcessDecision?: ProductActionDecision;
 }
 
 const criticalityClass = (criticality: string) => {
@@ -22,10 +24,12 @@ const statusClass = (status: string) => {
     return 'bg-[#002C4B]/10 text-[#002C4B] ring-[#002C4B]/15 dark:bg-[#ffbc03]/10 dark:text-[#ffcf45] dark:ring-[#ffbc03]/20';
 };
 
-const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail }) => {
+const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision }) => {
     const { currentOrganization } = useOrganization();
     const { processes, loading, refreshProcesses } = useProcessService();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const canCreateProcess = createProcessDecision?.allowed ?? true;
+    const createProcessBlockedReason = createProcessDecision && !createProcessDecision.allowed ? createProcessDecision.message : 'Process creation is not authorized in this workspace.';
 
     if (!currentOrganization) return null;
 
@@ -49,8 +53,10 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail })
                         <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.</p>
                     </div>
                     <button
-                        onClick={() => setIsCreateModalOpen(true)}
-                        className="rounded-xl bg-gradient-to-r from-[#002C4B] to-[#ffbc03] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-[#002C4B]/20 transition-transform hover:-translate-y-0.5"
+                        onClick={() => canCreateProcess ? setIsCreateModalOpen(true) : alert(createProcessBlockedReason)}
+                        disabled={!canCreateProcess}
+                        title={!canCreateProcess ? createProcessBlockedReason : undefined}
+                        className="rounded-xl bg-gradient-to-r from-[#002C4B] to-[#ffbc03] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-[#002C4B]/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         New Process
                     </button>

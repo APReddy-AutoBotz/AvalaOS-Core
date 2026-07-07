@@ -16,6 +16,7 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { isModuleEnabled } from '../../constants/moduleConfig';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadGeneratedArtifacts } from '../../services/documentExportService';
+import type { ProductActionDecision } from '../../services/productActionPolicy';
 
 
 // Make marked available globally from the script tag in index.html
@@ -38,6 +39,13 @@ interface WorkspaceViewProps {
   onInitiateImport: (items: WorkItem[]) => void;
   onRefineSection: (artifactKey: DocumentArtifactKeys, sectionKey: string, newContent: string) => void;
   aiProviderType: AiProviderType;
+  actionPolicy?: {
+    documentExport?: ProductActionDecision;
+    artifactDownload?: ProductActionDecision;
+    refine?: ProductActionDecision;
+    approval?: ProductActionDecision;
+    importWorkItems?: ProductActionDecision;
+  };
 }
 
 type RightPanelTab = 'quality' | 'diagrams' | 'work' | 'approvals';
@@ -83,7 +91,7 @@ const toSafeFileName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'avalaos-core-document';
 
-const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType }) => {
+const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType, actionPolicy }) => {
   const { currentOrganization } = useOrganizationContext();
   const [activeTab, setActiveTab] = useState<RightPanelTab>('quality');
   const [exportingDocument, setExportingDocument] = useState<'json' | 'markdown' | null>(null);
@@ -106,6 +114,14 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
 
   const documentData = artifacts[template.artifactKey];
   const deliveryEnabled = isModuleEnabled('delivery', currentOrganization?.enabledModules);
+  const isActionAllowed = (decision?: ProductActionDecision) => decision?.allowed ?? true;
+  const blockedMessage = (decision: ProductActionDecision | undefined, fallback: string) => decision && !decision.allowed ? decision.message : fallback;
+  const blockAction = (decision: ProductActionDecision | undefined, fallback: string) => alert(blockedMessage(decision, fallback));
+  const canDownloadArtifact = isActionAllowed(actionPolicy?.artifactDownload);
+  const canExportDocument = isActionAllowed(actionPolicy?.documentExport);
+  const canRefineDocument = isActionAllowed(actionPolicy?.refine);
+  const canExecuteApproval = isActionAllowed(actionPolicy?.approval);
+  const canImportWorkItems = isActionAllowed(actionPolicy?.importWorkItems);
 
   const getExportHtml = () => {
     const root = mainContentRef.current?.querySelector('.document-export-root') as HTMLElement | null;
@@ -113,6 +129,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
   };
 
   const handleDownloadWord = () => {
+    if (!canDownloadArtifact) {
+      blockAction(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.');
+      return;
+    }
     const html = getExportHtml();
     if (!html) return;
 
@@ -153,6 +173,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
   };
 
   const handlePrintPdf = () => {
+    if (!canDownloadArtifact) {
+      blockAction(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.');
+      return;
+    }
     const html = getExportHtml();
     if (!html) return;
 
@@ -189,6 +213,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
   };
 
   const handleStructuredExport = async (format: 'json' | 'markdown') => {
+    if (!canExportDocument) {
+      blockAction(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.');
+      return;
+    }
     setExportingDocument(format);
     try {
       if (isAiEdgeEnabled() && generationId) {
@@ -208,6 +236,22 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
     }
   };
   
+  const openEditSection = (section: DocumentSection) => {
+    if (!canRefineDocument) {
+      blockAction(actionPolicy?.refine, 'Document refinement is not authorized for this workspace.');
+      return;
+    }
+    setEditModalState({ isOpen: true, section, content: section.content });
+  };
+
+  const openRefineSection = (section: DocumentSection) => {
+    if (!canRefineDocument) {
+      blockAction(actionPolicy?.refine, 'Document refinement is not authorized for this workspace.');
+      return;
+    }
+    setRefineModalState({ isOpen: true, section });
+  };
+
   const handleGoToSection = (sectionKey: string) => {
     const sectionEl = mainContentRef.current?.querySelector(`[data-section-key="${sectionKey}"]`);
     if (sectionEl) {
@@ -259,26 +303,28 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                 <p className="text-slate-500 dark:text-slate-400 mt-1">Review editable drafts, diagrams, and work items before human sign-off.</p>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={handleDownloadWord} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary">
+              <button onClick={handleDownloadWord} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
                   <DocumentTextIcon className="h-5 w-5" />
                   <span>Download Word</span>
               </button>
-              <button onClick={handlePrintPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary">
+              <button onClick={handlePrintPdf} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
                   <DocumentDuplicateIcon className="h-5 w-5" />
                   <span>Print / PDF</span>
               </button>
               <button
                 onClick={() => handleStructuredExport('markdown')}
-                disabled={Boolean(exportingDocument)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-wait disabled:opacity-60"
+                disabled={Boolean(exportingDocument) || !canExportDocument}
+                title={!canExportDocument ? blockedMessage(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.') : undefined}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
                   <ClipboardListIcon className="h-5 w-5" />
                   <span>{exportingDocument === 'markdown' ? 'Exporting...' : 'Markdown'}</span>
               </button>
               <button
                 onClick={() => handleStructuredExport('json')}
-                disabled={Boolean(exportingDocument)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-wait disabled:opacity-60"
+                disabled={Boolean(exportingDocument) || !canExportDocument}
+                title={!canExportDocument ? blockedMessage(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.') : undefined}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
                   <DocumentDuplicateIcon className="h-5 w-5" />
                   <span>{exportingDocument === 'json' ? 'Exporting...' : 'JSON'}</span>
@@ -290,7 +336,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
             </div>
         </div>
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
-          Exports are review artifacts. Confirm source lineage, evidence refs, and human sign-off before sharing outside this workspace.
+          Export and download controls are policy-gated. Confirm source lineage, evidence refs, and human sign-off before any future external sharing approval.
         </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -318,7 +364,8 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                     </div>
                     <div className="section-actions flex items-center gap-2 opacity-0 group-hover/section:opacity-100 transition-opacity">
                       <button
-                          onClick={() => setEditModalState({ isOpen: true, section, content: section.content })}
+                          onClick={() => openEditSection(section)}
+                          disabled={!canRefineDocument}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:text-abz-primary hover:border-abz-primary/50 bg-white/80"
                           title="Edit section"
                       >
@@ -326,7 +373,8 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                           Edit
                       </button>
                       <button
-                          onClick={() => setRefineModalState({ isOpen: true, section: section })}
+                          onClick={() => openRefineSection(section)}
+                          disabled={!canRefineDocument}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:text-abz-primary hover:border-abz-primary/50 bg-white/80"
                           title="Refine draft section"
                       >
@@ -363,9 +411,9 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                 </div>
                 <div className="p-6">
                     {activeTab === 'quality' && <QualityGatePanel artifacts={artifacts} onGoToSection={handleGoToSection} />}
-                    {activeTab === 'approvals' && <ApprovalsPanel approvers={artifacts.approvals} users={users} currentUser={currentUser} onSign={() => setApprovalModalOpen(true)} onResubmit={onResubmitForApproval} />}
+                    {activeTab === 'approvals' && <ApprovalsPanel approvers={artifacts.approvals} users={users} currentUser={currentUser} onSign={() => canExecuteApproval ? setApprovalModalOpen(true) : blockAction(actionPolicy?.approval, 'Approval execution is not authorized for this workspace.')} onResubmit={(userId) => canExecuteApproval ? onResubmitForApproval(userId) : blockAction(actionPolicy?.approval, 'Approval execution is not authorized for this workspace.')} />}
                     {activeTab === 'diagrams' && <DiagramsPanel artifacts={artifacts} />}
-                    {activeTab === 'work' && <WorkItemsPanel artifacts={artifacts} deliveryEnabled={deliveryEnabled} onImport={() => setIsImportModalOpen(true)} />}
+                    {activeTab === 'work' && <WorkItemsPanel artifacts={artifacts} deliveryEnabled={deliveryEnabled} canImport={canImportWorkItems} importBlockedReason={blockedMessage(actionPolicy?.importWorkItems, 'Backlog import is not authorized for this workspace.')} onImport={() => canImportWorkItems ? setIsImportModalOpen(true) : blockAction(actionPolicy?.importWorkItems, 'Backlog import is not authorized for this workspace.')} />}
                 </div>
             </div>
         </div>
@@ -375,6 +423,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
         isOpen={isApprovalModalOpen}
         onClose={() => setApprovalModalOpen(false)}
         onSubmit={({ status, comments }) => {
+            if (!canExecuteApproval) {
+              blockAction(actionPolicy?.approval, 'Approval execution is not authorized for this workspace.');
+              return;
+            }
             onUpdateApprovalStatus(currentUser.id, status, comments);
             setApprovalModalOpen(false);
         }}
@@ -385,6 +437,10 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
           onClose={() => setIsImportModalOpen(false)}
           workItems={artifacts.workItems}
           onImport={(selectedItems) => {
+              if (!canImportWorkItems) {
+                blockAction(actionPolicy?.importWorkItems, 'Backlog import is not authorized for this workspace.');
+                return;
+              }
               onInitiateImport(selectedItems);
               setIsImportModalOpen(false);
           }}
@@ -563,7 +619,7 @@ const DiagramsPanel: React.FC<{artifacts: GeneratedArtifacts}> = ({artifacts}) =
     </div>
 );
 
-const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: boolean, onImport: () => void}> = ({artifacts, deliveryEnabled, onImport}) => {
+const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: boolean, canImport: boolean, importBlockedReason?: string, onImport: () => void}> = ({artifacts, deliveryEnabled, canImport, importBlockedReason, onImport}) => {
     const sourceContext = artifacts.sourceContext;
     const lineageSummary = sourceContext
         ? `${sourceContext.sourceLabel} · ${sourceContext.evidenceRefs.length} evidence ref${sourceContext.evidenceRefs.length === 1 ? '' : 's'}`
@@ -576,7 +632,9 @@ const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: 
                  {deliveryEnabled && artifacts.workItems && artifacts.workItems.length > 0 && (
                     <button
                         onClick={onImport}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold btn-primary"
+                        disabled={!canImport}
+                        title={!canImport ? importBlockedReason : undefined}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         Import to Backlog
                     </button>

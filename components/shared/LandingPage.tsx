@@ -9,6 +9,8 @@ interface LandingPageProps {
   aiProviderType: AiProviderType;
   onAiProviderTypeChange: (provider: AiProviderType) => void;
   sourceContext?: AssessToStudioHandoffPayload | null;
+  canSubmit?: boolean;
+  submitBlockedReason?: string;
 }
 
 const DEFAULT_PROJECT_DETAILS = {
@@ -17,7 +19,7 @@ const DEFAULT_PROJECT_DETAILS = {
   domain: 'Finance Operations',
 };
 
-const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange, sourceContext }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate, onCancel, aiProviderType, onAiProviderTypeChange, sourceContext, canSubmit = true, submitBlockedReason }) => {
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
     company: DEFAULT_PROJECT_DETAILS.company,
     project: sourceContext?.processName || DEFAULT_PROJECT_DETAILS.project,
@@ -74,6 +76,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     onProjectCreate(projectDetails, file);
   };
   
@@ -231,6 +234,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
         </div>
 
 
+        {!canSubmit && submitBlockedReason && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+            {submitBlockedReason}
+          </div>
+        )}
+
         <div className="pt-8 flex flex-col-reverse sm:flex-row items-center justify-end gap-4">
             <button
                 type="button"
@@ -241,6 +250,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ docTemplates, onProjectCreate
             </button>
             <button
                 type="submit"
+                disabled={!canSubmit}
+                title={!canSubmit ? submitBlockedReason : undefined}
                 className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-3 text-md font-semibold btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <SparklesIcon className="w-6 h-6" />

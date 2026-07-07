@@ -34,6 +34,7 @@ import {
   parseProductNavigationSearch,
   resolveProductNavigationState,
 } from './services/productNavigationState';
+import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -137,7 +138,6 @@ function App() {
   );
   const navigationHydrated = useRef(false);
   const navigationWriteSuppressed = useRef(false);
-
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -293,25 +293,61 @@ function App() {
     window.alert(message);
   };
 
+  const resolveProductActionDecision = useCallback((
+    action: ProductAction,
+    context: Partial<Omit<ProductActionContext, 'action' | 'authLoading' | 'enabledModules' | 'organization' | 'scope' | 'user'>> & { scope?: Scope } = {},
+  ) => resolveProductActionPolicy({
+    user: currentUser,
+    authLoading: guardLoading,
+    organization: currentOrganization,
+    enabledModules,
+    scope: context.scope ?? currentScope,
+    action,
+    processId: context.processId,
+    projectId: context.projectId,
+    documentGenerationId: context.documentGenerationId,
+    hasDocumentContext: context.hasDocumentContext,
+    targetUserId: context.targetUserId,
+  }), [currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+
+  const ensureProductAction = useCallback((
+    action: ProductAction,
+    context: Partial<Omit<ProductActionContext, 'action' | 'authLoading' | 'enabledModules' | 'organization' | 'scope' | 'user'>> & { scope?: Scope } = {},
+  ) => {
+    const decision = resolveProductActionDecision(action, context);
+    if (!decision.allowed) {
+      surfaceDeliveryError(new Error(decision.message));
+      return false;
+    }
+    return true;
+  }, [resolveProductActionDecision]);
+
   const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (!ensureProductAction('workflow.status.change', { projectId: task?.projectId })) return;
     deliveryUpdateTaskStatus(taskId, newStatus).catch(surfaceDeliveryError);
   };
 
   const handleUpdateProjectLifecycleStage = (projectId: string, newStage: ProjectLifecycleStage) => {
     const project = projects.find(item => item.id === projectId);
     if (!project) return;
+    if (!ensureProductAction('workflow.status.change', { projectId })) return;
     deliveryUpdateProject({ ...project, lifecycleStage: newStage }).catch(surfaceDeliveryError);
   };
 
   const handleUpdateTask = (updatedTask: Task) => {
+    if (!ensureProductAction('project.task.update', { projectId: updatedTask.projectId })) return;
     deliveryUpdateTask(updatedTask).catch(surfaceDeliveryError);
   };
 
   const handleAddTask = (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => {
+    if (!ensureProductAction('project.task.create', { projectId: taskDetails.projectId })) return;
     deliveryAddTask(taskDetails).catch(surfaceDeliveryError);
   };
 
   const handleDeleteTask = (taskId: string) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (!ensureProductAction('project.task.delete', { projectId: task?.projectId })) return;
     deliveryDeleteTask(taskId)
       .then(() => {
         if (selectedTask?.id === taskId) {
@@ -322,10 +358,13 @@ function App() {
   };
 
   const handleUpdateTaskSprint = (taskId: string, sprintId: string | null) => {
+    const task = tasks.find(item => item.id === taskId);
+    if (!ensureProductAction('project.task.update', { projectId: task?.projectId })) return;
     deliveryUpdateTaskSprint(taskId, sprintId).catch(surfaceDeliveryError);
   };
 
   const handleUpdateSprint = (sprint: Sprint) => {
+    if (!ensureProductAction('workflow.status.change', { projectId: sprint.projectId })) return;
     deliveryUpdateSprint(sprint).catch(surfaceDeliveryError);
   };
 
@@ -527,17 +566,15 @@ function App() {
     tempArtifacts,
   ]);
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
+    const task = tasks.find(item => item.id === taskIdToMove);
+    if (!ensureProductAction('project.task.reorder', { projectId: task?.projectId })) return;
     deliveryReorderTask(taskIdToMove, referenceTaskId, newEpicId).catch(surfaceDeliveryError);
   };
 
   const handleUpdateTimesheet = (userId: string, taskId: string, date: string, hours: number) => {
     if (!currentOrganization || !currentUser) return;
-    const canManageTimesheets = currentUser.permissions?.some(permission => ['project.manage', 'timesheets.approve'].includes(permission));
-    const canLogOwnTime = userId === currentUser.id && currentUser.permissions?.includes('timesheets.log');
-    if (!canManageTimesheets && !canLogOwnTime) {
-      surfaceDeliveryError(new Error('You do not have permission to log or approve timesheet entries.'));
-      return;
-    }
+    const task = tasks.find(item => item.id === taskId);
+    if (!ensureProductAction('timesheet.update', { projectId: task?.projectId, targetUserId: userId })) return;
 
     const existingEntry = timesheetEntries.find(entry => entry.userId === userId && entry.taskId === taskId && entry.date === date);
     const optimisticEntry: TimesheetEntry = existingEntry || { id: `ts-${Date.now()}`, userId, taskId, date, hours };
@@ -569,6 +606,7 @@ function App() {
   const handleUpdateApprovalStatus = (userId: string, status: ApprovalStatus, comments?: string) => {
     const generationId = activeGenerationId;
     if (!generationId && !tempArtifacts) return;
+    if (!ensureProductAction('approval.execute', { documentGenerationId: generationId, hasDocumentContext: Boolean(tempArtifacts) })) return;
 
     if (tempArtifacts) {
       const newApprovals = tempArtifacts.approvals.map(approver =>
@@ -594,6 +632,7 @@ function App() {
   const handleResubmitForApproval = (userId: string) => {
     const generationId = activeGenerationId;
     if (!generationId && !tempArtifacts) return;
+    if (!ensureProductAction('approval.execute', { documentGenerationId: generationId, hasDocumentContext: Boolean(tempArtifacts) })) return;
 
     if (tempArtifacts) {
       const newApprovals = tempArtifacts.approvals.map(approver =>
@@ -633,6 +672,7 @@ function App() {
       : undefined;
     const sourceArtifacts = importSource.artifacts ?? activeGeneration?.artifacts ?? null;
     const sourceGenerationId = importSource.generationId || activeGeneration?.id || activeGenerationId || undefined;
+    if (!ensureProductAction('delivery.import', { projectId, documentGenerationId: sourceGenerationId, hasDocumentContext: Boolean(sourceArtifacts) })) return false;
     const sourceCreatedAt = importSource.generationCreatedAt || importedAt;
     const sourceContext = sourceArtifacts?.sourceContext;
     const newEpics: Epic[] = [];
@@ -711,6 +751,7 @@ function App() {
     alert(`${newEpics.length} epic(s) and ${newTasks.length} task(s) have been imported to your backlog.`);
 
     applyGuardedView(View.BACKLOG, { type: ScopeType.PROJECT, id: projectId, name: projectName });
+    return true;
   };
 
   const handleInitiateImport = (itemsToImport: WorkItem[]) => {
@@ -728,11 +769,12 @@ function App() {
           };
           const savedGeneration = await deliverySaveGeneration(newGeneration);
           const finalizedGeneration = savedGeneration || newGeneration;
-          await handleImportWorkItems(itemsToImport, currentScope.id, {
+          const imported = await handleImportWorkItems(itemsToImport, currentScope.id, {
             artifacts: finalizedGeneration.artifacts,
             generationId: finalizedGeneration.id,
             generationCreatedAt: finalizedGeneration.generatedAt,
           });
+          if (!imported) return;
           setActiveGenerationId(finalizedGeneration.id);
           setTempArtifacts(null);
           return;
@@ -741,11 +783,12 @@ function App() {
         const activeGeneration = activeGenerationId
           ? documentGenerations.find(generation => generation.id === activeGenerationId)
           : undefined;
-        await handleImportWorkItems(itemsToImport, currentScope.id, {
+        const imported = await handleImportWorkItems(itemsToImport, currentScope.id, {
           artifacts: activeGeneration?.artifacts || null,
           generationId: activeGeneration?.id || activeGenerationId,
           generationCreatedAt: activeGeneration?.generatedAt,
         });
+        if (!imported) return;
       };
 
       runProjectImport().catch(surfaceDeliveryError);
@@ -770,11 +813,12 @@ function App() {
       const savedGeneration = await deliverySaveGeneration(newGeneration);
       const finalizedGeneration = savedGeneration || newGeneration;
 
-      await handleImportWorkItems(artifactsToImport.workItems, project.id, {
+      const imported = await handleImportWorkItems(artifactsToImport.workItems, project.id, {
         artifacts: finalizedGeneration.artifacts,
         generationId: finalizedGeneration.id,
         generationCreatedAt: finalizedGeneration.generatedAt,
       });
+      if (!imported) return;
 
       setActiveGenerationId(finalizedGeneration.id);
       setTempArtifacts(null);
@@ -785,6 +829,7 @@ function App() {
   };
 
   const handleRefineSection = (artifactKey: DocumentArtifactKeys, sectionKey: string, newContent: string) => {
+    if (!ensureProductAction('docs.refine', { documentGenerationId: activeGenerationId, hasDocumentContext: Boolean(tempArtifacts || activeGenerationId) })) return;
     const processArtifacts = (artifacts: GeneratedArtifacts): GeneratedArtifacts => {
       const newArtifacts = { ...artifacts };
       const artifactToUpdate = newArtifacts[artifactKey];
@@ -913,7 +958,10 @@ function App() {
 
     // Global Assess Views
     if (currentView === View.PROCESS_CATALOG) {
-      return <ProcessCatalogView onViewDetail={(id) => { setSelectedProcessId(id); applyGuardedView(View.PROCESS_DETAIL); }} />;
+      return <ProcessCatalogView
+        onViewDetail={(id) => { setSelectedProcessId(id); applyGuardedView(View.PROCESS_DETAIL); }}
+        createProcessDecision={resolveProductActionDecision('process.create')}
+      />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
       return <TemplateLibraryView />;
@@ -963,6 +1011,9 @@ function App() {
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
           sourceContext={assessToStudioSourceContext}
+          generationDecision={resolveProductActionDecision('docs.generate', {
+            projectId: currentScope.type === ScopeType.PROJECT ? currentScope.id : undefined,
+          })}
         />;
       case View.WORKSPACE: {
         const activeGeneration = documentGenerations.find(g => g.id === activeGenerationId && (
@@ -997,6 +1048,29 @@ function App() {
           onInitiateImport={handleInitiateImport}
           onRefineSection={handleRefineSection}
           aiProviderType={aiProviderType}
+          actionPolicy={{
+            documentExport: resolveProductActionDecision('docs.export', {
+              documentGenerationId: activeGeneration?.id || null,
+              hasDocumentContext: Boolean(artifactsToShow),
+            }),
+            artifactDownload: resolveProductActionDecision('artifact.download', {
+              documentGenerationId: activeGeneration?.id || null,
+              hasDocumentContext: Boolean(artifactsToShow),
+            }),
+            refine: resolveProductActionDecision('docs.refine', {
+              documentGenerationId: activeGeneration?.id || null,
+              hasDocumentContext: Boolean(artifactsToShow),
+            }),
+            approval: resolveProductActionDecision('approval.execute', {
+              documentGenerationId: activeGeneration?.id || null,
+              hasDocumentContext: Boolean(artifactsToShow),
+            }),
+            importWorkItems: resolveProductActionDecision('delivery.import', {
+              projectId: currentScope.type === ScopeType.PROJECT ? currentScope.id : projectsForScope[0]?.id,
+              documentGenerationId: activeGeneration?.id || null,
+              hasDocumentContext: Boolean(artifactsToShow),
+            }),
+          }}
         />
       }
       case View.TEMPLATE_STUDIO:
@@ -1022,7 +1096,7 @@ function App() {
             onUpdateTaskStatus={handleUpdateTaskStatus} onUpdateTask={handleUpdateTask} onSelectTask={setSelectedTask}
             // Fix: Pass `handleReorderTask` to the `onReorderTask` prop. The original code had a typo `onReorderTask`.
             onUpdateTaskSprint={handleUpdateTaskSprint} onUpdateSprint={handleUpdateSprint} onReorderTask={handleReorderTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask}
-            onCreateAutomation={(a) => setAutomations(p => [...p, { ...a, id: `auto-${Date.now()}` }])} onUpdateAutomation={(a) => setAutomations(p => p.map(pa => pa.id === a.id ? a : pa))} onDeleteAutomation={(id) => setAutomations(p => p.filter(pa => pa.id !== id))} onToggleAutomation={(id, isEnabled) => setAutomations(p => p.map(pa => pa.id === id ? { ...pa, isEnabled } : pa))}
+            onCreateAutomation={(a) => { if (ensureProductAction('automation.create', { projectId: a.projectId })) setAutomations(p => [...p, { ...a, id: `auto-${Date.now()}` }]); }} onUpdateAutomation={(a) => { if (ensureProductAction('automation.update', { projectId: a.projectId })) setAutomations(p => p.map(pa => pa.id === a.id ? a : pa)); }} onDeleteAutomation={(id) => { const automation = automations.find(item => item.id === id); if (ensureProductAction('automation.delete', { projectId: automation?.projectId ?? projectsForScope[0]?.id })) setAutomations(p => p.filter(pa => pa.id !== id)); }} onToggleAutomation={(id, isEnabled) => { const automation = automations.find(item => item.id === id); if (ensureProductAction('automation.toggle', { projectId: automation?.projectId ?? projectsForScope[0]?.id })) setAutomations(p => p.map(pa => pa.id === id ? { ...pa, isEnabled } : pa)); }}
             onUpdateTimesheet={handleUpdateTimesheet}
             onViewGeneration={(generationId: string) => {
               const generation = documentGenerations.find(item => item.id === generationId && item.projectId === projectsForScope[0].id);
