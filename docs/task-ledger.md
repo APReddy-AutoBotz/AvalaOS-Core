@@ -1,4 +1,4 @@
-﻿# Task Ledger
+# Task Ledger
 
 This ledger records the current canonical milestone status. Evidence links are historical records unless the Decision column says they are active blockers.
 

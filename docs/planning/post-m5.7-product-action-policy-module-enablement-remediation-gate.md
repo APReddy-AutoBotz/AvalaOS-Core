@@ -1,4 +1,4 @@
-﻿# Post-M5.7 Product Action Policy Module Enablement Remediation Gate
+# Post-M5.7 Product Action Policy Module Enablement Remediation Gate
 
 ## Purpose
 

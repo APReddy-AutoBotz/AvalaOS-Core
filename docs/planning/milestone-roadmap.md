@@ -1,4 +1,4 @@
-﻿# Milestone Roadmap
+# Milestone Roadmap
 
 Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 

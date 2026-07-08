@@ -1,4 +1,4 @@
-﻿import { DEFAULT_ENABLED_MODULES } from '../constants/moduleConfig';
+import { DEFAULT_ENABLED_MODULES } from '../constants/moduleConfig';
 import { Organization, ProductModuleKey, Scope, ScopeType, User } from '../types';
 
 export type ProductAction =

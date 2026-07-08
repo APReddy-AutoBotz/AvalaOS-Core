@@ -1,4 +1,4 @@
-﻿# Readiness Gates
+# Readiness Gates
 
 Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
