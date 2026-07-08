@@ -297,6 +297,11 @@ const buildDecision = (
   message,
 });
 
+const resolveEnabledModules = (input: ProductActionContext): ProductModuleKey[] => {
+  if (input.enabledModules !== undefined) return input.enabledModules;
+  if (input.organization?.enabledModules !== undefined) return input.organization.enabledModules;
+  return DEFAULT_ENABLED_MODULES;
+};
 export function resolveProductActionPolicy(input: ProductActionContext): ProductActionDecision {
   if (input.authLoading) {
     return buildDecision(input.action, undefined, false, 'auth_loading', 'Action policy is waiting for authentication context.');
@@ -312,7 +317,7 @@ export function resolveProductActionPolicy(input: ProductActionContext): Product
   }
 
   const metadata = ACTION_POLICY[input.action];
-  const enabledModules = input.enabledModules && input.enabledModules.length > 0 ? input.enabledModules : DEFAULT_ENABLED_MODULES;
+  const enabledModules = resolveEnabledModules(input);
 
   if (metadata.module && !enabledModules.includes(metadata.module)) {
     return buildDecision(input.action, metadata, false, 'disabled_module', `Avala ${metadata.module} is not enabled for this organization.`);

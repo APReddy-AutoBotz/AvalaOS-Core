@@ -111,6 +111,56 @@ describe('productActionPolicy', () => {
     }).reason, 'disabled_module');
   });
 
+  it('uses organization module enablement for delivery actions when no explicit override is supplied', () => {
+    const deliveryUser = user({ permissions: ['task.create'] });
+
+    assert.equal(resolveProductActionPolicy({
+      user: deliveryUser,
+      organization: { ...organization, enabledModules: ['assess', 'docs', 'monitor'] },
+      scope: projectScope,
+      projectId: 'project-1',
+      action: 'project.task.create',
+    }).reason, 'disabled_module');
+  });
+
+  it('lets explicit enabledModules override organization enabledModules', () => {
+    const generator = user({ permissions: ['docs.generate'] });
+
+    assert.equal(resolveProductActionPolicy({
+      user: generator,
+      organization: { ...organization, enabledModules: ['assess', 'delivery', 'monitor'] },
+      enabledModules: ['docs'],
+      scope: myWorkScope,
+      action: 'docs.generate',
+    }).allowed, true);
+  });
+
+  it('treats an explicit empty enabledModules override as no modules enabled', () => {
+    const admin = user({ orgRole: 'Admin', permissions: [] });
+
+    assert.equal(resolveProductActionPolicy({
+      user: admin,
+      organization,
+      enabledModules: [],
+      scope: myWorkScope,
+      action: 'process.create',
+    }).reason, 'disabled_module');
+  });
+
+  it('uses default modules only when no explicit or organization modules are available', () => {
+    const generator = user({ permissions: ['docs.generate'] });
+    const organizationWithoutModules = {
+      ...organization,
+      enabledModules: undefined,
+    } as unknown as Organization;
+
+    assert.equal(resolveProductActionPolicy({
+      user: generator,
+      organization: organizationWithoutModules,
+      scope: myWorkScope,
+      action: 'docs.generate',
+    }).allowed, true);
+  });
   it('requires process, project, document, and target-user context for high-risk mutations', () => {
     const admin = user({ orgRole: 'Admin', permissions: [] });
 
