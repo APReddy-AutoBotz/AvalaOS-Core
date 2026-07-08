@@ -14,6 +14,7 @@ import ReportsView from '../shared/ReportsView';
 import DocsView from '../docs/DocsView';
 import DeliveryPackView from './DeliveryPackView';
 import { filterActiveDeliveryTasks } from '../../services/deliveryWorkflowPolicy';
+import type { ArtifactExportDecision } from '../../services/artifactExportPolicy';
 
 interface ProjectViewProps {
     view: View;
@@ -28,6 +29,10 @@ interface ProjectViewProps {
     docTemplates: DocTemplate[];
     documentGenerations: DocumentGeneration[];
     handoffEntries: HandoffLedgerEntry[];
+    deliveryPackArtifactPolicy?: {
+        exportMarkdown?: ArtifactExportDecision;
+        exportJson?: ArtifactExportDecision;
+    };
     onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
     onUpdateTask: (updatedTask: Task) => void;
     onSelectTask: (task: Task) => void;
@@ -47,7 +52,7 @@ interface ProjectViewProps {
 const ProjectView: React.FC<ProjectViewProps> = (props) => {
     const { 
         view, project, tasks, epics, sprints, users, currentUser, automations, timesheetEntries, 
-        docTemplates, documentGenerations, handoffEntries,
+        docTemplates, documentGenerations, handoffEntries, deliveryPackArtifactPolicy,
         onUpdateTaskStatus, onUpdateTask, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onReorderTask, onAddTask, onDeleteTask,
         onCreateAutomation, onUpdateAutomation, onDeleteAutomation, onToggleAutomation, onUpdateTimesheet,
         onViewGeneration
@@ -87,7 +92,7 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
             case View.AUTOMATIONS:
                 return <AutomationsView project={project} automations={automations} users={users} onCreate={onCreateAutomation} onUpdate={onUpdateAutomation} onDelete={onDeleteAutomation} onToggle={onToggleAutomation} />;
             case View.DELIVERY_PACK:
-                return <DeliveryPackView project={project} tasks={tasks} users={users} docTemplates={docTemplates} documentGenerations={documentGenerations} handoffEntries={handoffEntries} />;
+                return <DeliveryPackView project={project} tasks={tasks} users={users} docTemplates={docTemplates} documentGenerations={documentGenerations} handoffEntries={handoffEntries} artifactPolicy={deliveryPackArtifactPolicy} />;
             case View.TIMESHEETS:
                 return <TimesheetsView project={project} tasks={activeTasks} currentUser={currentUser} timesheetEntries={timesheetEntries} onUpdateTimesheet={onUpdateTimesheet} />;
             case View.REPORTS:

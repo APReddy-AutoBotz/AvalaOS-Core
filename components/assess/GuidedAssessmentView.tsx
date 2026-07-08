@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOrganization } from '../../services/organizationService';
 import { useAssessmentService } from '../../services/assessmentService';
 import { useProcessService } from '../../services/processService';
-import { AssessmentSectionKey, AssessmentResponses, Assessment, EvidenceItem, Assumption, AssessmentReviewComment } from '../../types';
+import { AssessmentSectionKey, AssessmentResponses, Assessment, EvidenceItem, Assumption, AssessmentReviewComment, Scope } from '../../types';
 import { useAuth } from '../auth/AuthProvider';
 import {
     ASSESS_SECTIONS,
@@ -18,6 +18,7 @@ import {
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadAssessmentDecisionPack } from '../../services/assessmentExportService';
+import { resolveArtifactExportPolicy } from '../../services/artifactExportPolicy';
 import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
 
 export const CONVERSION_RATES = {
@@ -43,10 +44,11 @@ const DEFAULT_RESPONSES: AssessmentResponses = {
 
 interface GuidedAssessmentViewProps {
     processId: string;
+    scope: Scope;
     onExit: () => void;
 }
 
-const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, onExit }) => {
+const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, scope, onExit }) => {
     const { currentOrganization } = useOrganization();
     const {
         getAssessmentForProcess,
@@ -227,6 +229,21 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
 
     const handleExportDecisionPack = useCallback(async (format: 'json' | 'markdown') => {
         if (!assessment?.scores || !currentOrganization) return;
+        const decision = resolveArtifactExportPolicy({
+            action: 'decision_pack.export',
+            artifactType: 'decision_pack_export',
+            actor: user,
+            organization: currentOrganization,
+            scope,
+            assessmentId: assessment.id,
+            hasAssessmentScores: Boolean(assessment.scores),
+            requestedOutputs: ['export_file', 'download_file', 'storage_object', 'live_signed_url'],
+            sourceSurfaceId: 'guided-assessment.decision-pack-export',
+        });
+        if (!decision.allowed) {
+            setErrorMsg(decision.message);
+            return;
+        }
         const processContext = getProcessById(processId, currentOrganization.id);
         setExportingDecisionPack(format);
 
@@ -253,7 +270,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         } finally {
             setExportingDecisionPack(null);
         }
-    }, [assessment, currentOrganization, getProcessById, processId]);
+    }, [assessment, currentOrganization, getProcessById, processId, scope, user]);
 
     const attemptExit = useCallback((action: () => void) => {
         if (isDirty) {
@@ -803,6 +820,18 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
     const currentTemplateRule = getAssessTemplateRuleFromConfig(currentProcess?.templateId, assessGovernanceConfig);
     const isLockedAssessment = LOCKED_ASSESSMENT_STATUSES.has(assessment.status);
     const governCard = assessment.scores && currentProcess ? buildAvalaGovernLiteCard(assessment, currentProcess) : null;
+    const decisionPackExportDecision = resolveArtifactExportPolicy({
+        action: 'decision_pack.export',
+        artifactType: 'decision_pack_export',
+        actor: user,
+        organization: currentOrganization,
+        scope,
+        assessmentId: assessment.id,
+        hasAssessmentScores: Boolean(assessment.scores),
+        requestedOutputs: ['export_file', 'download_file', 'storage_object', 'live_signed_url'],
+        sourceSurfaceId: 'guided-assessment.decision-pack-export',
+    });
+    const canExportDecisionPack = decisionPackExportDecision.allowed;
 
     const addEvidenceItem = () => {
         if (!evidenceDraft.description.trim()) {
@@ -1032,21 +1061,23 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                         <div className="mt-2 grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => handleExportDecisionPack('json')}
-                                                disabled={Boolean(exportingDecisionPack)}
-                                                className="rounded-xl px-3 py-2 text-xs font-black btn-ghost disabled:cursor-wait disabled:opacity-60"
+                                                disabled={Boolean(exportingDecisionPack) || !canExportDecisionPack}
+                                                title={!canExportDecisionPack ? decisionPackExportDecision.message : undefined}
+                                                className="rounded-xl px-3 py-2 text-xs font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
                                             >
                                                 {exportingDecisionPack === 'json' ? 'Exporting...' : 'JSON'}
                                             </button>
                                             <button
                                                 onClick={() => handleExportDecisionPack('markdown')}
-                                                disabled={Boolean(exportingDecisionPack)}
-                                                className="rounded-xl px-3 py-2 text-xs font-black btn-ghost disabled:cursor-wait disabled:opacity-60"
+                                                disabled={Boolean(exportingDecisionPack) || !canExportDecisionPack}
+                                                title={!canExportDecisionPack ? decisionPackExportDecision.message : undefined}
+                                                className="rounded-xl px-3 py-2 text-xs font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
                                             >
                                                 {exportingDecisionPack === 'markdown' ? 'Exporting...' : 'Markdown'}
                                             </button>
                                         </div>
                                         <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-400">
-                                            Demo mode downloads locally. Pilot mode uses server-side export storage.
+                                            Decision Pack export, local download, storage object creation, and signed URL generation are blocked until a later approved artifact boundary.
                                         </p>
                                     </div>
                                 </div>

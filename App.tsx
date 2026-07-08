@@ -35,6 +35,7 @@ import {
   resolveProductNavigationState,
 } from './services/productNavigationState';
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
+import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
@@ -969,7 +970,7 @@ function App() {
        // Using orgId from the current context. Assuming projects belong to current org if in project scope, but Process is strictly an org-level concept.
        // The process has an orgId. We need to use the current selected organization, but the scope might be Team/Project.
        // Actually, Module 1 defined Assess views mostly in Organization scope, so we use currentOrganization context globally.
-       return <GuidedAssessmentView processId={selectedProcessId} onExit={() => applyGuardedView(View.PROCESS_DETAIL)} />;
+       return <GuidedAssessmentView processId={selectedProcessId} scope={currentScope} onExit={() => applyGuardedView(View.PROCESS_DETAIL)} />;
     }
 
     // Global Assess Views
@@ -1043,10 +1044,23 @@ function App() {
         // Template finding might be less reliable for global generations
         const templateId = activeGeneration?.templateId || 'brd.v1';
         const template = docTemplates.find(t => t.id === templateId) || docTemplates[0];
+        const documentGenerationId = activeGeneration?.id || null;
+        const documentEvidenceRefs = artifactsToShow.sourceContext?.evidenceRefs.map(ref => ref.id) || [];
+        const documentLineageRefs = artifactsToShow.sourceContext
+          ? [artifactsToShow.sourceContext.processId, artifactsToShow.sourceContext.assessmentId].filter(Boolean)
+          : [];
+        const documentExportDecision = resolveProductActionDecision('docs.export', {
+          documentGenerationId,
+          hasDocumentContext: Boolean(artifactsToShow),
+        });
+        const artifactDownloadDecision = resolveProductActionDecision('artifact.download', {
+          documentGenerationId,
+          hasDocumentContext: Boolean(artifactsToShow),
+        });
 
         return <WorkspaceView
           artifacts={artifactsToShow}
-          generationId={activeGeneration?.id || null}
+          generationId={documentGenerationId}
           template={template}
           error={null}
           onDone={() => {
@@ -1065,26 +1079,63 @@ function App() {
           onRefineSection={handleRefineSection}
           aiProviderType={aiProviderType}
           actionPolicy={{
-            documentExport: resolveProductActionDecision('docs.export', {
-              documentGenerationId: activeGeneration?.id || null,
-              hasDocumentContext: Boolean(artifactsToShow),
-            }),
-            artifactDownload: resolveProductActionDecision('artifact.download', {
-              documentGenerationId: activeGeneration?.id || null,
-              hasDocumentContext: Boolean(artifactsToShow),
-            }),
+            documentExport: documentExportDecision,
+            artifactDownload: artifactDownloadDecision,
             refine: resolveProductActionDecision('docs.refine', {
-              documentGenerationId: activeGeneration?.id || null,
+              documentGenerationId,
               hasDocumentContext: Boolean(artifactsToShow),
             }),
             approval: resolveProductActionDecision('approval.execute', {
-              documentGenerationId: activeGeneration?.id || null,
+              documentGenerationId,
               hasDocumentContext: Boolean(artifactsToShow),
             }),
             importWorkItems: resolveProductActionDecision('delivery.import', {
               projectId: currentScope.type === ScopeType.PROJECT ? currentScope.id : projectsForScope[0]?.id,
-              documentGenerationId: activeGeneration?.id || null,
+              documentGenerationId,
               hasDocumentContext: Boolean(artifactsToShow),
+            }),
+          }}
+          artifactPolicy={{
+            documentExport: resolveArtifactExportPolicy({
+              action: 'document.export',
+              artifactType: 'generated_document_export',
+              actor: currentUser,
+              organization: currentOrganization,
+              scope: currentScope,
+              productActionDecision: documentExportDecision,
+              documentGenerationId,
+              hasDocumentContext: Boolean(artifactsToShow),
+              projectId: currentScope.type === ScopeType.PROJECT ? currentScope.id : activeGeneration?.projectId,
+              evidenceRefs: documentEvidenceRefs,
+              lineageRefs: documentLineageRefs,
+              requestedOutputs: ['export_file', 'storage_object', 'live_signed_url'],
+              sourceSurfaceId: 'workspace.generated-document-export',
+            }),
+            documentDownload: resolveArtifactExportPolicy({
+              action: 'document.download',
+              artifactType: 'generated_document_download',
+              actor: currentUser,
+              organization: currentOrganization,
+              scope: currentScope,
+              productActionDecision: artifactDownloadDecision,
+              documentGenerationId,
+              hasDocumentContext: Boolean(artifactsToShow),
+              projectId: currentScope.type === ScopeType.PROJECT ? currentScope.id : activeGeneration?.projectId,
+              evidenceRefs: documentEvidenceRefs,
+              lineageRefs: documentLineageRefs,
+              requestedOutputs: ['download_file', 'pdf_file'],
+              sourceSurfaceId: 'workspace.generated-document-download',
+            }),
+            signedUrl: resolveArtifactExportPolicy({
+              action: 'storage.signed_url.create',
+              artifactType: 'signed_url',
+              actor: currentUser,
+              organization: currentOrganization,
+              scope: currentScope,
+              documentGenerationId,
+              hasDocumentContext: Boolean(artifactsToShow),
+              requestedOutputs: ['live_signed_url', 'public_url'],
+              sourceSurfaceId: 'workspace.generated-document-signed-url',
             }),
           }}
         />
@@ -1109,6 +1160,58 @@ function App() {
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
+            deliveryPackArtifactPolicy={{
+              exportMarkdown: resolveArtifactExportPolicy({
+                action: 'delivery_pack.export',
+                artifactType: 'delivery_pack_export',
+                actor: currentUser,
+                organization: currentOrganization,
+                scope: currentScope,
+                productActionDecision: resolveProductActionDecision('delivery.pack.review', { projectId: projectsForScope[0].id }),
+                projectId: projectsForScope[0].id,
+                deliveryPackId: projectsForScope[0].id + '-delivery-pack',
+                hasDeliveryPackContext: true,
+                evidenceRefs: Array.from(new Set([
+                  ...handoffEntries.flatMap(entry => entry.evidenceRefs),
+                  ...tasksForScope.flatMap(task => task.sourceLineage?.evidenceRefs || []),
+                ])),
+                lineageRefs: Array.from(new Set([
+                  ...tasksForScope.flatMap(task => [
+                    task.sourceLineage?.processId,
+                    task.sourceLineage?.assessmentId,
+                    task.sourceLineage?.documentGenerationId,
+                    ...(task.sourceLineage?.handoffLedgerEntryIds || []),
+                  ]),
+                ].filter(Boolean) as string[])),
+                requestedOutputs: ['export_file', 'download_file'],
+                sourceSurfaceId: 'delivery-pack.markdown-export',
+              }),
+              exportJson: resolveArtifactExportPolicy({
+                action: 'delivery_pack.download',
+                artifactType: 'delivery_pack_export',
+                actor: currentUser,
+                organization: currentOrganization,
+                scope: currentScope,
+                productActionDecision: resolveProductActionDecision('delivery.pack.review', { projectId: projectsForScope[0].id }),
+                projectId: projectsForScope[0].id,
+                deliveryPackId: projectsForScope[0].id + '-delivery-pack',
+                hasDeliveryPackContext: true,
+                evidenceRefs: Array.from(new Set([
+                  ...handoffEntries.flatMap(entry => entry.evidenceRefs),
+                  ...tasksForScope.flatMap(task => task.sourceLineage?.evidenceRefs || []),
+                ])),
+                lineageRefs: Array.from(new Set([
+                  ...tasksForScope.flatMap(task => [
+                    task.sourceLineage?.processId,
+                    task.sourceLineage?.assessmentId,
+                    task.sourceLineage?.documentGenerationId,
+                    ...(task.sourceLineage?.handoffLedgerEntryIds || []),
+                  ]),
+                ].filter(Boolean) as string[])),
+                requestedOutputs: ['download_file'],
+                sourceSurfaceId: 'delivery-pack.json-download',
+              }),
+            }}
             onUpdateTaskStatus={handleUpdateTaskStatus} onUpdateTask={handleUpdateTask} onSelectTask={setSelectedTask}
             // Fix: Pass `handleReorderTask` to the `onReorderTask` prop. The original code had a typo `onReorderTask`.
             onUpdateTaskSprint={handleUpdateTaskSprint} onUpdateSprint={handleUpdateSprint} onReorderTask={handleReorderTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask}
