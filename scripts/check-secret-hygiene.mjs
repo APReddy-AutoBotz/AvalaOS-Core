@@ -152,7 +152,7 @@ const createHit = ({ ruleId, relativePath, lineNumber, classification }) => ({
 const rawSecretLiteralPatterns = [
   {
     id: 'provider-key-prefix',
-    regex: /(?:sk-[A-Za-z0-9_-]{32,}|sk_live_[A-Za-z0-9_-]{24,}|sk-ant-[A-Za-z0-9_-]{24,}|gsk_[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|gh[pousr]_[A-Za-z0-9_]{24,})/,
+    regex: /(?<![A-Za-z0-9_])(?:sk-[A-Za-z0-9_-]{32,}|sk_live_[A-Za-z0-9_-]{24,}|sk-ant-[A-Za-z0-9_-]{24,}|gsk_[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|gh[pousr]_[A-Za-z0-9_]{24,})(?![A-Za-z0-9_])/,
   },
   {
     id: 'bearer-token-assignment',

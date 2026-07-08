@@ -35,6 +35,7 @@ import {
   resolveProductNavigationState,
 } from './services/productNavigationState';
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
+import { resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -673,6 +674,18 @@ function App() {
     const sourceArtifacts = importSource.artifacts ?? activeGeneration?.artifacts ?? null;
     const sourceGenerationId = importSource.generationId || activeGeneration?.id || activeGenerationId || undefined;
     if (!ensureProductAction('delivery.import', { projectId, documentGenerationId: sourceGenerationId, hasDocumentContext: Boolean(sourceArtifacts) })) return false;
+    const importDecision = resolveDeliveryImportGuard({
+      actor: currentUser,
+      organizationId: currentOrganization?.id,
+      projectId,
+      documentGenerationId: sourceGenerationId,
+      hasDocumentContext: Boolean(sourceArtifacts),
+      itemsToImport,
+    });
+    if (!importDecision.allowed) {
+      surfaceDeliveryError(new Error(importDecision.message));
+      return false;
+    }
     const sourceCreatedAt = importSource.generationCreatedAt || importedAt;
     const sourceContext = sourceArtifacts?.sourceContext;
     const newEpics: Epic[] = [];

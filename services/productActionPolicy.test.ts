@@ -256,6 +256,42 @@ describe('productActionPolicy', () => {
     }).allowed, true);
   });
 
+  it('treats task.update.own as delivery attempt authority while keeping comments out of workflow status changes', () => {
+    const assignedContributor = user({ permissions: ['task.update.own'] });
+    const commentReviewer = user({ permissions: ['comments.manage'] });
+
+    assert.equal(resolveProductActionPolicy({
+      user: assignedContributor,
+      organization,
+      scope: projectScope,
+      projectId: 'project-1',
+      action: 'project.task.update',
+    }).allowed, true);
+
+    assert.equal(resolveProductActionPolicy({
+      user: assignedContributor,
+      organization,
+      scope: projectScope,
+      projectId: 'project-1',
+      action: 'workflow.status.change',
+    }).allowed, true);
+
+    assert.equal(resolveProductActionPolicy({
+      user: commentReviewer,
+      organization,
+      scope: projectScope,
+      projectId: 'project-1',
+      action: 'project.task.update',
+    }).allowed, true);
+
+    assert.equal(resolveProductActionPolicy({
+      user: commentReviewer,
+      organization,
+      scope: projectScope,
+      projectId: 'project-1',
+      action: 'workflow.status.change',
+    }).allowed, false);
+  });
   it('requires explicit automation edit authority in project scope', () => {
     const viewer = user({ permissions: ['automation.view'] });
     const editor = user({ permissions: ['automation.edit'] });
