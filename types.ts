@@ -863,6 +863,9 @@ export type TaskPriority = typeof ALL_PRIORITIES[number];
 
 export const ALL_TASK_TYPES = ['Story', 'Task', 'Bug', 'Subtask'] as const;
 export type TaskType = typeof ALL_TASK_TYPES[number];
+export type DeliveryDeletionState = 'active' | 'soft_deleted' | 'retained';
+export type DeliveryDeletionMode = 'soft_delete' | 'retained_lineage';
+export type DeliveryRetentionClass = 'none' | 'dependency' | 'child' | 'lineage' | 'terminal' | 'unknown_context';
 
 export interface Task {
     id: string;
@@ -887,6 +890,16 @@ export interface Task {
     userStories?: UserStory[];
     activityLog?: ActivityLogItem[];
     sourceLineage?: TaskSourceLineageMetadata;
+    deletionState?: DeliveryDeletionState;
+    deletionMode?: DeliveryDeletionMode;
+    deletionRequestedAt?: string;
+    deletionRequestedBy?: string;
+    deletedAt?: string;
+    deletedBy?: string;
+    deletionReason?: string;
+    retentionReason?: string;
+    retentionClass?: DeliveryRetentionClass;
+    restoreEligible?: boolean;
 }
 
 export interface Epic {

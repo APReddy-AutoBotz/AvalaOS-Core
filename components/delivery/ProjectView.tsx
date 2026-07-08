@@ -13,6 +13,7 @@ import TimesheetsView from './TimesheetsView';
 import ReportsView from '../shared/ReportsView';
 import DocsView from '../docs/DocsView';
 import DeliveryPackView from './DeliveryPackView';
+import { filterActiveDeliveryTasks } from '../../services/deliveryWorkflowPolicy';
 
 interface ProjectViewProps {
     view: View;
@@ -52,24 +53,26 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
         onViewGeneration
     } = props;
 
+    const activeTasks = filterActiveDeliveryTasks(tasks);
+
     const renderCurrentView = () => {
         switch (view) {
             case View.BOARDS:
-                return <BoardsView tasks={tasks} projects={[project]} epics={epics} users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
+                return <BoardsView tasks={activeTasks} projects={[project]} epics={epics} users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
             case View.LIST:
-                return <TaskListView tasks={tasks} projects={[project]} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
+                return <TaskListView tasks={activeTasks} projects={[project]} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
             case View.GANTT:
-                return <GanttChartView tasks={tasks} projects={[project]} onSelectTask={onSelectTask} onUpdateTask={onUpdateTask} />;
+                return <GanttChartView tasks={activeTasks} projects={[project]} onSelectTask={onSelectTask} onUpdateTask={onUpdateTask} />;
             case View.CALENDAR:
-                return <CalendarView tasks={tasks} projects={[project]} onSelectTask={onSelectTask} />;
+                return <CalendarView tasks={activeTasks} projects={[project]} onSelectTask={onSelectTask} />;
             case View.ROADMAP:
-                return <RoadmapView tasks={tasks} epics={epics} />;
+                return <RoadmapView tasks={activeTasks} epics={epics} />;
             case View.BACKLOG:
-                return <BacklogView project={project} tasks={tasks} epics={epics} onSelectTask={onSelectTask} onReorderTask={onReorderTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
+                return <BacklogView project={project} tasks={activeTasks} epics={epics} onSelectTask={onSelectTask} onReorderTask={onReorderTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
             case View.SPRINT_PLANNING:
                 return <SprintPlanningView 
                             project={project} 
-                            tasks={tasks} 
+                            tasks={activeTasks}
                             sprints={sprints} 
                             users={users}
                             onSelectTask={onSelectTask} 
@@ -80,13 +83,13 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
                             onUpdateTask={onUpdateTask}
                         />;
             case View.WORKLOAD:
-                return <WorkloadView tasks={tasks} users={users.filter(u => tasks.some(t => t.assigneeIds.includes(u.id)))} />;
+                return <WorkloadView tasks={activeTasks} users={users.filter(u => activeTasks.some(t => t.assigneeIds.includes(u.id)))} />;
             case View.AUTOMATIONS:
                 return <AutomationsView project={project} automations={automations} users={users} onCreate={onCreateAutomation} onUpdate={onUpdateAutomation} onDelete={onDeleteAutomation} onToggle={onToggleAutomation} />;
             case View.DELIVERY_PACK:
                 return <DeliveryPackView project={project} tasks={tasks} users={users} docTemplates={docTemplates} documentGenerations={documentGenerations} handoffEntries={handoffEntries} />;
             case View.TIMESHEETS:
-                return <TimesheetsView project={project} tasks={tasks} currentUser={currentUser} timesheetEntries={timesheetEntries} onUpdateTimesheet={onUpdateTimesheet} />;
+                return <TimesheetsView project={project} tasks={activeTasks} currentUser={currentUser} timesheetEntries={timesheetEntries} onUpdateTimesheet={onUpdateTimesheet} />;
             case View.REPORTS:
                 return <ReportsView />;
             case View.DOCS:

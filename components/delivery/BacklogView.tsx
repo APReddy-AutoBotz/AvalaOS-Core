@@ -50,7 +50,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, isBeingDragged, onSelectTask, o
     
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (window.confirm('Are you sure you want to delete this task? This action is permanent.')) {
+        if (window.confirm('Remove this task from active delivery views? Retained lineage and audit metadata stay in source state.')) {
             onDeleteTask(task.id);
         }
     };

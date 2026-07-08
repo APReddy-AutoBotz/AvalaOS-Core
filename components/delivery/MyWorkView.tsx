@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Task, Project, User, TaskStatus, Epic, Filters } from '../../types';
 import TaskListView from './TaskListView';
+import { filterActiveDeliveryTasks } from '../../services/deliveryWorkflowPolicy';
 import BoardsView from './BoardsView';
 import GanttChartView from './GanttChartView';
 import CalendarView from './CalendarView';
@@ -32,7 +33,7 @@ const MyWorkView: React.FC<MyWorkViewProps> = ({ view, allTasks, allProjects, al
         }
     }, [quickFilter, setQuickFilter]);
 
-    const myTasks = useMemo(() => allTasks.filter(task => task.assigneeIds.includes(currentUser.id)), [allTasks, currentUser.id]);
+    const myTasks = useMemo(() => filterActiveDeliveryTasks(allTasks).filter(task => task.assigneeIds.includes(currentUser.id)), [allTasks, currentUser.id]);
 
     const { filteredTasks, visibleProjects, visibleEpics } = useMemo(() => {
         const hasActiveFilters = Object.values(filters).some(val => val && (Array.isArray(val) ? val.length > 0 : true));

@@ -3,15 +3,17 @@ import { Project, Task, Epic, Sprint, User, TaskStatus, ProjectLifecycleStage, T
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { deliveryAdapter } from '../../services/adapters/deliveryAdapter';
 import { useAuth } from '../auth/AuthProvider';
-import { assertCanCreateDeliveryTask, assertCanDeleteDeliveryTask, assertCanUpdateDeliveryTask, canManageProjectDelivery, DeliveryPolicyError, hasDeliveryPermission } from '../../services/deliveryPolicy';
+import { assertCanCreateDeliveryTask, assertCanUpdateDeliveryTask, canDeleteDeliveryTask, canManageProjectDelivery, DeliveryPolicyError, hasDeliveryPermission } from '../../services/deliveryPolicy';
 import {
   assertProjectLifecycleMutationAllowed,
   assertSprintMutationAllowed,
-  assertTaskDeletionAllowed,
+  applyTaskDeletionPersistenceState,
   assertTaskMutationAllowed,
   assertTaskReorderAllowed,
   assertTaskSprintAssignmentAllowed,
+  buildTaskDeletionPersistenceActivity,
   buildTaskMutationAuditActivity,
+  resolveTaskDeletionPersistenceGuard,
 } from '../../services/deliveryWorkflowPolicy';
 
 interface DeliveryContextType {
@@ -334,20 +336,46 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const deleteTask = async (taskId: string) => {
+    if (!currentOrganization || !user) return;
     const task = tasks.find(t => t.id === taskId);
-    assertTaskDeletionAllowed({
+    if (!task) {
+      throw new DeliveryPolicyError('Open a delivery work item before deleting it.');
+    }
+    if (!canDeleteDeliveryTask(user)) {
+      throw new DeliveryPolicyError('You do not have permission to delete delivery tasks.');
+    }
+
+    const deletionDecision = resolveTaskDeletionPersistenceGuard({
       actor: user,
-      organizationId: currentOrganization?.id,
+      organizationId: currentOrganization.id,
       task,
       allTasks: tasks,
     });
-    if (task) {
-      assertCanDeleteDeliveryTask(user, task, tasks);
+    if (!deletionDecision.allowed) {
+      throw new DeliveryPolicyError(deletionDecision.message);
     }
-    if (currentOrganization) {
-      await deliveryAdapter.deleteTask(currentOrganization.id, taskId);
-    }
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    const occurredAt = new Date().toISOString();
+    const nextTask = applyTaskDeletionPersistenceState({
+      task,
+      actor: user,
+      decision: deletionDecision,
+      occurredAt,
+    });
+    const activityLog = [
+      ...(task.activityLog || []),
+      buildTaskDeletionPersistenceActivity({
+        actor: user,
+        organizationId: currentOrganization.id,
+        previousTask: task,
+        nextTask,
+        decision: deletionDecision,
+        occurredAt,
+      }),
+    ];
+
+    const saved = await deliveryAdapter.saveTask({ ...nextTask, activityLog }, currentOrganization.id, user.id);
+    setTasks(prev => sortTasksForDisplay(prev.map(t => t.id === taskId ? saved : t)));
   };
 
   return (

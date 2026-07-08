@@ -48,7 +48,7 @@ const TaskListView: React.FC<TaskListViewProps> = ({ tasks, projects, onSelectTa
     
     const handleDelete = (e: React.MouseEvent, taskId: string) => {
         e.stopPropagation();
-        if (window.confirm('Are you sure you want to delete this task? This action is permanent.')) {
+        if (window.confirm('Remove this task from active delivery views? Retained lineage and audit metadata stay in source state.')) {
             onDeleteTask(taskId);
         }
     };

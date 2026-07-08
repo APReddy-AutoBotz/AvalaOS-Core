@@ -35,7 +35,7 @@ import {
   resolveProductNavigationState,
 } from './services/productNavigationState';
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
-import { resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
+import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -907,6 +907,9 @@ function App() {
     return { tasksForScope: [], projectsForScope: [], epicsForScope: [], sprintsForScope: [], usersForScope: [], automationsForScope: [], timesheetsForScope: [] };
   }, [currentScope, tasks, projects, epics, sprints, users, automations, timesheetEntries, currentUser, teams]);
 
+  const activeTasks = useMemo(() => filterActiveDeliveryTasks(tasks), [tasks]);
+  const activeTasksForScope = useMemo(() => filterActiveDeliveryTasks(tasksForScope), [tasksForScope]);
+
   const handleCreateEpicFromDoc = (generation: DocumentGeneration) => {
     const template = docTemplates.find(t => t.id === generation.templateId);
     if (!template) return;
@@ -986,9 +989,9 @@ function App() {
 
     switch (currentView) {
       case View.DASHBOARD:
-        return <CustomDashboardView currentUser={currentUser} tasks={tasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
+        return <CustomDashboardView currentUser={currentUser} tasks={activeTasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
       case View.PORTFOLIO:
-        return <PortfolioView projects={projects} tasks={tasks} users={users} onUpdateProjectStage={handleUpdateProjectLifecycleStage} onScopeChange={handleScopeChange} onViewChange={handleViewChange} />;
+        return <PortfolioView projects={projects} tasks={activeTasks} users={users} onUpdateProjectStage={handleUpdateProjectLifecycleStage} onScopeChange={handleScopeChange} onViewChange={handleViewChange} />;
       case View.DOCS_FORGE:
         return <DocsForgeView
           project={currentScope.type === ScopeType.PROJECT ? projectsForScope[0] : null}

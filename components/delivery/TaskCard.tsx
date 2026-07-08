@@ -59,7 +59,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, epic, users = [], su
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (window.confirm('Are you sure you want to delete this task? This action is permanent.')) {
+        if (window.confirm('Remove this task from active delivery views? Retained lineage and audit metadata stay in source state.')) {
             onDeleteTask(task.id);
         }
     };
@@ -76,7 +76,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, epic, users = [], su
                 <button 
                     onClick={handleDelete}
                     className="p-1.5 rounded-full text-slate-400 bg-white/50 dark:bg-surface-dark/50 backdrop-blur-sm hover:text-abz-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                    title="Delete task"
+                    title="Remove from active delivery"
                 >
                     <TrashIcon className="w-4 h-4" />
                 </button>
