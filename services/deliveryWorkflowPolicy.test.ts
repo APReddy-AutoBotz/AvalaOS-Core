@@ -3,13 +3,17 @@ import { describe, it } from 'node:test';
 import { Organization, Project, Scope, ScopeType, Sprint, Task, User } from '../types';
 import { resolveProductActionPolicy } from './productActionPolicy';
 import {
+  applyTaskDeletionPersistenceState,
   buildTaskDeletionAuditEnvelope,
+  buildTaskDeletionPersistenceActivity,
   buildTaskMutationAuditActivity,
   createDeliveryMutationAuditEnvelope,
+  filterActiveDeliveryTasks,
   resolveDeliveryImportGuard,
   resolveProjectLifecycleMutationGuard,
   resolveSprintMutationGuard,
   resolveTaskDeletionGuard,
+  resolveTaskDeletionPersistenceGuard,
   resolveTaskReorderGuard,
   resolveTaskSprintAssignmentGuard,
   resolveTaskMutationGuard,
@@ -189,6 +193,102 @@ describe('deliveryWorkflowPolicy', () => {
     assert.equal(resolveTaskDeletionGuard({ actor, organizationId: 'org-1', task: doneTask, allTasks: [doneTask] }).reason, 'terminal_state_retention_required');
   });
 
+  it('records clean delete requests as source-level soft deletes without physical deletion', () => {
+    const cleanTask = task({ id: 'clean-delete-1' });
+    const decision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: cleanTask, allTasks: [cleanTask] });
+
+    assert.equal(decision.allowed, true);
+    assert.equal(decision.physicalDeleteAllowed, false);
+    assert.equal(decision.deletionState, 'soft_deleted');
+    assert.equal(decision.deletionMode, 'soft_delete');
+    assert.equal(decision.retentionClass, 'none');
+    assert.equal(decision.restoreEligible, true);
+
+    const nextTask = applyTaskDeletionPersistenceState({
+      task: cleanTask,
+      actor,
+      decision,
+      occurredAt: '2026-07-08T00:00:00.000Z',
+    });
+
+    assert.equal(nextTask.deletionState, 'soft_deleted');
+    assert.equal(nextTask.deletedAt, '2026-07-08T00:00:00.000Z');
+    assert.equal(nextTask.deletedBy, actor.id);
+    assert.deepEqual(filterActiveDeliveryTasks([cleanTask, nextTask]).map(item => item.id), [cleanTask.id]);
+  });
+
+  it('records lineage and dependent delete requests as retained source state', () => {
+    const lineageTask = task({
+      id: 'lineage-retain-1',
+      sourceLineage: {
+        processId: 'process-1',
+        assessmentId: 'assessment-1',
+        documentGenerationId: 'docgen-1',
+        handoffLedgerEntryIds: ['handoff-1'],
+        evidenceRefs: ['ev-1'],
+        lineageCompleteness: 'complete',
+      },
+    });
+    const lineageDecision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: lineageTask, allTasks: [lineageTask] });
+    const retainedLineageTask = applyTaskDeletionPersistenceState({ task: lineageTask, actor, decision: lineageDecision, occurredAt: '2026-07-08T00:00:00.000Z' });
+
+    assert.equal(lineageDecision.allowed, true);
+    assert.equal(lineageDecision.physicalDeleteAllowed, false);
+    assert.equal(lineageDecision.deletionState, 'retained');
+    assert.equal(lineageDecision.deletionMode, 'retained_lineage');
+    assert.equal(lineageDecision.retentionClass, 'lineage');
+    assert.equal(retainedLineageTask.deletedAt, undefined);
+    assert.deepEqual(retainedLineageTask.sourceLineage?.evidenceRefs, ['ev-1']);
+    assert.deepEqual(retainedLineageTask.sourceLineage?.handoffLedgerEntryIds, ['handoff-1']);
+
+    const parent = task({ id: 'parent-retain-1' });
+    const child = task({ id: 'child-retain-1', parentId: parent.id });
+    const childDecision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: parent, allTasks: [parent, child] });
+    assert.equal(childDecision.deletionState, 'retained');
+    assert.equal(childDecision.retentionClass, 'child');
+
+    const dependency = task({ id: 'dependency-retain-1' });
+    const dependent = task({ id: 'dependent-retain-1', dependencyIds: [dependency.id] });
+    const dependencyDecision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: dependency, allTasks: [dependency, dependent] });
+    assert.equal(dependencyDecision.deletionState, 'retained');
+    assert.equal(dependencyDecision.retentionClass, 'dependency');
+
+    const terminalDecision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: task({ id: 'done-retain-1', status: 'Done' }), allTasks: [] });
+    assert.equal(terminalDecision.deletionState, 'retained');
+    assert.equal(terminalDecision.retentionClass, 'terminal');
+  });
+
+  it('blocks active workflow mutations against soft-deleted or retained work items', () => {
+    const previousSoftDeleted = task({ id: 'soft-deleted-1', deletionState: 'soft_deleted', deletionMode: 'soft_delete' });
+    const nextSoftDeleted = { ...previousSoftDeleted, title: 'Changed title' };
+    assert.equal(resolveTaskMutationGuard({ actor, organizationId: 'org-1', previousTask: previousSoftDeleted, nextTask: nextSoftDeleted, allTasks: [previousSoftDeleted] }).reason, 'inactive_retained_task');
+    assert.equal(resolveTaskReorderGuard({ actor, organizationId: 'org-1', task: previousSoftDeleted, projectId: 'project-1' }).reason, 'inactive_retained_task');
+    assert.equal(resolveTaskSprintAssignmentGuard({ actor, organizationId: 'org-1', task: previousSoftDeleted, projectId: 'project-1' }).reason, 'inactive_retained_task');
+
+    const retainedTask = task({ id: 'retained-1', deletionState: 'retained', deletionMode: 'retained_lineage', retentionClass: 'lineage' });
+    assert.equal(resolveTaskDeletionGuard({ actor, organizationId: 'org-1', task: retainedTask, allTasks: [retainedTask] }).reason, 'inactive_retained_task');
+  });
+
+  it('builds sanitized soft-delete and retained-lineage activity without raw payloads', () => {
+    const lineageTask = task({
+      id: 'activity-retain-1',
+      sourceLineage: { evidenceRefs: ['ev-1'], handoffLedgerEntryIds: ['handoff-1'], lineageCompleteness: 'partial' },
+    });
+    const decision = resolveTaskDeletionPersistenceGuard({ actor, organizationId: 'org-1', task: lineageTask, allTasks: [lineageTask] });
+    const nextTask = applyTaskDeletionPersistenceState({ task: lineageTask, actor, decision, occurredAt: '2026-07-08T00:00:00.000Z' });
+    const activity = buildTaskDeletionPersistenceActivity({
+      actor,
+      organizationId: 'org-1',
+      previousTask: lineageTask,
+      nextTask,
+      decision,
+      occurredAt: '2026-07-08T00:00:00.000Z',
+    });
+
+    assert.match(activity.change, /source deletion guard/);
+    assert.match(activity.newValue || '', /retained/);
+    assert.doesNotMatch(activity.newValue || '', /provider|raw|prompt|secret|document body/i);
+  });
   it('requires import project, document context, actor, and non-empty item batch', () => {
     assert.equal(resolveDeliveryImportGuard({
       actor,

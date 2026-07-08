@@ -1,6 +1,9 @@
 import {
   ActivityLogItem,
   ALL_STATUSES,
+  DeliveryDeletionMode,
+  DeliveryDeletionState,
+  DeliveryRetentionClass,
   Project,
   ProjectLifecycleStage,
   Sprint,
@@ -27,6 +30,8 @@ export type DeliveryWorkflowReason =
   | 'lineage_retention_required'
   | 'dependent_entity_exists'
   | 'terminal_state_retention_required'
+  | 'inactive_retained_task'
+  | 'source_state_retained'
   | 'empty_import_batch';
 
 export interface DeliveryWorkflowDecision {
@@ -36,6 +41,16 @@ export interface DeliveryWorkflowDecision {
   ruleId: string;
   message: string;
   requiredEvidenceRefs?: string[];
+}
+
+export interface TaskDeletionPersistenceDecision extends DeliveryWorkflowDecision {
+  deletionState: DeliveryDeletionState;
+  deletionMode: DeliveryDeletionMode;
+  retentionClass: DeliveryRetentionClass;
+  retentionReason?: string;
+  restoreEligible: boolean;
+  physicalDeleteAllowed: false;
+  hardDeleteDecision: DeliveryWorkflowDecision;
 }
 
 interface TransitionRule {
@@ -55,6 +70,8 @@ export type DeliveryMutationOperation =
   | 'reorder'
   | 'import'
   | 'delete'
+  | 'soft_delete'
+  | 'retain_lineage'
   | 'delete_denied';
 
 export interface DeliveryMutationAuditEnvelope {
@@ -103,9 +120,11 @@ export interface DeliveryMutationAuditEnvelope {
     lineageCompleteness?: string;
   };
   retention?: {
-    deletionMode: 'not_applicable' | 'hard_delete_allowed' | 'hard_delete_denied';
-    retentionClass?: 'delivery_work_item' | 'audit' | 'handoff';
+    deletionMode: 'not_applicable' | 'hard_delete_allowed' | 'hard_delete_denied' | DeliveryDeletionMode;
+    retentionClass?: 'delivery_work_item' | 'audit' | 'handoff' | DeliveryRetentionClass;
     denialReason?: DeliveryWorkflowReason;
+    retentionReason?: string;
+    restoreEligible?: boolean;
   };
   result: {
     status: 'allowed' | 'blocked';
@@ -321,6 +340,8 @@ const summarizeTask = (task: Task | undefined): Record<string, unknown> | undefi
   orderRank: task.orderRank,
   assigneeCount: task.assigneeIds?.length || 0,
   dependencyCount: task.dependencyIds?.length || 0,
+  deletionState: getTaskDeletionState(task),
+  retentionClass: task.retentionClass,
   hasSourceLineage: Boolean(task.sourceLineage),
 } : undefined;
 
@@ -348,6 +369,126 @@ const lineageFromTask = (task: Task | undefined) => task?.sourceLineage ? {
   lineageCompleteness: task.sourceLineage.lineageCompleteness,
 } : undefined;
 
+
+export const getTaskDeletionState = (task: Pick<Task, 'deletionState'> | undefined): DeliveryDeletionState =>
+  task?.deletionState || 'active';
+
+export const isTaskActiveForDelivery = (task: Pick<Task, 'deletionState'> | undefined) =>
+  getTaskDeletionState(task) === 'active';
+
+export const filterActiveDeliveryTasks = (tasks: Task[]) =>
+  tasks.filter(isTaskActiveForDelivery);
+
+const retentionClassFromHardDeleteDecision = (decision: DeliveryWorkflowDecision): DeliveryRetentionClass => {
+  if (decision.reason === 'lineage_retention_required') return 'lineage';
+  if (decision.reason === 'terminal_state_retention_required') return 'terminal';
+  if (decision.reason === 'dependent_entity_exists' && decision.ruleId.includes('child')) return 'child';
+  if (decision.reason === 'dependent_entity_exists') return 'dependency';
+  return 'unknown_context';
+};
+
+const deletionPersistenceDecision = (
+  hardDeleteDecision: DeliveryWorkflowDecision,
+  status: DeliveryWorkflowDecisionStatus,
+  reason: DeliveryWorkflowReason,
+  ruleId: string,
+  message: string,
+  deletionState: DeliveryDeletionState,
+  deletionMode: DeliveryDeletionMode,
+  retentionClass: DeliveryRetentionClass,
+  restoreEligible: boolean,
+  retentionReason?: string,
+): TaskDeletionPersistenceDecision => ({
+  ...buildDecision(status, reason, ruleId, message, hardDeleteDecision.requiredEvidenceRefs),
+  deletionState,
+  deletionMode,
+  retentionClass,
+  retentionReason,
+  restoreEligible,
+  physicalDeleteAllowed: false,
+  hardDeleteDecision,
+});
+
+export const resolveTaskDeletionPersistenceGuard = (input: {
+  actor: User | null | undefined;
+  organizationId: string | null | undefined;
+  task: Task | undefined;
+  allTasks: Task[];
+}): TaskDeletionPersistenceDecision => {
+  const hardDeleteDecision = resolveTaskDeletionGuard(input);
+  if (!hardDeleteDecision.allowed) {
+    const missingContext = [
+      'missing_actor_context',
+      'missing_organization_context',
+      'missing_project_context',
+      'missing_entity_context',
+      'inactive_retained_task',
+    ].includes(hardDeleteDecision.reason);
+    if (missingContext) {
+      return deletionPersistenceDecision(
+        hardDeleteDecision,
+        hardDeleteDecision.status,
+        hardDeleteDecision.reason,
+        hardDeleteDecision.ruleId,
+        hardDeleteDecision.message,
+        'active',
+        'soft_delete',
+        'unknown_context',
+        false,
+      );
+    }
+
+    const retentionClass = retentionClassFromHardDeleteDecision(hardDeleteDecision);
+    return deletionPersistenceDecision(
+      hardDeleteDecision,
+      'allowed',
+      'source_state_retained',
+      `task.delete.retained_source_state.${retentionClass}`,
+      'Physical deletion blocked; source-level retained-lineage state recorded for audit review.',
+      'retained',
+      'retained_lineage',
+      retentionClass,
+      false,
+      hardDeleteDecision.message,
+    );
+  }
+
+  return deletionPersistenceDecision(
+    hardDeleteDecision,
+    'allowed',
+    'allowed',
+    'task.delete.source_soft_delete',
+    'Source-level soft delete accepted; physical deletion remains disabled for this product path.',
+    'soft_deleted',
+    'soft_delete',
+    'none',
+    true,
+  );
+};
+
+export const applyTaskDeletionPersistenceState = (input: {
+  task: Task;
+  actor: User;
+  decision: TaskDeletionPersistenceDecision;
+  occurredAt?: string;
+  deletionReason?: string;
+}): Task => {
+  const occurredAt = input.occurredAt || new Date().toISOString();
+  const isSoftDeleted = input.decision.deletionState === 'soft_deleted';
+  return {
+    ...input.task,
+    deletionState: input.decision.deletionState,
+    deletionMode: input.decision.deletionMode,
+    deletionRequestedAt: occurredAt,
+    deletionRequestedBy: input.actor.id,
+    deletedAt: isSoftDeleted ? occurredAt : input.task.deletedAt,
+    deletedBy: isSoftDeleted ? input.actor.id : input.task.deletedBy,
+    deletionReason: input.deletionReason || input.task.deletionReason || input.decision.message,
+    retentionReason: input.decision.retentionReason || input.task.retentionReason,
+    retentionClass: input.decision.retentionClass,
+    restoreEligible: input.decision.restoreEligible,
+  };
+};
 const mutationOperationForTask = (previousTask: Task, nextTask: Task): DeliveryMutationOperation => {
   if (previousTask.status !== nextTask.status) return 'status_change';
   if (previousTask.sprintId !== nextTask.sprintId) return 'sprint_assignment';
@@ -396,6 +537,9 @@ export const resolveTaskMutationGuard = (input: {
   if (!hasOrgContext(input.organizationId)) return buildDecision('blocked', 'missing_organization_context', 'task.org.missing', 'Select an organization before mutating delivery work items.');
   if (!input.previousTask || !input.nextTask) return buildDecision('blocked', 'missing_entity_context', 'task.entity.missing', 'Open a delivery work item before mutating it.');
   if (!hasProjectContext(input.nextTask.projectId)) return buildDecision('blocked', 'missing_project_context', 'task.project.missing', 'Select a project before mutating delivery work items.');
+  if (!isTaskActiveForDelivery(input.previousTask) || !isTaskActiveForDelivery(input.nextTask)) {
+    return buildDecision('blocked', 'inactive_retained_task', 'task.mutation.inactive_retained', 'Soft-deleted or retained work items cannot be mutated through active delivery workflows.');
+  }
 
   const transition = resolveTaskStatusTransition(input.previousTask.status, input.nextTask.status);
   if (!transition.allowed) return transition;
@@ -471,6 +615,7 @@ export const resolveTaskReorderGuard = (input: {
   if (!hasActorContext(input.actor)) return buildDecision('blocked', 'missing_actor_context', 'task.reorder.actor.missing', 'Sign in before reordering delivery work items.');
   if (!hasOrgContext(input.organizationId)) return buildDecision('blocked', 'missing_organization_context', 'task.reorder.org.missing', 'Select an organization before reordering delivery work items.');
   if (!input.task) return buildDecision('blocked', 'missing_entity_context', 'task.reorder.entity.missing', 'Open a delivery work item before reordering it.');
+  if (!isTaskActiveForDelivery(input.task)) return buildDecision('blocked', 'inactive_retained_task', 'task.reorder.inactive_retained', 'Soft-deleted or retained work items cannot be reordered through active delivery workflows.');
   if (!hasProjectContext(input.projectId || input.task.projectId)) return buildDecision('blocked', 'missing_project_context', 'task.reorder.project.missing', 'Select a project before reordering delivery work items.');
   if (!['To Do', 'Blocked', 'On Hold'].includes(input.task.status)) {
     return buildDecision('blocked', 'transition_requires_approved_decision', 'task.reorder.active_or_terminal', 'Only backlog, blocked, or held work can be reordered without a separate planning decision.');
@@ -490,6 +635,7 @@ export const resolveTaskSprintAssignmentGuard = (input: {
   if (!hasActorContext(input.actor)) return buildDecision('blocked', 'missing_actor_context', 'task.sprint.actor.missing', 'Sign in before moving delivery work items between sprints.');
   if (!hasOrgContext(input.organizationId)) return buildDecision('blocked', 'missing_organization_context', 'task.sprint.org.missing', 'Select an organization before moving delivery work items between sprints.');
   if (!input.task) return buildDecision('blocked', 'missing_entity_context', 'task.sprint.entity.missing', 'Open a delivery work item before moving it between sprints.');
+  if (!isTaskActiveForDelivery(input.task)) return buildDecision('blocked', 'inactive_retained_task', 'task.sprint.inactive_retained', 'Soft-deleted or retained work items cannot be moved through active sprint planning.');
   if (!hasProjectContext(input.projectId || input.task.projectId)) return buildDecision('blocked', 'missing_project_context', 'task.sprint.project.missing', 'Select a project before moving delivery work items between sprints.');
   if (TERMINAL_DELETE_STATUSES.includes(input.task.status)) {
     return buildDecision('blocked', 'terminal_state_retention_required', 'task.sprint.terminal_retention', 'Release-ready or completed work requires a separate reopen or retention decision before sprint movement.');
@@ -508,6 +654,7 @@ export const resolveTaskDeletionGuard = (input: {
   if (!hasActorContext(input.actor)) return buildDecision('blocked', 'missing_actor_context', 'task.delete.actor.missing', 'Sign in before deleting delivery work items.');
   if (!hasOrgContext(input.organizationId)) return buildDecision('blocked', 'missing_organization_context', 'task.delete.org.missing', 'Select an organization before deleting delivery work items.');
   if (!input.task) return buildDecision('blocked', 'missing_entity_context', 'task.delete.entity.missing', 'Open a delivery work item before deleting it.');
+  if (!isTaskActiveForDelivery(input.task)) return buildDecision('blocked', 'inactive_retained_task', 'task.delete.inactive_retained', 'Soft-deleted or retained work items are already preserved in source state.');
   if (!hasProjectContext(input.task.projectId)) return buildDecision('blocked', 'missing_project_context', 'task.delete.project.missing', 'Select a project before deleting delivery work items.');
 
   const dependentTasks = input.allTasks.filter(candidate => candidate.dependencyIds?.includes(input.task!.id));
@@ -708,6 +855,51 @@ export const buildTaskDeletionAuditEnvelope = (input: {
   occurredAt: input.occurredAt,
 });
 
+
+export const buildTaskDeletionPersistenceActivity = (input: {
+  actor: User;
+  organizationId: string;
+  previousTask: Task;
+  nextTask: Task;
+  decision: TaskDeletionPersistenceDecision;
+  occurredAt?: string;
+}): ActivityLogItem => {
+  const envelope = createDeliveryMutationAuditEnvelope({
+    actor: input.actor,
+    organizationId: input.organizationId,
+    projectId: input.nextTask.projectId,
+    action: 'project.task.delete',
+    category: 'delivery',
+    risk: 'critical',
+    entityType: 'task',
+    entityId: input.nextTask.id,
+    operation: input.decision.deletionMode === 'soft_delete' ? 'soft_delete' : 'retain_lineage',
+    beforeSummary: summarizeTask(input.previousTask),
+    afterSummary: summarizeTask(input.nextTask),
+    changedFields: ['deletionState', 'deletionMode', 'deletionRequestedAt', 'deletionRequestedBy', 'deletedAt', 'deletedBy', 'retentionClass', 'restoreEligible'],
+    decision: input.decision,
+    fromStatus: input.previousTask.status,
+    toStatus: input.nextTask.status,
+    lineage: lineageFromTask(input.nextTask),
+    retention: {
+      deletionMode: input.decision.deletionMode,
+      retentionClass: input.decision.retentionClass,
+      denialReason: input.decision.hardDeleteDecision.allowed ? undefined : input.decision.hardDeleteDecision.reason,
+      retentionReason: input.decision.retentionReason,
+      restoreEligible: input.decision.restoreEligible,
+    },
+    occurredAt: input.occurredAt,
+  });
+
+  return {
+    id: `act-${envelope.correlationId}`,
+    userId: input.actor.id,
+    change: `recorded source deletion guard ${input.decision.ruleId}`,
+    previousValue: JSON.stringify(envelope.mutation.beforeSummary),
+    newValue: JSON.stringify(envelope.mutation.afterSummary),
+    createdAt: envelope.occurredAt,
+  };
+};
 export const buildProjectLifecycleAuditEnvelope = (input: {
   actor: User;
   organizationId: string;

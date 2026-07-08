@@ -221,7 +221,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
     };
 
     const handleDelete = () => {
-        if (window.confirm('Are you sure you want to delete this task? This action is permanent.')) {
+        if (window.confirm('Remove this task from active delivery views? Retained lineage and audit metadata stay in source state.')) {
             onDeleteTask(task.id);
         }
     };
@@ -298,7 +298,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                             <PencilIcon className="w-4 h-4" /> Edit
                         </button>
                         <button onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-abz-danger bg-abz-danger/10 rounded-lg hover:bg-abz-danger/20 focus:outline-none focus:ring-3 focus:ring-abz-danger transition-all">
-                            <TrashIcon className="w-4 h-4" /> Delete
+                            <TrashIcon className="w-4 h-4" /> Remove
                         </button>
                     </div>
                 </div>

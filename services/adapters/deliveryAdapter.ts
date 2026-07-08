@@ -80,6 +80,16 @@ const fromTaskRow = (row: any): Task => ({
   userStories: row.metadata?.userStories,
   activityLog: (row.task_activity_events || []).map(fromActivityRow).sort((a: ActivityLogItem, b: ActivityLogItem) => a.createdAt.localeCompare(b.createdAt)) || row.metadata?.activityLog,
   sourceLineage: row.metadata?.sourceLineage,
+  deletionState: row.metadata?.deletionState,
+  deletionMode: row.metadata?.deletionMode,
+  deletionRequestedAt: row.metadata?.deletionRequestedAt,
+  deletionRequestedBy: row.metadata?.deletionRequestedBy,
+  deletedAt: row.metadata?.deletedAt,
+  deletedBy: row.metadata?.deletedBy,
+  deletionReason: row.metadata?.deletionReason,
+  retentionReason: row.metadata?.retentionReason,
+  retentionClass: row.metadata?.retentionClass,
+  restoreEligible: row.metadata?.restoreEligible,
 });
 
 async function getEntityUuid(table: string, orgId: string, appId?: string) {
@@ -302,6 +312,16 @@ export const deliveryAdapter = {
         orderRank: task.orderRank,
         userStories: task.userStories,
         sourceLineage: task.sourceLineage,
+        deletionState: task.deletionState,
+        deletionMode: task.deletionMode,
+        deletionRequestedAt: task.deletionRequestedAt,
+        deletionRequestedBy: task.deletionRequestedBy,
+        deletedAt: task.deletedAt,
+        deletedBy: task.deletedBy,
+        deletionReason: task.deletionReason,
+        retentionReason: task.retentionReason,
+        retentionClass: task.retentionClass,
+        restoreEligible: task.restoreEligible,
       },
     };
 
