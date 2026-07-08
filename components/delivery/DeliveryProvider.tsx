@@ -4,6 +4,15 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { deliveryAdapter } from '../../services/adapters/deliveryAdapter';
 import { useAuth } from '../auth/AuthProvider';
 import { assertCanCreateDeliveryTask, assertCanDeleteDeliveryTask, assertCanUpdateDeliveryTask, canManageProjectDelivery, DeliveryPolicyError, hasDeliveryPermission } from '../../services/deliveryPolicy';
+import {
+  assertProjectLifecycleMutationAllowed,
+  assertSprintMutationAllowed,
+  assertTaskDeletionAllowed,
+  assertTaskMutationAllowed,
+  assertTaskReorderAllowed,
+  assertTaskSprintAssignmentAllowed,
+  buildTaskMutationAuditActivity,
+} from '../../services/deliveryWorkflowPolicy';
 
 interface DeliveryContextType {
   projects: Project[];
@@ -186,6 +195,13 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!canManageProjectDelivery(user)) {
       throw new DeliveryPolicyError('Only project managers or admins can update project lifecycle and health.');
     }
+    const previousProject = projects.find(item => item.id === project.id);
+    assertProjectLifecycleMutationAllowed({
+      actor: user,
+      organizationId: currentOrganization.id,
+      previousProject,
+      nextProject: project,
+    });
     const saved = await deliveryAdapter.saveProject(project, currentOrganization.id);
     setProjects(prev => prev.map(item => item.id === project.id ? saved : item));
   };
@@ -195,6 +211,14 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!canManageProjectDelivery(user) && !hasDeliveryPermission(user, 'sprint.manage')) {
       throw new DeliveryPolicyError('Only project managers can update sprint planning.');
     }
+    const previousSprint = sprints.find(item => item.id === sprint.id);
+    assertSprintMutationAllowed({
+      actor: user,
+      organizationId: currentOrganization.id,
+      previousSprint,
+      nextSprint: sprint,
+      allSprints: sprints,
+    });
     const saved = await deliveryAdapter.saveSprint(sprint, currentOrganization.id);
     setSprints(prev => prev.map(item => item.id === sprint.id ? saved : item));
   };
@@ -203,10 +227,24 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!currentOrganization || !user) return;
     const existingTask = tasks.find(t => t.id === task.id);
     if (!existingTask) return;
+    const workflowDecision = assertTaskMutationAllowed({
+      actor: user,
+      organizationId: currentOrganization.id,
+      previousTask: existingTask,
+      nextTask: task,
+      allTasks: tasks,
+    });
     assertCanUpdateDeliveryTask(user, existingTask, task, tasks);
     const activityLog = [
       ...(task.activityLog || existingTask?.activityLog || []),
       ...buildTaskActivity(existingTask, task, user.id),
+      buildTaskMutationAuditActivity({
+        actor: user,
+        organizationId: currentOrganization.id,
+        previousTask: existingTask,
+        nextTask: task,
+        decision: workflowDecision,
+      }),
     ];
     const saved = await deliveryAdapter.saveTask({ ...task, activityLog }, currentOrganization.id, user.id);
     setTasks(prev => sortTasksForDisplay(prev.map(t => t.id === task.id ? saved : t)));
@@ -222,6 +260,12 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateTaskSprint = async (taskId: string, sprintId: string | null) => {
     const task = tasks.find(t => t.id === taskId);
     if (task) {
+      assertTaskSprintAssignmentAllowed({
+        actor: user,
+        organizationId: currentOrganization?.id,
+        task,
+        projectId: task.projectId,
+      });
       await updateTask({ ...task, sprintId: sprintId || undefined });
     }
   };
@@ -234,6 +278,12 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const taskToMove = tasks.find(t => t.id === taskIdToMove);
     if (!taskToMove) return;
+    const reorderDecision = assertTaskReorderAllowed({
+      actor: user,
+      organizationId: currentOrganization.id,
+      task: taskToMove,
+      projectId: taskToMove.projectId,
+    });
 
     const targetEpicId = newEpicId !== 'unassigned' ? newEpicId : undefined;
     const targetBucketId = targetEpicId || 'unassigned';
@@ -259,7 +309,18 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       changedTasks.map(nextTask => {
         const previousTask = tasks.find(task => task.id === nextTask.id);
         const activityLog = nextTask.id === taskToMove.id
-          ? [...(nextTask.activityLog || previousTask?.activityLog || []), ...buildTaskActivity(previousTask, nextTask, user.id)]
+          ? [
+              ...(nextTask.activityLog || previousTask?.activityLog || []),
+              ...buildTaskActivity(previousTask, nextTask, user.id),
+              buildTaskMutationAuditActivity({
+                actor: user,
+                organizationId: currentOrganization.id,
+                previousTask,
+                nextTask,
+                decision: reorderDecision,
+                operation: 'reorder',
+              }),
+            ]
           : nextTask.activityLog;
         return deliveryAdapter.saveTask({ ...nextTask, activityLog }, currentOrganization.id, user.id);
       })
@@ -274,6 +335,12 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteTask = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
+    assertTaskDeletionAllowed({
+      actor: user,
+      organizationId: currentOrganization?.id,
+      task,
+      allTasks: tasks,
+    });
     if (task) {
       assertCanDeleteDeliveryTask(user, task, tasks);
     }

@@ -13,7 +13,6 @@ import {
   buildDeliveryPack,
   inferDeliveryPackProcessId,
 } from '../../services/deliveryPackService';
-import { downloadDeliveryPackExport } from '../../services/deliveryPackExportService';
 import { useProcessService } from '../../services/processService';
 import { useAssessmentService } from '../../services/assessmentService';
 import {
@@ -132,18 +131,18 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
           <div className="flex shrink-0 flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => downloadDeliveryPackExport(pack, 'markdown')}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-black text-[#002C4B] shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
-              title="Download Markdown export"
+              disabled
+              className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-400 opacity-60 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500"
+              title="Export blocked. Delivery Pack downloads are not approved in this milestone; review the pack in-app and preserve evidence lineage."
             >
               <ArrowDownIcon className="h-4 w-4" />
               Markdown
             </button>
             <button
               type="button"
-              onClick={() => downloadDeliveryPackExport(pack, 'json')}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#002C4B] px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-[#003F6B]"
-              title="Download JSON export"
+              disabled
+              className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-300 px-4 py-2 text-sm font-black text-white opacity-60 shadow-sm dark:bg-slate-700"
+              title="Export blocked. Delivery Pack downloads are not approved in this milestone; review the pack in-app and preserve evidence lineage."
             >
               <ArrowDownIcon className="h-4 w-4" />
               JSON
@@ -151,7 +150,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
           </div>
         </div>
         <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
-          Delivery Pack exports are review artifacts that require human sign-off. Review incomplete lineage or missing evidence refs before external sharing.
+          Delivery Pack exports remain blocked in this milestone. Review the pack in-app and preserve lineage/evidence references until a later approved export boundary authorizes downloads.
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Sources" value={pack.sources.length} detail="Assess, Studio, Delivery, and handoff references" />
