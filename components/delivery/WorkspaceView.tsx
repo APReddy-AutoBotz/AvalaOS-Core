@@ -17,7 +17,7 @@ import { isModuleEnabled } from '../../constants/moduleConfig';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadGeneratedArtifacts } from '../../services/documentExportService';
 import type { ProductActionDecision } from '../../services/productActionPolicy';
-import type { ArtifactExportDecision } from '../../services/artifactExportPolicy';
+import { assertArtifactExportExecutionAllowed, type ArtifactExportDecision } from '../../services/artifactExportPolicy';
 
 
 // Make marked available globally from the script tag in index.html
@@ -140,6 +140,14 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
       blockAction(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.');
       return;
     }
+    assertArtifactExportExecutionAllowed({
+      helperId: 'WorkspaceView.handleDownloadWord',
+      operation: 'download',
+      decision: artifactPolicy?.documentDownload,
+      expectedAction: 'document.download',
+      expectedArtifactType: 'generated_document_download',
+      sourceSurfaceId: artifactPolicy?.documentDownload?.sourceSurfaceId || 'workspace.generated-document-word-download',
+    });
     const html = getExportHtml();
     if (!html) return;
 
@@ -184,6 +192,14 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
       blockAction(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.');
       return;
     }
+    assertArtifactExportExecutionAllowed({
+      helperId: 'WorkspaceView.handlePrintPdf',
+      operation: 'download',
+      decision: artifactPolicy?.documentDownload,
+      expectedAction: 'document.download',
+      expectedArtifactType: 'generated_document_download',
+      sourceSurfaceId: artifactPolicy?.documentDownload?.sourceSurfaceId || 'workspace.generated-document-pdf-print',
+    });
     const html = getExportHtml();
     if (!html) return;
 
@@ -234,11 +250,11 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
         const exportResult = await aiEdgeClient.exportDocument({
           documentId: generationId,
           exportType: format,
-        });
-        const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference);
+        }, artifactPolicy?.documentExport);
+        const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference, artifactPolicy?.signedUrl);
         window.open(signedUrl, '_blank', 'noopener,noreferrer');
       } else {
-        downloadGeneratedArtifacts(artifacts, template, format);
+        downloadGeneratedArtifacts(artifacts, template, format, artifactPolicy?.documentExport);
       }
     } catch (err: any) {
       alert(err.message || 'Unable to export this generated document.');
@@ -655,7 +671,7 @@ const WorkItemsPanel: React.FC<{artifacts: GeneratedArtifacts, deliveryEnabled: 
                 Lineage: {lineageSummary}
             </div>
             <p className="text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
-                Import preserves available lineage on selected work items. Treat partial lineage as review-needed until the export policy milestone is implemented.
+                Import preserves available lineage on selected work items. Treat partial lineage as review-needed until a later AP-approved artifact execution gate authorizes and verifies export behavior.
             </p>
             {!deliveryEnabled && (
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-400 dark:ring-slate-800">

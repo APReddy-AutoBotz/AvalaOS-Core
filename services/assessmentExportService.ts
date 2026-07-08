@@ -1,4 +1,8 @@
 import { Assessment, AvalaGovernLiteCard } from '../types';
+import {
+  ArtifactExportDecision,
+  assertArtifactExportExecutionAllowed,
+} from './artifactExportPolicy';
 
 type DecisionPackExportFormat = 'json' | 'markdown';
 
@@ -180,7 +184,16 @@ export const downloadAssessmentDecisionPack = (
   processName: string | undefined,
   format: DecisionPackExportFormat,
   governCard?: AvalaGovernLiteCard,
+  artifactDecision?: ArtifactExportDecision | null,
 ) => {
+  assertArtifactExportExecutionAllowed({
+    helperId: 'assessmentExportService.downloadAssessmentDecisionPack',
+    operation: 'download',
+    decision: artifactDecision,
+    expectedAction: 'decision_pack.export',
+    expectedArtifactType: 'decision_pack_export',
+    sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'assessment-export-service.local-download',
+  });
   const isJson = format === 'json';
   const content = isJson
     ? renderAssessmentDecisionPackJson(assessment, processName, governCard)

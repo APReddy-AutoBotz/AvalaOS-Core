@@ -1,4 +1,8 @@
 import { DocTemplate, GeneratedArtifacts, DocumentArtifactKeys } from '../types';
+import {
+  ArtifactExportDecision,
+  assertArtifactExportExecutionAllowed,
+} from './artifactExportPolicy';
 
 type DocumentExportFormat = 'json' | 'markdown';
 
@@ -94,7 +98,16 @@ export const downloadGeneratedArtifacts = (
   artifacts: GeneratedArtifacts,
   template: DocTemplate | null | undefined,
   format: DocumentExportFormat,
+  artifactDecision?: ArtifactExportDecision | null,
 ) => {
+  assertArtifactExportExecutionAllowed({
+    helperId: 'documentExportService.downloadGeneratedArtifacts',
+    operation: 'export',
+    decision: artifactDecision,
+    expectedAction: 'document.export',
+    expectedArtifactType: 'generated_document_export',
+    sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'document-export-service.local-download',
+  });
   const title = (artifacts[template?.artifactKey || 'brd'] as any)?.title || template?.title || 'generated-document';
   const isJson = format === 'json';
   const content = isJson
