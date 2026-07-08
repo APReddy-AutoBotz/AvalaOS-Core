@@ -17,6 +17,7 @@ import { isModuleEnabled } from '../../constants/moduleConfig';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadGeneratedArtifacts } from '../../services/documentExportService';
 import type { ProductActionDecision } from '../../services/productActionPolicy';
+import type { ArtifactExportDecision } from '../../services/artifactExportPolicy';
 
 
 // Make marked available globally from the script tag in index.html
@@ -45,6 +46,11 @@ interface WorkspaceViewProps {
     refine?: ProductActionDecision;
     approval?: ProductActionDecision;
     importWorkItems?: ProductActionDecision;
+  };
+  artifactPolicy?: {
+    documentExport?: ArtifactExportDecision;
+    documentDownload?: ArtifactExportDecision;
+    signedUrl?: ArtifactExportDecision;
   };
 }
 
@@ -91,7 +97,7 @@ const toSafeFileName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'avalaos-core-document';
 
-const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType, actionPolicy }) => {
+const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType, actionPolicy, artifactPolicy }) => {
   const { currentOrganization } = useOrganizationContext();
   const [activeTab, setActiveTab] = useState<RightPanelTab>('quality');
   const [exportingDocument, setExportingDocument] = useState<'json' | 'markdown' | null>(null);
@@ -115,10 +121,11 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
   const documentData = artifacts[template.artifactKey];
   const deliveryEnabled = isModuleEnabled('delivery', currentOrganization?.enabledModules);
   const isActionAllowed = (decision?: ProductActionDecision) => decision?.allowed ?? true;
-  const blockedMessage = (decision: ProductActionDecision | undefined, fallback: string) => decision && !decision.allowed ? decision.message : fallback;
-  const blockAction = (decision: ProductActionDecision | undefined, fallback: string) => alert(blockedMessage(decision, fallback));
-  const canDownloadArtifact = isActionAllowed(actionPolicy?.artifactDownload);
-  const canExportDocument = isActionAllowed(actionPolicy?.documentExport);
+  const isArtifactActionAllowed = (decision?: ArtifactExportDecision) => decision?.allowed ?? false;
+  const blockedMessage = (decision: ProductActionDecision | ArtifactExportDecision | undefined, fallback: string) => decision && !decision.allowed ? decision.message : fallback;
+  const blockAction = (decision: ProductActionDecision | ArtifactExportDecision | undefined, fallback: string) => alert(blockedMessage(decision, fallback));
+  const canDownloadArtifact = isArtifactActionAllowed(artifactPolicy?.documentDownload);
+  const canExportDocument = isArtifactActionAllowed(artifactPolicy?.documentExport);
   const canRefineDocument = isActionAllowed(actionPolicy?.refine);
   const canExecuteApproval = isActionAllowed(actionPolicy?.approval);
   const canImportWorkItems = isActionAllowed(actionPolicy?.importWorkItems);
@@ -130,7 +137,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
 
   const handleDownloadWord = () => {
     if (!canDownloadArtifact) {
-      blockAction(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.');
+      blockAction(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.');
       return;
     }
     const html = getExportHtml();
@@ -174,7 +181,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
 
   const handlePrintPdf = () => {
     if (!canDownloadArtifact) {
-      blockAction(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.');
+      blockAction(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.');
       return;
     }
     const html = getExportHtml();
@@ -214,12 +221,16 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
 
   const handleStructuredExport = async (format: 'json' | 'markdown') => {
     if (!canExportDocument) {
-      blockAction(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.');
+      blockAction(artifactPolicy?.documentExport, 'Structured document export is blocked until a later approved artifact boundary.');
       return;
     }
     setExportingDocument(format);
     try {
       if (isAiEdgeEnabled() && generationId) {
+        if (!isArtifactActionAllowed(artifactPolicy?.signedUrl)) {
+          blockAction(artifactPolicy?.signedUrl, 'Signed URL generation is blocked until a later approved artifact boundary.');
+          return;
+        }
         const exportResult = await aiEdgeClient.exportDocument({
           documentId: generationId,
           exportType: format,
@@ -303,18 +314,18 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
                 <p className="text-slate-500 dark:text-slate-400 mt-1">Review editable drafts, diagrams, and work items before human sign-off.</p>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={handleDownloadWord} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
+              <button onClick={handleDownloadWord} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
                   <DocumentTextIcon className="h-5 w-5" />
                   <span>Download Word</span>
               </button>
-              <button onClick={handlePrintPdf} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(actionPolicy?.artifactDownload, 'Document downloads are not authorized for this workspace.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
+              <button onClick={handlePrintPdf} disabled={!canDownloadArtifact} title={!canDownloadArtifact ? blockedMessage(artifactPolicy?.documentDownload, 'Document downloads are blocked until a later approved artifact boundary.') : undefined} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
                   <DocumentDuplicateIcon className="h-5 w-5" />
                   <span>Print / PDF</span>
               </button>
               <button
                 onClick={() => handleStructuredExport('markdown')}
                 disabled={Boolean(exportingDocument) || !canExportDocument}
-                title={!canExportDocument ? blockedMessage(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.') : undefined}
+                title={!canExportDocument ? blockedMessage(artifactPolicy?.documentExport, 'Structured document export is blocked until a later approved artifact boundary.') : undefined}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
                   <ClipboardListIcon className="h-5 w-5" />
@@ -323,7 +334,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
               <button
                 onClick={() => handleStructuredExport('json')}
                 disabled={Boolean(exportingDocument) || !canExportDocument}
-                title={!canExportDocument ? blockedMessage(actionPolicy?.documentExport, 'Structured document export is not authorized for this workspace.') : undefined}
+                title={!canExportDocument ? blockedMessage(artifactPolicy?.documentExport, 'Structured document export is blocked until a later approved artifact boundary.') : undefined}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
                   <DocumentDuplicateIcon className="h-5 w-5" />
@@ -336,7 +347,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
             </div>
         </div>
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
-          Export and download controls are policy-gated. Confirm source lineage, evidence refs, and human sign-off before any future external sharing approval.
+          Export, download, storage, and signed URL controls are blocked by the artifact boundary until a later approved execution gate. Continue review in-app and preserve source lineage, evidence refs, and human sign-off context.
         </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
