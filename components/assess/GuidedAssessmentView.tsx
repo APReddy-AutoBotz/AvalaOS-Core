@@ -253,8 +253,19 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                     assessmentId: assessment.id,
                     scoreSetId: assessment.scores.scoreVersion,
                     exportType: format,
+                }, decision);
+                const signedUrlDecision = resolveArtifactExportPolicy({
+                    action: 'storage.signed_url.create',
+                    artifactType: 'signed_url',
+                    actor: user,
+                    organization: currentOrganization,
+                    scope,
+                    assessmentId: assessment.id,
+                    hasAssessmentScores: Boolean(assessment.scores),
+                    requestedOutputs: ['live_signed_url', 'public_url'],
+                    sourceSurfaceId: 'guided-assessment.decision-pack-signed-url',
                 });
-                const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference);
+                const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference, signedUrlDecision);
                 window.open(signedUrl, '_blank', 'noopener,noreferrer');
             } else {
                 downloadAssessmentDecisionPack(
@@ -262,6 +273,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                     processContext?.name,
                     format,
                     processContext ? buildAvalaGovernLiteCard(assessment, processContext) : undefined,
+                    decision,
                 );
             }
             setErrorMsg(null);

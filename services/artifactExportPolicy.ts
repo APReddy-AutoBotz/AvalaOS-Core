@@ -32,9 +32,14 @@ export type ArtifactPolicyArtifactType =
   | 'signed_url'
   | 'external_share';
 
-export type ArtifactExportDecisionStatus = 'blocked' | 'decision_pending';
+export type ArtifactExportDecisionStatus = 'allowed' | 'blocked' | 'decision_pending';
 export type ArtifactExportRisk = 'low' | 'medium' | 'high' | 'critical';
 export type ArtifactExportReason =
+  | 'missing_artifact_policy_decision'
+  | 'artifact_policy_decision_not_allowed'
+  | 'artifact_policy_decision_pending'
+  | 'artifact_policy_action_mismatch'
+  | 'artifact_policy_artifact_type_mismatch'
   | 'unknown_artifact_action'
   | 'unknown_artifact_type'
   | 'product_action_blocked'
@@ -56,7 +61,7 @@ export type ArtifactExportReason =
 export interface ArtifactExportDecision {
   action: string;
   artifactType: string;
-  allowed: false;
+  allowed: boolean;
   status: ArtifactExportDecisionStatus;
   reason: ArtifactExportReason;
   risk: ArtifactExportRisk;
@@ -114,6 +119,30 @@ export interface ArtifactExportAttemptAuditEnvelope {
   prohibitedOutputs: ExportProhibitedOutput[];
 }
 
+export type ArtifactExportExecutionOperation =
+  | 'export'
+  | 'download'
+  | 'storage_object'
+  | 'signed_url'
+  | 'external_share';
+
+export interface ArtifactExportExecutionGuardInput {
+  helperId: string;
+  operation: ArtifactExportExecutionOperation;
+  decision?: ArtifactExportDecision | null;
+  expectedAction?: ArtifactExportAction | string;
+  expectedArtifactType?: ArtifactPolicyArtifactType | string;
+  sourceSurfaceId?: string;
+}
+
+export interface ArtifactExportExecutionGuardAuditEnvelope {
+  schemaVersion: 'artifact-export-helper-guard.v1';
+  helperId: string;
+  operation: ArtifactExportExecutionOperation;
+  sourceSurfaceId?: string;
+  decision: Pick<ArtifactExportDecision, 'action' | 'artifactType' | 'allowed' | 'status' | 'reason' | 'risk' | 'message'>;
+  prohibitedOutputs: ExportProhibitedOutput[];
+}
 interface ArtifactActionMetadata {
   artifactType: ArtifactPolicyArtifactType;
   risk: ArtifactExportRisk;
@@ -225,6 +254,13 @@ const uniqueProhibitedOutputs = (outputs: readonly string[]): ExportProhibitedOu
   const prohibited = outputs.filter(isProhibitedOutput);
   return Array.from(new Set(prohibited));
 };
+const sanitizeAuditToken = (value: string | undefined | null, fallback = 'redacted') => {
+  if (!value) return undefined;
+  return /^[A-Za-z0-9_.:-]{1,120}$/.test(value) ? value : fallback;
+};
+
+const sanitizeAuditRefs = (refs: readonly string[] | undefined, prefix: string) =>
+  (refs || []).slice(0, 20).map((ref, index) => sanitizeAuditToken(ref, `${prefix}-${index + 1}`) || `${prefix}-${index + 1}`);
 
 const buildDecision = (
   input: ArtifactExportPolicyInput,
@@ -245,7 +281,7 @@ const buildDecision = (
     ...(metadata?.prohibitedOutputs || []),
     ...(input.requestedOutputs || []),
   ]),
-  sourceSurfaceId: input.sourceSurfaceId,
+  sourceSurfaceId: sanitizeAuditToken(input.sourceSurfaceId, 'redacted-surface'),
   message,
 });
 
@@ -339,6 +375,101 @@ export class ArtifactExportPolicyError extends Error {
   }
 }
 
+const buildExecutionGuardDecision = (
+  input: ArtifactExportExecutionGuardInput,
+  reason: ArtifactExportReason,
+  status: ArtifactExportDecisionStatus,
+  message: string,
+): ArtifactExportDecision => ({
+  action: input.expectedAction || input.decision?.action || 'unknown',
+  artifactType: String(input.expectedArtifactType || input.decision?.artifactType || 'unknown'),
+  allowed: false,
+  status,
+  reason,
+  risk: input.decision?.risk || 'critical',
+  requiredContext: [],
+  prohibitedOutputs: [...(input.decision?.prohibitedOutputs || [])],
+  sourceSurfaceId: sanitizeAuditToken(input.sourceSurfaceId || input.decision?.sourceSurfaceId, 'redacted-surface'),
+  message,
+});
+
+export function assertArtifactExportExecutionAllowed(input: ArtifactExportExecutionGuardInput): ArtifactExportDecision {
+  if (!input.decision) {
+    throw new ArtifactExportPolicyError(buildExecutionGuardDecision(
+      input,
+      'missing_artifact_policy_decision',
+      'blocked',
+      'Artifact export helper execution requires an explicit artifact export policy decision.',
+    ));
+  }
+  if (input.expectedAction && input.decision.action !== input.expectedAction) {
+    throw new ArtifactExportPolicyError(buildExecutionGuardDecision(
+      input,
+      'artifact_policy_action_mismatch',
+      'blocked',
+      'Artifact export helper execution requires a decision for the requested artifact action.',
+    ));
+  }
+  if (input.expectedArtifactType && input.decision.artifactType !== input.expectedArtifactType) {
+    throw new ArtifactExportPolicyError(buildExecutionGuardDecision(
+      input,
+      'artifact_policy_artifact_type_mismatch',
+      'blocked',
+      'Artifact export helper execution requires a decision for the requested artifact type.',
+    ));
+  }
+  if (input.decision.status === 'decision_pending') {
+    throw new ArtifactExportPolicyError(buildExecutionGuardDecision(
+      input,
+      'artifact_policy_decision_pending',
+      'decision_pending',
+      input.decision.message || 'Artifact helper execution is blocked while artifact policy approval remains pending.',
+    ));
+  }
+  if (input.decision.allowed !== true || input.decision.status !== 'allowed') {
+    throw new ArtifactExportPolicyError(buildExecutionGuardDecision(
+      input,
+      'artifact_policy_decision_not_allowed',
+      'blocked',
+      input.decision.message || 'Artifact helper execution is blocked by artifact policy.',
+    ));
+  }
+
+  return input.decision;
+}
+
+export const assertArtifactStorageExecutionAllowed = (input: Omit<ArtifactExportExecutionGuardInput, 'operation'>) =>
+  assertArtifactExportExecutionAllowed({ ...input, operation: 'storage_object', expectedAction: input.expectedAction || 'storage.object.create' });
+
+export const assertSignedUrlExecutionAllowed = (input: Omit<ArtifactExportExecutionGuardInput, 'operation'>) =>
+  assertArtifactExportExecutionAllowed({ ...input, operation: 'signed_url', expectedAction: input.expectedAction || 'storage.signed_url.create', expectedArtifactType: input.expectedArtifactType || 'signed_url' });
+
+export function buildArtifactExportExecutionGuardAuditEnvelope(
+  input: ArtifactExportExecutionGuardInput,
+  decision: ArtifactExportDecision = input.decision || buildExecutionGuardDecision(
+    input,
+    'missing_artifact_policy_decision',
+    'blocked',
+    'Artifact export helper execution requires an explicit artifact export policy decision.',
+  ),
+): ArtifactExportExecutionGuardAuditEnvelope {
+  return {
+    schemaVersion: 'artifact-export-helper-guard.v1',
+    helperId: input.helperId,
+    operation: input.operation,
+    sourceSurfaceId: sanitizeAuditToken(input.sourceSurfaceId || decision.sourceSurfaceId, 'redacted-surface'),
+    decision: {
+      action: decision.action,
+      artifactType: decision.artifactType,
+      allowed: decision.allowed,
+      status: decision.status,
+      reason: decision.reason,
+      risk: decision.risk,
+      message: decision.message,
+    },
+    prohibitedOutputs: [...decision.prohibitedOutputs],
+  };
+}
 export function assertArtifactExportAllowed(input: ArtifactExportPolicyInput): never {
   const decision = resolveArtifactExportPolicy(input);
   throw new ArtifactExportPolicyError(decision);
@@ -352,7 +483,7 @@ export function buildArtifactExportAttemptAuditEnvelope(
     schemaVersion: 'artifact-export-attempt.v1',
     action: input.action,
     artifactType: decision.artifactType,
-    sourceSurfaceId: input.sourceSurfaceId,
+    sourceSurfaceId: sanitizeAuditToken(input.sourceSurfaceId, 'redacted-surface'),
     actor: {
       userId: input.actor?.id,
       orgRole: input.actor?.orgRole,
@@ -361,15 +492,15 @@ export function buildArtifactExportAttemptAuditEnvelope(
     organizationId: input.organization?.id,
     scope: {
       type: input.scope?.type,
-      id: input.scope && 'id' in input.scope ? input.scope.id : undefined,
+      id: input.scope && 'id' in input.scope ? sanitizeAuditToken(input.scope.id, 'redacted-scope') : undefined,
     },
     context: {
-      projectId: input.projectId || undefined,
-      documentGenerationId: input.documentGenerationId || undefined,
-      assessmentId: input.assessmentId || undefined,
-      deliveryPackId: input.deliveryPackId || undefined,
-      evidenceRefs: [...(input.evidenceRefs || [])],
-      lineageRefs: [...(input.lineageRefs || [])],
+      projectId: sanitizeAuditToken(input.projectId, 'redacted-project'),
+      documentGenerationId: sanitizeAuditToken(input.documentGenerationId, 'redacted-document'),
+      assessmentId: sanitizeAuditToken(input.assessmentId, 'redacted-assessment'),
+      deliveryPackId: sanitizeAuditToken(input.deliveryPackId, 'redacted-delivery-pack'),
+      evidenceRefs: sanitizeAuditRefs(input.evidenceRefs, 'redacted-evidence-ref'),
+      lineageRefs: sanitizeAuditRefs(input.lineageRefs, 'redacted-lineage-ref'),
     },
     decision: {
       allowed: decision.allowed,

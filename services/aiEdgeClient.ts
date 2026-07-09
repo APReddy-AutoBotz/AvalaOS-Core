@@ -1,4 +1,9 @@
 import { AiProviderType, GeneratedArtifacts, ProjectDetails } from '../types';
+import {
+  ArtifactExportDecision,
+  assertArtifactExportExecutionAllowed,
+  assertSignedUrlExecutionAllowed,
+} from './artifactExportPolicy';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 const EDGE_AI_ENABLED = import.meta.env.VITE_AI_EDGE_FUNCTIONS_ENABLED === 'true';
@@ -97,7 +102,15 @@ export const aiEdgeClient = {
     return unwrapEdgeResponse(data);
   },
 
-  async exportDocument(input: EdgeExportDocumentInput): Promise<EdgeExportResult & { documentId: string; versionId?: string }> {
+  async exportDocument(input: EdgeExportDocumentInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { documentId: string; versionId?: string }> {
+    assertArtifactExportExecutionAllowed({
+      helperId: 'aiEdgeClient.exportDocument',
+      operation: 'export',
+      decision: artifactDecision,
+      expectedAction: 'document.export',
+      expectedArtifactType: 'generated_document_export',
+      sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'ai-edge.export-document',
+    });
     const { data, error } = await supabase.functions.invoke('export-document', {
       body: input,
     });
@@ -106,7 +119,15 @@ export const aiEdgeClient = {
     return unwrapEdgeResponse(data);
   },
 
-  async exportDecisionPack(input: EdgeExportDecisionPackInput): Promise<EdgeExportResult & { assessmentId: string; scoreSetId?: string }> {
+  async exportDecisionPack(input: EdgeExportDecisionPackInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { assessmentId: string; scoreSetId?: string }> {
+    assertArtifactExportExecutionAllowed({
+      helperId: 'aiEdgeClient.exportDecisionPack',
+      operation: 'export',
+      decision: artifactDecision,
+      expectedAction: 'decision_pack.export',
+      expectedArtifactType: 'decision_pack_export',
+      sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'ai-edge.export-decision-pack',
+    });
     const { data, error } = await supabase.functions.invoke('export-decision-pack', {
       body: input,
     });
@@ -115,7 +136,12 @@ export const aiEdgeClient = {
     return unwrapEdgeResponse(data);
   },
 
-  async createSignedDownloadUrl(reference: { bucket: string; path: string }, expiresInSeconds = 60): Promise<string> {
+  async createSignedDownloadUrl(reference: { bucket: string; path: string }, artifactDecision?: ArtifactExportDecision | null, expiresInSeconds = 60): Promise<string> {
+    assertSignedUrlExecutionAllowed({
+      helperId: 'aiEdgeClient.createSignedDownloadUrl',
+      decision: artifactDecision,
+      sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'ai-edge.create-signed-download-url',
+    });
     const { data, error } = await supabase.storage
       .from(reference.bucket)
       .createSignedUrl(reference.path, expiresInSeconds);

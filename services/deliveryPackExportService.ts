@@ -1,4 +1,8 @@
 import { DeliveryPack } from '../types';
+import {
+  ArtifactExportDecision,
+  assertArtifactExportExecutionAllowed,
+} from './artifactExportPolicy';
 
 const safe = (value: unknown) => {
   if (value === undefined || value === null || value === '') return 'Not available';
@@ -79,14 +83,33 @@ export const renderDeliveryPackJson = (pack: DeliveryPack) => JSON.stringify(pac
 
 export type DeliveryPackExportFormat = 'markdown' | 'json';
 
-export const getDeliveryPackExport = (pack: DeliveryPack, format: DeliveryPackExportFormat) => ({
-  fileName: `${pack.id}.${format === 'markdown' ? 'md' : 'json'}`,
-  mimeType: format === 'markdown' ? 'text/markdown;charset=utf-8' : 'application/json;charset=utf-8',
-  content: format === 'markdown' ? renderDeliveryPackMarkdown(pack) : renderDeliveryPackJson(pack),
-});
+export const getDeliveryPackExport = (
+  pack: DeliveryPack,
+  format: DeliveryPackExportFormat,
+  artifactDecision?: ArtifactExportDecision | null,
+) => {
+  assertArtifactExportExecutionAllowed({
+    helperId: 'deliveryPackExportService.getDeliveryPackExport',
+    operation: 'export',
+    decision: artifactDecision,
+    expectedAction: 'delivery_pack.export',
+    expectedArtifactType: 'delivery_pack_export',
+    sourceSurfaceId: artifactDecision?.sourceSurfaceId || 'delivery-pack-export-service.local-export',
+  });
 
-export const downloadDeliveryPackExport = (pack: DeliveryPack, format: DeliveryPackExportFormat) => {
-  const { fileName, mimeType, content } = getDeliveryPackExport(pack, format);
+  return {
+    fileName: `${pack.id}.${format === 'markdown' ? 'md' : 'json'}`,
+    mimeType: format === 'markdown' ? 'text/markdown;charset=utf-8' : 'application/json;charset=utf-8',
+    content: format === 'markdown' ? renderDeliveryPackMarkdown(pack) : renderDeliveryPackJson(pack),
+  };
+};
+
+export const downloadDeliveryPackExport = (
+  pack: DeliveryPack,
+  format: DeliveryPackExportFormat,
+  artifactDecision?: ArtifactExportDecision | null,
+) => {
+  const { fileName, mimeType, content } = getDeliveryPackExport(pack, format, artifactDecision);
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
