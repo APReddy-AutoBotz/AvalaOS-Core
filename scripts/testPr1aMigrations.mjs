@@ -15,6 +15,7 @@ const databaseNames = {
   upgrade: 'avalaos_pr1a_upgrade_test',
 };
 const createdDatabases = [];
+const createdRoles = [];
 
 const databaseConnection = databaseName => {
   const value = new URL(adminConnection);
@@ -54,6 +55,17 @@ const runSql = async (client, label, sql) => {
 const applyMigrations = async (client, names) => {
   for (const name of names) {
     await runSql(client, name, fs.readFileSync(path.join(migrationsDir, name), 'utf8'));
+  }
+};
+
+const ensureSupabaseRoles = async admin => {
+  for (const role of ['anon', 'authenticated']) {
+    assert.match(role, /^[a-z_]+$/);
+    const existing = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [role]);
+    if (existing.rowCount === 0) {
+      await admin.query(`CREATE ROLE ${role} NOLOGIN`);
+      createdRoles.push(role);
+    }
   }
 };
 
@@ -154,9 +166,17 @@ const dropCreatedDatabases = async admin => {
   }
 };
 
+const dropCreatedRoles = async admin => {
+  for (const role of createdRoles.reverse()) {
+    assert.match(role, /^[a-z_]+$/);
+    await admin.query(`DROP ROLE IF EXISTS ${role}`);
+  }
+};
+
 const main = async () => {
   const admin = await connect(adminConnection);
   try {
+    await ensureSupabaseRoles(admin);
     await createDatabase(admin, databaseNames.fresh);
     await createDatabase(admin, databaseNames.upgrade);
 
@@ -184,8 +204,15 @@ const main = async () => {
       await upgrade.end();
     }
   } finally {
-    await dropCreatedDatabases(admin);
-    await admin.end();
+    try {
+      await dropCreatedDatabases(admin);
+    } finally {
+      try {
+        await dropCreatedRoles(admin);
+      } finally {
+        await admin.end();
+      }
+    }
   }
 
   console.log('PR 1A isolated fresh, idempotency, upgrade, RLS, and failure migration checks passed.');
