@@ -1,47 +1,34 @@
-# AvalaOS Core Roadmap
+# AvalaOS Core Enterprise Roadmap
 
-## Roadmap Authority
+## Current Position
 
-This roadmap reconciles the current accepted baseline after the docs consistency audit. Historical evidence files remain records of prior slices. This file, `docs/00_SOURCE_OF_TRUTH.md`, `docs/05_IMPLEMENTATION_STATUS.md`, and `docs/task-ledger.md` are the active roadmap and status authority.
+Historical M0–M5.7 and post-M5.7 milestone records remain accepted for the limited proof stated in their evidence. Source hardening through PR #204 is present on `main`. Those records do not establish a server-authoritative, tenant-safe pilot or production platform.
 
-## Completed Baseline
+The docs/config-only enterprise rebaseline is the active planning boundary. It replaces routine micro-PR sequencing with substantial vertical delivery.
 
-| Milestone | Current Status | Roadmap Meaning |
-| --- | --- | --- |
-| M0 | Complete | AvalaOS Core migration, naming baseline, and historical prototype separation were established. |
-| M0.2 | Complete | Build Control Pack, agent rules, governance docs, planning docs, and evidence rules were established. |
-| M1 | Complete | Avala Govern hardening established scoped governance cards and control models. |
-| M2 | Complete | Governed Delivery Pack established handoff lineage from decisions to delivery work. |
-| M3 | Complete | Server-side AI/BYOK hardening moved the pilot direction away from browser-side provider execution. |
-| M4 through M4.5 | Complete | Buyer-demo readiness and M5 readiness gate evidence were closed. |
-| M5.0 through M5.2 | Complete as planning/readiness | Enterprise Supabase readiness, secret hygiene, and auth/org/workspace schema planning were accepted. |
-| M5.2a through M5.2g-a | Complete or merged as authority groundwork | Authority and ownership groundwork exists on main. M5.2g-a is fail-closed table readiness, not tenant-isolation proof. |
-| M5.3 | Complete as design/test plan | RLS policy design and test planning are documented. Policy implementation remains future work. |
+## Active Sequence
 
-## Active Enterprise Readiness Track
+| Order | Work | Entry gate | Exit meaning |
+| --- | --- | --- | --- |
+| 0 | P0 service-role Storage URL escape decision | Rebaseline accepted/merged; separate approval for deployment inventory | Unknown/deployed/not-deployed path resolved as required; readiness remains blocked until safe. |
+| 1A | Platform Safety and Fail-Closed Runtime Foundation | Fresh current `main`; P0 decision first | Fail-closed modes and directly related P0/P1 safety controls. |
+| 1B | Server-Authoritative Identity, RBAC, RLS, and Assess | PR 1A accepted | Fresh authorization, revocation, tenant-safe Assess persistence, server scoring parity, reproducible migrations. |
+| 1C | Enterprise Assess UI Cutover, Govern Resolution, Studio Handoff | PR 1B accepted | Accessible enterprise journey with atomic Govern/handoff and no false success. |
+| 2 | Studio, documents, private artifacts | Workstream 1 accepted | Server-controlled documents, approval/versioning, private artifacts, scoped export/download. |
+| 3 | Delivery and lineage | Workstream 2 contracts stable | Canonical import, lineage, idempotent handoff, workflow controls, audit, soft delete. |
+| 4 | Monitor, Admin, Trust | Tenant-safe source domains exist | Server read models, administrative controls, entitlements, claim-safe evidence. |
+| 5 | Shared quality infrastructure, if needed | Shared need affects at least two slices | Only shared CI/tooling that cannot live in a feature PR. |
+| 6 | Deployment and pilot control | Selected pilot journey accepted | Promotion, observability, secrets, rollback, operator controls, controlled cutover. |
 
-| Track | Status | Required Next Evidence |
-| --- | --- | --- |
-| M5.2 authority groundwork | Complete through M5.2g-a evidence | Confirmation that authority boundaries are sufficient before any RLS implementation. |
-| M5.3a RLS policy implementation | Planned, not started | Approved scope, policy migration, tenant-isolation tests, and post-merge evidence. |
-| Audit and evidence operations | Planned | Evidence lineage, audit coverage, and export readiness with verification. |
-| Secure export and storage | Planned | Private bucket configuration, export checks, and runbook evidence. |
-| Deployment and pilot readiness | Planned | Environment runbooks, smoke tests, open-risk list, and AP acceptance. |
-| KlarityFlow Health | Separate proof vertical | Separate approval and evidence if Health work is opened. |
+## PR Boundaries
 
-## Sequencing Clarification
+- Each workstream uses one to three substantial vertical PRs only when security, schema, deployment, or rollback isolation requires it.
+- Feature-specific quality, migration, security, accessibility, performance, evidence, and rollback remain in the implementation PR.
+- Plan-only, evidence-only, reconciliation-only, routine post-merge, and closure-only PRs are prohibited.
+- Workstream 5 is not a destination for deferred product quality.
 
-M5.3 was merged as an RLS design/test-plan milestone before some later M5.2 authority follow-up slices. That does not make the sequence contradictory. The canonical interpretation is:
+## Readiness Boundary
 
-1. M5.3 design and test planning can exist before all authority-table follow-up slices are complete.
-2. M5.3a implementation must wait until the required M5.2 authority boundaries are accepted.
-3. Authority slices such as M5.2g-a do not themselves satisfy RLS policy proof.
-4. Tenant isolation is not accepted until policy implementation, tests, and post-merge verification are complete.
+No active roadmap item is pilot or production proof until its stated executed evidence passes. The P0 deployment status is currently unknown. Live infrastructure inspection or mutation requires separate explicit approval.
 
-## Non-Scope Until Approved
-
-- No scoring behavior changes.
-- No schema or migration changes from documentation cleanup.
-- No runtime AI behavior changes from documentation cleanup.
-- No CI changes from documentation cleanup.
-- No Health implementation or core-platform merge without explicit approval.
+KlarityFlow Health, scoring changes, runtime agent execution, MCP/A2A controls, browser AI authority, and expansion into a Jira replacement remain out of scope.

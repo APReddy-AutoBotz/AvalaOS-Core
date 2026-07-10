@@ -4,6 +4,25 @@ Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 This roadmap is the active milestone sequence after the documentation consistency audit. It replaces stale Phase 1-4 and Health-as-M5 interpretations while preserving historical evidence as history.
 
+## Active Enterprise Acceleration Route
+
+The enterprise rebaseline is anchored to `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`, after accepted source hardening through PR #204. It supersedes routine micro-PR sequencing while preserving the historical gate chronology below.
+
+1. Accept and merge the docs/config-only enterprise rebaseline.
+2. From fresh current `main`, resolve the `P0-001` deployment decision before normal PR 1A work.
+3. PR 1A — Platform Safety and Fail-Closed Runtime Foundation.
+4. PR 1B — Server-Authoritative Identity, RBAC, RLS, and Assess.
+5. PR 1C — Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff.
+6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control.
+
+Rules:
+
+- One to three substantial vertical PRs per workstream only when security, schema, deployment, or rollback isolation requires it.
+- Feature quality, migration, security, evidence, and rollback remain in the implementing PR.
+- No plan-only, evidence-only, reconciliation-only, routine post-merge, or closure-only PRs.
+- Workstream 5 is shared tooling only and is opened only after at least two product slices need it.
+- Deployment status of the P0 extraction path remains unknown; readiness claims are blocked.
+
 ## Gate Roadmap
 
 | Gate | Milestone | Current Status | Outcome |
