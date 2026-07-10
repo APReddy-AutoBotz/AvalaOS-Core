@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 import { DocumentGeneration } from '../../types';
 import { MOCK_DOCUMENT_GENERATIONS } from '../../data/mockData';
 
@@ -13,6 +13,7 @@ const fromGenerationRow = (row: any): DocumentGeneration => ({
   id: row.id,
   projectId: relationAppId(row.projects) || row.project_app_id || row.project_id,
   generatedAt: row.generated_at || row.created_at || new Date().toISOString(),
+  versionId: row.updated_at || row.generated_at || row.created_at,
   templateId: row.template_id,
   artifacts: row.artifacts || {},
 });
@@ -32,8 +33,14 @@ async function getProjectUuid(orgId: string, projectId?: string) {
 
 export const docsAdapter = {
   async getGenerations(orgId: string, projectId?: string) {
-    if (!isSupabaseConfigured()) {
-      return projectId ? MOCK_DOCUMENT_GENERATIONS.filter(gen => gen.projectId === projectId) : MOCK_DOCUMENT_GENERATIONS;
+    if (getRuntimeDataAccess() === 'local') {
+      const generations = projectId
+        ? MOCK_DOCUMENT_GENERATIONS.filter(gen => gen.projectId === projectId)
+        : MOCK_DOCUMENT_GENERATIONS;
+      return generations.map(generation => ({
+        ...generation,
+        versionId: generation.versionId || generation.generatedAt,
+      }));
     }
     let query = supabase
       .from('document_generations')
@@ -51,7 +58,14 @@ export const docsAdapter = {
   },
 
   async saveGeneration(generation: Partial<DocumentGeneration> & { org_id: string }) {
-    if (!isSupabaseConfigured()) return generation as DocumentGeneration;
+    if (getRuntimeDataAccess() === 'local') {
+      const generatedAt = generation.generatedAt || new Date().toISOString();
+      return {
+        ...generation,
+        generatedAt,
+        versionId: generation.versionId || generatedAt,
+      } as DocumentGeneration;
+    }
     const projectUuid = await getProjectUuid(generation.org_id, generation.projectId);
     if (!projectUuid) throw new Error('Project not found for document generation.');
 
@@ -70,6 +84,7 @@ export const docsAdapter = {
       .select('*, projects(app_id)')
       .single();
     if (error) throw error;
+    if (!data) throw new Error('Document persistence did not return an authoritative record.');
     return fromGenerationRow(data);
-  }
+  },
 };

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { orgAdapter } from '../../services/adapters/orgAdapter';
-import { supabase, isSupabaseConfigured } from '../../services/supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../../services/supabaseClient';
 import { Organization, ProductModuleKey, User } from '../../types';
 import { useAuth } from './AuthProvider';
 import { DEFAULT_ENABLED_MODULES } from '../../constants/moduleConfig';
@@ -68,7 +68,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const updateProfile = async (orgId: string, profile: any) => {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       // Mock update
       setCurrentOrganization(prev => prev ? { ...prev, profile } : prev);
       setOrganizations(prev => prev.map(org => org.id === orgId ? { ...org, profile } : org));

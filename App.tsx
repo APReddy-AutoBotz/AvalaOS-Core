@@ -15,8 +15,7 @@ import { useProcessService } from './services/processService';
 
 import { StorageKeys, usePersistentState } from './services/storage';
 import { useHandoffLedger } from './services/handoffLedgerService';
-import { isSupabaseConfigured } from './services/supabaseClient';
-import { mapDemoTeamsForSupabase, mapDemoUsersForSupabase } from './services/demoIdentity';
+import { isLocalRuntimeEnabled } from './services/supabaseClient';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
 import { resolveViewAccess } from './services/viewAccessGuard';
@@ -68,6 +67,7 @@ const ViewLoadingFallback = () => (
 );
 
 function App() {
+  const localRuntimeEnabled = isLocalRuntimeEnabled();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -111,11 +111,11 @@ function App() {
     deleteTask: deliveryDeleteTask,
   } = useDelivery();
   const { processes, loading: processesLoading } = useProcessService();
-  const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, MOCK_TEAMS);
-  const [users, setUsers] = usePersistentState<User[]>(StorageKeys.USERS, MOCK_USERS);
-  const [docTemplates, setDocTemplates] = usePersistentState<DocTemplate[]>(StorageKeys.DOC_TEMPLATES, MOCK_DOC_TEMPLATES);
-  const [automations, setAutomations] = usePersistentState<Automation[]>(StorageKeys.AUTOMATIONS, MOCK_AUTOMATIONS);
-  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>(MOCK_TIMESHEET_ENTRIES);
+  const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, localRuntimeEnabled ? MOCK_TEAMS : [], { enabled: localRuntimeEnabled });
+  const [users, setUsers] = usePersistentState<User[]>(StorageKeys.USERS, localRuntimeEnabled ? MOCK_USERS : [], { enabled: localRuntimeEnabled });
+  const [docTemplates, setDocTemplates] = usePersistentState<DocTemplate[]>(StorageKeys.DOC_TEMPLATES, localRuntimeEnabled ? MOCK_DOC_TEMPLATES : [], { enabled: localRuntimeEnabled });
+  const [automations, setAutomations] = usePersistentState<Automation[]>(StorageKeys.AUTOMATIONS, localRuntimeEnabled ? MOCK_AUTOMATIONS : [], { enabled: localRuntimeEnabled });
+  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>(localRuntimeEnabled ? MOCK_TIMESHEET_ENTRIES : []);
   const { documentGenerations, saveGeneration: deliverySaveGeneration } = useDocs();
   const { entries: handoffEntries, recordHandoff } = useHandoffLedger();
 
@@ -210,11 +210,6 @@ function App() {
     if (guardLoading) return;
     if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
     if (explicitNavigationIntent && !navigationHydrated.current) return;
-
-    if (isSupabaseConfigured()) {
-      setUsers(mapDemoUsersForSupabase(MOCK_USERS));
-      setTeams(mapDemoTeamsForSupabase(MOCK_TEAMS));
-    }
 
     const defaultScope = currentUser.defaultScope ?? currentScope;
     setScopeIfChanged(defaultScope);
@@ -781,8 +776,7 @@ function App() {
             templateId: 'unknown',
             artifacts: artifactsToImport,
           };
-          const savedGeneration = await deliverySaveGeneration(newGeneration);
-          const finalizedGeneration = savedGeneration || newGeneration;
+          const finalizedGeneration = await deliverySaveGeneration(newGeneration);
           const imported = await handleImportWorkItems(itemsToImport, currentScope.id, {
             artifacts: finalizedGeneration.artifacts,
             generationId: finalizedGeneration.id,
@@ -824,8 +818,7 @@ function App() {
         templateId: 'unknown',
         artifacts: artifactsToImport,
       };
-      const savedGeneration = await deliverySaveGeneration(newGeneration);
-      const finalizedGeneration = savedGeneration || newGeneration;
+      const finalizedGeneration = await deliverySaveGeneration(newGeneration);
 
       const imported = await handleImportWorkItems(artifactsToImport.workItems, project.id, {
         artifacts: finalizedGeneration.artifacts,
@@ -861,7 +854,8 @@ function App() {
     } else if (activeGenerationId) {
       const gen = documentGenerations.find(g => g.id === activeGenerationId);
       if (gen) {
-        deliverySaveGeneration({ ...gen, artifacts: processArtifacts(gen.artifacts) });
+        void deliverySaveGeneration({ ...gen, artifacts: processArtifacts(gen.artifacts) })
+          .catch(surfaceDeliveryError);
       }
     }
   };
@@ -1001,29 +995,26 @@ function App() {
             setAssessToStudioSourceContext(null);
             applyGuardedView(View.DASHBOARD, { type: ScopeType.MY_WORK });
           }}
-          onComplete={(projectDetails: ProjectDetails, artifacts: GeneratedArtifacts) => {
-            if (currentScope.type === ScopeType.PROJECT) {
+          onComplete={async (projectDetails: ProjectDetails, artifacts: GeneratedArtifacts) => {
+            try {
+              if (currentScope.type !== ScopeType.PROJECT) {
+                throw new Error('Document generation requires an active project before the draft can be saved and opened.');
+              }
               const newGeneration: DocumentGeneration = {
-                id: `docgen-${Date.now()}`, projectId: currentScope.id,
-                generatedAt: new Date().toISOString(), templateId: projectDetails.templateId, artifacts: artifacts,
+                id: `docgen-${Date.now()}`,
+                projectId: currentScope.id,
+                generatedAt: new Date().toISOString(),
+                templateId: projectDetails.templateId,
+                artifacts,
               };
-              setTempArtifacts(artifacts);
-              setActiveGenerationId(null);
-              deliverySaveGeneration(newGeneration)
-                .then(saved => {
-                  if (saved) {
-                    setActiveGenerationId(saved.id);
-                    setTempArtifacts(null);
-                  }
-                })
-                .catch(surfaceDeliveryError);
-            } else {
-              // Globally generated, hold artifacts in temp state
-              setTempArtifacts(artifacts);
-              setActiveGenerationId(null);
+              const saved = await deliverySaveGeneration(newGeneration);
+              setActiveGenerationId(saved.id);
+              setTempArtifacts(null);
+              setAssessToStudioSourceContext(null);
+              applyGuardedView(View.WORKSPACE);
+            } catch (error) {
+              surfaceDeliveryError(error);
             }
-            setAssessToStudioSourceContext(null);
-            applyGuardedView(View.WORKSPACE);
           }}
           aiProviderType={aiProviderType}
           onAiProviderTypeChange={setAiProviderType}
@@ -1061,6 +1052,7 @@ function App() {
         return <WorkspaceView
           artifacts={artifactsToShow}
           generationId={documentGenerationId}
+          generationVersion={activeGeneration?.versionId}
           template={template}
           error={null}
           onDone={() => {

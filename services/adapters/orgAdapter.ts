@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 import {
   CANONICAL_DEMO_ENABLED_MODULES,
   CANONICAL_DEMO_ORG_ID,
@@ -14,7 +14,7 @@ const mockOrgModulesKey = `${StorageKeys.ORGANIZATION}-enabled-modules`;
 
 export const orgAdapter = {
   async getOrganizations(userId: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return [{
         id: CANONICAL_DEMO_ORG_ID,
         name: CANONICAL_DEMO_ORG_NAME,
@@ -44,7 +44,7 @@ export const orgAdapter = {
   },
 
   async createOrganization(name: string, userId: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return { id: `org-${Date.now()}`, name, slug: name.toLowerCase().replace(/\s+/g, '-') };
     }
 
@@ -68,7 +68,7 @@ export const orgAdapter = {
   },
 
   async updateEnabledModules(orgId: string, enabledModules: ProductModuleKey[]) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       StorageService.save(mockOrgModulesKey, enabledModules);
       return { success: true };
     }

@@ -3,6 +3,7 @@ import Modal from '../shared/Modal';
 import { DocumentSection, AiProviderType } from '../../types';
 import { aiOrchestrator } from '../../services/aiOrchestrator';
 import { SparklesIcon } from '../shared/icons';
+import { renderSafeMarkdown } from '../../services/safeMarkdown';
 
 interface RefineSectionModalProps {
     isOpen: boolean;
@@ -83,7 +84,7 @@ const RefineSectionModal: React.FC<RefineSectionModalProps> = ({ isOpen, onClose
                     <div>
                         <h4 className="font-semibold mb-2">Original Content</h4>
                         <div className="p-3 rounded-lg bg-slate-50 dark:bg-abz-ink h-64 overflow-y-auto text-sm prose prose-sm max-w-none">
-                            <div dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(section?.content || '') : (section?.content || '').replace(/\n/g, '<br />') }} />
+                            <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(section?.content || '') }} />
                         </div>
                     </div>
                      <div>
@@ -98,7 +99,7 @@ const RefineSectionModal: React.FC<RefineSectionModalProps> = ({ isOpen, onClose
                                 </div>
                             )}
                             {refinedContent && (
-                                <div dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(refinedContent) : refinedContent.replace(/\n/g, '<br />') }} />
+                                <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(refinedContent) }} />
                             )}
                         </div>
                     </div>

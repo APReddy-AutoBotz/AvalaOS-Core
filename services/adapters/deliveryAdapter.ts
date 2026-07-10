@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 import { Project, Task, Epic, Sprint, Comment, ActivityLogItem } from '../../types';
 import { MOCK_PROJECTS, MOCK_TASKS, MOCK_EPICS, MOCK_SPRINTS } from '../../data/mockData';
 import { toSupabaseDemoUserId } from '../demoIdentity';
@@ -155,14 +155,14 @@ async function syncTaskActivity(orgId: string, taskId: string, activityLog?: Act
 
 export const deliveryAdapter = {
   async getProjects(orgId: string) {
-    if (!isSupabaseConfigured()) return MOCK_PROJECTS;
+    if (getRuntimeDataAccess() === 'local') return MOCK_PROJECTS;
     const { data, error } = await supabase.from('projects').select('*').eq('org_id', orgId).order('created_at');
     if (error) throw error;
     return (data || []).map(fromProjectRow);
   },
 
   async saveProject(project: Partial<Project>, orgId: string) {
-    if (!isSupabaseConfigured()) return project as Project;
+    if (getRuntimeDataAccess() === 'local') return project as Project;
     const row: any = {
       org_id: orgId,
       app_id: project.id || `project-${Date.now()}`,
@@ -185,7 +185,7 @@ export const deliveryAdapter = {
   },
 
   async getTasks(orgId: string, projectId?: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return projectId ? MOCK_TASKS.filter(task => task.projectId === projectId) : MOCK_TASKS;
     }
     let query = supabase
@@ -204,7 +204,7 @@ export const deliveryAdapter = {
   },
 
   async getEpics(orgId: string, projectId?: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return projectId ? MOCK_EPICS.filter(epic => epic.projectId === projectId) : MOCK_EPICS;
     }
     let query = supabase.from('epics').select('*, projects(app_id)').eq('org_id', orgId).order('created_at');
@@ -219,7 +219,7 @@ export const deliveryAdapter = {
   },
 
   async saveEpic(epic: Partial<Epic>, orgId: string) {
-    if (!isSupabaseConfigured()) return epic as Epic;
+    if (getRuntimeDataAccess() === 'local') return epic as Epic;
     const projectUuid = await getEntityUuid('projects', orgId, epic.projectId);
     if (!projectUuid) throw new Error('Project not found for epic save.');
     const row: any = {
@@ -241,7 +241,7 @@ export const deliveryAdapter = {
   },
 
   async getSprints(orgId: string, projectId?: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return projectId ? MOCK_SPRINTS.filter(sprint => sprint.projectId === projectId) : MOCK_SPRINTS;
     }
     let query = supabase.from('sprints').select('*, projects(app_id)').eq('org_id', orgId).order('start_date');
@@ -256,7 +256,7 @@ export const deliveryAdapter = {
   },
 
   async saveSprint(sprint: Partial<Sprint>, orgId: string) {
-    if (!isSupabaseConfigured()) return sprint as Sprint;
+    if (getRuntimeDataAccess() === 'local') return sprint as Sprint;
     const projectUuid = await getEntityUuid('projects', orgId, sprint.projectId);
     if (!projectUuid) throw new Error('Project not found for sprint save.');
 
@@ -283,7 +283,7 @@ export const deliveryAdapter = {
   },
 
   async saveTask(task: Partial<Task>, orgId: string, actorId?: string) {
-    if (!isSupabaseConfigured()) return task as Task;
+    if (getRuntimeDataAccess() === 'local') return task as Task;
     const projectUuid = await getEntityUuid('projects', orgId, task.projectId);
     if (!projectUuid) throw new Error('Project not found for task save.');
     const epicUuid = await getEntityUuid('epics', orgId, task.epicId);
@@ -346,7 +346,7 @@ export const deliveryAdapter = {
   },
 
   async deleteTask(orgId: string, taskId: string) {
-    if (!isSupabaseConfigured()) return;
+    if (getRuntimeDataAccess() === 'local') return;
     let query = supabase.from('tasks').delete().eq('org_id', orgId);
     query = isUuid(taskId) ? query.eq('id', taskId) : query.eq('app_id', taskId);
     const { error } = await query;

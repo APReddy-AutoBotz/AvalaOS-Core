@@ -1,7 +1,7 @@
 import { TimesheetEntry } from '../../types';
 import { MOCK_TIMESHEET_ENTRIES } from '../../data/mockData';
 import { toSupabaseDemoUserId } from '../demoIdentity';
-import { isSupabaseConfigured, supabase } from '../supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 
 const isUuid = (value?: string) => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 
@@ -33,7 +33,7 @@ const fromTimesheetRow = (row: any): TimesheetEntry => ({
 
 export const timesheetAdapter = {
   async getEntries(orgId: string, projectId?: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       if (!projectId) return MOCK_TIMESHEET_ENTRIES;
       return MOCK_TIMESHEET_ENTRIES;
     }
@@ -56,7 +56,7 @@ export const timesheetAdapter = {
   },
 
   async saveEntry(entry: Omit<TimesheetEntry, 'id'> & { id?: string }, orgId: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return {
         id: entry.id || `ts-${Date.now()}`,
         ...entry,
@@ -99,7 +99,7 @@ export const timesheetAdapter = {
   },
 
   async deleteEntry(orgId: string, userId: string, taskId: string, date: string) {
-    if (!isSupabaseConfigured()) return;
+    if (getRuntimeDataAccess() === 'local') return;
 
     const taskUuid = await getEntityUuid('tasks', orgId, taskId);
     const normalizedUserId = toSupabaseDemoUserId(userId);

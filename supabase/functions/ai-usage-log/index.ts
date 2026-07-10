@@ -1,4 +1,4 @@
-import { recordAiUsage } from '../_shared/audit.ts';
+import { recordAiUsageRequired } from '../_shared/audit.ts';
 import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
 import { getAuthUser, resolveOrgId } from '../_shared/supabase.ts';
 
@@ -11,7 +11,7 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const orgId = await resolveOrgId(user.id, body.organizationId);
 
-    await recordAiUsage({
+    await recordAiUsageRequired({
       orgId,
       userId: user.id,
       jobId: body.jobId,

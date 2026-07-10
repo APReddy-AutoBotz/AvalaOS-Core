@@ -1,4 +1,4 @@
-import { completeAiJob, createAiJob } from '../_shared/audit.ts';
+import { completeAiJob, createAiJob, failAiJobBestEffort } from '../_shared/audit.ts';
 import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
 import { getAuthUser, resolveOrgId } from '../_shared/supabase.ts';
 import { assertTenantStoragePath, downloadStoredFile, resolveSourceUploadsBucket } from '../_shared/storage.ts';
@@ -37,7 +37,7 @@ Deno.serve(async (request) => {
       jobType: 'extract_document_text',
       inputRefs: { fileId, storagePath, fileType },
     });
-    jobId = job?.id;
+    jobId = job.id;
 
     if (!supportedTextTypes.has(fileType)) {
       throw new Error('Only text, Markdown, CSV, and JSON extraction are implemented in this Edge Function source. Binary PDF/DOCX extraction requires a dedicated extractor before pilot use.');
@@ -60,7 +60,7 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     const message = safeErrorMessage(error);
-    await completeAiJob(jobId, 'failed', {}, message);
+    await failAiJobBestEffort(jobId, message);
     return jsonResponse({ error: message }, 400);
   }
 });

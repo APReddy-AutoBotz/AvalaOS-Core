@@ -22,24 +22,36 @@ export const assertStorageBucketName = (bucket: string) => {
   }
 };
 
-export const selectSourceUploadsBucket = (
-  configuredBucket?: string,
-  configuredAllowlist?: string,
+const selectAllowlistedBucket = (
+  configuredBucket: string,
+  configuredAllowlist: string,
 ) => {
-  const bucket = configuredBucket === undefined
-    ? DEFAULT_SOURCE_UPLOADS_BUCKET
-    : configuredBucket;
-  const allowlistValue = configuredAllowlist === undefined
-    ? DEFAULT_SOURCE_UPLOADS_BUCKET
-    : configuredAllowlist;
-  const allowedBuckets = allowlistValue.split(',');
+  const allowedBuckets = configuredAllowlist.split(',');
 
   if (!allowedBuckets.length || allowedBuckets.length > 16) configurationError();
   for (const allowedBucket of allowedBuckets) assertStorageBucketName(allowedBucket);
-  assertStorageBucketName(bucket);
+  assertStorageBucketName(configuredBucket);
 
-  if (!new Set(allowedBuckets).has(bucket)) configurationError();
-  return bucket;
+  if (!new Set(allowedBuckets).has(configuredBucket)) configurationError();
+  return configuredBucket;
+};
+
+export const selectSourceUploadsBucket = (
+  configuredBucket?: string,
+  configuredAllowlist?: string,
+) => selectAllowlistedBucket(
+  configuredBucket ?? DEFAULT_SOURCE_UPLOADS_BUCKET,
+  configuredAllowlist ?? DEFAULT_SOURCE_UPLOADS_BUCKET,
+);
+
+export const selectExportsBucket = (
+  configuredBucket?: string,
+  configuredAllowlist?: string,
+) => {
+  if (configuredBucket === undefined || configuredAllowlist === undefined) {
+    configurationError();
+  }
+  return selectAllowlistedBucket(configuredBucket, configuredAllowlist);
 };
 
 export const assertCanonicalStoragePath = (storagePath: string) => {

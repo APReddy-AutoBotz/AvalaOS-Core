@@ -18,18 +18,13 @@ import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadGeneratedArtifacts } from '../../services/documentExportService';
 import type { ProductActionDecision } from '../../services/productActionPolicy';
 import { assertArtifactExportExecutionAllowed, type ArtifactExportDecision } from '../../services/artifactExportPolicy';
+import { renderSafeMarkdown } from '../../services/safeMarkdown';
 
-
-// Make marked available globally from the script tag in index.html
-declare global {
-  interface Window {
-    marked: any;
-  }
-}
 
 interface WorkspaceViewProps {
   artifacts: GeneratedArtifacts | null;
   generationId?: string | null;
+  generationVersion?: string | null;
   template: DocTemplate | null;
   error: string | null;
   onDone: () => void;
@@ -85,7 +80,7 @@ const renderMarkdownWithMermaid = (content: string, sectionKey: string) => {
     return (
       <div
         key={`${sectionKey}-markdown-${index}`}
-        dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(part.content) : part.content.replace(/\n/g, '<br />') }}
+        dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(part.content) }}
       />
     );
   });
@@ -97,7 +92,7 @@ const toSafeFileName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'avalaos-core-document';
 
-const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType, actionPolicy, artifactPolicy }) => {
+const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, generationVersion, template, error, onDone, users, currentUser, onUpdateApprovalStatus, onResubmitForApproval, onInitiateImport, onRefineSection, aiProviderType, actionPolicy, artifactPolicy }) => {
   const { currentOrganization } = useOrganizationContext();
   const [activeTab, setActiveTab] = useState<RightPanelTab>('quality');
   const [exportingDocument, setExportingDocument] = useState<'json' | 'markdown' | null>(null);
@@ -242,13 +237,17 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
     }
     setExportingDocument(format);
     try {
-      if (isAiEdgeEnabled() && generationId) {
+      if (isAiEdgeEnabled()) {
+        if (!generationId || !generationVersion) {
+          throw new Error('An authoritative document version is required for server export.');
+        }
         if (!isArtifactActionAllowed(artifactPolicy?.signedUrl)) {
           blockAction(artifactPolicy?.signedUrl, 'Signed URL generation is blocked until a later approved artifact boundary.');
           return;
         }
         const exportResult = await aiEdgeClient.exportDocument({
           documentId: generationId,
+          versionId: generationVersion,
           exportType: format,
         }, artifactPolicy?.documentExport);
         const signedUrl = await aiEdgeClient.createSignedDownloadUrl(exportResult.downloadReference, artifactPolicy?.signedUrl);
@@ -318,7 +317,7 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
             <div className="py-1"><ExclamationTriangleIcon className="h-6 w-6 mr-3" /></div>
             <div>
               <p className="font-bold">Generation Error</p>
-              <p className="text-sm">{error} The app has loaded sample data to demonstrate the workspace view.</p>
+              <p className="text-sm">{error}</p>
             </div>
           </div>
         </div>

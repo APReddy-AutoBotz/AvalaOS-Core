@@ -43,10 +43,11 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ code, id }) => {
         // Re-initialize on every render to pick up theme changes.
         window.mermaid.initialize({
             startOnLoad: false,
+            securityLevel: 'strict',
             theme: currentTheme,
             flowchart: {
                 useMaxWidth: true,
-                htmlLabels: true,
+                htmlLabels: false,
             },
             themeVariables: {
                 'primaryColor': '#002C4B',

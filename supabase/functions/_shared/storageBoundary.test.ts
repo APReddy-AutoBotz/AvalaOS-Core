@@ -7,6 +7,7 @@ import {
   STORAGE_PATH_SCOPE_ERROR,
   assertTenantStoragePath,
   buildStorageObjectUrl,
+  selectExportsBucket,
   selectSourceUploadsBucket,
 } from './storageBoundary';
 
@@ -35,6 +36,24 @@ const main = () => {
   ]) {
     assertErrorMessage(
       () => selectSourceUploadsBucket(bucket, allowlist),
+      STORAGE_CONFIGURATION_ERROR,
+    );
+  }
+
+  assert.equal(
+    selectExportsBucket('private-exports', 'private-exports,archive-exports'),
+    'private-exports',
+  );
+  for (const [bucket, allowlist] of [
+    [undefined, undefined],
+    ['private-exports', undefined],
+    [undefined, 'private-exports'],
+    ['attacker-exports', 'private-exports'],
+    ['https://attacker.invalid', 'https://attacker.invalid'],
+    [' private-exports', ' private-exports'],
+  ] as const) {
+    assertErrorMessage(
+      () => selectExportsBucket(bucket, allowlist),
       STORAGE_CONFIGURATION_ERROR,
     );
   }
@@ -112,9 +131,13 @@ const main = () => {
 
   const storageSource = fs.readFileSync('supabase/functions/_shared/storage.ts', 'utf8');
   assert.match(storageSource, /redirect: 'error'/);
+  assert.match(storageSource, /bucket: string/);
+  assert.match(storageSource, /assertTenantStoragePath\(input\.orgId, path\)/);
+  assert.doesNotMatch(storageSource, /Deno\.env\.get\('EXPORTS_BUCKET'\)/);
+  assert.doesNotMatch(storageSource, /klarity-exports/);
   assert.doesNotMatch(storageSource, /Storage download failed \(\$\{response\.status\}\)/);
 
-  console.log('P0 Storage boundary regression suite passed.');
+  console.log('P0 and export Storage boundary regression suite passed.');
 };
 
 main();

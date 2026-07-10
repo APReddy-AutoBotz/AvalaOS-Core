@@ -32,6 +32,7 @@ export const getAuthUser = async (request: Request): Promise<AuthUser> => {
   const { url, anonKey } = supabaseEnv();
   const token = getBearerToken(request);
   const response = await fetch(`${url}/auth/v1/user`, {
+    redirect: 'error',
     headers: {
       apikey: anonKey,
       Authorization: `Bearer ${token}`,
@@ -51,6 +52,7 @@ export const postgrest = async <T>(
   const { url, serviceRoleKey } = supabaseEnv();
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
+    redirect: 'error',
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
@@ -61,7 +63,7 @@ export const postgrest = async <T>(
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase REST request failed (${response.status}): ${await response.text()}`);
+    throw new Error('Supabase request failed.');
   }
 
   if (response.status === 204) return undefined as T;
@@ -75,7 +77,7 @@ type Membership = {
 
 export const resolveOrgId = async (userId: string, requestedOrgId?: string): Promise<string> => {
   const memberships = await postgrest<Membership[]>(
-    `organization_members?select=org_id,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.active`,
+    `organization_members?select=org_id,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&deleted_at=is.null`,
     { method: 'GET' },
   );
 

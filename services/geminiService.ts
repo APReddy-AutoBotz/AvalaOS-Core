@@ -1,37 +1,36 @@
 import { AiProviderType, IAiProvider } from '../types';
+import type { AiExecutionPolicy } from './aiMode';
 import { GeminiProvider } from './geminiProvider';
 import { GroqProvider } from './groqProvider';
 
-// Browser provider fallback is gated by aiOrchestrator to explicit local-demo/internal-dev modes.
-// Do not accept user-provided raw browser keys here; pilot/production must use server-side Edge AI.
-export function getAiProviderApiKey(providerType: AiProviderType): string | undefined {
-    if (providerType === 'openai') {
-        return undefined;
-    }
+type BrowserFallbackPolicy = Extract<
+  AiExecutionPolicy,
+  { boundary: 'browser-demo-test-fallback' }
+>;
 
-    if (providerType === 'groq') {
-        return import.meta.env.VITE_GROQ_API_KEY;
-    }
-
-    return import.meta.env.VITE_GEMINI_API_KEY;
+export function getAiProviderApiKey(
+  providerType: AiProviderType,
+  policy: BrowserFallbackPolicy,
+): string | undefined {
+  if (!policy.allowBrowserFallback) return undefined;
+  if (providerType === 'openai') return undefined;
+  if (providerType === 'groq') return import.meta.env.VITE_GROQ_API_KEY;
+  return import.meta.env.VITE_GEMINI_API_KEY;
 }
 
-export function getAiProvider(providerType: AiProviderType): IAiProvider {
-    const apiKeyToUse = getAiProviderApiKey(providerType);
+export function getAiProvider(
+  providerType: AiProviderType,
+  policy: BrowserFallbackPolicy,
+): IAiProvider {
+  const apiKeyToUse = getAiProviderApiKey(providerType, policy);
 
-    if (providerType === 'openai') {
-        throw new Error("OpenAI provider is disabled until the server-side AI provider boundary is implemented.");
-    }
-
-    if (providerType === 'groq') {
-        if (!apiKeyToUse) {
-            throw new Error("Groq API key is missing. Configure a key before generating AI content.");
-        }
-        return new GroqProvider(apiKeyToUse);
-    }
-
-    if (!apiKeyToUse) {
-        throw new Error("Google Gemini API key is missing. Configure a key before generating AI content.");
-    }
-    return new GeminiProvider(apiKeyToUse);
+  if (providerType === 'openai') {
+    throw new Error('OpenAI browser execution is disabled.');
+  }
+  if (!apiKeyToUse) {
+    throw new Error('An approved local demo/test provider key is not configured.');
+  }
+  return providerType === 'groq'
+    ? new GroqProvider(apiKeyToUse)
+    : new GeminiProvider(apiKeyToUse);
 }

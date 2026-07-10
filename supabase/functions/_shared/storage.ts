@@ -1,6 +1,5 @@
 import { supabaseEnv } from './supabase.ts';
 import {
-  assertStorageBucketName,
   assertTenantStoragePath,
   buildStorageObjectUrl,
   selectSourceUploadsBucket,
@@ -15,26 +14,26 @@ export const resolveSourceUploadsBucket = () => selectSourceUploadsBucket(
 
 export const uploadTextArtifact = async (input: {
   orgId: string;
+  bucket: string;
   artifactType: string;
   extension: string;
   contentType: string;
   content: string;
 }) => {
   const { url, serviceRoleKey } = supabaseEnv();
-  const bucket = Deno.env.get('EXPORTS_BUCKET') || 'klarity-exports';
-  assertStorageBucketName(bucket);
   const artifactId = crypto.randomUUID();
   const safeType = input.artifactType.replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
   const path = `${input.orgId}/${safeType}/${artifactId}.${input.extension}`;
+  assertTenantStoragePath(input.orgId, path);
 
-  const response = await fetch(buildStorageObjectUrl(url, bucket, path), {
+  const response = await fetch(buildStorageObjectUrl(url, input.bucket, path), {
     method: 'POST',
     redirect: 'error',
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       'Content-Type': input.contentType,
-      'x-upsert': 'true',
+      'x-upsert': 'false',
     },
     body: input.content,
   });
@@ -45,7 +44,7 @@ export const uploadTextArtifact = async (input: {
 
   return {
     artifactId,
-    bucket,
+    bucket: input.bucket,
     path,
   };
 };

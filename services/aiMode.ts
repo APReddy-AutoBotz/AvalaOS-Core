@@ -1,34 +1,35 @@
-export type AiRuntimeMode = 'local-demo' | 'internal-dev' | 'pilot' | 'production';
+import {
+  RUNTIME_BOUNDARY_USER_MESSAGE,
+  RuntimeBoundaryError,
+  RuntimeMode,
+  resolveRuntimeMode,
+} from './runtimeMode';
+
+export type AiRuntimeMode = RuntimeMode;
 
 export type AiModeBoundaryErrorCode =
   | 'AI_BOUNDARY_INVALID_MODE'
   | 'AI_BOUNDARY_MODE_REQUIRED'
+  | 'AI_BOUNDARY_AUTOMATED_TEST_CONTEXT_REQUIRED'
   | 'AI_BOUNDARY_EDGE_REQUIRED';
 
-export const AI_MODE_BOUNDARY_USER_MESSAGE =
-  'Server-side AI is not configured for this workspace/environment. Contact an administrator or use an approved demo path.';
-
-const VALID_MODES: AiRuntimeMode[] = ['local-demo', 'internal-dev', 'pilot', 'production'];
+export const AI_MODE_BOUNDARY_USER_MESSAGE = RUNTIME_BOUNDARY_USER_MESSAGE;
 
 export class AiModeBoundaryError extends Error {
   code: AiModeBoundaryErrorCode;
 
-  constructor(code: AiModeBoundaryErrorCode, message = AI_MODE_BOUNDARY_USER_MESSAGE) {
-    super(message);
+  constructor(code: AiModeBoundaryErrorCode) {
+    super(AI_MODE_BOUNDARY_USER_MESSAGE);
     this.name = 'AiModeBoundaryError';
     this.code = code;
   }
 }
 
 export type AiModeResolution =
-  | {
-      status: 'resolved';
-      mode: AiRuntimeMode;
-      source: 'explicit' | 'dev-default';
-    }
+  | { status: 'resolved'; mode: AiRuntimeMode; source: 'explicit' }
   | {
       status: 'blocked';
-      code: AiModeBoundaryErrorCode;
+      code: Exclude<AiModeBoundaryErrorCode, 'AI_BOUNDARY_EDGE_REQUIRED'>;
       error: AiModeBoundaryError;
       configuredMode?: string | null;
     };
@@ -40,74 +41,52 @@ export type AiExecutionPolicy =
       useEdge: true;
       requiresEdge: boolean;
       allowBrowserFallback: false;
-      isDemoOrDevFallback: false;
+      isDemoOrTestFallback: false;
       boundary: 'edge';
     }
   | {
       status: 'allowed';
-      mode: 'local-demo' | 'internal-dev';
+      mode: 'local_demo' | 'automated_test';
       useEdge: false;
       requiresEdge: false;
       allowBrowserFallback: true;
-      isDemoOrDevFallback: true;
-      fallbackLabel: 'local-demo synthetic/prepared fallback' | 'internal-dev transitional fallback';
-      boundary: 'browser-demo-dev-fallback';
+      isDemoOrTestFallback: true;
+      fallbackLabel: 'local_demo synthetic fallback' | 'automated_test controlled fallback';
+      boundary: 'browser-demo-test-fallback';
     }
   | {
       status: 'blocked';
       mode?: AiRuntimeMode;
       code: AiModeBoundaryErrorCode;
-      error: AiModeBoundaryError;
+      error: AiModeBoundaryError | RuntimeBoundaryError;
       useEdge: false;
       requiresEdge: boolean;
       allowBrowserFallback: false;
-      isDemoOrDevFallback: false;
+      isDemoOrTestFallback: false;
       boundary: 'blocked';
     };
 
-export const isAiRuntimeMode = (value: string): value is AiRuntimeMode =>
-  VALID_MODES.includes(value as AiRuntimeMode);
-
 export const resolveAiMode = ({
   configuredMode,
-  isDev,
-  isProd,
+  isAutomatedTestContext,
 }: {
   configuredMode?: string | null;
-  isDev: boolean;
-  isProd: boolean;
+  isAutomatedTestContext: boolean;
 }): AiModeResolution => {
-  const normalizedMode = configuredMode?.trim();
-
-  if (normalizedMode) {
-    if (isAiRuntimeMode(normalizedMode)) {
-      return {
-        status: 'resolved',
-        mode: normalizedMode,
-        source: 'explicit',
-      };
-    }
-
-    return {
-      status: 'blocked',
-      code: 'AI_BOUNDARY_INVALID_MODE',
-      error: new AiModeBoundaryError('AI_BOUNDARY_INVALID_MODE'),
-      configuredMode,
-    };
+  const resolution = resolveRuntimeMode({ configuredMode, isAutomatedTestContext });
+  if (resolution.status === 'resolved') {
+    return { status: 'resolved', mode: resolution.mode, source: 'explicit' };
   }
 
-  if (isDev && !isProd) {
-    return {
-      status: 'resolved',
-      mode: 'local-demo',
-      source: 'dev-default',
-    };
-  }
-
+  const code = resolution.code === 'RUNTIME_MODE_INVALID'
+    ? 'AI_BOUNDARY_INVALID_MODE'
+    : resolution.code === 'RUNTIME_AUTOMATED_TEST_CONTEXT_REQUIRED'
+      ? 'AI_BOUNDARY_AUTOMATED_TEST_CONTEXT_REQUIRED'
+      : 'AI_BOUNDARY_MODE_REQUIRED';
   return {
     status: 'blocked',
-    code: 'AI_BOUNDARY_MODE_REQUIRED',
-    error: new AiModeBoundaryError('AI_BOUNDARY_MODE_REQUIRED'),
+    code,
+    error: new AiModeBoundaryError(code),
     configuredMode,
   };
 };
@@ -127,13 +106,12 @@ export const getAiExecutionPolicy = ({
       useEdge: false,
       requiresEdge: false,
       allowBrowserFallback: false,
-      isDemoOrDevFallback: false,
+      isDemoOrTestFallback: false,
       boundary: 'blocked',
     };
   }
 
   const { mode } = modeResolution;
-
   if (edgeEnabled) {
     return {
       status: 'allowed',
@@ -141,7 +119,7 @@ export const getAiExecutionPolicy = ({
       useEdge: true,
       requiresEdge: mode === 'pilot' || mode === 'production',
       allowBrowserFallback: false,
-      isDemoOrDevFallback: false,
+      isDemoOrTestFallback: false,
       boundary: 'edge',
     };
   }
@@ -155,7 +133,7 @@ export const getAiExecutionPolicy = ({
       useEdge: false,
       requiresEdge: true,
       allowBrowserFallback: false,
-      isDemoOrDevFallback: false,
+      isDemoOrTestFallback: false,
       boundary: 'blocked',
     };
   }
@@ -166,11 +144,10 @@ export const getAiExecutionPolicy = ({
     useEdge: false,
     requiresEdge: false,
     allowBrowserFallback: true,
-    isDemoOrDevFallback: true,
-    fallbackLabel:
-      mode === 'local-demo'
-        ? 'local-demo synthetic/prepared fallback'
-        : 'internal-dev transitional fallback',
-    boundary: 'browser-demo-dev-fallback',
+    isDemoOrTestFallback: true,
+    fallbackLabel: mode === 'local_demo'
+      ? 'local_demo synthetic fallback'
+      : 'automated_test controlled fallback',
+    boundary: 'browser-demo-test-fallback',
   };
 };
