@@ -149,4 +149,3 @@ const serverMapperSource = authAdapterSource.slice(
 assert.doesNotMatch(serverMapperSource, /MOCK_USERS|MOCK_LOGIN_PROFILES|demoPersona/);
 
 console.log('Runtime mode boundary regression suite passed.');
-

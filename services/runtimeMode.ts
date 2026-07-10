@@ -123,4 +123,3 @@ export const resolveRuntimeDataAccess = ({
 
   throw new RuntimeBoundaryError('RUNTIME_SERVER_CONFIGURATION_REQUIRED');
 };
-
