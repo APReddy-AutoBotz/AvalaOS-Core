@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09` through PR #204.
+Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68` through PR #205; PR 1A is a candidate pending review, CI, and merge.
 
 ## Honest Maturity Verdict
 
@@ -19,9 +19,20 @@ Baseline: `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09` through PR #204.
 - Product-action, workflow, artifact export, storage, and signed-URL source guards through PR #204.
 - Historical milestone/evidence corpus preserved as immutable records.
 
-## Confirmed Source Defects And Gaps
+## PR 1A Implementation Candidate
 
-- P0 service-role Storage URL escape; deployment status unknown.
+- AP deployment classification for P0: **NOT DEPLOYED**; no repository-side live access or infrastructure identifiers.
+- Exact fail-closed runtime modes and removal of demo/mock/browser-AI authority from pilot and production paths.
+- P0 Storage, Edge export authorization, required privileged audit, unsafe-rendering, and directly related false-success remediation.
+- Minimum canonical AI-audit migration with executed disposable fresh and targeted upgrade verification.
+- Edge typecheck, source guards, supplemental default regression, changed-critical-module coverage, and migration CI ownership.
+- Local source and migration gates passed; browser E2E/accessibility/responsive/performance execution is blocked and no pass is claimed.
+
+## Confirmed Accepted-Baseline Defects And Gaps
+
+The following describes the accepted baseline and is reconciled by the PR 1A candidate only where stated above; later PR 1B/1C and deployment evidence remain required.
+
+- P0 service-role Storage URL escape; deployment was unknown at the accepted baseline and the AP later classified the intended function as not deployed.
 - Supabase users can inherit demo-persona role/permissions through email matching.
 - Missing Supabase configuration silently falls back to mock behavior.
 - Browser action policies consume client user role/permission projections.
@@ -37,15 +48,15 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 
 ## Not Proven
 
-- Deployment status of the vulnerable extraction function.
+- Repository-side deployment inventory was not run. The AP supplied the bounded P0 classification **NOT DEPLOYED**, without infrastructure identifiers.
 - Hosted schema or migration state.
 - End-to-end server-authoritative identity, RBAC, workspace authorization, and immediate revocation.
 - RLS and two-tenant non-disclosure across pilot paths.
 - Server Assess scoring parity and durable Assess lifecycle.
 - Private storage, export, signed URL, rollback, incident, backup/restore, observability, pilot, production, buyer, release-candidate, security, or compliance readiness.
 
-## Next Accepted Planning Boundary
+## Next Acceptance Boundary
 
-After this docs/config-only rebaseline is accepted and merged, PR 1A starts from fresh current `main` and begins with the P0 decision. PR 1B and PR 1C follow only after their predecessor evidence is accepted.
+Finish PR 1A review and GitHub CI, then merge only through the normal approval process. PR 1B may begin only after PR 1A is accepted and merged; PR 1C remains dependent on accepted PR 1B evidence.
 
-No product source, migration, runtime, environment, deployment, secret, or live-system behavior is changed by the rebaseline PR.
+No deployment, tag, live-system inspection, secret action, incident action, merge, or PR 1B/1C work is part of this candidate.

@@ -1,7 +1,7 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
-Baseline: `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`
-Status: target contract; no runtime change is made by the rebaseline PR
+Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
+Status: target contract with a PR 1A implementation candidate pending review, CI, and merge
 
 ## Current Architecture
 
@@ -28,6 +28,19 @@ Supabase
 Material current boundaries are source-validated in the active risk register. They include demo-persona permission inheritance for matching Supabase emails, missing-config mock fallback, client policy authority, incomplete export authorization, service-role URL construction, best-effort audit, non-atomic persistence/UI transitions, and an unreconciled migration authority split.
 
 Provider-governance code is stronger than the general application path: it checks active membership and fails closed when allowed-operation audit persistence fails. That control is not yet a uniform platform authorization layer.
+
+## PR 1A Candidate Transition
+
+PR 1A implements the first target slice without claiming the later server-authoritative platform is complete:
+
+- exact explicit runtime modes with no implicit pilot/production fallback;
+- server-required pilot/production data and AI paths, without demo-persona authorization or browser provider authority;
+- server-derived allowlisted Storage authority and authenticated export checks before service-role operations;
+- required AI audit persistence that fails closed;
+- structural sanitization at the three validated rich-content sinks and durable-persistence-before-success UI behavior; and
+- a minimum canonical AI-audit migration with isolated fresh and supported-upgrade execution.
+
+This is branch evidence pending acceptance. It does not complete PR 1B identity/RBAC/RLS/Assess, prove tenant isolation, or establish a deployed environment.
 
 ## Target Architecture
 
@@ -102,6 +115,7 @@ Scoring remains deterministic and versioned. PR 1B proves server parity against 
 - `supabase/migrations/` is the only canonical ordered migration chain.
 - `docs/schema/` is a legacy design and historical operational reference until required contracts are reconciled into canonical migrations.
 - Fresh database, supported upgrade path, policy/RLS assertions, and failure/rollback behavior are CI gates for schema-changing PRs.
+- PR 1A supplies those executed gates for its minimum AI-audit migration only; broader runtime schema and two-tenant RLS proof remain PR 1B work.
 - Production rollback is normally flag disablement, read-only maintenance, or forward migration. Destructive down-migrations are not the default.
 
 ## Audit And Evidence
