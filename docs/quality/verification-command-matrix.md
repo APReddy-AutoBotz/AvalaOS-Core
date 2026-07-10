@@ -18,7 +18,7 @@ Record the exact exit code and material result for every executed command. Unava
 | `node scripts/runTypeScriptTest.mjs types.ts services/productActionPolicy.ts services/artifactExportPolicy.ts services/artifactExportPolicy.test.ts` | Artifact export policy suite omitted from default chain. | Exit 0. |
 | `node scripts/runTypeScriptTest.mjs services/artifactExportHelperGuards.test.ts` | Export/storage/signed-URL helper guard suite omitted from default chain. | Exit 0. |
 | `npm run build` | Production bundle compilation. | Exit 0. |
-| `codex --strict-config features list` | Repository `.codex` schema validation. | Exit 0; no unsupported-key error. |
+| `codex app-server --strict-config --stdio` | Repository `.codex` schema validation through the supported strict app-server path. | Exit 0 after stdin closes; no unsupported-key error. |
 | `git diff --check` | Patch whitespace integrity. | Exit 0. |
 | Changed-file review | Scope and historical-evidence check. | Only approved docs/config changed; no historical evidence modified. |
 

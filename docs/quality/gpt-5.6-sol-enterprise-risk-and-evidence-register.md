@@ -78,12 +78,18 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | `node scripts/runTypeScriptTest.mjs services/artifactExportHelperGuards.test.ts` | Passed | 5 tests passed; zero failed. |
 | Expanded helper dependency invocation | Failed — harness mismatch, not product behavior | Directly passing Vite modules to the test compiler produced `TS1343`/`TS2339` for `import.meta.env`; the supported single-entry helper suite above passed. |
 | `npm run build` | Passed with warning | 199 modules transformed; build completed in 22.14s. Browserslist data reported as six months old; no update was authorized. |
+| `codex app-server --strict-config --stdio` | Passed | `codex-cli 0.144.0-alpha.4` loaded the project configuration from a disposable detached worktree at `09576a0b073bc46ba7716d289eee13f1e68f0b5c` and exited 0 after stdin closed; no unsupported-key error was emitted. |
+| Four-role discovery and limits | Passed | Runtime `config/read` resolved `architecture_explorer`, `security_reviewer`, `quality_reviewer`, and `implementation_worker` from the project layer and loaded `max_threads = 4` and `max_depth = 1`. |
+| Model and reasoning compatibility | Passed locally; runtime execution not proven | Runtime `model/list` exposed `gpt-5.6-sol` with both configured efforts, `high` and `max`. Spawned-agent execution metadata was not exposed, so this is not evidence that each agent executed on that model or that no provider fallback occurred. |
+| Concurrent reviewer spawning | Passed | `architecture_explorer`, `security_reviewer`, and `quality_reviewer` were spawned with their configured roles before any wait and were observed running concurrently with the controller at `4/4` threads. Their runtime paths were `/root/architecture_explorer`, `/root/security_reviewer`, and `/root/quality_reviewer`. |
+| Reviewer read-only sandbox enforcement | Failed | All three unique workspace write probes were stopped before PowerShell execution with `windows sandbox: helper_unknown_error: apply deny-read ACLs`. The same helper error blocked reviewer and controller `Test-Path` and no-op commands, so this was not a valid read-only enforcement pass. An external controller confirmed all reviewer probe paths were absent. |
+| `max_depth = 1` enforcement | Failed | After the reviewers finished, `/root/architecture_explorer` successfully spawned `/root/architecture_explorer/depth_probe`; no rejection error was returned. The nested child was interrupted immediately. |
+| `implementation_worker` workspace-write probe | Not run | The validation stopped at the required depth-failure gate, so the worker was not spawned and no worker probe was created. An external controller confirmed the worker probe path was absent. |
 
 ## Blocked Or Not Run
 
 | Check/action | Status | Reason |
 | --- | --- | --- |
-| `codex --strict-config features list` | Blocked | Installed WindowsApps `codex.exe` returned `Access is denied`; alternate `codex.cmd` was not present. Configuration was manually constrained to the supported agents schema, but strict execution is not claimed. |
 | Official Codex manual helper | Blocked | The fetched response lacked the required `x-content-sha256` integrity header. Installing a global docs MCP would have exceeded the repository-only scope. |
 | Live deployment/function inventory | Not run | Explicitly outside this PR; P0 deployment status remains unknown. |
 | Environment, database, RLS, storage, Edge, log, secret, incident, rotation, hosted, and production checks | Not run | Explicitly unauthorized for the docs/config-only rebaseline. |
