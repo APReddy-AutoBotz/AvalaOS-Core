@@ -186,19 +186,25 @@ Read only:
 
 Do not inventory or read the full historical planning/evidence corpus unless a current artifact links to specific evidence required for this PR.
 
-## PARALLEL EXECUTION
+## CONTROLLED PERMISSION AND DELEGATION PHASES
 
-The controller retains final authority for scope, plan, integration, acceptance, and the single PR. No broader parallel implementation may begin before the P0 decision tree authorizes continuation.
+The root controller retains final authority for scope, plan, integration, acceptance, and the single PR. Only the root controller may spawn agents. Recursive or nested delegation is prohibited.
 
-After the P0 gate permits broader work, run Wave 1 concurrently as findings-only:
+- If any child creates or attempts to create a descendant, interrupt it immediately and mark the orchestration run failed.
+- Keep `max_threads = 4` as the effective tested concurrency cap.
+- Keep `max_depth = 1` configured, but do not rely on it as the only containment control until https://github.com/openai/codex/issues/32027 is fixed and retested.
+- Treat per-agent `sandbox_mode` values as defaults; the live parent permission selection is reapplied to spawned children.
+- Never use `--yolo` or `danger-full-access` for this controlled workflow.
+
+After the P0 gate permits broader work, start Wave 1 with the live parent/controller permission set to read-only and run the findings-only reviewers concurrently:
 
 - `architecture_explorer`: map affected trust boundaries, dependencies, and file ownership.
 - `security_reviewer`: validate attack paths, authorization boundaries, negative tests, and residual risk.
 - `quality_reviewer`: define feature-owned CI, migration, coverage, accessibility, performance, rollback, and evidence requirements.
 
-The controller must synthesize and resolve conflicting findings before implementation begins.
+All Wave 1 reviewers must finish and close before the root controller changes permissions. The controller must synthesize and resolve conflicting findings before implementation begins.
 
-Wave 2 uses up to three `implementation_worker` instances only for independent, non-overlapping, substantial tracks. Every assignment must include its behavior, focused tests, documentation updates, and rollback notes; micro-tasks are prohibited.
+Only after Wave 1 is complete and no reviewer remains active may the root controller explicitly switch to workspace-write. Wave 2 may then use up to three `implementation_worker` instances only for independent, non-overlapping, substantial tracks. No reviewer may run during the write-enabled phase. Every assignment must include its behavior, focused tests, documentation updates, and rollback notes; micro-tasks are prohibited.
 
 Suggested PR 1A ownership:
 
@@ -208,7 +214,7 @@ Suggested PR 1A ownership:
 
 Assign exclusive file ownership before workers edit. Workers must not create branches or PRs independently. Serialize any materially overlapping portion.
 
-The controller owns migration-chain reconciliation, CI integration, conflict resolution, full verification, final security/quality review, and the one draft PR.
+The root controller owns migration-chain reconciliation, CI integration, conflict resolution, full verification, final security/quality review, and the one draft PR.
 
 ## OBJECTIVE
 
