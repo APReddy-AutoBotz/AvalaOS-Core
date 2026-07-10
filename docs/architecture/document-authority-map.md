@@ -12,6 +12,14 @@ Read only this sequence unless the active task requires more:
 6. `PLANS.md` for substantial implementation
 7. One or more domain documents from the routing table below
 
+## Authority Precedence
+
+- `AGENTS.md` governs agent execution, approval requirements, safety constraints, delegation, and delivery discipline.
+- `docs/00_SOURCE_OF_TRUTH.md` governs product scope, maturity, readiness/proof boundaries, and the accepted implementation sequence.
+- Each domain document governs only the questions assigned to it in the table below.
+- No document has blanket precedence outside its assigned domain.
+- If a genuine conflict crosses these boundaries and cannot be resolved safely, stop and request AP clarification.
+
 ## Active Authority
 
 | Question | Authoritative document |
@@ -33,6 +41,10 @@ Read only this sequence unless the active task requires more:
 | Readiness definitions | `docs/quality/readiness-gates.md` |
 | Verification commands | `docs/quality/verification-command-matrix.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
+
+## PR Governance Boundary
+
+PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. After it is accepted, routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs are prohibited. This exception does not authorize another documentation-only control PR or weaken the requirement to keep implementation, tests, documentation, evidence, and rollback together.
 
 ## Historical Routing
 

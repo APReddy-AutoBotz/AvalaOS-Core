@@ -1,6 +1,6 @@
 # AvalaOS Core Agent Instructions
 
-Read `docs/00_SOURCE_OF_TRUTH.md` before planning, reviewing, or implementing repository work. If instructions conflict, that file wins.
+Read `docs/00_SOURCE_OF_TRUTH.md` before planning, reviewing, or implementing repository work.
 
 ## Minimum Authoritative Reading Sequence
 
@@ -13,6 +13,14 @@ Read `docs/00_SOURCE_OF_TRUTH.md` before planning, reviewing, or implementing re
 7. Only the task-specific canonical document routed by `docs/architecture/document-authority-map.md`
 
 Do not read the full historical planning or evidence corpus by default. Historical plans, evidence, reconciliation records, and post-merge verification are consulted only when an active artifact links to them or the task requires a specific audit trail.
+
+## Authority Precedence
+
+- `AGENTS.md` governs agent execution, approval requirements, safety constraints, delegation, and delivery discipline.
+- `docs/00_SOURCE_OF_TRUTH.md` governs product scope, maturity, readiness/proof boundaries, and the accepted implementation sequence.
+- Domain documents govern only the areas assigned to them by `docs/architecture/document-authority-map.md`.
+- No document has blanket precedence outside its assigned domain.
+- If a genuine conflict crosses these boundaries and cannot be resolved safely, stop and request AP clarification.
 
 ## Product Law
 
@@ -45,12 +53,41 @@ The service-role Storage URL escape recorded as `P0-001` in the active risk regi
 
 ## Delivery Discipline
 
+- PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. It does not authorize another plan-only, evidence-only, reconciliation-only, post-merge-only, or closure-only PR.
 - A workstream may use one to three substantial vertical PRs when security, schema, deployment, or rollback boundaries require it.
-- Do not create plan-only, evidence-only, reconciliation-only, routine post-merge, or closure-only PRs.
+- After PR #205 is accepted, do not create routine plan-only, evidence-only, reconciliation-only, post-merge-only, or closure-only PRs.
 - Keep feature documentation, migrations, security controls, tests, verification, evidence, and rollback instructions in the implementation PR that needs them.
 - Every implementation PR must include acceptance criteria, feature-specific quality gates, exact verification results, and a safe rollback or read-only fallback.
 - Stop after each substantial PR boundary and report evidence; do not fragment one boundary into process-theatre PRs.
 - Use the status vocabulary `confirmed source defect`, `suspected defect requiring deeper validation`, `deployment status unknown`, `executed evidence`, `planned verification`, `blocked`, and `not run` precisely.
+
+## Parallel Execution
+
+The controller retains final authority for scope, plan, integration, acceptance, and the single PR. No broader parallel implementation may begin before the P0 decision tree authorizes continuation.
+
+After the P0 gate permits broader work:
+
+### Wave 1 — Concurrent Findings Only
+
+- `architecture_explorer`: map affected trust boundaries, dependencies, and file ownership.
+- `security_reviewer`: validate attack paths, authorization boundaries, negative tests, and residual risk.
+- `quality_reviewer`: define feature-owned CI, migration, coverage, accessibility, performance, rollback, and evidence requirements.
+
+The controller must synthesize the findings and resolve conflicts before implementation begins.
+
+### Wave 2 — Substantial Implementation Ownership
+
+Use up to three `implementation_worker` instances only for independent, non-overlapping tracks. Every assignment must be a meaningful body of work, not a micro-task, and must include its behavior, focused tests, documentation updates, and rollback notes.
+
+Suggested PR 1A ownership:
+
+- Track A: explicit runtime modes and removal of demo/mock/browser-AI authority from pilot and production paths.
+- Track B: P0 Storage remediation, Edge export authorization, privileged audit behavior, and affected Edge tests.
+- Track C: validated unsafe-rendering remediation and directly related false-success UI behavior with tests.
+
+Assign exclusive file ownership before workers edit. Workers must not create branches or PRs independently. If tracks overlap materially, serialize the affected portion.
+
+The controller owns migration-chain reconciliation, CI integration, conflict resolution, full verification, final security/quality review, and the one draft PR.
 
 ## Historical Evidence
 

@@ -8,6 +8,7 @@ Use an execution plan for work that crosses product layers, changes security or 
 - Keep the active risk and proof state in `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md`.
 - Add task-specific execution detail to the implementation PR when the portfolio plan is not sufficient.
 - Update the plan, tests, migration notes, evidence, and rollback guidance in the same implementation PR.
+- Treat PR #205 as the explicitly authorized one-time docs/config-only enterprise rebaseline; it does not authorize another documentation-only control PR.
 - Do not open a separate plan, evidence, reconciliation, post-merge, or closure PR for routine work.
 
 ## Required Plan Content

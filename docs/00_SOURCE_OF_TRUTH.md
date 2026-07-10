@@ -4,7 +4,7 @@ AvalaOS Core is the governed AI and automation delivery platform.
 
 Canonical tagline: **Evaluate before you automate. Govern before you execute.**
 
-This file is the highest repository authority for product scope, proof boundaries, maturity, readiness, and the next safe sequence.
+This file governs product scope, maturity, readiness/proof boundaries, and the accepted implementation sequence.
 
 ## Minimum Reading Sequence
 
@@ -17,6 +17,14 @@ This file is the highest repository authority for product scope, proof boundarie
 7. A task-specific document selected through `docs/architecture/document-authority-map.md`
 
 Do not read the full historical planning/evidence corpus by default.
+
+## Authority Precedence
+
+- `AGENTS.md` governs agent execution, approval requirements, safety constraints, delegation, and delivery discipline.
+- This file governs product scope, maturity, readiness/proof boundaries, and the accepted implementation sequence.
+- Domain documents govern only the areas assigned by `docs/architecture/document-authority-map.md`.
+- No document has blanket precedence outside its assigned domain.
+- If a genuine conflict crosses these boundaries and cannot be resolved safely, stop and request AP clarification.
 
 ## Accepted Source Baseline
 
@@ -87,7 +95,7 @@ Do not read the full historical planning/evidence corpus by default.
 5. PR 1C: Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff.
 6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
-Each workstream uses one to three substantial vertical PRs only when security, schema, deployment, or rollback boundaries require it. Plan-only, evidence-only, reconciliation-only, routine post-merge, and closure-only PRs are prohibited.
+PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. After it is accepted, each workstream uses one to three substantial vertical PRs only when security, schema, deployment, or rollback boundaries require it. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs are prohibited; PR #205 does not weaken that future rule.
 
 ## Evidence Authority
 

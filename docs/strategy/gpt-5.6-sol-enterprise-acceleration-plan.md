@@ -12,7 +12,7 @@ The repository has valuable deterministic scoring, governed lifecycle concepts, 
 
 The first selected major slice is **Identity and tenant-safe Assess**, scored 36/40 for business value, risk reduction, platform unlock, pilot relevance, complexity fit, testability, rollback, and evidence. Studio/private artifacts scored 30/40; Delivery scored 29/40.
 
-This plan replaces routine micro-PR chains with substantial vertical PRs. It does not authorize implementation, deployment, live inspection, or incident action by itself.
+PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. This plan replaces routine micro-PR chains with substantial vertical PRs after PR #205 is accepted. It does not authorize another plan-only/evidence-only control PR, implementation, deployment, live inspection, or incident action by itself.
 
 ## 2. P0 Stop Gate: Service-Role Storage URL Escape
 
@@ -140,7 +140,7 @@ Primary order:
 
 Workstream 5 is demand-driven, not a bucket for quality deferred from product PRs.
 
-Each workstream may contain one to three substantial vertical PRs only when security, schema, deployment, or rollback isolation requires it. Plan-only, evidence-only, reconciliation-only, routine post-merge, and closure-only PRs are prohibited. Tests, migration notes, acceptance evidence, and rollback travel with the behavior they verify.
+Each workstream may contain one to three substantial vertical PRs only when security, schema, deployment, or rollback isolation requires it. After the one-time PR #205 rebaseline is accepted, routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs are prohibited. Tests, migration notes, acceptance evidence, and rollback travel with the behavior they verify.
 
 ## 6. Quality And Evidence Contract
 
@@ -186,6 +186,30 @@ Read only:
 
 Do not inventory or read the full historical planning/evidence corpus unless a current artifact links to specific evidence required for this PR.
 
+## PARALLEL EXECUTION
+
+The controller retains final authority for scope, plan, integration, acceptance, and the single PR. No broader parallel implementation may begin before the P0 decision tree authorizes continuation.
+
+After the P0 gate permits broader work, run Wave 1 concurrently as findings-only:
+
+- `architecture_explorer`: map affected trust boundaries, dependencies, and file ownership.
+- `security_reviewer`: validate attack paths, authorization boundaries, negative tests, and residual risk.
+- `quality_reviewer`: define feature-owned CI, migration, coverage, accessibility, performance, rollback, and evidence requirements.
+
+The controller must synthesize and resolve conflicting findings before implementation begins.
+
+Wave 2 uses up to three `implementation_worker` instances only for independent, non-overlapping, substantial tracks. Every assignment must include its behavior, focused tests, documentation updates, and rollback notes; micro-tasks are prohibited.
+
+Suggested PR 1A ownership:
+
+- Track A: explicit runtime modes and removal of demo/mock/browser-AI authority from pilot and production paths.
+- Track B: P0 Storage remediation, Edge export authorization, privileged audit behavior, and affected Edge tests.
+- Track C: validated unsafe-rendering remediation and directly related false-success UI behavior with tests.
+
+Assign exclusive file ownership before workers edit. Workers must not create branches or PRs independently. Serialize any materially overlapping portion.
+
+The controller owns migration-chain reconciliation, CI integration, conflict resolution, full verification, final security/quality review, and the one draft PR.
+
 ## OBJECTIVE
 
 Deliver one substantial vertical PR that establishes a fail-closed runtime and resolves directly related P0/P1 safety defects without changing deterministic scoring behavior or expanding product scope.
@@ -212,7 +236,7 @@ Do not implement PR 1B identity/RBAC/Assess persistence or PR 1C UI/Govern/hando
 - Do not change scoring formulas, weights, thresholds, hard stops, or recommendation logic.
 - Do not add browser-side provider secrets, browser AI authority, AGS, MCP, A2A, or autonomous agent execution.
 - Do not modify KlarityFlow Health.
-- Preserve historical evidence and avoid plan-only, evidence-only, reconciliation-only, or closure-only PRs.
+- Preserve historical evidence. After the accepted one-time PR #205 rebaseline, do not create routine plan-only, evidence-only, reconciliation-only, post-merge-only, or closure-only PRs.
 
 ## VERIFICATION AND EVIDENCE
 
