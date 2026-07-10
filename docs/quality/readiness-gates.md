@@ -4,6 +4,19 @@ Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 No gate passes without evidence, verification, and AP acceptance where required. Historical evidence proves a gate state at the time it was written; current gate status is maintained here and in `docs/task-ledger.md`.
 
+## Active Enterprise Blocking Gates
+
+| Order | Gate | Current status | Pass evidence |
+| --- | --- | --- | --- |
+| 0 | `P0-001` service-role Storage URL escape | **Blocked — confirmed source defect; deployment unknown** | Separately approved deployment determination, safe containment decision when applicable, source fix, negative tests, sanitized evidence. |
+| 1A | Platform safety and fail-closed runtime | Planned after rebaseline merge | Runtime-mode, P0/P1 security, audit, migration-chain, CI, and rollback evidence in PR 1A. |
+| 1B | Server identity/RBAC/RLS/Assess | Planned after PR 1A acceptance | Fresh authorization/revocation, two-tenant non-disclosure, server scoring parity, migration, concurrency, idempotency, audit, and rollback evidence. |
+| 1C | Enterprise Assess/Govern/Studio journey | Planned after PR 1B acceptance | Browser E2E, accessibility, responsive-state, failure-state, atomic handoff, tenant, and rollback evidence. |
+| Pilot | Controlled pilot | Blocked | Workstreams 1–4 accepted plus deployment/operations evidence and AP acceptance. |
+| Production | Production readiness | Blocked | Pilot evidence, production controls, open-risk disposition, and explicit acceptance. |
+
+Source inspection is not deployment proof. Planned verification is not executed evidence. Unavailable or unauthorized checks are `blocked` or `not run`, never passed.
+
 ## Core Gates
 
 | Gate | Name | Current Status | Required Evidence |

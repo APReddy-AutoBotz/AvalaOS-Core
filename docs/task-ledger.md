@@ -2,8 +2,21 @@
 
 This ledger records the current canonical milestone status. Evidence links are historical records unless the Decision column says they are active blockers.
 
+## Active Enterprise Rebaseline
+
+The active repository-wide planning boundary is the docs/config-only AvalaOS Enterprise Rebaseline, anchored to `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09` after PR #204.
+
+- Maturity: credible deterministic enterprise demo with substantial source-level governance scaffolding; not a coherent server-authoritative, tenant-safe pilot or production platform.
+- First stop: `P0-001` service-role Storage URL escape; confirmed source defect, deployment status unknown.
+- Selected sequence: PR 1A Platform Safety and Fail-Closed Runtime → PR 1B Server-Authoritative Identity/RBAC/RLS/Assess → PR 1C Enterprise Assess UI/Govern/Studio Handoff.
+- Execution: begins only after the rebaseline PR is accepted and merged, from a fresh current `main`.
+- Scope: this rebaseline changes supported documentation and Codex configuration only; no product, migration, runtime, environment, deployment, secret, or live-system change.
+
+The acceleration plan, target architecture, active risk register, and `PLANS.md` supersede the prior routine micro-PR control pattern. Historical ledger entries and evidence remain unchanged below.
+
 | Milestone | Task ID | Status | Owner | Files | Acceptance | Evidence Link | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| AvalaOS Enterprise Rebaseline | ERB-001 | Complete in branch; acceptance pending | AP/Codex | Active canonical docs, `AGENTS.md`, `PLANS.md`, `.codex/**` | One docs/config-only rebaseline with decision-complete acceleration path and verified source risk register | `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md`; `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` | Approved scope only; no PR 1A, product/runtime/live execution, readiness claim, merge, tag, or deployment |
 | M0 | M0-001 | Complete | AP/Codex | Migration docs, package metadata, main branch | AvalaOS Core migration complete | `docs/08_MIGRATION_FROM_KLARITYPM.md` | Accepted |
 | M0.2 | M02-001 | Complete | Codex | `AGENTS.md`, `.agent/**`, `docs/**` | Build Control Pack created and verified | `docs/quality/m0.2-final-evidence-review.md`; `docs/quality/m0.2-post-merge-verification.md` | Accepted |
 | M1 | M1-001 | Complete | AP/Codex | Avala Govern approved files | Govern hardening complete | `docs/quality/m1-final-evidence-review.md`; `docs/quality/m1-post-merge-verification.md` | Accepted |

@@ -1,42 +1,60 @@
 # AvalaOS Core Technical Architecture
 
-## Current Architecture
+The detailed current and target trust architecture is authoritative at `docs/architecture/current-to-target-enterprise-architecture.md`.
 
-AvalaOS Core is a React/Vite application with TypeScript domain models, local demo adapters, Supabase-ready services, and Supabase Edge Function sources for AI and export paths.
+## Current State
 
-Core areas:
+AvalaOS Core is a React/Vite TypeScript application with deterministic scoring, browser-side domain services, demo adapters, partial Supabase adapters, an incomplete canonical migration chain, and Supabase Edge sources for AI, extraction, export, storage, and provider governance.
 
-- React UI shell with module gating.
-- Deterministic Assess scoring in `services/scoringEngine.ts`.
-- Scoring regression harness in `scripts/runScoringRegression.mjs`.
-- Delivery policy checks and tests in `services/deliveryPolicy.ts` and `services/deliveryPolicy.test.ts`.
-- Supabase adapters and schema contracts under `services/adapters` and `docs/schema`.
-- Supabase Edge Function sources under `supabase/functions`.
+Current strengths:
 
-## Scoring Boundary
+- deterministic scoring and regression coverage;
+- explicit product/module policy scaffolding;
+- provider-governance code that checks active membership and fails closed on allowed-operation audit failure;
+- source-level delivery, export, storage, and signed-URL guards;
+- historical evidence and proof-boundary discipline.
 
-Deterministic scoring is the authority for scores, gates, risk tiers, recommendations, business value, and handoff readiness. AI may draft documentation, summarize context, or refine editable sections, but it must not decide final scoring outputs.
+Current enterprise gaps:
 
-## AI Boundary
+- browser identity and permission projections remain influential authority;
+- missing Supabase configuration silently selects mock behavior;
+- privileged authorization is not uniformly revalidated server-side;
+- service-role Edge helpers contain a P0 URL escape and incomplete export authorization;
+- audit behavior is not uniformly atomic/fail closed;
+- Assess scoring and lifecycle remain browser-driven;
+- schema authority is split between `supabase/migrations/` and legacy `docs/schema/` contracts;
+- tenant isolation and deployment have not been proven.
 
-Pilot and production AI calls must run server-side through Supabase Edge Functions or equivalent backend services. Browser-side AI provider execution and raw browser-stored provider keys are not acceptable for real customer data.
+## Target Request Path
 
-## Enterprise Persistence Baseline
+```text
+Browser projection
+  → Edge/API transport router
+  → separate typed command/query handler
+  → fresh server identity and tenant/workspace/resource authorization
+  → deterministic policy, idempotency, expected-version check
+  → one state + audit transaction
+  → sanitized, stable, non-disclosing response
+```
 
-The M5 enterprise-readiness track is building toward Supabase-backed tenant isolation and deployment readiness. Current accepted architecture state:
+The browser is not an authorization boundary. Service-role access does not replace application authorization. Storage authority is allowlisted and derived server-side. Pilot and production fail closed.
 
-- Supabase schema contracts, adapters, and Edge Function source files are authored.
-- M5.2 authority slices have added organization/workspace context and ownership groundwork across core domains.
-- M5.2f established project authority, and M5.2g-a established the `delivery_work_items` authority table.
-- The M5.2g-a `delivery_work_items` table has RLS enabled with no policies. This is fail-closed readiness only and must not be represented as tenant-isolation proof.
-- Delivery runtime adapters still require an approved migration path before hosted Delivery runtime behavior can depend on the new `delivery_work_items` authority table.
-- M5.3 is a policy design and test plan. RLS policy implementation and isolation tests remain future milestone work.
+## Scoring And AI Boundaries
 
-## Governance And Delivery Boundary
+- Deterministic scoring is authoritative for scores, gates, risk tiers, recommendations, business value, and handoff eligibility.
+- AI may draft or transform editable content but cannot decide deterministic or regulated outcomes.
+- Pilot and production AI runs server-side with governed provider configuration and no browser-held secrets.
 
-Avala Govern is a governance and control-plane model derived from existing assessment/process data. It does not execute agents, bots, RPA jobs, external-system actions, monitor live runtime behavior, or add MCP/A2A controls in this phase.
+## Data Authority
 
-Avala Delivery is the governed delivery workbench for approved work items, owners, blockers, handoff lineage, delivery packs, evidence checklists, and downstream delivery handoff. It is not a Jira replacement and does not claim hosted, deployment, production, RLS, tenant-isolation, or security readiness without future accepted evidence.
+- `supabase/migrations/` is the canonical ordered migration chain.
+- `docs/schema/` is legacy design/historical operational reference until required contracts are reconciled.
+- Schema-changing PRs require fresh, upgrade, policy/RLS, failure, and rollback/read-only verification.
 
-## Repository Direction
-This repository is AvalaOS Core. Existing internal module keys may remain `assess`, `docs`, `delivery`, `monitor`, and `admin` to avoid unnecessary refactor risk.
+## Transition
+
+- PR 1A establishes fail-closed runtime and platform safety.
+- PR 1B establishes server identity/RBAC/RLS and Assess command authority.
+- PR 1C cuts over the enterprise Assess UI and atomic Govern/Studio handoff.
+
+No architecture statement in this document is deployment or readiness proof.
