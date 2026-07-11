@@ -78,7 +78,7 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run typecheck` | Passed | `tsc --noEmit` exit 0; does not cover `supabase/` because of the recorded exclusion. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns; 734 allowed classified hits; zero forbidden hits; zero stale allowlist entries. |
-| `npm run test:secret-hygiene` | Passed | 5 rules; 746 allowed classified hits; zero forbidden hits; zero tracked `.env*` files. |
+| `npm run test:secret-hygiene` | Passed | 5 rules; 748 allowed classified hits; zero forbidden hits; zero tracked `.env*` files. |
 | `npm run test` | Passed | Complete default chained regression suite exit 0, including deterministic scoring and provider resolver tests. |
 | `npm run test:evidence-execution-gate` | Passed | Model and presentation suites passed. |
 | Product action policy supplemental suite | Passed | 13 tests passed; zero failed. |
@@ -125,7 +125,7 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 | Implementation wave | Completed with root integration | Worker tracks covered runtime, Edge/audit/export, and UI safety. Native helper failures blocked some child edits; root integrated the full candidate. No child permission-probe pass is claimed. |
 | Local PR 1A regression and coverage | Passed | Corrective focused gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; sanitizer, audit, and persistence are covered by their named source, migration, direct, and browser suites rather than included in this percentage. |
 | Full default/supplemental regression | Passed | `npm test` and `npm run test:required-supplemental` exited 0; deterministic scoring stayed green. |
-| Expanded migration harness | Planned GitHub execution | Earlier fresh/reapply/legacy-upgrade execution passed. The corrective harness adds populated legacy data, dirty-data preflight, cross-authority, duplicate completion, terminal/usage immutability, token consistency, and RLS assertions; no local database variable was configured, so the changed harness is not claimed passed until PR CI executes it. |
+| Expanded migration harness | Passed in GitHub CI | Both push and pull-request PostgreSQL jobs passed populated legacy data, dirty-data preflight, cross-authority, duplicate completion, terminal/usage immutability, token consistency, RLS, fresh, reapply, and upgrade assertions. It was not run against a live or hosted application database. |
 | Build, audit, AI boundary, and secret hygiene | Passed | Production build exited 0; dependency audit found 0 vulnerabilities; AI-boundary scan found 0 forbidden/stale hits; secret scan found 0 forbidden hits. |
 
 ## Blocked Or Not Run

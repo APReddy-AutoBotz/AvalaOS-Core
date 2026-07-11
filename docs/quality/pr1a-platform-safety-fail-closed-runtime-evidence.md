@@ -42,7 +42,7 @@ This PR changes platform-safety source, tests, CI, one canonical migration, and 
 | `npm run test:pr1a` | Passed | Runtime, export, audit, rendering, false-success, migration-contract, and coverage gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; no sanitizer/audit/persistence percentage is inferred. |
 | `npm run test:required-supplemental` | Passed | Evidence execution, product-action, delivery-workflow, artifact-export, and helper-guard suites passed: 13 product-action, 12 workflow, 7 artifact, and 5 helper-guard tests. |
 | `npm test` | Passed | The complete default and supplemental chained regression path exited 0; locked deterministic scoring remained green. |
-| `npm run test:migrations:pr1a` | Not rerun locally after corrective expansion | No disposable PostgreSQL connection was configured. Earlier harness execution passed; the changed populated clean/dirty/cross-authority/immutability harness awaits the PR PostgreSQL CI job. |
+| `npm run test:migrations:pr1a` | Passed in both GitHub workflow triggers | The push and pull-request PostgreSQL jobs passed the changed populated clean/dirty/cross-authority/immutability harness. No disposable local database was configured and no live or hosted database was accessed. |
 | `npm run build` | Passed with warning | 201 modules transformed; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns, 734 classified hits, zero forbidden hits, and zero stale allowlist entries. |
@@ -57,7 +57,7 @@ The migration harness used only disposable local databases and a temporary local
 
 | Check | Status | Reason |
 | --- | --- | --- |
-| `npm run test:browser -- --reporter=line` | Passed | Official Playwright Chromium executed six deterministic desktop/mobile tests covering server-precedence login, hostile Markdown/SVG, rejected persistence, shared-dialog keyboard/focus, and axe serious/critical findings. External requests were aborted; no live service was contacted. |
+| `npm run test:browser -- --reporter=line` | Passed | Official Playwright Chromium executed six deterministic desktop/mobile tests covering server-precedence login, hostile Markdown/SVG, rejected persistence, shared-dialog keyboard/focus, and axe serious/critical findings. External requests were aborted; no live service was contacted. Both push and pull-request Chromium jobs also passed. |
 | Browser performance budget | Not run | No PR-owned performance budget was defined; no performance pass is claimed. |
 | Live deployment, hosted schema, RLS/tenant isolation, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision is recorded without repository-side live access. |
 | Implementation-worker disposable write probe | Not run | The product implementation wave is not used as a Codex sandbox experiment; no runtime permission result is inferred. |

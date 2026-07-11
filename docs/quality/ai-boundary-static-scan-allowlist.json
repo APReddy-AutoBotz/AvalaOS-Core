@@ -30,14 +30,14 @@
     {
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
-      "lines": [152],
+      "lines": [153],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
     },
     {
       "pattern": "localStorage",
       "path": "App.tsx",
-      "lines": [152],
+      "lines": [153],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
     },
@@ -51,14 +51,14 @@
     {
       "pattern": "getAiProvider",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 83, 97, 131],
+      "lines": [1, 85, 99, 133],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },
     {
       "pattern": "getAiProviderApiKey",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 92],
+      "lines": [1, 94],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },

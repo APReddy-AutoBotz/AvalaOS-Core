@@ -92,7 +92,7 @@ Deliver:
 
 Acceptance: P0 disposition recorded; negative security tests pass; pilot/production cannot silently use demo authority; directly affected checks run in CI; no score behavior changes.
 
-Current draft status: the corrected implementation candidate has local source, regression, coverage, build, and deterministic Chromium browser/axe/desktop/mobile evidence. The expanded populated fresh/upgrade/dirty-data migration harness requires the PR PostgreSQL CI job because no disposable local database was configured. GitHub CI and review remain acceptance gates; no performance, hosted, deployment, or live-system pass is claimed.
+Current draft status: the corrected implementation candidate has local source, regression, coverage, build, and deterministic Chromium browser/axe/desktop/mobile evidence. The expanded populated fresh/upgrade/dirty-data migration harness passed in both push and pull-request PostgreSQL CI jobs because no disposable local database was configured. The corrected quality jobs, review, and merge remain acceptance gates; no performance, hosted, deployment, or live-system pass is claimed.
 
 Rollback: keep vulnerable endpoints disabled; revert non-security runtime refactors if necessary; never restore service-role URL construction or production fail-open behavior.
 
