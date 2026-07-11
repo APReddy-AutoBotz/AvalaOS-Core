@@ -1,7 +1,9 @@
+declare const Deno: { env: { get: (key: string) => string | undefined } };
 import { supabaseEnv } from './supabase.ts';
 import {
   assertTenantStoragePath,
   buildStorageObjectUrl,
+  buildStorageRemovalUrl,
   selectSourceUploadsBucket,
 } from './storageBoundary.ts';
 
@@ -54,12 +56,30 @@ export const removeTextArtifact = async (
 ) => {
   const { url, serviceRoleKey } = supabaseEnv();
   assertTenantStoragePath(orgId, artifact.path);
-  const response = await fetch(buildStorageObjectUrl(url, artifact.bucket, artifact.path), {
+  const response = await fetch(buildStorageRemovalUrl(url, artifact.bucket), {
     method: 'DELETE',
     redirect: 'error',
-    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prefixes: [artifact.path] }),
   });
-  if (!response.ok && response.status !== 404) throw new Error('Storage compensation failed.');
+  if (!response.ok) throw new Error('Storage compensation failed.');
+  let removed: unknown;
+  try {
+    removed = await response.json();
+  } catch {
+    throw new Error('Storage compensation failed.');
+  }
+  if (!Array.isArray(removed)) throw new Error('Storage compensation failed.');
+  if (removed.length === 0) return;
+  if (!removed.some((entry) => (
+    typeof entry === 'object' && entry !== null &&
+    'name' in entry && entry.name === artifact.path &&
+    'bucket_id' in entry && entry.bucket_id === artifact.bucket
+  ))) throw new Error('Storage compensation failed.');
 };
 
 export const downloadStoredFile = async (input: {

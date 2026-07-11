@@ -213,7 +213,10 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-    IF OLD.status IN ('succeeded', 'failed', 'cancelled') AND NEW IS DISTINCT FROM OLD THEN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'AI audit jobs are immutable and cannot be deleted.';
+    END IF;
+    IF OLD.status IN ('succeeded', 'failed', 'cancelled') THEN
         RAISE EXCEPTION 'Terminal AI audit jobs are immutable.';
     END IF;
     IF OLD.status = 'queued' AND NEW.status NOT IN ('queued', 'running', 'cancelled') THEN
@@ -229,7 +232,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_pr1a_ai_generation_jobs_transition ON public.ai_generation_jobs;
 CREATE TRIGGER trg_pr1a_ai_generation_jobs_transition
-BEFORE UPDATE ON public.ai_generation_jobs
+BEFORE UPDATE OR DELETE ON public.ai_generation_jobs
 FOR EACH ROW EXECUTE FUNCTION public.pr1a_enforce_ai_job_transition();
 
 CREATE OR REPLACE FUNCTION public.pr1a_reject_ai_usage_mutation()

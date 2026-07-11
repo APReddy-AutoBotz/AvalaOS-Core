@@ -140,3 +140,15 @@ export const buildStorageObjectUrl = (
 
   return objectUrl.toString();
 };
+
+export const buildStorageRemovalUrl = (
+  supabaseUrl: string,
+  bucket: string,
+) => {
+  const origin = canonicalSupabaseOrigin(supabaseUrl);
+  assertStorageBucketName(bucket);
+  const route = `/storage/v1/object/${encodeURIComponent(bucket)}`;
+  const removalUrl = new URL(route, `${origin}/`);
+  if (removalUrl.origin !== origin || removalUrl.pathname !== route) configurationError();
+  return removalUrl.toString();
+};

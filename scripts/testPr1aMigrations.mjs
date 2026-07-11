@@ -176,6 +176,37 @@ const assertPr1aSchema = async client => {
     client.query(`UPDATE public.ai_usage_events SET total_tokens = 6 WHERE id = $1`, [usage.rows[0].id]),
     /AI usage audit events are immutable/,
   );
+  await assert.rejects(
+    client.query(`UPDATE public.ai_generation_jobs SET output_ref = output_ref WHERE id = $1`, [jobId]),
+    /Terminal AI audit jobs are immutable/,
+  );
+  await assert.rejects(client.query(`DELETE FROM public.ai_generation_jobs WHERE id = $1`, [jobId]), /cannot be deleted/);
+  await assert.rejects(client.query(`DELETE FROM public.ai_usage_events WHERE id = $1`, [usage.rows[0].id]), /AI usage audit events are immutable/);
+
+  const queuedJob = await client.query(`INSERT INTO public.ai_generation_jobs (org_id, user_id, job_type, status, input_refs, output_ref) VALUES ($1, $2, 'generate_document', 'queued', '{}'::jsonb, '{}'::jsonb) RETURNING id`, [orgId, actorId]);
+  await assert.rejects(client.query(`DELETE FROM public.ai_generation_jobs WHERE id = $1`, [queuedJob.rows[0].id]), /cannot be deleted/);
+  const runningJob = await client.query(`INSERT INTO public.ai_generation_jobs (org_id, user_id, job_type, status, input_refs, output_ref, started_at) VALUES ($1, $2, 'generate_document', 'running', '{}'::jsonb, '{}'::jsonb, NOW()) RETURNING id`, [orgId, actorId]);
+  await assert.rejects(client.query(`DELETE FROM public.ai_generation_jobs WHERE id = $1`, [runningJob.rows[0].id]), /cannot be deleted/);
+  await client.query(`UPDATE public.ai_generation_jobs SET status = 'failed', completed_at = NOW(), error_message = 'sanitized failure' WHERE id = $1`, [runningJob.rows[0].id]);
+
+  for (const role of ['anon', 'authenticated']) {
+    assert.match(role, /^[a-z_]+$/);
+    await client.query(`SET ROLE ${role}`);
+    try {
+      for (const operation of [
+        `SELECT * FROM public.ai_generation_jobs`,
+        `INSERT INTO public.ai_generation_jobs DEFAULT VALUES`,
+        `UPDATE public.ai_generation_jobs SET status = 'queued'`,
+        `DELETE FROM public.ai_generation_jobs`,
+        `SELECT * FROM public.ai_usage_events`,
+        `INSERT INTO public.ai_usage_events DEFAULT VALUES`,
+        `UPDATE public.ai_usage_events SET total_tokens = 0`,
+        `DELETE FROM public.ai_usage_events`,
+      ]) await assert.rejects(client.query(operation), /permission denied/);
+    } finally {
+      await client.query('RESET ROLE');
+    }
+  }
   const otherActorId = '33333333-3333-4333-8333-333333333333';
   const otherOrgId = '44444444-4444-4444-8444-444444444444';
   await client.query('INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT DO NOTHING', [otherActorId]);

@@ -49,3 +49,11 @@ test('dialog traps focus, closes with Escape, restores focus, and has no serious
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 });
+
+test('production document HTML helper escapes export metadata and executes no hostile markup', async ({ page }) => {
+  await page.goto('/browser-harness.html');
+  const exported = page.frameLocator('[data-testid="document-export"]');
+  await expect(exported.locator('h1')).toContainText('<img src=x onerror=parent.__exportPwned=true> Unicode');
+  await expect(exported.locator('script, img, iframe, svg, foreignObject')).toHaveCount(0);
+  expect(await page.evaluate(() => (globalThis as any).__exportPwned ?? false)).toBe(false);
+});

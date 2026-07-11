@@ -104,6 +104,17 @@ const main = async () => {
     'audit-complete:succeeded',
   ]);
 
+  const auditInputEvents: string[] = [];
+  let auditInput: Parameters<ExportExecutionDependencies<Payload>['createRequiredAudit']>[0] | undefined;
+  const auditInputDependencies = dependencies(auditInputEvents);
+  auditInputDependencies.createRequiredAudit = async input => { auditInput = input; return { id: 'audit-1' }; };
+  await run(auditInputDependencies);
+  assert.deepEqual(auditInput?.inputRefs, {
+    resourceId,
+    version: 'v1',
+    exportType: 'json',
+    pendingArtifact: { artifactId: 'artifact-1', bucket: 'private-exports', path: `${orgId}/artifact-1.json` },
+  });
   const disabledEvents: string[] = [];
   await rejectsWith(() => executeExport({
     request,
@@ -154,6 +165,13 @@ const main = async () => {
   const completionDependencies = dependencies(completionEvents);
   completionDependencies.completeRequiredAudit = async () => { throw new Error('audit failed'); };
   await rejectsWith(() => run(completionDependencies), 'EXPORT_AUDIT_UNAVAILABLE');
+  assert.equal(completionEvents.includes(`remove:${orgId}/artifact-1.json`), true);
+
+  const removalFailureEvents: string[] = [];
+  const removalFailureDependencies = dependencies(removalFailureEvents);
+  removalFailureDependencies.completeRequiredAudit = async () => { throw new Error('audit failed'); };
+  removalFailureDependencies.remove = async () => { throw new Error('provider removal detail'); };
+  await rejectsWith(() => run(removalFailureDependencies), 'EXPORT_AUDIT_UNAVAILABLE');
 
   const supabaseSource = readFileSync('supabase/functions/_shared/supabase.ts', 'utf8');
   assert.doesNotMatch(supabaseSource, /await response\.text\(\)/);

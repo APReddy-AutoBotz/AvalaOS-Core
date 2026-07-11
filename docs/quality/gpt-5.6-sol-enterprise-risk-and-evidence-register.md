@@ -60,7 +60,7 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | P1-007 | Generated workspace success now requires durable save confirmation. | PR 1C still owns atomic Govern/Studio handoff and complete failure-state browser proof. |
 | P1-011 | Minimum AI-audit schema is canonical; isolated fresh and targeted legacy-upgrade paths pass. | Complete runtime schema and two-tenant RLS reproduction remain PR 1B work. |
 | P2-001 / P2-002 | Supplemental critical suites are in the default chain and Edge has an explicit typecheck boundary. | Candidate pending CI and acceptance. |
-| P2-003 | PR-owned source lint, focused coverage, fresh/upgrade/dirty migration gates, and required Chromium desktop/mobile/axe CI are present; six local browser tests pass. | A separate performance budget was not executed or claimed. |
+| P2-003 | PR-owned source lint, focused coverage, fresh/upgrade/dirty migration gates, and required Chromium desktop/mobile/axe CI are present; eight local browser tests pass. | A separate performance budget was not executed or claimed. |
 
 ## Existing Positive Controls
 
@@ -123,16 +123,17 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 | Isolated P0 remediation | Implemented; acceptance pending | Preserved as first logical commit `fa42a0ff78d3f8af448951031a97ed9e6a3c3d1a`; focused P0 tests passed. |
 | Controlled reviewer wave | Partially completed | Security and quality reviews completed read-only; architecture command initialization was environment-blocked by the native Windows ACL helper, so the root controller synthesized architecture findings. All reviewers closed before implementation. |
 | Implementation wave | Completed with root integration | Worker tracks covered runtime, Edge/audit/export, and UI safety. Native helper failures blocked some child edits; root integrated the full candidate. No child permission-probe pass is claimed. |
-| Local PR 1A regression and coverage | Passed | Corrective focused gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; sanitizer, audit, and persistence are covered by their named source, migration, direct, and browser suites rather than included in this percentage. |
+| Local PR 1A regression and coverage | Passed | Corrective focused gates passed. Coverage was 94.90% lines, 93.10% branches, and 92.86% functions for runtime/AI mode, Storage boundary, and export policy/handler only; sanitizer, audit, and persistence are covered by their named source, migration, direct, and browser suites rather than included in this percentage. |
 | Full default/supplemental regression | Passed | `npm test` and `npm run test:required-supplemental` exited 0; deterministic scoring stayed green. |
 | Expanded migration harness | Passed in GitHub CI | Both push and pull-request PostgreSQL jobs passed populated legacy data, dirty-data preflight, cross-authority, duplicate completion, terminal/usage immutability, token consistency, RLS, fresh, reapply, and upgrade assertions. It was not run against a live or hosted application database. |
 | Build, audit, AI boundary, and secret hygiene | Passed | Production build exited 0; dependency audit found 0 vulnerabilities; AI-boundary scan found 0 forbidden/stale hits; secret scan found 0 forbidden hits. |
+| Build-preview Chromium, accessibility, and responsive viewports | Passed locally | The production bundle was created with `vite build` and served with `vite preview`; eight deterministic Playwright checks passed across Chromium desktop and mobile. The principal login/runtime path exposed no demo authority, the production document-HTML helper escaped hostile export metadata without script/event execution, the component sanitizer harness removed hostile Markdown/SVG, rejected persistence did not commit success, dialog focus/keyboard behavior passed, and axe reported no serious/critical findings. This is narrow PR-owned browser evidence, not full product E2E or live-system proof. |
+| Storage compensation fetch contract | Passed locally; source-only | Deterministic fetch-level tests verify `DELETE /storage/v1/object/{encodedBucket}`, the exact validated tenant path in `prefixes`, JSON content type, service authorization-header presence without values, redirect rejection, path rejection, documented success/missing responses, and sanitized non-2xx/malformed-response failure. No live Storage or Edge invocation occurred. |
 
 ## Blocked Or Not Run
 
 | Check/action | Status | Reason |
 | --- | --- | --- |
-| Chromium E2E, accessibility, and responsive viewports | Passed locally and in both GitHub workflows | Official repository-local Playwright Chromium ran six deterministic tests across desktop and mobile: server-configured `local_demo` denied demo personas/credentials, hostile Markdown/SVG was removed, rejected persistence did not commit success, dialog focus/keyboard behavior passed, and axe reported no serious/critical findings. No live endpoint was used. |
 | Browser performance budget | Not run | No repository-owned PR 1A performance budget was defined; no performance pass is claimed. |
 | Live deployment, environment, hosted database/RLS, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision was recorded without repository-side live access. |
 | Implementation-worker runtime permission probe | Not run | The implementation wave was not used as a sandbox experiment; no write-capability result is inferred. |

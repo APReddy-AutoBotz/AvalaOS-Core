@@ -17,7 +17,7 @@ export default defineConfig({
     { name: 'chromium-mobile', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     env: {
@@ -26,6 +26,7 @@ export default defineConfig({
       VITE_SUPABASE_URL: 'http://127.0.0.1:59999',
       VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
       VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
+      PR1A_BROWSER_TEST_BUILD: 'true',
     },
   },
 });
