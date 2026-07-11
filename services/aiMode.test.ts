@@ -79,4 +79,13 @@ for (const [mode, isAutomatedTestContext] of [
   }
 }
 
+for (const mode of ['local_demo', 'automated_test'] as const) {
+  const resolution = resolveAiMode({ configuredMode: mode, isAutomatedTestContext: mode === 'automated_test' });
+  const policy = getAiExecutionPolicy({ modeResolution: resolution, edgeEnabled: false, dataAccess: 'server' });
+  assert.equal(policy.status, 'blocked');
+  if (policy.status === 'blocked') {
+    assert.equal(policy.code, 'AI_BOUNDARY_EDGE_REQUIRED');
+    assert.equal(policy.allowBrowserFallback, false);
+  }
+}
 console.log('AI mode boundary regression suite passed.');

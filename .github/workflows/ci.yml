@@ -50,6 +50,23 @@ jobs:
       - name: Production build
         run: npm run build
 
+  pr1a-browser:
+    name: PR 1A Chromium, accessibility, and viewport gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install official Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic desktop and mobile browser gates
+        run: npm run test:browser
   pr1a-migrations:
     name: PR 1A Migration Gates
     runs-on: ubuntu-latest

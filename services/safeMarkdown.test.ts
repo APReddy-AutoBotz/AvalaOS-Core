@@ -46,13 +46,14 @@ for (const sink of [
 }
 
 const sanitizerSource = readFileSync('services/safeMarkdown.ts', 'utf8');
-assert.match(sanitizerSource, /removedWithContent/);
-assert.match(sanitizerSource, /childElement\.removeAttribute/);
+assert.match(sanitizerSource, /import DOMPurify from 'dompurify'/);
+assert.match(sanitizerSource, /DOMPurify\.sanitize/);
 assert.match(sanitizerSource, /isSafeMarkdownHref/);
-assert.match(sanitizerSource, /DOMParser/);
+assert.match(sanitizerSource, /sanitizeMermaidSvg/);
 
 const mermaidSource = readFileSync('components/shared/MermaidRenderer.tsx', 'utf8');
 assert.match(mermaidSource, /securityLevel:\s*'strict'/);
 assert.match(mermaidSource, /htmlLabels:\s*false/);
+assert.match(mermaidSource, /sanitizeMermaidSvg\(renderedSvg\)/);
 
 console.log('Unsafe rendering regression suite passed.');

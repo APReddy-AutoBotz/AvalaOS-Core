@@ -9,8 +9,8 @@ PR 1A reconciles the minimum canonical AI audit contract required for fail-close
 The migration:
 
 - creates or reconciles `ai_generation_jobs` and `ai_usage_events` with organization, user, operation, provider, model, lifecycle, request, token, cost, timestamp, and sanitized error fields required by the current Edge audit helpers;
-- adds validated value and non-negative constraints plus supporting indexes;
-- enforces allowed AI-job lifecycle transitions with a trigger;
+- adds validated value, exact token-total, and organization/user/job relationship constraints plus supporting indexes;
+- enforces running-only completion, immutable terminal AI jobs, and immutable usage events with triggers;
 - removes legacy browser policies from the two privileged audit tables; and
 - enables and forces RLS while intentionally adding no browser policies, so browser access remains fail closed.
 
@@ -20,13 +20,15 @@ The migration:
 
 1. fresh application of the complete canonical migration chain;
 2. idempotent reapplication of the PR 1A migration;
-3. upgrade from the committed targeted legacy AI-audit fixture;
-4. RLS enabled and forced with no browser policies;
-5. validated constraints and required indexes;
-6. invalid lifecycle transition rejection; and
-7. invalid negative-token rejection.
+3. upgrade from a populated committed legacy AI-audit fixture;
+4. explicit dirty-data preflight failure without inventing tenant or actor authority;
+5. RLS enabled and forced with no browser policies;
+6. validated constraints and required indexes;
+7. cross-organization/user usage-to-job rejection;
+8. duplicate/concurrent completion detection and terminal/usage immutability; and
+9. invalid and inconsistent token rejection.
 
-The final fresh and supported-upgrade paths passed. The harness removes its temporary databases and container. It does not touch an existing application database and is not hosted or production evidence.
+The earlier fresh and supported-upgrade harness passed. The expanded corrective harness is committed for the PR PostgreSQL CI job; it was not rerun locally because no disposable PostgreSQL connection was configured. The harness removes only databases it creates. It does not touch an existing application database and is not hosted or production evidence.
 
 ## Rollback
 

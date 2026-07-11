@@ -2,6 +2,7 @@ import {
   RUNTIME_BOUNDARY_USER_MESSAGE,
   RuntimeBoundaryError,
   RuntimeMode,
+  RuntimeDataAccess,
   resolveRuntimeMode,
 } from './runtimeMode';
 
@@ -94,9 +95,11 @@ export const resolveAiMode = ({
 export const getAiExecutionPolicy = ({
   modeResolution,
   edgeEnabled,
+  dataAccess,
 }: {
   modeResolution: AiModeResolution;
   edgeEnabled: boolean;
+  dataAccess?: RuntimeDataAccess;
 }): AiExecutionPolicy => {
   if (modeResolution.status === 'blocked') {
     return {
@@ -124,7 +127,7 @@ export const getAiExecutionPolicy = ({
     };
   }
 
-  if (mode === 'pilot' || mode === 'production') {
+  if (mode === 'pilot' || mode === 'production' || dataAccess === 'server') {
     return {
       status: 'blocked',
       mode,

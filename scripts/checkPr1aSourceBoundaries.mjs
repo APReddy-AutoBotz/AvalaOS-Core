@@ -5,7 +5,7 @@ const read = path => fs.readFileSync(path, 'utf8');
 
 const supabaseClient = read('services/supabaseClient.ts');
 assert.match(supabaseClient, /VITE_AVALA_RUNTIME_MODE/);
-assert.match(supabaseClient, /resolveRuntimeDataAccess/);
+assert.match(supabaseClient, /resolveRuntimeAuthority/);
 assert.doesNotMatch(supabaseClient, /Missing Supabase configuration.*mock/i);
 
 const aiMode = read('services/aiMode.ts');
@@ -35,7 +35,7 @@ assert.doesNotMatch(app, /VITE_AVALA_AI_MODE/);
 
 const storage = read('supabase/functions/_shared/storage.ts');
 assert.doesNotMatch(storage, /Deno\.env\.get\('EXPORTS_BUCKET'\)|klarity-exports/);
-assert.match(storage, /assertTenantStoragePath\(input\.orgId, path\)/);
+assert.match(storage, /assertTenantStoragePath\(input\.orgId, input\.artifact\.path\)/);
 
 const postgrest = read('supabase/functions/_shared/supabase.ts');
 assert.doesNotMatch(postgrest, /await response\.text\(\)/);
@@ -58,5 +58,10 @@ for (const sink of [
   assert.match(source, /renderSafeMarkdown/);
   assert.doesNotMatch(source, /marked\.parse/);
 }
+
+const sanitizer = read('services/safeMarkdown.ts');
+assert.match(sanitizer, /DOMPurify\.sanitize/);
+const mermaid = read('components/shared/MermaidRenderer.tsx');
+assert.match(mermaid, /sanitizeMermaidSvg\(renderedSvg\)/);
 
 console.log('PR 1A fail-closed source boundary lint passed.');

@@ -4,6 +4,7 @@ import {
   RUNTIME_BOUNDARY_USER_MESSAGE,
   RUNTIME_MODES,
   RuntimeBoundaryError,
+  resolveRuntimeAuthority,
   resolveRuntimeDataAccess,
   resolveRuntimeMode,
 } from './runtimeMode';
@@ -66,6 +67,27 @@ if (uncontrolledTestMode.status === 'blocked') {
   );
 }
 
+for (const mode of RUNTIME_MODES) {
+  for (const serverConfigured of [false, true]) {
+    const resolution = resolveRuntimeMode({
+      configuredMode: mode,
+      isAutomatedTestContext: mode === 'automated_test',
+    });
+    const shouldResolve = serverConfigured || mode === 'local_demo' || mode === 'automated_test';
+    if (!shouldResolve) {
+      assert.throws(
+        () => resolveRuntimeAuthority({ modeResolution: resolution, serverConfigured }),
+        (error: unknown) => error instanceof RuntimeBoundaryError && error.code === 'RUNTIME_SERVER_CONFIGURATION_REQUIRED',
+      );
+      continue;
+    }
+    const authority = resolveRuntimeAuthority({ modeResolution: resolution, serverConfigured });
+    assert.equal(authority.mode, mode);
+    assert.equal(authority.dataAccess, serverConfigured ? 'server' : 'local');
+    assert.equal(authority.allowLocalAuthority, !serverConfigured);
+    assert.equal(authority.requiresServerAuthority, serverConfigured);
+  }
+}
 const localDemo = resolveRuntimeMode({
   configuredMode: 'local_demo',
   isAutomatedTestContext: false,

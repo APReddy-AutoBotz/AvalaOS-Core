@@ -19,10 +19,7 @@ export type ExportArtifact = {
 
 export type ExportExecutionDependencies<T> = {
   authenticate: () => Promise<AuthenticatedUser>;
-  loadAuthority: (
-    userId: string,
-    request: ParsedExportRequest,
-  ) => Promise<ExportAuthoritySnapshot<T>>;
+  loadAuthority: (userId: string, request: ParsedExportRequest) => Promise<ExportAuthoritySnapshot<T>>;
   createRequiredAudit: (input: {
     orgId: string;
     userId: string;
@@ -36,14 +33,19 @@ export type ExportExecutionDependencies<T> = {
     errorMessage?: string,
   ) => Promise<void>;
   render: (resource: T, format: ParsedExportRequest['exportType']) => string;
-  upload: (input: {
+  prepareArtifact: (input: {
     orgId: string;
     bucket: string;
     artifactType: string;
     extension: string;
+  }) => ExportArtifact;
+  upload: (input: {
+    artifact: ExportArtifact;
+    orgId: string;
     contentType: string;
     content: string;
   }) => Promise<ExportArtifact>;
+  remove: (artifact: ExportArtifact, orgId: string) => Promise<void>;
 };
 
 export type ExecuteExportInput<T> = {
@@ -76,6 +78,13 @@ export const executeExport = async <T>(input: ExecuteExportInput<T>) => {
   }
 
   const resource = assertExportAuthorized(request, snapshot, input.allowedStatuses);
+  const isJson = request.exportType === 'json';
+  const artifact = dependencies.prepareArtifact({
+    orgId: snapshot.requestedOrganizationId,
+    bucket,
+    artifactType: input.artifactType,
+    extension: isJson ? 'json' : 'md',
+  });
 
   let auditJob: AuditJob;
   try {
@@ -87,32 +96,24 @@ export const executeExport = async <T>(input: ExecuteExportInput<T>) => {
         resourceId: request.resourceId,
         version: request.version,
         exportType: request.exportType,
+        pendingArtifact: artifact,
       },
     });
   } catch {
     return exportError('EXPORT_AUDIT_UNAVAILABLE');
   }
 
-  const isJson = request.exportType === 'json';
-  let artifact: ExportArtifact;
   try {
     const content = dependencies.render(resource.payload, request.exportType);
-    artifact = await dependencies.upload({
+    await dependencies.upload({
+      artifact,
       orgId: snapshot.requestedOrganizationId,
-      bucket,
-      artifactType: input.artifactType,
-      extension: isJson ? 'json' : 'md',
       contentType: isJson ? 'application/json' : 'text/markdown',
       content,
     });
   } catch {
     try {
-      await dependencies.completeRequiredAudit(
-        auditJob.id,
-        'failed',
-        {},
-        'EXPORT_FAILED',
-      );
+      await dependencies.completeRequiredAudit(auditJob.id, 'failed', { pendingArtifact: artifact }, 'EXPORT_FAILED');
     } catch {
       return exportError('EXPORT_AUDIT_UNAVAILABLE');
     }
@@ -129,6 +130,11 @@ export const executeExport = async <T>(input: ExecuteExportInput<T>) => {
       exportType: request.exportType,
     });
   } catch {
+    try {
+      await dependencies.remove(artifact, snapshot.requestedOrganizationId);
+    } catch {
+      // The running audit row contains pendingArtifact for durable operator recovery.
+    }
     return exportError('EXPORT_AUDIT_UNAVAILABLE');
   }
 

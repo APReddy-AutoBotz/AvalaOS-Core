@@ -42,4 +42,6 @@ for (const runtimeColumn of [
   assert.equal(auditSource.includes(runtimeColumn), true, `Audit runtime does not reference canonical column: ${runtimeColumn}`);
 }
 
+assert.doesNotMatch(source, /^DO \$$/m, 'SQL dollar quotes must not be truncated.');
+assert.equal((source.match(/\$\$/g) || []).length % 2, 0, 'SQL dollar quotes must be balanced.');
 console.log(`PR 1A canonical migration contract passed across ${migrations.length} ordered migrations.`);

@@ -92,7 +92,7 @@ Deliver:
 
 Acceptance: P0 disposition recorded; negative security tests pass; pilot/production cannot silently use demo authority; directly affected checks run in CI; no score behavior changes.
 
-Current draft status: the implementation candidate and local source/migration gates are complete. Browser E2E, accessibility, responsive-state, and performance execution are blocked because the managed environment denied installation of the missing Playwright CLI; no browser pass is claimed. GitHub CI and review remain acceptance gates.
+Current draft status: the corrected implementation candidate has local source, regression, coverage, build, and deterministic Chromium browser/axe/desktop/mobile evidence. The expanded populated fresh/upgrade/dirty-data migration harness requires the PR PostgreSQL CI job because no disposable local database was configured. GitHub CI and review remain acceptance gates; no performance, hosted, deployment, or live-system pass is claimed.
 
 Rollback: keep vulnerable endpoints disabled; revert non-security runtime refactors if necessary; never restore service-role URL construction or production fail-open behavior.
 

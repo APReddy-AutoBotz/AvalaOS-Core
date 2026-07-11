@@ -101,10 +101,14 @@ export const insertRow = async <T>(table: string, row: Record<string, unknown>):
   return result?.[0] || null;
 };
 
-export const updateRow = async <T>(table: string, id: string, patch: Record<string, unknown>): Promise<T | null> => {
-  const result = await postgrest<T[]>(`${table}?id=eq.${encodeURIComponent(id)}`, {
+export const updateRows = async <T>(
+  table: string,
+  filters: Record<string, string>,
+  patch: Record<string, unknown>,
+): Promise<T[]> => {
+  const query = new URLSearchParams(filters).toString();
+  return postgrest<T[]>(`${table}?${query}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
-  return result?.[0] || null;
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { persistBeforeCommit } from './services/persistenceTransition';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
 import ModuleJourney from './components/shared/ModuleJourney';
@@ -1007,11 +1008,15 @@ function App() {
                 templateId: projectDetails.templateId,
                 artifacts,
               };
-              const saved = await deliverySaveGeneration(newGeneration);
-              setActiveGenerationId(saved.id);
-              setTempArtifacts(null);
-              setAssessToStudioSourceContext(null);
-              applyGuardedView(View.WORKSPACE);
+              await persistBeforeCommit<DocumentGeneration>(
+                () => deliverySaveGeneration(newGeneration),
+                saved => {
+                  setActiveGenerationId(saved.id);
+                  setTempArtifacts(null);
+                  setAssessToStudioSourceContext(null);
+                  applyGuardedView(View.WORKSPACE);
+                },
+              );
             } catch (error) {
               surfaceDeliveryError(error);
             }

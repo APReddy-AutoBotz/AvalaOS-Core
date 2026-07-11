@@ -61,7 +61,7 @@
     "test:edge-export-security": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/storageBoundary.ts supabase/functions/_shared/exportPolicy.ts supabase/functions/_shared/exportPolicy.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/storageBoundary.ts supabase/functions/_shared/exportPolicy.ts supabase/functions/_shared/exportHandler.ts supabase/functions/_shared/exportHandler.test.ts",
     "test:privileged-audit": "node scripts/runTypeScriptTest.mjs types.ts supabase/functions/_shared/auditBoundary.test.ts",
     "test:unsafe-rendering": "node scripts/runTypeScriptTest.mjs types.ts services/safeMarkdown.ts services/safeMarkdown.test.ts",
-    "test:false-success": "node scripts/runTypeScriptTest.mjs types.ts services/falseSuccess.test.ts",
+    "test:false-success": "node scripts/runTypeScriptTest.mjs types.ts services/falseSuccess.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/persistenceTransition.ts services/persistenceTransition.test.ts",
     "test:migration-contract": "node scripts/checkPr1aMigrationContract.mjs",
     "test:pr1a-coverage": "node scripts/runPr1aCoverage.mjs",
     "test:product-action-policy": "node scripts/runTypeScriptTest.mjs types.ts services/productActionPolicy.ts services/productActionPolicy.test.ts",
@@ -70,14 +70,19 @@
     "test:artifact-export-helper-guards": "node scripts/runTypeScriptTest.mjs types.ts services/artifactExportPolicy.ts services/artifactExportHelperGuards.test.ts",
     "test:required-supplemental": "npm run test:evidence-execution-gate && npm run test:product-action-policy && npm run test:delivery-workflow-policy && npm run test:artifact-export-policy && npm run test:artifact-export-helper-guards",
     "test:pr1a": "npm run lint:pr1a && npm run test:runtime-mode && npm run test:ai-boundary && npm run test:p0-storage-boundary && npm run test:edge-export-security && npm run test:privileged-audit && npm run test:unsafe-rendering && npm run test:false-success && npm run test:migration-contract && npm run test:pr1a-coverage",
-    "test:migrations:pr1a": "node scripts/testPr1aMigrations.mjs"
+    "test:migrations:pr1a": "node scripts/testPr1aMigrations.mjs",
+    "test:browser": "playwright test",
+    "test:browser:install": "playwright install chromium"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
+    "dompurify": "^3.4.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",

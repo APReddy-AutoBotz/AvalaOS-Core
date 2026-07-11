@@ -10,7 +10,7 @@ import {
 import { renderGeneratedDocumentMarkdown } from '../_shared/export.ts';
 import { handleOptions, jsonResponse } from '../_shared/http.ts';
 import { getAuthUser } from '../_shared/supabase.ts';
-import { uploadTextArtifact } from '../_shared/storage.ts';
+import { prepareTextArtifact, removeTextArtifact, uploadTextArtifact } from '../_shared/storage.ts';
 
 const DOCUMENT_EXPORT_STATUSES = ['generated', 'draft'] as const;
 
@@ -45,7 +45,9 @@ Deno.serve(async (request) => {
         render: (row, format) => format === 'json'
           ? JSON.stringify(row, null, 2)
           : renderGeneratedDocumentMarkdown(row),
+        prepareArtifact: prepareTextArtifact,
         upload: uploadTextArtifact,
+        remove: removeTextArtifact,
       },
     });
 

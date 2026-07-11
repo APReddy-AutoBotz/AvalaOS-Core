@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { sanitizeMermaidSvg } from '../../services/safeMarkdown';
 
 // Make mermaid available globally for the script to use
 declare global {
@@ -64,7 +65,7 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ code, id }) => {
         const renderId = `mermaid-svg-${id}-${Math.random().toString(36).slice(2)}`;
         
         const { svg: renderedSvg } = await window.mermaid.render(renderId, code);
-        setSvg(renderedSvg);
+        setSvg(sanitizeMermaidSvg(renderedSvg));
         setError(null);
       } catch (e: any) {
         console.error(`Mermaid rendering error for ID ${id}:`, e);

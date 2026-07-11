@@ -1,6 +1,7 @@
 import { getAiProvider, getAiProviderApiKey } from './geminiService';
 import { aiEdgeClient, isAiEdgeEnabled } from './aiEdgeClient';
 import { getAiExecutionPolicy, resolveAiMode } from './aiMode';
+import { getRuntimeDataAccess } from './supabaseClient';
 import { AiProviderType, ProjectDetails, GeneratedArtifacts } from '../types';
 
 const providerLabel: Record<AiProviderType, string> = {
@@ -55,6 +56,7 @@ const getCurrentAiExecutionPolicy = () =>
         import.meta.env.VITE_AVALA_AUTOMATED_TEST_CONTEXT === 'true',
     }),
     edgeEnabled: isAiEdgeEnabled(),
+    dataAccess: getRuntimeDataAccess(),
   });
 
 export const aiOrchestrator = {

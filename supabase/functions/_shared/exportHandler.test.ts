@@ -53,13 +53,20 @@ const dependencies = (events: string[]): ExportExecutionDependencies<Payload> =>
   completeRequiredAudit: async (_jobId, status) => {
     events.push(`audit-complete:${status}`);
   },
+  prepareArtifact: input => {
+    events.push(`prepare:${input.bucket}`);
+    return { artifactId: 'artifact-1', bucket: input.bucket, path: `${input.orgId}/artifact-1.json` };
+  },
   render: payload => {
     events.push(`render:${payload.title}`);
     return JSON.stringify(payload);
   },
   upload: async input => {
-    events.push(`upload:${input.bucket}`);
-    return { artifactId: 'artifact-1', bucket: input.bucket, path: `${input.orgId}/artifact-1.json` };
+    events.push(`upload:${input.artifact.bucket}`);
+    return input.artifact;
+  },
+  remove: async artifact => {
+    events.push(`remove:${artifact.path}`);
   },
 });
 
@@ -90,6 +97,7 @@ const main = async () => {
   assert.deepEqual(events, [
     'authenticate',
     'load-authority',
+    'prepare:private-exports',
     `audit-create:${orgId}:${userId}`,
     'render:Authoritative',
     'upload:private-exports',

@@ -45,6 +45,13 @@ export type RuntimeModeResolution =
 
 export type RuntimeDataAccess = 'local' | 'server';
 
+export type RuntimeAuthorityResolution = {
+  mode: RuntimeMode;
+  dataAccess: RuntimeDataAccess;
+  allowLocalAuthority: boolean;
+  requiresServerAuthority: boolean;
+};
+
 export const isRuntimeMode = (value: string): value is RuntimeMode =>
   RUNTIME_MODES.includes(value as RuntimeMode);
 
@@ -122,4 +129,21 @@ export const resolveRuntimeDataAccess = ({
   }
 
   throw new RuntimeBoundaryError('RUNTIME_SERVER_CONFIGURATION_REQUIRED');
+};
+
+export const resolveRuntimeAuthority = ({
+  modeResolution,
+  serverConfigured,
+}: {
+  modeResolution: RuntimeModeResolution;
+  serverConfigured: boolean;
+}): RuntimeAuthorityResolution => {
+  const dataAccess = resolveRuntimeDataAccess({ modeResolution, serverConfigured });
+  if (modeResolution.status === 'blocked') throw modeResolution.error;
+  return {
+    mode: modeResolution.mode,
+    dataAccess,
+    allowLocalAuthority: dataAccess === 'local',
+    requiresServerAuthority: dataAccess === 'server',
+  };
 };

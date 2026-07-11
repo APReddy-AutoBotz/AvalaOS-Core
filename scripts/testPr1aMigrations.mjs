@@ -13,6 +13,7 @@ if (!adminConnection) {
 const databaseNames = {
   fresh: 'avalaos_pr1a_fresh_test',
   upgrade: 'avalaos_pr1a_upgrade_test',
+  dirty: 'avalaos_pr1a_dirty_test',
 };
 const createdDatabases = [];
 const createdRoles = [];
@@ -75,6 +76,15 @@ const bootstrapSupabaseAuthority = async client => runSql(client, 'Supabase auth
   CREATE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS 'SELECT NULL::uuid';
 `);
 
+const seedPopulatedLegacyAudit = async client => {
+  const actorId = '66666666-6666-4666-8666-666666666666';
+  const orgId = '77777777-7777-4777-8777-777777777777';
+  await client.query('INSERT INTO auth.users (id) VALUES ($1)', [actorId]);
+  await client.query(`INSERT INTO public.profiles (id, email) VALUES ($1, 'legacy-populated@example.invalid')`, [actorId]);
+  await client.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, 'Legacy Populated', 'legacy-populated')`, [orgId]);
+  const job = await client.query(`INSERT INTO public.ai_generation_jobs (org_id, user_id, job_type, status, input_refs, output_ref, started_at) VALUES ($1, $2, 'generate_document', 'running', '{}'::jsonb, '{}'::jsonb, NOW()) RETURNING id`, [orgId, actorId]);
+  await client.query(`INSERT INTO public.ai_usage_events (org_id, user_id, job_id, provider, input_tokens, output_tokens, total_tokens, metadata) VALUES ($1, $2, $3, 'test', 1, 2, 3, '{}'::jsonb)`, [orgId, actorId, job.rows[0].id]);
+};
 const assertPr1aSchema = async client => {
   const relationResult = await client.query(`
     SELECT relname, relrowsecurity, relforcerowsecurity
@@ -102,7 +112,7 @@ const assertPr1aSchema = async client => {
       AND conname LIKE 'pr1a_%'
     ORDER BY conname
   `);
-  assert.equal(constraintResult.rows.length, 6);
+  assert.equal(constraintResult.rows.length, 8);
   assert.equal(constraintResult.rows.every(row => row.convalidated), true);
 
   const triggerResult = await client.query(`
@@ -140,7 +150,7 @@ const assertPr1aSchema = async client => {
 
   await assert.rejects(
     client.query(`UPDATE public.ai_generation_jobs SET status = 'running', completed_at = NULL WHERE id = $1`, [jobId]),
-    /Terminal AI audit jobs cannot transition/,
+    /Terminal AI audit jobs are immutable/,
   );
   await assert.rejects(
     client.query(`
@@ -149,6 +159,31 @@ const assertPr1aSchema = async client => {
       ) VALUES ($1, $2, 'test', -1, 0, 0)
     `, [orgId, actorId]),
     /pr1a_ai_usage_events_required_check/,
+  );
+
+  await assert.rejects(
+    client.query(`UPDATE public.ai_generation_jobs SET output_ref = '{"artifact":"tampered"}'::jsonb WHERE id = $1`, [jobId]),
+    /Terminal AI audit jobs are immutable/,
+  );
+  const duplicateCompletion = await client.query(`UPDATE public.ai_generation_jobs SET status = 'succeeded', completed_at = NOW() WHERE id = $1 AND status = 'running' RETURNING id`, [jobId]);
+  assert.equal(duplicateCompletion.rowCount, 0);
+  await assert.rejects(
+    client.query(`INSERT INTO public.ai_usage_events (org_id, user_id, job_id, provider, input_tokens, output_tokens, total_tokens) VALUES ($1, $2, $3, 'test', 2, 3, 4)`, [orgId, actorId, jobId]),
+    /pr1a_ai_usage_events_required_check/,
+  );
+  const usage = await client.query(`INSERT INTO public.ai_usage_events (org_id, user_id, job_id, provider, input_tokens, output_tokens, total_tokens) VALUES ($1, $2, $3, 'test', 2, 3, 5) RETURNING id`, [orgId, actorId, jobId]);
+  await assert.rejects(
+    client.query(`UPDATE public.ai_usage_events SET total_tokens = 6 WHERE id = $1`, [usage.rows[0].id]),
+    /AI usage audit events are immutable/,
+  );
+  const otherActorId = '33333333-3333-4333-8333-333333333333';
+  const otherOrgId = '44444444-4444-4444-8444-444444444444';
+  await client.query('INSERT INTO auth.users (id) VALUES ($1) ON CONFLICT DO NOTHING', [otherActorId]);
+  await client.query(`INSERT INTO public.profiles (id, email) VALUES ($1, 'migration-other@example.invalid') ON CONFLICT DO NOTHING`, [otherActorId]);
+  await client.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, 'Migration Other', 'migration-other') ON CONFLICT DO NOTHING`, [otherOrgId]);
+  await assert.rejects(
+    client.query(`INSERT INTO public.ai_usage_events (org_id, user_id, job_id, provider, input_tokens, output_tokens, total_tokens) VALUES ($1, $2, $3, 'test', 0, 0, 0)`, [otherOrgId, otherActorId, jobId]),
+    /pr1a_ai_usage_events_job_authority_fkey/,
   );
 };
 
@@ -179,6 +214,7 @@ const main = async () => {
     await ensureSupabaseRoles(admin);
     await createDatabase(admin, databaseNames.fresh);
     await createDatabase(admin, databaseNames.upgrade);
+    await createDatabase(admin, databaseNames.dirty);
 
     const fresh = await connect(databaseConnection(databaseNames.fresh));
     try {
@@ -191,11 +227,25 @@ const main = async () => {
       await fresh.end();
     }
 
+    const dirty = await connect(databaseConnection(databaseNames.dirty));
+    try {
+      await bootstrapSupabaseAuthority(dirty);
+      await applyMigrations(dirty, baselineMigrations);
+      await runSql(dirty, 'legacy AI audit fixture', legacyFixture);
+      const dirtyOrgId = '55555555-5555-4555-8555-555555555555';
+      await dirty.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, 'Dirty Migration', 'dirty-migration')`, [dirtyOrgId]);
+      await dirty.query(`INSERT INTO public.ai_generation_jobs (org_id, user_id, job_type, status) VALUES ($1, NULL, 'other', 'queued')`, [dirtyOrgId]);
+      await assert.rejects(applyMigrations(dirty, [pr1aMigration]), /PR1A_PREFLIGHT_AI_JOBS_REQUIRED_FIELDS/);
+      console.log('Dirty legacy-data preflight failure scenario passed without inventing authority.');
+    } finally {
+      await dirty.end();
+    }
     const upgrade = await connect(databaseConnection(databaseNames.upgrade));
     try {
       await bootstrapSupabaseAuthority(upgrade);
       await applyMigrations(upgrade, baselineMigrations);
       await runSql(upgrade, 'legacy AI audit fixture', legacyFixture);
+      await seedPopulatedLegacyAudit(upgrade);
       await applyMigrations(upgrade, [pr1aMigration]);
       await applyMigrations(upgrade, [pr1aMigration]);
       await assertPr1aSchema(upgrade);

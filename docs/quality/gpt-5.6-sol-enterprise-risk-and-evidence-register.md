@@ -55,12 +55,12 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | --- | --- | --- |
 | P1-001 / P1-002 | Runtime modes fail closed and authenticated users no longer inherit demo role/permissions by email. | PR 1B still owns server roles, workspace authority, revocation, and two-tenant proof. |
 | P1-003 | Edge export handlers validate strict schemas, requested organization, membership, workspace, `docs.export`, resource state, and version before privileged access. | Later artifact work still owns the complete artifact lifecycle, evidence, lineage, retention, and deployed proof. |
-| P1-004 | Three validated unsafe-rendering sinks use structural sanitization; malicious-markup source tests pass. | Browser E2E/accessibility execution was blocked and is not claimed. |
-| P1-005 | Required AI job and usage audit writes fail closed; only supplemental telemetry is best effort. | Transactional coverage across future PR 1B commands remains later work. |
+| P1-004 | Markdown sinks use DOMPurify, Mermaid SVG is sanitized, and export/print titles are escaped; adversarial Chromium tests pass on desktop and mobile. | This is bounded rendering evidence, not a general product-security or hosted-runtime claim. |
+| P1-005 | The unused caller-controlled usage endpoint is removed; job completion is running-only; terminal jobs and usage rows are immutable; usage/job authority is database-linked; export audit failure triggers compensation with a durable pending-artifact recovery reference. | Transactional coverage across future PR 1B commands remains later work. |
 | P1-007 | Generated workspace success now requires durable save confirmation. | PR 1C still owns atomic Govern/Studio handoff and complete failure-state browser proof. |
 | P1-011 | Minimum AI-audit schema is canonical; isolated fresh and targeted legacy-upgrade paths pass. | Complete runtime schema and two-tenant RLS reproduction remain PR 1B work. |
 | P2-001 / P2-002 | Supplemental critical suites are in the default chain and Edge has an explicit typecheck boundary. | Candidate pending CI and acceptance. |
-| P2-003 | PR-owned source lint, coverage, and fresh/upgrade migration gates are present. | Browser E2E, accessibility, responsive-state, and performance execution remain blocked. |
+| P2-003 | PR-owned source lint, focused coverage, fresh/upgrade/dirty migration gates, and required Chromium desktop/mobile/axe CI are present; six local browser tests pass. | A separate performance budget was not executed or claimed. |
 
 ## Existing Positive Controls
 
@@ -74,7 +74,7 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | Check | Result | Exact signal |
 | --- | --- | --- |
 | Baseline and repository preflight | Passed | Clean `main`; local `HEAD`, `main`, local `origin/main`, and remote `main` all `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`; private repository `APReddy-AutoBotz/AvalaOS-Core`; zero open PRs before branching. |
-| `npm ci` | Passed | 192 packages installed; 193 packages audited; zero vulnerabilities. |
+| `npm ci` | Passed | 200 packages installed; 201 packages audited; zero vulnerabilities. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run typecheck` | Passed | `tsc --noEmit` exit 0; does not cover `supabase/` because of the recorded exclusion. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns; 734 allowed classified hits; zero forbidden hits; zero stale allowlist entries. |
@@ -123,19 +123,20 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 | Isolated P0 remediation | Implemented; acceptance pending | Preserved as first logical commit `fa42a0ff78d3f8af448951031a97ed9e6a3c3d1a`; focused P0 tests passed. |
 | Controlled reviewer wave | Partially completed | Security and quality reviews completed read-only; architecture command initialization was environment-blocked by the native Windows ACL helper, so the root controller synthesized architecture findings. All reviewers closed before implementation. |
 | Implementation wave | Completed with root integration | Worker tracks covered runtime, Edge/audit/export, and UI safety. Native helper failures blocked some child edits; root integrated the full candidate. No child permission-probe pass is claimed. |
-| Local PR 1A regression and coverage | Passed | `npm run test:pr1a` passed; owned-module coverage was 95.98% lines, 93.33% branches, and 95.00% functions. |
+| Local PR 1A regression and coverage | Passed | Corrective focused gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; sanitizer, audit, and persistence are covered by their named source, migration, direct, and browser suites rather than included in this percentage. |
 | Full default/supplemental regression | Passed | `npm test` and `npm run test:required-supplemental` exited 0; deterministic scoring stayed green. |
-| Fresh and supported-upgrade migration harness | Passed | Disposable PostgreSQL 15 fresh chain, reapply, targeted legacy upgrade, RLS/constraint/index, transition, and invalid-token assertions passed. |
+| Expanded migration harness | Planned GitHub execution | Earlier fresh/reapply/legacy-upgrade execution passed. The corrective harness adds populated legacy data, dirty-data preflight, cross-authority, duplicate completion, terminal/usage immutability, token consistency, and RLS assertions; no local database variable was configured, so the changed harness is not claimed passed until PR CI executes it. |
 | Build, audit, AI boundary, and secret hygiene | Passed | Production build exited 0; dependency audit found 0 vulnerabilities; AI-boundary scan found 0 forbidden/stale hits; secret scan found 0 forbidden hits. |
 
 ## Blocked Or Not Run
 
 | Check/action | Status | Reason |
 | --- | --- | --- |
-| Browser E2E, accessibility, responsive-state, and performance | Blocked | No executable Playwright CLI was available in the repository and the managed approval service denied the required third-party package download. No browser ran and no pass is claimed. |
+| Chromium E2E, accessibility, and responsive viewports | Passed locally | Official repository-local Playwright Chromium ran six deterministic tests across desktop and mobile: server-configured `local_demo` denied demo personas/credentials, hostile Markdown/SVG was removed, rejected persistence did not commit success, dialog focus/keyboard behavior passed, and axe reported no serious/critical findings. No live endpoint was used. |
+| Browser performance budget | Not run | No repository-owned PR 1A performance budget was defined; no performance pass is claimed. |
 | Live deployment, environment, hosted database/RLS, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision was recorded without repository-side live access. |
 | Implementation-worker runtime permission probe | Not run | The implementation wave was not used as a sandbox experiment; no write-capability result is inferred. |
 
 ## Readiness Decision
 
-PR 1A is an implementation candidate with executed local source, regression, coverage, and isolated migration evidence. P0 deployment classification is **NOT DEPLOYED** based on AP-provided manual inspection, and the source remediation remains pending acceptance. Browser execution is blocked and GitHub CI/review are required before acceptance. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven. PR 1B must not begin until PR 1A is accepted and merged.
+PR 1A is an implementation candidate with executed local source, regression, coverage, and isolated migration evidence. P0 deployment classification is **NOT DEPLOYED** based on AP-provided manual inspection, and the source remediation remains pending acceptance. Deterministic local Chromium execution passed; the expanded migration job and all GitHub CI/review remain required before acceptance. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven. PR 1B must not begin until PR 1A is accepted and merged.

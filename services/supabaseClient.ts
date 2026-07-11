@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   RuntimeBoundaryError,
-  resolveRuntimeDataAccess,
+  resolveRuntimeAuthority,
   resolveRuntimeMode,
 } from './runtimeMode';
 
@@ -27,15 +27,20 @@ export const isSupabaseConfigured = () => serverConfigured;
 
 export const getRuntimeModeResolution = () => runtimeModeResolution;
 
-export const getRuntimeDataAccess = () => resolveRuntimeDataAccess({
+export const getRuntimeAuthority = () => resolveRuntimeAuthority({
   modeResolution: runtimeModeResolution,
   serverConfigured,
 });
 
-export const isLocalRuntimeEnabled = () => (
-  runtimeModeResolution.status === 'resolved' &&
-  runtimeModeResolution.allowLocalAuthority
-);
+export const getRuntimeDataAccess = () => getRuntimeAuthority().dataAccess;
+
+export const isLocalRuntimeEnabled = () => {
+  try {
+    return getRuntimeAuthority().allowLocalAuthority;
+  } catch {
+    return false;
+  }
+};
 
 export const getRuntimeBoundaryError = () => {
   if (runtimeModeResolution.status === 'blocked') return runtimeModeResolution.error;

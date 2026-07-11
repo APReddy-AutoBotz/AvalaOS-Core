@@ -16,15 +16,15 @@ This PR changes platform-safety source, tests, CI, one canonical migration, and 
 
 | Area | Candidate behavior |
 | --- | --- |
-| Runtime modes | Adds exact `local_demo`, `automated_test`, `pilot`, and `production` modes with no implicit mode. Pilot and production require server configuration and reject mock persistence, demo identity authority, and browser AI fallback. |
+| Runtime modes | Adds exact `local_demo`, `automated_test`, `pilot`, and `production` modes with no implicit mode. Server configuration has authority precedence in every mode, so server-configured `local_demo` also rejects demo personas, local persistence, and browser AI fallback. |
 | Identity projection | Removes email-based demo-persona role and permission merging from server-authenticated users. This does not claim completion of PR 1B server RBAC or revocation. |
 | P0 Storage boundary | Derives the extraction bucket from strict server configuration and allowlist membership, validates canonical tenant paths and the Supabase origin, encodes path segments, refuses redirects, and returns stable sanitized failures. |
 | Edge export boundary | Validates exact request schemas, organization/workspace membership, `docs.export`, requested organization binding, resource ownership/status/version, and stable non-disclosing errors before privileged access. Export remains disabled unless explicitly configured. |
-| Privileged audit | Required AI job creation/completion and required usage logging fail closed. Supplemental telemetry remains best effort only where the primary denial or failure stays fail closed. |
-| Unsafe rendering | Routes the three validated Markdown/HTML sinks through a structural allowlist sanitizer and hardens Mermaid with strict security and disabled HTML labels. |
+| Privileged audit | Removes the unused caller-controlled usage endpoint, validates exact token totals, links usage to the same organization/user job, permits completion only from `running`, makes terminal jobs and usage rows immutable, and compensates uploaded export artifacts when final audit completion fails while retaining a durable pending-artifact recovery reference. |
+| Unsafe rendering | Routes Markdown sinks through DOMPurify, sanitizes Mermaid SVG after rendering, escapes Word/print document and template titles, and retains Mermaid strict security with disabled HTML labels. |
 | False success | Requires durable document persistence before entering the generated workspace and exposes persistence failure instead of substituting a transient artifact. |
 | Migration authority | Adds the minimum canonical AI job/usage audit schema required by PR 1A, enables and forces RLS with no browser policies, validates constraints, and rejects invalid lifecycle transitions and negative token counts. |
-| CI ownership | Adds Edge-compatible TypeScript validation, PR 1A source guards, focused regression suites, changed-critical-module coverage, and fresh/upgrade migration execution. The default test chain now includes the previously omitted evidence, product-action, workflow, artifact, and helper-guard suites. |
+| CI ownership | Adds Edge-compatible TypeScript validation, PR 1A source guards, focused regression suites, narrowly scoped critical-module coverage, fresh/upgrade/dirty migration execution, and a required Playwright Chromium desktop/mobile/axe job. The default test chain now includes the previously omitted evidence, product-action, workflow, artifact, and helper-guard suites. |
 
 ## Controlled Review And Implementation Waves
 
@@ -39,10 +39,10 @@ This PR changes platform-safety source, tests, CI, one canonical migration, and 
 | `npm run typecheck` | Passed | Browser/application TypeScript exited 0. |
 | `npm run typecheck:edge` | Passed | Edge source and shared boundary types exited 0. |
 | `npm run lint:pr1a` | Passed | PR 1A source-boundary invariants exited 0. |
-| `npm run test:pr1a` | Passed | Runtime, export, audit, rendering, false-success, migration-contract, and coverage gates passed. Coverage was 95.98% lines, 93.33% branches, and 95.00% functions for the owned critical modules. |
+| `npm run test:pr1a` | Passed | Runtime, export, audit, rendering, false-success, migration-contract, and coverage gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; no sanitizer/audit/persistence percentage is inferred. |
 | `npm run test:required-supplemental` | Passed | Evidence execution, product-action, delivery-workflow, artifact-export, and helper-guard suites passed: 13 product-action, 12 workflow, 7 artifact, and 5 helper-guard tests. |
 | `npm test` | Passed | The complete default and supplemental chained regression path exited 0; locked deterministic scoring remained green. |
-| `npm run test:migrations:pr1a` | Passed | A disposable PostgreSQL 15 harness passed fresh application of all canonical migrations, PR 1A reapplication, targeted legacy upgrade, RLS/constraint assertions, transition rejection, and invalid-token rejection. |
+| `npm run test:migrations:pr1a` | Not rerun locally after corrective expansion | No disposable PostgreSQL connection was configured. Earlier harness execution passed; the changed populated clean/dirty/cross-authority/immutability harness awaits the PR PostgreSQL CI job. |
 | `npm run build` | Passed with warning | 201 modules transformed; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns, 734 classified hits, zero forbidden hits, and zero stale allowlist entries. |
@@ -57,7 +57,8 @@ The migration harness used only disposable local databases and a temporary local
 
 | Check | Status | Reason |
 | --- | --- | --- |
-| Browser E2E, accessibility, responsive-state, and performance execution | Blocked | The repository did not contain an executable Playwright CLI. The managed approval service denied the required third-party package download, so no browser run occurred and no pass is claimed. Source-level rendering and false-success tests passed. |
+| `npm run test:browser -- --reporter=line` | Passed | Official Playwright Chromium executed six deterministic desktop/mobile tests covering server-precedence login, hostile Markdown/SVG, rejected persistence, shared-dialog keyboard/focus, and axe serious/critical findings. External requests were aborted; no live service was contacted. |
+| Browser performance budget | Not run | No PR-owned performance budget was defined; no performance pass is claimed. |
 | Live deployment, hosted schema, RLS/tenant isolation, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision is recorded without repository-side live access. |
 | Implementation-worker disposable write probe | Not run | The product implementation wave is not used as a Codex sandbox experiment; no runtime permission result is inferred. |
 

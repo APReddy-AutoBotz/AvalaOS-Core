@@ -1,17 +1,14 @@
+import DOMPurify from 'dompurify';
+
 type MarkdownParser = {
   parse: (markdown: string) => string;
 };
 
-const allowedTags = new Set([
+const markdownTags = [
   'a', 'blockquote', 'br', 'code', 'del', 'em', 'h1', 'h2', 'h3', 'h4', 'h5',
   'h6', 'hr', 'li', 'ol', 'p', 'pre', 'strong', 'table', 'tbody', 'td', 'th',
   'thead', 'tr', 'ul',
-]);
-
-const removedWithContent = new Set([
-  'base', 'button', 'embed', 'form', 'iframe', 'input', 'link', 'math', 'meta',
-  'object', 'script', 'select', 'style', 'svg', 'textarea', 'video', 'audio',
-]);
+];
 
 const blockedProtocol = /^(?:data|javascript|vbscript):/i;
 
@@ -36,53 +33,38 @@ export const escapePlainText = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-const sanitizeElement = (element: Element) => {
-  for (const child of Array.from(element.childNodes)) {
-    if (child.nodeType === Node.COMMENT_NODE) {
-      child.remove();
-      continue;
-    }
-    if (child.nodeType !== Node.ELEMENT_NODE) continue;
-
-    const childElement = child as Element;
-    const tag = childElement.tagName.toLowerCase();
-    if (removedWithContent.has(tag)) {
-      childElement.remove();
-      continue;
-    }
-    if (!allowedTags.has(tag)) {
-      sanitizeElement(childElement);
-      childElement.replaceWith(...Array.from(childElement.childNodes));
-      continue;
-    }
-
-    for (const attribute of Array.from(childElement.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const keep = tag === 'a' && (name === 'href' || name === 'title');
-      if (!keep) childElement.removeAttribute(attribute.name);
-    }
-
-    if (tag === 'a') {
-      const href = childElement.getAttribute('href');
-      if (!href || !isSafeMarkdownHref(href)) {
-        childElement.removeAttribute('href');
-      } else {
-        childElement.setAttribute('rel', 'noopener noreferrer');
-      }
-    }
-
-    sanitizeElement(childElement);
+const normalizeLinks = (html: string) => {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  for (const link of Array.from(template.content.querySelectorAll('a'))) {
+    const href = link.getAttribute('href');
+    if (!href || !isSafeMarkdownHref(href)) link.removeAttribute('href');
+    link.setAttribute('rel', 'noopener noreferrer');
   }
+  return template.innerHTML;
 };
 
 export const sanitizeMarkdownHtml = (html: string) => {
-  if (typeof DOMParser === 'undefined') {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
     return escapePlainText(html).replace(/\r?\n/g, '<br />');
   }
+  const clean = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: markdownTags,
+    ALLOWED_ATTR: ['href', 'title'],
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+  });
+  return normalizeLinks(clean);
+};
 
-  const document = new DOMParser().parseFromString(html, 'text/html');
-  sanitizeElement(document.body);
-  return document.body.innerHTML;
+export const sanitizeMermaidSvg = (svg: string) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return '';
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    FORBID_TAGS: ['foreignObject', 'script', 'style'],
+    FORBID_ATTR: ['onload', 'onclick', 'onerror'],
+    ALLOW_DATA_ATTR: false,
+  });
 };
 
 export const renderSafeMarkdown = (

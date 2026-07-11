@@ -10,7 +10,7 @@ import {
 import { renderDecisionPackJson, renderDecisionPackMarkdown } from '../_shared/export.ts';
 import { handleOptions, jsonResponse } from '../_shared/http.ts';
 import { getAuthUser } from '../_shared/supabase.ts';
-import { uploadTextArtifact } from '../_shared/storage.ts';
+import { prepareTextArtifact, removeTextArtifact, uploadTextArtifact } from '../_shared/storage.ts';
 
 const DECISION_PACK_EXPORT_STATUSES = [
   'Approved',
@@ -50,7 +50,9 @@ Deno.serve(async (request) => {
         render: (row, format) => format === 'json'
           ? renderDecisionPackJson(row)
           : renderDecisionPackMarkdown(row),
+        prepareArtifact: prepareTextArtifact,
         upload: uploadTextArtifact,
+        remove: removeTextArtifact,
       },
     });
 

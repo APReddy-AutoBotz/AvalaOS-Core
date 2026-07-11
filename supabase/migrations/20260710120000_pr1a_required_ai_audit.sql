@@ -74,6 +74,18 @@ ALTER TABLE public.ai_usage_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
 
 DO $$
 BEGIN
+    IF EXISTS (SELECT 1 FROM public.ai_generation_jobs WHERE org_id IS NULL OR user_id IS NULL OR job_type IS NULL OR status IS NULL OR input_refs IS NULL OR output_ref IS NULL OR created_at IS NULL OR updated_at IS NULL) THEN
+        RAISE EXCEPTION 'PR1A_PREFLIGHT_AI_JOBS_REQUIRED_FIELDS';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.ai_usage_events WHERE org_id IS NULL OR user_id IS NULL OR provider IS NULL OR input_tokens IS NULL OR input_tokens < 0 OR output_tokens IS NULL OR output_tokens < 0 OR total_tokens IS NULL OR total_tokens < 0 OR total_tokens <> input_tokens + output_tokens OR metadata IS NULL OR created_at IS NULL) THEN
+        RAISE EXCEPTION 'PR1A_PREFLIGHT_AI_USAGE_REQUIRED_FIELDS';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.ai_usage_events usage JOIN public.ai_generation_jobs job ON job.id = usage.job_id WHERE usage.job_id IS NOT NULL AND (job.org_id <> usage.org_id OR job.user_id <> usage.user_id)) THEN
+        RAISE EXCEPTION 'PR1A_PREFLIGHT_AI_USAGE_JOB_AUTHORITY_MISMATCH';
+    END IF;
+END $$;
+DO $$
+BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'pr1a_ai_generation_jobs_required_check'
@@ -160,6 +172,7 @@ BEGIN
                 AND input_tokens IS NOT NULL AND input_tokens >= 0
                 AND output_tokens IS NOT NULL AND output_tokens >= 0
                 AND total_tokens IS NOT NULL AND total_tokens >= 0
+                AND total_tokens = input_tokens + output_tokens
                 AND metadata IS NOT NULL
                 AND created_at IS NOT NULL
             ) NOT VALID;
@@ -173,6 +186,17 @@ ALTER TABLE public.ai_generation_jobs VALIDATE CONSTRAINT pr1a_ai_generation_job
 ALTER TABLE public.ai_generation_jobs VALIDATE CONSTRAINT pr1a_ai_generation_jobs_error_length_check;
 ALTER TABLE public.ai_usage_events VALIDATE CONSTRAINT pr1a_ai_usage_events_required_check;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pr1a_ai_generation_jobs_authority_key' AND conrelid = 'public.ai_generation_jobs'::regclass) THEN
+        ALTER TABLE public.ai_generation_jobs ADD CONSTRAINT pr1a_ai_generation_jobs_authority_key UNIQUE (id, org_id, user_id);
+    END IF;
+    ALTER TABLE public.ai_usage_events DROP CONSTRAINT IF EXISTS ai_usage_events_job_id_fkey;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pr1a_ai_usage_events_job_authority_fkey' AND conrelid = 'public.ai_usage_events'::regclass) THEN
+        ALTER TABLE public.ai_usage_events ADD CONSTRAINT pr1a_ai_usage_events_job_authority_fkey FOREIGN KEY (job_id, org_id, user_id) REFERENCES public.ai_generation_jobs(id, org_id, user_id) ON DELETE RESTRICT NOT VALID;
+    END IF;
+END $$;
+ALTER TABLE public.ai_usage_events VALIDATE CONSTRAINT pr1a_ai_usage_events_job_authority_fkey;
 CREATE INDEX IF NOT EXISTS idx_ai_generation_jobs_org_status_created
     ON public.ai_generation_jobs(org_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_generation_jobs_user_created
@@ -189,8 +213,8 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-    IF OLD.status IN ('succeeded', 'failed', 'cancelled') AND NEW.status <> OLD.status THEN
-        RAISE EXCEPTION 'Terminal AI audit jobs cannot transition.';
+    IF OLD.status IN ('succeeded', 'failed', 'cancelled') AND NEW IS DISTINCT FROM OLD THEN
+        RAISE EXCEPTION 'Terminal AI audit jobs are immutable.';
     END IF;
     IF OLD.status = 'queued' AND NEW.status NOT IN ('queued', 'running', 'cancelled') THEN
         RAISE EXCEPTION 'Invalid AI audit job transition.';
@@ -208,6 +232,17 @@ CREATE TRIGGER trg_pr1a_ai_generation_jobs_transition
 BEFORE UPDATE ON public.ai_generation_jobs
 FOR EACH ROW EXECUTE FUNCTION public.pr1a_enforce_ai_job_transition();
 
+CREATE OR REPLACE FUNCTION public.pr1a_reject_ai_usage_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    RAISE EXCEPTION 'AI usage audit events are immutable.';
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_pr1a_ai_usage_events_immutable ON public.ai_usage_events;
+CREATE TRIGGER trg_pr1a_ai_usage_events_immutable BEFORE UPDATE OR DELETE ON public.ai_usage_events FOR EACH ROW EXECUTE FUNCTION public.pr1a_reject_ai_usage_mutation();
 -- Remove the known legacy browser policies if that legacy SQL was applied.
 DROP POLICY IF EXISTS "Members can read org AI jobs" ON public.ai_generation_jobs;
 DROP POLICY IF EXISTS "Members can create org AI jobs" ON public.ai_generation_jobs;

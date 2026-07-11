@@ -1,4 +1,4 @@
-import { insertRow, updateRow } from './supabase.ts';
+import { insertRow, updateRows } from './supabase.ts';
 
 export const REQUIRED_AI_AUDIT_ERROR = 'Required AI audit persistence failed.';
 
@@ -27,6 +27,21 @@ type UsageInput = {
 
 const requiredAuditError = (): never => {
   throw new Error(REQUIRED_AI_AUDIT_ERROR);
+};
+
+const finiteNonNegativeInteger = (value: number | undefined) => (
+  value === undefined || (Number.isSafeInteger(value) && value >= 0)
+);
+
+const validateUsage = (input: UsageInput) => {
+  if (!input.orgId || !input.userId || !input.provider.trim()) requiredAuditError();
+  if (!finiteNonNegativeInteger(input.inputTokens)
+    || !finiteNonNegativeInteger(input.outputTokens)
+    || !finiteNonNegativeInteger(input.totalTokens)) requiredAuditError();
+  const inputTokens = input.inputTokens || 0;
+  const outputTokens = input.outputTokens || 0;
+  const totalTokens = input.totalTokens ?? inputTokens + outputTokens;
+  if (totalTokens !== inputTokens + outputTokens) requiredAuditError();
 };
 
 export const createAiJob = async (input: JobInput) => {
@@ -58,13 +73,17 @@ export const completeAiJob = async (
 ) => {
   if (!jobId) requiredAuditError();
   try {
-    const job = await updateRow<{ id: string }>('ai_generation_jobs', jobId, {
-      status,
-      output_ref: outputRef,
-      error_message: errorMessage || null,
-      completed_at: new Date().toISOString(),
-    });
-    if (!job?.id) requiredAuditError();
+    const jobs = await updateRows<{ id: string }>(
+      'ai_generation_jobs',
+      { id: `eq.${jobId}`, status: 'eq.running' },
+      {
+        status,
+        output_ref: outputRef,
+        error_message: errorMessage || null,
+        completed_at: new Date().toISOString(),
+      },
+    );
+    if (jobs.length !== 1) requiredAuditError();
   } catch {
     requiredAuditError();
   }
@@ -76,30 +95,39 @@ export const failAiJobBestEffort = async (
 ) => {
   if (!jobId) return;
   try {
-    await updateRow('ai_generation_jobs', jobId, {
-      status: 'failed',
-      output_ref: {},
-      error_message: errorMessage,
-      completed_at: new Date().toISOString(),
-    });
+    await updateRows(
+      'ai_generation_jobs',
+      { id: `eq.${jobId}`, status: 'eq.running' },
+      {
+        status: 'failed',
+        output_ref: {},
+        error_message: errorMessage.slice(0, 600),
+        completed_at: new Date().toISOString(),
+      },
+    );
   } catch {
     // The primary operation has already failed; do not mask its controlled error.
   }
 };
 
-const usageRow = (input: UsageInput) => ({
-  org_id: input.orgId,
-  user_id: input.userId,
-  job_id: input.jobId,
-  provider: input.provider,
-  model: input.model,
-  input_tokens: input.inputTokens || 0,
-  output_tokens: input.outputTokens || 0,
-  total_tokens: input.totalTokens || 0,
-  output_artifact_type: input.outputArtifactType,
-  output_artifact_id: input.outputArtifactId,
-  metadata: input.metadata || {},
-});
+const usageRow = (input: UsageInput) => {
+  validateUsage(input);
+  const inputTokens = input.inputTokens || 0;
+  const outputTokens = input.outputTokens || 0;
+  return {
+    org_id: input.orgId,
+    user_id: input.userId,
+    job_id: input.jobId,
+    provider: input.provider,
+    model: input.model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: input.totalTokens ?? inputTokens + outputTokens,
+    output_artifact_type: input.outputArtifactType,
+    output_artifact_id: input.outputArtifactId,
+    metadata: input.metadata || {},
+  };
+};
 
 export const recordAiUsageRequired = async (input: UsageInput) => {
   try {
