@@ -43,7 +43,7 @@ This PR changes platform-safety source, tests, CI, one canonical migration, and 
 | `npm run test:required-supplemental` | Passed | Evidence execution, product-action, delivery-workflow, artifact-export, and helper-guard suites passed: 13 product-action, 12 workflow, 7 artifact, and 5 helper-guard tests. |
 | `npm test` | Passed | The complete default and supplemental chained regression path exited 0; locked deterministic scoring remained green. |
 | `npm run test:migrations:pr1a` | Passed in both GitHub workflow triggers | The push and pull-request PostgreSQL jobs passed the changed populated clean/dirty/cross-authority/immutability harness. No disposable local database was configured and no live or hosted database was accessed. |
-| `npm run build` | Passed with warning | 201 modules transformed; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
+| `npm run build` | Passed with warning | 203 modules transformed; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns, 734 classified hits, zero forbidden hits, and zero stale allowlist entries. |
 | `npm run test:secret-hygiene` | Passed | 5 rules, zero forbidden hits, and zero tracked environment files. |
