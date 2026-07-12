@@ -75,11 +75,16 @@ export const removeTextArtifact = async (
   }
   if (!Array.isArray(removed)) throw new Error('Storage compensation failed.');
   if (removed.length === 0) return;
-  if (!removed.some((entry) => (
+  if (!removed.every((entry) => (
     typeof entry === 'object' && entry !== null &&
-    'name' in entry && entry.name === artifact.path &&
-    'bucket_id' in entry && entry.bucket_id === artifact.bucket
+    'name' in entry && typeof entry.name === 'string' &&
+    (!('bucket_id' in entry) || (
+      typeof entry.bucket_id === 'string' && entry.bucket_id === artifact.bucket
+    ))
   ))) throw new Error('Storage compensation failed.');
+  if (!removed.some((entry) => entry.name === artifact.path)) {
+    throw new Error('Storage compensation failed.');
+  }
 };
 
 export const downloadStoredFile = async (input: {

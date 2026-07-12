@@ -32,32 +32,33 @@ This PR changes platform-safety source, tests, CI, one canonical migration, and 
 - Wave 2 used only implementation-worker tracks with exclusive scopes for runtime policy, Edge/export/audit, and UI rendering/false-success behavior. Native Windows helper failures blocked some child edits, so the root controller integrated and verified the complete change set. No unsupported child workspace-permission claim is made.
 - No child delegated or spawned descendants. Per-agent execution model and reasoning metadata were not exposed, so execution model remains unverified rather than inferred from configuration compatibility.
 
-## Executed Local Evidence
+## Executed Local/CI Evidence
 
 | Check | Result | Material signal |
 | --- | --- | --- |
 | `npm run typecheck` | Passed | Browser/application TypeScript exited 0. |
 | `npm run typecheck:edge` | Passed | Edge source and shared boundary types exited 0. |
 | `npm run lint:pr1a` | Passed | PR 1A source-boundary invariants exited 0. |
-| `npm run test:pr1a` | Passed | Runtime, export, audit, rendering, false-success, migration-contract, and coverage gates passed. Coverage was 95.76% lines, 92.49% branches, and 95.12% functions for runtime/AI mode, Storage boundary, and export policy/handler only; no sanitizer/audit/persistence percentage is inferred. |
+| `npm run test:pr1a` | Passed | Runtime, export, audit, rendering, false-success, migration-contract, and coverage gates passed. Coverage was 94.90% lines, 93.10% branches, and 92.86% functions for runtime/AI mode, Storage boundary, and export policy/handler only; no sanitizer/audit/persistence percentage is inferred. |
 | `npm run test:required-supplemental` | Passed | Evidence execution, product-action, delivery-workflow, artifact-export, and helper-guard suites passed: 13 product-action, 12 workflow, 7 artifact, and 5 helper-guard tests. |
 | `npm test` | Passed | The complete default and supplemental chained regression path exited 0; locked deterministic scoring remained green. |
-| `npm run test:migrations:pr1a` | Passed in both GitHub workflow triggers | The push and pull-request PostgreSQL jobs passed the changed populated clean/dirty/cross-authority/immutability harness. No disposable local database was configured and no live or hosted database was accessed. |
-| `npm run build` | Passed with warning | 203 modules transformed; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
+| `npm run test:migrations:pr1a` | Passed in both GitHub workflow triggers; not run locally | Docker Desktop was unavailable, so the final run did not execute the local PostgreSQL harness and did not use a temporary local PostgreSQL container. Both GitHub PostgreSQL migration jobs passed the populated clean/dirty/cross-authority/immutability, fresh, reapply, and upgrade harness. No live or hosted database was accessed. |
+| `npm run test:browser` with `vite build` + `vite preview` | Passed locally and in both GitHub workflow triggers | 8/8 deterministic Playwright Chromium tests passed across desktop and mobile, covering server-precedence login/runtime behavior, hostile Markdown/SVG, rejected persistence, shared-dialog keyboard/focus, axe serious/critical findings, and the production document-export HTML helper without script/event execution. This is narrow PR-owned browser evidence, not full product E2E or live-system proof. |
+| Storage compensation source/fetch contract | Passed locally; no live Storage validation | Deterministic tests cover the bucket DELETE URL, exact validated tenant prefix body, method, authorization-header presence without values, content type, redirect denial, tenant-path rejection, compatible success responses with optional `bucket_id`, missing-object empty-array disposition, and sanitized malformed/non-array/non-JSON/non-2xx failures. No live Supabase Storage or Edge invocation was run. |
+| `npm run build` | Passed with warning | 206 modules transformed in the observed final build; production bundle completed. Browserslist data was six months old; no dependency mutation was performed. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns, 734 classified hits, zero forbidden hits, and zero stale allowlist entries. |
 | `npm run test:secret-hygiene` | Passed | 5 rules, zero forbidden hits, and zero tracked environment files. |
-| `codex app-server --strict-config --stdio` | Passed | Stable WSL Codex 0.144.1 loaded the disposable project with a session-only trust override and exited 0 with no unsupported-key error. The native Windows executable access denial and the untrusted WSL attempt are not counted as passes. |
-| Changed-document Markdown link validation | Passed | 10 changed Markdown files were parsed offline; no local Markdown link targets were present and no broken target was reported. External links were not fetched. |
+| `codex app-server --strict-config --stdio` | Blocked in the final run | Strict parsing was attempted with the WindowsApps Codex executable, but process launch returned `Access is denied`. No fresh strict-parse pass is claimed; repository configuration was not changed. |
+| Changed-document Markdown link validation | Passed | The changed authoritative evidence Markdown file was parsed offline; no broken local target was reported. External links were not fetched. |
 | `git diff --check` | Passed | Exit 0; line-ending notices were informational and no whitespace error was reported. |
 
-The migration harness used only disposable local databases and a temporary local PostgreSQL container. It did not reset or inspect an existing application database, and all temporary databases, container state, and probe files were removed. An earlier ad hoc attempt using a broad legacy file encountered an unrelated legacy provider-policy conflict and is not counted as evidence; the committed targeted legacy fixture is the reproducible supported-upgrade proof for this PR's audit boundary.
+The local PostgreSQL harness was not run in the final acceptance correction because Docker Desktop was unavailable; no temporary local PostgreSQL container was used. The existing push and pull-request PostgreSQL CI jobs provide the executed fresh, reapply, targeted-upgrade, dirty-data, authority, and immutability evidence. No existing application, live, or hosted database was reset or inspected.
 
 ## Blocked Or Not Run
 
 | Check | Status | Reason |
 | --- | --- | --- |
-| `npm run test:browser -- --reporter=line` | Passed | Official Playwright Chromium executed six deterministic desktop/mobile tests covering server-precedence login, hostile Markdown/SVG, rejected persistence, shared-dialog keyboard/focus, and axe serious/critical findings. External requests were aborted; no live service was contacted. Both push and pull-request Chromium jobs also passed. |
 | Browser performance budget | Not run | No PR-owned performance budget was defined; no performance pass is claimed. |
 | Live deployment, hosted schema, RLS/tenant isolation, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision is recorded without repository-side live access. |
 | Implementation-worker disposable write probe | Not run | The product implementation wave is not used as a Codex sandbox experiment; no runtime permission result is inferred. |
