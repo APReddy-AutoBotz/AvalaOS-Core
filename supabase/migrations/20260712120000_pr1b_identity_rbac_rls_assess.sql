@@ -389,6 +389,7 @@ CREATE POLICY pr1b_audit_read ON public.privileged_audit_events FOR SELECT TO au
 
 REVOKE ALL ON public.capabilities,public.role_capabilities,public.authorization_versions,public.assess_command_receipts,public.privileged_audit_events FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.authorization_versions,public.privileged_audit_events TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_workspace_capability(uuid,uuid,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_tenant_context(uuid,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1b_create_assessment(uuid,uuid,uuid,uuid,uuid,text,bigint) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint) TO authenticated;
