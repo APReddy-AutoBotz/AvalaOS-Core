@@ -25,7 +25,6 @@ export type AssessAuthority = {
   workspaceId: string;
   authorizationVersion: number;
   permissions: readonly string[];
-  accessToken?: string;
 };
 
 export type AssessAtomicCommand = {
@@ -36,7 +35,6 @@ export type AssessAtomicCommand = {
   organizationId: string;
   workspaceId: string;
   authorizationVersion: number;
-  accessToken?: string;
   expectedVersion?: number;
   resourceId?: string;
   payload: Record<string, unknown>;
@@ -70,7 +68,6 @@ export interface AssessCommandDependencies {
     organizationId: string;
     workspaceId: string;
     expectedVersion: number;
-    accessToken?: string;
   }): Promise<AssessFinalizeInput | null>;
   executeAtomicCommand(command: AssessAtomicCommand): Promise<AssessAtomicResult>;
 }

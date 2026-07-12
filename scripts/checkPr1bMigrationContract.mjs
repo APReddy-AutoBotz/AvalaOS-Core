@@ -15,8 +15,16 @@ for (const contract of [
  'CREATE OR REPLACE FUNCTION public.get_tenant_context','CREATE OR REPLACE FUNCTION public.pr1b_create_assessment',
  'CREATE OR REPLACE FUNCTION public.pr1b_upsert_assessment_responses','CREATE OR REPLACE FUNCTION public.pr1b_finalize_assessment',
  'PR1B_PREFLIGHT_ASSESS_WORKSPACE_REQUIRED','FORCE ROW LEVEL SECURITY','PR1B_AUTHORIZATION_STALE',
- "'ok',true,'outcome','committed'", "'ok',false,'errorCode'", "jsonb_set(r.response,'{outcome}','\"replayed\"'::jsonb)",
+ 'PR1B_PREFLIGHT_ORGANIZATION_MEMBERSHIP_ROLE_INVALID','PR1B_PREFLIGHT_WORKSPACE_MEMBERSHIP_ROLE_INVALID',
+ 'p_actor_id uuid','PR1B_SCORE_VERSION_INVALID','PR1B_INVALID_COMMAND',"ELSE 'COMMAND_UNAVAILABLE' END",
+ 'TO service_role','FROM PUBLIC,anon,authenticated',
+ "'ok',true,'outcome','committed'", "'ok',false,'errorCode'", "IF r.status='succeeded' THEN RETURN r.response",
 ]) assert.ok(sql.includes(contract), `Missing PR 1B contract: ${contract}`);
+for (const forbiddenGrant of [
+ /GRANT EXECUTE ON FUNCTION public\.pr1b_create_assessment\([^;]+ TO authenticated/i,
+ /GRANT EXECUTE ON FUNCTION public\.pr1b_upsert_assessment_responses\([^;]+ TO authenticated/i,
+ /GRANT EXECUTE ON FUNCTION public\.pr1b_finalize_assessment\([^;]+ TO authenticated/i,
+]) assert.doesNotMatch(sql, forbiddenGrant);
 assert.doesNotMatch(sql, /DROP TABLE|TRUNCATE|DELETE FROM/i);
 assert.equal((sql.match(/\$\$/g) || []).length % 2, 0);
 console.log(`PR 1B canonical migration contract passed across ${migrations.length} ordered migrations.`);

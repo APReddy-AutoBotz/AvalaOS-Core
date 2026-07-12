@@ -34,7 +34,6 @@ const commonCommand = (envelope: AssessCommandEnvelope, authority: AssessAuthori
   organizationId: authority.organizationId,
   workspaceId: authority.workspaceId,
   authorizationVersion: authority.authorizationVersion,
-  ...(authority.accessToken ? { accessToken: authority.accessToken } : {}),
 });
 
 const requireExpectedVersion = (envelope: AssessCommandEnvelope) => {
@@ -81,7 +80,6 @@ const handleFinalize = async (envelope: AssessCommandEnvelope, authority: Assess
     organizationId: authority.organizationId,
     workspaceId: authority.workspaceId,
     expectedVersion,
-    accessToken: authority.accessToken,
   });
   if (!persisted) assessError('RESOURCE_NOT_AVAILABLE');
   let scores;
@@ -133,7 +131,7 @@ export const executeAssessCommand = async (
     if (error instanceof AssessCommandError) throw error;
     assessError('COMMAND_UNAVAILABLE');
   }
-  const authorized = { ...authorize(envelope, authority, actor.id), accessToken: actor.accessToken };
+  const authorized = authorize(envelope, authority, actor.id);
   if (envelope.commandType === 'assessment.create') return handleCreate(envelope, authorized, deps);
   if (envelope.commandType === 'assessment.response.upsert') return handleResponseUpsert(envelope, authorized, deps);
   return handleFinalize(envelope, authorized, deps);

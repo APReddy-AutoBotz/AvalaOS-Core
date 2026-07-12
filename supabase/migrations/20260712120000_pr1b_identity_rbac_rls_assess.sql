@@ -34,10 +34,55 @@ CREATE TABLE IF NOT EXISTS public.authorization_versions (
     PRIMARY KEY (org_id, user_id)
 );
 
+-- The legacy schema allowed nullable role references and did not constrain role
+-- scope across membership tables.  Fail the upgrade before installing stricter
+-- triggers rather than leaving pre-existing authority under weaker rules.  A
+-- roleless workspace membership remains supported: it grants workspace presence
+-- only, while capabilities may still be inherited from the organization role.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM public.organization_members om
+        LEFT JOIN public.roles r ON r.id = om.role_id
+        WHERE om.role_id IS NULL
+           OR r.id IS NULL
+           OR r.status <> 'active'
+           OR r.deleted_at IS NOT NULL
+           OR r.org_id IS DISTINCT FROM om.org_id
+           OR r.scope <> 'organization'
+           OR r.workspace_id IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'PR1B_PREFLIGHT_ORGANIZATION_MEMBERSHIP_ROLE_INVALID';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.workspace_memberships wm
+        JOIN public.roles r ON r.id = wm.role_id
+        WHERE wm.role_id IS NOT NULL
+          AND (r.status <> 'active'
+            OR r.deleted_at IS NOT NULL
+            OR r.org_id IS DISTINCT FROM wm.org_id
+            OR r.scope <> 'workspace'
+            OR r.workspace_id IS DISTINCT FROM wm.workspace_id)
+    ) OR EXISTS (
+        SELECT 1
+        FROM public.workspace_memberships wm
+        LEFT JOIN public.roles r ON r.id = wm.role_id
+        WHERE wm.role_id IS NOT NULL AND r.id IS NULL
+    ) THEN
+        RAISE EXCEPTION 'PR1B_PREFLIGHT_WORKSPACE_MEMBERSHIP_ROLE_INVALID';
+    END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.pr1b_enforce_membership_role_scope()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 DECLARE v_role public.roles;
 BEGIN
+    IF TG_TABLE_NAME = 'workspace_memberships' AND NEW.role_id IS NULL THEN
+        RETURN NEW;
+    END IF;
     SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
     IF v_role.id IS NULL OR v_role.status <> 'active' OR v_role.deleted_at IS NOT NULL
        OR v_role.org_id IS DISTINCT FROM NEW.org_id THEN
@@ -276,24 +321,63 @@ BEGIN RAISE EXCEPTION 'PR 1B audit and completed command records are immutable';
 DROP TRIGGER IF EXISTS trg_pr1b_audit_immutable ON public.privileged_audit_events;
 CREATE TRIGGER trg_pr1b_audit_immutable BEFORE UPDATE OR DELETE ON public.privileged_audit_events FOR EACH ROW EXECUTE FUNCTION public.pr1b_reject_immutable_event_mutation();
 
-CREATE OR REPLACE FUNCTION public.pr1b_assert_command_authority(p_org uuid,p_workspace uuid,p_capability text,p_version bigint)
+-- Canonical PR 1B upgrade/reapply cleanup.  These caller-JWT overloads existed
+-- only on the unmerged PR branch and must not survive beside the server-only API.
+DROP FUNCTION IF EXISTS public.pr1b_create_assessment(uuid,uuid,uuid,uuid,uuid,text,bigint);
+DROP FUNCTION IF EXISTS public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint);
+DROP FUNCTION IF EXISTS public.pr1b_finalize_assessment(uuid,uuid,uuid,jsonb,text,bigint,uuid,text,bigint);
+DROP FUNCTION IF EXISTS public.pr1b_assert_command_authority(uuid,uuid,text,bigint);
+DROP FUNCTION IF EXISTS public.pr1b_claim_command(uuid,uuid,text,text,uuid,text);
+
+CREATE OR REPLACE FUNCTION public.pr1b_assert_command_authority(p_actor uuid,p_org uuid,p_workspace uuid,p_capability text,p_version bigint)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_actual bigint;
 BEGIN
- IF auth.uid() IS NULL OR NOT public.has_workspace_capability(p_workspace,p_org,p_capability) THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
- SELECT version INTO v_actual FROM public.authorization_versions WHERE org_id=p_org AND user_id=auth.uid();
+ IF p_actor IS NULL OR p_org IS NULL OR p_workspace IS NULL OR p_capability IS NULL THEN
+  RAISE EXCEPTION 'PR1B_NOT_FOUND';
+ END IF;
+
+ -- This function is reached only through service-role-only mutation RPCs.  It
+ -- nevertheless reauthorizes every authority row independently and locks the
+ -- selected authority through transaction commit so a concurrent revocation
+ -- cannot interleave ahead of the authorized mutation.
+ PERFORM 1
+  FROM public.profiles p
+  JOIN public.organization_members om ON om.user_id=p.id AND om.org_id=p_org
+  JOIN public.workspace_memberships wm ON wm.user_id=p.id AND wm.org_id=om.org_id AND wm.workspace_id=p_workspace
+  JOIN public.organizations o ON o.id=om.org_id
+  JOIN public.workspaces w ON w.id=wm.workspace_id AND w.org_id=wm.org_id
+  JOIN public.roles r ON r.id IN (om.role_id,wm.role_id)
+  JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability
+  WHERE p.id=p_actor AND p.status='active' AND p.deleted_at IS NULL
+    AND om.status='active' AND om.deleted_at IS NULL
+    AND wm.status='active' AND wm.deleted_at IS NULL
+    AND o.status='active' AND o.deleted_at IS NULL
+    AND w.status='active' AND w.deleted_at IS NULL
+    AND r.status='active' AND r.deleted_at IS NULL
+    AND ((r.scope='organization' AND r.org_id=p_org AND r.workspace_id IS NULL)
+      OR (r.scope='workspace' AND r.org_id=p_org AND r.workspace_id=p_workspace))
+  LIMIT 1
+  FOR SHARE OF p,om,wm,o,w,r,rc;
+ IF NOT FOUND THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
+
+ SELECT version INTO v_actual FROM public.authorization_versions
+ WHERE org_id=p_org AND user_id=p_actor FOR SHARE;
  IF COALESCE(v_actual,1) <> p_version THEN RAISE EXCEPTION 'PR1B_AUTHORIZATION_STALE'; END IF;
 END $$;
 
-CREATE OR REPLACE FUNCTION public.pr1b_claim_command(p_org uuid,p_workspace uuid,p_type text,p_key text,p_request uuid,p_hash text)
+CREATE OR REPLACE FUNCTION public.pr1b_claim_command(p_actor uuid,p_org uuid,p_workspace uuid,p_type text,p_key text,p_request uuid,p_hash text)
 RETURNS public.assess_command_receipts LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_row public.assess_command_receipts;
 BEGIN
+ IF p_key IS NULL OR length(btrim(p_key)) NOT BETWEEN 1 AND 200 OR p_request IS NULL THEN
+  RAISE EXCEPTION 'PR1B_INVALID_COMMAND';
+ END IF;
  INSERT INTO public.assess_command_receipts(org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status)
- VALUES(p_org,p_workspace,auth.uid(),p_type,p_key,p_request,p_hash,'in_progress')
+ VALUES(p_org,p_workspace,p_actor,p_type,p_key,p_request,p_hash,'in_progress')
  ON CONFLICT(org_id,actor_id,command_type,idempotency_key) DO NOTHING RETURNING * INTO v_row;
  IF v_row.id IS NULL THEN
-  SELECT * INTO v_row FROM public.assess_command_receipts WHERE org_id=p_org AND actor_id=auth.uid() AND command_type=p_type AND idempotency_key=p_key FOR UPDATE;
+  SELECT * INTO v_row FROM public.assess_command_receipts WHERE org_id=p_org AND actor_id=p_actor AND command_type=p_type AND idempotency_key=p_key FOR UPDATE;
   IF v_row.request_hash<>p_hash THEN RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'; END IF;
  END IF;
  RETURN v_row;
@@ -305,65 +389,90 @@ RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
   WHEN p_message LIKE '%PR1B_AUTHORIZATION_STALE%' THEN 'AUTHORIZATION_STALE'
   WHEN p_message LIKE '%PR1B_IDEMPOTENCY_CONFLICT%' THEN 'IDEMPOTENCY_CONFLICT'
   WHEN p_message LIKE '%PR1B_VERSION_CONFLICT%' THEN 'VERSION_CONFLICT'
-  WHEN p_message LIKE '%PR1B_SCORE_VERSION_REQUIRED%' THEN 'INVALID_SCORE_VERSION'
-  ELSE 'NOT_FOUND' END);
+  WHEN p_message LIKE '%PR1B_SCORE_VERSION_INVALID%' THEN 'INVALID_SCORE_VERSION'
+  WHEN p_message LIKE '%PR1B_INVALID_COMMAND%' THEN 'INVALID_COMMAND'
+  WHEN p_message LIKE '%PR1B_NOT_FOUND%' THEN 'NOT_FOUND'
+  ELSE 'COMMAND_UNAVAILABLE' END);
 $$;
 
-CREATE OR REPLACE FUNCTION public.pr1b_create_assessment(p_org_id uuid,p_workspace_id uuid,p_process_id uuid,p_assessment_id uuid,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
+CREATE OR REPLACE FUNCTION public.pr1b_create_assessment(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_process_id uuid,p_assessment_id uuid,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE r public.assess_command_receipts; a public.assessments; h text:=md5(concat_ws('|',p_org_id,p_workspace_id,p_process_id,p_assessment_id)); result jsonb;
 BEGIN
- PERFORM public.pr1b_assert_command_authority(p_org_id,p_workspace_id,'assess.create',p_authorization_version);
- r:=public.pr1b_claim_command(p_org_id,p_workspace_id,'assessment.create',p_idempotency_key,p_request_id,h);
- IF r.status='succeeded' THEN RETURN jsonb_set(r.response,'{outcome}','"replayed"'::jsonb); END IF;
+ PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.create',p_authorization_version);
+ r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment.create',p_idempotency_key,p_request_id,h);
+ IF r.status='succeeded' THEN RETURN r.response; END IF;
  INSERT INTO public.assessments(id,process_id,org_id,workspace_id,status,created_by,updated_by)
- VALUES(p_assessment_id,p_process_id,p_org_id,p_workspace_id,'Draft',auth.uid(),auth.uid()) RETURNING * INTO a;
+ SELECT p_assessment_id,ap.id,p_org_id,p_workspace_id,'Draft',p_actor_id,p_actor_id
+ FROM public.assess_processes ap
+ WHERE ap.id=p_process_id AND ap.org_id=p_org_id AND ap.workspace_id=p_workspace_id AND ap.deleted_at IS NULL
+ RETURNING * INTO a;
+ IF a.id IS NULL THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
  result:=jsonb_build_object('ok',true,'outcome','committed','resource',jsonb_build_object('assessmentId',a.id,'version',a.version,'status',a.status));
- INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,auth.uid(),p_request_id,'assessment.create','assessment',a.id,'succeeded',a.version);
+ INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment.create','assessment',a.id,'succeeded',a.version);
  UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
  RETURN result;
-EXCEPTION WHEN OTHERS THEN RETURN public.pr1b_error_envelope(SQLERRM);
+EXCEPTION WHEN OTHERS THEN
+ IF SQLERRM NOT LIKE '%PR1B_%' THEN RAISE LOG 'PR1B_COMMAND_UNAVAILABLE function=pr1b_create_assessment sqlstate=%',SQLSTATE; END IF;
+ RETURN public.pr1b_error_envelope(SQLERRM);
 END $$;
 
-CREATE OR REPLACE FUNCTION public.pr1b_upsert_assessment_responses(p_org_id uuid,p_workspace_id uuid,p_assessment_id uuid,p_responses jsonb,p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
+CREATE OR REPLACE FUNCTION public.pr1b_upsert_assessment_responses(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_assessment_id uuid,p_responses jsonb,p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE r public.assess_command_receipts; a public.assessments; h text:=md5(concat_ws('|',p_org_id,p_workspace_id,p_assessment_id,p_expected_version,p_responses::text)); result jsonb;
 BEGIN
- PERFORM public.pr1b_assert_command_authority(p_org_id,p_workspace_id,'assess.response.write',p_authorization_version);
- r:=public.pr1b_claim_command(p_org_id,p_workspace_id,'assessment.response.upsert',p_idempotency_key,p_request_id,h);
- IF r.status='succeeded' THEN RETURN jsonb_set(r.response,'{outcome}','"replayed"'::jsonb); END IF;
- UPDATE public.assessments SET responses=p_responses,version=version+1,updated_by=auth.uid(),updated_at=now()
+ PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.response.write',p_authorization_version);
+ IF p_responses IS NULL OR jsonb_typeof(p_responses)<>'object'
+    OR NOT (p_responses ?& ARRAY['responses','metadata','evidenceItems','assumptions'])
+    OR (SELECT count(*) FROM jsonb_object_keys(p_responses))<>4
+    OR jsonb_typeof(p_responses->'responses')<>'object'
+    OR jsonb_typeof(p_responses->'metadata')<>'object'
+    OR jsonb_typeof(p_responses->'evidenceItems')<>'array'
+    OR jsonb_typeof(p_responses->'assumptions')<>'array' THEN
+  RAISE EXCEPTION 'PR1B_INVALID_COMMAND';
+ END IF;
+ r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment.response.upsert',p_idempotency_key,p_request_id,h);
+ IF r.status='succeeded' THEN RETURN r.response; END IF;
+ UPDATE public.assessments SET responses=p_responses,version=version+1,updated_by=p_actor_id,updated_at=now()
  WHERE id=p_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND version=p_expected_version AND deleted_at IS NULL RETURNING * INTO a;
  IF a.id IS NULL THEN
   IF EXISTS(SELECT 1 FROM public.assessments WHERE id=p_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL) THEN RAISE EXCEPTION 'PR1B_VERSION_CONFLICT';
   ELSE RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
  END IF;
  result:=jsonb_build_object('ok',true,'outcome','committed','resource',jsonb_build_object('assessmentId',a.id,'version',a.version,'status',a.status));
- INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,auth.uid(),p_request_id,'assessment.response.upsert','assessment',a.id,'succeeded',a.version);
+ INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment.response.upsert','assessment',a.id,'succeeded',a.version);
  UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
  RETURN result;
-EXCEPTION WHEN OTHERS THEN RETURN public.pr1b_error_envelope(SQLERRM);
+EXCEPTION WHEN OTHERS THEN
+ IF SQLERRM NOT LIKE '%PR1B_%' THEN RAISE LOG 'PR1B_COMMAND_UNAVAILABLE function=pr1b_upsert_assessment_responses sqlstate=%',SQLSTATE; END IF;
+ RETURN public.pr1b_error_envelope(SQLERRM);
 END $$;
 
-CREATE OR REPLACE FUNCTION public.pr1b_finalize_assessment(p_org_id uuid,p_workspace_id uuid,p_assessment_id uuid,p_scores jsonb,p_score_version text,p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
+CREATE OR REPLACE FUNCTION public.pr1b_finalize_assessment(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_assessment_id uuid,p_scores jsonb,p_score_version text,p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE r public.assess_command_receipts; a public.assessments; h text:=md5(concat_ws('|',p_org_id,p_workspace_id,p_assessment_id,p_expected_version,p_score_version,p_scores::text)); result jsonb;
 BEGIN
- PERFORM public.pr1b_assert_command_authority(p_org_id,p_workspace_id,'assess.finalize',p_authorization_version);
- IF p_score_version IS NULL OR length(btrim(p_score_version))=0 THEN RAISE EXCEPTION 'PR1B_SCORE_VERSION_REQUIRED'; END IF;
- r:=public.pr1b_claim_command(p_org_id,p_workspace_id,'assessment.finalize',p_idempotency_key,p_request_id,h);
- IF r.status='succeeded' THEN RETURN jsonb_set(r.response,'{outcome}','"replayed"'::jsonb); END IF;
- UPDATE public.assessments SET scores=p_scores,score_version=p_score_version,status='Ready for Review',version=version+1,updated_by=auth.uid(),updated_at=now()
+ PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.finalize',p_authorization_version);
+ IF p_score_version IS DISTINCT FROM 'assess-core-2026-05'
+    OR p_scores IS NULL OR jsonb_typeof(p_scores)<>'object'
+    OR p_scores->>'scoreVersion' IS DISTINCT FROM 'assess-core-2026-05' THEN
+  RAISE EXCEPTION 'PR1B_SCORE_VERSION_INVALID';
+ END IF;
+ r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment.finalize',p_idempotency_key,p_request_id,h);
+ IF r.status='succeeded' THEN RETURN r.response; END IF;
+ UPDATE public.assessments SET scores=p_scores,score_version='assess-core-2026-05',status='Ready for Review',version=version+1,updated_by=p_actor_id,updated_at=now()
  WHERE id=p_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND version=p_expected_version AND deleted_at IS NULL RETURNING * INTO a;
  IF a.id IS NULL THEN
   IF EXISTS(SELECT 1 FROM public.assessments WHERE id=p_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL) THEN RAISE EXCEPTION 'PR1B_VERSION_CONFLICT';
   ELSE RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
  END IF;
  result:=jsonb_build_object('ok',true,'outcome','committed','resource',jsonb_build_object('assessmentId',a.id,'version',a.version,'status',a.status,'scoreVersion',a.score_version));
- INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata) VALUES(p_org_id,p_workspace_id,auth.uid(),p_request_id,'assessment.finalize','assessment',a.id,'succeeded',a.version,jsonb_build_object('scoreVersion',p_score_version));
+ INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment.finalize','assessment',a.id,'succeeded',a.version,jsonb_build_object('scoreVersion','assess-core-2026-05'));
  UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
  RETURN result;
-EXCEPTION WHEN OTHERS THEN RETURN public.pr1b_error_envelope(SQLERRM);
+EXCEPTION WHEN OTHERS THEN
+ IF SQLERRM NOT LIKE '%PR1B_%' THEN RAISE LOG 'PR1B_COMMAND_UNAVAILABLE function=pr1b_finalize_assessment sqlstate=%',SQLSTATE; END IF;
+ RETURN public.pr1b_error_envelope(SQLERRM);
 END $$;
 
 ALTER TABLE public.capabilities ENABLE ROW LEVEL SECURITY; ALTER TABLE public.capabilities FORCE ROW LEVEL SECURITY;
@@ -389,12 +498,37 @@ CREATE POLICY pr1b_audit_read ON public.privileged_audit_events FOR SELECT TO au
 
 REVOKE ALL ON public.capabilities,public.role_capabilities,public.authorization_versions,public.assess_command_receipts,public.privileged_audit_events FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.authorization_versions,public.privileged_audit_events TO authenticated;
+
+-- PostgreSQL grants EXECUTE to PUBLIC for new functions by default.  Make the
+-- complete PR 1B function privilege matrix explicit: only the two auth.uid()-
+-- bound read projections are client-callable; mutation and authority internals
+-- are executable solely by the server-held service role.
+REVOKE EXECUTE ON FUNCTION
+ public.pr1b_enforce_membership_role_scope(),
+ public.pr1b_bump_authorization_version(uuid,uuid),
+ public.pr1b_bump_membership_authorization(),
+ public.pr1b_bump_role_authorization(),
+ public.pr1b_bump_role_capability_authorization(),
+ public.pr1b_reject_immutable_event_mutation(),
+ public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint),
+ public.pr1b_claim_command(uuid,uuid,uuid,text,text,uuid,text),
+ public.pr1b_error_envelope(text),
+ public.pr1b_create_assessment(uuid,uuid,uuid,uuid,uuid,uuid,text,bigint),
+ public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint),
+ public.pr1b_finalize_assessment(uuid,uuid,uuid,uuid,jsonb,text,bigint,uuid,text,bigint)
+ FROM PUBLIC,anon,authenticated;
+REVOKE EXECUTE ON FUNCTION
+ public.has_workspace_capability(uuid,uuid,text),
+ public.is_active_workspace_member(uuid,uuid),
+ public.get_tenant_context(uuid,uuid)
+ FROM PUBLIC,anon;
+
 GRANT EXECUTE ON FUNCTION public.has_workspace_capability(uuid,uuid,text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_active_workspace_member(uuid,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_tenant_context(uuid,uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.pr1b_create_assessment(uuid,uuid,uuid,uuid,uuid,text,bigint) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.pr1b_finalize_assessment(uuid,uuid,uuid,jsonb,text,bigint,uuid,text,bigint) TO authenticated;
-REVOKE EXECUTE ON FUNCTION public.pr1b_bump_authorization_version(uuid,uuid),public.pr1b_claim_command(uuid,uuid,text,text,uuid,text),public.pr1b_assert_command_authority(uuid,uuid,text,bigint),public.has_workspace_capability(uuid,uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.pr1b_create_assessment(uuid,uuid,uuid,uuid,uuid,uuid,text,bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.pr1b_finalize_assessment(uuid,uuid,uuid,uuid,jsonb,text,bigint,uuid,text,bigint) TO service_role;
 
 COMMENT ON TABLE public.authorization_versions IS 'Immediate server authorization invalidation epoch. Membership, role, and normalized capability changes bump affected users.';
 COMMENT ON TABLE public.assess_command_receipts IS 'Server-only idempotency records. Completed success is replayed only for the same canonical request hash.';

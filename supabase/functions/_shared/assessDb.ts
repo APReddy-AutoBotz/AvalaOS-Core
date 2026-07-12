@@ -13,6 +13,7 @@ type RpcResult = { ok?: unknown; outcome?: unknown; resource?: unknown; errorCod
 
 const rpcBody = (command: AssessAtomicCommand): Record<string, unknown> => {
   const common = {
+    p_actor_id: command.actorId,
     p_org_id: command.organizationId,
     p_workspace_id: command.workspaceId,
     p_assessment_id: command.resourceId,
@@ -35,6 +36,7 @@ const controlledRpcResult = (value: unknown): AssessAtomicResult => {
   if (result.errorCode === 'IDEMPOTENCY_CONFLICT') throw new AssessCommandError('IDEMPOTENCY_CONFLICT');
   if (result.errorCode === 'AUTHORIZATION_STALE') throw new AssessCommandError('AUTHORITY_STALE');
   if (result.errorCode === 'NOT_FOUND') throw new AssessCommandError('RESOURCE_NOT_AVAILABLE');
+  if (result.errorCode === 'INVALID_COMMAND') throw new AssessCommandError('INVALID_COMMAND');
   if (result.errorCode === 'INVALID_SCORE_VERSION') throw new AssessCommandError('INVALID_COMMAND');
   if ((result.outcome !== 'committed' && result.outcome !== 'replayed') || !result.resource ||
       typeof result.resource !== 'object' || Array.isArray(result.resource)) throw new AssessCommandError('COMMAND_UNAVAILABLE');
@@ -65,8 +67,7 @@ export const assessCommandDependencies: AssessCommandDependencies = {
     }
   },
   async loadAssessmentForFinalize(input) {
-    if (!input.accessToken) throw new AssessCommandError('AUTHENTICATION_REQUIRED');
-    const { url, anonKey } = supabaseEnv();
+    const { url, serviceRoleKey } = supabaseEnv();
     const query = new URLSearchParams({
       select: 'id,process_id,version,responses',
       id: `eq.${input.assessmentId}`,
@@ -77,7 +78,7 @@ export const assessCommandDependencies: AssessCommandDependencies = {
     });
     const response = await fetch(`${url}/rest/v1/assessments?${query}`, {
       method: 'GET', redirect: 'error',
-      headers: { apikey: anonKey, Authorization: `Bearer ${input.accessToken}` },
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
     });
     if (!response.ok) throw new AssessCommandError('COMMAND_UNAVAILABLE');
     const rows = await response.json() as Array<Record<string, unknown>>;
@@ -103,11 +104,10 @@ export const assessCommandDependencies: AssessCommandDependencies = {
   },
   async executeAtomicCommand(command) {
     try {
-      if (!command.accessToken) throw new AssessCommandError('AUTHENTICATION_REQUIRED');
-      const { url, anonKey } = supabaseEnv();
+      const { url, serviceRoleKey } = supabaseEnv();
       const response = await fetch(`${url}/rest/v1/rpc/${RPC_BY_COMMAND[command.commandType]}`, {
         method: 'POST', redirect: 'error',
-        headers: { apikey: anonKey, Authorization: `Bearer ${command.accessToken}`, 'Content-Type': 'application/json' },
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(rpcBody(command)),
       });
       if (!response.ok) throw new AssessCommandError('COMMAND_UNAVAILABLE');
