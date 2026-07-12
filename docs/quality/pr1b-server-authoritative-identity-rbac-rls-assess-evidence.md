@@ -1,6 +1,6 @@
 # PR 1B Server-Authoritative Identity, RBAC, RLS, And Assess Evidence
 
-Status: implementation candidate; security-critical acceptance correction implemented; corrected local evidence passed; GitHub CI, review, and merge pending
+Status: implementation candidate; security-critical acceptance correction implemented; corrected local and GitHub CI evidence passed; review and merge pending
 
 ## Scope And Baseline
 
@@ -68,10 +68,12 @@ PostgreSQL runtime checks inspected ACLs and attempted all three mutation calls 
 | `npm run build` | Passed with warning | 204 modules transformed; production bundle built. Browserslist data warning retained without dependency mutation. |
 | Offline Markdown-link validation | Passed | All relative links in the six changed active documentation files resolved locally. |
 | `git diff --check` | Passed | No whitespace errors. |
+| GitHub push CI | Passed | Run `29191250939` passed quality, browser, PR 1A migration, and real PR 1B migration jobs; live Supabase smoke remained skipped as designed. |
+| GitHub pull-request CI | Passed | Run `29191252378` passed the same required jobs for corrected head `b1aae19ddd3d07fed470f34fd97f4b2e6dd399da`. |
 
 ## Planned Verification
 
-- GitHub push and pull-request CI after publication.
+- Review and merge remain pending; this draft evidence does not grant acceptance.
 
 ## Not Run And Proof Boundary
 
