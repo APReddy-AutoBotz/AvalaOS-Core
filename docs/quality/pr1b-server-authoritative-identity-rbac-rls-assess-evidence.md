@@ -60,6 +60,7 @@ PostgreSQL runtime checks inspected ACLs and attempted all three mutation calls 
 | `npm run test:pr1b` | Passed | Source/migration contracts, authority, endpoint, command, scoring parity, and coverage passed. |
 | PR 1B coverage | Passed | 95.61% lines, 81.42% branches, 100% functions for instrumented critical modules. SQL and fetch adapters are covered by direct and migration suites, not this percentage. |
 | `npm run test:migrations:pr1b` | Passed | Disposable PostgreSQL 15 executed the real RPC privilege, forged-input, trusted mutation, replay/conflict, two-client concurrency, rollback, revocation, non-disclosure, unexpected-failure, fresh/reapply/upgrade/dirty/read-only/forward-fix matrix. |
+| `npm run test:migrations:pr1a` | Passed after CI harness correction | The older full-chain harness now bootstraps the disposable Supabase `service_role`; fresh, idempotency, upgrade, RLS, and failure scenarios passed without changing an accepted migration. |
 | `npm test` | Passed | Full default regression including PR 1A and PR 1B gates exited 0. |
 | `npm audit --audit-level=moderate` | Passed | 0 vulnerabilities. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns; 734 allowed classified hits; 0 forbidden; 0 stale. |
