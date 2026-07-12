@@ -1,6 +1,6 @@
 # PR 1B Server-Authoritative Identity, RBAC, RLS, And Assess Evidence
 
-Status: implementation candidate; security-critical acceptance correction implemented; corrected local and GitHub CI evidence passed; review and merge pending
+Status: implementation candidate; role-mutation and capability-provenance correction implemented; required local source/database gates passed, local browser blocked by a missing host library, final GitHub CI pending; review and merge pending
 
 ## Scope And Baseline
 
@@ -29,9 +29,13 @@ rechecks active organization/workspace authority, normalized capability,
 authorization version, aggregate version, idempotency, and tenant ownership.
 The service credential is never command input or client output.
 
+The accepted direct-RPC correction exposed a second **confirmed source defect** in the same candidate: membership triggers validated a role only when the membership changed, so a later update to a referenced role's organization, scope, or workspace could invalidate existing membership provenance. All three capability derivations also joined one role alias through both membership role IDs, losing proof of whether authority came from the organization edge or the exact-workspace edge.
+
+The database correction adds a serialized, two-sided invariant. Membership validation locks the referenced role; referenced structural role updates are rejected before mutation unless every organization and workspace membership remains compatible. Capability projection, RLS evaluation, and private command reauthorization now use separate exact organization-role and workspace-role paths. Status/soft-deletion revocation remains supported, immediately denies authority, bumps affected authorization versions, and preserves membership and audit history.
+
 - Caller-JWT server-derived TenantContext with organization, workspace, normalized capabilities, and authorization version.
 - Immediate authority invalidation for membership, role, and capability changes.
-- Database-enforced tenant/scope role integrity and permission-aware Assess RLS.
+- Database-enforced two-sided tenant/scope role integrity, provenance-preserving capability derivation, and permission-aware Assess RLS.
 - Workspace-complete Assess lineage, optimistic versions, idempotency receipts, append-only privileged audit, and atomic command RPCs.
 - Transport-only `assess-command` routing to separate create, response-upsert, and finalize handlers.
 - Finalize reloads persisted input through the server-only database client after caller authorization and runs the unchanged `assess-core-2026-05` deterministic engine server-side.
@@ -59,7 +63,7 @@ PostgreSQL runtime checks inspected ACLs and attempted all three mutation calls 
 | `npm run test:scoring` | Passed | Locked deterministic, validation, golden, monotonic, and polarity corpus passed. |
 | `npm run test:pr1b` | Passed | Source/migration contracts, authority, endpoint, command, scoring parity, and coverage passed. |
 | PR 1B coverage | Passed | 95.61% lines, 81.42% branches, 100% functions for instrumented critical modules. SQL and fetch adapters are covered by direct and migration suites, not this percentage. |
-| `npm run test:migrations:pr1b` | Passed | Disposable PostgreSQL 15 executed the real RPC privilege, forged-input, trusted mutation, replay/conflict, two-client concurrency, rollback, revocation, non-disclosure, unexpected-failure, fresh/reapply/upgrade/dirty/read-only/forward-fix matrix. |
+| `npm run test:migrations:pr1b` | Passed | Disposable PostgreSQL 15 executed six transactionally rejected referenced-role mutations; unchanged role/membership/version/capability state; explicit organization/exact-workspace provenance; disable/re-enable revocation; roleless inheritance; test-superuser legacy-trigger bypass; real RPC privilege, forged-input, trusted mutation, replay/conflict, two-client concurrency, rollback, non-disclosure, unexpected-failure, fresh/reapply/upgrade/dirty/read-only/forward-fix scenarios. |
 | `npm run test:migrations:pr1a` | Passed after CI harness correction | The older full-chain harness now bootstraps the disposable Supabase `service_role`; fresh, idempotency, upgrade, RLS, and failure scenarios passed without changing an accepted migration. |
 | `npm test` | Passed | Full default regression including PR 1A and PR 1B gates exited 0. |
 | `npm audit --audit-level=moderate` | Passed | 0 vulnerabilities. |
