@@ -17,9 +17,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
-      const currentUser = await authAdapter.getCurrentUser();
-      setUser(currentUser);
-      setLoading(false);
+      try {
+        const currentUser = await authAdapter.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Runtime authentication boundary unavailable:', error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     };
     initAuth();
   }, []);

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 import { AssessProcess, Assessment, AssessmentReviewComment, AssessmentResponses, EvidenceItem, Assumption, AssessStatus } from '../../types';
 import {
   CANONICAL_AP_ASSUMPTIONS,
@@ -284,7 +284,7 @@ const upsertDemoAssessment = (assessment: Assessment): Assessment => {
 
 export const assessAdapter = {
   async getProcesses(orgId: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return demoProcesses.filter(process => process.orgId === orgId);
     }
 
@@ -298,7 +298,7 @@ export const assessAdapter = {
   },
 
   async createProcess(process: Omit<AssessProcess, 'id' | 'createdAt' | 'updatedAt'>) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       const saved = { ...process, id: `proc-${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       demoProcesses = [saved, ...demoProcesses];
       return saved;
@@ -315,7 +315,7 @@ export const assessAdapter = {
   },
 
   async getAssessment(processId: string, orgId: string) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return demoAssessments.find(assessment => assessment.processId === processId && assessment.orgId === orgId) || null;
     }
 
@@ -331,7 +331,7 @@ export const assessAdapter = {
   },
 
   async saveAssessment(assessment: Partial<Assessment>) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return upsertDemoAssessment(assessment as Assessment);
     }
 
@@ -346,7 +346,7 @@ export const assessAdapter = {
   },
 
   async transitionAssessmentWithAudit(assessment: Assessment, event: AssessmentReviewAuditInput) {
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       const saved = upsertDemoAssessment(assessment);
       await this.recordAssessmentReviewEvent(event);
       return saved;
@@ -385,7 +385,7 @@ export const assessAdapter = {
       reason: event.reason,
     };
 
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       const existing = StorageService.load<any[]>(StorageKeys.AUDIT_LOGS, []);
       const reviewEvent = {
         id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -441,7 +441,7 @@ export const assessAdapter = {
   async calculateScores(assessmentId: string) {
     // In a real production app, this would be a call to a Supabase Edge Function
     // to ensure the scoring logic is executed in a secure, server-side environment.
-    if (!isSupabaseConfigured()) {
+    if (getRuntimeDataAccess() === 'local') {
       return null;
     }
     

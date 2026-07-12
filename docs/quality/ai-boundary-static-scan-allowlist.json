@@ -30,14 +30,14 @@
     {
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
-      "lines": [152],
+      "lines": [153],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
     },
     {
       "pattern": "localStorage",
       "path": "App.tsx",
-      "lines": [152],
+      "lines": [153],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
     },
@@ -51,56 +51,56 @@
     {
       "pattern": "getAiProvider",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 82, 96, 130],
+      "lines": [1, 85, 99, 133],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },
     {
       "pattern": "getAiProviderApiKey",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 91],
+      "lines": [1, 94],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },
     {
       "pattern": "getAiProviderApiKey",
       "path": "services/geminiService.ts",
-      "lines": [7, 20],
+      "lines": [11, 25],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "VITE_GROQ_API_KEY",
       "path": "services/geminiService.ts",
-      "lines": [13],
+      "lines": [17],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback; M3.2 owns server-side key-reference resolution."
     },
     {
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "services/geminiService.ts",
-      "lines": [16],
+      "lines": [18],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback; M3.2 owns server-side key-reference resolution."
     },
     {
       "pattern": "getAiProvider",
       "path": "services/geminiService.ts",
-      "lines": [19],
+      "lines": [21],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "new GroqProvider",
       "path": "services/geminiService.ts",
-      "lines": [30],
+      "lines": [34],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "new GeminiProvider",
       "path": "services/geminiService.ts",
-      "lines": [36],
+      "lines": [35],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
@@ -142,7 +142,7 @@
     {
       "pattern": "localStorage",
       "path": "services/adapters/authAdapter.ts",
-      "lines": [39, 57, 63, 69],
+      "lines": [34, 50, 56, 62],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep current-user/demo state classified separately from provider-key storage."
     },

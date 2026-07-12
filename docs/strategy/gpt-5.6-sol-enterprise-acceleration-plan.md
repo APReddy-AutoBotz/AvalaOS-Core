@@ -1,7 +1,7 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan, implementation begins only after this rebaseline PR is accepted and merged
-Rebaseline source: `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`
+Status: active plan; PR #205 is accepted and PR 1A is an implementation candidate pending review, CI, and merge
+Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
 ## 1. Maturity Verdict
@@ -16,7 +16,7 @@ PR #205 is the explicitly authorized one-time docs/config-only enterprise rebase
 
 ## 2. P0 Stop Gate: Service-Role Storage URL Escape
 
-`P0-001` in the active risk register is a confirmed source defect. Hosted deployment status is unknown.
+`P0-001` in the active risk register is a confirmed source defect. At the planning baseline, hosted deployment status was unknown; the executed PR 1A disposition below records the later AP classification.
 
 Before normal PR 1A implementation:
 
@@ -35,7 +35,9 @@ Before normal PR 1A implementation:
    - Fix and test the defect before broader PR 1A refactoring.
 5. Never expose secrets, raw logs, signed URLs, customer data, object identifiers, or production infrastructure identifiers in evidence.
 
-This rebaseline does not perform deployment inventory, endpoint changes, log review, rotation, or live-system access.
+PR #205 did not perform deployment inventory, endpoint changes, log review, rotation, or live-system access.
+
+**Executed PR 1A disposition:** the AP manually inspected the intended Supabase project and reported that `extract-document-text` was not present. Classification: **NOT DEPLOYED**. The repository run did not inspect live infrastructure or request, record, or emit infrastructure identifiers. The isolated P0 source fix and tests remained the first logical commit before broader PR 1A work.
 
 ## 3. Locked Target Contracts
 
@@ -74,7 +76,7 @@ Command envelopes carry a request ID, idempotency key, command type, expected ve
 
 ### PR 1A — Platform Safety and Fail-Closed Runtime Foundation
 
-Entry: this rebaseline is accepted and merged; start from fresh current `main`; complete the P0 decision first.
+Entry: PR #205 is accepted and merged; PR 1A started from fresh `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`; the AP classified P0 as not deployed before broader implementation.
 
 Deliver:
 
@@ -89,6 +91,8 @@ Deliver:
 - directly required CI and security gates.
 
 Acceptance: P0 disposition recorded; negative security tests pass; pilot/production cannot silently use demo authority; directly affected checks run in CI; no score behavior changes.
+
+Current draft status: the corrected implementation candidate has local source, regression, coverage, build, and deterministic Chromium browser/axe/desktop/mobile evidence. The expanded populated fresh/upgrade/dirty-data migration harness passed in both push and pull-request PostgreSQL CI jobs because no disposable local database was configured. Both push and pull-request quality, browser, and migration jobs passed; review and merge remain acceptance gates; no performance, hosted, deployment, or live-system pass is claimed.
 
 Rollback: keep vulnerable endpoints disabled; revert non-security runtime refactors if necessary; never restore service-role URL construction or production fail-open behavior.
 

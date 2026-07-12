@@ -32,6 +32,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Edge Function typecheck
+        run: npm run typecheck:edge
+
+      - name: PR 1A fail-closed source lint
+        run: npm run lint:pr1a
+
       - name: Static AI boundary scan
         run: npm run test:ai-boundary-static
 
@@ -43,6 +49,57 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  pr1a-browser:
+    name: PR 1A Chromium, accessibility, and viewport gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install official Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic desktop and mobile browser gates
+        run: npm run test:browser
+  pr1a-migrations:
+    name: PR 1A Migration Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PR1A_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fresh, upgrade, RLS, and failure migration checks
+        run: npm run test:migrations:pr1a
 
   supabase-smoke:
     name: Supabase Smoke Checks

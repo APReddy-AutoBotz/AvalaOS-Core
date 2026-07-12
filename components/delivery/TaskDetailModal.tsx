@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Task, Project, Epic, User, TaskStatus, TaskPriority, UserStory, AcceptanceCriterion, Attachment, Comment as TaskComment, ALL_STATUSES, ALL_PRIORITIES } from '../../types';
 import Modal from '../shared/Modal';
-
-declare global {
-    interface Window {
-        mermaid: any;
-        marked: any;
-    }
-}
+import { renderSafeMarkdown } from '../../services/safeMarkdown';
 
 import {
     SparklesIcon, ArrowPathIcon, EyeIcon, FireIcon, CheckCircleIcon, BanIcon, ClockIcon,
@@ -304,7 +298,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                 </div>
                 <div className="prose dark:prose-invert max-w-none text-sm text-slate-600 dark:text-slate-300">
                     {window.marked ? (
-                        <div dangerouslySetInnerHTML={{ __html: window.marked.parse(task.description || 'No description provided.') }} />
+                        <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(task.description || 'No description provided.') }} />
                     ) : (
                         <p className="whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
                     )}

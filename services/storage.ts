@@ -53,14 +53,19 @@ export class StorageService {
     }
 }
 
-export function usePersistentState<T>(key: string, defaultValue: T) {
-    const [state, setState] = useState<T>(() => {
-        return StorageService.load(key, defaultValue);
-    });
+export function usePersistentState<T>(
+    key: string,
+    defaultValue: T,
+    options: { enabled?: boolean } = {},
+) {
+    const enabled = options.enabled ?? true;
+    const [state, setState] = useState<T>(() => (
+        enabled ? StorageService.load(key, defaultValue) : defaultValue
+    ));
 
     useEffect(() => {
-        StorageService.save(key, state);
-    }, [key, state]);
+        if (enabled) StorageService.save(key, state);
+    }, [enabled, key, state]);
 
     return [state, setState] as const;
 }

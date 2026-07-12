@@ -1,79 +1,70 @@
 import { completeAiJob, createAiJob } from '../_shared/audit.ts';
+import { loadDocumentExportAuthority } from '../_shared/exportDb.ts';
+import { executeExport } from '../_shared/exportHandler.ts';
+import {
+  asExportControlError,
+  exportError,
+  exportErrorResponseBody,
+  parseDocumentExportRequest,
+} from '../_shared/exportPolicy.ts';
 import { renderGeneratedDocumentMarkdown } from '../_shared/export.ts';
-import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
-import { getAuthUser, postgrest, resolveOrgId } from '../_shared/supabase.ts';
-import { uploadTextArtifact } from '../_shared/storage.ts';
+import { handleOptions, jsonResponse } from '../_shared/http.ts';
+import { getAuthUser } from '../_shared/supabase.ts';
+import { prepareTextArtifact, removeTextArtifact, uploadTextArtifact } from '../_shared/storage.ts';
 
-const normalizeExportType = (value: unknown) => String(value || 'markdown').toLowerCase();
+const DOCUMENT_EXPORT_STATUSES = ['generated', 'draft'] as const;
 
 Deno.serve(async (request) => {
   const options = handleOptions(request);
   if (options) return options;
 
-  let jobId: string | undefined;
-
   try {
-    const user = await getAuthUser(request);
-    const body = await request.json();
-    const orgId = await resolveOrgId(user.id, body.organizationId);
-    const documentId = String(body.documentId || '');
-    const versionId = body.versionId ? String(body.versionId) : undefined;
-    const exportType = normalizeExportType(body.exportType);
-
-    if (!documentId) throw new Error('documentId is required.');
-    if (!['markdown', 'md', 'json'].includes(exportType)) {
-      throw new Error('Only Markdown and JSON document exports are implemented in this Edge Function source. Server-side DOCX/PDF rendering remains pending.');
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      exportError('INVALID_EXPORT_REQUEST');
     }
 
-    const rows = await postgrest<Record<string, unknown>[]>(
-      `document_generations?select=*&id=eq.${encodeURIComponent(documentId)}&org_id=eq.${encodeURIComponent(orgId)}`,
-      { method: 'GET' },
-    );
-    const documentRow = rows[0];
-    if (!documentRow) throw new Error('Generated document was not found for this organization.');
-
-    const job = await createAiJob({
-      orgId,
-      userId: user.id,
+    const parsedRequest = parseDocumentExportRequest(body);
+    const result = await executeExport({
+      request: parsedRequest,
+      runtimeConfig: {
+        enabled: Deno.env.get('EDGE_EXPORTS_ENABLED'),
+        bucket: Deno.env.get('EXPORTS_BUCKET'),
+        bucketAllowlist: Deno.env.get('EXPORTS_BUCKET_ALLOWLIST'),
+      },
       jobType: 'export_document',
-      inputRefs: { documentId, versionId, exportType },
-    });
-    jobId = job?.id;
-
-    const isJson = exportType === 'json';
-    const content = isJson ? JSON.stringify(documentRow, null, 2) : renderGeneratedDocumentMarkdown(documentRow);
-    const artifact = await uploadTextArtifact({
-      orgId,
       artifactType: 'generated-document',
-      extension: isJson ? 'json' : 'md',
-      contentType: isJson ? 'application/json' : 'text/markdown',
-      content,
-    });
-
-    await completeAiJob(jobId, 'succeeded', {
-      artifactId: artifact.artifactId,
-      bucket: artifact.bucket,
-      path: artifact.path,
-      documentId,
-      versionId,
-      exportType,
+      allowedStatuses: DOCUMENT_EXPORT_STATUSES,
+      dependencies: {
+        authenticate: () => getAuthUser(request),
+        loadAuthority: loadDocumentExportAuthority,
+        createRequiredAudit: createAiJob,
+        completeRequiredAudit: completeAiJob,
+        render: (row, format) => format === 'json'
+          ? JSON.stringify(row, null, 2)
+          : renderGeneratedDocumentMarkdown(row),
+        prepareArtifact: prepareTextArtifact,
+        upload: uploadTextArtifact,
+        remove: removeTextArtifact,
+      },
     });
 
     return jsonResponse({
       data: {
-        exportArtifactId: artifact.artifactId,
+        exportArtifactId: result.artifact.artifactId,
         downloadReference: {
-          bucket: artifact.bucket,
-          path: artifact.path,
+          bucket: result.artifact.bucket,
+          path: result.artifact.path,
         },
-        documentId,
-        versionId,
-        exportType,
+        documentId: result.resourceId,
+        versionId: result.version,
+        exportType: result.exportType,
       },
     });
   } catch (error) {
-    const message = safeErrorMessage(error);
-    await completeAiJob(jobId, 'failed', {}, message);
-    return jsonResponse({ error: message }, 400);
+    const controlled = asExportControlError(error);
+    return jsonResponse(exportErrorResponseBody(controlled), controlled.status);
   }
 });

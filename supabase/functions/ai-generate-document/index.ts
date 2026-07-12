@@ -1,5 +1,5 @@
-import { completeAiJob, createAiJob, recordAiUsage } from '../_shared/audit.ts';
-import { generateDocumentWithProvider } from '../_shared/ai.ts';
+import { completeAiJob, createAiJob, failAiJobBestEffort, recordAiUsageBestEffort } from '../_shared/audit.ts';
+import { generateDocumentWithProvider, type ProviderType } from '../_shared/ai.ts';
 import { handleOptions, jsonResponse, safeErrorMessage } from '../_shared/http.ts';
 import { runProviderGovernedOperation } from '../_shared/providerResolverIntegration.ts';
 import { getAuthUser, resolveOrgId } from '../_shared/supabase.ts';
@@ -11,7 +11,7 @@ Deno.serve(async (request) => {
   let jobId: string | undefined;
   let orgId: string | undefined;
   let userId: string | undefined;
-  let provider = 'groq';
+  let provider: ProviderType = 'groq';
 
   try {
     const user = await getAuthUser(request);
@@ -44,7 +44,7 @@ Deno.serve(async (request) => {
             sourceProvided: Boolean(source.text?.trim()),
           },
         });
-        jobId = job?.id;
+        jobId = job.id;
 
         return generateDocumentWithProvider(
           provider,
@@ -62,7 +62,7 @@ Deno.serve(async (request) => {
 
     const result = governed.value;
 
-    await recordAiUsage({
+    await recordAiUsageBestEffort({
       orgId,
       userId,
       jobId,
@@ -84,7 +84,7 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     const message = safeErrorMessage(error);
-    await completeAiJob(jobId, 'failed', {}, message);
+    await failAiJobBestEffort(jobId, message);
     return jsonResponse({ error: message }, 400);
   }
 });

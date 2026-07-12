@@ -1103,6 +1103,7 @@ export interface DocumentGeneration {
     id: string;
     projectId: string;
     generatedAt: string; // ISO timestamp
+    versionId?: string; // authoritative server version used for export binding
     templateId: string;
     artifacts: GeneratedArtifacts;
 }

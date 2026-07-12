@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: `main` at `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`
+Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`; PR 1A candidate evidence is explicitly marked pending acceptance
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -18,20 +18,16 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 
 ## P0 Stop Gate
 
-### P0-001 — Service-role Storage URL escape
+### P0-001 - Service-role Storage URL escape
 
 - **Severity:** P0
-- **Classification:** confirmed source defect; deployment status unknown
-- **Source evidence:**
-  - `supabase/functions/extract-document-text/index.ts:23-32` accepts request-controlled `bucket` and validates only `storagePath`.
-  - `supabase/functions/extract-document-text/index.ts:46-60` downloads through the supplied bucket and returns extracted text/chunks.
-  - `supabase/functions/_shared/storage.ts:54-64` interpolates `input.bucket` into a privileged URL while authenticating with the service-role key.
-- **Impact:** a crafted bucket value may change URL path interpretation and send a service-role-authenticated request outside the intended Storage object route. The code path can return response content to the caller.
-- **Deployment state:** unknown. This rebaseline did not inspect deployments, environments, logs, credentials, or live infrastructure.
-- **Readiness effect:** blocks pilot, production, hosted, deployment, storage, and security readiness claims.
-- **Required next action:** execute the unknown/deployed/not-deployed decision tree at the start of PR 1A under separate authority.
-- **Closure evidence:** deployment disposition; containment decision if applicable; allowlisted server-derived bucket authority; canonical URL/path validation; negative traversal and URL-normalization tests; sanitized incident/rotation assessment when applicable.
-- **Prohibited action in this PR:** live inspection or mutation, endpoint disablement, log review, credential/key rotation, incident execution, deployment, or source fix.
+- **Accepted-baseline classification:** confirmed source defect at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`.
+- **Deployment disposition:** **NOT DEPLOYED**, based on the AP manual inspection of the intended Supabase project. The `extract-document-text` Edge Function was not present.
+- **Evidence boundary:** the repository did not perform live inspection and did not request, record, or emit a project reference, organization, URL, credential, screenshot, or infrastructure identifier.
+- **Candidate remediation:** the first logical PR 1A commit, `fa42a0ff78d3f8af448951031a97ed9e6a3c3d1a`, removes request-controlled bucket authority; requires strict server configuration and allowlist membership; validates canonical tenant paths and origin; encodes route segments; refuses redirects; and returns stable sanitized failures.
+- **Executed source evidence:** `npm run test:p0-storage-boundary` passed bucket-injection, tenant-escape, traversal, normalization, origin, redirect, and source-invariant cases.
+- **Readiness effect:** the not-deployed decision closes the deployment-question stop condition and allowed broader PR 1A work. It does not prove hosted, Storage, Edge, tenant-isolation, security, pilot, or production readiness.
+- **Remaining closure:** PR 1A remediation must be accepted and merged. No deployment, live mutation, log review, credential rotation, incident action, or other environment access occurred.
 
 ## Material Risks
 
@@ -53,6 +49,19 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | P2-002 | P2 | Confirmed quality gap | `tsconfig.json:29-36` | Root TypeScript validation excludes `supabase/`, leaving Edge source outside the standard typecheck. | PR 1A adds an Edge-compatible typecheck/test boundary. |
 | P2-003 | P2 | Confirmed quality gap | `package.json:6-52`; `.github/workflows/ci.yml:26-73` | No standard lint, coverage threshold, browser E2E, accessibility, performance-budget, or migration fresh/upgrade gate exists. | Add each feature-specific gate to the slice that needs it; consolidate only genuinely shared infrastructure. |
 
+## PR 1A Candidate Risk Disposition
+
+| Risk | Candidate disposition | Remaining boundary |
+| --- | --- | --- |
+| P1-001 / P1-002 | Runtime modes fail closed and authenticated users no longer inherit demo role/permissions by email. | PR 1B still owns server roles, workspace authority, revocation, and two-tenant proof. |
+| P1-003 | Edge export handlers validate strict schemas, requested organization, membership, workspace, `docs.export`, resource state, and version before privileged access. | Later artifact work still owns the complete artifact lifecycle, evidence, lineage, retention, and deployed proof. |
+| P1-004 | Markdown sinks use DOMPurify, Mermaid SVG is sanitized, and export/print titles are escaped; adversarial Chromium tests pass on desktop and mobile. | This is bounded rendering evidence, not a general product-security or hosted-runtime claim. |
+| P1-005 | The unused caller-controlled usage endpoint is removed; job completion is running-only; terminal jobs and usage rows are immutable; usage/job authority is database-linked; export audit failure triggers compensation with a durable pending-artifact recovery reference. | Transactional coverage across future PR 1B commands remains later work. |
+| P1-007 | Generated workspace success now requires durable save confirmation. | PR 1C still owns atomic Govern/Studio handoff and complete failure-state browser proof. |
+| P1-011 | Minimum AI-audit schema is canonical; isolated fresh and targeted legacy-upgrade paths pass. | Complete runtime schema and two-tenant RLS reproduction remain PR 1B work. |
+| P2-001 / P2-002 | Supplemental critical suites are in the default chain and Edge has an explicit typecheck boundary. | Candidate pending CI and acceptance. |
+| P2-003 | PR-owned source lint, focused coverage, fresh/upgrade/dirty migration gates, and required Chromium desktop/mobile/axe CI are present; eight local browser tests pass. | A separate performance budget was not executed or claimed. |
+
 ## Existing Positive Controls
 
 - Deterministic scoring regression tests execute in the default suite.
@@ -65,11 +74,11 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | Check | Result | Exact signal |
 | --- | --- | --- |
 | Baseline and repository preflight | Passed | Clean `main`; local `HEAD`, `main`, local `origin/main`, and remote `main` all `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`; private repository `APReddy-AutoBotz/AvalaOS-Core`; zero open PRs before branching. |
-| `npm ci` | Passed | 192 packages installed; 193 packages audited; zero vulnerabilities. |
+| `npm ci` | Passed | 200 packages installed; 201 packages audited; zero vulnerabilities. |
 | `npm audit --audit-level=moderate` | Passed | Zero vulnerabilities. |
 | `npm run typecheck` | Passed | `tsc --noEmit` exit 0; does not cover `supabase/` because of the recorded exclusion. |
 | `npm run test:ai-boundary-static` | Passed | 15 patterns; 734 allowed classified hits; zero forbidden hits; zero stale allowlist entries. |
-| `npm run test:secret-hygiene` | Passed | 5 rules; 746 allowed classified hits; zero forbidden hits; zero tracked `.env*` files. |
+| `npm run test:secret-hygiene` | Passed | 5 rules; 748 allowed classified hits; zero forbidden hits; zero tracked `.env*` files. |
 | `npm run test` | Passed | Complete default chained regression suite exit 0, including deterministic scoring and provider resolver tests. |
 | `npm run test:evidence-execution-gate` | Passed | Model and presentation suites passed. |
 | Product action policy supplemental suite | Passed | 13 tests passed; zero failed. |
@@ -103,15 +112,32 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | External limitation scope | Codex orchestration only | The `max_depth` defect and repository containment affect Codex development orchestration only. They do not alter AvalaOS product runtime, deployment, tenant isolation, security controls, maturity, or readiness state. |
 | Final WSL2 cleanup and Git status | Passed | All reviewer and worker probe paths were absent; the disposable checkout was clean at `d0f932eb9364cfe7eb2e13f233128ab551307943` before removal. |
 
+## PR 1A Executed Evidence
+
+The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-closed-runtime-evidence.md`.
+
+| Check | Result | Exact signal |
+| --- | --- | --- |
+| Fresh-main and PR preflight | Passed | PR #205 was merged; branch `codex/pr-1a-platform-safety-fail-closed-runtime` started from accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`. |
+| AP P0 determination | **NOT DEPLOYED** | AP manually reported that `extract-document-text` was not present in the intended Supabase project. No repository-side live access or infrastructure identifier collection occurred. |
+| Isolated P0 remediation | Implemented; acceptance pending | Preserved as first logical commit `fa42a0ff78d3f8af448951031a97ed9e6a3c3d1a`; focused P0 tests passed. |
+| Controlled reviewer wave | Partially completed | Security and quality reviews completed read-only; architecture command initialization was environment-blocked by the native Windows ACL helper, so the root controller synthesized architecture findings. All reviewers closed before implementation. |
+| Implementation wave | Completed with root integration | Worker tracks covered runtime, Edge/audit/export, and UI safety. Native helper failures blocked some child edits; root integrated the full candidate. No child permission-probe pass is claimed. |
+| Local PR 1A regression and coverage | Passed | Corrective focused gates passed. Coverage was 94.90% lines, 93.10% branches, and 92.86% functions for runtime/AI mode, Storage boundary, and export policy/handler only; sanitizer, audit, and persistence are covered by their named source, migration, direct, and browser suites rather than included in this percentage. |
+| Full default/supplemental regression | Passed | `npm test` and `npm run test:required-supplemental` exited 0; deterministic scoring stayed green. |
+| Expanded migration harness | Passed in GitHub CI | Both push and pull-request PostgreSQL jobs passed populated legacy data, dirty-data preflight, cross-authority, duplicate completion, terminal/usage immutability, token consistency, RLS, fresh, reapply, and upgrade assertions. It was not run against a live or hosted application database. |
+| Build, audit, AI boundary, and secret hygiene | Passed | Production build exited 0; dependency audit found 0 vulnerabilities; AI-boundary scan found 0 forbidden/stale hits; secret scan found 0 forbidden hits. |
+| Build-preview Chromium, accessibility, and responsive viewports | Passed locally | The production bundle was created with `vite build` and served with `vite preview`; eight deterministic Playwright checks passed across Chromium desktop and mobile. The principal login/runtime path exposed no demo authority, the production document-HTML helper escaped hostile export metadata without script/event execution, the component sanitizer harness removed hostile Markdown/SVG, rejected persistence did not commit success, dialog focus/keyboard behavior passed, and axe reported no serious/critical findings. This is narrow PR-owned browser evidence, not full product E2E or live-system proof. |
+| Storage compensation fetch contract | Passed locally; source-only | Deterministic fetch-level tests verify `DELETE /storage/v1/object/{encodedBucket}`, the exact validated tenant path in `prefixes`, JSON content type, service authorization-header presence without values, redirect rejection, path rejection, documented success/missing responses, and sanitized non-2xx/malformed-response failure. No live Storage or Edge invocation occurred. |
+
 ## Blocked Or Not Run
 
 | Check/action | Status | Reason |
 | --- | --- | --- |
-| Official Codex manual helper | Blocked | The fetched response lacked the required `x-content-sha256` integrity header. Installing a global docs MCP would have exceeded the repository-only scope. |
-| Live deployment/function inventory | Not run | Explicitly outside this PR; P0 deployment status remains unknown. |
-| Environment, database, RLS, storage, Edge, log, secret, incident, rotation, hosted, and production checks | Not run | Explicitly unauthorized for the docs/config-only rebaseline. |
-| Browser E2E, accessibility, performance, coverage, lint, and migration fresh/upgrade gates | Not run / unavailable | No standard repository commands currently exist; recorded as P2 quality gaps. |
+| Browser performance budget | Not run | No repository-owned PR 1A performance budget was defined; no performance pass is claimed. |
+| Live deployment, environment, hosted database/RLS, Storage, Edge invocation, logs, secrets, incident, rotation, backup/restore, and production checks | Not run | Outside the authorized PR 1A boundary. The AP-provided P0 decision was recorded without repository-side live access. |
+| Implementation-worker runtime permission probe | Not run | The implementation wave was not used as a sandbox experiment; no write-capability result is inferred. |
 
 ## Readiness Decision
 
-The source-level rebaseline checks support the maturity verdict and implementation plan. They do not close any enterprise readiness domain. P0 remains open, deployment status remains unknown, and PR 1A cannot start until this rebaseline is accepted and merged and a fresh-main execution begins under the stated stop gate.
+PR 1A is an implementation candidate with executed local source, regression, coverage, and isolated migration evidence. P0 deployment classification is **NOT DEPLOYED** based on AP-provided manual inspection, and the source remediation remains pending acceptance. Deterministic local Chromium execution and both push/pull-request quality, browser, and migration jobs passed; review and merge remain required before acceptance. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven. PR 1B must not begin until PR 1A is accepted and merged.

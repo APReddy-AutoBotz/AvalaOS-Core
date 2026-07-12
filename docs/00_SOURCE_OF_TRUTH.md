@@ -30,9 +30,10 @@ Do not read the full historical planning/evidence corpus by default.
 
 - Repository: `APReddy-AutoBotz/AvalaOS-Core`
 - Branch: `main`
-- Rebaseline anchor: `6877bd90f5f93e685b5ec47a0fbafa2c57a99e09`
-- Latest accepted source hardening: PR #204, Server-Side Export Storage and Signed URL Guard Hardening Implementation Gate
-- PR #204 is source-level defense-in-depth only. It is not deployment, export, storage, signed-URL, tenant-isolation, hosted, pilot, production, security, buyer, release-candidate, or compliance proof.
+- Rebaseline anchor: `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
+- Latest accepted repository baseline: PR #205, AvalaOS Enterprise Rebaseline, merged as `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`.
+- Latest accepted source hardening before the rebaseline: PR #204, Server-Side Export Storage and Signed URL Guard Hardening Implementation Gate.
+- PR 1A is an active implementation candidate. Its source, migration, CI, and evidence changes are not accepted until the draft PR is reviewed and merged.
 
 ## Maturity Verdict
 
@@ -53,24 +54,24 @@ Do not read the full historical planning/evidence corpus by default.
 
 ## Not Accepted Or Proven
 
-- One reproducible migration chain for the runtime-assumed schema.
+- One reproducible migration chain for the complete runtime-assumed schema. PR 1A adds executed fresh/upgrade evidence only for its minimum AI audit boundary.
 - Uniform server-authoritative identity, RBAC, workspace authorization, and immediate revocation.
 - Enterprise Assess persistence and server scoring parity.
 - Complete RLS and two-tenant non-disclosure proof across pilot paths.
 - Atomic privileged audit across all state changes.
 - Safe private storage/export behavior in a deployed environment.
-- Browser E2E, accessibility, performance, coverage, and migration gates as standard CI.
+- Browser E2E, accessibility, responsive-state, and performance evidence. PR 1A adds candidate coverage and migration gates but does not supply browser execution evidence.
 - Hosted, deployment, rollback, incident, backup/restore, operational, pilot, production, buyer, release-candidate, security, or compliance readiness.
 
 ## P0 Stop Gate
 
-`P0-001` is a confirmed source defect in the service-role document-extraction Storage path. Deployment status is unknown.
+`P0-001` was a confirmed source defect in the service-role document-extraction Storage path. The AP manually inspected the intended Supabase project and classified the function as **NOT DEPLOYED**.
 
-- It is the first gate for PR 1A and all readiness claims.
-- Do not inspect or mutate live infrastructure, disable endpoints, review production logs, rotate credentials, or perform incident actions without separate explicit approval.
-- While deployment is unknown, treat the path as potentially deployed and block readiness claims.
-- The full unknown/deployed/not-deployed decision tree is in the acceleration plan and active risk register.
-- Evidence must exclude secrets, raw logs, signed URLs, customer data, object identifiers, and production infrastructure identifiers.
+- The repository did not access live infrastructure and did not request or record a project reference, organization, URL, credential, screenshot, or infrastructure identifier.
+- The isolated source remediation and negative tests remain the first logical PR 1A commit.
+- The not-deployed decision permitted broader PR 1A implementation; it is not deployment, hosted, storage, security, pilot, or production readiness proof.
+- Do not inspect or mutate live infrastructure, deploy, disable endpoints, review production logs, rotate credentials, or perform incident actions without separate explicit approval.
+- Evidence excludes secrets, raw logs, signed URLs, customer data, object identifiers, and infrastructure identifiers.
 
 ## Product And Security Law
 
@@ -88,14 +89,14 @@ Do not read the full historical planning/evidence corpus by default.
 
 ## Active Enterprise Sequence
 
-1. Accept and merge the docs/config-only enterprise rebaseline PR.
-2. Start PR 1A from a fresh current `main`; resolve the P0 gate before normal work.
-3. PR 1A: Platform Safety and Fail-Closed Runtime Foundation.
+1. PR #205, the one-time docs/config enterprise rebaseline, is accepted and merged.
+2. PR 1A is the active draft: Platform Safety and Fail-Closed Runtime Foundation.
+3. Accept PR 1A only after required local and GitHub CI evidence is green and review is complete.
 4. PR 1B: Server-Authoritative Identity, RBAC, RLS, and Assess.
 5. PR 1C: Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff.
 6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
-PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. After it is accepted, each workstream uses one to three substantial vertical PRs only when security, schema, deployment, or rollback boundaries require it. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs are prohibited; PR #205 does not weaken that future rule.
+PR 1A remains one substantial vertical PR. It does not authorize PR 1B, deployment, live-system access, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.
 
 ## Evidence Authority
 

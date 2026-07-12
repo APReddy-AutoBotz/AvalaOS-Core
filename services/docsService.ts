@@ -4,6 +4,9 @@ import { useOrganizationContext } from '../components/auth/OrganizationProvider'
 import { docsAdapter } from './adapters/docsAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
 
+const DOCUMENT_PERSISTENCE_AUTHORITY_ERROR =
+  'Document persistence authority is unavailable. The generated draft was not opened as a saved document.';
+
 export function useDocsService() {
   const { currentOrganization } = useOrganizationContext();
   const { user } = useAuth();
@@ -27,11 +30,26 @@ export function useDocsService() {
     fetchDocsData();
   }, [fetchDocsData]);
 
-  const saveGeneration = useCallback(async (gen: Partial<DocumentGeneration>) => {
-    if (!currentOrganization || !user) return;
-    const newGen = { ...gen, org_id: currentOrganization.id } as any;
+  const saveGeneration = useCallback(async (
+    gen: Partial<DocumentGeneration>,
+  ): Promise<DocumentGeneration> => {
+    if (!currentOrganization || !user) {
+      throw new Error(DOCUMENT_PERSISTENCE_AUTHORITY_ERROR);
+    }
+    const newGen = {
+      ...gen,
+      org_id: currentOrganization.id,
+      generatedAt: gen.generatedAt || new Date().toISOString(),
+    } as Partial<DocumentGeneration> & { org_id: string };
     const saved = await docsAdapter.saveGeneration(newGen);
-    setGenerations(prev => [...prev, saved]);
+    if (!saved?.id) throw new Error(DOCUMENT_PERSISTENCE_AUTHORITY_ERROR);
+
+    setGenerations(prev => {
+      const exists = prev.some(item => item.id === saved.id);
+      return exists
+        ? prev.map(item => item.id === saved.id ? saved : item)
+        : [saved, ...prev];
+    });
     return saved;
   }, [currentOrganization, user]);
 
@@ -39,6 +57,6 @@ export function useDocsService() {
     generations,
     loading,
     saveGeneration,
-    refresh: fetchDocsData
+    refresh: fetchDocsData,
   };
 }

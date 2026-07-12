@@ -15,7 +15,7 @@ import {
   ViewBoardsIcon,
 } from '../shared/icons';
 import { useAuth } from './AuthProvider';
-import { isSupabaseConfigured } from '../../services/supabaseClient';
+import { getRuntimeBoundaryError, isLocalRuntimeEnabled } from '../../services/supabaseClient';
 
 const valuePillars = [
   { label: 'Avala Assess', detail: 'Deterministic fit score', icon: ClipboardListIcon },
@@ -41,12 +41,13 @@ const proofPoints = [
 
 const LoginView: React.FC = () => {
   const { signIn } = useAuth();
-  const isDemoMode = !isSupabaseConfigured();
+  const isDemoMode = isLocalRuntimeEnabled();
+  const runtimeBoundaryError = getRuntimeBoundaryError();
   const [email, setEmail] = useState(isDemoMode ? MOCK_USERS[0]?.email || '' : '');
   const [password, setPassword] = useState(isDemoMode ? 'demo123' : '');
   const [selectedUserId, setSelectedUserId] = useState(MOCK_LOGIN_PROFILES[0]?.userId || '');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(runtimeBoundaryError?.message || null);
 
   const enrichedProfiles = useMemo(() => MOCK_LOGIN_PROFILES.map(profile => ({
     ...profile,

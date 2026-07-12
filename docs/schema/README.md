@@ -1,6 +1,6 @@
 # AvalaOS Core Schema Authority
 
-Status: legacy design and historical operational reference
+Status: legacy design and historical operational reference; PR 1A minimum AI-audit reconciliation recorded below
 Active canonical migration authority: `supabase/migrations/`
 
 ## Authority Boundary
@@ -10,6 +10,14 @@ Files under `docs/schema/` capture useful historical schema designs, policy prop
 Only timestamped files under `supabase/migrations/` are canonical migrations. A schema contract needed by runtime must be reconciled into that ordered chain in the implementation PR that owns the behavior, with fresh-database, supported-upgrade, RLS/policy, failure, and rollback/read-only verification.
 
 Do not use historical applied/live checkboxes from this directory as current deployment or readiness proof. Deployment status, hosted schema state, RLS behavior, tenant isolation, storage configuration, and migration reproducibility are unknown or unproven until separately authorized executed evidence establishes them.
+
+## PR 1A Minimum Reconciliation
+
+`supabase/migrations/20260710120000_pr1a_required_ai_audit.sql` reconciles the minimum `ai_generation_jobs` and `ai_usage_events` contract required by PR 1A. It enables and forces RLS without browser policies, validates constraints, and enforces lifecycle transitions.
+
+`npm run test:migrations:pr1a` passed the complete canonical chain from fresh state, idempotent PR 1A reapplication, and a targeted supported upgrade from `supabase/tests/migration-harness/pr1a_legacy_ai_audit_fixture.sql` using disposable PostgreSQL 15 databases. This is executed local evidence for that narrow migration boundary only; it is not hosted schema, general RLS, tenant-isolation, or deployment proof.
+
+Detailed behavior and rollback notes: `docs/migrations/pr1a-platform-safety-fail-closed-runtime.md`.
 
 ## Legacy Reference Files
 

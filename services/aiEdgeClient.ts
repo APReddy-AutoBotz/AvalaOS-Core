@@ -4,7 +4,7 @@ import {
   assertArtifactExportExecutionAllowed,
   assertSignedUrlExecutionAllowed,
 } from './artifactExportPolicy';
-import { isSupabaseConfigured, supabase } from './supabaseClient';
+import { getRuntimeDataAccess, isSupabaseConfigured, supabase } from './supabaseClient';
 
 const EDGE_AI_ENABLED = import.meta.env.VITE_AI_EDGE_FUNCTIONS_ENABLED === 'true';
 
@@ -26,18 +26,17 @@ type EdgeExtractDocumentTextInput = {
   fileId: string;
   storagePath: string;
   fileType: string;
-  bucket?: string;
 };
 
 type EdgeExportDocumentInput = {
   documentId: string;
-  versionId?: string;
+  versionId: string;
   exportType: 'markdown' | 'md' | 'json';
 };
 
 type EdgeExportDecisionPackInput = {
   assessmentId: string;
-  scoreSetId?: string;
+  scoreSetId: string;
   exportType: 'markdown' | 'md' | 'json';
 };
 
@@ -59,10 +58,17 @@ const unwrapEdgeResponse = <T>(payload: unknown): T => {
   return value as T;
 };
 
+const requireServerRuntime = () => {
+  if (getRuntimeDataAccess() !== 'server' || !isSupabaseConfigured()) {
+    throw new Error('Server runtime authority is unavailable.');
+  }
+};
+
 export const isAiEdgeEnabled = () => EDGE_AI_ENABLED && isSupabaseConfigured();
 
 export const aiEdgeClient = {
   async generateDocument(input: EdgeGenerateDocumentInput): Promise<GeneratedArtifacts> {
+    requireServerRuntime();
     const { data, error } = await supabase.functions.invoke('ai-generate-document', {
       body: {
         providerType: input.providerType,
@@ -79,6 +85,7 @@ export const aiEdgeClient = {
   },
 
   async refineSection(input: EdgeRefineSectionInput): Promise<string> {
+    requireServerRuntime();
     const { data, error } = await supabase.functions.invoke('ai-refine-section', {
       body: {
         providerType: input.providerType,
@@ -94,6 +101,7 @@ export const aiEdgeClient = {
   },
 
   async extractDocumentText(input: EdgeExtractDocumentTextInput): Promise<{ text: string; chunks: { index: number; text: string }[]; status: string; warnings: string[] }> {
+    requireServerRuntime();
     const { data, error } = await supabase.functions.invoke('extract-document-text', {
       body: input,
     });
@@ -102,7 +110,8 @@ export const aiEdgeClient = {
     return unwrapEdgeResponse(data);
   },
 
-  async exportDocument(input: EdgeExportDocumentInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { documentId: string; versionId?: string }> {
+  async exportDocument(input: EdgeExportDocumentInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { documentId: string; versionId: string }> {
+    requireServerRuntime();
     assertArtifactExportExecutionAllowed({
       helperId: 'aiEdgeClient.exportDocument',
       operation: 'export',
@@ -119,7 +128,8 @@ export const aiEdgeClient = {
     return unwrapEdgeResponse(data);
   },
 
-  async exportDecisionPack(input: EdgeExportDecisionPackInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { assessmentId: string; scoreSetId?: string }> {
+  async exportDecisionPack(input: EdgeExportDecisionPackInput, artifactDecision?: ArtifactExportDecision | null): Promise<EdgeExportResult & { assessmentId: string; scoreSetId: string }> {
+    requireServerRuntime();
     assertArtifactExportExecutionAllowed({
       helperId: 'aiEdgeClient.exportDecisionPack',
       operation: 'export',
@@ -137,6 +147,7 @@ export const aiEdgeClient = {
   },
 
   async createSignedDownloadUrl(reference: { bucket: string; path: string }, artifactDecision?: ArtifactExportDecision | null, expiresInSeconds = 60): Promise<string> {
+    requireServerRuntime();
     assertSignedUrlExecutionAllowed({
       helperId: 'aiEdgeClient.createSignedDownloadUrl',
       decision: artifactDecision,

@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { DocumentGeneration, GeneratedArtifacts } from '../../types';
+import { DocumentGeneration } from '../../types';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { docsAdapter } from '../../services/adapters/docsAdapter';
 import { useAuth } from '../auth/AuthProvider';
 
+const DOCUMENT_PERSISTENCE_AUTHORITY_ERROR =
+  'Document persistence authority is unavailable. The generated draft was not opened as a saved document.';
+
 interface DocsContextType {
   documentGenerations: DocumentGeneration[];
   loading: boolean;
-  saveGeneration: (gen: Partial<DocumentGeneration>) => Promise<DocumentGeneration | undefined>;
+  saveGeneration: (gen: Partial<DocumentGeneration>) => Promise<DocumentGeneration>;
   refresh: () => Promise<void>;
 }
 
@@ -36,20 +39,23 @@ export const DocsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchDocsData();
   }, [currentOrganization]);
 
-  const saveGeneration = async (gen: Partial<DocumentGeneration>) => {
-    if (!currentOrganization || !user) return;
-    const newGen = { 
-      ...gen, 
+  const saveGeneration = async (gen: Partial<DocumentGeneration>): Promise<DocumentGeneration> => {
+    if (!currentOrganization || !user) {
+      throw new Error(DOCUMENT_PERSISTENCE_AUTHORITY_ERROR);
+    }
+    const newGen = {
+      ...gen,
       org_id: currentOrganization.id,
-      generatedAt: gen.generatedAt || new Date().toISOString()
-    } as any;
+      generatedAt: gen.generatedAt || new Date().toISOString(),
+    } as Partial<DocumentGeneration> & { org_id: string };
     const saved = await docsAdapter.saveGeneration(newGen);
+    if (!saved?.id) throw new Error(DOCUMENT_PERSISTENCE_AUTHORITY_ERROR);
+
     setDocumentGenerations(prev => {
-      const existingIndex = prev.findIndex(item => item.id === saved.id);
-      if (existingIndex >= 0) {
-        return prev.map(item => item.id === saved.id ? saved : item);
-      }
-      return [saved, ...prev];
+      const exists = prev.some(item => item.id === saved.id);
+      return exists
+        ? prev.map(item => item.id === saved.id ? saved : item)
+        : [saved, ...prev];
     });
     return saved;
   };

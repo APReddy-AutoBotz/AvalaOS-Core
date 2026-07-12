@@ -1,6 +1,7 @@
 import { getAiProvider, getAiProviderApiKey } from './geminiService';
 import { aiEdgeClient, isAiEdgeEnabled } from './aiEdgeClient';
 import { getAiExecutionPolicy, resolveAiMode } from './aiMode';
+import { getRuntimeDataAccess } from './supabaseClient';
 import { AiProviderType, ProjectDetails, GeneratedArtifacts } from '../types';
 
 const providerLabel: Record<AiProviderType, string> = {
@@ -49,11 +50,13 @@ const appendFallbackNote = (artifacts: GeneratedArtifacts, attemptedProvider: Ai
 const getCurrentAiExecutionPolicy = () =>
   getAiExecutionPolicy({
     modeResolution: resolveAiMode({
-      configuredMode: import.meta.env.VITE_AVALA_AI_MODE,
-      isDev: import.meta.env.DEV,
-      isProd: import.meta.env.PROD,
+      configuredMode: import.meta.env.VITE_AVALA_RUNTIME_MODE,
+      isAutomatedTestContext:
+        import.meta.env.MODE === 'test' &&
+        import.meta.env.VITE_AVALA_AUTOMATED_TEST_CONTEXT === 'true',
     }),
     edgeEnabled: isAiEdgeEnabled(),
+    dataAccess: getRuntimeDataAccess(),
   });
 
 export const aiOrchestrator = {
@@ -79,7 +82,7 @@ export const aiOrchestrator = {
     }
 
     console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
-    const provider = getAiProvider(providerType);
+    const provider = getAiProvider(providerType, aiPolicy);
     try {
       return await provider.generateProjectArtifacts(projectDetails, fileContent, fileName);
     } catch (error) {
@@ -88,12 +91,12 @@ export const aiOrchestrator = {
       }
 
       for (const fallbackProviderType of fallbackOrder(providerType)) {
-        const fallbackKey = getAiProviderApiKey(fallbackProviderType);
+        const fallbackKey = getAiProviderApiKey(fallbackProviderType, aiPolicy);
         if (!fallbackKey) continue;
 
         try {
           console.warn(`${providerLabel[providerType]} generation failed. Falling back to ${providerLabel[fallbackProviderType]}.`, error);
-          const fallbackProvider = getAiProvider(fallbackProviderType);
+          const fallbackProvider = getAiProvider(fallbackProviderType, aiPolicy);
           const artifacts = await fallbackProvider.generateProjectArtifacts(projectDetails, fileContent, fileName);
           return appendFallbackNote(artifacts, providerType, fallbackProviderType, error);
         } catch (fallbackError) {
@@ -127,7 +130,7 @@ export const aiOrchestrator = {
     }
 
     console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
-    const provider = getAiProvider(providerType);
+    const provider = getAiProvider(providerType, aiPolicy);
     return await provider.refineSectionContent(currentContent, `${sectionTitle}\n\n${instructions}`);
   }
 };
