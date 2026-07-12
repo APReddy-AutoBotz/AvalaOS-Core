@@ -83,7 +83,7 @@ BEGIN
     IF TG_TABLE_NAME = 'workspace_memberships' AND NEW.role_id IS NULL THEN
         RETURN NEW;
     END IF;
-    SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
+    SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id FOR SHARE;
     IF v_role.id IS NULL OR v_role.status <> 'active' OR v_role.deleted_at IS NOT NULL
        OR v_role.org_id IS DISTINCT FROM NEW.org_id THEN
         RAISE EXCEPTION 'PR1B_MEMBERSHIP_ROLE_SCOPE_INVALID';
@@ -108,6 +108,37 @@ DROP TRIGGER IF EXISTS trg_pr1b_workspace_membership_role_scope ON public.worksp
 CREATE TRIGGER trg_pr1b_workspace_membership_role_scope
 BEFORE INSERT OR UPDATE OF org_id, workspace_id, role_id ON public.workspace_memberships
 FOR EACH ROW EXECUTE FUNCTION public.pr1b_enforce_membership_role_scope();
+
+-- Membership provenance is a two-sided invariant.  Membership writes lock and
+-- validate the referenced role above; role structural writes lock the role row
+-- and must remain compatible with every existing reference below.  Status and
+-- soft-deletion changes intentionally remain available for immediate revocation.
+CREATE OR REPLACE FUNCTION public.pr1b_enforce_referenced_role_scope()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.organization_members om
+        WHERE om.role_id = NEW.id
+          AND (NEW.scope <> 'organization'
+            OR NEW.org_id IS DISTINCT FROM om.org_id
+            OR NEW.workspace_id IS NOT NULL)
+    ) OR EXISTS (
+        SELECT 1 FROM public.workspace_memberships wm
+        WHERE wm.role_id = NEW.id
+          AND (NEW.scope <> 'workspace'
+            OR NEW.org_id IS DISTINCT FROM wm.org_id
+            OR NEW.workspace_id IS DISTINCT FROM wm.workspace_id)
+    ) THEN
+        RAISE EXCEPTION 'PR1B_REFERENCED_ROLE_SCOPE_INVALID';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_pr1b_referenced_role_scope ON public.roles;
+CREATE TRIGGER trg_pr1b_referenced_role_scope
+BEFORE UPDATE OF org_id, scope, workspace_id ON public.roles
+FOR EACH ROW EXECUTE FUNCTION public.pr1b_enforce_referenced_role_scope();
 
 INSERT INTO public.authorization_versions (org_id, user_id)
 SELECT om.org_id, om.user_id
@@ -214,14 +245,28 @@ SELECT EXISTS (
   JOIN public.workspace_memberships wm ON wm.org_id=om.org_id AND wm.user_id=om.user_id
   JOIN public.workspaces w ON w.id=wm.workspace_id AND w.org_id=wm.org_id
   JOIN public.organizations o ON o.id=om.org_id
-  JOIN public.roles r ON r.id IN (om.role_id, wm.role_id)
-  JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability_key
   WHERE auth.uid() IS NOT NULL AND om.user_id=auth.uid() AND om.org_id=p_org_id
     AND wm.workspace_id=p_workspace_id AND om.status='active' AND om.deleted_at IS NULL
     AND wm.status='active' AND wm.deleted_at IS NULL AND w.status='active' AND w.deleted_at IS NULL
-    AND o.status='active' AND o.deleted_at IS NULL AND r.status='active' AND r.deleted_at IS NULL
-    AND ((r.scope='organization' AND r.org_id=p_org_id AND r.workspace_id IS NULL)
-      OR (r.scope='workspace' AND r.org_id=p_org_id AND r.workspace_id=p_workspace_id))
+    AND o.status='active' AND o.deleted_at IS NULL
+    AND (
+      EXISTS (SELECT 1 FROM public.roles organization_role
+        JOIN public.role_capabilities organization_capability
+          ON organization_capability.role_id=organization_role.id
+         AND organization_capability.capability_key=p_capability_key
+        WHERE organization_role.id=om.role_id
+          AND organization_role.scope='organization' AND organization_role.org_id=p_org_id
+          AND organization_role.workspace_id IS NULL
+          AND organization_role.status='active' AND organization_role.deleted_at IS NULL)
+      OR EXISTS (SELECT 1 FROM public.roles workspace_role
+        JOIN public.role_capabilities workspace_capability
+          ON workspace_capability.role_id=workspace_role.id
+         AND workspace_capability.capability_key=p_capability_key
+        WHERE workspace_role.id=wm.role_id
+          AND workspace_role.scope='workspace' AND workspace_role.org_id=p_org_id
+          AND workspace_role.workspace_id=p_workspace_id
+          AND workspace_role.status='active' AND workspace_role.deleted_at IS NULL)
+    )
 );
 $$;
 
@@ -250,13 +295,25 @@ SELECT CASE WHEN NOT public.is_active_workspace_member(p_workspace_id,p_org_id) 
  'userId',auth.uid(),'organizationId',p_org_id,'workspaceId',p_workspace_id,
  'authorizationVersion',COALESCE((SELECT version FROM public.authorization_versions WHERE org_id=p_org_id AND user_id=auth.uid()),1),
  'capabilities',COALESCE((SELECT jsonb_agg(x.capability_key ORDER BY x.capability_key) FROM (
-   SELECT DISTINCT rc.capability_key FROM public.organization_members om
+   SELECT organization_capability.capability_key FROM public.organization_members om
    JOIN public.workspace_memberships wm ON wm.org_id=om.org_id AND wm.user_id=om.user_id
-   JOIN public.roles r ON r.id IN (om.role_id,wm.role_id)
-   JOIN public.role_capabilities rc ON rc.role_id=r.id
+   JOIN public.roles organization_role ON organization_role.id=om.role_id
+   JOIN public.role_capabilities organization_capability ON organization_capability.role_id=organization_role.id
    WHERE om.org_id=p_org_id AND wm.workspace_id=p_workspace_id AND om.user_id=auth.uid()
      AND om.status='active' AND om.deleted_at IS NULL AND wm.status='active' AND wm.deleted_at IS NULL
-     AND r.status='active' AND r.deleted_at IS NULL
+     AND organization_role.scope='organization' AND organization_role.org_id=p_org_id
+     AND organization_role.workspace_id IS NULL
+     AND organization_role.status='active' AND organization_role.deleted_at IS NULL
+   UNION
+   SELECT workspace_capability.capability_key FROM public.organization_members om
+   JOIN public.workspace_memberships wm ON wm.org_id=om.org_id AND wm.user_id=om.user_id
+   JOIN public.roles workspace_role ON workspace_role.id=wm.role_id
+   JOIN public.role_capabilities workspace_capability ON workspace_capability.role_id=workspace_role.id
+   WHERE om.org_id=p_org_id AND wm.workspace_id=p_workspace_id AND om.user_id=auth.uid()
+     AND om.status='active' AND om.deleted_at IS NULL AND wm.status='active' AND wm.deleted_at IS NULL
+     AND workspace_role.scope='workspace' AND workspace_role.org_id=p_org_id
+     AND workspace_role.workspace_id=p_workspace_id
+     AND workspace_role.status='active' AND workspace_role.deleted_at IS NULL
  ) x),'[]'::jsonb)) END;
 $$;
 
@@ -347,19 +404,36 @@ BEGIN
   JOIN public.workspace_memberships wm ON wm.user_id=p.id AND wm.org_id=om.org_id AND wm.workspace_id=p_workspace
   JOIN public.organizations o ON o.id=om.org_id
   JOIN public.workspaces w ON w.id=wm.workspace_id AND w.org_id=wm.org_id
-  JOIN public.roles r ON r.id IN (om.role_id,wm.role_id)
-  JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability
   WHERE p.id=p_actor AND p.status='active' AND p.deleted_at IS NULL
     AND om.status='active' AND om.deleted_at IS NULL
     AND wm.status='active' AND wm.deleted_at IS NULL
     AND o.status='active' AND o.deleted_at IS NULL
     AND w.status='active' AND w.deleted_at IS NULL
-    AND r.status='active' AND r.deleted_at IS NULL
-    AND ((r.scope='organization' AND r.org_id=p_org AND r.workspace_id IS NULL)
-      OR (r.scope='workspace' AND r.org_id=p_org AND r.workspace_id=p_workspace))
   LIMIT 1
-  FOR SHARE OF p,om,wm,o,w,r,rc;
+  FOR SHARE OF p,om,wm,o,w;
  IF NOT FOUND THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
+
+ PERFORM 1 FROM public.organization_members om
+  JOIN public.roles organization_role ON organization_role.id=om.role_id
+  JOIN public.role_capabilities organization_capability
+    ON organization_capability.role_id=organization_role.id AND organization_capability.capability_key=p_capability
+  WHERE om.user_id=p_actor AND om.org_id=p_org
+    AND organization_role.scope='organization' AND organization_role.org_id=p_org
+    AND organization_role.workspace_id IS NULL
+    AND organization_role.status='active' AND organization_role.deleted_at IS NULL
+  FOR SHARE OF organization_role,organization_capability;
+ IF NOT FOUND THEN
+  PERFORM 1 FROM public.workspace_memberships wm
+   JOIN public.roles workspace_role ON workspace_role.id=wm.role_id
+   JOIN public.role_capabilities workspace_capability
+     ON workspace_capability.role_id=workspace_role.id AND workspace_capability.capability_key=p_capability
+   WHERE wm.user_id=p_actor AND wm.org_id=p_org AND wm.workspace_id=p_workspace
+     AND workspace_role.scope='workspace' AND workspace_role.org_id=p_org
+     AND workspace_role.workspace_id=p_workspace
+     AND workspace_role.status='active' AND workspace_role.deleted_at IS NULL
+   FOR SHARE OF workspace_role,workspace_capability;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
+ END IF;
 
  SELECT version INTO v_actual FROM public.authorization_versions
  WHERE org_id=p_org AND user_id=p_actor FOR SHARE;

@@ -18,7 +18,8 @@ const connect = async url => { const c=new Client({connectionString:url}); await
 const tx = async (c,source) => { await c.query('BEGIN'); try { await c.query(source); await c.query('COMMIT'); } catch(e){ await c.query('ROLLBACK'); throw e; } };
 const apply = async(c,list) => { for(const n of list) await tx(c,sql(n)); };
 const bootstrap = c => tx(c,`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key);
- CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT null::uuid';`);
+ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
+ 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';`);
 
 const ACTOR='11000000-0000-4000-8000-000000000001', ORG='11000000-0000-4000-8000-000000000010';
 const WS='11000000-0000-4000-8000-000000000011', PROCESS='11000000-0000-4000-8000-000000000013';
@@ -77,7 +78,75 @@ const assertPrivileges = async c => {
 
 const mutationAcceptance = async (c,url) => {
  await assertPrivileges(c);
+ await c.query(`SELECT set_config('request.jwt.claim.sub',$1,false)`,[ACTOR]);
  let av=await authVersion(c);
+
+ const ORG_ROLE='11000000-0000-4000-8000-000000000012';
+ const WORKSPACE_ROLE='11000000-0000-4000-8000-000000000015';
+ const OTHER_WS='11000000-0000-4000-8000-000000000016';
+ await c.query(`INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,'A Other Workspace','other')`,[OTHER_WS,ORG]);
+ await c.query(`INSERT INTO roles(id,org_id,workspace_id,name,slug,scope,permissions) VALUES($1,$2,$3,'Workspace Auditor','workspace-auditor','workspace','[]')`,[WORKSPACE_ROLE,ORG,WS]);
+ await c.query(`INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.audit.read')`,[WORKSPACE_ROLE]);
+ await c.query(`DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.audit.read'`,[ORG_ROLE]);
+ await c.query(`UPDATE workspace_memberships SET role_id=$1 WHERE org_id=$2 AND workspace_id=$3 AND user_id=$4`,[WORKSPACE_ROLE,ORG,WS,ACTOR]);
+ av=await authVersion(c);
+
+ const context=async()=> (await c.query(`SELECT get_tenant_context($1,$2) value`,[ORG,WS])).rows[0].value;
+ const has=async capability => (await c.query(`SELECT has_workspace_capability($1,$2,$3) value`,[WS,ORG,capability])).rows[0].value;
+ const privateAllows=async(capability,version)=>{
+  version ??= await authVersion(c);
+  try { await c.query(`SELECT pr1b_assert_command_authority($1,$2,$3,$4,$5)`,[ACTOR,ORG,WS,capability,version]); return true; }
+  catch(e) { assert.match(e.message,/PR1B_(?:NOT_FOUND|AUTHORIZATION_STALE)/); return false; }
+ };
+ const snapshot=async(role,membershipTable)=>({
+  role:(await c.query(`SELECT row_to_json(r) value FROM roles r WHERE id=$1`,[role])).rows[0].value,
+  membership:(await c.query(`SELECT row_to_json(m) value FROM ${membershipTable} m WHERE role_id=$1`,[role])).rows[0].value,
+  version:await authVersion(c), context:await context(), hasCreate:await has('assess.create'), hasAudit:await has('assess.audit.read'),
+  privateCreate:await privateAllows('assess.create'), privateAudit:await privateAllows('assess.audit.read'),
+ });
+ const rejectedRoleMutation=async(role,membershipTable,statement,params=[])=>{
+  const before=await snapshot(role,membershipTable);
+  await c.query('BEGIN'); await c.query('SAVEPOINT rejected_role_mutation');
+  await assert.rejects(c.query(statement,params),/PR1B_REFERENCED_ROLE_SCOPE_INVALID/);
+  await c.query('ROLLBACK TO SAVEPOINT rejected_role_mutation'); await c.query('COMMIT');
+  assert.deepEqual(await snapshot(role,membershipTable),before);
+ };
+ await rejectedRoleMutation(ORG_ROLE,'organization_members',`UPDATE roles SET scope='workspace',workspace_id=$1 WHERE id=$2`,[WS,ORG_ROLE]);
+ await rejectedRoleMutation(ORG_ROLE,'organization_members',`UPDATE roles SET org_id='22000000-0000-4000-8000-000000000020' WHERE id=$1`,[ORG_ROLE]);
+ await rejectedRoleMutation(ORG_ROLE,'organization_members',`UPDATE roles SET workspace_id=$1,scope='workspace' WHERE id=$2`,[WS,ORG_ROLE]);
+ await rejectedRoleMutation(WORKSPACE_ROLE,'workspace_memberships',`UPDATE roles SET scope='organization',workspace_id=NULL WHERE id=$1`,[WORKSPACE_ROLE]);
+ await rejectedRoleMutation(WORKSPACE_ROLE,'workspace_memberships',`UPDATE roles SET org_id='22000000-0000-4000-8000-000000000020' WHERE id=$1`,[WORKSPACE_ROLE]);
+ await rejectedRoleMutation(WORKSPACE_ROLE,'workspace_memberships',`UPDATE roles SET workspace_id=$1 WHERE id=$2`,[OTHER_WS,WORKSPACE_ROLE]);
+
+ assert.deepEqual((await context()).capabilities,['assess.audit.read','assess.create','assess.finalize','assess.read','assess.response.write']);
+ assert.equal(await has('assess.audit.read'),true); assert.equal(await privateAllows('assess.audit.read'),true);
+ const disableVersion=await authVersion(c);
+ await c.query(`UPDATE roles SET status='disabled' WHERE id=$1`,[WORKSPACE_ROLE]);
+ assert.equal(await authVersion(c),disableVersion+1); assert.equal(await has('assess.audit.read'),false);
+ assert.equal((await context()).capabilities.includes('assess.audit.read'),false);
+ assert.equal(await privateAllows('assess.audit.read'),false);
+ await c.query(`UPDATE roles SET status='active' WHERE id=$1`,[WORKSPACE_ROLE]);
+ assert.equal(await authVersion(c),disableVersion+2); assert.equal(await has('assess.audit.read'),true);
+ assert.equal(await privateAllows('assess.audit.read'),true);
+
+ await c.query(`UPDATE workspace_memberships SET role_id=NULL WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3`,[ORG,WS,ACTOR]);
+ assert.equal(await has('assess.audit.read'),false); assert.equal(await has('assess.create'),true);
+ assert.deepEqual((await context()).capabilities,['assess.create','assess.finalize','assess.read','assess.response.write']);
+ await c.query(`UPDATE workspace_memberships SET role_id=$1 WHERE org_id=$2 AND workspace_id=$3 AND user_id=$4`,[WORKSPACE_ROLE,ORG,WS,ACTOR]);
+
+ await c.query('ALTER TABLE roles DISABLE TRIGGER trg_pr1b_referenced_role_scope');
+ try {
+  await c.query(`UPDATE roles SET scope='workspace',workspace_id=$1 WHERE id=$2`,[WS,ORG_ROLE]);
+  assert.equal(await has('assess.create'),false);
+  assert.equal((await context()).capabilities.includes('assess.create'),false);
+  assert.equal(await privateAllows('assess.create'),false);
+ } finally {
+  await c.query(`UPDATE roles SET scope='organization',workspace_id=NULL,org_id=$1 WHERE id=$2`,[ORG,ORG_ROLE]);
+  await c.query('ALTER TABLE roles ENABLE TRIGGER trg_pr1b_referenced_role_scope');
+ }
+ assert.equal(await has('assess.create'),true);
+ av=await authVersion(c);
+ console.log('PR 1B referenced-role mutation, explicit provenance, revocation/re-enable, roleless inheritance, and legacy-bypass scenarios passed.');
 
  const forgedBefore=await state(c,EXISTING);
  assert.equal(value(await trusted(c,()=>rpc.finalize(c,EXISTING,{scoreVersion:'forged',overallScore:100},'forged',1,'forged-score',av))).errorCode,'INVALID_SCORE_VERSION');
