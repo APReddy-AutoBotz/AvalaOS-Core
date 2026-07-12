@@ -1,6 +1,6 @@
 # PR 1B Server-Authoritative Identity, RBAC, RLS, And Assess Evidence
 
-Status: implementation candidate; role-mutation and capability-provenance correction implemented; required local source/database gates passed, local browser blocked by a missing host library, final GitHub CI pending; review and merge pending
+Status: implementation candidate; role-mutation and capability-provenance correction implemented; required local source/database gates and correction-head GitHub CI passed; review and merge pending
 
 ## Scope And Baseline
 
@@ -72,8 +72,8 @@ PostgreSQL runtime checks inspected ACLs and attempted all three mutation calls 
 | `npm run build` | Passed with warning | 204 modules transformed; production bundle built. Browserslist data warning retained without dependency mutation. |
 | Offline Markdown-link validation | Passed | All relative links in the six changed active documentation files resolved locally. |
 | `git diff --check` | Passed | No whitespace errors. |
-| GitHub push CI | Passed | Run `29191250939` passed quality, browser, PR 1A migration, and real PR 1B migration jobs; live Supabase smoke remained skipped as designed. |
-| GitHub pull-request CI | Passed | Run `29191252378` passed the same required jobs for corrected head `b1aae19ddd3d07fed470f34fd97f4b2e6dd399da`. |
+| GitHub push CI | Passed | Run `29198930121` passed quality, browser (8 desktop/mobile tests), PR 1A migration, and real PR 1B migration jobs for correction head `e236bd7100f93c97a7f7923a1b057fa6dfdb587a`; live Supabase smoke remained skipped as designed. |
+| GitHub pull-request CI | Passed | Run `29198931345` passed the same required jobs for correction head `e236bd7100f93c97a7f7923a1b057fa6dfdb587a`. |
 
 ## Planned Verification
 
