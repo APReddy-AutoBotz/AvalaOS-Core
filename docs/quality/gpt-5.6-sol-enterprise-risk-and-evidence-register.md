@@ -64,7 +64,7 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 
 ## Existing Positive Controls
 
-PR 1B candidate controls add caller-JWT TenantContext, normalized capability and role integrity, authorization-version invalidation, permission-aware Assess RLS, workspace-complete lineage, optimistic concurrency, idempotency, atomic audit, typed command handlers, and unchanged deterministic server scoring parity. Local source evidence is recorded in `docs/quality/pr1b-server-authoritative-identity-rbac-rls-assess-evidence.md`; PostgreSQL CI, review, and merge remain planned verification.
+The first PR 1B candidate exposed its Assess mutation RPCs to `authenticated`, allowing a browser JWT to bypass typed Edge validation and submit scores or score versions directly. This was a **confirmed source defect** and invalidated the earlier server-authoritative acceptance claim. The active correction revokes mutation/helper execution from `PUBLIC`, `anon`, and `authenticated`, grants the three mutation RPCs only to the server-held `service_role`, passes an Edge-validated actor explicitly, and independently reauthorizes every private transaction. The corrected disposable PostgreSQL real-RPC matrix is **executed evidence** and passed locally; GitHub CI, review, and merge remain planned verification. Live Supabase and deployment checks remain not run. Evidence is recorded in `docs/quality/pr1b-server-authoritative-identity-rbac-rls-assess-evidence.md`.
 
 - Deterministic scoring regression tests execute in the default suite.
 - Product-action, delivery-workflow, artifact-export, and helper-guard source controls have focused tests, although they are omitted from the default chain.

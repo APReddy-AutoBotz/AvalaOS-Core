@@ -38,7 +38,7 @@ Hosted database, RLS/tenant-isolation, Storage, Edge invocation, deployment, env
 | `npm run test:assess-command` | Typed handlers, concurrency/idempotency contracts, non-disclosure, and locked server scoring parity. | Exit 0. |
 | `npm run test:pr1b-coverage` | Changed-critical-module coverage. | At least 90% lines, 85% functions, 80% branches. |
 | `npm run test:pr1b` | Complete focused PR 1B source boundary. | Exit 0. |
-| `npm run test:migrations:pr1b` | PostgreSQL fresh/upgrade/failure/reapply, RLS, revocation, read-only, and forward-fix proof. | Exit 0; disposable state removed. |
+| `npm run test:migrations:pr1b` | Real PostgreSQL RPC privilege denial and trusted execution; forged input, idempotency, concurrency, version/revocation, non-disclosure, sanitized failure, atomicity/rollback, fresh/upgrade/dirty/reapply/read-only/forward-fix proof. | Exit 0; disposable state removed. |
 | `npm run test:scoring` | Locked deterministic scoring regression. | Exit 0; `assess-core-2026-05` unchanged. |
 
 PR 1B also runs the applicable PR 1A required set, full default regression, build, secret/AI-boundary scans, link validation, `git diff --check`, and changed-file review. Browser/accessibility/responsive checks are not applicable unless UI behavior changes. Hosted or live checks remain separately authorized.
