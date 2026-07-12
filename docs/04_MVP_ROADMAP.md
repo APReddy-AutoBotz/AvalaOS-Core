@@ -4,7 +4,7 @@
 
 Historical M0–M5.7 and post-M5.7 milestone records remain accepted for the limited proof stated in their evidence. Source hardening through PR #204 is present on `main`. Those records do not establish a server-authoritative, tenant-safe pilot or production platform.
 
-The docs/config-only enterprise rebaseline is the active planning boundary. It replaces routine micro-PR sequencing with substantial vertical delivery.
+PR 1A is accepted through PR #206. PR 1B is the active substantial vertical implementation boundary.
 
 ## Active Sequence
 
@@ -29,6 +29,6 @@ The docs/config-only enterprise rebaseline is the active planning boundary. It r
 
 ## Readiness Boundary
 
-No active roadmap item is pilot or production proof until its stated executed evidence passes. The P0 deployment status is currently unknown. Live infrastructure inspection or mutation requires separate explicit approval.
+No active roadmap item is pilot or production proof until its stated executed evidence passes. P0 was classified not deployed within the accepted PR 1A boundary; general hosted/deployment status remains unknown. Live infrastructure inspection or mutation requires separate explicit approval.
 
 KlarityFlow Health, scoring changes, runtime agent execution, MCP/A2A controls, browser AI authority, and expansion into a Jira replacement remain out of scope.

@@ -19,6 +19,12 @@ Do not use historical applied/live checkboxes from this directory as current dep
 
 Detailed behavior and rollback notes: `docs/migrations/pr1a-platform-safety-fail-closed-runtime.md`.
 
+## PR 1B Identity, RBAC, RLS, And Assess Reconciliation
+
+`supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql` adds the canonical normalized capability, authorization-version, permission-aware RLS, workspace-complete Assess, optimistic version, idempotency, and atomic audit contracts. Its disposable PostgreSQL harness is `npm run test:migrations:pr1b`; detailed compatibility and read-only/forward-fix rollback guidance is in `docs/migrations/pr1b-server-authoritative-identity-rbac-rls-assess.md`.
+
+This remains source and disposable-database evidence only. It is not hosted schema, deployment, or production tenant-isolation proof.
+
 ## Legacy Reference Files
 
 - `initial_schema.sql`: broad prototype schema reference.

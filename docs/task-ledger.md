@@ -4,13 +4,13 @@ This ledger records the current canonical milestone status. Evidence links are h
 
 ## Active Enterprise Workstream 1
 
-PR #205, the one-time AvalaOS Enterprise Rebaseline, is accepted and merged at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`. The active boundary is the single substantial PR 1A draft on `codex/pr-1a-platform-safety-fail-closed-runtime`.
+PR #205 is accepted and PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. The active boundary is the single substantial PR 1B candidate on `codex/pr-1b-server-authoritative-identity-rbac-rls-assess`.
 
 - Maturity: credible deterministic enterprise demo with substantial source-level governance scaffolding; not a coherent server-authoritative, tenant-safe pilot or production platform.
 - P0: AP classified `extract-document-text` as **NOT DEPLOYED** after manual inspection; the repository did not access live infrastructure or record identifiers.
-- Candidate: fail-closed runtime, P0 Storage, Edge export authorization, required audit, safe rendering, false-success, minimum migration, and feature-owned CI gates implemented.
-- Evidence: local regression, coverage, build, audit, boundary, secret, and disposable migration gates passed; browser execution is blocked and not claimed.
-- Sequence: finish PR 1A review/CI/acceptance, then PR 1B, then PR 1C. No deployment or readiness claim.
+- Candidate: server identity, normalized RBAC, authorization versions, RLS, typed Assess persistence/finalize, idempotency, concurrency, atomic audit, and locked scoring parity implemented.
+- Evidence: local regression, coverage, build, audit, boundary, and secret gates passed; disposable PostgreSQL CI/review/merge pending. Browser execution is not applicable to this non-UI slice.
+- Sequence: finish PR 1B acceptance, then PR 1C. No deployment or readiness claim.
 
 The acceleration plan, target architecture, active risk register, and `PLANS.md` supersede the prior routine micro-PR control pattern. Historical ledger entries and evidence remain unchanged below.
 
@@ -18,6 +18,7 @@ The acceleration plan, target architecture, active risk register, and `PLANS.md`
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | AvalaOS Enterprise Rebaseline | ERB-001 | Complete/Accepted | AP/Codex | Active canonical docs, `AGENTS.md`, `PLANS.md`, `.codex/**` | One docs/config-only rebaseline with decision-complete acceleration path and verified source risk register | `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md`; `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` | PR #205 accepted and merged as `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`; no readiness claim |
 | Workstream 1 PR 1A | WS1-PR1A | Implementation candidate; acceptance pending | AP/Codex | Runtime, adapters, Edge functions, one canonical migration, tests, CI, and active evidence docs | P0 disposition; fail-closed runtime; directly related P0/P1 remediation; feature-owned local and CI evidence; rollback | `docs/quality/pr1a-platform-safety-fail-closed-runtime-evidence.md`; `docs/migrations/pr1a-platform-safety-fail-closed-runtime.md` | P0 not deployed per AP; local source/migration gates passed; browser blocked; GitHub CI/review pending; no deploy, merge, or PR 1B/1C |
+| Workstream 1 PR 1B | WS1-PR1B | Implementation candidate; acceptance pending | AP/Codex | Identity/RBAC/RLS migration, TenantContext and Assess Edge handlers, tests, CI, and active evidence docs | Immediate revocation; two-tenant non-disclosure; scoring parity; migration; concurrency/idempotency/audit; rollback | `docs/quality/pr1b-server-authoritative-identity-rbac-rls-assess-evidence.md`; `docs/migrations/pr1b-server-authoritative-identity-rbac-rls-assess.md` | Local source gates passed; disposable PostgreSQL CI/review pending; no deploy, merge, or PR 1C |
 | M0 | M0-001 | Complete | AP/Codex | Migration docs, package metadata, main branch | AvalaOS Core migration complete | `docs/08_MIGRATION_FROM_KLARITYPM.md` | Accepted |
 | M0.2 | M02-001 | Complete | Codex | `AGENTS.md`, `.agent/**`, `docs/**` | Build Control Pack created and verified | `docs/quality/m0.2-final-evidence-review.md`; `docs/quality/m0.2-post-merge-verification.md` | Accepted |
 | M1 | M1-001 | Complete | AP/Codex | Avala Govern approved files | Govern hardening complete | `docs/quality/m1-final-evidence-review.md`; `docs/quality/m1-post-merge-verification.md` | Accepted |
