@@ -579,6 +579,7 @@ GRANT SELECT ON public.authorization_versions,public.privileged_audit_events TO 
 -- are executable solely by the server-held service role.
 REVOKE EXECUTE ON FUNCTION
  public.pr1b_enforce_membership_role_scope(),
+ public.pr1b_enforce_referenced_role_scope(),
  public.pr1b_bump_authorization_version(uuid,uuid),
  public.pr1b_bump_membership_authorization(),
  public.pr1b_bump_role_authorization(),

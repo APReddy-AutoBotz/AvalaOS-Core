@@ -19,6 +19,7 @@ for (const contract of [
  'PR1B_PREFLIGHT_ORGANIZATION_MEMBERSHIP_ROLE_INVALID','PR1B_PREFLIGHT_WORKSPACE_MEMBERSHIP_ROLE_INVALID',
  'p_actor_id uuid','PR1B_SCORE_VERSION_INVALID','PR1B_INVALID_COMMAND',"ELSE 'COMMAND_UNAVAILABLE' END",
  'TO service_role','FROM PUBLIC,anon,authenticated',
+ 'public.pr1b_enforce_referenced_role_scope(),',
  "'ok',true,'outcome','committed'", "'ok',false,'errorCode'", "IF r.status='succeeded' THEN RETURN r.response",
 ]) assert.ok(sql.includes(contract), `Missing PR 1B contract: ${contract}`);
 const functionBody = name => {
@@ -42,6 +43,7 @@ for (const name of ['has_workspace_capability','get_tenant_context','pr1b_assert
  ]) assert.match(body, contract, `${name} is missing an explicit provenance contract: ${contract}`);
 }
 assert.doesNotMatch(sql, /\b\w+\.id\s+IN\s*\(\s*(?:om\.role_id\s*,\s*wm\.role_id|wm\.role_id\s*,\s*om\.role_id)\s*\)/i);
+assert.match(sql, /REVOKE EXECUTE ON FUNCTION[^;]*public\.pr1b_enforce_referenced_role_scope\(\)[^;]*FROM PUBLIC\s*,\s*anon\s*,\s*authenticated\s*;/i);
 for (const forbiddenGrant of [
  /GRANT EXECUTE ON FUNCTION public\.pr1b_create_assessment\([^;]+ TO authenticated/i,
  /GRANT EXECUTE ON FUNCTION public\.pr1b_upsert_assessment_responses\([^;]+ TO authenticated/i,

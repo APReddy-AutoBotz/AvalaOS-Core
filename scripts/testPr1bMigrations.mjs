@@ -64,6 +64,12 @@ const assertPrivileges = async c => {
    assert.equal((await c.query(`SELECT has_function_privilege($1,$2,'EXECUTE') allowed`,[role,signature])).rows[0].allowed,false,`${role} executes ${signature}`);
  }
  for(const signature of signatures) assert.equal((await c.query(`SELECT has_function_privilege('service_role',$1,'EXECUTE') allowed`,[signature])).rows[0].allowed,true);
+ const roleScopeHelper='pr1b_enforce_referenced_role_scope()';
+ const helperPublicExecute=await c.query(`SELECT COALESCE(bool_or(a.grantee=0 AND a.privilege_type='EXECUTE'),false) allowed
+   FROM pg_proc p CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE p.oid=$1::regprocedure`,[roleScopeHelper]);
+ assert.equal(helperPublicExecute.rows[0].allowed,false,`PUBLIC executes ${roleScopeHelper}`);
+ for(const role of ['anon','authenticated'])
+  assert.equal((await c.query(`SELECT has_function_privilege($1,$2,'EXECUTE') allowed`,[role,roleScopeHelper])).rows[0].allowed,false,`${role} executes ${roleScopeHelper}`);
  assert.equal((await c.query(`SELECT has_function_privilege('authenticated','get_tenant_context(uuid,uuid)','EXECUTE') allowed`)).rows[0].allowed,true);
  for(const role of ['anon','authenticated']) {
   await c.query(`SET ROLE ${role}`);
