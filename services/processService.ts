@@ -6,23 +6,23 @@ import { assessAdapter } from './adapters/assessAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
 
 export function useProcessService() {
-    const { currentOrganization } = useOrganizationContext() as any;
+    const { currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
     const { user } = useAuth();
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
 
     const fetchProcesses = useCallback(async () => {
-        if (!currentOrganization) return;
+        if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) return;
         setLoading(true);
         try {
-            const data = await assessAdapter.getProcesses(currentOrganization.id);
+            const data = await assessAdapter.getProcesses(currentOrganization.id, currentWorkspace.id);
             setProcesses(data);
         } catch (err) {
             console.error('Failed to fetch processes:', err);
         } finally {
             setLoading(false);
         }
-    }, [currentOrganization]);
+    }, [currentOrganization, currentWorkspace, sessionState]);
 
     useEffect(() => {
         fetchProcesses();
@@ -50,6 +50,7 @@ export function useProcessService() {
 
         const newProcessData: Omit<AssessProcess, 'id' | 'createdAt' | 'updatedAt'> = {
             orgId: currentOrganization.id,
+            workspaceId: currentWorkspace?.id,
             name: data.name || 'Untitled Process',
             description: data.description || '',
             ownerId: data.ownerId || user.id,

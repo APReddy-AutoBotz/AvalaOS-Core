@@ -12,6 +12,7 @@ import {
 interface BuildAssessToStudioHandoffPayloadInput {
   process: AssessProcess;
   assessment: Assessment;
+  requireCommittedHandoff?: boolean;
   governCard?: AvalaGovernLiteCard | null;
   createdAt?: string;
 }
@@ -110,9 +111,10 @@ export const buildAssessToStudioHandoffPayload = ({
   assessment,
   governCard,
   createdAt = new Date().toISOString(),
+  requireCommittedHandoff = false,
 }: BuildAssessToStudioHandoffPayloadInput): AssessToStudioHandoffPayload | null => {
   const scores = assessment.scores;
-  if (!scores) return null;
+  if (!scores || (requireCommittedHandoff && assessment.status !== 'Handed Off to Docs')) return null;
 
   const decisionPack = scores.decisionPack;
   const handoffPack = scores.handoffPack;

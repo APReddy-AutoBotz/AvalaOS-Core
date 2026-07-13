@@ -1,14 +1,29 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { orgAdapter } from '../../services/adapters/orgAdapter';
-import { getRuntimeDataAccess, supabase } from '../../services/supabaseClient';
-import { Organization, ProductModuleKey, User } from '../../types';
+import { EnterpriseBoundaryError, loadEnterpriseSessionContexts } from '../../services/enterpriseAssess';
+import { getRuntimeDataAccess, isLocalRuntimeEnabled, supabase } from '../../services/supabaseClient';
+import { RuntimeBoundaryError } from '../../services/runtimeMode';
+import {
+  EnterpriseSessionState,
+  EnterpriseWorkspace,
+  Organization,
+  ProductModuleKey,
+  TenantContextProjection,
+} from '../../types';
 import { useAuth } from './AuthProvider';
 import { DEFAULT_ENABLED_MODULES } from '../../constants/moduleConfig';
 
 interface OrganizationContextType {
   organizations: Organization[];
   currentOrganization: Organization | null;
+  workspaces: EnterpriseWorkspace[];
+  currentWorkspace: EnterpriseWorkspace | null;
+  tenantContext: TenantContextProjection | null;
+  sessionState: EnterpriseSessionState;
+  sessionMessage: string | null;
   loading: boolean;
+  selectOrganization: (organizationId: string) => void;
+  selectWorkspace: (workspaceId: string) => void;
   createOrg: (name: string) => Promise<Organization>;
   updateProfile: (orgId: string, profile: any) => Promise<void>;
   updateEnabledModules: (orgId: string, enabledModules: ProductModuleKey[]) => Promise<void>;
@@ -16,94 +31,189 @@ interface OrganizationContextType {
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+const SESSION_SELECTION_KEY = 'avala.enterprise.session.selection';
+const stateForError = (error: unknown): { state: EnterpriseSessionState; message: string } => {
+  if (error instanceof RuntimeBoundaryError) {
+    return { state: 'blocked', message: 'AvalaOS runtime authority is not configured. Enterprise actions remain blocked.' };
+  }
+  if (error instanceof EnterpriseBoundaryError) {
+    if (error.code === 'AUTHENTICATION_REQUIRED') return { state: 'expired_session', message: 'Your session expired. Sign in again to continue.' };
+    if (error.code === 'AUTHORITY_STALE') return { state: 'stale', message: 'Your access changed. Refresh the workspace context before continuing.' };
+    if (error.code === 'RESOURCE_NOT_AVAILABLE' || error.code === 'PERMISSION_DENIED') {
+      return { state: 'revoked', message: 'This workspace is no longer available for your account.' };
+    }
+    if (error.code === 'OFFLINE') return { state: 'offline', message: 'AvalaOS is offline. Changes remain blocked until the server is reachable.' };
+  }
+  return { state: 'error', message: 'AvalaOS could not load the server-issued workspace context.' };
+};
+
+const asOrganization = (context: TenantContextProjection): Organization => ({
+  id: context.organizationId,
+  name: context.organizationName,
+  profile: { industry: '', size: '', geography: '', strategicGoals: '' },
+  subscriptionTier: 'Enterprise',
+  members: [],
+  enabledModules: DEFAULT_ENABLED_MODULES,
+});
 
 export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [contexts, setContexts] = useState<TenantContextProjection[]>([]);
+  const [currentContext, setCurrentContext] = useState<TenantContextProjection | null>(null);
   const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
+  const [sessionState, setSessionState] = useState<EnterpriseSessionState>('loading');
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
 
-  const fetchOrgs = async () => {
+  const loadSession = useCallback(async () => {
     if (!user) {
       setOrganizations([]);
+      setContexts([]);
+      setCurrentContext(null);
       setCurrentOrganization(null);
-      setLoading(false);
+      setSessionState('empty');
+      setSessionMessage(null);
       return;
     }
-
+    setSessionState('loading');
+    setSessionMessage(null);
     try {
-      setLoading(true);
-      const data = await orgAdapter.getOrganizations(user.id);
-      
-      // Map database schema to our Organization type if needed
-      const mappedOrgs: Organization[] = data.map((o: any) => ({
-        id: o.id,
-        name: o.name,
-        profile: o.settings?.profile || { industry: '', size: '', geography: '', strategicGoals: '' },
-        subscriptionTier: o.is_trial ? 'Free_Trial' : 'Enterprise',
-        members: o.members || [],
-        enabledModules: o.settings?.enabledModules || DEFAULT_ENABLED_MODULES,
-      }));
-
-      setOrganizations(mappedOrgs);
-      if (mappedOrgs.length > 0) {
-        setCurrentOrganization(mappedOrgs[0]);
+      if (getRuntimeDataAccess() === 'local') {
+        const data = await orgAdapter.getOrganizations(user.id);
+        const mapped = data.map((item: any): Organization => ({
+          id: item.id,
+          name: item.name,
+          profile: item.settings?.profile || { industry: '', size: '', geography: '', strategicGoals: '' },
+          subscriptionTier: item.is_trial ? 'Free_Trial' : 'Enterprise',
+          members: item.members || [],
+          enabledModules: item.settings?.enabledModules || DEFAULT_ENABLED_MODULES,
+        }));
+        setOrganizations(mapped);
+        setContexts([]);
+        setCurrentContext(null);
+        setCurrentOrganization(mapped[0] || null);
+        setSessionState(mapped.length ? 'ready' : 'empty');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to fetch organizations:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchOrgs();
+      const loaded = await loadEnterpriseSessionContexts();
+      if (!loaded.length) {
+        setOrganizations([]);
+        setContexts([]);
+        setCurrentContext(null);
+        setCurrentOrganization(null);
+        setSessionState('empty');
+        setSessionMessage('No active organization and workspace membership is available.');
+        return;
+      }
+      const uniqueOrganizations = [...new Map(loaded.map(item => [item.organizationId, asOrganization(item)])).values()];
+      let selected = loaded[0];
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(SESSION_SELECTION_KEY) || '{}');
+        selected = loaded.find(item => item.organizationId === saved.organizationId && item.workspaceId === saved.workspaceId) || selected;
+      } catch {
+        sessionStorage.removeItem(SESSION_SELECTION_KEY);
+      }
+      setOrganizations(uniqueOrganizations);
+      setContexts(loaded);
+      setCurrentContext(selected);
+      setCurrentOrganization(uniqueOrganizations.find(item => item.id === selected.organizationId) || null);
+      const readOnly = import.meta.env.VITE_AVALA_READ_ONLY_MAINTENANCE === 'true';
+      setSessionState(readOnly ? 'read_only' : 'ready');
+      setSessionMessage(readOnly ? 'AvalaOS is in read-only maintenance. Privileged actions are blocked.' : null);
+    } catch (error) {
+      const next = stateForError(error);
+      setOrganizations([]);
+      setContexts([]);
+      setCurrentContext(null);
+      setCurrentOrganization(null);
+      setSessionState(next.state);
+      setSessionMessage(next.message);
+    }
   }, [user]);
 
+  useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => {
+    const offline = () => { setSessionState('offline'); setSessionMessage('AvalaOS is offline. Changes remain blocked until the server is reachable.'); };
+    const online = () => { loadSession(); };
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => { window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
+  }, [loadSession]);
+
+  const selectContext = useCallback((next: TenantContextProjection) => {
+    const organization = organizations.find(item => item.id === next.organizationId) || null;
+    setCurrentContext(next);
+    setCurrentOrganization(organization);
+    sessionStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify({
+      organizationId: next.organizationId,
+      workspaceId: next.workspaceId,
+    }));
+  }, [organizations]);
+
+  const selectOrganization = useCallback((organizationId: string) => {
+    const next = contexts.find(item => item.organizationId === organizationId);
+    if (next) selectContext(next);
+  }, [contexts, selectContext]);
+
+  const selectWorkspace = useCallback((workspaceId: string) => {
+    const next = contexts.find(item => item.organizationId === currentOrganization?.id && item.workspaceId === workspaceId);
+    if (next) selectContext(next);
+  }, [contexts, currentOrganization, selectContext]);
+
+  const workspaces = useMemo(() => contexts
+    .filter(item => item.organizationId === currentOrganization?.id)
+    .map(item => ({ id: item.workspaceId, organizationId: item.organizationId, name: item.workspaceName })),
+  [contexts, currentOrganization]);
+
+  const currentWorkspace = currentContext
+    ? { id: currentContext.workspaceId, organizationId: currentContext.organizationId, name: currentContext.workspaceName }
+    : isLocalRuntimeEnabled() && currentOrganization
+      ? { id: 'local-demo-workspace', organizationId: currentOrganization.id, name: 'Local demo workspace' }
+      : null;
+
   const createOrg = async (name: string) => {
+    if (getRuntimeDataAccess() !== 'local') throw new Error('Enterprise organization creation is outside the PR 1C Assess cutover.');
     if (!user) throw new Error('Authentication required');
-    const newOrg = await orgAdapter.createOrganization(name, user.id);
-    await fetchOrgs();
-    return newOrg as unknown as Organization;
+    const created = await orgAdapter.createOrganization(name, user.id);
+    await loadSession();
+    return created as unknown as Organization;
   };
 
   const updateProfile = async (orgId: string, profile: any) => {
     if (getRuntimeDataAccess() === 'local') {
-      // Mock update
-      setCurrentOrganization(prev => prev ? { ...prev, profile } : prev);
-      setOrganizations(prev => prev.map(org => org.id === orgId ? { ...org, profile } : org));
+      setCurrentOrganization(previous => previous ? { ...previous, profile } : previous);
+      setOrganizations(previous => previous.map(org => org.id === orgId ? { ...org, profile } : org));
       return;
     }
-
-    const { error } = await supabase
-      .from('organizations')
-      .update({ settings: { profile } })
-      .eq('id', orgId);
-
+    const { error } = await supabase.from('organizations').update({ settings: { profile } }).eq('id', orgId);
     if (error) throw error;
-    await fetchOrgs();
+    await loadSession();
   };
 
   const updateEnabledModules = async (orgId: string, enabledModules: ProductModuleKey[]) => {
-    const normalizedModules = enabledModules.length > 0 ? enabledModules : DEFAULT_ENABLED_MODULES;
-    await orgAdapter.updateEnabledModules(orgId, normalizedModules);
-    setCurrentOrganization(prev => prev ? { ...prev, enabledModules: normalizedModules } : prev);
-    setOrganizations(prev => prev.map(org => org.id === orgId ? { ...org, enabledModules: normalizedModules } : org));
+    const normalized = enabledModules.length ? enabledModules : DEFAULT_ENABLED_MODULES;
+    await orgAdapter.updateEnabledModules(orgId, normalized);
+    setCurrentOrganization(previous => previous ? { ...previous, enabledModules: normalized } : previous);
+    setOrganizations(previous => previous.map(org => org.id === orgId ? { ...org, enabledModules: normalized } : org));
   };
 
-  return (
-    <OrganizationContext.Provider value={{ 
-      organizations, 
-      currentOrganization, 
-      loading, 
-      createOrg, 
-      updateProfile,
-      updateEnabledModules,
-      refreshOrgs: fetchOrgs 
-    }}>
-      {children}
-    </OrganizationContext.Provider>
-  );
+  return <OrganizationContext.Provider value={{
+    organizations,
+    currentOrganization,
+    workspaces,
+    currentWorkspace,
+    tenantContext: currentContext,
+    sessionState,
+    sessionMessage,
+    loading: sessionState === 'loading',
+    selectOrganization,
+    selectWorkspace,
+    createOrg,
+    updateProfile,
+    updateEnabledModules,
+    refreshOrgs: loadSession,
+  }}>{children}</OrganizationContext.Provider>;
 };
 
 export const useOrganizationContext = () => {

@@ -11,11 +11,15 @@ import {
   requireUuid,
 } from './assessCommand.ts';
 
-const requiredPermission = (type: AssessCommandEnvelope['commandType']) => (
-  type === 'assessment.create'
-    ? 'assess.create'
-    : type === 'assessment.response.upsert' ? 'assess.response.write' : 'assess.finalize'
-);
+const REQUIRED_PERMISSION: Record<AssessCommandEnvelope['commandType'], string> = {
+  'assessment.create': 'assess.create',
+  'assessment.response.upsert': 'assess.response.write',
+  'assessment.finalize': 'assess.finalize',
+  'govern.resolve': 'govern.resolve',
+  'studio_handoff.create': 'studio.handoff.create',
+};
+
+const requiredPermission = (type: AssessCommandEnvelope['commandType']) => REQUIRED_PERMISSION[type];
 
 const authorize = (envelope: AssessCommandEnvelope, authority: AssessAuthority | null, actorId: string) => {
   if (!authority || authority.actorId !== actorId ||
@@ -107,6 +111,53 @@ const handleFinalize = async (envelope: AssessCommandEnvelope, authority: Assess
   });
 };
 
+const handleGovernResolve = async (
+  envelope: AssessCommandEnvelope,
+  authority: AssessAuthority,
+  deps: AssessCommandDependencies,
+) => {
+  requireExactKeys(envelope.payload, ['assessmentId', 'resolution', 'reason']);
+  const assessmentId = requireUuid(envelope.payload.assessmentId);
+  const resolution = envelope.payload.resolution;
+  if (!['submit', 'approve', 'request_changes', 'reject'].includes(resolution as string)) assessError('INVALID_COMMAND');
+  if (envelope.payload.reason !== null && envelope.payload.reason !== undefined &&
+      (typeof envelope.payload.reason !== 'string' || envelope.payload.reason.trim().length > 1000)) {
+    assessError('INVALID_COMMAND');
+  }
+  if (['request_changes', 'reject'].includes(resolution as string) &&
+      (typeof envelope.payload.reason !== 'string' || !envelope.payload.reason.trim())) {
+    assessError('INVALID_COMMAND');
+  }
+  return deps.executeAtomicCommand({
+    ...commonCommand(envelope, authority),
+    expectedVersion: requireExpectedVersion(envelope),
+    resourceId: assessmentId,
+    payload: {
+      resolution,
+      reason: typeof envelope.payload.reason === 'string' ? envelope.payload.reason.trim() : null,
+    },
+  });
+};
+
+const handleStudioHandoff = async (
+  envelope: AssessCommandEnvelope,
+  authority: AssessAuthority,
+  deps: AssessCommandDependencies,
+) => {
+  requireExactKeys(envelope.payload, ['assessmentId', 'reason']);
+  const assessmentId = requireUuid(envelope.payload.assessmentId);
+  if (envelope.payload.reason !== null && envelope.payload.reason !== undefined &&
+      (typeof envelope.payload.reason !== 'string' || envelope.payload.reason.trim().length > 1000)) {
+    assessError('INVALID_COMMAND');
+  }
+  return deps.executeAtomicCommand({
+    ...commonCommand(envelope, authority),
+    expectedVersion: requireExpectedVersion(envelope),
+    resourceId: assessmentId,
+    payload: { reason: typeof envelope.payload.reason === 'string' ? envelope.payload.reason.trim() : null },
+  });
+};
+
 export const executeAssessCommand = async (
   request: Request,
   envelope: AssessCommandEnvelope,
@@ -134,5 +185,7 @@ export const executeAssessCommand = async (
   const authorized = authorize(envelope, authority, actor.id);
   if (envelope.commandType === 'assessment.create') return handleCreate(envelope, authorized, deps);
   if (envelope.commandType === 'assessment.response.upsert') return handleResponseUpsert(envelope, authorized, deps);
-  return handleFinalize(envelope, authorized, deps);
+  if (envelope.commandType === 'assessment.finalize') return handleFinalize(envelope, authorized, deps);
+  if (envelope.commandType === 'govern.resolve') return handleGovernResolve(envelope, authorized, deps);
+  return handleStudioHandoff(envelope, authorized, deps);
 };

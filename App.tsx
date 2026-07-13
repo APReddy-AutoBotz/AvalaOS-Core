@@ -9,6 +9,7 @@ import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
 import LoginView from './components/auth/LoginView';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
+import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
@@ -74,7 +75,13 @@ function App() {
 
   // App State
   const { user: currentUser, loading: authLoading } = useAuth();
-  const { currentOrganization, organizations, loading: orgLoading, createOrg } = useOrganizationContext();
+  const {
+    currentOrganization,
+    organizations,
+    sessionState,
+    loading: orgLoading,
+    createOrg,
+  } = useOrganizationContext();
   const [persistedScope, setPersistedScope] = usePersistentState<unknown>(StorageKeys.SCOPE, DEFAULT_PERSISTED_SCOPE);
   const [persistedView, setPersistedView] = usePersistentState<unknown>(StorageKeys.VIEW, DEFAULT_PERSISTED_VIEW);
   const currentScope = useMemo(() => normalizePersistedScope(persistedScope), [persistedScope]);
@@ -1238,8 +1245,14 @@ function App() {
     return <LoginView />;
   }
 
+  if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {
+    return <EnterpriseSessionStateView />;
+  }
+
   if (organizations.length === 0) {
-    return <OnboardingWizard onComplete={(name) => createOrg(name)} />;
+    return localRuntimeEnabled
+      ? <OnboardingWizard onComplete={(name) => createOrg(name)} />
+      : <EnterpriseSessionStateView />;
   }
 
   return (
@@ -1262,6 +1275,7 @@ function App() {
           teams={teams}
           projects={projects}
         />
+        {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
         {currentScope.type !== ScopeType.ORGANIZATION && (
           <ModuleJourney
             enabledModules={enabledModules}

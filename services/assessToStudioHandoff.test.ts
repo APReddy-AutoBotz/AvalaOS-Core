@@ -144,7 +144,7 @@ const assessment: Assessment = {
   id: 'assessment-1',
   processId: 'process-1',
   orgId: 'org-1',
-  status: 'Approved',
+  status: 'Handed Off to Docs',
   metadata: {
     completionQuality: 100,
     templateFit: true,
@@ -293,6 +293,14 @@ const unscoredPayload = buildAssessToStudioHandoffPayload({
 });
 
 assert.equal(unscoredPayload, null);
+
+const approvedButNotHandedOffPayload = buildAssessToStudioHandoffPayload({
+  process,
+  assessment: { ...assessment, status: 'Approved' },
+  requireCommittedHandoff: true,
+});
+
+assert.equal(approvedButNotHandedOffPayload, null);
 
 const artifacts: GeneratedArtifacts = {
   brd: { title: 'BRD', sections: [] },

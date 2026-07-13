@@ -1,7 +1,7 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
-Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
-Status: target contract with PR 1A accepted through PR #206 and a PR 1B implementation candidate pending migration CI, review, and merge
+Baseline: accepted `main` at `de87c86`
+Status: target contract with PR 1B accepted and a PR 1C implementation candidate pending review, CI, and merge
 
 ## Current Architecture
 
@@ -44,7 +44,7 @@ This is branch evidence pending acceptance. It does not complete PR 1B identity/
 
 ## Target Architecture
 
-The PR 1B candidate implements the server identity/RBAC/RLS and typed Assess portion of this target in source and canonical migration form. Hosted/deployed behavior and the PR 1C browser cutover remain unproven and out of scope.
+PR 1B implements the accepted server identity/RBAC/RLS and typed Assess authority. The PR 1C candidate adds the enterprise browser projection, Govern resolution, and atomic Studio handoff; hosted/deployed behavior remains unproven and out of scope.
 
 ```text
 Browser projection

@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: accepted `main` at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa` through PR #206; PR 1B is an implementation candidate pending review, CI, and merge.
+Baseline: accepted `main` at `de87c86` through PR 1B; PR 1C is an implementation candidate pending review, GitHub CI, and merge.
 
 ## Honest Maturity Verdict
 
@@ -19,13 +19,14 @@ Baseline: accepted `main` at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa` through 
 - Product-action, workflow, artifact export, storage, and signed-URL source guards through PR #204.
 - Historical milestone/evidence corpus preserved as immutable records.
 
-## PR 1B Implementation Candidate
+## PR 1C Implementation Candidate
 
-- Caller-JWT server-derived TenantContext, normalized capabilities, authorization versions, immediate revocation, and stable non-disclosing errors.
-- Permission-aware RLS, tenant/scope role integrity, workspace-complete Assess lineage, optimistic versions, idempotency, and atomic audit.
-- Typed Assess create/response/finalize handlers and unchanged `assess-core-2026-05` deterministic server scoring parity.
-- Local typecheck, regression, source, secret, build, and focused coverage gates passed; disposable PostgreSQL and GitHub CI remain acceptance gates.
-- No UI changed; browser/accessibility/responsive execution is not applicable and PR 1C remains unopened.
+- PR 1B identity, RBAC, RLS, Assess commands, and unchanged `assess-core-2026-05` scoring parity are accepted at `de87c86`.
+- Server-issued organization/workspace projection and explicit loading, empty, error, offline, stale, revoked, blocked, read-only, and expired-session states.
+- Enterprise Assess create/save/finalize uses the typed command boundary; direct browser assessment/review mutations fail closed.
+- Separate Govern resolution and Studio handoff handlers use service-role-only RPCs with fresh authorization, exact ancestry, expected versions, actor-scoped idempotency, and atomic state/receipt/audit.
+- Studio payload generation requires the server-committed `Handed Off to Docs` state.
+- Local source/type/Edge/coverage/build, disposable PostgreSQL ACL/adversarial/rollback, and production-preview Chromium desktop/mobile/axe/performance gates passed.
 
 ## Confirmed Accepted-Baseline Defects And Gaps
 
@@ -56,6 +57,6 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 
 ## Next Acceptance Boundary
 
-Finish PR 1B disposable migration verification, GitHub CI, and review, then merge only through the normal approval process. PR 1C remains dependent on accepted PR 1B evidence.
+Finish PR 1C GitHub CI and review, then merge only through the normal approval process.
 
-No deployment, tag, live-system inspection, secret action, incident action, merge, or PR 1C work is part of this candidate.
+No deployment, tag, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation is part of this candidate.

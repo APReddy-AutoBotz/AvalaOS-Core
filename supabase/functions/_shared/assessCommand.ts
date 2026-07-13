@@ -2,6 +2,8 @@ export const ASSESS_COMMAND_TYPES = [
   'assessment.create',
   'assessment.response.upsert',
   'assessment.finalize',
+  'govern.resolve',
+  'studio_handoff.create',
 ] as const;
 
 export type AssessCommandType = typeof ASSESS_COMMAND_TYPES[number];

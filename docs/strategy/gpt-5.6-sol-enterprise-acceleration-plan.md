@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan; PR 1A is accepted through PR #206 and PR 1B is an implementation candidate pending migration CI, review, and merge
+Status: active plan; PR 1A is accepted through PR #206, PR 1B is accepted at `de87c86`, and PR 1C is the active implementation candidate
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
@@ -112,7 +112,7 @@ Acceptance: stale TenantContext and revoked sessions deny immediately; two-tenan
 
 Rollback: disable enterprise commands or enter read-only maintenance mode; preserve data and audit history; forward-fix migrations rather than using destructive rollback.
 
-Current candidate status: caller-JWT TenantContext, normalized capability/RBAC integrity, authorization versions, permission-aware RLS, workspace-complete Assess lineage, optimistic versions, idempotency, atomic audit, typed Assess commands, and locked server scoring parity are implemented. Local source/type/coverage/regression/build/security gates passed; disposable PostgreSQL CI, review, and merge remain acceptance gates. No hosted or deployment evidence is claimed.
+Accepted status: caller-JWT TenantContext, normalized capability/RBAC integrity, authorization versions, permission-aware RLS, workspace-complete Assess lineage, optimistic versions, idempotency, atomic audit, typed Assess commands, and locked server scoring parity are accepted on `main` at `de87c86`. No hosted or deployment evidence is claimed.
 
 ### PR 1C — Enterprise Assess UI Cutover, Govern Resolution, And Studio Handoff
 
@@ -129,6 +129,8 @@ Deliver:
 Acceptance: no UI path bypasses Govern; failed persistence cannot render success; revocation is visible and immediately denies action; browser E2E, accessibility, responsive-state, and relevant performance gates pass.
 
 Rollback: disable handoff and UI cutover flags; enter read-only maintenance mode; preserve server records. Never fall back to demo authority in pilot or production.
+Current candidate status: server-issued organization/workspace projection, enterprise Assess create/save/finalize cutover, separate Govern and Studio handoff handlers, service-role-only atomic RPCs, explicit failure states, disposable PostgreSQL adversarial coverage, and production-preview Chromium/axe/viewport/performance gates are implemented. Review, GitHub CI, and merge remain acceptance gates; no live-system or readiness claim is made.
+
 
 ## 5. Later Workstreams And Dependencies
 
