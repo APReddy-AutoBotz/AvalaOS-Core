@@ -8,9 +8,9 @@ No gate passes without evidence, verification, and AP acceptance where required.
 
 | Order | Gate | Current status | Pass evidence |
 | --- | --- | --- | --- |
-| 0 | `P0-001` service-role Storage URL escape | **AP classified NOT DEPLOYED; source remediation candidate pending acceptance** | AP-provided bounded deployment disposition, first logical source-fix commit, negative tests, and sanitized PR 1A evidence. This is not deployment/readiness proof. |
-| 1A | Platform safety and fail-closed runtime | **Corrected implementation candidate; local and GitHub quality/browser/migration gates passed; review/merge pending** | Runtime-mode, P0/P1 security, audit, minimum migration-chain, source/coverage, deterministic Chromium/axe/viewport, CI, and rollback evidence in PR 1A. |
-| 1B | Server identity/RBAC/RLS/Assess | Planned after PR 1A acceptance | Fresh authorization/revocation, two-tenant non-disclosure, server scoring parity, migration, concurrency, idempotency, audit, and rollback evidence. |
+| 0 | `P0-001` service-role Storage URL escape | **AP classified NOT DEPLOYED; source remediation accepted through PR #206** | AP-provided bounded deployment disposition, source fix, negative tests, and sanitized PR 1A evidence. This is not deployment/readiness proof. |
+| 1A | Platform safety and fail-closed runtime | **Accepted through PR #206** | Runtime-mode, P0/P1 security, audit, minimum migration-chain, source/coverage, deterministic Chromium/axe/viewport, CI, and rollback evidence in PR 1A. |
+| 1B | Server identity/RBAC/RLS/Assess | **Implementation candidate; security-critical direct-RPC correction implemented; corrected local PostgreSQL and GitHub CI passed; review/merge pending** | Server-only mutation privileges, fresh authorization/revocation, two-tenant non-disclosure, server scoring parity, migration, concurrency, idempotency, audit, and rollback evidence. No hosted, pilot, production, or security readiness claim. |
 | 1C | Enterprise Assess/Govern/Studio journey | Planned after PR 1B acceptance | Browser E2E, accessibility, responsive-state, failure-state, atomic handoff, tenant, and rollback evidence. |
 | Pilot | Controlled pilot | Blocked | Workstreams 1–4 accepted plus deployment/operations evidence and AP acceptance. |
 | Production | Production readiness | Blocked | Pilot evidence, production controls, open-risk disposition, and explicit acceptance. |

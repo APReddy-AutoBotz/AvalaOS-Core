@@ -28,3 +28,17 @@ Record the exact exit code and material result for every executed command. Unava
 Browser E2E, accessibility, responsive-state, and performance execution require an available authorized browser toolchain. In PR 1A the executable Playwright CLI was absent and managed approval denied the third-party package download, so these checks are `blocked`, not passed.
 
 Hosted database, RLS/tenant-isolation, Storage, Edge invocation, deployment, environment, log, secret, incident, rotation, backup/restore, and production checks require separate explicit authority and are not implied by local source or disposable migration evidence.
+
+## PR 1B Required Set
+
+| Command | Purpose | Pass signal |
+| --- | --- | --- |
+| `npm run lint:pr1b` | Server-authority and canonical migration invariants. | Exit 0. |
+| `npm run test:tenant-authority` | Caller-JWT TenantContext, RBAC, revocation, and endpoint negatives. | Exit 0. |
+| `npm run test:assess-command` | Typed handlers, concurrency/idempotency contracts, non-disclosure, and locked server scoring parity. | Exit 0. |
+| `npm run test:pr1b-coverage` | Changed-critical-module coverage. | At least 90% lines, 85% functions, 80% branches. |
+| `npm run test:pr1b` | Complete focused PR 1B source boundary. | Exit 0. |
+| `npm run test:migrations:pr1b` | Real PostgreSQL RPC privilege denial and trusted execution; forged input, idempotency, concurrency, version/revocation, non-disclosure, sanitized failure, atomicity/rollback, fresh/upgrade/dirty/reapply/read-only/forward-fix proof. | Exit 0; disposable state removed. |
+| `npm run test:scoring` | Locked deterministic scoring regression. | Exit 0; `assess-core-2026-05` unchanged. |
+
+PR 1B also runs the applicable PR 1A required set, full default regression, build, secret/AI-boundary scans, link validation, `git diff --check`, and changed-file review. Browser/accessibility/responsive checks are not applicable unless UI behavior changes. Hosted or live checks remain separately authorized.

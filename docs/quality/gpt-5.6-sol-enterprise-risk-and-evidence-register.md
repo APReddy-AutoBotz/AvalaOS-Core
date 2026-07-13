@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`; PR 1A candidate evidence is explicitly marked pending acceptance
+Baseline: accepted `main` at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa` through PR #206; PR 1B candidate evidence is explicitly pending acceptance
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -63,6 +63,8 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 | P2-003 | PR-owned source lint, focused coverage, fresh/upgrade/dirty migration gates, and required Chromium desktop/mobile/axe CI are present; eight local browser tests pass. | A separate performance budget was not executed or claimed. |
 
 ## Existing Positive Controls
+
+The first PR 1B candidate exposed its Assess mutation RPCs to `authenticated`, allowing a browser JWT to bypass typed Edge validation and submit scores or score versions directly. This was a **confirmed source defect** and invalidated the earlier server-authoritative acceptance claim. The accepted direct-RPC correction revokes mutation/helper execution from `PUBLIC`, `anon`, and `authenticated`, grants the three mutation RPCs only to the server-held `service_role`, passes an Edge-validated actor explicitly, and independently reauthorizes every private transaction. A subsequent **confirmed source defect** showed that referenced role structure could be mutated after membership validation and that three authorization functions collapsed organization/workspace role provenance. The active correction adds serialized two-sided role/membership integrity and separate organization-role and exact-workspace-role capability paths. Final local and GitHub workflow evidence is pending; review and merge remain planned verification. Live Supabase and deployment checks remain not run. Evidence is recorded in `docs/quality/pr1b-server-authoritative-identity-rbac-rls-assess-evidence.md`.
 
 - Deterministic scoring regression tests execute in the default suite.
 - Product-action, delivery-workflow, artifact-export, and helper-guard source controls have focused tests, although they are omitted from the default chain.

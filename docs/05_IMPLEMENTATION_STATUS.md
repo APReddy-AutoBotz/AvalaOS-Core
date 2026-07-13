@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68` through PR #205; PR 1A is a candidate pending review, CI, and merge.
+Baseline: accepted `main` at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa` through PR #206; PR 1B is an implementation candidate pending review, CI, and merge.
 
 ## Honest Maturity Verdict
 
@@ -19,14 +19,13 @@ Baseline: accepted `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68` through 
 - Product-action, workflow, artifact export, storage, and signed-URL source guards through PR #204.
 - Historical milestone/evidence corpus preserved as immutable records.
 
-## PR 1A Implementation Candidate
+## PR 1B Implementation Candidate
 
-- AP deployment classification for P0: **NOT DEPLOYED**; no repository-side live access or infrastructure identifiers.
-- Exact fail-closed runtime modes and removal of demo/mock/browser-AI authority from pilot and production paths.
-- P0 Storage, Edge export authorization, required privileged audit, unsafe-rendering, and directly related false-success remediation.
-- Minimum canonical AI-audit migration with executed disposable fresh and targeted upgrade verification.
-- Edge typecheck, source guards, supplemental default regression, changed-critical-module coverage, and migration CI ownership.
-- Local source and migration gates passed; browser E2E/accessibility/responsive/performance execution is blocked and no pass is claimed.
+- Caller-JWT server-derived TenantContext, normalized capabilities, authorization versions, immediate revocation, and stable non-disclosing errors.
+- Permission-aware RLS, tenant/scope role integrity, workspace-complete Assess lineage, optimistic versions, idempotency, and atomic audit.
+- Typed Assess create/response/finalize handlers and unchanged `assess-core-2026-05` deterministic server scoring parity.
+- Local typecheck, regression, source, secret, build, and focused coverage gates passed; disposable PostgreSQL and GitHub CI remain acceptance gates.
+- No UI changed; browser/accessibility/responsive execution is not applicable and PR 1C remains unopened.
 
 ## Confirmed Accepted-Baseline Defects And Gaps
 
@@ -57,6 +56,6 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 
 ## Next Acceptance Boundary
 
-Finish PR 1A review and GitHub CI, then merge only through the normal approval process. PR 1B may begin only after PR 1A is accepted and merged; PR 1C remains dependent on accepted PR 1B evidence.
+Finish PR 1B disposable migration verification, GitHub CI, and review, then merge only through the normal approval process. PR 1C remains dependent on accepted PR 1B evidence.
 
-No deployment, tag, live-system inspection, secret action, incident action, merge, or PR 1B/1C work is part of this candidate.
+No deployment, tag, live-system inspection, secret action, incident action, merge, or PR 1C work is part of this candidate.

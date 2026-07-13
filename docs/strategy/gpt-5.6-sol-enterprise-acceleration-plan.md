@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan; PR #205 is accepted and PR 1A is an implementation candidate pending review, CI, and merge
+Status: active plan; PR 1A is accepted through PR #206 and PR 1B is an implementation candidate pending migration CI, review, and merge
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
@@ -111,6 +111,8 @@ Deliver:
 Acceptance: stale TenantContext and revoked sessions deny immediately; two-tenant tests cover positive and negative paths; server scoring matches the locked regression corpus; migrations reproduce the accepted schema from fresh and upgrade states.
 
 Rollback: disable enterprise commands or enter read-only maintenance mode; preserve data and audit history; forward-fix migrations rather than using destructive rollback.
+
+Current candidate status: caller-JWT TenantContext, normalized capability/RBAC integrity, authorization versions, permission-aware RLS, workspace-complete Assess lineage, optimistic versions, idempotency, atomic audit, typed Assess commands, and locked server scoring parity are implemented. Local source/type/coverage/regression/build/security gates passed; disposable PostgreSQL CI, review, and merge remain acceptance gates. No hosted or deployment evidence is claimed.
 
 ### PR 1C — Enterprise Assess UI Cutover, Govern Resolution, And Studio Handoff
 

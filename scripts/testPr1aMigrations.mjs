@@ -60,7 +60,7 @@ const applyMigrations = async (client, names) => {
 };
 
 const ensureSupabaseRoles = async admin => {
-  for (const role of ['anon', 'authenticated']) {
+  for (const role of ['anon', 'authenticated', 'service_role']) {
     assert.match(role, /^[a-z_]+$/);
     const existing = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [role]);
     if (existing.rowCount === 0) {

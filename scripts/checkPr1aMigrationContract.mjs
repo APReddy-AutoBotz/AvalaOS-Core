@@ -8,7 +8,12 @@ const migrations = fs.readdirSync(migrationsDir)
   .sort();
 const migrationName = '20260710120000_pr1a_required_ai_audit.sql';
 
-assert.equal(migrations.at(-1), migrationName, 'PR 1A audit migration must be the latest canonical migration.');
+assert.equal(migrations.includes(migrationName), true, 'PR 1A audit migration must remain in the canonical chain.');
+assert.equal(
+  migrations.every((name, index) => index === 0 || migrations[index - 1].slice(0, 14) < name.slice(0, 14)),
+  true,
+  'Canonical migration timestamps must remain strictly ordered.',
+);
 assert.equal(new Set(migrations.map(name => name.slice(0, 14))).size, migrations.length, 'Migration timestamps must be unique.');
 
 const source = fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
