@@ -143,7 +143,6 @@ jobs:
       - name: Fresh, upgrade, two-tenant RLS, failure, and read-only checks
         run: npm run test:migrations:pr1b
 
-  supabase-smoke:
   pr1c-migrations:
     name: PR 1C Govern, Studio Handoff, ACL, and Atomicity Migration Gates
     runs-on: ubuntu-latest
@@ -174,6 +173,7 @@ jobs:
       - name: ACL, adversarial ancestry, idempotency, concurrency, and rollback checks
         run: npm run test:migrations:pr1c
 
+  supabase-smoke:
     name: Supabase Smoke Checks
     runs-on: ubuntu-latest
     needs: verify
