@@ -4,7 +4,8 @@ import fs from 'node:fs';
 const dir = 'supabase/migrations';
 const name = '20260712120000_pr1b_identity_rbac_rls_assess.sql';
 const migrations = fs.readdirSync(dir).filter(x => x.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1), name);
+const pr1bBoundary = migrations.filter(x => x <= name);
+assert.equal(pr1bBoundary.at(-1), name);
 assert.equal(new Set(migrations.map(x => x.slice(0, 14))).size, migrations.length);
 const sql = fs.readFileSync(`${dir}/${name}`, 'utf8');
 for (const contract of [
@@ -51,4 +52,4 @@ for (const forbiddenGrant of [
 ]) assert.doesNotMatch(sql, forbiddenGrant);
 assert.doesNotMatch(sql, /DROP TABLE|TRUNCATE|DELETE FROM/i);
 assert.equal((sql.match(/\$\$/g) || []).length % 2, 0);
-console.log(`PR 1B canonical migration contract passed across ${migrations.length} ordered migrations.`);
+console.log(`PR 1B canonical migration contract passed across ${pr1bBoundary.length} ordered migrations.`);

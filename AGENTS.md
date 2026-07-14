@@ -33,10 +33,10 @@ Do not read the full historical planning or evidence corpus by default. Historic
 
 The service-role Storage URL escape recorded as `P0-001` in the active risk register is the first gate for PR 1A and every readiness claim.
 
-- Deployment status is `unknown`; do not infer that the vulnerable function is deployed or not deployed.
+- Deployment disposition is **NOT DEPLOYED**, based on the AP manual inspection recorded in the active source of truth, acceleration plan, and risk register.
 - Do not inspect or mutate live infrastructure, disable endpoints, review production logs, rotate credentials, or perform incident actions without separate explicit approval.
-- Do not claim pilot, production, hosted, deployment, storage, or security readiness while the deployment question is unresolved.
-- Follow the decision tree in the acceleration plan before normal PR 1A work.
+- The disposition closed only the P0 deployment-question stop condition; it is not pilot, production, hosted, deployment, storage, or security readiness proof.
+- Preserve the accepted PR 1A remediation and follow the acceleration plan for later work.
 - Never place secrets, raw logs, signed URLs, customer data, object identifiers, or production infrastructure identifiers in evidence.
 
 ## Non-Negotiable Rules

@@ -33,7 +33,7 @@ Do not read the full historical planning/evidence corpus by default.
 - Rebaseline anchor: `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 - Latest accepted repository baseline: PR #205, AvalaOS Enterprise Rebaseline, merged as `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`.
 - Latest accepted source hardening before the rebaseline: PR #204, Server-Side Export Storage and Signed URL Guard Hardening Implementation Gate.
-- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is the active implementation candidate; its changes are not accepted until review and merge.
+- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is accepted on `main` at `de87c86`. PR 1C is the active implementation candidate.
 
 ## Maturity Verdict
 
@@ -91,12 +91,11 @@ Do not read the full historical planning/evidence corpus by default.
 
 1. PR #205, the one-time docs/config enterprise rebaseline, is accepted and merged.
 2. PR 1A, Platform Safety and Fail-Closed Runtime Foundation, is accepted through PR #206.
-3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is the active implementation candidate.
-4. Accept PR 1B only after required local and GitHub CI evidence is green and review is complete.
-5. PR 1C: Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff.
+3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is accepted on `main` at `de87c86`.
+4. PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is the active implementation candidate.
 6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
-PR 1B remains one substantial vertical PR. It does not authorize PR 1C, deployment, live-system access, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.
+PR 1C remains one substantial vertical PR. It does not authorize deployment, live-system access, later workstreams, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.
 
 ## Evidence Authority
 

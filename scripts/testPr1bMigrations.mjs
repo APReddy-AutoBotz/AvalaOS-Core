@@ -9,8 +9,9 @@ if (!adminUrl) { console.error('PR1B_MIGRATION_DATABASE_URL is required.'); proc
 const names = ['fresh','upgrade','dirty','readonly','forwardfix'].map(x => `avalaos_pr1b_${x}_test`);
 const createdRoles = [];
 const migration = '20260712120000_pr1b_identity_rbac_rls_assess.sql';
-const all = fs.readdirSync('supabase/migrations').filter(x=>x.endsWith('.sql')).sort();
-const baseline = all.filter(x=>x!==migration);
+const migrations = fs.readdirSync('supabase/migrations').filter(x=>x.endsWith('.sql')).sort();
+const baseline = migrations.slice(0,migrations.indexOf(migration));
+const all = [...baseline,migration];
 const sql = n => fs.readFileSync(path.join('supabase/migrations',n),'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql','utf8');
 const urlFor = name => { const u=new URL(adminUrl); u.pathname=`/${name}`; return u.toString(); };

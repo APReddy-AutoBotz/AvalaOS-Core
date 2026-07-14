@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: accepted `main` at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa` through PR #206; PR 1B candidate evidence is explicitly pending acceptance
+Baseline: accepted `main` at `de87c86` through PR 1B; PR 1C candidate evidence is explicitly pending acceptance
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -27,7 +27,7 @@ Evidence must never include secrets, tokens, raw logs, signed URLs, customer dat
 - **Candidate remediation:** the first logical PR 1A commit, `fa42a0ff78d3f8af448951031a97ed9e6a3c3d1a`, removes request-controlled bucket authority; requires strict server configuration and allowlist membership; validates canonical tenant paths and origin; encodes route segments; refuses redirects; and returns stable sanitized failures.
 - **Executed source evidence:** `npm run test:p0-storage-boundary` passed bucket-injection, tenant-escape, traversal, normalization, origin, redirect, and source-invariant cases.
 - **Readiness effect:** the not-deployed decision closes the deployment-question stop condition and allowed broader PR 1A work. It does not prove hosted, Storage, Edge, tenant-isolation, security, pilot, or production readiness.
-- **Remaining closure:** PR 1A remediation must be accepted and merged. No deployment, live mutation, log review, credential rotation, incident action, or other environment access occurred.
+- **Remaining closure:** source remediation is accepted through PR #206. No deployment, live mutation, log review, credential rotation, incident action, or other environment access occurred.
 
 ## Material Risks
 
@@ -142,4 +142,4 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 
 ## Readiness Decision
 
-PR 1A is an implementation candidate with executed local source, regression, coverage, and isolated migration evidence. P0 deployment classification is **NOT DEPLOYED** based on AP-provided manual inspection, and the source remediation remains pending acceptance. Deterministic local Chromium execution and both push/pull-request quality, browser, and migration jobs passed; review and merge remain required before acceptance. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven. PR 1B must not begin until PR 1A is accepted and merged.
+PR 1A is accepted through PR #206 and PR 1B is accepted on `main` at `de87c86`. P0 deployment classification remains **NOT DEPLOYED** based on AP-provided manual inspection; no repository-side live access occurred. PR 1C is the active implementation candidate with executed local source, regression, coverage, production build-preview Chromium desktop/mobile, accessibility, viewport, and performance evidence. Its expanded disposable PostgreSQL suite was not run locally because no disposable server was available, but both GitHub push and pull-request PR 1C migration jobs passed in runs `29308403238` and `29308405309`; review and merge remain required. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven.

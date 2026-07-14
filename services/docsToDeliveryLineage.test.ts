@@ -23,7 +23,8 @@ const sourceContext: AssessToStudioHandoffPayload = {
   processId: 'process-1',
   processName: 'Invoice exception handling',
   assessmentId: 'assessment-1',
-  assessmentStatus: 'Approved',
+  studioHandoffId: '77777777-7777-4777-8777-777777777777',
+  assessmentStatus: 'Handed Off to Docs',
   evidenceRefs: [
     {
       id: 'assessment-1',

@@ -118,7 +118,7 @@ const main = async () => {
       (error: unknown) => error instanceof AssessCommandError && error.code === 'INVALID_COMMAND',
     );
   }
-  assert.throws(() => parseAssessEnvelope({ ...baseEnvelope, commandType: 'govern.resolve' }), (error: unknown) => error instanceof AssessCommandError && error.code === 'COMMAND_NOT_SUPPORTED');
+  assert.throws(() => parseAssessEnvelope({ ...baseEnvelope, commandType: 'unknown.command' }), (error: unknown) => error instanceof AssessCommandError && error.code === 'COMMAND_NOT_SUPPORTED');
 
   const upsert: AssessCommandEnvelope = {
     ...baseEnvelope,

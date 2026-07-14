@@ -41,6 +41,9 @@ jobs:
       - name: PR 1B server-authority source lint
         run: npm run lint:pr1b
 
+      - name: PR 1C enterprise Assess and handoff source lint
+        run: npm run lint:pr1c
+
       - name: Static AI boundary scan
         run: npm run test:ai-boundary-static
 
@@ -53,11 +56,14 @@ jobs:
       - name: PR 1B identity, RBAC, and Assess gates
         run: npm run test:pr1b
 
+      - name: PR 1C tenant, Govern, Studio, and coverage gates
+        run: npm run test:pr1c
+
       - name: Production build
         run: npm run build
 
-  pr1a-browser:
-    name: PR 1A Chromium, accessibility, and viewport gates
+  enterprise-browser:
+    name: PR 1A and PR 1C Chromium, accessibility, viewport, and performance gates
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -136,6 +142,36 @@ jobs:
         run: npm ci
       - name: Fresh, upgrade, two-tenant RLS, failure, and read-only checks
         run: npm run test:migrations:pr1b
+
+  pr1c-migrations:
+    name: PR 1C Govern, Studio Handoff, ACL, and Atomicity Migration Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PR1C_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: ACL, adversarial ancestry, idempotency, concurrency, and rollback checks
+        run: npm run test:migrations:pr1c
 
   supabase-smoke:
     name: Supabase Smoke Checks

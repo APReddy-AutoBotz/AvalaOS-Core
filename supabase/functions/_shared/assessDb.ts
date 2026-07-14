@@ -7,6 +7,8 @@ const RPC_BY_COMMAND = {
   'assessment.create': 'pr1b_create_assessment',
   'assessment.response.upsert': 'pr1b_upsert_assessment_responses',
   'assessment.finalize': 'pr1b_finalize_assessment',
+  'govern.resolve': 'pr1c_govern_resolve',
+  'studio_handoff.create': 'pr1c_create_studio_handoff',
 } as const;
 
 type RpcResult = { ok?: unknown; outcome?: unknown; resource?: unknown; errorCode?: unknown };
@@ -24,6 +26,12 @@ const rpcBody = (command: AssessAtomicCommand): Record<string, unknown> => {
   if (command.commandType === 'assessment.create') return { ...common, p_process_id: command.payload.processId };
   if (command.commandType === 'assessment.response.upsert') {
     return { ...common, p_responses: command.payload, p_expected_version: command.expectedVersion };
+  }
+  if (command.commandType === 'govern.resolve') {
+    return { ...common, p_resolution: command.payload.resolution, p_reason: command.payload.reason, p_expected_version: command.expectedVersion };
+  }
+  if (command.commandType === 'studio_handoff.create') {
+    return { ...common, p_reason: command.payload.reason, p_expected_version: command.expectedVersion };
   }
   const scores = command.payload.scores as { scoreVersion?: unknown };
   return { ...common, p_scores: scores, p_score_version: scores.scoreVersion, p_expected_version: command.expectedVersion };

@@ -44,6 +44,34 @@ export interface Organization {
     enabledModules?: ProductModuleKey[];
 }
 
+export interface EnterpriseWorkspace {
+    id: string;
+    organizationId: string;
+    name: string;
+}
+
+export interface TenantContextProjection {
+    userId: string;
+    organizationId: string;
+    organizationName: string;
+    workspaceId: string;
+    workspaceName: string;
+    authorizationVersion: number;
+    capabilities: string[];
+}
+
+export type EnterpriseSessionState =
+    | 'loading'
+    | 'ready'
+    | 'empty'
+    | 'error'
+    | 'offline'
+    | 'stale'
+    | 'revoked'
+    | 'blocked'
+    | 'expired_session'
+    | 'read_only';
+
 export interface AuditLogEntry {
     id: string;
     orgId: string;
@@ -95,6 +123,7 @@ export type CriticalityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export interface AssessProcess {
     id: string;
     orgId: string;
+    workspaceId?: string;
     name: string;
     description: string;
     ownerId: string;
@@ -550,6 +579,7 @@ export interface AssessToStudioHandoffPayload {
     processId: string;
     processName: string;
     assessmentId: string;
+    studioHandoffId?: string;
     assessmentStatus: AssessStatus;
     gateDecision?: GateDecision;
     riskTier?: RiskTier;
@@ -771,6 +801,10 @@ export interface Assessment {
     id: string;
     processId: string;
     orgId: string;
+    workspaceId?: string;
+    version?: number;
+    scoreVersion?: string;
+    studioHandoffId?: string;
     status: AssessStatus;
     metadata: {
         completionQuality: number;

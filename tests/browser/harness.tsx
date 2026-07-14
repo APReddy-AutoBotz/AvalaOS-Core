@@ -4,6 +4,7 @@ import Modal from '../../components/shared/Modal';
 import { persistBeforeCommit } from '../../services/persistenceTransition';
 import { escapePlainText, sanitizeMarkdownHtml, sanitizeMermaidSvg } from '../../services/safeMarkdown';
 import { buildDocumentExportHtml, markSanitizedDocumentBodyHtml } from '../../services/documentHtmlExport';
+import { EnterpriseSessionStatePanel } from '../../components/auth/EnterpriseSessionStatePanel';
 
 const markdownAttack = '<p>safe</p><img src=x onerror=alert(1)><a href="javascript:alert(1)">bad</a><script>alert(1)</script>';
 const svgAttack = '<svg xmlns="http://www.w3.org/2000/svg"><text>safe diagram</text><script>alert(1)</script><foreignObject><iframe src="javascript:alert(1)"></iframe></foreignObject></svg>';
@@ -29,7 +30,10 @@ const Harness = () => {
     sanitizedBodyHtml: markSanitizedDocumentBodyHtml(sanitizeMarkdownHtml(markdownAttack)),
   });
   return <main>
-    <h1>PR 1A browser harness</h1>
+    <h1>PR 1A and PR 1C browser harness</h1>
+    <div className="grid min-h-[60vh] place-items-center bg-slate-50 p-6">
+      <EnterpriseSessionStatePanel state="stale" message="Your authorization version changed." onRefresh={() => setPersistence('context-refresh-requested')} />
+    </div>
     <section aria-labelledby="markdown-heading"><h2 id="markdown-heading">Markdown sink</h2><div data-testid="markdown-sink" dangerouslySetInnerHTML={{ __html: sanitizeMarkdownHtml(markdownAttack) }} /></section>
     <p data-testid="title-sink" dangerouslySetInnerHTML={{ __html: escapePlainText('<img src=x onerror=alert(1)>safe title') }} />
     <section aria-labelledby="svg-heading"><h2 id="svg-heading">Diagram sink</h2><div data-testid="svg-sink" dangerouslySetInnerHTML={{ __html: sanitizeMermaidSvg(svgAttack) }} /></section>

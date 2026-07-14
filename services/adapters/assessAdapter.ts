@@ -14,6 +14,7 @@ import { StorageKeys, StorageService } from '../storage';
 type AssessProcessRow = {
   id: string;
   org_id: string;
+  workspace_id?: string | null;
   name: string;
   description?: string | null;
   owner_id?: string | null;
@@ -29,6 +30,9 @@ type AssessmentRow = {
   id: string;
   process_id: string;
   org_id: string;
+  workspace_id?: string | null;
+  version?: number | null;
+  score_version?: string | null;
   status?: string | null;
   metadata?: Assessment['metadata'] | null;
   responses?: AssessmentResponses | null;
@@ -53,6 +57,7 @@ export interface AssessmentReviewAuditInput {
 const fromProcessRow = (row: AssessProcessRow): AssessProcess => ({
   id: row.id,
   orgId: row.org_id,
+  workspaceId: row.workspace_id || undefined,
   name: row.name,
   description: row.description || '',
   ownerId: row.owner_id || '',
@@ -75,12 +80,24 @@ const toProcessInsertRow = (process: Omit<AssessProcess, 'id' | 'createdAt' | 'u
   template_id: process.templateId,
 });
 
-const fromAssessmentRow = (row: AssessmentRow): Assessment => ({
+const fromAssessmentRow = (row: AssessmentRow): Assessment => {
+  const aggregate = row.responses && 'responses' in row.responses
+    ? row.responses as unknown as {
+      responses: AssessmentResponses;
+      metadata?: Assessment['metadata'];
+      evidenceItems?: EvidenceItem[];
+      assumptions?: Assumption[];
+    }
+    : null;
+  return {
   id: row.id,
   processId: row.process_id,
   orgId: row.org_id,
+  workspaceId: row.workspace_id || undefined,
+  version: row.version || undefined,
+  scoreVersion: row.score_version || undefined,
   status: (row.status || 'Not Started') as AssessStatus,
-  metadata: row.metadata || {
+  metadata: aggregate?.metadata || row.metadata || {
     completionQuality: 0,
     templateFit: false,
     lastSavedAt: new Date().toISOString(),
@@ -88,7 +105,7 @@ const fromAssessmentRow = (row: AssessmentRow): Assessment => ({
     evidenceQuality: 1,
     assumptionQuality: 1,
   },
-  responses: row.responses || {
+  responses: aggregate?.responses || row.responses || {
     processStructure: {},
     workPattern: {},
     dataProfile: {},
@@ -96,8 +113,8 @@ const fromAssessmentRow = (row: AssessmentRow): Assessment => ({
     systems: {},
     risk: {},
   },
-  evidenceItems: row.evidence_items || [],
-  assumptions: row.assumptions || [],
+  evidenceItems: aggregate?.evidenceItems || row.evidence_items || [],
+  assumptions: aggregate?.assumptions || row.assumptions || [],
   completionBySection: row.completion_by_section || {
     processStructure: 0,
     workPattern: 0,
@@ -109,7 +126,8 @@ const fromAssessmentRow = (row: AssessmentRow): Assessment => ({
   },
   review: row.review || undefined,
   scores: row.scores || undefined,
-});
+  };
+};
 
 const toAssessmentRow = (assessment: Assessment) => ({
   id: assessment.id,
@@ -283,15 +301,14 @@ const upsertDemoAssessment = (assessment: Assessment): Assessment => {
 };
 
 export const assessAdapter = {
-  async getProcesses(orgId: string) {
+  async getProcesses(orgId: string, workspaceId?: string) {
     if (getRuntimeDataAccess() === 'local') {
       return demoProcesses.filter(process => process.orgId === orgId);
     }
 
-    const { data, error } = await supabase
-      .from('assess_processes')
-      .select('*')
-      .eq('org_id', orgId);
+    let query = supabase.from('assess_processes').select('*').eq('org_id', orgId);
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data, error } = await query;
 
     if (error) throw error;
     return (data || []).map(fromProcessRow);
@@ -314,20 +331,33 @@ export const assessAdapter = {
     return fromProcessRow(data);
   },
 
-  async getAssessment(processId: string, orgId: string) {
+  async getAssessment(processId: string, orgId: string, workspaceId?: string) {
     if (getRuntimeDataAccess() === 'local') {
       return demoAssessments.find(assessment => assessment.processId === processId && assessment.orgId === orgId) || null;
     }
 
-    const { data, error } = await supabase
-      .from('assessments')
-      .select('*')
-      .eq('process_id', processId)
-      .eq('org_id', orgId)
-      .maybeSingle();
+    let query = supabase.from('assessments').select('*').eq('process_id', processId).eq('org_id', orgId);
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw error;
-    return data ? fromAssessmentRow(data) : null;
+    if (!data) return null;
+    const assessment = fromAssessmentRow(data);
+    if (assessment.status !== 'Handed Off to Docs' || !workspaceId) return assessment;
+
+    const { data: handoff, error: handoffError } = await supabase
+      .from('assessment_studio_handoffs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('workspace_id', workspaceId)
+      .eq('assessment_id', assessment.id)
+      .eq('process_id', processId)
+      .in('status', ['submitted', 'accepted'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (handoffError) throw handoffError;
+    return handoff?.id ? { ...assessment, studioHandoffId: handoff.id } : assessment;
   },
 
   async saveAssessment(assessment: Partial<Assessment>) {
@@ -335,14 +365,8 @@ export const assessAdapter = {
       return upsertDemoAssessment(assessment as Assessment);
     }
 
-    const { data, error } = await supabase
-      .from('assessments')
-      .upsert([toAssessmentRow(assessment as Assessment)])
-      .select()
-      .single();
+    throw new Error('Enterprise assessment mutations must use the typed assess-command boundary.');
 
-    if (error) throw error;
-    return fromAssessmentRow(data);
   },
 
   async transitionAssessmentWithAudit(assessment: Assessment, event: AssessmentReviewAuditInput) {
@@ -352,31 +376,14 @@ export const assessAdapter = {
       return saved;
     }
 
-    const { data, error } = await supabase
-      .rpc('transition_assessment_with_audit', {
-        p_assessment: toAssessmentRow(assessment),
-        p_review_event: {
-          org_id: event.orgId,
-          assessment_id: event.assessmentId,
-          process_id: event.processId,
-          actor_id: event.actorId,
-          event_type: event.eventType,
-          status: event.status,
-          reason: event.reason || null,
-          payload: {
-            ...(event.payload || {}),
-            status: event.status,
-            eventType: event.eventType,
-            reason: event.reason,
-          },
-        },
-      });
-
-    if (error) throw error;
-    return fromAssessmentRow(data);
+    throw new Error('Enterprise Govern and handoff mutations must use the typed assess-command boundary.');
   },
 
   async recordAssessmentReviewEvent(event: AssessmentReviewAuditInput) {
+    if (getRuntimeDataAccess() !== 'local') {
+      throw new Error('Enterprise assessment review events must use the typed assess-command boundary.');
+    }
+
     const now = new Date().toISOString();
     const payload = {
       ...(event.payload || {}),
