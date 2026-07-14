@@ -31,7 +31,7 @@ The mutation RPCs are callable only by `service_role`. They independently invoke
 - immutable provenance, one durable handoff, and matching privileged audit events; and
 - injected Govern and Studio audit failures roll back state, provenance/handoff, and receipt.
 
-Local execution status on 2026-07-14: not run because no disposable PostgreSQL server was available in the authorized workspace. The suite remains a required GitHub migration gate. No hosted or live application database was accessed.
+Local execution status on 2026-07-14: not run because no disposable PostgreSQL server was available in the authorized workspace. Both GitHub push and pull-request PR 1C PostgreSQL jobs passed the suite in runs `29308403238` and `29308405309`. No hosted or live application database was accessed.
 
 ## Rollback And Recovery
 

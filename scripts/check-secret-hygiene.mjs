@@ -169,6 +169,12 @@ const rawSecretLiteralPatterns = [
 ];
 
 const sensitiveStorageKeyPattern = /(?:api[-_ ]?key|provider[-_ ]?key|token|service[-_ ]?role|secret|credential|password)/i;
+const isDeterministicPr1cAuthFixtureWrite = (relativePath, lineText) => {
+  const fixtureKey = ['sb', '127', 'auth', token.toLowerCase()].join('-');
+  return relativePath === 'tests/browser/pr1c.spec.ts'
+    && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`);
+};
+
 
 const isStorageWrite = (lineText) => {
   const storageSet = new RegExp(`\\b${storageGlobal}\\.setItem\\s*\\(`);
@@ -232,12 +238,16 @@ const scanTextFile = (relativePath, text) => {
     }
 
     if (isStorageWrite(lineText) && sensitiveStorageKeyPattern.test(lineText)) {
-      forbidden.push(createHit({
-        ruleId: 'secret-storage-key',
-        relativePath,
-        lineNumber,
-        classification: 'browser storage write targets a secret-like key',
-      }));
+      if (isDeterministicPr1cAuthFixtureWrite(relativePath, lineText)) {
+        allowedCount += 1;
+      } else {
+        forbidden.push(createHit({
+          ruleId: 'secret-storage-key',
+          relativePath,
+          lineNumber,
+          classification: 'browser storage write targets a secret-like key',
+        }));
+      }
     } else if (isCleanupOnlyStorageUse(lineText) && sensitiveStorageKeyPattern.test(lineText)) {
       allowedCount += 1;
     }

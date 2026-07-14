@@ -30,16 +30,23 @@
     {
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
-      "lines": [160],
+      "lines": [161],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
     },
     {
       "pattern": "localStorage",
       "path": "App.tsx",
-      "lines": [160],
+      "lines": [161],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/pr1c.spec.ts",
+      "lines": [83, 91, 92],
+      "reason": "test/control documentation",
+      "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
     },
     {
       "pattern": "VITE_GEMINI_API_KEY",

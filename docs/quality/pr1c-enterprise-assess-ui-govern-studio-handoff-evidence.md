@@ -1,6 +1,6 @@
 # PR 1C Enterprise Assess UI, Govern, And Studio Handoff Evidence
 
-Status: implementation candidate; local source, regression, build, and browser verification complete; disposable PostgreSQL, GitHub CI, review, and merge pending
+Status: implementation candidate; local and GitHub quality, browser, and disposable PostgreSQL verification complete; review and merge pending
 Date: 2026-07-14
 Accepted dependency: PR 1B on `main` at `de87c86`
 
@@ -67,7 +67,7 @@ Root synthesis:
 | `npx playwright test pr1c.spec.ts --reporter=line` | Passed | 16/16 production App build-preview tests passed across Chromium desktop and mobile |
 | `git diff --check` | Passed | No whitespace errors after final implementation and evidence edits |
 | Full default `npm test` | Passed | Complete chained regression, including PR 1A, PR 1B, and PR 1C coverage gates, exited 0 |
-| GitHub Actions | Planned verification | Required on the existing draft PR #208 after push |
+| GitHub Actions | Passed | Push and pull-request quality, browser, PR 1A/1B migration, and PR 1C PostgreSQL migration jobs passed in runs `29308403238` and `29308405309` |
 
 
 ## Rollback And Fallback
@@ -80,4 +80,4 @@ Root synthesis:
 
 ## Remaining Gates
 
-Disposable PostgreSQL execution, GitHub quality/browser/migration jobs, code review, and normal merge approval remain. Hosted and live-system verification remain not run and out of scope.
+Code review and normal merge approval remain. Hosted and live-system verification remain not run and out of scope.
