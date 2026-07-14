@@ -28,7 +28,9 @@ const transaction = async (client, sql) => {
 const apply = async (client, names) => { for (const name of names) await transaction(client, source(name)); };
 const bootstrap = client => transaction(client, `CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key);
  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
- 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';`);
+ 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
+ GRANT USAGE ON SCHEMA auth TO authenticated;
+ GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
 
 const ACTOR='11000000-0000-4000-8000-000000000001';
 const ORG='11000000-0000-4000-8000-000000000010';
