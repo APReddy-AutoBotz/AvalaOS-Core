@@ -58,3 +58,9 @@ The browser is not an authorization boundary. Service-role access does not repla
 - PR 1C cuts over the enterprise Assess UI and atomic Govern/Studio handoff.
 
 No architecture statement in this document is deployment or readiness proof.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+The canonical V2 design is [Assess V2 Decision Intelligence Architecture](architecture/assess-v2-decision-intelligence-architecture.md). V2 uses normalized authoring facts, immutable finalized snapshots, canonical SHA-256 references, private server-authoritative commands, and forced-RLS read projections. V1 and V2 identities, commands, persistence, outputs, and lifecycles are not interchangeable.

@@ -48,3 +48,9 @@ Do not inspect or mutate live infrastructure, disable endpoints, review producti
 Avala Govern records risk, autonomy, approvals, evidence, allowed/blocked actions, review frequency, and audit posture. It does not execute agents, bots, RPA jobs, external-system actions, MCP controls, A2A controls, or live runtime enforcement in the current baseline.
 
 KlarityFlow Health remains separate. No SOC 2, HIPAA, GDPR, GxP, ISO, or similar certification or compliance claim is made.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+V2 mutation RPCs are private service-role transport with independent transactional authorization. Authenticated access is forced-RLS read projection only. Server-generated hashes prove snapshot integrity, not truth, calibration, approval, compliance, or readiness.

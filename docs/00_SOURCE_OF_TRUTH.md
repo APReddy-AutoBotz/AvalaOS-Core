@@ -33,7 +33,7 @@ Do not read the full historical planning/evidence corpus by default.
 - Rebaseline anchor: `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 - Latest accepted repository baseline: PR #205, AvalaOS Enterprise Rebaseline, merged as `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`.
 - Latest accepted source hardening before the rebaseline: PR #204, Server-Side Export Storage and Signed URL Guard Hardening Implementation Gate.
-- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is accepted on `main` at `de87c86`. PR 1C is the active implementation candidate.
+- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is accepted on `main` at `de87c86`. PR #208 / PR 1C is accepted; PR 1D is the active implementation boundary.
 
 ## Maturity Verdict
 
@@ -92,7 +92,7 @@ Do not read the full historical planning/evidence corpus by default.
 1. PR #205, the one-time docs/config enterprise rebaseline, is accepted and merged.
 2. PR 1A, Platform Safety and Fail-Closed Runtime Foundation, is accepted through PR #206.
 3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is accepted on `main` at `de87c86`.
-4. PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is the active implementation candidate.
+4. PR #208 / PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is accepted at the PR #208 merge baseline.
 6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
 PR 1C remains one substantial vertical PR. It does not authorize deployment, live-system access, later workstreams, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.
@@ -103,3 +103,7 @@ PR 1C remains one substantial vertical PR. It does not authorize deployment, liv
 - Historical evidence and post-merge verification under `docs/quality/` are immutable records of what was checked at the time.
 - Historical records never override current authority and are read only when task-specific evidence is required.
 - Correct current drift in active documents; do not rewrite historical evidence.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.

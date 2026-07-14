@@ -320,6 +320,22 @@ console.log('Running Avala Govern Lite service regression tests...');
 }
 
 {
+  const lowFivePointEvidence = createAssessment({
+    metadata: { ...createAssessment().metadata, evidenceQuality: 3 },
+  });
+  const acceptableFivePointEvidence = createAssessment({
+    metadata: { ...createAssessment().metadata, evidenceQuality: 4 },
+  });
+
+  assert.ok(buildAvalaGovernLiteCard(lowFivePointEvidence, baseProcess).evidenceGaps.some(
+    gap => gap.label === 'Evidence confidence is below Govern Lite threshold.',
+  ));
+  assert.equal(buildAvalaGovernLiteCard(acceptableFivePointEvidence, baseProcess).evidenceGaps.some(
+    gap => gap.label === 'Evidence confidence is below Govern Lite threshold.',
+  ), false);
+}
+
+{
   const assessment = createAssessment();
   const governCard = buildAvalaGovernLiteCard(assessment, baseProcess);
   const markdown = renderAssessmentDecisionPackMarkdown(assessment, baseProcess.name, governCard);

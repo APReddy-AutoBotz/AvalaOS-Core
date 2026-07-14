@@ -58,3 +58,9 @@ Avala Govern and Avala Delivery are the buyer-facing canonical names for the pre
 - No current user-visible old branding remains outside migration notes.
 - Scoring behavior is unchanged.
 - No unsupported compliance claims are introduced.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+PR 1D requires explicit V2 cases, immutable authoring/decision versions, primitives, decisions, exceptions, application interactions, evidence links, a versioned deterministic rule registry, action-specific controls, modernization dispositions, and a read-only executive Decision Pack. V1 import is explicit and unverified; V2 finalization ends reviewer-ready.

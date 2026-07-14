@@ -202,6 +202,22 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         }
     }, [assessment, currentOrganization, completeAssessment, getAssessmentForProcess, processId]);
 
+    const handleReviseRequestedChanges = useCallback(async () => {
+        if (!assessment || assessment.status !== 'Changes Requested') return;
+        try {
+            const reopened = await saveAssessmentDraft({ ...assessment, status: 'Draft', scores: undefined });
+            if (reopened) {
+                const snapshot = JSON.parse(JSON.stringify(reopened));
+                setAssessment(snapshot);
+                setOriginalAssessment(snapshot);
+                setCurrentSection(SECTIONS[0].key);
+                setErrorMsg(null);
+            }
+        } catch (err: any) {
+            setErrorMsg(err.message || 'Unable to reopen the requested changes.');
+        }
+    }, [assessment, saveAssessmentDraft]);
+
     const statusActionRequiresReason = useCallback((kind: 'submit' | 'approve' | 'changes' | 'reject' | 'docs' | 'delivery') => {
         if (!assessment) return false;
         const restrictedDecision = assessment.scores?.decisionPack?.finalDecision === 'No-Go'
@@ -949,7 +965,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                     <button onClick={() => attemptExit(onExit)} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-slate-500 transition-colors hover:text-[#002C4B] dark:hover:text-slate-200">
                         Back to Process
                     </button>
-                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Assess</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Assess Ã‚Â· Legacy V1</p>
                     <h2 className="mt-1 text-xl font-black text-[#002C4B] dark:text-white leading-tight">Decision Intake</h2>
                     <p className="text-xs font-medium text-slate-500 mt-1 truncate">{currentProcess?.name}</p>
                     <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
@@ -1207,12 +1223,12 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                             </div>
                             <div className="pb-4 border-b border-slate-200 dark:border-slate-800">
                                 <h1 className="text-3xl font-bold font-display text-slate-900 dark:text-white">Deterministic Scoring Results</h1>
-                                <p className="text-sm text-slate-500 mt-2">Engine Version: {assessment.scores.scoreVersion} • Evaluated: {new Date(assessment.scores.calculatedAt).toLocaleString()}</p>
+                                <p className="text-sm text-slate-500 mt-2">Engine Version: {assessment.scores.scoreVersion} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Evaluated: {new Date(assessment.scores.calculatedAt).toLocaleString()}</p>
                             </div>
 
                             {assessment.scores.gatesTriggered.length > 0 && (
                                 <div className="p-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-xl">
-                                    <h3 className="text-lg font-bold text-red-900 dark:text-red-400 mb-2 flex items-center gap-2">🛑 Hard Stop Gates Triggered</h3>
+                                    <h3 className="text-lg font-bold text-red-900 dark:text-red-400 mb-2 flex items-center gap-2">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬Ëœ Hard Stop Gates Triggered</h3>
                                     <p className="text-sm text-red-700 dark:text-red-300 mb-4">This process hit critical rule violations and is gated from final automation routing.</p>
                                     <ul className="list-disc pl-5 space-y-1 mb-4">
                                         {assessment.scores.gatesTriggered.map((gate, i) => (

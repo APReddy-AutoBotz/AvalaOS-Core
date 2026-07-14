@@ -8,6 +8,7 @@ import {
   AvalaGovernStatus,
   RiskTier,
 } from '../types';
+import { meetsGovernLiteEvidenceThreshold } from './assessV1Compatibility';
 
 const splitSystems = (...values: Array<string | undefined>) =>
   values
@@ -104,7 +105,7 @@ const evidenceGapsFor = (assessment: Assessment, riskLevel: AvalaGovernRiskLevel
     });
   }
 
-  if ((assessment.metadata.evidenceQuality || 0) < 70) {
+  if (!meetsGovernLiteEvidenceThreshold(assessment.metadata.evidenceQuality)) {
     gaps.push({
       label: 'Evidence confidence is below Govern Lite threshold.',
       severity: riskLevel === 'Low' ? 'Medium' : riskLevel,

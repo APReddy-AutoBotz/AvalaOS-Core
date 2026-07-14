@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan; PR 1A is accepted through PR #206, PR 1B is accepted at `de87c86`, and PR 1C is the active implementation candidate
+Status: active plan; PR 1A is accepted through PR #206, PR 1B is accepted at `de87c86`, and PR #208 / PR 1C is accepted; PR 1D is the active implementation candidate
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
@@ -268,3 +268,9 @@ Document:
 
 Create one intentional branch from current main, a small number of logical and reviewable commits, and one draft PR. Do not merge, deploy, rotate keys, disable a live endpoint, or begin PR 1B without the required approval and accepted PR 1A evidence.
 ```
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+PR 1D delivers the V1 compatibility boundary and a working reviewer-ready V2 foundation. PR 1E owns review/approval/handoff authority and PR 1F owns calibration/economics. The three boundaries precede broader Studio/private-artifact work.

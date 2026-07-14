@@ -1,0 +1,5 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const migration=fs.readFileSync('supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql','utf8');
+for(const token of ['assess_v2_cases','assess_v2_case_versions','assess_v2_decision_versions','assess_v2_decision_points','assess_v2_exception_paths','assess_v2_candidate_evaluations','assess_v2_gate_results','assess_v2_control_requirements','assess_v2_modernization_dispositions','FOREIGN KEY(decision_id,case_id,workspace_id,org_id)','ENABLE ROW LEVEL SECURITY','FORCE ROW LEVEL SECURITY','assessment_v2.finalize','p_source_case jsonb','p_input_hash text','TO service_role','FROM PUBLIC,anon,authenticated',"p_authoring->'decisionPoints'","p_authoring->'exceptionPaths'","p_output_snapshot->'candidateEvaluations'","p_output_snapshot->'gateResults'","p_output_snapshot->'controlRequirements'","p_output_snapshot->'modernization'","'decisionPoints',COALESCE","'exceptionPaths',COALESCE"])assert.ok(migration.includes(token),`missing ${token}`);
+assert.doesNotMatch(migration,/UPDATE public\.privileged_audit_events/);
+console.log('PR 1D migration contract passed.');

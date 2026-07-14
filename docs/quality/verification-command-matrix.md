@@ -42,3 +42,11 @@ Hosted database, RLS/tenant-isolation, Storage, Edge invocation, deployment, env
 | `npm run test:scoring` | Locked deterministic scoring regression. | Exit 0; `assess-core-2026-05` unchanged. |
 
 PR 1B also runs the applicable PR 1A required set, full default regression, build, secret/AI-boundary scans, link validation, `git diff --check`, and changed-file review. Browser/accessibility/responsive checks are not applicable unless UI behavior changes. Hosted or live checks remain separately authorized.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+PR 1D feature-owned verification: `npm run test:pr1d`, `npm run test:migrations:pr1d`, `npm run test:browser:pr1d`, and `npm run test:docs:pr1d`, in addition to all retained PR 1A/1B/1C, typecheck, audit, security, build, and diff gates. Unavailable checks are Blocked or Not Run, never passed.
+
+Executed local results and the proof boundary are recorded in [PR 1D Avala Assess V2 Decision Intelligence Evidence](./pr1d-assess-v2-decision-intelligence-evidence.md).
