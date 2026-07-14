@@ -142,6 +142,7 @@ const governCard: AvalaGovernLiteCard = {
 
 const assessment: Assessment = {
   id: 'assessment-1',
+  studioHandoffId: '77777777-7777-4777-8777-777777777701',
   processId: 'process-1',
   orgId: 'org-1',
   status: 'Handed Off to Docs',
@@ -227,6 +228,7 @@ const payload = buildAssessToStudioHandoffPayload({
 assert.ok(payload, 'Expected scored assessment to create an Assess-to-Studio payload.');
 assert.equal(payload.processId, process.id);
 assert.equal(payload.assessmentId, assessment.id);
+assert.equal(payload.studioHandoffId, assessment.studioHandoffId);
 assert.equal(payload.gateDecision, 'Conditional Go');
 assert.equal(payload.recommendationCategory, 'Workflow with HITL');
 assert.equal(payload.decisionPack, decisionPack);
@@ -253,6 +255,7 @@ assert.doesNotMatch(renderedSource, /undefined/);
 const partialAssessment = {
   ...assessment,
   id: 'assessment-partial',
+  studioHandoffId: '77777777-7777-4777-8777-777777777702',
   evidenceItems: [],
   assumptions: [],
   scores: {

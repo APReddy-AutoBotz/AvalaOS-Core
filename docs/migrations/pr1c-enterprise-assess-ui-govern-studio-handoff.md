@@ -9,6 +9,7 @@ The migration adds:
 
 - `govern.resolve` and `studio.handoff.create` capabilities;
 - immutable `assessment_studio_handoffs` with exact organization, workspace, process, and assessment ancestry;
+- immutable receipt-bound Govern provenance plus a fail-closed legacy Approved/handed-off preflight;
 - `pr1c_list_tenant_contexts` for the authenticated user's server-issued UI projection;
 - `pr1c_govern_resolve` for human review lifecycle decisions; and
 - `pr1c_create_studio_handoff` for approved, version-matched, one-time Studio handoff creation.
@@ -21,14 +22,16 @@ The mutation RPCs are callable only by `service_role`. They independently invoke
 
 - `anon` and `authenticated` mutation execution is denied while `service_role` is allowed;
 - available tenant contexts are actor-scoped;
-- approval cannot be bypassed before Studio handoff;
+- dirty legacy Approved or handed-off rows fail preflight without partially applying the migration;
+- Studio handoff requires immutable, successful, receipt-bound Govern approval at the exact assessment version;
 - exact ancestry and cross-tenant access fail without resource disclosure;
-- expected-version and actor-scoped idempotency behavior;
+- positive and negative RLS/ACL behavior, expected-version, and actor-scoped idempotency;
+- separate-connection Govern and Studio concurrency races produce one commit and one conflict;
 - Govern approval and Studio handoff lifecycle;
-- one durable handoff and matching privileged audit events; and
-- injected audit failure rolls back state, handoff, and receipt.
+- immutable provenance, one durable handoff, and matching privileged audit events; and
+- injected Govern and Studio audit failures roll back state, provenance/handoff, and receipt.
 
-Executed locally on 2026-07-13 against a disposable database in a local Supabase PostgreSQL container: passed. No hosted or live application database was accessed.
+Local execution status on 2026-07-14: not run because no disposable PostgreSQL server was available in the authorized workspace. The suite remains a required GitHub migration gate. No hosted or live application database was accessed.
 
 ## Rollback And Recovery
 

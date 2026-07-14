@@ -5,6 +5,9 @@ import ts from 'typescript';
 
 const roots = [
   'types.ts',
+  'services/enterpriseAssessContract.ts',
+  'services/enterpriseSessionPolicy.ts',
+  'services/enterpriseAssessContract.test.ts',
   'services/scoringEngine.ts',
   'supabase/functions/_shared/tenantAuthority.ts',
   'supabase/functions/_shared/assessScoring.ts',
@@ -41,9 +44,14 @@ if (diagnostics.length) {
   process.exit(1);
 }
 if (program.emit().emitSkipped) process.exit(1);
-const testFile = path.join(outputDir, 'supabase/functions/_shared/pr1cCommand.test.js');
+const testFiles = [
+  'supabase/functions/_shared/pr1cCommand.test.js',
+  'services/enterpriseAssessContract.test.js',
+].map(file => path.join(outputDir, file));
 const includes = [
   'supabase/functions/_shared/assessHandlers.js',
+  'services/enterpriseAssessContract.js',
+  'services/enterpriseSessionPolicy.js',
   'supabase/functions/_shared/tenantSession.js',
 ].map(file => path.join(outputDir, file).replace(/\\/g, '/'));
 const result = spawnSync(process.execPath, [
@@ -53,6 +61,6 @@ const result = spawnSync(process.execPath, [
   '--test-coverage-branches=60',
   ...includes.map(file => `--test-coverage-include=${file}`),
   '--test',
-  testFile,
+  ...testFiles,
 ], { stdio: 'inherit' });
 process.exit(result.status ?? 1);

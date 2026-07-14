@@ -78,6 +78,7 @@ function App() {
   const {
     currentOrganization,
     organizations,
+    tenantContext,
     sessionState,
     loading: orgLoading,
     createOrg,
@@ -161,6 +162,19 @@ function App() {
   }, []);
 
   const guardLoading = authLoading || orgLoading;
+  const viewAuthorityUser = useMemo(() => {
+    if (!currentUser || !tenantContext?.capabilities.includes('assess.read')) {
+      return currentUser;
+    }
+
+    return {
+      ...currentUser,
+      permissions: Array.from(new Set([
+        ...(currentUser.permissions ?? []),
+        'assessment.review',
+      ])),
+    };
+  }, [currentUser, tenantContext]);
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
@@ -170,14 +184,14 @@ function App() {
 
   const resolveAppViewAccess = useCallback((view: View, scope: Scope = currentScope) => {
     return resolveViewAccess({
-      user: currentUser,
+      user: viewAuthorityUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
       view,
       scope,
     });
-  }, [currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+  }, [currentOrganization, currentScope, enabledModules, guardLoading, viewAuthorityUser]);
 
   const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
     if (guardLoading) return false;
@@ -416,12 +430,12 @@ function App() {
   };
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization) return;
+    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
 
     const resolvedState = resolvePersistedViewScopeState({
       view: persistedView,
       scope: persistedScope,
-      user: currentUser,
+      user: viewAuthorityUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
@@ -440,7 +454,7 @@ function App() {
   }, [
     currentOrganization,
     currentScope,
-    currentUser,
+    viewAuthorityUser,
     currentView,
     enabledModules,
     guardLoading,
@@ -451,13 +465,13 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization) return;
+    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
     if (!explicitNavigationIntent || navigationHydrated.current) return;
     if (processesLoading) return;
 
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
-      user: currentUser,
+      user: viewAuthorityUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
@@ -484,7 +498,7 @@ function App() {
     navigationHydrated.current = true;
   }, [
     currentOrganization,
-    currentUser,
+    viewAuthorityUser,
     documentGenerations,
     enabledModules,
     explicitNavigationIntent,
@@ -498,7 +512,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization) return;
+    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
     if (explicitNavigationIntent && !navigationHydrated.current) return;
     if (processesLoading) return;
 
@@ -517,7 +531,7 @@ function App() {
       scope: currentScope,
       processId: selectedProcessId,
       documentGenerationId: activeGenerationId,
-      user: currentUser,
+      user: viewAuthorityUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
@@ -555,7 +569,7 @@ function App() {
     activeGenerationId,
     currentOrganization,
     currentScope,
-    currentUser,
+    viewAuthorityUser,
     currentView,
     documentGenerations,
     enabledModules,

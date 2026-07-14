@@ -4,6 +4,10 @@ import { EnterpriseBoundaryError, loadEnterpriseSessionContexts } from '../../se
 import { getRuntimeDataAccess, isLocalRuntimeEnabled, supabase } from '../../services/supabaseClient';
 import { RuntimeBoundaryError } from '../../services/runtimeMode';
 import {
+  EnterpriseMutationCapability,
+  presentEnterpriseBoundary,
+} from '../../services/enterpriseSessionPolicy';
+import {
   EnterpriseSessionState,
   EnterpriseWorkspace,
   Organization,
@@ -28,6 +32,8 @@ interface OrganizationContextType {
   updateProfile: (orgId: string, profile: any) => Promise<void>;
   updateEnabledModules: (orgId: string, enabledModules: ProductModuleKey[]) => Promise<void>;
   refreshOrgs: () => Promise<void>;
+  hasCapability: (capability: EnterpriseMutationCapability) => boolean;
+  handleEnterpriseBoundary: (error: unknown) => boolean;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -37,12 +43,8 @@ const stateForError = (error: unknown): { state: EnterpriseSessionState; message
     return { state: 'blocked', message: 'AvalaOS runtime authority is not configured. Enterprise actions remain blocked.' };
   }
   if (error instanceof EnterpriseBoundaryError) {
-    if (error.code === 'AUTHENTICATION_REQUIRED') return { state: 'expired_session', message: 'Your session expired. Sign in again to continue.' };
-    if (error.code === 'AUTHORITY_STALE') return { state: 'stale', message: 'Your access changed. Refresh the workspace context before continuing.' };
-    if (error.code === 'RESOURCE_NOT_AVAILABLE' || error.code === 'PERMISSION_DENIED') {
-      return { state: 'revoked', message: 'This workspace is no longer available for your account.' };
-    }
-    if (error.code === 'OFFLINE') return { state: 'offline', message: 'AvalaOS is offline. Changes remain blocked until the server is reachable.' };
+    const presentation = presentEnterpriseBoundary(error.code);
+    return { state: presentation.state, message: presentation.message };
   }
   return { state: 'error', message: 'AvalaOS could not load the server-issued workspace context.' };
 };
@@ -141,6 +143,26 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => { window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
   }, [loadSession]);
 
+  const hasCapability = useCallback((capability: EnterpriseMutationCapability) =>
+    isLocalRuntimeEnabled() || Boolean(currentContext?.capabilities.includes(capability)),
+  [currentContext]);
+
+  const handleEnterpriseBoundary = useCallback((error: unknown) => {
+    if (!(error instanceof EnterpriseBoundaryError)) return false;
+    const presentation = presentEnterpriseBoundary(error.code);
+    if (presentation.clearAuthority) {
+      setCurrentContext(null);
+      setCurrentOrganization(null);
+      sessionStorage.removeItem(SESSION_SELECTION_KEY);
+      if (error.code === 'AUTHENTICATION_REQUIRED') {
+        setContexts([]);
+        setOrganizations([]);
+      }
+    }
+    setSessionState(presentation.state);
+    setSessionMessage(presentation.message);
+    return true;
+  }, []);
   const selectContext = useCallback((next: TenantContextProjection) => {
     const organization = organizations.find(item => item.id === next.organizationId) || null;
     setCurrentContext(next);
@@ -213,6 +235,8 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     updateProfile,
     updateEnabledModules,
     refreshOrgs: loadSession,
+    hasCapability,
+    handleEnterpriseBoundary,
   }}>{children}</OrganizationContext.Provider>;
 };
 

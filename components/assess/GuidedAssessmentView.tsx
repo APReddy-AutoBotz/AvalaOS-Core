@@ -18,6 +18,9 @@ import {
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
 import { aiEdgeClient, isAiEdgeEnabled } from '../../services/aiEdgeClient';
 import { downloadAssessmentDecisionPack } from '../../services/assessmentExportService';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
+import { enterpriseActionPolicy, EnterpriseMutationCapability } from '../../services/enterpriseSessionPolicy';
+import { isLocalRuntimeEnabled } from '../../services/supabaseClient';
 import { resolveArtifactExportPolicy } from '../../services/artifactExportPolicy';
 import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
 
@@ -50,6 +53,7 @@ interface GuidedAssessmentViewProps {
 
 const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, scope, onExit }) => {
     const { currentOrganization } = useOrganization();
+    const { tenantContext, sessionState } = useOrganizationContext();
     const {
         getAssessmentForProcess,
         saveAssessmentDraft,
@@ -59,7 +63,6 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         approveAssessment,
         rejectAssessment,
         markHandedOffToDocs,
-        markHandedOffToDelivery,
     } = useAssessmentService();
     const { getProcessById } = useProcessService();
     const { user } = useAuth();
@@ -840,6 +843,19 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
     const fieldOptions = getAssessFieldOptions(assessment);
     const currentTemplateRule = getAssessTemplateRuleFromConfig(currentProcess?.templateId, assessGovernanceConfig);
     const isLockedAssessment = LOCKED_ASSESSMENT_STATUSES.has(assessment.status);
+    const policyFor = (capability: EnterpriseMutationCapability) => enterpriseActionPolicy({
+        sessionState,
+        tenantContext,
+        capability,
+        localAuthority: isLocalRuntimeEnabled(),
+    });
+    const createPolicy = policyFor('assess.create');
+    const responsePolicy = policyFor('assess.response.write');
+    const savePolicy = assessment.version === undefined && !createPolicy.enabled ? createPolicy : responsePolicy;
+    const finalizeCapabilityPolicy = policyFor('assess.finalize');
+    const finalizePolicy = savePolicy.enabled ? finalizeCapabilityPolicy : savePolicy;
+    const governPolicy = policyFor('govern.resolve');
+    const studioPolicy = policyFor('studio.handoff.create');
     const governCard = assessment.scores && currentProcess ? buildAvalaGovernLiteCard(assessment, currentProcess) : null;
     const decisionPackExportDecision = resolveArtifactExportPolicy({
         action: 'decision_pack.export',
@@ -969,18 +985,29 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                 <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50 dark:bg-slate-950">
                     {!assessment.scores ? (
                         <>
-                            <button 
+                            <button
                                 onClick={handleSaveDraft}
-                                className={`w-full rounded-xl py-2.5 font-black transition-all shadow-sm ${isDirty ? 'bg-[#002C4B] text-white shadow-[#002C4B]/20' : 'bg-slate-200 text-slate-500 dark:bg-slate-800'}`}
+                                disabled={!savePolicy.enabled}
+                                title={savePolicy.explanation || undefined}
+                                aria-describedby={!savePolicy.enabled ? 'assess-mutation-explanation' : undefined}
+                                className={`w-full rounded-xl py-2.5 font-black transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${isDirty ? 'bg-[#002C4B] text-white shadow-[#002C4B]/20' : 'bg-slate-200 text-slate-500 dark:bg-slate-800'}`}
                             >
                                 Save Draft {isDirty && '*'}
                             </button>
-                            <button 
+                            <button
                                 onClick={handleComplete}
-                                className="w-full rounded-xl bg-[#ffbc03] py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00]"
+                                disabled={!finalizePolicy.enabled}
+                                title={finalizePolicy.explanation || undefined}
+                                aria-describedby={!finalizePolicy.enabled ? 'assess-mutation-explanation' : undefined}
+                                className="w-full rounded-xl bg-[#ffbc03] py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Calculate deterministic score
                             </button>
+                            {(!savePolicy.enabled || !finalizePolicy.enabled) && (
+                                <p id="assess-mutation-explanation" className="text-xs font-semibold leading-5 text-amber-700" role="status">
+                                    {savePolicy.explanation || finalizePolicy.explanation}
+                                </p>
+                            )}
                         </>
                     ) : (
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center dark:border-emerald-800/50 dark:bg-emerald-900/20">
@@ -1070,12 +1097,16 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                         Reason required for changes, rejection, and governance/no-go approval overrides.
                                     </p>
                                     <div className="mt-4 space-y-2">
-                                        <button disabled={isLockedAssessment} onClick={() => runStatusAction(submitForReview, 'Assessment sent for review.', 'submit')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-primary disabled:cursor-not-allowed disabled:opacity-50">Send for Review</button>
-                                        <button disabled={isLockedAssessment} onClick={() => runStatusAction(approveAssessment, 'Assessment approved.', 'approve')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
-                                        <button disabled={isLockedAssessment} onClick={() => runStatusAction(requestChanges, 'Changes requested.', 'changes')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Request Changes</button>
-                                        <button disabled={isLockedAssessment} onClick={() => runStatusAction(rejectAssessment, 'Assessment rejected.', 'reject')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Reject</button>
-                                        <button disabled={assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDocs, 'Governed Studio handoff committed.', 'docs')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Create governed Studio handoff</button>
-                                        <button disabled={assessment.status !== 'Approved'} onClick={() => runStatusAction(markHandedOffToDelivery, 'Delivery handoff snapshot generated.', 'delivery')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Record Delivery handoff snapshot</button>
+                                        <button disabled={assessment.status !== 'Ready for Review' || !governPolicy.enabled} title={governPolicy.explanation || undefined} onClick={() => runStatusAction(submitForReview, 'Assessment sent for review.', 'submit')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-primary disabled:cursor-not-allowed disabled:opacity-50">Send for Review</button>
+                                        <button disabled={!['Ready for Review', 'In Review'].includes(assessment.status) || !governPolicy.enabled} title={governPolicy.explanation || undefined} onClick={() => runStatusAction(approveAssessment, 'Assessment approved.', 'approve')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
+                                        <button disabled={!['Ready for Review', 'In Review'].includes(assessment.status) || !governPolicy.enabled} title={governPolicy.explanation || undefined} onClick={() => runStatusAction(requestChanges, 'Changes requested.', 'changes')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Request Changes</button>
+                                        <button disabled={!['Ready for Review', 'In Review'].includes(assessment.status) || !governPolicy.enabled} title={governPolicy.explanation || undefined} onClick={() => runStatusAction(rejectAssessment, 'Assessment rejected.', 'reject')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Reject</button>
+                                        <button disabled={assessment.status !== 'Approved' || !studioPolicy.enabled} title={studioPolicy.explanation || undefined} onClick={() => runStatusAction(markHandedOffToDocs, 'Governed Studio handoff committed.', 'docs')} className="w-full rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50">Create governed Studio handoff</button>
+                                        {(!governPolicy.enabled || !studioPolicy.enabled) && (
+                                            <p className="text-xs font-semibold leading-5 text-amber-700" role="status">
+                                                {governPolicy.explanation || studioPolicy.explanation}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
                                         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Decision Pack export</p>
@@ -1495,11 +1526,11 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                             ) : <div></div>}
                             
                             {currentSectionIndex < SECTIONS.length - 1 ? (
-                                <button onClick={handleNext} className="rounded-xl bg-[#002C4B] px-8 py-2.5 font-black text-white shadow-sm transition-colors hover:bg-[#003c66]">
+                                <button onClick={handleNext} disabled={!savePolicy.enabled} title={savePolicy.explanation || undefined} className="rounded-xl bg-[#002C4B] px-8 py-2.5 font-black text-white shadow-sm transition-colors hover:bg-[#003c66] disabled:cursor-not-allowed disabled:opacity-50">
                                     Save & Continue
                                 </button>
                             ) : (
-                                <button onClick={handleComplete} className="rounded-xl bg-[#ffbc03] px-8 py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00]">
+                                <button onClick={handleComplete} disabled={!finalizePolicy.enabled} title={finalizePolicy.explanation || undefined} className="rounded-xl bg-[#ffbc03] px-8 py-2.5 font-black text-[#002C4B] shadow-sm transition-colors hover:bg-[#f3ad00] disabled:cursor-not-allowed disabled:opacity-50">
                                     Calculate deterministic score
                                 </button>
                             )}

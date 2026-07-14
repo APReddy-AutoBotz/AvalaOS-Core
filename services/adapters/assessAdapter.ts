@@ -341,7 +341,23 @@ export const assessAdapter = {
     const { data, error } = await query.maybeSingle();
 
     if (error) throw error;
-    return data ? fromAssessmentRow(data) : null;
+    if (!data) return null;
+    const assessment = fromAssessmentRow(data);
+    if (assessment.status !== 'Handed Off to Docs' || !workspaceId) return assessment;
+
+    const { data: handoff, error: handoffError } = await supabase
+      .from('assessment_studio_handoffs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('workspace_id', workspaceId)
+      .eq('assessment_id', assessment.id)
+      .eq('process_id', processId)
+      .in('status', ['submitted', 'accepted'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (handoffError) throw handoffError;
+    return handoff?.id ? { ...assessment, studioHandoffId: handoff.id } : assessment;
   },
 
   async saveAssessment(assessment: Partial<Assessment>) {

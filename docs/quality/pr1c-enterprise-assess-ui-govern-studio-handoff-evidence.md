@@ -1,7 +1,7 @@
 # PR 1C Enterprise Assess UI, Govern, And Studio Handoff Evidence
 
-Status: implementation candidate; local verification complete; GitHub CI, review, and merge pending
-Date: 2026-07-13
+Status: implementation candidate; local source, regression, build, and browser verification complete; disposable PostgreSQL, GitHub CI, review, and merge pending
+Date: 2026-07-14
 Accepted dependency: PR 1B on `main` at `de87c86`
 
 ## Scope And Proof Boundary
@@ -29,6 +29,7 @@ Root synthesis:
 - `tenant-session` returns a validated server-issued organization/workspace/TenantContext projection and accepts no actor or tenant claim from the browser.
 - `assess-command` dispatches `govern.resolve` and `studio_handoff.create` to separate typed handlers.
 - One additive PR 1C migration provides service-role-only context and mutation RPCs; `PUBLIC`, `anon`, and `authenticated` cannot execute mutations.
+- Immutable successful Govern provenance is bound to the exact receipt, actor, ancestry, decision, and resulting version. Migration preflight fails closed when legacy Approved or handed-off rows lack that trusted provenance.
 - Govern and Studio transactions reauthorize through PR 1B, verify exact ancestry and versions, enforce lifecycle rules, claim actor-scoped idempotency, and atomically persist domain state, receipt, review/handoff evidence, and privileged audit.
 - Enterprise Assess create/save/finalize uses the typed command client. Direct enterprise assessment and review-event adapter mutations fail closed.
 - Assessment reads preserve error state rather than collapsing failure to an empty assessment.
@@ -42,9 +43,9 @@ Root synthesis:
 | --- | --- |
 | PR 1B and scoring boundaries preserved | Passed; score behavior/version unchanged and regression remained green |
 | No UI path bypasses Govern | Passed by server lifecycle enforcement, source gate, payload gate, and handoff regression |
-| Failed persistence cannot render success | Passed by command error handling, atomic rollback test, and browser false-success check |
-| Fresh authorization, ancestry, version, and idempotency | Passed in handler and disposable PostgreSQL adversarial tests |
-| Service-role-only mutation RPCs | Passed by source contract and PostgreSQL ACL assertions |
+| Failed persistence cannot render success | Passed in typed command and production-browser failure paths; PostgreSQL fault-injection verification is pending |
+| Fresh authorization, ancestry, version, and idempotency | Passed in handler tests and source review; disposable PostgreSQL adversarial execution is pending |
+| Service-role-only mutation RPCs | Passed by source contract; PostgreSQL ACL execution is pending |
 | Explicit enterprise session/failure states | Passed by source/type checks and production-preview stale-state coverage |
 | Accessibility and responsive desktop/mobile behavior | Passed in Chromium desktop and Pixel 7 projects with no serious/critical axe findings or viewport overflow |
 | Relevant performance budget | Passed; navigation duration below 5000 ms and DOMContentLoaded below 4000 ms on both projects |
@@ -54,23 +55,20 @@ Root synthesis:
 
 | Command | Result | Exact signal |
 | --- | --- | --- |
-| `npm ci` | Passed | 171 packages installed; 172 audited; 0 vulnerabilities |
+| `npm ci` | Not run | Existing lockfile installation was retained; dependency installation was not repeated in this continuation |
 | `npm run typecheck` | Passed | `tsc --noEmit` exit 0 |
 | `npm run typecheck:edge` | Passed | Edge TypeScript project exit 0 |
-| `npm run test:assess-command` | Passed | Assess handlers and locked scoring parity regression passed |
-| `npm run test:assess-to-studio-handoff` | Passed | Handoff payload regression passed, including approved-but-not-handed-off denial |
-| `npm run test:pr1c` | Passed | Source boundary and tenant/Govern/Studio/false-success suites passed |
-| `npm run test:pr1c-coverage` | Passed | 70.20% lines, 64.41% branches, 81.25% functions across changed Assess handlers and tenant-session boundary; enforced floors 70/60/80 |
-| `npm run test:migrations:pr1c` | Passed | Disposable PostgreSQL ACL, ancestry, idempotency, lifecycle, atomicity, and rollback suite passed |
+| `npm run lint:pr1c` | Passed | Source, migration, authority, and UI cutover boundaries passed |
+| `npm run test:assess-to-studio-handoff` | Passed via `npm test` | Durable handoff ID and approved-but-uncommitted denial regression passed |
+| `npm run test:pr1c` | Passed | Source, command, strict response/session contract, and coverage gates passed |
+| `npm run test:pr1c-coverage` | Passed | 80.00% lines, 81.97% branches, and 86.96% functions across the PR 1C-owned boundary set |
+| `npm run test:migrations:pr1c` | Not run | No disposable local PostgreSQL server was available; live or hosted databases were explicitly out of scope |
 | `npm run build` | Passed with warning | Vite production build completed; Browserslist data warning remains non-blocking |
-| `npm run test:browser:pr1c` | Passed | 6/6 production build-preview tests passed across Chromium desktop and mobile |
-| `git diff --check` | Passed | No whitespace errors after final implementation and evidence changes |
+| `npx playwright test pr1c.spec.ts --reporter=line` | Passed | 16/16 production App build-preview tests passed across Chromium desktop and mobile |
+| `git diff --check` | Passed | No whitespace errors after final implementation and evidence edits |
 | Full default `npm test` | Passed | Complete chained regression, including PR 1A, PR 1B, and PR 1C coverage gates, exited 0 |
-| GitHub Actions | Planned verification | Required after draft PR opens |
+| GitHub Actions | Planned verification | Required on the existing draft PR #208 after push |
 
-The first local browser attempt was blocked by missing WSL Chromium library `libnspr4.so`. Playwright's official Chromium dependencies were installed locally; the rerun executed the application checks and passed 6/6. The first disposable rollback fault-injection constraint incorrectly validated existing fixture rows; it was corrected to `NOT VALID`, after which the intended new-write rollback assertion passed. Neither condition was a product-runtime pass or failure.
-
-The first full regression exposed two predecessor checks that treated PR 1B as the repository's terminal migration and measured additive PR 1C handler branches without their tests. The PR 1B migration check now fixes its boundary at the PR 1B filename, and its shared-handler coverage run includes the additive PR 1C cases; the complete rerun passed.
 
 ## Rollback And Fallback
 
@@ -82,4 +80,4 @@ The first full regression exposed two predecessor checks that treated PR 1B as t
 
 ## Remaining Gates
 
-GitHub quality, browser, and PR 1C migration jobs; code review; normal merge approval. Hosted and live-system verification remain not run and out of scope.
+Disposable PostgreSQL execution, GitHub quality/browser/migration jobs, code review, and normal merge approval remain. Hosted and live-system verification remain not run and out of scope.

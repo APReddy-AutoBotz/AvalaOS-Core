@@ -114,7 +114,9 @@ export const buildAssessToStudioHandoffPayload = ({
   requireCommittedHandoff = false,
 }: BuildAssessToStudioHandoffPayloadInput): AssessToStudioHandoffPayload | null => {
   const scores = assessment.scores;
-  if (!scores || (requireCommittedHandoff && assessment.status !== 'Handed Off to Docs')) return null;
+  if (!scores || (requireCommittedHandoff && (
+    assessment.status !== 'Handed Off to Docs' || !assessment.studioHandoffId
+  ))) return null;
 
   const decisionPack = scores.decisionPack;
   const handoffPack = scores.handoffPack;
@@ -130,6 +132,7 @@ export const buildAssessToStudioHandoffPayload = ({
     processId: process.id,
     processName: process.name,
     assessmentId: assessment.id,
+    ...(assessment.studioHandoffId ? { studioHandoffId: assessment.studioHandoffId } : {}),
     assessmentStatus: assessment.status,
     gateDecision: decisionPack?.finalDecision || scores.gateDecision,
     riskTier: scores.riskTier,
@@ -183,6 +186,7 @@ export const renderAssessToStudioSourceContext = (payload: AssessToStudioHandoff
     processId: payload.processId,
     processName: payload.processName,
     assessmentId: payload.assessmentId,
+    studioHandoffId: payload.studioHandoffId,
     assessmentStatus: payload.assessmentStatus,
     gateDecision: payload.gateDecision,
     riskTier: payload.riskTier,
@@ -203,6 +207,7 @@ export const renderAssessToStudioSourceContext = (payload: AssessToStudioHandoff
     '',
     `Source Label: ${payload.sourceLabel}`,
     `Assessment ID: ${payload.assessmentId}`,
+    ...(payload.studioHandoffId ? [`Studio Handoff ID: ${payload.studioHandoffId}`] : []),
     `Process: ${payload.processName}`,
     `Assessment Status: ${payload.assessmentStatus}`,
     `Gate Decision: ${payload.gateDecision || 'Not recorded'}`,

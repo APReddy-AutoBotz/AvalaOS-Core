@@ -26,6 +26,54 @@ CREATE TABLE IF NOT EXISTS public.assessment_studio_handoffs (
   CONSTRAINT pr1c_handoff_reason_check CHECK(reason IS NULL OR length(reason) BETWEEN 1 AND 1000),
   CONSTRAINT pr1c_handoff_safe_snapshot_check CHECK(NOT (decision_snapshot ?| ARRAY['secret','token','signedUrl','rawContent','customerData']))
 );
+CREATE TABLE IF NOT EXISTS public.assessment_govern_provenance (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL,
+  workspace_id uuid NOT NULL,
+  assessment_id uuid NOT NULL,
+  process_id uuid NOT NULL,
+  actor_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  decision text NOT NULL CHECK(decision IN('submit','approve','request_changes','reject')),
+  assessment_version bigint NOT NULL CHECK(assessment_version > 0),
+  result_status text NOT NULL,
+  request_id uuid NOT NULL,
+  receipt_id uuid NOT NULL UNIQUE REFERENCES public.assess_command_receipts(id) ON DELETE RESTRICT,
+  outcome text NOT NULL DEFAULT 'succeeded' CHECK(outcome='succeeded'),
+  reason text,
+  decided_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pr1c_govern_provenance_assessment_ancestry_fkey FOREIGN KEY(assessment_id,workspace_id,org_id) REFERENCES public.assessments(id,workspace_id,org_id),
+  CONSTRAINT pr1c_govern_provenance_process_ancestry_fkey FOREIGN KEY(process_id,workspace_id,org_id) REFERENCES public.assess_processes(id,workspace_id,org_id),
+  CONSTRAINT pr1c_govern_provenance_reason_check CHECK(reason IS NULL OR length(reason) BETWEEN 1 AND 1000),
+  UNIQUE(org_id,workspace_id,assessment_id,assessment_version,decision)
+);
+
+DO $$
+BEGIN
+  IF EXISTS(
+    SELECT 1 FROM public.assessments a
+    WHERE a.deleted_at IS NULL AND a.status IN('Approved','Handed Off to Docs')
+      AND NOT EXISTS(
+        SELECT 1
+        FROM public.assessment_govern_provenance gp
+        JOIN public.assess_command_receipts cr ON cr.id=gp.receipt_id
+        WHERE gp.org_id=a.org_id AND gp.workspace_id=a.workspace_id
+          AND gp.assessment_id=a.id AND gp.process_id=a.process_id
+          AND gp.decision='approve' AND gp.outcome='succeeded'
+          AND cr.status='succeeded' AND cr.request_id=gp.request_id
+          AND (
+            (a.status='Approved' AND gp.assessment_version=a.version)
+            OR (a.status='Handed Off to Docs' AND EXISTS(
+              SELECT 1 FROM public.assessment_studio_handoffs ho
+              WHERE ho.assessment_id=a.id AND ho.org_id=a.org_id AND ho.workspace_id=a.workspace_id
+                AND ho.process_id=a.process_id AND ho.assessment_version=gp.assessment_version
+                AND ho.status IN('submitted','accepted')
+            ))
+          )
+      )
+  ) THEN
+    RAISE EXCEPTION 'PR1C_PREFLIGHT_TRUSTED_GOVERN_PROVENANCE_REQUIRED';
+  END IF;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS pr1c_one_active_studio_handoff_per_assessment
 ON public.assessment_studio_handoffs(assessment_id)
@@ -34,6 +82,10 @@ WHERE status IN('submitted','accepted');
 DROP TRIGGER IF EXISTS trg_pr1c_handoff_immutable ON public.assessment_studio_handoffs;
 CREATE TRIGGER trg_pr1c_handoff_immutable
 BEFORE UPDATE OR DELETE ON public.assessment_studio_handoffs
+FOR EACH ROW EXECUTE FUNCTION public.pr1b_reject_immutable_event_mutation();
+DROP TRIGGER IF EXISTS trg_pr1c_govern_provenance_immutable ON public.assessment_govern_provenance;
+CREATE TRIGGER trg_pr1c_govern_provenance_immutable
+BEFORE UPDATE OR DELETE ON public.assessment_govern_provenance
 FOR EACH ROW EXECUTE FUNCTION public.pr1b_reject_immutable_event_mutation();
 
 CREATE OR REPLACE FUNCTION public.pr1c_list_tenant_contexts(p_actor_id uuid)
@@ -151,6 +203,13 @@ BEGIN
     updated_at=now()
   WHERE id=a.id
   RETURNING * INTO a;
+  INSERT INTO public.assessment_govern_provenance(
+    org_id,workspace_id,assessment_id,process_id,actor_id,decision,assessment_version,
+    result_status,request_id,receipt_id,reason
+  ) VALUES(
+    p_org_id,p_workspace_id,a.id,a.process_id,p_actor_id,p_resolution,a.version,
+    a.status,p_request_id,r.id,v_reason
+  );
 
   INSERT INTO public.assessment_review_events(
     org_id,workspace_id,assessment_id,process_id,actor_id,event_type,status,reason,payload,correlation_id
@@ -205,6 +264,21 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
   IF a.version<>p_expected_version THEN RAISE EXCEPTION 'PR1B_VERSION_CONFLICT'; END IF;
   IF a.status<>'Approved' THEN RAISE EXCEPTION 'PR1B_INVALID_COMMAND'; END IF;
+  IF NOT EXISTS(
+    SELECT 1
+    FROM public.assessment_govern_provenance gp
+    JOIN public.assess_command_receipts cr ON cr.id=gp.receipt_id
+    WHERE gp.org_id=p_org_id AND gp.workspace_id=p_workspace_id
+      AND gp.assessment_id=a.id AND gp.process_id=a.process_id
+      AND gp.decision='approve' AND gp.assessment_version=a.version
+      AND gp.result_status='Approved' AND gp.outcome='succeeded'
+      AND cr.actor_id=gp.actor_id AND cr.org_id=gp.org_id AND cr.workspace_id=gp.workspace_id
+      AND cr.command_type='govern.resolve' AND cr.request_id=gp.request_id
+      AND cr.status='succeeded'
+      AND cr.response#>>'{resource,assessmentId}'=a.id::text
+      AND cr.response#>>'{resource,version}'=a.version::text
+      AND cr.response#>>'{resource,status}'='Approved'
+  ) THEN RAISE EXCEPTION 'PR1B_INVALID_COMMAND'; END IF;
 
   INSERT INTO public.assessment_studio_handoffs(
     org_id,workspace_id,assessment_id,process_id,actor_id,assessment_version,reason,decision_snapshot
@@ -255,13 +329,21 @@ $$;
 
 ALTER TABLE public.assessment_studio_handoffs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assessment_studio_handoffs FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.assessment_govern_provenance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assessment_govern_provenance FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS pr1c_studio_handoff_read ON public.assessment_studio_handoffs;
 CREATE POLICY pr1c_studio_handoff_read ON public.assessment_studio_handoffs
+FOR SELECT TO authenticated
+USING(public.has_workspace_capability(workspace_id,org_id,'assess.read'));
+DROP POLICY IF EXISTS pr1c_govern_provenance_read ON public.assessment_govern_provenance;
+CREATE POLICY pr1c_govern_provenance_read ON public.assessment_govern_provenance
 FOR SELECT TO authenticated
 USING(public.has_workspace_capability(workspace_id,org_id,'assess.read'));
 
 REVOKE ALL ON public.assessment_studio_handoffs FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.assessment_studio_handoffs TO authenticated;
+REVOKE ALL ON public.assessment_govern_provenance FROM PUBLIC,anon,authenticated;
+GRANT SELECT ON public.assessment_govern_provenance TO authenticated;
 REVOKE ALL ON FUNCTION public.pr1c_list_tenant_contexts(uuid) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1c_govern_resolve(uuid,uuid,uuid,uuid,text,text,bigint,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1c_create_studio_handoff(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
@@ -270,4 +352,5 @@ GRANT EXECUTE ON FUNCTION public.pr1c_govern_resolve(uuid,uuid,uuid,uuid,text,te
 GRANT EXECUTE ON FUNCTION public.pr1c_create_studio_handoff(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint) TO service_role;
 
 COMMENT ON TABLE public.assessment_studio_handoffs IS 'Immutable PR 1C Govern-approved Studio handoff record with exact tenant ancestry.';
+COMMENT ON TABLE public.assessment_govern_provenance IS 'Immutable authoritative Govern outcome provenance bound to the successful command receipt and resulting assessment version.';
 COMMENT ON FUNCTION public.pr1c_list_tenant_contexts(uuid) IS 'Service-role-only fresh UI session projection after Edge caller authentication.';

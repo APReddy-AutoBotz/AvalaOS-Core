@@ -38,6 +38,9 @@ const PROCESS='11000000-0000-4000-8000-000000000013';
 const ASSESSMENT='11000000-0000-4000-8000-000000000014';
 const BYPASS='11000000-0000-4000-8000-000000000015';
 const AUDIT_FAIL='11000000-0000-4000-8000-000000000016';
+const LEGACY='11000000-0000-4000-8000-000000000017';
+const GOVERN_FAIL='11000000-0000-4000-8000-000000000018';
+const CONCURRENT='11000000-0000-4000-8000-000000000019';
 const requestId = suffix => `41000000-0000-4000-8000-${suffix.padStart(12,'0')}`;
 const value = result => result.rows[0].value;
 const trusted = async (client, operation) => {
@@ -65,6 +68,13 @@ try {
   await apply(test, baseline);
   await transaction(test, fixture);
   await transaction(test, source(pr1b));
+  await test.query("UPDATE assessments SET status='Approved' WHERE id=$1",[ASSESSMENT]);
+  await assert.rejects(
+    transaction(test, source(pr1c)),
+    /PR1C_PREFLIGHT_TRUSTED_GOVERN_PROVENANCE_REQUIRED/,
+  );
+  assert.equal((await test.query("SELECT to_regclass('public.assessment_govern_provenance') value")).rows[0].value,null);
+  await test.query("UPDATE assessments SET status='Ready for Review' WHERE id=$1",[ASSESSMENT]);
   await transaction(test, source(pr1c));
 
   await test.query(`INSERT INTO role_capabilities(role_id,capability_key) VALUES
@@ -77,8 +87,12 @@ try {
     ]);
   await test.query(`INSERT INTO assessments(id,process_id,org_id,workspace_id,status,version,score_version,scores)
     VALUES($1,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
-          ($6,$2,$3,$4,'Approved',1,'assess-core-2026-05',$5)`,[
-      BYPASS,PROCESS,ORG,WS,{ scoreVersion:'assess-core-2026-05', gateDecision:'Go' },AUDIT_FAIL,
+          ($6,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($7,$2,$3,$4,'Approved',1,'assess-core-2026-05',$5),
+          ($8,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($9,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5)`,[
+      BYPASS,PROCESS,ORG,WS,{ scoreVersion:'assess-core-2026-05', gateDecision:'Go' },
+      AUDIT_FAIL,LEGACY,GOVERN_FAIL,CONCURRENT,
     ]);
 
   const signatures = [
@@ -95,6 +109,13 @@ try {
     assert.equal((await test.query(
       `SELECT has_function_privilege('service_role',$1,'EXECUTE') allowed`,[signature]
     )).rows[0].allowed,true);
+  }
+  for (const table of ['assessment_govern_provenance','assessment_studio_handoffs']) {
+    assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'SELECT') allowed",[table])).rows[0].allowed,true);
+    for (const privilege of ['INSERT','UPDATE','DELETE']) {
+      assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,$2) allowed",[table,privilege])).rows[0].allowed,false);
+    }
+    assert.equal((await test.query("SELECT has_table_privilege('anon',$1,'SELECT') allowed",[table])).rows[0].allowed,false);
   }
 
   await test.query('SET ROLE authenticated');
@@ -123,6 +144,19 @@ try {
   assert.equal(bypass.errorCode,'INVALID_COMMAND');
   assert.equal((await test.query('SELECT status FROM assessments WHERE id=$1',[BYPASS])).rows[0].status,'Ready for Review');
   assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE assessment_id=$1',[BYPASS])).rows[0].n),0);
+  const legacy = value(await trusted(test, () => test.query(
+    'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [ACTOR,ORG,WS,LEGACY,'legacy must fail closed',1,requestId('30'),'legacy-handoff',version],
+  )));
+  assert.equal(legacy.errorCode,'INVALID_COMMAND');
+  assert.equal((await test.query('SELECT status FROM assessments WHERE id=$1',[LEGACY])).rows[0].status,'Approved');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE assessment_id=$1',[LEGACY])).rows[0].n),0);
+
+  const stale = value(await trusted(test, () => test.query(
+    'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+    [ACTOR,ORG,WS,ASSESSMENT,'approve','stale',1,requestId('31'),'stale-govern',version+1],
+  )));
+  assert.equal(stale.errorCode,'AUTHORIZATION_STALE');
 
   const governed = value(await trusted(test, () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
@@ -130,12 +164,32 @@ try {
   )));
   assert.equal(governed.resource.status,'Approved');
   assert.equal(Number(governed.resource.version),2);
+  const provenance = await test.query(`SELECT gp.*,cr.status receipt_status,cr.response
+    FROM assessment_govern_provenance gp JOIN assess_command_receipts cr ON cr.id=gp.receipt_id
+    WHERE gp.assessment_id=$1`,[ASSESSMENT]);
+  assert.equal(provenance.rowCount,1);
+  assert.equal(provenance.rows[0].org_id,ORG);
+  assert.equal(provenance.rows[0].workspace_id,WS);
+  assert.equal(provenance.rows[0].process_id,PROCESS);
+  assert.equal(provenance.rows[0].actor_id,ACTOR);
+  assert.equal(provenance.rows[0].decision,'approve');
+  assert.equal(Number(provenance.rows[0].assessment_version),2);
+  assert.equal(provenance.rows[0].result_status,'Approved');
+  assert.equal(provenance.rows[0].outcome,'succeeded');
+  assert.equal(provenance.rows[0].receipt_status,'succeeded');
+  assert.equal(provenance.rows[0].response.resource.version,2);
 
   const replay = value(await trusted(test, () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
     [ACTOR,ORG,WS,ASSESSMENT,'approve','Human approval recorded.',1,requestId('4'),'approve-assessment',version],
   )));
   assert.deepEqual(replay,governed);
+  const conflict = value(await trusted(test, () => test.query(
+    'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+    [ACTOR,ORG,WS,ASSESSMENT,'approve','different content',1,requestId('32'),'approve-assessment',version],
+  )));
+  assert.equal(conflict.errorCode,'IDEMPOTENCY_CONFLICT');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE assessment_id=$1',[ASSESSMENT])).rows[0].n),1);
 
   const handoff = value(await trusted(test, () => test.query(
     'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
@@ -146,6 +200,18 @@ try {
   assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT])).rows[0].n),1);
   assert.equal(Number((await test.query(`SELECT count(*) n FROM privileged_audit_events
     WHERE resource_id=$1 AND action IN('govern.resolve','studio_handoff.create')`,[ASSESSMENT])).rows[0].n),2);
+  assert.match(handoff.resource.handoffId,/^[0-9a-f-]{36}$/i);
+  assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT])).rows[0].id,handoff.resource.handoffId);
+  await assert.rejects(test.query("UPDATE assessment_govern_provenance SET reason='mutated' WHERE assessment_id=$1",[ASSESSMENT]),/immutable/i);
+  await assert.rejects(test.query('DELETE FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT]),/immutable/i);
+
+  await test.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[ACTOR]);
+  await test.query('SET ROLE authenticated');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance')).rows[0].n),1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs')).rows[0].n),1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE org_id<>$1',[ORG])).rows[0].n),0);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE org_id<>$1',[ORG])).rows[0].n),0);
+  await test.query('RESET ROLE');
 
   const crossTenant = value(await trusted(test, () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
@@ -153,11 +219,63 @@ try {
   )));
   assert.equal(crossTenant.errorCode,'NOT_FOUND');
 
+  const raceA = await connect(urlFor(databaseName));
+  const raceB = await connect(urlFor(databaseName));
+  try {
+    const governRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,CONCURRENT,'approve','concurrent approval',1,requestId('40'),'concurrent-govern-a',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,CONCURRENT,'approve','concurrent approval',1,requestId('41'),'concurrent-govern-b',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.equal(governRace.filter(result => result.resource?.status === 'Approved').length,1);
+    assert.equal(governRace.filter(result => result.errorCode === 'VERSION_CONFLICT').length,1);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE assessment_id=$1',[CONCURRENT])).rows[0].n),1);
+
+    const handoffRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,CONCURRENT,'concurrent handoff',2,requestId('42'),'concurrent-handoff-a',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,CONCURRENT,'concurrent handoff',2,requestId('43'),'concurrent-handoff-b',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.equal(handoffRace.filter(result => result.resource?.status === 'Handed Off to Docs').length,1);
+    assert.equal(handoffRace.filter(result => result.errorCode === 'VERSION_CONFLICT').length,1);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE assessment_id=$1',[CONCURRENT])).rows[0].n),1);
+  } finally {
+    await raceA.end();
+    await raceB.end();
+  }
+
+  await test.query(`ALTER TABLE privileged_audit_events ADD CONSTRAINT pr1c_test_govern_audit_failure
+    CHECK(action<>'govern.resolve') NOT VALID`);
+  const governFailed = value(await trusted(test, () => test.query(
+    'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+    [ACTOR,ORG,WS,GOVERN_FAIL,'approve','must rollback govern',1,requestId('44'),'govern-audit-failure',version],
+  )));
+  assert.equal(governFailed.errorCode,'COMMAND_UNAVAILABLE');
+  assert.equal((await test.query('SELECT status FROM assessments WHERE id=$1',[GOVERN_FAIL])).rows[0].status,'Ready for Review');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE assessment_id=$1',[GOVERN_FAIL])).rows[0].n),0);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='govern-audit-failure'")).rows[0].n),0);
+  await test.query('ALTER TABLE privileged_audit_events DROP CONSTRAINT pr1c_test_govern_audit_failure');
+
+  const auditFailApproved = value(await trusted(test, () => test.query(
+    'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+    [ACTOR,ORG,WS,AUDIT_FAIL,'approve','prepare handoff rollback',1,requestId('45'),'audit-fail-approve',version],
+  )));
+  assert.equal(auditFailApproved.resource.status,'Approved');
   await test.query(`ALTER TABLE privileged_audit_events ADD CONSTRAINT pr1c_test_audit_failure
     CHECK(action<>'studio_handoff.create') NOT VALID`);
   const failed = value(await trusted(test, () => test.query(
     'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
-    [ACTOR,ORG,WS,AUDIT_FAIL,'must rollback',1,requestId('7'),'audit-failure',version],
+    [ACTOR,ORG,WS,AUDIT_FAIL,'must rollback',2,requestId('7'),'audit-failure',version],
   )));
   assert.equal(failed.errorCode,'COMMAND_UNAVAILABLE');
   assert.equal((await test.query('SELECT status FROM assessments WHERE id=$1',[AUDIT_FAIL])).rows[0].status,'Approved');
@@ -165,6 +283,11 @@ try {
   assert.equal(Number((await test.query(`SELECT count(*) n FROM assess_command_receipts
     WHERE command_type='studio_handoff.create' AND idempotency_key='audit-failure'`)).rows[0].n),0);
   await test.query('ALTER TABLE privileged_audit_events DROP CONSTRAINT pr1c_test_audit_failure');
+  await assert.rejects(transaction(test, source(pr1c)),/PR1C_PREFLIGHT_TRUSTED_GOVERN_PROVENANCE_REQUIRED/);
+  await test.query("UPDATE assessments SET status='Ready for Review' WHERE id=$1",[LEGACY]);
+  await transaction(test, source(pr1c));
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE assessment_id=$1',[ASSESSMENT])).rows[0].n),1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT])).rows[0].n),1);
 
   console.log('PR 1C disposable PostgreSQL ACL, ancestry, idempotency, lifecycle, atomicity, and rollback tests passed.');
 } finally {

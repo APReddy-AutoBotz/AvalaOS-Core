@@ -6,11 +6,13 @@ import { assessAdapter } from './adapters/assessAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
 import { getRuntimeDataAccess } from './supabaseClient';
 import {
+    EnterpriseBoundaryError,
     createEnterpriseStudioHandoff,
     finalizeEnterpriseAssessment,
     persistEnterpriseAssessment,
     resolveEnterpriseGovern,
 } from './enterpriseAssess';
+import { presentEnterpriseBoundary } from './enterpriseSessionPolicy';
 
 const CORE_SCORING_FIELDS = [
     { section: 'processStructure' as AssessmentSectionKey, field: 'standardization' },
@@ -87,10 +89,18 @@ export function useAssessmentService() {
         tenantContext,
         sessionState,
         refreshOrgs,
+        handleEnterpriseBoundary,
     } = useOrganizationContext();
     const { user } = useAuth();
     const [assessments, setAssessments] = useState<Assessment[]>([]);
     const [loading, setLoading] = useState(false);
+    const resolveEnterpriseFailure = useCallback((error: unknown): never => {
+        if (error instanceof EnterpriseBoundaryError) {
+            handleEnterpriseBoundary(error);
+            throw new Error(presentEnterpriseBoundary(error.code).message);
+        }
+        throw error;
+    }, [handleEnterpriseBoundary]);
 
     const createApprovalEvent = useCallback((status: AssessStatus, reason?: string): AssessmentApprovalEvent => ({
         id: `review-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -135,7 +145,7 @@ export function useAssessmentService() {
             await assessAdapter.saveAssessment(draft);
         } else {
             if (!tenantContext || sessionState !== 'ready') throw new Error('The server-issued workspace context is not ready for changes.');
-            const committed = await persistEnterpriseAssessment(tenantContext, draft);
+            const committed = await persistEnterpriseAssessment(tenantContext, draft).catch(resolveEnterpriseFailure);
             saved = { ...draft, workspaceId: tenantContext.workspaceId, version: committed.version, status: committed.status };
         }
         setAssessments(prev => {
@@ -143,7 +153,7 @@ export function useAssessmentService() {
             return existing ? prev.map(a => a.id === assessment.id ? saved : a) : [...prev, saved];
         });
         return saved;
-    }, [currentOrganization, user, tenantContext, sessionState]);
+    }, [currentOrganization, user, tenantContext, sessionState, resolveEnterpriseFailure]);
 
     const persistAssessment = useCallback(async (nextAssessment: Assessment) => {
         await assessAdapter.saveAssessment(nextAssessment);
@@ -159,7 +169,7 @@ export function useAssessmentService() {
         if (getRuntimeDataAccess() !== 'local') {
             if (!tenantContext || sessionState !== 'ready') throw new Error('The server-issued workspace context is not ready for finalization.');
             const persisted = await saveAssessmentDraft(assessment);
-            const committed = await finalizeEnterpriseAssessment(tenantContext, persisted);
+            const committed = await finalizeEnterpriseAssessment(tenantContext, persisted).catch(resolveEnterpriseFailure);
             const refreshed = await assessAdapter.getAssessment(assessment.processId, currentOrganization.id, currentWorkspace.id);
             if (!refreshed) throw new Error('The finalized assessment is not available in this workspace.');
             setAssessments(prev => prev.map(item => item.id === refreshed.id ? refreshed : item));
@@ -208,7 +218,7 @@ export function useAssessmentService() {
         };
 
         return persistAssessment(completedAssessment);
-    }, [currentOrganization, currentWorkspace, user, tenantContext, sessionState, saveAssessmentDraft, persistAssessment]);
+    }, [currentOrganization, currentWorkspace, user, tenantContext, sessionState, saveAssessmentDraft, persistAssessment, resolveEnterpriseFailure]);
 
     const transitionAssessment = useCallback(async (assessment: Assessment, status: AssessStatus, reason?: string) => {
         if (!currentOrganization || !currentWorkspace || !user) throw new Error('Auth required');
@@ -216,7 +226,7 @@ export function useAssessmentService() {
             if (!tenantContext || sessionState !== 'ready') throw new Error('The server-issued workspace context is not ready for this action.');
             if (status === 'Handed Off to Delivery') throw new Error('Delivery handoff is outside the PR 1C Studio boundary.');
             if (status === 'Handed Off to Docs') {
-                await createEnterpriseStudioHandoff(tenantContext, assessment, reason);
+                await createEnterpriseStudioHandoff(tenantContext, assessment, reason).catch(resolveEnterpriseFailure);
             } else {
                 const resolution = status === 'In Review' ? 'submit'
                     : status === 'Approved' ? 'approve'
@@ -224,7 +234,7 @@ export function useAssessmentService() {
                     : status === 'Rejected' ? 'reject'
                     : null;
                 if (!resolution) throw new Error('This lifecycle transition is not supported by the Govern command.');
-                await resolveEnterpriseGovern(tenantContext, assessment, resolution, reason);
+                await resolveEnterpriseGovern(tenantContext, assessment, resolution, reason).catch(resolveEnterpriseFailure);
             }
             const refreshed = await assessAdapter.getAssessment(assessment.processId, currentOrganization.id, currentWorkspace.id);
             if (!refreshed) {
@@ -313,7 +323,7 @@ export function useAssessmentService() {
             return existing ? prev.map(a => a.id === savedAssessment.id ? savedAssessment : a) : [...prev, savedAssessment];
         });
         return savedAssessment;
-    }, [currentOrganization, currentWorkspace, user, tenantContext, sessionState, refreshOrgs, createApprovalEvent, createReviewComment]);
+    }, [currentOrganization, currentWorkspace, user, tenantContext, sessionState, refreshOrgs, createApprovalEvent, createReviewComment, resolveEnterpriseFailure]);
 
     const submitForReview = useCallback((assessment: Assessment, reason?: string) => transitionAssessment(assessment, 'In Review', reason), [transitionAssessment]);
     const requestChanges = useCallback((assessment: Assessment, reason?: string) => transitionAssessment(assessment, 'Changes Requested', reason), [transitionAssessment]);

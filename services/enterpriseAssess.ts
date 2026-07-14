@@ -1,15 +1,15 @@
 import { Assessment, TenantContextProjection } from '../types';
 import { getRuntimeDataAccess, supabase } from './supabaseClient';
+import {
+  EnterpriseCommandResource,
+  type EnterpriseBoundaryCode,
+  isEnterpriseObject,
+  parseEnterpriseCommandResource,
+  parseTenantContextProjection,
+  readEnterpriseErrorCode,
+} from './enterpriseAssessContract';
 
-export type EnterpriseBoundaryCode =
-  | 'AUTHENTICATION_REQUIRED'
-  | 'AUTHORITY_STALE'
-  | 'RESOURCE_NOT_AVAILABLE'
-  | 'PERMISSION_DENIED'
-  | 'VERSION_CONFLICT'
-  | 'IDEMPOTENCY_CONFLICT'
-  | 'COMMAND_UNAVAILABLE'
-  | 'OFFLINE';
+export type { EnterpriseBoundaryCode } from './enterpriseAssessContract';
 
 export class EnterpriseBoundaryError extends Error {
   constructor(public readonly code: EnterpriseBoundaryCode) {
@@ -18,17 +18,6 @@ export class EnterpriseBoundaryError extends Error {
   }
 }
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const errorCode = (value: unknown): EnterpriseBoundaryCode => {
-  const code = isObject(value) && isObject(value.error) ? value.error.code : isObject(value) ? value.code : undefined;
-  if (code === 'AUTHENTICATION_REQUIRED' || code === 'AUTHORITY_STALE' ||
-      code === 'RESOURCE_NOT_AVAILABLE' || code === 'PERMISSION_DENIED' ||
-      code === 'VERSION_CONFLICT' || code === 'IDEMPOTENCY_CONFLICT') return code;
-  return typeof navigator !== 'undefined' && !navigator.onLine ? 'OFFLINE' : 'COMMAND_UNAVAILABLE';
-};
 
 const invoke = async <T>(functionName: string, body: Record<string, unknown>): Promise<T> => {
   try {
@@ -36,9 +25,9 @@ const invoke = async <T>(functionName: string, body: Record<string, unknown>): P
     if (error) {
       let payload: unknown;
       try { payload = await (error as any).context?.clone?.().json(); } catch { payload = undefined; }
-      throw new EnterpriseBoundaryError(errorCode(payload));
+      throw new EnterpriseBoundaryError(readEnterpriseErrorCode(payload, typeof navigator !== 'undefined' && !navigator.onLine));
     }
-    if (!isObject(data)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    if (!isEnterpriseObject(data)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
     return data as T;
   } catch (error) {
     if (error instanceof EnterpriseBoundaryError) throw error;
@@ -46,43 +35,18 @@ const invoke = async <T>(functionName: string, body: Record<string, unknown>): P
   }
 };
 
-const tenantContext = (value: unknown): TenantContextProjection => {
-  if (!isObject(value) ||
-      typeof value.userId !== 'string' || !uuid.test(value.userId) ||
-      typeof value.organizationId !== 'string' || !uuid.test(value.organizationId) ||
-      typeof value.organizationName !== 'string' || !value.organizationName.trim() ||
-      typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId) ||
-      typeof value.workspaceName !== 'string' || !value.workspaceName.trim() ||
-      !Number.isSafeInteger(value.authorizationVersion) ||
-      !Array.isArray(value.capabilities) ||
-      value.capabilities.some(item => typeof item !== 'string')) {
-    throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-  }
-  return {
-    userId: value.userId,
-    organizationId: value.organizationId,
-    organizationName: value.organizationName.trim(),
-    workspaceId: value.workspaceId,
-    workspaceName: value.workspaceName.trim(),
-    authorizationVersion: value.authorizationVersion as number,
-    capabilities: [...new Set(value.capabilities as string[])].sort(),
-  };
-};
 
 export const loadEnterpriseSessionContexts = async (): Promise<TenantContextProjection[]> => {
   if (getRuntimeDataAccess() === 'local') return [];
   const result = await invoke<{ contexts?: unknown }>('tenant-session', {});
   if (!Array.isArray(result.contexts)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-  return result.contexts.map(tenantContext);
+  return result.contexts.map(value => {
+    const context = parseTenantContextProjection(value);
+    if (!context) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    return context;
+  });
 };
 
-type CommandResource = {
-  assessmentId: string;
-  version: number;
-  status: Assessment['status'];
-  scoreVersion?: string;
-  handoffId?: string;
-};
 
 const command = async (
   context: TenantContextProjection,
@@ -91,7 +55,7 @@ const command = async (
   idempotencyKey: string,
   expectedVersion?: number,
   requestId: string = crypto.randomUUID(),
-): Promise<CommandResource> => {
+): Promise<EnterpriseCommandResource> => {
   const result = await invoke<{ ok?: unknown; resource?: unknown }>('assess-command', {
     requestId,
     idempotencyKey,
@@ -102,19 +66,16 @@ const command = async (
     ...(expectedVersion === undefined ? {} : { expectedVersion }),
     payload,
   });
-  if (result.ok !== true || !isObject(result.resource) ||
-      typeof result.resource.assessmentId !== 'string' ||
-      !Number.isSafeInteger(result.resource.version) ||
-      typeof result.resource.status !== 'string') {
-    throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-  }
-  return result.resource as CommandResource;
+  if (result.ok !== true) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  const resource = parseEnterpriseCommandResource(result.resource, commandType);
+  if (!resource) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  return resource;
 };
 
 export const persistEnterpriseAssessment = async (
   context: TenantContextProjection,
   assessment: Assessment,
-): Promise<CommandResource> => {
+): Promise<EnterpriseCommandResource> => {
   let version = assessment.version;
   if (version === undefined) {
     const created = await command(

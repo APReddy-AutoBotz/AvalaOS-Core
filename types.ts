@@ -579,6 +579,7 @@ export interface AssessToStudioHandoffPayload {
     processId: string;
     processName: string;
     assessmentId: string;
+    studioHandoffId?: string;
     assessmentStatus: AssessStatus;
     gateDecision?: GateDecision;
     riskTier?: RiskTier;
