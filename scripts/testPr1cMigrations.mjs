@@ -41,21 +41,43 @@ const AUDIT_FAIL='11000000-0000-4000-8000-000000000016';
 const LEGACY='11000000-0000-4000-8000-000000000017';
 const GOVERN_FAIL='11000000-0000-4000-8000-000000000018';
 const CONCURRENT='11000000-0000-4000-8000-000000000019';
+const GOVERN_REPLAY='11000000-0000-4000-8000-000000000020';
+const GOVERN_CONFLICT='11000000-0000-4000-8000-000000000021';
+const STUDIO_REPLAY='11000000-0000-4000-8000-000000000022';
+const STUDIO_CONFLICT='11000000-0000-4000-8000-000000000023';
+const ACTOR_B='22000000-0000-4000-8000-000000000002';
+const ORG_B='22000000-0000-4000-8000-000000000020';
+const WS_B='22000000-0000-4000-8000-000000000022';
+const ROLE_B='22000000-0000-4000-8000-000000000023';
+const PROCESS_B='22000000-0000-4000-8000-000000000024';
+const ASSESSMENT_B='22000000-0000-4000-8000-000000000025';
 const requestId = suffix => `41000000-0000-4000-8000-${suffix.padStart(12,'0')}`;
 const value = result => result.rows[0].value;
-const trusted = async (client, operation) => {
-  await client.query('SET ROLE service_role');
+const asRole = async (client, role, operation) => {
+  await client.query(`SET ROLE ${role}`);
   try { return await operation(); } finally { await client.query('RESET ROLE'); }
 };
-const authorizationVersion = async client => Number((await client.query(
-  'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[ORG,ACTOR]
+const trusted = async (client, operation) => {
+  return asRole(client,'service_role',operation);
+};
+const authenticatedAs = async (client, actor, operation) => {
+  await client.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[actor]);
+  return asRole(client,'authenticated',async () => {
+    const identity = await client.query('SELECT current_user role,auth.uid() actor');
+    assert.equal(identity.rows[0].role,'authenticated');
+    assert.equal(identity.rows[0].actor,actor);
+    return operation();
+  });
+};
+const authorizationVersion = async (client,org=ORG,actor=ACTOR) => Number((await client.query(
+  'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[org,actor]
 )).rows[0].version);
 
 let admin;
 let test;
 try {
   admin = await connect(adminUrl);
-  for (const [role, attributes] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']]) {
+  for (const [role, attributes] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS'],['pr1c_unprivileged','NOLOGIN']]) {
     if ((await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount === 0) {
       await admin.query(`CREATE ROLE ${role} ${attributes}`);
       createdRoles.push(role);
@@ -78,7 +100,20 @@ try {
   await transaction(test, source(pr1c));
 
   await test.query(`INSERT INTO role_capabilities(role_id,capability_key) VALUES
-    ($1,'govern.resolve'),($1,'studio.handoff.create') ON CONFLICT DO NOTHING`,[ROLE]);
+    ($1,'govern.resolve'),($1,'studio.handoff.create'),
+    ($2,'govern.resolve'),($2,'studio.handoff.create') ON CONFLICT DO NOTHING`,[ROLE,ROLE_B]);
+  for (const [table,id] of [
+    ['profiles',ACTOR_B],['organizations',ORG_B],['workspaces',WS_B],
+    ['roles',ROLE_B],['assess_processes',PROCESS_B],['assessments',ASSESSMENT_B],
+  ]) {
+    assert.equal((await test.query(`SELECT id FROM ${table} WHERE id=$1`,[id])).rowCount,1,`missing tenant-B ${table}`);
+  }
+  await test.query(`UPDATE assessments SET status='Ready for Review',score_version='assess-core-2026-05',
+    scores=$2::jsonb,responses=$3::jsonb WHERE id=$1`,[
+      ASSESSMENT_B,
+      JSON.stringify({ scoreVersion:'assess-core-2026-05', gateDecision:'Go', riskTier:'Medium', handoffEligibility:'Eligible' }),
+      JSON.stringify({ responses:{ q1:4 }, metadata:{ completionQuality:100 }, evidenceItems:[], assumptions:[] }),
+    ]);
   await test.query(`UPDATE assessments SET status='Ready for Review',score_version='assess-core-2026-05',
     scores=$2::jsonb,responses=$3::jsonb WHERE id=$1`,[
       ASSESSMENT,
@@ -90,9 +125,14 @@ try {
           ($6,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
           ($7,$2,$3,$4,'Approved',1,'assess-core-2026-05',$5),
           ($8,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
-          ($9,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5)`,[
+          ($9,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($10,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($11,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($12,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5),
+          ($13,$2,$3,$4,'Ready for Review',1,'assess-core-2026-05',$5)`,[
       BYPASS,PROCESS,ORG,WS,{ scoreVersion:'assess-core-2026-05', gateDecision:'Go' },
       AUDIT_FAIL,LEGACY,GOVERN_FAIL,CONCURRENT,
+      GOVERN_REPLAY,GOVERN_CONFLICT,STUDIO_REPLAY,STUDIO_CONFLICT,
     ]);
 
   const signatures = [
@@ -100,8 +140,9 @@ try {
     'pr1c_govern_resolve(uuid,uuid,uuid,uuid,text,text,bigint,uuid,text,bigint)',
     'pr1c_create_studio_handoff(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint)',
   ];
+  const mutationSignatures = signatures.slice(1);
   for (const signature of signatures) {
-    for (const role of ['anon','authenticated']) {
+    for (const role of ['anon','authenticated','pr1c_unprivileged']) {
       assert.equal((await test.query(
         `SELECT has_function_privilege($1,$2,'EXECUTE') allowed`,[role,signature]
       )).rows[0].allowed,false,`${role} executes ${signature}`);
@@ -110,12 +151,39 @@ try {
       `SELECT has_function_privilege('service_role',$1,'EXECUTE') allowed`,[signature]
     )).rows[0].allowed,true);
   }
+  for (const signature of mutationSignatures) {
+    const publicExecute = await test.query(`SELECT count(*) n FROM pg_proc p
+      CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) acl
+      WHERE p.oid=to_regprocedure($1) AND acl.grantee=0
+        AND upper(acl.privilege_type)='EXECUTE'`,[signature]);
+    assert.equal(Number(publicExecute.rows[0].n),0,`PUBLIC executes ${signature}`);
+  }
   for (const table of ['assessment_govern_provenance','assessment_studio_handoffs']) {
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'SELECT') allowed",[table])).rows[0].allowed,true);
     for (const privilege of ['INSERT','UPDATE','DELETE']) {
       assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,$2) allowed",[table,privilege])).rows[0].allowed,false);
     }
     assert.equal((await test.query("SELECT has_table_privilege('anon',$1,'SELECT') allowed",[table])).rows[0].allowed,false);
+    assert.equal((await test.query("SELECT has_table_privilege('pr1c_unprivileged',$1,'SELECT') allowed",[table])).rows[0].allowed,false);
+    const publicMutation = await test.query(`SELECT count(*) n FROM pg_class c
+      CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) acl
+      WHERE c.oid=to_regclass($1) AND acl.grantee=0
+        AND upper(acl.privilege_type)=ANY($2::text[])`,[table,['INSERT','UPDATE','DELETE']]);
+    assert.equal(Number(publicMutation.rows[0].n),0,`PUBLIC mutates ${table}`);
+    for (const role of ['anon','pr1c_unprivileged','service_role']) {
+      for (const privilege of ['INSERT','UPDATE','DELETE']) {
+        assert.equal((await test.query(
+          'SELECT has_table_privilege($1,$2,$3) allowed',[role,table,privilege]
+        )).rows[0].allowed,false,`${role} has ${privilege} on ${table}`);
+      }
+    }
+    for (const role of ['anon','authenticated','pr1c_unprivileged']) {
+      await asRole(test,role,async () => {
+        await assert.rejects(test.query(`INSERT INTO ${table} DEFAULT VALUES`),/permission denied/i);
+        await assert.rejects(test.query(`UPDATE ${table} SET id=id WHERE false`),/permission denied/i);
+        await assert.rejects(test.query(`DELETE FROM ${table} WHERE false`),/permission denied/i);
+      });
+    }
   }
 
   await test.query('SET ROLE authenticated');
@@ -129,6 +197,18 @@ try {
   ),/permission denied/i);
   await test.query('RESET ROLE');
 
+  for (const role of ['anon','pr1c_unprivileged']) {
+    await asRole(test,role,async () => {
+      await assert.rejects(test.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+        [ACTOR,ORG,WS,ASSESSMENT,'approve','forged',1,requestId('1'),'forged-govern',1],
+      ),/permission denied/i);
+      await assert.rejects(test.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [ACTOR,ORG,WS,ASSESSMENT,'forged',1,requestId('2'),'forged-handoff',1],
+      ),/permission denied/i);
+    });
+  }
   const contexts = await trusted(test, () => test.query('SELECT pr1c_list_tenant_contexts($1) value',[ACTOR]));
   assert.equal(contexts.rowCount,1);
   assert.equal(contexts.rows[0].value.organizationId,ORG);
@@ -205,6 +285,47 @@ try {
   await assert.rejects(test.query("UPDATE assessment_govern_provenance SET reason='mutated' WHERE assessment_id=$1",[ASSESSMENT]),/immutable/i);
   await assert.rejects(test.query('DELETE FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT]),/immutable/i);
 
+  const versionB = await authorizationVersion(test,ORG_B,ACTOR_B);
+  const governedB = value(await trusted(test, () => test.query(
+    'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+    [ACTOR_B,ORG_B,WS_B,ASSESSMENT_B,'approve','Tenant B human approval.',1,requestId('70'),'tenant-b-govern',versionB],
+  )));
+  assert.equal(governedB.resource.status,'Approved');
+  const handoffB = value(await trusted(test, () => test.query(
+    'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [ACTOR_B,ORG_B,WS_B,ASSESSMENT_B,'Tenant B governed handoff.',2,requestId('71'),'tenant-b-handoff',versionB],
+  )));
+  assert.equal(handoffB.resource.status,'Handed Off to Docs');
+  const tenantBProvenance = await test.query(
+    'SELECT id FROM assessment_govern_provenance WHERE assessment_id=$1',[ASSESSMENT_B]
+  );
+  assert.equal(tenantBProvenance.rowCount,1);
+  const provenanceBId = tenantBProvenance.rows[0].id;
+  const handoffBId = handoffB.resource.handoffId;
+  await authenticatedAs(test,ACTOR,async () => {
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance')).rows[0].n),1);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs')).rows[0].n),1);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE id=$1',[provenance.rows[0].id])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE id=$1',[handoff.resource.handoffId])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE org_id=$1',[ORG_B])).rowCount,0);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE org_id=$1',[ORG_B])).rowCount,0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance WHERE org_id=$1',[ORG_B])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs WHERE org_id=$1',[ORG_B])).rows[0].n),0);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE id=$1',[provenanceBId])).rowCount,0);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE id=$1',[handoffBId])).rowCount,0);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE assessment_id=$1',[ASSESSMENT_B])).rowCount,0);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT_B])).rowCount,0);
+  });
+  await authenticatedAs(test,ACTOR_B,async () => {
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance')).rows[0].n),1);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_studio_handoffs')).rows[0].n),1);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE id=$1',[provenanceBId])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE id=$1',[handoffBId])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE assessment_id=$1',[ASSESSMENT_B])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE assessment_id=$1',[ASSESSMENT_B])).rowCount,1);
+    assert.equal((await test.query('SELECT id FROM assessment_govern_provenance WHERE id=$1',[provenance.rows[0].id])).rowCount,0);
+    assert.equal((await test.query('SELECT id FROM assessment_studio_handoffs WHERE id=$1',[handoff.resource.handoffId])).rowCount,0);
+  });
   await test.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[ACTOR]);
   await test.query('SET ROLE authenticated');
   assert.equal(Number((await test.query('SELECT count(*) n FROM assessment_govern_provenance')).rows[0].n),1);
@@ -218,10 +339,89 @@ try {
     [ACTOR,'22000000-0000-4000-8000-000000000020','22000000-0000-4000-8000-000000000022',ASSESSMENT,'approve','cross tenant',3,requestId('6'),'cross-tenant',version],
   )));
   assert.equal(crossTenant.errorCode,'NOT_FOUND');
+  const countRows = async (sql,parameters) => Number((await test.query(sql,parameters)).rows[0].n);
+  const assertCommandEffects = async (assessment,command,key,table,event,status,expectedVersion) => {
+    const state = (await test.query('SELECT status,version FROM assessments WHERE id=$1',[assessment])).rows[0];
+    assert.equal(state.status,status);
+    assert.equal(Number(state.version),expectedVersion);
+    assert.equal(await countRows(
+      'SELECT count(*) n FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type=$4 AND idempotency_key=$5',
+      [ORG,WS,ACTOR,command,key],
+    ),1);
+    assert.equal(await countRows(`SELECT count(*) n FROM ${table} WHERE assessment_id=$1`,[assessment]),1);
+    assert.equal(await countRows('SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1 AND action=$2',[assessment,command]),1);
+    assert.equal(await countRows('SELECT count(*) n FROM assessment_review_events WHERE assessment_id=$1 AND event_type=$2',[assessment,event]),1);
+  };
 
   const raceA = await connect(urlFor(databaseName));
   const raceB = await connect(urlFor(databaseName));
   try {
+    const governReplayRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,GOVERN_REPLAY,'approve','same concurrent approval',1,requestId('80'),'same-govern-replay',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,GOVERN_REPLAY,'approve','same concurrent approval',1,requestId('80'),'same-govern-replay',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.deepEqual(governReplayRace[0],governReplayRace[1]);
+    assert.equal(governReplayRace[0].resource.status,'Approved');
+    await assertCommandEffects(GOVERN_REPLAY,'govern.resolve','same-govern-replay','assessment_govern_provenance','Approval','Approved',2);
+
+    const governConflictRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,GOVERN_CONFLICT,'approve','concurrent payload A',1,requestId('81'),'same-govern-conflict',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,GOVERN_CONFLICT,'approve','concurrent payload B',1,requestId('81'),'same-govern-conflict',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.equal(governConflictRace.filter(result => result.resource?.status === 'Approved').length,1);
+    assert.equal(governConflictRace.filter(result => result.errorCode === 'IDEMPOTENCY_CONFLICT').length,1);
+    await assertCommandEffects(GOVERN_CONFLICT,'govern.resolve','same-govern-conflict','assessment_govern_provenance','Approval','Approved',2);
+
+    for (const [assessment,suffix,key] of [
+      [STUDIO_REPLAY,'82','prepare-studio-replay'],
+      [STUDIO_CONFLICT,'83','prepare-studio-conflict'],
+    ]) {
+      const prepared = value(await trusted(test, () => test.query(
+        'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+        [ACTOR,ORG,WS,assessment,'approve','prepare concurrent handoff',1,requestId(suffix),key,version],
+      )));
+      assert.equal(prepared.resource.status,'Approved');
+    }
+
+    const studioReplayRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,STUDIO_REPLAY,'same concurrent handoff',2,requestId('84'),'same-studio-replay',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,STUDIO_REPLAY,'same concurrent handoff',2,requestId('84'),'same-studio-replay',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.deepEqual(studioReplayRace[0],studioReplayRace[1]);
+    assert.equal(studioReplayRace[0].resource.status,'Handed Off to Docs');
+    await assertCommandEffects(STUDIO_REPLAY,'studio_handoff.create','same-studio-replay','assessment_studio_handoffs','Handoff','Handed Off to Docs',3);
+
+    const studioConflictRace = await Promise.all([
+      trusted(raceA, () => raceA.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,STUDIO_CONFLICT,'concurrent handoff A',2,requestId('85'),'same-studio-conflict',version],
+      )),
+      trusted(raceB, () => raceB.query(
+        'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [ACTOR,ORG,WS,STUDIO_CONFLICT,'concurrent handoff B',2,requestId('85'),'same-studio-conflict',version],
+      )),
+    ]).then(results => results.map(value));
+    assert.equal(studioConflictRace.filter(result => result.resource?.status === 'Handed Off to Docs').length,1);
+    assert.equal(studioConflictRace.filter(result => result.errorCode === 'IDEMPOTENCY_CONFLICT').length,1);
+    await assertCommandEffects(STUDIO_CONFLICT,'studio_handoff.create','same-studio-conflict','assessment_studio_handoffs','Handoff','Handed Off to Docs',3);
     const governRace = await Promise.all([
       trusted(raceA, () => raceA.query(
         'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
