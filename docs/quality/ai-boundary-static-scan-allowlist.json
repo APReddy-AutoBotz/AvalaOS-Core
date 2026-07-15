@@ -180,6 +180,13 @@
       "lines": [125, 127],
       "reason": "test/control documentation",
       "futureAction": "Keep M4.2b canonical demo data planning references classified as audit/control documentation; do not treat them as runtime permission or browser-secret storage."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/pr1d.spec.ts",
+      "lines": [86, 94, 95],
+      "reason": "test/control documentation",
+      "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
     }
   ]
 }

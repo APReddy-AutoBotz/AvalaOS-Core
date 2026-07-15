@@ -169,9 +169,13 @@ const rawSecretLiteralPatterns = [
 ];
 
 const sensitiveStorageKeyPattern = /(?:api[-_ ]?key|provider[-_ ]?key|token|service[-_ ]?role|secret|credential|password)/i;
-const isDeterministicPr1cAuthFixtureWrite = (relativePath, lineText) => {
+const deterministicBrowserAuthFixturePaths = new Set([
+  'tests/browser/pr1c.spec.ts',
+  'tests/browser/pr1d.spec.ts',
+]);
+const isDeterministicBrowserAuthFixtureWrite = (relativePath, lineText) => {
   const fixtureKey = ['sb', '127', 'auth', token.toLowerCase()].join('-');
-  return relativePath === 'tests/browser/pr1c.spec.ts'
+  return deterministicBrowserAuthFixturePaths.has(relativePath)
     && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`);
 };
 
@@ -238,7 +242,7 @@ const scanTextFile = (relativePath, text) => {
     }
 
     if (isStorageWrite(lineText) && sensitiveStorageKeyPattern.test(lineText)) {
-      if (isDeterministicPr1cAuthFixtureWrite(relativePath, lineText)) {
+      if (isDeterministicBrowserAuthFixtureWrite(relativePath, lineText)) {
         allowedCount += 1;
       } else {
         forbidden.push(createHit({
