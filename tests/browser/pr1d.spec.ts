@@ -1,6 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, Page, test } from '@playwright/test';
 import { CANONICAL_AP_ASSESSMENT } from '../../data/mockData';
+import { ASSESS_V1_SCORE_VERSION, cloneV1AssessmentToV2 } from '../../services/assessV1Compatibility';
+import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
+import { buildDecisionVersionV2 } from '../../services/assessV2/decisionVersion';
+import { AP_INVOICE_EXCEPTION_V2_FIXTURE } from '../../services/assessV2/fixture';
+import { parseAssessV2DraftPayload } from '../../supabase/functions/_shared/assessV2Command';
+import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, type AssessmentCaseV2, createUnknownAgentNecessityFacts } from '../../services/assessV2/types';
 
 const USER='11111111-1111-4111-8111-111111111111';
 const ORG='22222222-2222-4222-8222-222222222222';
@@ -12,7 +18,8 @@ const API='http://127.0.0.1:59999';
 const ALL_CAPABILITIES = [
   'assess.read','assess.create','assess.response.write','assess.finalize',
   'govern.resolve','studio.handoff.create',
-  'assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.write','assess.v2.finalize',
+  ASSESS_V2_CAPABILITIES.read, ASSESS_V2_CAPABILITIES.create, ASSESS_V2_CAPABILITIES.clone,
+  ASSESS_V2_CAPABILITIES.draftWrite, ASSESS_V2_CAPABILITIES.finalize,
 ];
 
 type BoundaryCode = 'AUTHENTICATION_REQUIRED' | 'AUTHORITY_STALE' |
@@ -21,6 +28,8 @@ type BoundaryCode = 'AUTHENTICATION_REQUIRED' | 'AUTHORITY_STALE' |
 type FixtureOptions = {
   capabilities?: string[];
   failCommand?: { type: string; code: BoundaryCode };
+  failV2Command?: { type: string; code: BoundaryCode };
+  v2Offline?: boolean;
   initialStatus?: 'Ready for Review' | 'Approved' | 'Handed Off to Docs';
   trustedApproval?: boolean;
 };
@@ -55,6 +64,9 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
   let trustedApproval = options.trustedApproval ?? false;
   let v2Version = 0;
   let v2Decision: Record<string,any> | null = null;
+  let v2Name = 'Invoice exception handling';
+  let v2Description = 'V2 case';
+  let v2Case: AssessmentCaseV2 | null = null;
   let handoffId: string | null = options.initialStatus === 'Handed Off to Docs' ? HANDOFF : null;
   let assessment: AssessmentRow | null = options.initialStatus ? {
     id: ASSESSMENT,
@@ -125,43 +137,58 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     }
     if (url.pathname === '/functions/v1/assess-v2-command') {
       const body = request.postDataJSON() as Record<string,any>;
-      committedCommands.push(body);
-      if (body.commandType === 'assessment_v2.create' || body.commandType === 'assessment_v2.clone_from_v1') v2Version = 1;
-      else if (body.commandType === 'assessment_v2.draft.upsert') v2Version += 1;
-      else if (body.commandType === 'assessment_v2.finalize') {
-        v2Version += 1;
-        v2Decision = {
-          caseId:body.payload.caseId,sourceCaseVersion:v2Version-1,ruleSetVersion:'assess-v2-rules-2026-07',
-          decisionVersion:'assess-v2-decision-2026-07',inputSnapshot:{id:body.payload.caseId,status:'reviewer-ready',version:v2Version-1,primitives:[],edges:[],assets:[],interactions:[],evidence:[]},evidenceSnapshot:[],
-          outputSnapshot:{confidence:'Partially Evidenced',processReadiness:'Provisional',
-            composedOperatingModel:[{primitiveId:'investigate',components:['GenAI Assistant','Audit','Monitoring']}],
-            interactionDecisions:[],modernization:[],controls:['Human approval','Audit'],evidenceGaps:['Validate source facts'],
-            assumptions:[],alternativesConsidered:['Human-led operation'],whatWouldChangeDecision:['Validated contradictory evidence'],
-            nonClaims:['No production readiness claim']},
-          inputHash:'server-input-hash',evidenceHash:'server-evidence-hash',outputHash:'server-output-hash',
-          createdBy:USER,createdAt:new Date().toISOString(),validationStatus:'reviewer-ready'
-        };
+      if (options.v2Offline) return route.abort('internetdisconnected');
+      if (options.failV2Command?.type === body.commandType) {
+        return fail(route, options.failV2Command.code, options.failV2Command.code === 'AUTHENTICATION_REQUIRED' ? 401 : options.failV2Command.code === 'PERMISSION_DENIED' ? 403 : 409);
       }
-      return route.fulfill({status:200,headers:jsonHeaders,body:JSON.stringify({ok:true,outcome:'committed',
-        resource:{id:body.payload.caseId,status:body.commandType==='assessment_v2.finalize'?'reviewer_ready':'draft',
-          version:v2Version,headVersionId:'77777777-7777-4777-8777-777777777777',
-          ...(v2Decision?{decisionId:'88888888-8888-4888-8888-888888888888'}:{})}})});
+      if (body.commandType === 'assessment_v2.create' || body.commandType === 'assessment_v2.clone_from_v1') {
+        v2Version = 1; v2Name = body.payload.name; v2Description = body.payload.description;
+        const cloned = body.commandType === 'assessment_v2.clone_from_v1';
+        if (cloned) {
+          const source = {
+            ...structuredClone(CANONICAL_AP_ASSESSMENT), id:ASSESSMENT, processId:PROCESS, orgId:ORG, workspaceId:WS,
+            status:'Approved' as const, scoreVersion:ASSESS_V1_SCORE_VERSION,
+            scores:{ ...structuredClone(CANONICAL_AP_ASSESSMENT.scores!), scoreVersion:ASSESS_V1_SCORE_VERSION },
+          };
+          v2Case = cloneV1AssessmentToV2(source, { caseId:body.payload.caseId, organizationId:ORG, workspaceId:WS, ownerId:USER, clonedAt:'2026-07-13T00:00:00.000Z' });
+        } else {
+          v2Case = { id:body.payload.caseId, organizationId:ORG, workspaceId:WS, sourceProcessId:PROCESS, ownerId:USER, status:'draft', version:1, schemaVersion:ASSESS_V2_SCHEMA_VERSION, ruleSetVersion:ASSESS_V2_RULE_SET_VERSION, importedFacts:[], primitives:[], edges:[], decisionPoints:[], exceptionPaths:[], assets:[], interactions:[], evidence:[], agentNecessity:createUnknownAgentNecessityFacts(), createdAt:'2026-07-13T00:00:00.000Z', updatedAt:'2026-07-13T00:00:00.000Z' };
+        }
+      } else if (body.commandType === 'assessment_v2.draft.upsert') {
+        const parsed = JSON.parse(JSON.stringify(parseAssessV2DraftPayload(body.payload))) as ReturnType<typeof parseAssessV2DraftPayload>;
+        if (!v2Case || body.expectedVersion !== v2Version) return fail(route,'VERSION_CONFLICT',409);
+        v2Version += 1; v2Name = parsed.name; v2Description = parsed.description;
+        v2Case = { ...v2Case, id:parsed.caseId, version:v2Version, primitives:parsed.primitives, edges:parsed.edges, decisionPoints:parsed.decisionPoints, exceptionPaths:parsed.exceptionPaths, assets:parsed.assets, interactions:parsed.interactions as unknown as AssessmentCaseV2['interactions'], evidence:parsed.evidence, agentNecessity:parsed.agentNecessity, updatedAt:'2026-07-13T00:01:00.000Z' };
+      } else if (body.commandType === 'assessment_v2.finalize') {
+        if (!v2Case || body.expectedVersion !== v2Version) return fail(route,'VERSION_CONFLICT',409);
+        v2Decision = await buildDecisionVersionV2(v2Case, USER, '2026-07-13T00:02:00.000Z');
+        v2Version += 1; v2Case = { ...v2Case, status:'reviewer-ready', version:v2Version };
+      }
+      committedCommands.push(body);
+      return route.fulfill({status:200,headers:jsonHeaders,body:JSON.stringify({ok:true,outcome:'committed', resource:{id:body.payload.caseId,status:body.commandType==='assessment_v2.finalize'?'reviewer_ready':'draft', version:v2Version,headVersionId:'77777777-7777-4777-8777-777777777777', ...(body.commandType === 'assessment_v2.clone_from_v1' ? { importedFactCount:v2Case?.importedFacts?.length ?? 0, importedEvidenceCount:v2Case?.evidence.length ?? 0 } : {}), ...(v2Decision?{decisionId:'88888888-8888-4888-8888-888888888888'}:{})}})});
     }
     if (url.pathname === '/rest/v1/assess_v2_decision_versions') {
       return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':'0-0/1'},body:JSON.stringify(v2Decision ? {
         case_id:v2Decision.caseId,source_version_id:'77777777-7777-4777-8777-777777777777',
+        schema_version:v2Decision.schemaVersion,
         rule_set_version:v2Decision.ruleSetVersion,decision_version:v2Decision.decisionVersion,
         validation_status:v2Decision.validationStatus,input_snapshot:v2Decision.inputSnapshot,
         evidence_snapshot:v2Decision.evidenceSnapshot,output_snapshot:v2Decision.outputSnapshot,
         input_hash:v2Decision.inputHash,evidence_hash:v2Decision.evidenceHash,output_hash:v2Decision.outputHash,
+        input_canonical:v2Decision.inputCanonical,evidence_canonical:v2Decision.evidenceCanonical,output_canonical:v2Decision.outputCanonical,
         supersedes_decision_id:null,created_by:v2Decision.createdBy,created_at:v2Decision.createdAt
       } : null)});
     }
-    if (url.pathname === '/rest/v1/assess_v2_case_versions') {
-      return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':'0-0/1'},body:JSON.stringify({
-        name:'Invoice exception handling',description:'V2 case'
-      })});
+    if (url.pathname === '/rest/v1/assess_v2_cases') {
+      return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':v2Case?'0-0/1':'*/0'},body:JSON.stringify(v2Case ? { id:v2Case.id,org_id:ORG,workspace_id:WS,process_id:PROCESS,owner_id:USER,status:v2Case.status === 'reviewer-ready'?'reviewer_ready':'draft',version:v2Case.version,schema_version:v2Case.schemaVersion,rule_set_version:v2Case.ruleSetVersion,source_v1_assessment_id:v2Case.sourceV1?.assessmentId ?? null,source_v1_score_version:v2Case.sourceV1?.scoreVersion ?? null,created_at:v2Case.createdAt,updated_at:v2Case.updatedAt,head_version_id:'77777777-7777-4777-8777-777777777777' } : null)});
     }
+    if (url.pathname === '/rest/v1/assess_v2_case_versions') {
+      const full = url.searchParams.get('select')?.includes('agent_necessity');
+      return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':'0-0/1'},body:JSON.stringify(full ? { name:v2Name,description:v2Description,agent_necessity:v2Case?.agentNecessity,source_snapshot:{},created_at:v2Case?.createdAt,imported_facts:v2Case?.importedFacts ?? [] } : { name:v2Name,description:v2Description })});
+    }
+    const v2Children: Record<string, unknown[]> = { assess_v2_primitives:v2Case?.primitives ?? [], assess_v2_edges:v2Case?.edges ?? [], assess_v2_decision_points:v2Case?.decisionPoints ?? [], assess_v2_exception_paths:v2Case?.exceptionPaths ?? [], assess_v2_application_assets:v2Case?.assets ?? [], assess_v2_application_interactions:v2Case?.interactions ?? [], assess_v2_evidence_links:v2Case?.evidence ?? [] };
+    const childName = url.pathname.split('/').pop()!;
+    if (childName in v2Children) return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':v2Children[childName].length?'0-0/1':'*/0'},body:JSON.stringify(v2Children[childName].map(payload => ({ payload })))});
     if (url.pathname === '/functions/v1/assess-command') {
       const body = request.postDataJSON() as Record<string,any>;
       if (options.failCommand?.type === body.commandType) {
@@ -259,6 +286,8 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
   return {
     committedCommands,
     get assessment(){ return assessment; },
+    get v2Case(){ return v2Case; },
+    get v2Decision(){ return v2Decision; },
     setAssessmentStatus(status: string){ if (assessment) assessment={...assessment,status}; },
     get handoffId(){ return handoffId; },
   };
@@ -282,29 +311,172 @@ test.beforeEach(async ({ page }) => {
 
 
 test('V2 capability-controlled authoring finalizes server-only decision data and renders read-only on desktop and mobile',async ({ page }) => {
+  test.setTimeout(60_000);
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error') errors.push(message.text());});
-  const fixture=await installEnterpriseFixture(page);
+  const fixture=await installEnterpriseFixture(page,{ initialStatus:'Ready for Review' });
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible({ timeout:15_000 });
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-  const started=performance.now();
   await page.getByRole('button',{name:'Create V2 case'}).click();
   await page.getByLabel('V2 case description').fill('Controlled exception assessment with explicit evidence gaps.');
+  await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByLabel('Primitive 1 name').fill('Capture invoice request');
+  await page.getByRole('button',{name:'Add primitive'}).click();
+  await page.getByLabel('Primitive 3 name').fill('Temporary authoring step');
+  await page.getByRole('button',{name:'Move primitive 3 up'}).click();
+  await page.getByRole('button',{name:'Move primitive 2 down'}).click();
+  await page.getByRole('button',{name:'Remove'}).last().click();
+  await page.getByText('2. Flow, decisions and exceptions').evaluate(element => (element as HTMLElement).click());
+  await page.getByRole('button',{name:'Add decision point'}).click();
+  await page.getByRole('button',{name:'Add exception path'}).click();
+  await page.getByText('3. Applications and interactions').evaluate(element => (element as HTMLElement).click());
+  await page.getByLabel('Application 1 name').fill('SAP governed interface');
+  await page.getByLabel('Interaction 1 operation name').fill('Read governed invoice');
+  await page.getByLabel('Interaction 1 interfaceAvailable').selectOption('true');
+  await page.getByLabel('Interaction 1 operationCovered').selectOption('true');
+  await page.getByText('4. Agent necessity and evidence').evaluate(element => (element as HTMLElement).click());
+  await page.getByRole('button',{name:'Add linked evidence'}).click();
+  await page.getByLabel('Evidence 2 claim IDs').fill('assessment.scope, primitive.type');
+  await page.getByLabel('Evidence 2 review status').selectOption('validated');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Reload current draft'}).click();
+  await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Capture invoice request');
+  const canonicalApDraft = {
+    caseId: fixture.v2Case!.id,
+    name: 'Invoice exception handling',
+    description: 'Canonical AP invoice-exception decision-intelligence assessment.',
+    primitives: AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives,
+    edges: AP_INVOICE_EXCEPTION_V2_FIXTURE.edges,
+    decisionPoints: AP_INVOICE_EXCEPTION_V2_FIXTURE.decisionPoints,
+    exceptionPaths: AP_INVOICE_EXCEPTION_V2_FIXTURE.exceptionPaths,
+    applicationAssets: AP_INVOICE_EXCEPTION_V2_FIXTURE.assets,
+    interactions: AP_INVOICE_EXCEPTION_V2_FIXTURE.interactions,
+    evidenceLinks: AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence,
+    agentNecessity: AP_INVOICE_EXCEPTION_V2_FIXTURE.agentNecessity,
+    candidateEvaluations: [], gateResults: [], controlRequirements: [], modernizationDispositions: [],
+  };
+  expect(canonicalApDraft.primitives).toHaveLength(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length);
+  const canonicalSave = await page.evaluate(async ({ canonicalApDraft, endpoint, organizationId, workspaceId }) => {
+    const response = await fetch(endpoint, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer browser-fixture-token' },
+      body: JSON.stringify({ requestId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID(), commandType: 'assessment_v2.draft.upsert', organizationId, workspaceId, authorizationVersion: 9, expectedVersion: 2, payload: canonicalApDraft }),
+    });
+    return { ok: response.ok, body: await response.json() };
+  }, { canonicalApDraft, endpoint: `${API}/functions/v1/assess-v2-command`, organizationId: ORG, workspaceId: WS });
+  expect(canonicalSave.ok).toBe(true);
+  expect(canonicalSave.body.resource.version).toBe(3);
+  expect(fixture.committedCommands.some(item => item.commandType === 'assessment_v2.draft.upsert' && item.payload.primitives.length === AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length)).toBe(true);
+  await page.getByRole('button',{name:'Reload current draft'}).click();
+  await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Invoice intake');
+  const decisionStarted=performance.now();
   await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Composed operating model');
-  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('V2 approval, Govern resolution, Studio generation');
+  expect(performance.now()-decisionStarted).toBeLessThan(5000);
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Executive decision');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Approval-bound actions');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Modernization dispositions');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Immutable references');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Claim-linked evidence');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source: document');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Document Intelligence');
+  expect(fixture.v2Decision?.inputSnapshot.primitives).toHaveLength(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length);
+  const expectExactVisible = async (text: string) => {
+    const locator = page.getByText(text, { exact:true });
+    await locator.scrollIntoViewIfNeeded();
+    if (!await locator.isVisible()) console.log('PR1D_VISIBILITY_DIAGNOSTIC', text, await locator.evaluate(element => { const style = getComputedStyle(element); const rect = element.getBoundingClientRect(); return { display:style.display, visibility:style.visibility, opacity:style.opacity, contentVisibility:style.contentVisibility, rect:{ x:rect.x, y:rect.y, width:rect.width, height:rect.height }, scrollY, documentHeight:document.documentElement.scrollHeight, ancestors:Array.from(function*(){ let current:Element|null=element; while(current){ const computed=getComputedStyle(current); yield { tag:current.tagName, className:current.className, display:computed.display, visibility:computed.visibility, opacity:computed.opacity, overflow:computed.overflow, height:current.getBoundingClientRect().height }; current=current.parentElement; } }()) }; }));
+    await expect(locator).toBeVisible();
+  };
+  await expectExactVisible('Legacy V1 | assess-core-2026-05.');
+  await expectExactVisible('Read-only | reviewer-ready');
+  await expectExactVisible('Engine evaluated; reviewers decide.');
+  await expectExactVisible('Hard stop: prohibited actions cannot proceed.');
+  await expectExactVisible('No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.');
+  await expectExactVisible('V2 approval, Govern resolution, Studio generation, export, and external sharing are not available in this foundation boundary.');
   const finalize=fixture.committedCommands.find(item=>item.commandType==='assessment_v2.finalize');
   expect(finalize?.payload).toEqual({caseId:finalize?.payload.caseId});
   expect(finalize?.payload.decision).toBeUndefined();
   expect(finalize?.payload.inputHash).toBeUndefined();
-  expect(performance.now()-started).toBeLessThan(5000);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   const violations=await new AxeBuilder({page}).include('[data-testid="assess-v2-workspace"]').analyze();
   expect(violations.violations.filter(item=>['serious','critical'].includes(item.impact || ''))).toEqual([]);
   expect(errors.filter(item=>!item.includes('Failed to load resource: net::ERR_FAILED'))).toEqual([]);
+});
+
+
+
+
+
+test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked review evidence', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Clone V1 as suggestions'}).click();
+  const expectedClone = cloneV1AssessmentToV2({
+    ...structuredClone(CANONICAL_AP_ASSESSMENT), id:ASSESSMENT, processId:PROCESS, orgId:ORG, workspaceId:WS,
+    status:'Approved', scoreVersion:ASSESS_V1_SCORE_VERSION,
+    scores:{ ...structuredClone(CANONICAL_AP_ASSESSMENT.scores!), scoreVersion:ASSESS_V1_SCORE_VERSION },
+  }, { caseId:'77777777-7777-4777-8777-777777777777', organizationId:ORG, workspaceId:WS, ownerId:USER, clonedAt:'2026-07-13T00:00:00.000Z' });
+  const importedStatus = page.getByText(new RegExp(`Imported ${expectedClone.importedFacts!.length} V1 fact suggestions and ${expectedClone.evidence.length} evidence suggestions\\.`));
+  await expect(importedStatus).toBeVisible();
+  await expect(importedStatus).toContainText(expectedClone.importedFacts![0].fieldId);
+  await page.getByRole('button',{name:'Add review evidence'}).first().evaluate(element => (element as HTMLElement).click());
+  await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Reload current draft'}).click();
+  expect(fixture.v2Case?.importedFacts?.map(fact => fact.fieldId)).toEqual(expectedClone.importedFacts?.map(fact => fact.fieldId));
+  expect(fixture.v2Case?.evidence.slice(0, expectedClone.evidence.length).map(item => item.id)).toEqual(expectedClone.evidence.map(item => item.id));
+  expect(fixture.v2Case?.evidence.every(item => /^[0-9a-f-]{36}$/.test(item.id))).toBe(true);
+  expect(fixture.v2Case?.evidence.some(item => item.claimIds.includes(expectedClone.importedFacts![0].fieldId))).toBe(true);
+  const clone = fixture.committedCommands.find(item => item.commandType === 'assessment_v2.clone_from_v1');
+  expect(clone?.payload).toEqual({ caseId:clone?.payload.caseId, sourceAssessmentId:ASSESSMENT, name:'Invoice exception handling', description:'Resolve invoice exceptions before payment release.' });
+  expect(clone?.payload.importedFacts).toBeUndefined();
+});
+
+test('incomplete V2 authoring cannot finalize or send a finalization command', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await expect(page.getByText('Before finalization, add: at least two process primitives', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toEqual([]);
+});
+
+test('V2 mutation capability denial is visible and no command is sent', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { capabilities:['assess.read', ASSESS_V2_CAPABILITIES.read] });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await expect(page.getByRole('button',{name:'Create V2 case'})).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('Create a V2 case');
+  expect(fixture.committedCommands.filter(item => String(item.commandType).startsWith('assessment_v2.'))).toEqual([]);
+});
+
+test('stale V2 authority surfaces an error without false success', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.create',code:'AUTHORITY_STALE'} });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await expect(page.getByRole('heading',{name:'Access context changed'})).toBeVisible();
+  await expect(page.getByText(/Your access changed/)).toBeVisible();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);
+});
+
+test('V2 version conflict prevents save success and returns to a safe reload state', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.draft.upsert',code:'VERSION_CONFLICT'} });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click(); await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await expect(page.getByText(/changed on the server/i)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Create V2 case'})).toBeVisible();
+  await expect(page.getByText('Draft saved as a new immutable authoring version.')).toHaveCount(0);
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert')).toEqual([]);
+});
+
+test('offline V2 create reports failure and never claims success', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { v2Offline:true });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await expect(page.getByRole('heading',{name:'Workspace unavailable'})).toBeVisible();
+  await expect(page.getByText('The command could not be completed. No success was recorded.')).toBeVisible();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);
 });

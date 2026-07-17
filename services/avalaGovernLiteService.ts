@@ -175,7 +175,7 @@ const mapAutonomyLevel = (
   const blocked = hasBlockedGate(assessment) || riskLevel === 'Blocked';
   const evidenceConfidenceSufficient = assessment.evidenceItems.length > 0
     && evidenceGaps.length === 0
-    && (assessment.metadata.evidenceQuality || 0) >= 70;
+    && meetsGovernLiteEvidenceThreshold(assessment.metadata.evidenceQuality);
   const riskAllowsL4 = !(['High', 'Critical', 'Blocked'] as AvalaGovernRiskLevel[]).includes(riskLevel);
   const l4Allowed = Boolean(
     judgment.autonomousExecutionAllowed

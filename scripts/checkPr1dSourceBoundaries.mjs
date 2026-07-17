@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const root = process.cwd();
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -10,10 +11,18 @@ const forbidText = (source, fragment, label) => {
   if (source.includes(fragment)) throw new Error(`PR1D_SOURCE_BOUNDARY_FORBIDDEN: ${label}`);
 };
 
-const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d'));
-if (migrationNames.length !== 1) throw new Error(`PR1D_MIGRATION_COUNT: expected 1, received ${migrationNames.length}`);
+const foundationName = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
+const correctionName = '20260715120000_pr1d_decision_integrity_correction.sql';
+const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d')).sort();
+for (const expected of [foundationName, correctionName]) {
+  if (!migrationNames.includes(expected)) throw new Error(`PR1D_MIGRATION_MISSING: ${expected}`);
+}
+if (migrationNames.length !== 2) throw new Error(`PR1D_MIGRATION_COUNT: expected 2, received ${migrationNames.length}`);
 
-const migration = read(`supabase/migrations/${migrationNames[0]}`);
+const foundation = read(`supabase/migrations/${foundationName}`);
+const correction = read(`supabase/migrations/${correctionName}`);
+const migrations = `${foundation}\n${correction}`;
+const capabilities = read('services/assessV2/capabilities.ts');
 const command = read('supabase/functions/_shared/assessV2Command.ts');
 const handlers = read('supabase/functions/_shared/assessV2Handlers.ts');
 const router = read('supabase/functions/_shared/assessV2Router.ts');
@@ -23,6 +32,9 @@ const registry = read('services/assessV2/registry.ts');
 const decisionVersion = read('services/assessV2/decisionVersion.ts');
 const client = read('services/assessV2Client.ts');
 const workspace = read('components/assess-v2/AssessV2Workspace.tsx');
+const browserFixture = read('tests/browser/pr1d.spec.ts');
+const architecture = read('docs/architecture/assess-v2-decision-intelligence-architecture.md');
+const migrationDoc = read('docs/migrations/pr1d-assess-v2-decision-intelligence.md');
 
 for (const type of [
   'assessment_v2.create',
@@ -31,15 +43,26 @@ for (const type of [
   'assessment_v2.finalize',
 ]) requireText(command, type, `typed command ${type}`);
 
-for (const capability of [
-  'assess.v2.read',
-  'assess.v2.create',
-  'assess.v2.clone',
-  'assess.v2.draft.write',
-  'assess.v2.finalize',
-]) requireText(migration, capability, `normalized capability ${capability}`);
+for (const [key, capability] of Object.entries({
+  read: 'assess.v2.read',
+  create: 'assess.v2.create',
+  clone: 'assess.v2.clone',
+  draftWrite: 'assess.v2.draft.write',
+  finalize: 'assess.v2.finalize',
+})) {
+  requireText(capabilities, `${key}: '${capability}'`, `typed capability ${capability}`);
+  requireText(migrations, capability, `migration capability ${capability}`);
+  requireText(architecture, `\`${capability}\``, `architecture capability ${capability}`);
+  requireText(migrationDoc, `\`${capability}\``, `migration documentation capability ${capability}`);
+}
+requireText(handlers, 'ASSESS_V2_COMMAND_CAPABILITY', 'server uses canonical capability mapping');
+requireText(workspace, 'ASSESS_V2_CAPABILITIES.draftWrite', 'UI uses canonical draft-write capability');
+requireText(browserFixture, 'ASSESS_V2_CAPABILITIES.draftWrite', 'browser fixture uses canonical draft-write capability');
+for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'server'], [client, 'client'], [workspace, 'UI'], [browserFixture, 'browser fixture'], [migrations, 'migration'], [architecture, 'architecture'], [migrationDoc, 'migration docs']]) {
+  forbidText(source, "assess.v2.write", `obsolete capability in ${label}`);
+}
 
-requireText(command, "else{exact(p,['caseId']);payload={caseId:uuid(p.caseId)}}", 'finalize accepts only caseId');
+requireText(command, "exact(rawPayload, ['caseId'])", 'finalize accepts only caseId');
 forbidText(command, "['caseId', 'decision']", 'client-supplied finalized decision');
 forbidText(client, 'evaluateAssessmentV2(', 'browser-side deterministic evaluation');
 forbidText(workspace, 'studio_handoff', 'V2 Studio handoff affordance');
@@ -47,6 +70,13 @@ forbidText(workspace, 'govern.resolve', 'V2 Govern resolution affordance');
 forbidText(`${command}\n${handlers}\n${router}`, 'assessment_v2.approve', 'V2 approval command');
 
 requireText(handlers, 'buildDecisionVersionV2', 'server-side snapshot construction');
+for (const canonicalParameter of ['p_input_canonical', 'p_evidence_canonical', 'p_output_canonical']) {
+  requireText(database, canonicalParameter, `database adapter ${canonicalParameter}`);
+  requireText(correction, canonicalParameter, `corrected finalize RPC ${canonicalParameter}`);
+}
+requireText(correction, 'imported_facts', 'durable imported V1 facts');
+requireText(correction, 'convert_to', 'UTF-8 canonical digest input');
+requireText(correction, 'digest(', 'database SHA-256 recomputation');
 requireText(database, 'serviceRoleKey', 'private service-role transport');
 requireText(router, 'assessV2ErrorBody', 'sanitized stable errors');
 requireText(registry, 'validateFieldRegistry', 'field/rule registry contract');
@@ -55,35 +85,33 @@ requireText(decisionVersion, 'buildDecisionDigestV2', 'SHA-256 decision referenc
 forbidText(decisionVersion, 'sha-lite', 'V1 lightweight hash reuse');
 
 for (const table of [
-  'assess_v2_cases',
-  'assess_v2_case_versions',
-  'assess_v2_primitives',
-  'assess_v2_edges',
-  'assess_v2_decision_points',
-  'assess_v2_exception_paths',
-  'assess_v2_application_assets',
-  'assess_v2_application_interactions',
-  'assess_v2_evidence_links',
-  'assess_v2_decision_versions',
-  'assess_v2_candidate_evaluations',
-  'assess_v2_gate_results',
-  'assess_v2_control_requirements',
+  'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',
+  'assess_v2_decision_points', 'assess_v2_exception_paths', 'assess_v2_application_assets',
+  'assess_v2_application_interactions', 'assess_v2_evidence_links', 'assess_v2_decision_versions',
+  'assess_v2_candidate_evaluations', 'assess_v2_gate_results', 'assess_v2_control_requirements',
   'assess_v2_modernization_dispositions',
-]) requireText(migration, table, `normalized/immutable table ${table}`);
-requireText(migration, 'FORCE ROW LEVEL SECURITY', 'forced RLS for normalized V2 tables');
+]) requireText(migrations, table, `normalized/immutable table ${table}`);
+requireText(migrations, 'FORCE ROW LEVEL SECURITY', 'forced RLS for normalized V2 tables');
+for (const role of ['PUBLIC', 'anon', 'authenticated']) requireText(migrations, role, `private RPC/table ACL role ${role}`);
+requireText(migrations, "'reviewer_ready'", 'reviewer-ready final state');
+requireText(migrations, 'pr1b_assert_command_authority', 'independent transactional authorization');
+requireText(migrations, 'privileged_audit_events', 'atomic privileged audit');
+requireText(migrations, 'assess_command_receipts', 'actor-scoped command receipt');
+requireText(foundation, "CHECK(status IN('draft','reviewer_ready','superseded'))", 'V2 state boundary excludes approval and handoff');
 
-for (const role of ['PUBLIC', 'anon', 'authenticated']) requireText(migration, role, `private RPC/table ACL role ${role}`);
-requireText(migration, 'digest(', 'database SHA-256 digest');
-requireText(migration, "'reviewer_ready'", 'reviewer-ready final state');
-requireText(migration, 'pr1b_assert_command_authority', 'independent transactional authorization');
-requireText(migration, 'privileged_audit_events', 'atomic privileged audit');
-requireText(migration, 'assess_command_receipts', 'actor-scoped command receipt');
-requireText(migration, "CHECK(status IN('draft','reviewer_ready','superseded'))", 'V2 state boundary excludes approval and handoff');
-
-const oldMigration = read('supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql');
-if (oldMigration.includes("a.status IN ('Ready for Review','Changes Requested')")) {
-  throw new Error('PR1D_HISTORY_MUTATION: accepted PR 1C migration was edited');
+const buyerExtensions = new Set(['.ts', '.tsx', '.md', '.json']);
+const correctionEntrySha = '7d3e8fcccdc524959d2f28b4960d617813d9e2fc';
+let tracked;
+try {
+  tracked = execFileSync('git', ['diff', '--name-only', '--diff-filter=ACMR', correctionEntrySha, '--'], { cwd: root, encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
+} catch {
+  throw new Error(`PR1D_BUYER_COPY_BASELINE_UNAVAILABLE: ${correctionEntrySha}`);
 }
-requireText(migration, 'Changes Requested', 'forward-only V1 resubmission compatibility correction');
+const corruption = /\u00c2|\u00c3|\u00e2(?:\u0080|\u20ac)|\u00f0\u0178|\ufffd/;
+for (const file of tracked) {
+  if (!buyerExtensions.has(path.extname(file).toLowerCase())) continue;
+  const source = read(file);
+  if (corruption.test(source)) throw new Error(`PR1D_BUYER_COPY_ENCODING: ${file}`);
+}
 
-console.log('PR 1D V1/V2, rule, command, persistence, authority, snapshot, UI, and rollback source boundaries passed.');
+console.log('PR 1D capability, V1/V2, command, persistence, database digest, UI, UTF-8 buyer-copy, and rollback source boundaries passed.');

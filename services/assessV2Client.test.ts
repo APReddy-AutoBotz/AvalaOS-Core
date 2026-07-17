@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import type { TenantContextProjection } from '../types';
+import { ASSESS_V2_CAPABILITIES, ASSESS_V2_COMMAND_CAPABILITY } from './assessV2/capabilities';
 import { buildAssessV2CommandEnvelope } from './assessV2ClientContract';
 
 const context: TenantContextProjection = {
@@ -31,4 +33,22 @@ assert.equal('inputSnapshot' in envelope.payload, false);
 assert.equal('inputHash' in envelope.payload, false);
 const createEnvelope=buildAssessV2CommandEnvelope(context,'assessment_v2.create',{caseId},'assessment_v2.create:case',undefined,'66666666-6666-4666-8666-666666666666');
 assert.equal('expectedVersion' in createEnvelope,false);
+assert.deepEqual(Object.values(ASSESS_V2_CAPABILITIES), [
+  'assess.v2.read',
+  'assess.v2.create',
+  'assess.v2.clone',
+  'assess.v2.draft.write',
+  'assess.v2.finalize',
+]);
+assert.deepEqual(ASSESS_V2_COMMAND_CAPABILITY, {
+  'assessment_v2.create': 'assess.v2.create',
+  'assessment_v2.clone_from_v1': 'assess.v2.clone',
+  'assessment_v2.draft.upsert': 'assess.v2.draft.write',
+  'assessment_v2.finalize': 'assess.v2.finalize',
+});
+assert.equal(Object.values(ASSESS_V2_CAPABILITIES).includes(['assess', 'v2', 'write'].join('.') as never), false);
+const clientSource = fs.readFileSync('services/assessV2Client.ts', 'utf8');
+assert.match(clientSource, /evidenceIds\.has\(evidence\.id\)/);
+assert.match(clientSource, /throw new EnterpriseBoundaryError\('COMMAND_UNAVAILABLE'\)/);
+assert.match(clientSource, /assertUniqueAssessV2EvidenceIds\(value\.case_snapshot\)/);
 console.log('Assess V2 client boundary regression passed.');

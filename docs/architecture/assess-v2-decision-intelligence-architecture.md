@@ -1,6 +1,6 @@
 # Avala Assess V2 Decision Intelligence Architecture
 
-Status: PR 1D target and implementation contract
+Status: PR 1D correction target and implementation contract
 
 Baseline: PR #208 / PR 1C merged at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`
 
@@ -37,14 +37,14 @@ Untrusted browser projection
 
 The browser never supplies authority-bearing decisions or hashes and never reruns final deterministic rules. Service-role database access is transport privilege, not application authorization. Every private mutation RPC independently revalidates active actor, organization, workspace, capability, authorization version, and resource ancestry inside the transaction.
 
-## Durable Model
+## Durable Model And Additive Correction
 
-The canonical migration adds separate normalized `assess_v2_*` relations. It does not add V2 rows to the V1 `assessments` table and performs no V1 backfill.
+The accepted PR 1D foundation migration adds separate normalized `assess_v2_*` relations. The additive PR 1D correction migration tightens clone persistence and finalization integrity without rewriting the accepted migration. Neither migration adds V2 rows to the V1 `assessments` table or backfills V1 records.
 
-- `assess_v2_cases`: organization/workspace/process ancestry, optional V1 source, owner, lifecycle, optimistic version, schema/rule-set identity, and soft-deletion state.
-- `assess_v2_case_versions`: immutable authoring revisions and clone provenance.
-- Version-owned primitives, edges, decision points, exception paths, application assets, application interactions, and evidence links.
-- `assess_v2_decision_versions`: immutable source-version ancestry, schema/rule/decision versions, canonical input/evidence/output snapshots, SHA-256 references, supersession, validation status, actor/time, and explicit non-claims.
+- `assess_v2_cases` owns organization/workspace/process ancestry, optional V1 source, owner, lifecycle, optimistic version, schema/rule-set identity, and soft-deletion state.
+- `assess_v2_case_versions` owns immutable authoring revisions, clone provenance, and allowlisted imported facts. Imported V1 evidence is persisted as submitted and unvalidated; imported fact and evidence counts are returned from the clone/load boundary.
+- Version-owned relations persist primitives, edges, decision points, exception paths, application assets, application interactions, and evidence links.
+- `assess_v2_decision_versions` owns immutable source-version ancestry, schema/rule/decision versions, canonical input/evidence/output snapshots, SHA-256 references, supersession, validation status, actor/time, and explicit non-claims.
 
 Every child relation carries organization, workspace, and case ancestry with composite constraints. Authenticated clients receive tenant-scoped read projection only. `PUBLIC`, `anon`, and `authenticated` cannot execute private mutation RPCs or directly mutate V2 relations. RLS is enabled and forced.
 
@@ -65,7 +65,7 @@ The V2 rule set evaluates independent layers and never collapses them into one w
 
 Business value and evidence confidence cannot increase technical fit. Data sensitivity changes controls, not data quality. Mandatory human approval changes the action boundary, not component suitability. API facts and UI/RPA facts remain separate. Modernization never derives solely from agent readiness.
 
-A bounded agent is ineligible unless irreducible ambiguity, adaptive next-step selection, tool/path selection, incremental value beyond simpler components, and controllability are all evidenced. Extraction, summarization, retrieval, or drafting alone cannot satisfy this gate.
+A bounded agent is ineligible when any required necessity condition is proven false. When all five conditions are asserted true but one or more lack valid claim-linked evidence, the result remains `Conditional Fit` with `Assumption-Led` confidence; only claim-linked evidence can raise that confidence to `Verified`. Extraction, summarization, retrieval, or drafting alone cannot satisfy this gate.
 
 ## Rule And Evidence Registry
 
@@ -75,28 +75,36 @@ Claim-level confidence is derived from exact evidence coverage, source type, fre
 
 Template and V1-import values begin as suggested/unverified with `validated = false`. Unknown values remain unknown; missing evidence never receives an optimistic default.
 
-## Canonical Snapshots And Hashes
+## Canonical Snapshots And Database-Verified Hashes
 
 The server generates input, evidence, and output snapshots from the same locked normalized facts used by the deterministic evaluator. Canonicalization has an explicit version and stable object-key, array-order, number, Unicode, and null rules. Each digest is domain-separated and binds tenant, workspace, case, source version, schema version, rule-set version, and decision version.
 
+Finalization sends both canonical JSON text and its parsed snapshot to the private database RPC. PostgreSQL verifies that each canonical text parses to the equivalent bound snapshot, independently recomputes its UTF-8 SHA-256 digest, and rejects any snapshot, digest, or bound-context mismatch before decision, receipt, state, or audit persistence. A 64-character shape check is not an integrity proof.
+
 SHA-256 references prove deterministic snapshot integrity only. They do not prove truth, authorship, evidence quality, scientific calibration, buyer approval, or deployment readiness. Historical V1 `sha-lite` identifiers remain legacy correlation references and are never promoted to cryptographic evidence.
 
-## Commands And Capabilities
+## Commands And Canonical Capabilities
 
-PR 1D supports only:
+PR 1D supports only these command types:
 
 - `assessment_v2.create`
 - `assessment_v2.clone_from_v1`
 - `assessment_v2.draft.upsert`
 - `assessment_v2.finalize`
 
-The corresponding capabilities are read, create, clone, draft-write, and finalize capabilities scoped to Assess V2. Every envelope and nested payload rejects unknown keys and enforces bounded types, enums, lengths, counts, units, and conditional applicability.
+One typed capability contract is authoritative across the server mapping, client affordances, browser fixtures, tests, documentation, and migration checks:
 
-Identical actor-scoped idempotent retries return the same committed response. Reusing a key with a different canonical payload conflicts. Concurrent distinct keys at one expected version produce one commit and one version conflict. Any required receipt, decision snapshot, hash, or audit failure rolls back the complete command.
+- `assess.v2.read`
+- `assess.v2.create`
+- `assess.v2.clone`
+- `assess.v2.draft.write`
+- `assess.v2.finalize`
+
+Every envelope and nested payload rejects unknown keys and enforces bounded types, enums, lengths, counts, units, and conditional applicability. Identical actor-scoped idempotent retries return the same committed response. Reusing a key with a different canonical payload conflicts. Concurrent distinct keys at one expected version produce one commit and one version conflict. Any required receipt, decision snapshot, hash, or audit failure rolls back the complete command.
 
 ## V1 Clone Boundary
 
-Clone requires V2 create/clone authority plus readable same-tenant V1 ancestry. The source must be active, non-deleted, and use `assess-core-2026-05`. The server copies only allowlisted values as unverified source facts or assumptions, records the source assessment and score version, and never mutates the V1 row, Govern provenance, Studio handoff, score, or version.
+Clone requires V2 create/clone authority plus readable same-tenant V1 ancestry. The source must be active, non-deleted, and use `assess-core-2026-05`. The server recursively converts only allowlisted response sections into explicit suggested or assumed facts, maps V1 evidence to submitted/unvalidated V2 evidence, persists both in the first immutable V2 version, and reports their actual counts. It records the source assessment and score version and never mutates the V1 row, Govern provenance, Studio handoff, score, or version.
 
 V1 and V2 IDs, commands, persistence, outputs, and lifecycle states are not interchangeable. Existing V1 Govern and Studio handlers cannot accept V2 cases.
 
@@ -114,7 +122,7 @@ The ERP is retained and integrated or wrapped. Autonomous payment release and ve
 
 ## Rollback And Safe Fallback
 
-Rollback is operational feature disablement or read-only maintenance, followed by an additive forward fix. It preserves V1 and V2 data, case versions, finalized decisions, receipts, hashes, and audits. Finalized V2 decisions remain readable. The system never restores browser authority, silently falls back to V1, reinterprets V2 data using the V1 engine, or destructively down-migrates evidence.
+Rollback is operational feature disablement or read-only maintenance, followed by another additive forward fix. It preserves V1 and V2 data, imported facts/evidence, case versions, finalized decisions, canonical snapshots/text, receipts, hashes, and audits. Finalized V2 decisions remain readable. The accepted foundation migration and its correction are not destructively reversed. The system never restores browser authority, silently falls back to V1, reinterprets V2 data using the V1 engine, or destructively down-migrates evidence.
 
 ## Proof Boundary
 

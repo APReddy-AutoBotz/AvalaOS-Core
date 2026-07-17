@@ -1,5 +1,16 @@
 import type { TenantContextProjection } from '../types';
-import type { AssessmentCaseV2, ImmutableDecisionVersionV2 } from './assessV2/types';
+import type {
+  AgentNecessityFacts,
+  ApplicationAsset,
+  ApplicationInteraction,
+  AssessmentCaseV2,
+  DecisionPoint,
+  EvidenceLink,
+  ExceptionPath,
+  ImmutableDecisionVersionV2,
+  ProcessEdge,
+  ProcessPrimitive,
+} from './assessV2/types';
 import { supabase } from './supabaseClient';
 import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
@@ -16,23 +27,26 @@ export interface AssessV2CommandResource {
   version: number;
   status: 'draft' | 'reviewer-ready' | 'superseded';
   decisionId?: string;
+  importedFactCount?: number;
+  importedEvidenceCount?: number;
 }
 
 export interface AssessV2DraftInput {
   caseId: string;
   name: string;
   description: string;
-  primitives: unknown[];
-  edges: unknown[];
-  decisionPoints: unknown[];
-  exceptionPaths: unknown[];
-  applicationAssets: unknown[];
-  interactions: unknown[];
-  evidenceLinks: unknown[];
-  candidateEvaluations: unknown[];
-  gateResults: unknown[];
-  controlRequirements: unknown[];
-  modernizationDispositions: unknown[];
+  primitives: ProcessPrimitive[];
+  edges: ProcessEdge[];
+  decisionPoints: DecisionPoint[];
+  exceptionPaths: ExceptionPath[];
+  applicationAssets: ApplicationAsset[];
+  interactions: ApplicationInteraction[];
+  evidenceLinks: EvidenceLink[];
+  agentNecessity: AgentNecessityFacts;
+  candidateEvaluations: [];
+  gateResults: [];
+  controlRequirements: [];
+  modernizationDispositions: [];
 }
 
 export interface AssessV2ReadProjection {
@@ -41,6 +55,24 @@ export interface AssessV2ReadProjection {
   description: string;
   decision: ImmutableDecisionVersionV2 | null;
 }
+
+export const draftFromAssessmentCase = (assessment: AssessmentCaseV2, name: string, description: string): AssessV2DraftInput => ({
+  caseId: assessment.id,
+  name,
+  description,
+  primitives: assessment.primitives,
+  edges: assessment.edges,
+  decisionPoints: assessment.decisionPoints,
+  exceptionPaths: assessment.exceptionPaths,
+  applicationAssets: assessment.assets,
+  interactions: assessment.interactions,
+  evidenceLinks: assessment.evidence,
+  agentNecessity: assessment.agentNecessity,
+  candidateEvaluations: [],
+  gateResults: [],
+  controlRequirements: [],
+  modernizationDispositions: [],
+});
 
 export interface AssessV2Transport {
   invoke(body: Record<string, unknown>): Promise<unknown>;
@@ -60,6 +92,8 @@ const parseResource = (value: unknown): AssessV2CommandResource => {
     version: value.version as number,
     status: value.status === 'reviewer_ready' ? 'reviewer-ready' : value.status as 'draft' | 'superseded',
     decisionId: typeof value.decisionId === 'string' ? value.decisionId : undefined,
+    importedFactCount: Number.isSafeInteger(value.importedFactCount) ? value.importedFactCount as number : undefined,
+    importedEvidenceCount: Number.isSafeInteger(value.importedEvidenceCount) ? value.importedEvidenceCount as number : undefined,
   };
 };
 
@@ -76,13 +110,54 @@ const defaultTransport: AssessV2Transport = {
   async readCase(caseId) {
     const { data: decision, error: decisionError } = await supabase
       .from('assess_v2_decision_versions')
-      .select('case_id,source_version_id,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,supersedes_decision_id,created_by,created_at')
+      .select('case_id,source_version_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,input_canonical,evidence_canonical,output_canonical,supersedes_decision_id,created_by,created_at')
       .eq('case_id', caseId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (decisionError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-    if (!decision) return null;
+    if (!decision) {
+      const { data: currentCase, error: caseError } = await supabase.from('assess_v2_cases')
+        .select('id,org_id,workspace_id,process_id,owner_id,status,version,schema_version,rule_set_version,source_v1_assessment_id,source_v1_score_version,created_at,updated_at,head_version_id')
+        .eq('id', caseId).maybeSingle();
+      if (caseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+      if (!currentCase) return null;
+      const { data: head, error: headError } = await supabase.from('assess_v2_case_versions')
+        .select('name,description,agent_necessity,source_snapshot,created_at,imported_facts')
+        .eq('id', currentCase.head_version_id).maybeSingle();
+      if (headError || !head) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+      const child = async (table: string) => {
+        const { data, error } = await supabase.from(table).select('payload').eq('version_id', currentCase.head_version_id);
+        if (error) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+        return (data ?? []).map(row => row.payload);
+      };
+      const [primitives, edges, decisionPoints, exceptionPaths, assets, interactions, evidence] = await Promise.all([
+        child('assess_v2_primitives'), child('assess_v2_edges'), child('assess_v2_decision_points'), child('assess_v2_exception_paths'),
+        child('assess_v2_application_assets'), child('assess_v2_application_interactions'), child('assess_v2_evidence_links'),
+      ]);
+      return { case_id: caseId, name: head.name, description: head.description, case_snapshot: {
+        id: currentCase.id,
+        organizationId: currentCase.org_id,
+        workspaceId: currentCase.workspace_id,
+        sourceProcessId: currentCase.process_id,
+        ownerId: currentCase.owner_id,
+        status: currentCase.status === 'reviewer_ready' ? 'reviewer-ready' : currentCase.status,
+        version: currentCase.version,
+        schemaVersion: currentCase.schema_version,
+        ruleSetVersion: currentCase.rule_set_version,
+        ...(currentCase.source_v1_assessment_id ? { sourceV1: {
+          assessmentId: currentCase.source_v1_assessment_id,
+          scoreVersion: currentCase.source_v1_score_version,
+          clonedAt: head.created_at,
+          importedAs: 'unverified-source-facts',
+        } } : {}),
+        importedFacts: head.imported_facts ?? [],
+        primitives, edges, decisionPoints, exceptionPaths, assets, interactions, evidence,
+        agentNecessity: head.agent_necessity,
+        createdAt: currentCase.created_at,
+        updatedAt: currentCase.updated_at,
+      }, decision_snapshot: null };
+    }
     const { data: version, error: versionError } = await supabase
       .from('assess_v2_case_versions')
       .select('name,description')
@@ -97,6 +172,7 @@ const defaultTransport: AssessV2Transport = {
       decision_snapshot: {
         caseId: decision.case_id,
         sourceCaseVersion: (decision.input_snapshot as AssessmentCaseV2).version,
+        schemaVersion: decision.schema_version,
         ruleSetVersion: decision.rule_set_version,
         decisionVersion: decision.decision_version,
         inputSnapshot: decision.input_snapshot,
@@ -105,6 +181,9 @@ const defaultTransport: AssessV2Transport = {
         inputHash: decision.input_hash,
         evidenceHash: decision.evidence_hash,
         outputHash: decision.output_hash,
+        inputCanonical: decision.input_canonical,
+        evidenceCanonical: decision.evidence_canonical,
+        outputCanonical: decision.output_canonical,
         supersedesDecisionId: decision.supersedes_decision_id ?? undefined,
         createdBy: decision.created_by,
         createdAt: decision.created_at,
@@ -161,6 +240,19 @@ export const finalizeAssessV2Case = (
   expectedVersion,
 );
 
+export const assertUniqueAssessV2EvidenceIds = (caseSnapshot: unknown): void => {
+  if (!isEnterpriseObject(caseSnapshot) || !Array.isArray(caseSnapshot.evidence)) {
+    throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  }
+  const evidenceIds = new Set<string>();
+  for (const evidence of caseSnapshot.evidence) {
+    if (!isEnterpriseObject(evidence) || typeof evidence.id !== 'string' || evidenceIds.has(evidence.id)) {
+      throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    }
+    evidenceIds.add(evidence.id);
+  }
+};
+
 export const readAssessV2Case = async (
   caseId: string,
   transport: AssessV2Transport = defaultTransport,
@@ -171,6 +263,7 @@ export const readAssessV2Case = async (
       typeof value.description !== 'string' || !isEnterpriseObject(value.case_snapshot)) {
     throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   }
+  assertUniqueAssessV2EvidenceIds(value.case_snapshot);
   return {
     case: value.case_snapshot as unknown as AssessmentCaseV2,
     name: value.name,

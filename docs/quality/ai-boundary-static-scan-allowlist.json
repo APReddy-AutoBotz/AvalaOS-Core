@@ -184,7 +184,7 @@
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1d.spec.ts",
-      "lines": [86, 94, 95],
+      "lines": [98, 106, 107],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
     }

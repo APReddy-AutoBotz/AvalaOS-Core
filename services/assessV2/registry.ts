@@ -7,92 +7,126 @@ export const RULE_REGISTRY: readonly RuleContract[] = [
   { ruleId: 'AGENT-002', description: 'Adaptive next-step selection is required for bounded agency.', engineeringBaseline: true },
   { ruleId: 'AGENT-003', description: 'Tool or investigation-path selection is required for bounded agency.', engineeringBaseline: true },
   { ruleId: 'AGENT-004', description: 'Incremental value beyond simpler components is required.', engineeringBaseline: true },
-  { ruleId: 'AGENT-005', description: 'Permissions, budgets, stopping rules, monitoring and rollback must be bounded.', engineeringBaseline: true },
+  { ruleId: 'AGENT-005', description: 'Controllability is required for bounded agency.', engineeringBaseline: true },
+  { ruleId: 'CAND-001', description: 'Primitive type identifies candidates but required technical facts determine fit.', engineeringBaseline: true },
   { ruleId: 'COMPOSE-001', description: 'Select the least-complex compatible component set per primitive.', engineeringBaseline: true },
   { ruleId: 'EVID-001', description: 'Confidence derives from claim-linked validated evidence coverage.', engineeringBaseline: true },
   { ruleId: 'EVID-002', description: 'Template suggestions and assumptions are never verified evidence.', engineeringBaseline: true },
-  { ruleId: 'INT-001', description: 'Interface and operation coverage gate machine interaction.', engineeringBaseline: true },
+  { ruleId: 'INT-001', description: 'Interface and operation coverage gate the declared API mode only.', engineeringBaseline: true },
   { ruleId: 'INT-002', description: 'Machine identity gates autonomous writes.', engineeringBaseline: true },
   { ruleId: 'INT-003', description: 'Least privilege gates state-changing actions.', engineeringBaseline: true },
-  { ruleId: 'INT-004', description: 'UI stability independently gates RPA/UI readiness.', engineeringBaseline: true },
+  { ruleId: 'INT-004', description: 'UI stability independently gates UI automation.', engineeringBaseline: true },
   { ruleId: 'INT-005', description: 'Auditable transactions gate high-impact writes.', engineeringBaseline: true },
   { ruleId: 'INT-006', description: 'Idempotency and compensation gate retryable financial actions.', engineeringBaseline: true },
   { ruleId: 'INT-007', description: 'Rollback absence makes high-impact execution approval-bound.', engineeringBaseline: true },
   { ruleId: 'INT-008', description: 'Classified data gates AI access.', engineeringBaseline: true },
-  { ruleId: 'INT-009', description: 'Production-like testing gates any production execution claim.', engineeringBaseline: true },
-  { ruleId: 'INT-010', description: 'Accountable ownership gates approval.', engineeringBaseline: true },
+  { ruleId: 'INT-009', description: 'A test environment gates controlled execution.', engineeringBaseline: true },
+  { ruleId: 'INT-010', description: 'Accountable ownership gates operational readiness.', engineeringBaseline: true },
   { ruleId: 'INT-011', description: 'Event semantics independently gate event readiness.', engineeringBaseline: true },
   { ruleId: 'INT-012', description: 'Monitoring and capacity evidence determine operational readiness.', engineeringBaseline: true },
   { ruleId: 'INT-013', description: 'Untrusted content with tool access requires prompt-injection controls.', engineeringBaseline: true },
-  { ruleId: 'MOD-001', description: 'Modernization uses lifecycle and technical-health facts independently of agent readiness.', engineeringBaseline: true },
+  { ruleId: 'INT-014', description: 'Declared mode is the only actionable interaction mode.', engineeringBaseline: true },
+  { ruleId: 'MOD-001', description: 'Modernization uses complete lifecycle and interaction facts independently of agent readiness.', engineeringBaseline: true },
 ] as const;
+
+const field = (fieldId: string, use: FieldContract['use'], layer: FieldContract['layer'], ruleIds: string[], unit: FieldUnit, evidenceRequired = true, polarity: FieldContract['polarity'] = 'positive', applicability?: FieldContract['applicability']): FieldContract => ({ fieldId, use, layer, ruleIds, polarity, unit, evidenceRequired, ...(applicability ? { applicability } : {}) });
 
 export const FIELD_REGISTRY: readonly FieldContract[] = [
-  { fieldId: 'primitive.type', use: 'fit', layer: 'primitive', ruleIds: ['COMPOSE-001'], polarity: 'neutral', unit: 'category', evidenceRequired: false },
-  { fieldId: 'primitive.businessDisposition', use: 'context', layer: 'primitive', ruleIds: [], polarity: 'neutral', unit: 'category', evidenceRequired: true },
-  { fieldId: 'agent.irreducibleAmbiguity', use: 'eligibility', layer: 'primitive', ruleIds: ['AGENT-001'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'agent.adaptiveNextStep', use: 'eligibility', layer: 'primitive', ruleIds: ['AGENT-002'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'agent.toolOrPathSelection', use: 'eligibility', layer: 'primitive', ruleIds: ['AGENT-003'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'agent.incrementalValue', use: 'eligibility', layer: 'primitive', ruleIds: ['AGENT-004'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'agent.controllable', use: 'risk', layer: 'governance', ruleIds: ['AGENT-005'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.interfaceAvailable', use: 'eligibility', layer: 'interaction', ruleIds: ['INT-001'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.operationCovered', use: 'eligibility', layer: 'interaction', ruleIds: ['INT-001'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.apiDocumented', use: 'confidence', layer: 'interaction', ruleIds: ['INT-001'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.machineIdentity', use: 'risk', layer: 'interaction', ruleIds: ['INT-002'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.leastPrivilege', use: 'risk', layer: 'interaction', ruleIds: ['INT-003'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.uiStable', use: 'eligibility', layer: 'interaction', ruleIds: ['INT-004'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.auditable', use: 'risk', layer: 'interaction', ruleIds: ['INT-005'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.idempotent', use: 'risk', layer: 'interaction', ruleIds: ['INT-006'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.compensatable', use: 'risk', layer: 'interaction', ruleIds: ['INT-006'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.rollback', use: 'risk', layer: 'interaction', ruleIds: ['INT-007'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.dataClassified', use: 'risk', layer: 'interaction', ruleIds: ['INT-008'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.dataQuality', use: 'fit', layer: 'interaction', ruleIds: ['INT-001'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.testEnvironment', use: 'risk', layer: 'interaction', ruleIds: ['INT-009'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.accountableOwner', use: 'risk', layer: 'application', ruleIds: ['INT-010'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.eventSemantics', use: 'eligibility', layer: 'interaction', ruleIds: ['INT-011'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.monitored', use: 'risk', layer: 'interaction', ruleIds: ['INT-012'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.capacityKnown', use: 'risk', layer: 'interaction', ruleIds: ['INT-012'], polarity: 'positive', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.untrustedContentWithTools', use: 'risk', layer: 'interaction', ruleIds: ['INT-013'], polarity: 'negative', unit: 'boolean', evidenceRequired: true },
-  { fieldId: 'interaction.highImpact', use: 'context', layer: 'interaction', ruleIds: [], polarity: 'neutral', unit: 'boolean', evidenceRequired: false },
-  { fieldId: 'interaction.financialAction', use: 'context', layer: 'interaction', ruleIds: [], polarity: 'neutral', unit: 'boolean', evidenceRequired: false },
-  { fieldId: 'evidence.coverage', use: 'confidence', layer: 'governance', ruleIds: ['EVID-001'], polarity: 'positive', unit: 'ratio', evidenceRequired: false },
-  { fieldId: 'evidence.templateStatus', use: 'confidence', layer: 'governance', ruleIds: ['EVID-002'], polarity: 'neutral', unit: 'category', evidenceRequired: false },
-  { fieldId: 'asset.strategicLifespan', use: 'context', layer: 'modernization', ruleIds: [], polarity: 'neutral', unit: 'category', evidenceRequired: true },
-  { fieldId: 'asset.technicalHealth', use: 'context', layer: 'modernization', ruleIds: ['MOD-001'], polarity: 'neutral', unit: 'category', evidenceRequired: true },
+  field('primitive.type', 'eligibility', 'primitive', ['CAND-001', 'COMPOSE-001'], 'category', false, 'neutral'),
+  field('primitive.businessDisposition', 'context', 'primitive', [], 'category', true, 'neutral'),
+  field('primitive.documentQualityRepresentative', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.exceptionSamplesAvailable', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.rulesStable', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.interfaceDependencyKnown', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.workflowPatternKnown', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.ambiguityCharacterized', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('primitive.controlRequirementsKnown', 'fit', 'primitive', ['CAND-001'], 'boolean'),
+  field('agent.irreducibleAmbiguity', 'eligibility', 'primitive', ['AGENT-001'], 'boolean'),
+  field('agent.adaptiveNextStep', 'eligibility', 'primitive', ['AGENT-002'], 'boolean'),
+  field('agent.toolOrPathSelection', 'eligibility', 'primitive', ['AGENT-003'], 'boolean'),
+  field('agent.incrementalValue', 'eligibility', 'primitive', ['AGENT-004'], 'boolean'),
+  field('agent.controllable', 'risk', 'governance', ['AGENT-005'], 'boolean'),
+  field('interaction.interfaceAvailable', 'eligibility', 'interaction', ['INT-001'], 'boolean'),
+  field('interaction.operationCovered', 'eligibility', 'interaction', ['INT-001'], 'boolean'),
+  field('interaction.apiDocumented', 'confidence', 'interaction', ['INT-001'], 'boolean'),
+  field('interaction.machineIdentity', 'risk', 'interaction', ['INT-002'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'write' }),
+  field('interaction.leastPrivilege', 'risk', 'interaction', ['INT-003'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'write' }),
+  field('interaction.uiStable', 'eligibility', 'interaction', ['INT-004'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'ui' }),
+  field('interaction.auditable', 'risk', 'interaction', ['INT-005'], 'boolean', true, 'positive', { fieldId: 'interaction.highImpact', equals: true }),
+  field('interaction.idempotent', 'risk', 'interaction', ['INT-006'], 'boolean', true, 'positive', { fieldId: 'interaction.financialAction', equals: true }),
+  field('interaction.compensatable', 'risk', 'interaction', ['INT-006'], 'boolean', true, 'positive', { fieldId: 'interaction.financialAction', equals: true }),
+  field('interaction.rollback', 'risk', 'interaction', ['INT-007'], 'boolean', true, 'positive', { fieldId: 'interaction.highImpact', equals: true }),
+  field('interaction.dataClassified', 'risk', 'interaction', ['INT-008'], 'boolean'),
+  field('interaction.dataQuality', 'confidence', 'interaction', ['INT-001'], 'boolean'),
+  field('interaction.testEnvironment', 'risk', 'interaction', ['INT-009'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'operational' }),
+  field('interaction.accountableOwner', 'risk', 'interaction', ['INT-010'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'operational' }),
+  field('interaction.eventSemantics', 'eligibility', 'interaction', ['INT-011'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'event' }),
+  field('interaction.monitored', 'risk', 'interaction', ['INT-012'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'operational' }),
+  field('interaction.capacityKnown', 'risk', 'interaction', ['INT-012'], 'boolean', true, 'positive', { fieldId: 'interaction.mode', equals: 'operational' }),
+  field('interaction.errorContract', 'risk', 'interaction', ['INT-001'], 'boolean'),
+  field('interaction.untrustedContentWithTools', 'risk', 'interaction', ['INT-013'], 'boolean', true, 'negative'),
+  field('interaction.highImpact', 'risk', 'interaction', ['INT-005', 'INT-007'], 'boolean', false, 'neutral', { fieldId: 'interaction.mode', equals: 'write' }),
+  field('interaction.financialAction', 'risk', 'interaction', ['INT-006'], 'boolean', false, 'neutral', { fieldId: 'interaction.mode', equals: 'write' }),
+  field('interaction.mode', 'eligibility', 'interaction', ['INT-001', 'INT-002', 'INT-003', 'INT-004', 'INT-009', 'INT-010', 'INT-011', 'INT-012', 'INT-014'], 'category', false, 'neutral'),
+  field('evidence.coverage', 'confidence', 'governance', ['EVID-001'], 'ratio', false),
+  field('evidence.templateStatus', 'confidence', 'governance', ['EVID-002'], 'category', false, 'neutral'),
+  field('asset.strategicLifespan', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.technicalHealth', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.businessCriticality', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.ownershipModel', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.vendorRoadmap', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.operatingStability', 'context', 'modernization', ['MOD-001'], 'category'),
+  field('asset.accountableOwner', 'context', 'modernization', ['MOD-001'], 'text'),
 ] as const;
 
-export interface FieldInput { fieldId: string; value: unknown; unit: FieldUnit; applicable?: boolean }
+export interface FieldInput { fieldId: string; value: unknown; unit: FieldUnit; contextId?: string; applicable?: boolean }
 
 export const validateFieldRegistry = (registry: readonly FieldContract[] = FIELD_REGISTRY): string[] => {
   const errors: string[] = [];
   const ruleIds = new Set(RULE_REGISTRY.map(rule => rule.ruleId));
   const byId = new Map<string, FieldContract>();
-  for (const field of registry) {
-    const prior = byId.get(field.fieldId);
-    if (prior) {
-      errors.push(`${field.fieldId}: duplicate field ID`);
-      if (prior.use !== field.use && !field.allowedDualUseReason && !prior.allowedDualUseReason) errors.push(`${field.fieldId}: dual decision use requires an allowed reason`);
-    }
-    byId.set(field.fieldId, field);
-    if (field.use !== 'context' && field.ruleIds.length === 0) errors.push(`${field.fieldId}: missing rule ID`);
-    for (const ruleId of field.ruleIds) if (!ruleIds.has(ruleId)) errors.push(`${field.fieldId}: unknown rule ${ruleId}`);
-    if (field.templateVerified) errors.push(`${field.fieldId}: template suggestion cannot be verified`);
+  for (const item of registry) {
+    const prior = byId.get(item.fieldId);
+    if (prior) errors.push(`${item.fieldId}: duplicate field ID`);
+    byId.set(item.fieldId, item);
+    if (item.use !== 'context' && item.ruleIds.length === 0) errors.push(`${item.fieldId}: missing rule ID`);
+    for (const ruleId of item.ruleIds) if (!ruleIds.has(ruleId)) errors.push(`${item.fieldId}: unknown rule ${ruleId}`);
+    if (item.templateVerified) errors.push(`${item.fieldId}: template suggestion cannot be verified`);
   }
-  for (const field of registry) if (field.applicability && !byId.has(field.applicability.fieldId)) errors.push(`${field.fieldId}: applicability references unknown field ${field.applicability.fieldId}`);
+  for (const item of registry) if (item.applicability) {
+    const controller = byId.get(item.applicability.fieldId);
+    if (!controller) errors.push(`${item.fieldId}: applicability references unknown field ${item.applicability.fieldId}`);
+    else {
+      if (controller.unit !== 'boolean' && controller.unit !== 'category') errors.push(`${item.fieldId}: applicability controller must be boolean or category`);
+      if (controller.use === 'context' && controller.ruleIds.length === 0) errors.push(`${item.fieldId}: applicability controller must have decision semantics`);
+    }
+  }
   return errors;
 };
 
 export const validateDecisionFieldInputs = (inputs: readonly FieldInput[], registry: readonly FieldContract[] = FIELD_REGISTRY): string[] => {
   const errors: string[] = [];
-  const contracts = new Map(registry.map(field => [field.fieldId, field]));
-  const seen = new Set<string>();
+  const contracts = new Map(registry.map(item => [item.fieldId, item]));
+  const scoped = new Map(inputs.map(input => [`${input.contextId ?? '__global'}:${input.fieldId}`, input]));
   for (const input of inputs) {
     const contract = contracts.get(input.fieldId);
     if (!contract) { errors.push(`${input.fieldId}: unknown field`); continue; }
-    if (seen.has(input.fieldId)) errors.push(`${input.fieldId}: duplicate input`);
-    seen.add(input.fieldId);
     if (contract.unit !== input.unit) errors.push(`${input.fieldId}: expected ${contract.unit}, received ${input.unit}`);
-    if (input.applicable === false && input.value !== null && input.value !== undefined) errors.push(`${input.fieldId}: value supplied when field is not applicable`);
+    if (contract.applicability) {
+      const controller = scoped.get(`${input.contextId ?? '__global'}:${contract.applicability.fieldId}`);
+      if (!controller) errors.push(`${input.fieldId}: missing applicability controller ${contract.applicability.fieldId}`);
+      else {
+        const applicable = controller.value === contract.applicability.equals;
+        if (input.applicable !== undefined && input.applicable !== applicable) errors.push(`${input.fieldId}: supplied applicability does not match ${contract.applicability.fieldId}`);
+        if (!applicable && input.value !== null && input.value !== undefined) errors.push(`${input.fieldId}: value supplied when field is not applicable`);
+      }
+    } else if (input.applicable === false && input.value !== null && input.value !== undefined) errors.push(`${input.fieldId}: unconditional field cannot be marked not applicable`);
+    if (input.value !== null && input.value !== undefined) {
+      if (input.unit === 'boolean' && typeof input.value !== 'boolean') errors.push(`${input.fieldId}: expected boolean value`);
+      if (input.unit === 'ratio' && (typeof input.value !== 'number' || !Number.isFinite(input.value) || input.value < 0 || input.value > 1)) errors.push(`${input.fieldId}: expected finite ratio value`);
+      if ((input.unit === 'category' || input.unit === 'text') && typeof input.value !== 'string') errors.push(`${input.fieldId}: expected string value`);
+      if (input.unit === 'count' && (typeof input.value !== 'number' || !Number.isSafeInteger(input.value) || input.value < 0)) errors.push(`${input.fieldId}: expected non-negative integer value`);
+    }
   }
   return errors;
 };
@@ -100,6 +134,9 @@ export const validateDecisionFieldInputs = (inputs: readonly FieldInput[], regis
 export const validateEvidenceLinks = (evidence: readonly EvidenceLink[]): string[] => evidence.flatMap(item => {
   const errors: string[] = [];
   if (item.sourceType === 'template' && (item.validated || item.status === 'validated')) errors.push(`${item.id}: template suggestion cannot be verified evidence`);
-  if (item.status === 'validated' && (!item.owner?.trim() || item.claimIds.length === 0)) errors.push(`${item.id}: validated evidence requires an owner and claim links`);
+  if (item.status === 'validated' && (!item.validated || !item.owner?.trim() || item.claimIds.length === 0)) errors.push(`${item.id}: validated evidence requires validation, an owner, and claim links`);
+  if (item.validated && item.status !== 'validated') errors.push(`${item.id}: validated flag requires validated status`);
+  if (item.capturedAt && !Number.isFinite(Date.parse(item.capturedAt))) errors.push(`${item.id}: capturedAt must be an ISO timestamp`);
+  if (item.validUntil && !Number.isFinite(Date.parse(item.validUntil))) errors.push(`${item.id}: validUntil must be an ISO timestamp`);
   return errors;
 });

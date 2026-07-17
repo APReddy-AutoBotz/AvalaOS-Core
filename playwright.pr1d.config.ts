@@ -14,7 +14,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4183',
     url: 'http://127.0.0.1:4183',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
     env: {
       ...process.env,
       VITE_AVALA_RUNTIME_MODE: 'pilot',
