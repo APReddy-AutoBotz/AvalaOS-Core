@@ -391,7 +391,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   };
   await expectExactVisible('Legacy V1 | assess-core-2026-05.');
   await expectExactVisible('Read-only | reviewer-ready');
-  await expectExactVisible('Engine evaluated; reviewers decide.');
+  await expectExactVisible('Deterministic evaluation completed; independent evidence and governance review not yet completed.');
   await expectExactVisible('Hard stop: prohibited actions cannot proceed.');
   await expectExactVisible('No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.');
   await expectExactVisible('V2 approval, Govern resolution, Studio generation, export, and external sharing are not available in this foundation boundary.');

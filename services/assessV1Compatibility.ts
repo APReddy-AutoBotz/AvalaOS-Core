@@ -77,7 +77,7 @@ export const cloneV1AssessmentToV2 = (assessment: Assessment, options: CloneV1As
     id: deterministicV1EvidenceId(assessment.id, item.id),
     claimIds: [item.linkedField ? `v1.responses.${item.linkedField}` : `v1.evidence.${item.id}`],
     sourceType: 'document', status: ASSESS_V1_TO_V2_CLONE_CONTRACT.evidenceStatus, validated: ASSESS_V1_TO_V2_CLONE_CONTRACT.evidenceValidated,
-    ...(typeof item.owner === 'string' && item.owner.trim() ? { owner: item.owner } : {}), reviewerIds: [], contradictory: false,
+    ...(typeof item.owner === 'string' && item.owner.trim() ? { owner: item.owner } : {}),
   }));
   const evidenceForClaim = new Map(importedEvidence.flatMap(item => item.claimIds.map(claimId => [claimId, item.id] as const)));
   for (const fact of importedFacts) { const evidenceId = evidenceForClaim.get(fact.fieldId); if (evidenceId) fact.evidenceIds.push(evidenceId); }
