@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { AvalaLogo, SparklesIcon, BuildingOfficeIcon } from '../shared/icons';
+import { SparklesIcon, BuildingOfficeIcon } from '../shared/icons';
+import { AvalaLogo } from '../shared/brand';
 
 interface OnboardingWizardProps {
   onComplete: (orgName: string) => void;

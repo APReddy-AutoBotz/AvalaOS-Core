@@ -63,7 +63,7 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
     const renderCurrentView = () => {
         switch (view) {
             case View.BOARDS:
-                return <BoardsView tasks={activeTasks} projects={[project]} epics={epics} users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
+                return <BoardsView tasks={activeTasks} projects={[project]} epics={epics} title={`${project.name} delivery board`} contextLabel="Project delivery" users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
             case View.LIST:
                 return <TaskListView tasks={activeTasks} projects={[project]} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
             case View.GANTT:

@@ -9,11 +9,11 @@ import {
   ClipboardListIcon,
   DocumentTextIcon,
   KeyIcon,
-  AvalaWordmark,
   SparklesIcon,
   UsersIcon,
   ViewBoardsIcon,
 } from '../shared/icons';
+import { AvalaWordmark } from '../shared/brand';
 import { useAuth } from './AuthProvider';
 import { getRuntimeBoundaryError, isLocalRuntimeEnabled } from '../../services/supabaseClient';
 

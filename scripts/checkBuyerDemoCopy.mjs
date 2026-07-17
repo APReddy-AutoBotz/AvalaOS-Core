@@ -153,7 +153,7 @@ assert.ok(moduleConfig.includes('human sign-off'), 'Avala Studio module copy sho
 assert.ok(moduleConfig.includes('Readiness, lineage, blockers, value signals'), 'Avala Monitor module copy should use readiness/lineage/blocker/value signal wording.');
 assert.equal(/telemetry/i.test(moduleConfig), false, 'Avala Monitor module copy should not imply telemetry.');
 
-const login = read('components/auth/LoginView.tsx');
+const login = read('components/auth/EnterpriseAccessView.tsx');
 assert.ok(login.includes('Editable review drafts'), 'Login module pillar should frame Studio outputs as editable review drafts.');
 assert.ok(login.includes('Readiness, lineage, blockers'), 'Login module pillar should frame Monitor as readiness/lineage/blocker visibility.');
 assert.ok(login.includes('Monitor readiness, lineage, blocker, and value signals'), 'Login proof points should use safe Monitor wording.');

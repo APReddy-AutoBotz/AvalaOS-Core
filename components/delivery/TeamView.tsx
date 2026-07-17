@@ -30,9 +30,9 @@ const TeamView: React.FC<TeamViewProps> = (props) => {
     const renderCurrentView = () => {
         switch (view) {
             case View.TEAMS:
-                return <BoardsView tasks={activeTasks} projects={projects} epics={epics} users={members} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
+                return <BoardsView tasks={activeTasks} projects={projects} epics={epics} title="Team delivery board" contextLabel={team.name} users={members} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
             case View.BOARDS:
-                return <BoardsView tasks={activeTasks} projects={projects} epics={epics} users={members} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
+                return <BoardsView tasks={activeTasks} projects={projects} epics={epics} title="Delivery control board" contextLabel={team.name} users={members} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
             case View.LIST:
                 return <TaskListView tasks={activeTasks} projects={projects} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
             default:

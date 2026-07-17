@@ -4,43 +4,6 @@ type IconProps = {
     className?: string;
 };
 
-export const AvalaWordmark: React.FC<IconProps> = ({ className }) => (
-    <svg className={className} viewBox="0 0 330 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvalaOS Core">
-        <text x="0" y="68" fill="var(--kp-logo-word, #002C4B)" fontFamily="'Playfair Display', Georgia, serif" fontSize="62" fontWeight="800">Avala</text>
-        <g transform="translate(112 11)">
-            <path d="M20 0V12" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
-            <path d="M3 17L12 23" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
-            <path d="M37 17L28 23" stroke="#E85D04" strokeWidth="5" strokeLinecap="round" />
-            <path d="M8 5L14 13" stroke="#E85D04" strokeWidth="4" strokeLinecap="round" />
-            <path d="M32 5L26 13" stroke="#E85D04" strokeWidth="4" strokeLinecap="round" />
-        </g>
-        <g transform="translate(198 17)">
-            <rect x="2" y="2" width="112" height="62" rx="11" fill="var(--kp-logo-pm-bg, rgba(255, 188, 3, 0.12))" stroke="#FFBC03" strokeWidth="5" />
-            <text x="14" y="44" fill="#FFBC03" fontFamily="Inter, sans-serif" fontSize="26" fontWeight="900">CORE</text>
-        </g>
-    </svg>
-);
-
-export const AvalaLogo: React.FC<IconProps> = ({ className }) => (
-    <svg className={className} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-            <linearGradient id="avala-mark-core" x1="8" y1="7" x2="40" y2="41" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#002C4B" />
-                <stop offset="0.58" stopColor="#003F6B" />
-                <stop offset="1" stopColor="#FFBC03" />
-            </linearGradient>
-            <linearGradient id="avala-mark-edge" x1="12" y1="10" x2="36" y2="39" gradientUnits="userSpaceOnUse">
-                <stop stopColor="white" stopOpacity="0.96" />
-                <stop offset="1" stopColor="white" stopOpacity="0.58" />
-            </linearGradient>
-        </defs>
-        <rect x="4.5" y="4.5" width="39" height="39" rx="12" fill="#002C4B" />
-        <rect x="5.5" y="5.5" width="37" height="37" rx="11" stroke="url(#avala-mark-core)" strokeWidth="2" />
-        <path d="M23.8 12.5L35.5 34H30.5L28.3 29.8H19.4L17.2 34H12.4L23.8 12.5ZM21.5 25.7H26.1L23.8 21L21.5 25.7Z" fill="url(#avala-mark-edge)" />
-        <circle cx="36.3" cy="11.7" r="2.2" fill="#FFBC03" />
-    </svg>
-);
-
 export const MoonIcon: React.FC<IconProps> = ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
