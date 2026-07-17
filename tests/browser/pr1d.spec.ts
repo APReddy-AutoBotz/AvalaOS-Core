@@ -404,6 +404,12 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   const violations=await new AxeBuilder({page}).include('[data-testid="assess-v2-workspace"]').analyze();
   expect(violations.violations.filter(item=>['serious','critical'].includes(item.impact || ''))).toEqual([]);
   expect(errors.filter(item=>!item.includes('Failed to load resource: net::ERR_FAILED'))).toEqual([]);
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await page.getByRole('button',{name:'View'}).first().click();
+  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
+  await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
 });
 
 
@@ -451,21 +457,6 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toHaveLength(1);
 });
 
-test('persisted reviewer-ready Decision Pack is reopened after remount', async ({ page }) => {
-  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
-  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
-  await page.getByRole('button',{name:'Add minimum working structure'}).click();
-  await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
-  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
-  await page.getByRole('button',{name:'View'}).first().click();
-  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
-  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toHaveLength(1);
-});
 test('incomplete V2 authoring cannot finalize or send a finalization command', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
@@ -499,7 +490,7 @@ test('V2 version conflict prevents save success and returns to a safe reload sta
   await page.getByRole('button',{name:'Save V2 draft'}).click();
   await expect(page.getByText(/changed on the server/i)).toBeVisible();
   await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
-  await expect(page.getByLabel('Primitive 1 name')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Add minimum working structure'})).toBeVisible();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert')).toEqual([]);
 });

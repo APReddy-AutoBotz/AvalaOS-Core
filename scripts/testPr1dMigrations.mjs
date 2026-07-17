@@ -155,7 +155,7 @@ try {
     }
   }
 
-  const authorizationVersion = Number((await test.query(
+  let authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
   const callCreate = (id, key, number) => asRole(test, 'service_role', () => test.query(
@@ -258,6 +258,9 @@ try {
     assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1',[deniedCaseId])).rows[0].n),0);
     await test.query('INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,$2)', ['11000000-0000-4000-8000-000000000012', capability]);
   }
+  authorizationVersion = Number((await test.query(
+    'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
+  )).rows[0].version);
   const rejectedClone = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs('31000000-0000-4000-8000-000000000097',V1,'Rejected clone','wrong-contract',29,'clone-wrong-contract'),
