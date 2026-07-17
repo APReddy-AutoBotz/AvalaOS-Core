@@ -441,6 +441,23 @@ test('V1 clone reports real counts, exposes imported suggestions, and persists c
   expect(clone?.payload.importedFacts).toBeUndefined();
 });
 
+test('displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByLabel('Primitive 1 primitive.rulesStable').selectOption('true');
+  await page.getByText('3. Applications and interactions').evaluate(element => (element as HTMLElement).click());
+  await page.getByLabel('Application 1 strategic lifespan').selectOption('long');
+  await page.getByLabel('Application 1 accountable owner').fill('process-owner');
+  await page.getByLabel('Interaction 1 data classification').selectOption('Internal');
+  for (const fact of ['interfaceAvailable','operationCovered','apiDocumented','errorContract']) {
+    await page.getByLabel(`Interaction 1 ${fact}`).selectOption('true');
+  }
+  await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
+  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
+});
 test('persisted V2 draft is resumed after remount without duplicate creation', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();

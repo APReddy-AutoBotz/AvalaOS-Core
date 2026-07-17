@@ -134,3 +134,7 @@ PR 1D source and disposable-test evidence cannot prove hosted RLS, deployment, p
 PR 1D permits only author-controlled evidence submission (suggested or submitted, with validated false). It does not create evidence approval, independent reviewer attestation, reviewer assignment, Govern resolution, Studio handoff, export, or sharing. The Edge parser rejects validated/rejected states, reviewer IDs, and review receipt/attestation fields; an additive database trigger independently rejects author-attestation payloads even if a private RPC is called directly.
 
 Verified confidence is reserved for an immutable, server-authoritative, independently authorized evidence-attestation projection. That projection and its review command are PR 1E work. Consequently the PR 1D authoring/finalization path is reviewer-ready only and submitted claim-linked evidence can be no higher than Partially Evidenced; V1 imports remain submitted, unvalidated, and provenance-linked. Rollback remains the existing V2 disable/read-only fallback; no destructive migration rollback is permitted.
+
+### Authoring completeness correction
+
+The V2 workspace exposes canonical primitive fact controls and editable application lifecycle and accountable-owner fields. These inputs remain author-controlled facts; deterministic finalization validates their completeness and evidence linkage server-side.

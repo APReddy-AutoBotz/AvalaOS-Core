@@ -67,3 +67,7 @@ This final acceptance-record update changes only current evidence/status. It doe
 PR 1D permits only author-controlled evidence submission (suggested or submitted, with validated false). It does not create evidence approval, independent reviewer attestation, reviewer assignment, Govern resolution, Studio handoff, export, or sharing. The Edge parser rejects validated/rejected states, reviewer IDs, and review receipt/attestation fields; an additive database trigger independently rejects author-attestation payloads even if a private RPC is called directly.
 
 Verified confidence is reserved for an immutable, server-authoritative, independently authorized evidence-attestation projection. That projection and its review command are PR 1E work. Consequently the PR 1D authoring/finalization path is reviewer-ready only and submitted claim-linked evidence can be no higher than Partially Evidenced; V1 imports remain submitted, unvalidated, and provenance-linked. Rollback remains the existing V2 disable/read-only fallback; no destructive migration rollback is permitted.
+
+### Final review authoring-completeness correction
+
+The P1 primitive-fact and application-lifecycle editor findings are corrected in the implementation boundary. Executed local evidence includes TypeScript, PR 1D source lint, production build, and the focused displayed-controls finalization browser journey; fresh final-head CI is required before review-thread resolution and readiness.

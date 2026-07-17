@@ -60,6 +60,9 @@ for (const [key, capability] of Object.entries({
 requireText(handlers, 'ASSESS_V2_COMMAND_CAPABILITY', 'server uses canonical capability mapping');
 requireText(workspace, 'ASSESS_V2_CAPABILITIES.draftWrite', 'UI uses canonical draft-write capability');
 requireText(workspace, 'Independent review: pending', 'Decision Pack states independent review boundary');
+requireText(workspace, 'primitiveFactKeys.map', 'UI exposes primitive fact authoring');
+requireText(workspace, 'accountable owner', 'UI exposes application accountable-owner authoring');
+requireText(browserFixture, 'displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', 'browser proves displayed required controls can finalize');
 forbidText(workspace, "['suggested','submitted','validated','rejected']", 'validated authoring control');
 requireText(browserFixture, 'ASSESS_V2_CAPABILITIES.draftWrite', 'browser fixture uses canonical draft-write capability');
 for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'server'], [client, 'client'], [workspace, 'UI'], [browserFixture, 'browser fixture'], [migrations, 'migration'], [architecture, 'architecture'], [migrationDoc, 'migration docs']]) {

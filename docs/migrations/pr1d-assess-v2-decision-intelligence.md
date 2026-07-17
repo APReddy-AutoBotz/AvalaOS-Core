@@ -29,3 +29,7 @@ Disable V2 or set its runtime control to read-only, preserve all V1/V2 rows, imp
 PR 1D permits only author-controlled evidence submission (suggested or submitted, with validated false). It does not create evidence approval, independent reviewer attestation, reviewer assignment, Govern resolution, Studio handoff, export, or sharing. The Edge parser rejects validated/rejected states, reviewer IDs, and review receipt/attestation fields; an additive database trigger independently rejects author-attestation payloads even if a private RPC is called directly.
 
 Verified confidence is reserved for an immutable, server-authoritative, independently authorized evidence-attestation projection. That projection and its review command are PR 1E work. Consequently the PR 1D authoring/finalization path is reviewer-ready only and submitted claim-linked evidence can be no higher than Partially Evidenced; V1 imports remain submitted, unvalidated, and provenance-linked. Rollback remains the existing V2 disable/read-only fallback; no destructive migration rollback is permitted.
+
+### Authoring completeness acceptance
+
+The browser acceptance path must prove a scaffolded case can supply a known user-sourced primitive fact, an application lifecycle fact, and an accountable owner through displayed controls before server finalization. Rollback remains V2 disable/read-only with records preserved.
