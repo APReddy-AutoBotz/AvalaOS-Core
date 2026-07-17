@@ -36,6 +36,24 @@ const asRole = async (client, role, run) => {
   try { return await run(); } finally { await client.query('RESET ROLE'); }
 };
 const canonicalize = (input) => {
+  if (typeof input === 'number') {
+    if (Object.is(input, -0)) return '0';
+    const serialized = String(input);
+    if (!/[eE]/.test(serialized)) return serialized;
+    const [coefficient, exponentText] = serialized.toLowerCase().split('e');
+    const exponent = Number(exponentText);
+    const negative = coefficient.startsWith('-');
+    const unsigned = negative ? coefficient.slice(1) : coefficient;
+    const [integer, fraction = ''] = unsigned.split('.');
+    const digits = integer + fraction;
+    const decimalIndex = integer.length + exponent;
+    const expanded = decimalIndex <= 0
+      ? `0.${'0'.repeat(-decimalIndex)}${digits}`
+      : decimalIndex >= digits.length
+        ? `${digits}${'0'.repeat(decimalIndex - digits.length)}`
+        : `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+    return negative ? `-${expanded}` : expanded;
+  }
   if (input === null || typeof input !== 'object') return JSON.stringify(input);
   if (Array.isArray(input)) return `[${input.map(canonicalize).join(',')}]`;
   return `{${Object.keys(input).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(input[key])}`).join(',')}}`;
@@ -480,6 +498,9 @@ try {
   )).rows[0].value;
   const verifierCountsBefore = await verifierCounts();
   assert.equal(await verifyCanonical(), true);
+  const exponentPayload = { volumeShare: 1e-7, upperBound: 1e21 };
+  const exponentBound = bound('output', NEG_BINDING, 1, exponentPayload);
+  assert.equal(await verifyCanonical({ canonical: exponentBound.canonical, snapshot: exponentPayload, hash: exponentBound.hash }), true, 'exponent-form numbers use PostgreSQL-compatible decimal canonicalization');
   const verifierNegatives = [
     { name: 'organization binding', organizationId: OB },
     { name: 'workspace binding', workspaceId: WB },

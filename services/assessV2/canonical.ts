@@ -26,7 +26,26 @@ const assertJsonValue = (value: unknown, seen: Set<object>): void => {
   }
   seen.delete(value);
 };
+const canonicalNumber = (value: number): string => {
+  if (Object.is(value, -0)) return '0';
+  const serialized = String(value);
+  if (!/[eE]/.test(serialized)) return serialized;
+  const [coefficient, exponentText] = serialized.toLowerCase().split('e');
+  const exponent = Number(exponentText);
+  const negative = coefficient.startsWith('-');
+  const unsigned = negative ? coefficient.slice(1) : coefficient;
+  const [integer, fraction = ''] = unsigned.split('.');
+  const digits = integer + fraction;
+  const decimalIndex = integer.length + exponent;
+  const expanded = decimalIndex <= 0
+    ? `0.${'0'.repeat(-decimalIndex)}${digits}`
+    : decimalIndex >= digits.length
+      ? `${digits}${'0'.repeat(decimalIndex - digits.length)}`
+      : `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+  return negative ? `-${expanded}` : expanded;
+};
 const canonical = (value: unknown): string => {
+  if (typeof value === 'number') return canonicalNumber(value);
   if (value === null || typeof value !== 'object') return JSON.stringify(value) as string;
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   const record = value as Record<string, unknown>;

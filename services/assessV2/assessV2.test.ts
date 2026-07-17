@@ -32,6 +32,7 @@ const run = async () => {
   assert.ok(validateEvidenceLinks([{ id: 'template', claimIds: ['claim'], sourceType: 'template', status: 'validated', validated: true, owner: 'owner' } as unknown as import('./types').EvidenceLink]).length);
 
   assert.equal(canonicalizeDecisionPayload({ b: 2, a: 1 }), '{"a":1,"b":2}');
+  assert.equal(canonicalizeDecisionPayload({ tiny: 1e-7, huge: 1e21, negativeZero: -0 }), '{"huge":1000000000000000000000,"negativeZero":0,"tiny":0.0000001}');
   assert.equal(await sha256Hex({ b: 2, a: 1 }), '43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777');
   assert.throws(() => canonicalizeDecisionPayload({ invalid: undefined }), /undefined/);
   assert.throws(() => canonicalizeDecisionPayload({ invalid: Number.NaN }), /non-finite/);
