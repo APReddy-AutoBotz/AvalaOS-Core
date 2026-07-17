@@ -15,7 +15,7 @@ import {
 import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 import { buildDecisionPackRenderModel } from '../../services/assessV2/decisionVersion';
 import { FIELD_REGISTRY } from '../../services/assessV2/registry';
-import { createUnknownAgentNecessityFacts, type PrimitiveType } from '../../services/assessV2/types';
+import { createUnknownAgentNecessityFacts, type CaseFact, type PrimitiveType } from '../../services/assessV2/types';
 
 interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
@@ -84,7 +84,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     draft.primitives.some(item => !item.name.trim() || !item.description.trim()) && 'a meaningful name and description for every primitive',
     draft.interactions.some(item => !draft.primitives.some(primitive => primitive.id === item.primitiveId) || !draft.applicationAssets.some(asset => asset.id === item.assetId)) && 'valid primitive and application references for every interaction',
     draft.evidenceLinks.some(item => !item.claimIds.length) && 'an exact claim for every evidence item',
-    !draft.primitives.some(item => Object.values(item.facts).some(fact => fact.value !== null && fact.status !== 'unknown' && fact.source !== 'template')) && 'at least one known process fact',
+    !draft.primitives.some(item => (Object.values(item.facts) as CaseFact[]).some(fact => fact.value !== null && fact.status !== 'unknown' && fact.source !== 'template')) && 'at least one known process fact',
     !draft.applicationAssets.some(item => Boolean(item.accountableOwner?.trim()) && [item.strategicLifespan, item.technicalHealth, item.businessCriticality, item.ownershipModel, item.vendorRoadmap, item.operatingStability].some(value => value !== 'unknown')) && 'application lifecycle and accountable owner facts',
   ].filter(Boolean) as string[] : [], [draft]);
 
