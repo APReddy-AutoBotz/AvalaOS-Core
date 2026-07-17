@@ -13,15 +13,17 @@ const forbidText = (source, fragment, label) => {
 
 const foundationName = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
 const correctionName = '20260715120000_pr1d_decision_integrity_correction.sql';
+const evidenceBoundaryName = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d')).sort();
-for (const expected of [foundationName, correctionName]) {
+for (const expected of [foundationName, correctionName, evidenceBoundaryName]) {
   if (!migrationNames.includes(expected)) throw new Error(`PR1D_MIGRATION_MISSING: ${expected}`);
 }
-if (migrationNames.length !== 2) throw new Error(`PR1D_MIGRATION_COUNT: expected 2, received ${migrationNames.length}`);
+if (migrationNames.length !== 3) throw new Error(`PR1D_MIGRATION_COUNT: expected 3, received ${migrationNames.length}`);
 
 const foundation = read(`supabase/migrations/${foundationName}`);
 const correction = read(`supabase/migrations/${correctionName}`);
-const migrations = `${foundation}\n${correction}`;
+const evidenceBoundary = read(`supabase/migrations/${evidenceBoundaryName}`);
+const migrations = `${foundation}\n${correction}\n${evidenceBoundary}`;
 const capabilities = read('services/assessV2/capabilities.ts');
 const command = read('supabase/functions/_shared/assessV2Command.ts');
 const handlers = read('supabase/functions/_shared/assessV2Handlers.ts');
@@ -57,6 +59,8 @@ for (const [key, capability] of Object.entries({
 }
 requireText(handlers, 'ASSESS_V2_COMMAND_CAPABILITY', 'server uses canonical capability mapping');
 requireText(workspace, 'ASSESS_V2_CAPABILITIES.draftWrite', 'UI uses canonical draft-write capability');
+requireText(workspace, 'Independent review: pending', 'Decision Pack states independent review boundary');
+forbidText(workspace, "['suggested','submitted','validated','rejected']", 'validated authoring control');
 requireText(browserFixture, 'ASSESS_V2_CAPABILITIES.draftWrite', 'browser fixture uses canonical draft-write capability');
 for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'server'], [client, 'client'], [workspace, 'UI'], [browserFixture, 'browser fixture'], [migrations, 'migration'], [architecture, 'architecture'], [migrationDoc, 'migration docs']]) {
   forbidText(source, "assess.v2.write", `obsolete capability in ${label}`);
@@ -81,6 +85,10 @@ requireText(database, 'serviceRoleKey', 'private service-role transport');
 requireText(router, 'assessV2ErrorBody', 'sanitized stable errors');
 requireText(registry, 'validateFieldRegistry', 'field/rule registry contract');
 requireText(evaluator, 'Bounded Agent', 'bounded-agent necessity gate');
+requireText(evaluator, 'Verified is unreachable', 'PR 1D cannot self-attest evidence');
+requireText(command, "['suggested', 'submitted']", 'draft parser permits only evidence submission states');
+forbidText(command, 'reviewerIds', 'caller-controlled reviewer authority');
+requireText(evidenceBoundary, 'PR1D_AUTHOR_ATTESTATION_FORBIDDEN', 'database rejects author attestation');
 requireText(decisionVersion, 'buildDecisionDigestV2', 'SHA-256 decision references');
 forbidText(decisionVersion, 'sha-lite', 'V1 lightweight hash reuse');
 

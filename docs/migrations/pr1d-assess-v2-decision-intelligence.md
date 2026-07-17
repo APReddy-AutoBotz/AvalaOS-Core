@@ -22,3 +22,10 @@ This source and disposable-test evidence does not establish deployment, pilot, p
 ## Rollback and recovery
 
 Disable V2 or set its runtime control to read-only, preserve all V1/V2 rows, imported facts/evidence, canonical snapshots/text, receipts, hashes, audits, and the corrected helper ACLs, then ship another additive forward fix. Do not grant direct helper execution as a rollback shortcut, destructively reverse either PR 1D migration, restore browser authority, silently reinterpret V2 through V1, or mutate finalized evidence.
+
+
+## P1 independent evidence-attestation correction
+
+PR 1D permits only author-controlled evidence submission (suggested or submitted, with validated false). It does not create evidence approval, independent reviewer attestation, reviewer assignment, Govern resolution, Studio handoff, export, or sharing. The Edge parser rejects validated/rejected states, reviewer IDs, and review receipt/attestation fields; an additive database trigger independently rejects author-attestation payloads even if a private RPC is called directly.
+
+Verified confidence is reserved for an immutable, server-authoritative, independently authorized evidence-attestation projection. That projection and its review command are PR 1E work. Consequently the PR 1D authoring/finalization path is reviewer-ready only and submitted claim-linked evidence can be no higher than Partially Evidenced; V1 imports remain submitted, unvalidated, and provenance-linked. Rollback remains the existing V2 disable/read-only fallback; no destructive migration rollback is permitted.

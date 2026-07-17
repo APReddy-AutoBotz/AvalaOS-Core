@@ -30,10 +30,11 @@ const agentRuleByKey = {
   controllable: 'AGENT-005',
 } as const;
 
-const verified = (evidence: EvidenceLink | undefined, asOf: string, claimId?: string): boolean => Boolean(
-  evidence && evidence.sourceType !== 'template' && evidence.status === 'validated' && evidence.validated &&
-  evidence.owner?.trim() && evidence.claimIds.length && (!claimId || evidence.claimIds.includes(claimId)) && !evidence.contradictory &&
-  (!evidence.validUntil || Date.parse(evidence.validUntil) >= Date.parse(asOf)),
+// PR 1D has no server-authoritative attestation relation: Verified is unreachable.
+const verified = (_evidence: EvidenceLink | undefined, _asOf: string, _claimId?: string): boolean => false;
+const submitted = (evidence: EvidenceLink | undefined, asOf: string, claimId?: string): boolean => Boolean(
+  evidence && evidence.sourceType !== 'template' && evidence.status === 'submitted' && evidence.validated === false && evidence.claimIds.length &&
+  (!claimId || evidence.claimIds.includes(claimId)) && (!evidence.validUntil || Date.parse(evidence.validUntil) >= Date.parse(asOf)),
 );
 
 const evidenceAsOf = (evidence: readonly EvidenceLink[]): string => evidence.map(item => item.capturedAt).filter((value): value is string => Boolean(value)).sort().at(-1) ?? '1970-01-01T00:00:00.000Z';
@@ -69,19 +70,18 @@ export const deriveEvidenceConfidence = (c: AssessmentCaseV2): EvidenceConfidenc
   const required = requiredEvidence(c);
   if (!required.length || !c.evidence.length) return 'Insufficient Evidence';
   const byId = new Map(c.evidence.map(item => [item.id, item]));
-  const count = required.filter(({ evidenceIds, claimId }) => evidenceIds.some(evidenceId => verified(byId.get(evidenceId), c.createdAt, claimId))).length;
-  return count === required.length ? 'Verified' : count > 0 ? 'Partially Evidenced' : 'Assumption-Led';
+  const count = required.filter(({ evidenceIds, claimId }) => evidenceIds.some(evidenceId => submitted(byId.get(evidenceId), c.updatedAt, claimId))).length;
+  return count > 0 ? 'Partially Evidenced' : c.evidence.some(item => item.status === 'suggested' || item.sourceType === 'template') ? 'Assumption-Led' : 'Insufficient Evidence';
 };
 
 const confidenceForEvidence = (ids: readonly string[], evidence: readonly EvidenceLink[], asOf = '1970-01-01T00:00:00.000Z', claimIds: readonly string[] = []): EvidenceConfidence => {
   if (!ids.length) return 'Insufficient Evidence';
   const byId = new Map(evidence.map(item => [item.id, item]));
   if (claimIds.length) {
-    const validClaims = claimIds.filter(claimId => ids.some(id => verified(byId.get(id), asOf, claimId))).length;
-    return validClaims === claimIds.length ? 'Verified' : validClaims > 0 ? 'Partially Evidenced' : 'Assumption-Led';
+    const submittedClaims = claimIds.filter(claimId => ids.some(id => submitted(byId.get(id), asOf, claimId))).length;
+    return submittedClaims > 0 ? 'Partially Evidenced' : 'Assumption-Led';
   }
-  const validEvidence = ids.filter(id => verified(byId.get(id), asOf)).length;
-  return validEvidence === ids.length ? 'Verified' : validEvidence > 0 ? 'Partially Evidenced' : 'Assumption-Led';
+  return ids.some(id => submitted(byId.get(id), asOf)) ? 'Partially Evidenced' : 'Assumption-Led';
 };
 
 export const evaluateAgentNecessity = (primitiveId: string, facts: AgentNecessityFacts, evidence: readonly EvidenceLink[] = [], asOf = evidenceAsOf(evidence)): CandidateEvaluation => {

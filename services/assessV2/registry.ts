@@ -10,7 +10,7 @@ export const RULE_REGISTRY: readonly RuleContract[] = [
   { ruleId: 'AGENT-005', description: 'Controllability is required for bounded agency.', engineeringBaseline: true },
   { ruleId: 'CAND-001', description: 'Primitive type identifies candidates but required technical facts determine fit.', engineeringBaseline: true },
   { ruleId: 'COMPOSE-001', description: 'Select the least-complex compatible component set per primitive.', engineeringBaseline: true },
-  { ruleId: 'EVID-001', description: 'Confidence derives from claim-linked validated evidence coverage.', engineeringBaseline: true },
+  { ruleId: 'EVID-001', description: 'Verified confidence requires claim-linked independent server-authoritative attestation; submitted evidence is only partial.', engineeringBaseline: true },
   { ruleId: 'EVID-002', description: 'Template suggestions and assumptions are never verified evidence.', engineeringBaseline: true },
   { ruleId: 'INT-001', description: 'Interface and operation coverage gate the declared API mode only.', engineeringBaseline: true },
   { ruleId: 'INT-002', description: 'Machine identity gates autonomous writes.', engineeringBaseline: true },
@@ -133,9 +133,8 @@ export const validateDecisionFieldInputs = (inputs: readonly FieldInput[], regis
 
 export const validateEvidenceLinks = (evidence: readonly EvidenceLink[]): string[] => evidence.flatMap(item => {
   const errors: string[] = [];
-  if (item.sourceType === 'template' && (item.validated || item.status === 'validated')) errors.push(`${item.id}: template suggestion cannot be verified evidence`);
-  if (item.status === 'validated' && (!item.validated || !item.owner?.trim() || item.claimIds.length === 0)) errors.push(`${item.id}: validated evidence requires validation, an owner, and claim links`);
-  if (item.validated && item.status !== 'validated') errors.push(`${item.id}: validated flag requires validated status`);
+  if (item.validated !== false) errors.push(`${item.id}: PR 1D author evidence cannot be validated`);
+  if (item.status !== 'suggested' && item.status !== 'submitted') errors.push(`${item.id}: PR 1D author evidence must be suggested or submitted`);
   if (item.capturedAt && !Number.isFinite(Date.parse(item.capturedAt))) errors.push(`${item.id}: capturedAt must be an ISO timestamp`);
   if (item.validUntil && !Number.isFinite(Date.parse(item.validUntil))) errors.push(`${item.id}: validUntil must be an ISO timestamp`);
   return errors;

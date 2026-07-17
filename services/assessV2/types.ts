@@ -11,17 +11,24 @@ export type InteractionMode = 'read' | 'write' | 'event' | 'ui' | 'operational';
 export type Readiness = 'Ready' | 'Conditional' | 'Prohibited' | 'Unknown' | 'Not Applicable';
 export type ModernizationDisposition = 'Retain' | 'Native Integration' | 'API Facade' | 'Semantic Bridge' | 'Event Bridge' | 'Temporary RPA Bridge' | 'Refactor' | 'Replatform' | 'Replace' | 'Incremental Rebuild' | 'Consolidate' | 'Retire';
 
-export interface EvidenceLink {
+/** Author-controlled submission. Independent attestation is deliberately PR 1E work. */
+export interface EvidenceSubmission {
   id: string;
   claimIds: string[];
   sourceType: 'system-record' | 'document' | 'interview' | 'observation' | 'test' | 'template';
-  status: 'suggested' | 'submitted' | 'validated' | 'rejected';
-  validated: boolean;
+  status: 'suggested' | 'submitted';
+  validated: false;
   owner?: string;
   capturedAt?: string;
   validUntil?: string;
-  reviewerIds?: string[];
-  contradictory?: boolean;
+}
+export type EvidenceLink = EvidenceSubmission;
+/** PR 1E-only trusted projection; draft payloads and PR 1D persistence cannot create it. */
+export interface EvidenceReviewAttestation {
+  evidenceId: string; claimIds: string[]; caseId: string; caseVersion: number;
+  organizationId: string; workspaceId: string; reviewerActorId: string;
+  reviewerAuthorizationVersion: number; outcome: 'accepted' | 'rejected';
+  reviewedAt: string; receiptId: string;
 }
 
 export interface CaseFact<T = unknown> {

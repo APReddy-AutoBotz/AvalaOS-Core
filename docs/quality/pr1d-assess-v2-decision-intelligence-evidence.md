@@ -60,3 +60,10 @@ Implementation head: `f43c98505e0467853e776e993723d8c2f764b508`. Push workflow `
 The implementation head recorded 98.47% lines, 84.27% branches, and 95.96% functions; 38/38 complete browser journeys and 14/14 focused PR 1D browser journeys passed. Dependency audit found zero vulnerabilities; application and Edge typechecks, PR 1A-1D gates, AI-boundary and secret-hygiene scans, and production build passed. Live/hosted validation was not run.
 
 This final acceptance-record update changes only current evidence/status. It does not alter product behavior, V1 scoring, V2 decision logic, capability authority, RLS, hashes, traceability, clone behavior, audit behavior, or browser behavior. Its own CI is recorded in the PR description and GitHub checks to avoid a self-referential evidence-commit cycle.
+
+
+## P1 independent evidence-attestation correction
+
+PR 1D permits only author-controlled evidence submission (suggested or submitted, with validated false). It does not create evidence approval, independent reviewer attestation, reviewer assignment, Govern resolution, Studio handoff, export, or sharing. The Edge parser rejects validated/rejected states, reviewer IDs, and review receipt/attestation fields; an additive database trigger independently rejects author-attestation payloads even if a private RPC is called directly.
+
+Verified confidence is reserved for an immutable, server-authoritative, independently authorized evidence-attestation projection. That projection and its review command are PR 1E work. Consequently the PR 1D authoring/finalization path is reviewer-ready only and submitted claim-linked evidence can be no higher than Partially Evidenced; V1 imports remain submitted, unvalidated, and provenance-linked. Rollback remains the existing V2 disable/read-only fallback; no destructive migration rollback is permitted.
