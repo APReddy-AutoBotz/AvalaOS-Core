@@ -33,6 +33,7 @@ assert.ok(clone.importedFacts?.every(item => item.status === 'assumed' || item.s
 assert.ok(clone.importedFacts?.every(item => item.source === 'v1-import'));
 assert.ok(clone.importedFacts?.filter(item => item.fieldId.startsWith('v1.responses.')).every(item => ASSESS_V1_IMPORT_SECTIONS.some(section => item.fieldId.startsWith(`v1.responses.${section}.`))));
 assert.ok(clone.evidence.every(item => item.validated === false && item.status === 'submitted'));
+assert.ok(clone.evidence.every(item => (item as typeof item & { reviewerIds?: unknown[]; contradictory?: boolean }).reviewerIds?.length === 0 && (item as typeof item & { reviewerIds?: unknown[]; contradictory?: boolean }).contradictory === false));
 assert.ok(clone.evidence.every(item => /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id)));
 assert.equal(deterministicV1EvidenceId(source.id, source.evidenceItems[0].id), clone.evidence[0].id);
 assert.equal(deterministicV1EvidenceId(source.id, source.evidenceItems[0].id), deterministicV1EvidenceId(source.id, source.evidenceItems[0].id));

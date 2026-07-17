@@ -73,11 +73,13 @@ export const cloneV1AssessmentToV2 = (assessment: Assessment, options: CloneV1As
   for (const section of ASSESS_V1_TO_V2_CLONE_CONTRACT.responseSections) flattenValues(responses[section], `v1.responses.${section}`, importedFacts);
   for (const assumption of assessment.assumptions) importedFacts.push({ fieldId: `v1.assumptions.${assumption.id}`, value: assumption.description, status: 'assumed', evidenceIds: [], source: ASSESS_V1_TO_V2_CLONE_CONTRACT.factSource });
 
-  const importedEvidence: EvidenceLink[] = assessment.evidenceItems.map(item => ({
+  // The private clone RPC has a legacy normalized-payload contract. These empty defaults are server-generated; author draft commands cannot submit them.
+  type TrustedCloneEvidence = EvidenceLink & { reviewerIds: []; contradictory: false };
+  const importedEvidence: TrustedCloneEvidence[] = assessment.evidenceItems.map(item => ({
     id: deterministicV1EvidenceId(assessment.id, item.id),
     claimIds: [item.linkedField ? `v1.responses.${item.linkedField}` : `v1.evidence.${item.id}`],
     sourceType: 'document', status: ASSESS_V1_TO_V2_CLONE_CONTRACT.evidenceStatus, validated: ASSESS_V1_TO_V2_CLONE_CONTRACT.evidenceValidated,
-    ...(typeof item.owner === 'string' && item.owner.trim() ? { owner: item.owner } : {}),
+    ...(typeof item.owner === 'string' && item.owner.trim() ? { owner: item.owner } : {}), reviewerIds: [], contradictory: false,
   }));
   const evidenceForClaim = new Map(importedEvidence.flatMap(item => item.claimIds.map(claimId => [claimId, item.id] as const)));
   for (const fact of importedFacts) { const evidenceId = evidenceForClaim.get(fact.fieldId); if (evidenceId) fact.evidenceIds.push(evidenceId); }
