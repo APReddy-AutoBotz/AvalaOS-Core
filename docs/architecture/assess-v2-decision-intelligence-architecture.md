@@ -138,3 +138,8 @@ Verified confidence is reserved for an immutable, server-authoritative, independ
 ### Authoring completeness correction
 
 The V2 workspace exposes canonical primitive fact controls and editable application lifecycle and accountable-owner fields. These inputs remain author-controlled facts; deterministic finalization validates their completeness and evidence linkage server-side.
+
+
+### Locked-row clone projection authority
+
+The private clone RPC reconstructs the complete canonical V1-to-V2 projection from the locked same-tenant V1 assessment row before any receipt or V2 write. It normalizes only the six allowlisted response sections, assumptions, and evidence items; derives deterministic evidence surrogates and claim links; preserves declared section and source-array ordering; and requires exact JSON equality with the server-supplied imported facts and evidence. Shape-valid but fabricated allowed-section values, owners, claims, IDs, or assumption content are rejected with no case, receipt, audit, or evidence side effect.

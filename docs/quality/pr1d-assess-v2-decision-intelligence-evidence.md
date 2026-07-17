@@ -71,3 +71,8 @@ Verified confidence is reserved for an immutable, server-authoritative, independ
 ### Final review authoring-completeness correction
 
 The P1 primitive-fact and application-lifecycle editor findings are corrected in the implementation boundary. Executed local evidence includes TypeScript, PR 1D source lint, production build, and the focused displayed-controls finalization browser journey; fresh final-head CI is required before review-thread resolution and readiness.
+
+
+### Final review locked-row clone correction
+
+The final Codex review identified a confirmed source defect: the private clone RPC validated caller-supplied imported fact/evidence shape without proving exact equality to the locked V1 source row. The correction makes PostgreSQL independently derive the canonical projection and reject any mismatch before side effects. Static PR 1D migration/source guards passed locally. The isolated PostgreSQL harness was not run locally because `PR1D_MIGRATION_DATABASE_URL` was unavailable and Docker Desktop was not running; fresh final-head CI is required to execute the migration chain, deterministic evidence parity, fabricated fact/evidence rejection, and zero-side-effect assertions before this finding can be resolved.

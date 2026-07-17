@@ -33,3 +33,8 @@ Verified confidence is reserved for an immutable, server-authoritative, independ
 ### Authoring completeness acceptance
 
 The browser acceptance path must prove a scaffolded case can supply a known user-sourced primitive fact, an application lifecycle fact, and an accountable owner through displayed controls before server finalization. Rollback remains V2 disable/read-only with records preserved.
+
+
+### Locked-row clone projection acceptance
+
+The correction migration derives the canonical imported-fact and imported-evidence arrays inside the private clone RPC from the locked V1 row. It mirrors the TypeScript contract for declared section ordering, missing and empty response normalization, assumptions, deterministic evidence IDs, linked claims, owners, and last-link fact association, then rejects any non-exact caller projection before claiming an idempotency receipt. The isolated migration harness includes fabricated allowed-section fact and fabricated evidence-owner cases and requires zero case, receipt, privileged-audit, or evidence writes.

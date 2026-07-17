@@ -30,6 +30,8 @@ for (const field of ['p_source_process_id uuid', 'p_source_v1 jsonb', 'p_importe
 }
 assert.ok(correction.includes("p_source_v1 IS DISTINCT FROM jsonb_build_object("), 'SQL must independently bind canonical V1 provenance');
 assert.ok(correction.includes('p_source_process_id IS DISTINCT FROM a.process_id'), 'SQL must independently bind V1 process ancestry');
+assert.ok(correction.includes('p_imported_facts IS DISTINCT FROM expected_imported_facts'), 'SQL must compare imported facts exactly with the locked V1 row projection');
+assert.ok(correction.includes('p_imported_evidence IS DISTINCT FROM expected_imported_evidence'), 'SQL must compare imported evidence exactly with the locked V1 row projection');
 for (const field of ['importedFactCount', 'importedEvidenceCount']) {
   assert.ok(compatibility.includes(`'${field}'`) && correction.includes(`'${field}'`), `clone response contract missing ${field}`);
 }
@@ -60,7 +62,8 @@ for (const token of [
   'ADD COLUMN imported_facts jsonb NOT NULL',
   'pr1d_imported_facts_array_check',
   'public.pr1d_v1_import_facts',
-  "('processStructure'),('workPattern'),('dataProfile'),('judgment'),('systems'),('risk')",
+  'public.pr1d_v1_evidence_id',
+  "(1,'processStructure'),(2,'workPattern'),(3,'dataProfile'),(4,'judgment'),(5,'systems'),(6,'risk')",
   "evidence->>'status' <> 'submitted'",
   "evidence->'validated' <> 'false'::jsonb",
   "'source', 'v1-import'",

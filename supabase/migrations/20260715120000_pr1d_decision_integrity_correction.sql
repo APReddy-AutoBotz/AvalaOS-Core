@@ -19,30 +19,57 @@ LANGUAGE sql
 IMMUTABLE
 SET search_path = pg_catalog
 AS $$
-WITH RECURSIVE allowed(section) AS (
-  VALUES ('processStructure'),('workPattern'),('dataProfile'),('judgment'),('systems'),('risk')
-), walk(path, value) AS (
-  SELECT a.section, COALESCE(p_responses, '{}'::jsonb) -> a.section
+WITH RECURSIVE allowed(section_order,section) AS (
+  VALUES (1,'processStructure'),(2,'workPattern'),(3,'dataProfile'),(4,'judgment'),(5,'systems'),(6,'risk')
+), walk(section_order,path, value) AS (
+  SELECT a.section_order,a.section, COALESCE(COALESCE(p_responses, '{}'::jsonb) -> a.section,'null'::jsonb)
   FROM allowed a
-  WHERE COALESCE(p_responses, '{}'::jsonb) ? a.section
   UNION ALL
-  SELECT w.path || '.' || child.key, child.value
+  SELECT w.section_order,w.path || '.' || child.key, child.value
   FROM walk w
-  CROSS JOIN LATERAL jsonb_each(w.value) child
-  WHERE jsonb_typeof(w.value) = 'object'
+  CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(w.value)='object' THEN w.value ELSE '{}'::jsonb END) child
 ), leaves AS (
-  SELECT path, value
+  SELECT section_order,path, value
   FROM walk
   WHERE value IS NOT NULL AND jsonb_typeof(value) <> 'object'
 )
 SELECT COALESCE(jsonb_agg(jsonb_build_object(
   'fieldId', 'v1.responses.' || path,
-  'value', value,
-  'status', CASE WHEN value = 'null'::jsonb THEN 'unknown' ELSE 'assumed' END,
+  'value', CASE WHEN value = 'null'::jsonb OR value = '""'::jsonb THEN 'null'::jsonb ELSE value END,
+  'status', CASE WHEN value = 'null'::jsonb OR value = '""'::jsonb THEN 'unknown' ELSE 'assumed' END,
   'evidenceIds', '[]'::jsonb,
   'source', 'v1-import'
-) ORDER BY path), '[]'::jsonb)
+) ORDER BY section_order,path), '[]'::jsonb)
 FROM leaves
+$$;
+
+CREATE OR REPLACE FUNCTION public.pr1d_v1_evidence_id(p_assessment_id uuid,p_evidence_id text)
+RETURNS uuid
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  source_value text := 'assess-v1-evidence|' || p_assessment_id::text || '|' || p_evidence_id;
+  seeds bigint[] := ARRAY[2166136261,2654435769,2246822507,3266489909];
+  seed bigint;
+  hash_value bigint;
+  digest_hex text := '';
+  variant_nibble integer;
+  char_index integer;
+BEGIN
+  IF p_evidence_id !~ '^[A-Za-z0-9._:-]+$' THEN RETURN NULL; END IF;
+  FOREACH seed IN ARRAY seeds LOOP
+    hash_value := seed;
+    FOR char_index IN 1..length(source_value) LOOP
+      hash_value := mod((hash_value # ascii(substr(source_value,char_index,1))) * 16777619,4294967296);
+    END LOOP;
+    digest_hex := digest_hex || lpad(to_hex(hash_value),8,'0');
+  END LOOP;
+  variant_nibble := ((strpos('0123456789abcdef',substr(digest_hex,17,1))-1) & 3) | 8;
+  RETURN (substr(digest_hex,1,8) || '-' || substr(digest_hex,9,4) || '-5' || substr(digest_hex,14,3) || '-' || to_hex(variant_nibble) || substr(digest_hex,18,3) || '-' || substr(digest_hex,21,12))::uuid;
+END
 $$;
 
 DROP FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,text,bigint);
@@ -64,6 +91,14 @@ DECLARE
   r public.assess_command_receipts;
   c public.assess_v2_cases;
   v public.assess_v2_case_versions;
+  source_aggregate jsonb;
+  source_responses jsonb;
+  source_evidence jsonb;
+  source_assumptions jsonb;
+  expected_imported_evidence jsonb;
+  expected_response_facts jsonb;
+  expected_assumption_facts jsonb;
+  expected_imported_facts jsonb;
   expected_agent_necessity jsonb := jsonb_build_object(
     'irreducibleAmbiguity',jsonb_build_object('fieldId','agent.irreducibleAmbiguity','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
     'adaptiveNextStep',jsonb_build_object('fieldId','agent.adaptiveNextStep','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
@@ -85,6 +120,61 @@ BEGIN
      AND status IN ('Approved','Handed Off to Docs')
    FOR SHARE;
   IF a.id IS NULL THEN RETURN jsonb_build_object('errorCode','NOT_FOUND'); END IF;
+  source_aggregate := CASE WHEN jsonb_typeof(a.responses)='object' AND a.responses ? 'responses' THEN a.responses ELSE NULL END;
+  source_responses := CASE WHEN source_aggregate IS NULL OR source_aggregate->'responses' IS NULL OR source_aggregate->'responses'='null'::jsonb THEN a.responses ELSE source_aggregate->'responses' END;
+  source_evidence := CASE WHEN source_aggregate IS NULL OR source_aggregate->'evidenceItems' IS NULL OR source_aggregate->'evidenceItems'='null'::jsonb THEN COALESCE(a.evidence_items,'[]'::jsonb) ELSE source_aggregate->'evidenceItems' END;
+  source_assumptions := CASE WHEN source_aggregate IS NULL OR source_aggregate->'assumptions' IS NULL OR source_aggregate->'assumptions'='null'::jsonb THEN COALESCE(a.assumptions,'[]'::jsonb) ELSE source_aggregate->'assumptions' END;
+  IF jsonb_typeof(source_responses) IS DISTINCT FROM 'object'
+    OR jsonb_typeof(source_evidence) IS DISTINCT FROM 'array'
+    OR jsonb_typeof(source_assumptions) IS DISTINCT FROM 'array'
+    OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements(source_evidence) item
+      WHERE jsonb_typeof(item) IS DISTINCT FROM 'object'
+        OR jsonb_typeof(item->'id') IS DISTINCT FROM 'string'
+        OR item->>'id' !~ '^[A-Za-z0-9._:-]+$'
+        OR (item ? 'linkedField' AND item->'linkedField'<>'null'::jsonb AND jsonb_typeof(item->'linkedField') IS DISTINCT FROM 'string')
+        OR (item ? 'owner' AND item->'owner'<>'null'::jsonb AND jsonb_typeof(item->'owner') IS DISTINCT FROM 'string')
+    ) OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements(source_assumptions) item
+      WHERE jsonb_typeof(item) IS DISTINCT FROM 'object'
+        OR jsonb_typeof(item->'id') IS DISTINCT FROM 'string'
+        OR item->>'id' !~ '^[^.]+$'
+        OR jsonb_typeof(item->'description') IS DISTINCT FROM 'string'
+    ) OR EXISTS (
+      SELECT item->>'id' FROM jsonb_array_elements(source_evidence) item GROUP BY item->>'id' HAVING count(*)>1
+    )
+  THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+    'id',public.pr1d_v1_evidence_id(a.id,item->>'id'),
+    'claimIds',jsonb_build_array(CASE WHEN NULLIF(item->>'linkedField','') IS NULL THEN 'v1.evidence.' || (item->>'id') ELSE 'v1.responses.' || (item->>'linkedField') END),
+    'sourceType','document','status','submitted','validated',false,
+    'owner',CASE WHEN jsonb_typeof(item->'owner')='string' AND btrim(item->>'owner')<>'' THEN item->>'owner' ELSE NULL END,
+    'reviewerIds','[]'::jsonb,'contradictory',false
+  )) ORDER BY ordinal),'[]'::jsonb)
+  INTO expected_imported_evidence
+  FROM jsonb_array_elements(source_evidence) WITH ORDINALITY source_item(item,ordinal);
+
+  SELECT COALESCE(jsonb_agg(
+    CASE WHEN linked.id IS NULL THEN fact ELSE jsonb_set(fact,'{evidenceIds}',jsonb_build_array(linked.id)) END
+    ORDER BY fact_ordinal
+  ),'[]'::jsonb)
+  INTO expected_response_facts
+  FROM jsonb_array_elements(public.pr1d_v1_import_facts(source_responses)) WITH ORDINALITY source_fact(fact,fact_ordinal)
+  LEFT JOIN LATERAL (
+    SELECT evidence->>'id' id
+    FROM jsonb_array_elements(expected_imported_evidence) WITH ORDINALITY source_link(evidence,evidence_ordinal)
+    WHERE evidence->'claimIds'->>0=fact->>'fieldId'
+    ORDER BY evidence_ordinal DESC LIMIT 1
+  ) linked ON true;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'fieldId','v1.assumptions.' || (item->>'id'),'value',item->'description','status','assumed',
+    'evidenceIds','[]'::jsonb,'source','v1-import'
+  ) ORDER BY ordinal),'[]'::jsonb)
+  INTO expected_assumption_facts
+  FROM jsonb_array_elements(source_assumptions) WITH ORDINALITY source_assumption(item,ordinal);
+  expected_imported_facts := expected_response_facts || expected_assumption_facts;
   IF p_source_process_id IS DISTINCT FROM a.process_id
     OR jsonb_typeof(p_source_v1) IS DISTINCT FROM 'object'
     OR p_source_v1 IS DISTINCT FROM jsonb_build_object(
@@ -96,6 +186,8 @@ BEGIN
     OR NULLIF(p_source_v1->>'clonedAt','') IS NULL
     OR jsonb_typeof(p_imported_facts) IS DISTINCT FROM 'array'
     OR jsonb_typeof(p_imported_evidence) IS DISTINCT FROM 'array'
+    OR p_imported_facts IS DISTINCT FROM expected_imported_facts
+    OR p_imported_evidence IS DISTINCT FROM expected_imported_evidence
     OR p_agent_necessity IS DISTINCT FROM expected_agent_necessity
   THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
   BEGIN
@@ -316,7 +408,7 @@ EXCEPTION
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.pr1d_v1_import_facts(jsonb),public.pr1d_canonical_json(jsonb),public.pr1d_verify_bound_canonical(text,text,jsonb,text,uuid,uuid,uuid,bigint,text,text,text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1d_v1_import_facts(jsonb),public.pr1d_v1_evidence_id(uuid,text),public.pr1d_canonical_json(jsonb),public.pr1d_verify_bound_canonical(text,text,jsonb,text,uuid,uuid,uuid,bigint,text,text,text) FROM PUBLIC,anon,authenticated,service_role;
 -- These SECURITY DEFINER helpers are implementation details, not callable API.
 -- Keep invocation authority with the function owner so the private RPCs can use
 -- them without exposing a direct bypass to any PostgREST role.
@@ -327,6 +419,7 @@ GRANT EXECUTE ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uui
 GRANT EXECUTE ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) TO service_role;
 
 COMMENT ON COLUMN public.assess_v2_case_versions.imported_facts IS 'Immutable allowlisted V1 facts imported as assumed/unknown with source=v1-import.';
+COMMENT ON FUNCTION public.pr1d_v1_evidence_id(uuid,text) IS 'Internal deterministic V1 evidence surrogate used to compare clone projections with the locked source row.';
 COMMENT ON FUNCTION public.pr1d_verify_bound_canonical(text,text,jsonb,text,uuid,uuid,uuid,bigint,text,text,text) IS 'Internal digest verifier; no role receives execute authority.';
 COMMENT ON FUNCTION public.pr1d_canonical_json(jsonb) IS 'Internal deterministic JSON serializer for Assess V2 canonical snapshot verification.';
 COMMENT ON FUNCTION public.pr1d_assert_enabled() IS 'Internal SECURITY DEFINER runtime-control helper; callable only by the owning role through private RPCs.';

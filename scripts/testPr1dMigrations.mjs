@@ -182,8 +182,9 @@ try {
     forbiddenSecretSection: { token: 'must-not-import' },
   };
   const v1Evidence = [{ id: 'legacy-evidence-1', linkedField: 'processStructure.trigger', owner: 'process-owner' }, { id: 'legacy-evidence-without-owner', linkedField: 'risk.financial' }];
-  const evidenceId1 = '61000000-0000-4000-8000-000000000001';
-  const evidenceId2 = '61000000-0000-4000-8000-000000000002';
+  const v1Assumptions = [{ id:'api-availability',description:'The ERP API remains available.' }];
+  const evidenceId1 = 'f9177f53-6161-50b7-b73e-aea9d29f9ba3';
+  const evidenceId2 = '863d45e6-4592-54ba-accb-17acd04d48d6';
   const importedFacts = [
     { fieldId:'v1.responses.processStructure.trigger',value:'invoice-received',status:'assumed',evidenceIds:[evidenceId1],source:'v1-import' },
     { fieldId:'v1.responses.processStructure.nested.handoffs',value:3,status:'assumed',evidenceIds:[],source:'v1-import' },
@@ -192,6 +193,7 @@ try {
     { fieldId:'v1.responses.judgment.ambiguity',value:'medium',status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.systems.erp',value:'retained',status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.risk.financial',value:true,status:'assumed',evidenceIds:[evidenceId2],source:'v1-import' },
+    { fieldId:'v1.assumptions.api-availability',value:'The ERP API remains available.',status:'assumed',evidenceIds:[],source:'v1-import' },
   ];
   const importedEvidence = [
     { id:evidenceId1,claimIds:['v1.responses.processStructure.trigger'],sourceType:'document',status:'submitted',validated:false,owner:'process-owner',reviewerIds:[],contradictory:false },
@@ -207,8 +209,8 @@ try {
     contract,req(requestNumber),idempotencyKey,overrides.authorizationVersion ?? authorizationVersion,
   ];
   await test.query(
-    "UPDATE assessments SET score_version='assess-core-2026-05',responses=$2,evidence_items=$3,status='Ready for Review',version=1 WHERE id=$1",
-    [V1, JSON.stringify(v1Responses), JSON.stringify(v1Evidence)],
+    "UPDATE assessments SET score_version='assess-core-2026-05',responses=$2,evidence_items=$3,assumptions=$4,status='Ready for Review',version=1 WHERE id=$1",
+    [V1, JSON.stringify(v1Responses), JSON.stringify(v1Evidence), JSON.stringify(v1Assumptions)],
   );
   const approvedV1 = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
@@ -236,7 +238,7 @@ try {
   assert.equal(provenanceBeforeClone.length, 1);
   assert.equal(handoffsBeforeClone.length, 1);
   const sourceBefore = (await test.query(
-    'SELECT responses,evidence_items,score_version,status,version FROM assessments WHERE id=$1', [V1],
+    'SELECT responses,evidence_items,assumptions,score_version,status,version FROM assessments WHERE id=$1', [V1],
   )).rows[0];
   for (const [capability, deniedCaseId, key, requestNumber] of [
     ['assess.v2.create', '31000000-0000-4000-8000-000000000090', 'clone-without-v2-create', 51],
@@ -273,6 +275,8 @@ try {
     ['31000000-0000-4000-8000-000000000094','clone-wrong-process',{sourceProcessId:'31000000-0000-4000-8000-000000000099'}],
     ['31000000-0000-4000-8000-000000000095','clone-bad-fact',{importedFacts:[{...importedFacts[0],fieldId:'v1.responses.forbiddenSecretSection.token'}]}],
     ['31000000-0000-4000-8000-000000000096','clone-bad-provenance',{sourceV1:{...sourceV1,assessmentId:V1B}}],
+    ['31000000-0000-4000-8000-000000000092','clone-fabricated-allowed-fact',{importedFacts:importedFacts.map((item,index)=>index===0?{...item,value:'fabricated'}:item)}],
+    ['31000000-0000-4000-8000-000000000093','clone-fabricated-evidence',{importedEvidence:importedEvidence.map((item,index)=>index===0?{...item,owner:'fabricated-owner'}:item)}],
   ]) {
     const invalidProjection = value(await asRole(test,'service_role',() => test.query(
       'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
@@ -282,17 +286,18 @@ try {
     assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE id=$1',[caseId])).rows[0].n),0);
     assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1',[key])).rows[0].n),0);
     assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1',[caseId])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_evidence_links WHERE case_id=$1',[caseId])).rows[0].n),0);
   }
   const cloned = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',30,'clone-v1'),
   )));
   assert.equal(cloned.resource.status, 'draft');
-  assert.equal(cloned.resource.importedFactCount, 7);
+  assert.equal(cloned.resource.importedFactCount, 8);
   assert.equal(cloned.resource.importedEvidenceCount, 2);
   assert.equal(cloned.resource.cloneContractVersion, 'assess-v1-to-v2-clone-2026-07-15');
   const sourceAfter = (await test.query(
-    'SELECT responses,evidence_items,score_version,status,version FROM assessments WHERE id=$1', [V1],
+    'SELECT responses,evidence_items,assumptions,score_version,status,version FROM assessments WHERE id=$1', [V1],
   )).rows[0];
   assert.deepEqual(sourceAfter, sourceBefore);
   const provenanceAfterClone = (await test.query(
@@ -307,7 +312,7 @@ try {
     'SELECT source_snapshot,imported_facts FROM assess_v2_case_versions WHERE case_id=$1', [CLONE],
   )).rows[0];
   assert.equal(cloneVersion.source_snapshot.importedAs, 'unverified-source-facts');
-  assert.equal(cloneVersion.source_snapshot.factCount, 7);
+  assert.equal(cloneVersion.source_snapshot.factCount, 8);
   assert.equal(cloneVersion.source_snapshot.evidenceCount, 2);
   assert.equal(JSON.stringify(cloneVersion.source_snapshot).includes('must-not-import'), false);
   assert.equal(cloneVersion.imported_facts.some((fact) => fact.fieldId.startsWith('v1.responses.forbiddenSecretSection')), false);
