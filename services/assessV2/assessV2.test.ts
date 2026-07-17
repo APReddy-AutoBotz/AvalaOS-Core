@@ -29,7 +29,7 @@ const run = async () => {
     { fieldId: 'interaction.mode', value: 'read', unit: 'category', contextId: 'interaction-1' },
     { fieldId: 'interaction.uiStable', value: true, unit: 'boolean', contextId: 'interaction-1', applicable: true },
   ]).some(error => /supplied applicability|not applicable/.test(error)));
-  assert.ok(validateEvidenceLinks([{ id: 'template', claimIds: ['claim'], sourceType: 'template', status: 'validated', validated: true, owner: 'owner' }]).length);
+  assert.ok(validateEvidenceLinks([{ id: 'template', claimIds: ['claim'], sourceType: 'template', status: 'validated', validated: true, owner: 'owner' } as unknown as import('./types').EvidenceLink]).length);
 
   assert.equal(canonicalizeDecisionPayload({ b: 2, a: 1 }), '{"a":1,"b":2}');
   assert.equal(await sha256Hex({ b: 2, a: 1 }), '43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777');
@@ -38,8 +38,8 @@ const run = async () => {
 
   assert.deepEqual(validateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE), []);
   const decision = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
-  assert.equal(decision.confidence, 'Verified');
-  assert.equal(decision.processReadiness, 'Ready for controlled design');
+  assert.equal(decision.confidence, 'Partially Evidenced');
+  assert.equal(decision.processReadiness, 'Provisional');
   assert.ok(decision.composedOperatingModel.some(item => item.components.includes('Document Intelligence')));
   const erp = decision.modernization[0];
   assert.ok(erp.dispositions.includes('Retain'));
@@ -53,20 +53,20 @@ const run = async () => {
   const stableAfter = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   assert.deepEqual(stableAfter, stableBefore);
   const evaluatedAfterExpiry = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
-  evaluatedAfterExpiry.createdAt = '2028-07-14T00:00:00.000Z';
-  assert.equal(deriveEvidenceConfidence(evaluatedAfterExpiry), 'Assumption-Led');
+  evaluatedAfterExpiry.updatedAt = '2028-07-14T00:00:00.000Z';
+  assert.equal(deriveEvidenceConfidence(evaluatedAfterExpiry), 'Insufficient Evidence');
   const mismatchedClaim = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   mismatchedClaim.evidence[1].claimIds = mismatchedClaim.evidence[1].claimIds.filter(id => id !== 'primitive.documentQualityRepresentative');
   assert.equal(deriveEvidenceConfidence(mismatchedClaim), 'Partially Evidenced');
   const mismatchedExtract = mismatchedClaim.primitives.find(item => item.type === 'Extract')!;
-  assert.equal(evaluateCandidateFit(mismatchedExtract, 'Document Intelligence', mismatchedClaim.evidence, mismatchedClaim.createdAt).confidence, 'Partially Evidenced');
+  assert.equal(evaluateCandidateFit(mismatchedExtract, 'Document Intelligence', mismatchedClaim.evidence, mismatchedClaim.createdAt).confidence, 'Assumption-Led');
   const mismatchedCandidateTrace = evaluateAssessmentV2(mismatchedClaim).trace.find(item => item.subjectId === mismatchedExtract.id && item.ruleId === 'CAND-001' && item.outcome.startsWith('Document Intelligence'))!;
   assert.ok(!mismatchedCandidateTrace.evidenceIds.includes(mismatchedClaim.evidence[1].id) || mismatchedClaim.evidence[1].claimIds.some(claimId => mismatchedCandidateTrace.fieldIds.includes(claimId)));
 
   const missingRequiredEvidence = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   const missingEvidenceExtract = missingRequiredEvidence.primitives.find(item => item.type === 'Extract')!;
   missingEvidenceExtract.facts['primitive.exceptionSamplesAvailable'].evidenceIds = [];
-  assert.equal(evaluateCandidateFit(missingEvidenceExtract, 'Document Intelligence', missingRequiredEvidence.evidence, missingRequiredEvidence.createdAt).confidence, 'Partially Evidenced');
+  assert.equal(evaluateCandidateFit(missingEvidenceExtract, 'Document Intelligence', missingRequiredEvidence.evidence, missingRequiredEvidence.createdAt).confidence, 'Assumption-Led');
   assert.equal(deriveEvidenceConfidence(missingRequiredEvidence), 'Partially Evidenced');
   const missingRequiredDecision = evaluateAssessmentV2(missingRequiredEvidence);
   assert.notEqual(missingRequiredDecision.confidence, 'Verified');
@@ -81,7 +81,7 @@ const run = async () => {
   const evidenceId = AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence[1].id;
   const evidencedAgent = evaluateAgentNecessity('primitive', agentFacts(true, [evidenceId]), AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence);
   assert.equal(evidencedAgent.fit, 'Conditional Fit');
-  assert.equal(evidencedAgent.confidence, 'Verified');
+  assert.equal(evidencedAgent.confidence, 'Assumption-Led');
   assert.ok(evidencedAgent.fieldIds.length === 5 && evidencedAgent.evidenceIds.length === 1);
   assert.equal(evaluateAgentNecessity('primitive', createUnknownAgentNecessityFacts()).fit, 'Weak Fit');
   assert.ok(!decision.candidateEvaluations.some(item => item.component === 'Bounded Agent' && item.primitiveId === AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.find(p => p.type === 'Extract')!.id));
@@ -118,7 +118,7 @@ const run = async () => {
   readInteraction.facts.eventSemantics = null;
   readInteraction.facts.monitored = null;
   readInteraction.facts.capacityKnown = null;
-  assert.equal(deriveEvidenceConfidence(notApplicableInteractionEvidence), 'Verified');
+  assert.equal(deriveEvidenceConfidence(notApplicableInteractionEvidence), 'Partially Evidenced');
   assert.ok(!evaluateAssessmentV2(notApplicableInteractionEvidence).evidenceGaps.some(gap =>
     gap.startsWith(`${readInteraction.id}:`) && /machineIdentity|leastPrivilege|uiStable|auditable|idempotent|compensatable|rollback|testEnvironment|accountableOwner|eventSemantics|monitored|capacityKnown/.test(gap)));
   const ui = structuredClone(base); ui.mode = 'ui'; ui.facts.interfaceAvailable = false; ui.facts.operationCovered = false; ui.facts.uiStable = true;
@@ -149,8 +149,9 @@ const run = async () => {
   assert.equal(evaluateCandidateFit(extract, 'Bounded Agent' as Component, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence).fit, 'Not Applicable');
 
   const confidenceChanged = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
-  confidenceChanged.evidence[0].validated = false; confidenceChanged.evidence[0].status = 'submitted';
+  confidenceChanged.evidence[0].status = 'suggested';
   assert.equal(deriveEvidenceConfidence(confidenceChanged), 'Partially Evidenced');
+  assert.ok(!evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE).candidateEvaluations.some(item => item.confidence === 'Verified'), 'PR 1D submitted evidence cannot produce Verified confidence');
   assert.deepEqual(evaluateAssessmentV2(confidenceChanged).candidateEvaluations.map(item => item.fit), decision.candidateEvaluations.map(item => item.fit));
   const contextChanged = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   contextChanged.primitives[0].businessDisposition = 'Human-Led';
