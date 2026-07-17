@@ -11,6 +11,9 @@
 :root {
   color-scheme: light;
 
+  --kp-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --kp-font-display: Outfit, Inter, ui-sans-serif, system-ui, sans-serif;
+
   --kp-obsidian-980: #030712;
   --kp-obsidian-950: #001b2f;
   --kp-obsidian-900: #002c4b;
@@ -116,8 +119,41 @@ body {
   overflow: hidden;
   background: var(--kp-bg);
   color: var(--kp-text);
+  font-family: var(--kp-font-ui);
+  font-weight: 400;
+  font-synthesis: none;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   text-rendering: geometricPrecision;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/*
+  Product typography contract: one restrained display face for page titles,
+  Inter for dense application UI, and no synthetic 800/900 weight in runtime
+  surfaces. Legacy utility names remain compatible while rendering at the
+  premium enterprise hierarchy.
+*/
+main h1 {
+  font-family: var(--kp-font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.font-black,
+.font-extrabold {
+  font-weight: 700;
+}
+
+button.font-black,
+[role="button"].font-black,
+label.font-black {
+  font-weight: 600;
 }
 
 body.app-bg {
@@ -518,6 +554,19 @@ header.glass {
   -webkit-backdrop-filter: blur(12px);
 }
 
+.modal-surface {
+  background: var(--kp-surface);
+  border: 1px solid var(--kp-border-strong);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28), 0 2px 10px rgba(15, 23, 42, 0.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.dark .modal-surface {
+  background: var(--kp-surface);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.52), 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+
 .card,
 .card-hover-effect {
   position: relative;
@@ -821,6 +870,34 @@ input:checked + .toggle-slider::before {
     radial-gradient(circle at 18% 18%, rgba(255, 188, 3, 0.18), transparent 34%),
     radial-gradient(circle at 82% 12%, rgba(0, 44, 75, 0.12), transparent 34%),
     linear-gradient(135deg, #fffcf5 0%, #f6f8fb 54%, #edf3f8 100%);
+}
+
+/* Claim-safe enterprise landing: product structure replaces generic stock photography. */
+.enterprise-landing {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(255, 188, 3, 0.11), transparent 30%),
+    radial-gradient(circle at 92% 12%, rgba(11, 95, 138, 0.12), transparent 32%),
+    linear-gradient(145deg, #f8fafc 0%, #eef4f8 48%, #f8fafc 100%) !important;
+}
+
+.landing-story-surface {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 252, 0.96)),
+    #ffffff;
+}
+
+.landing-story-grid {
+  background-image:
+    linear-gradient(rgba(2, 44, 75, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(2, 44, 75, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 72% 28%, rgba(255, 188, 3, 0.14), transparent 26%),
+    radial-gradient(circle at 18% 74%, rgba(11, 95, 138, 0.08), transparent 30%);
+  background-size: 36px 36px, 36px 36px, auto, auto;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.72) 62%, transparent 100%);
+}
+
+.landing-product-preview {
+  isolation: isolate;
 }
 
 /* Progress Gauge Styling */

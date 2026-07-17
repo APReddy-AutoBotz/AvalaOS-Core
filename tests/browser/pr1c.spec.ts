@@ -327,6 +327,24 @@ test('production route meets accessibility, focus, overflow, and measured naviga
   await installEnterpriseFixture(page);
   await page.goto('/');
   await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible();
+  const catalogTypography = await page.getByRole('heading',{ name:'Process Catalog' }).evaluate(element => ({
+    family:getComputedStyle(element).fontFamily,
+    weight:getComputedStyle(element).fontWeight,
+  }));
+  const descriptionWeight = await page.getByText('Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.').evaluate(element => getComputedStyle(element).fontWeight);
+  const processWeight = await page.getByRole('button',{ name:'Invoice exception handling' }).evaluate(element => getComputedStyle(element).fontWeight);
+  const actionWeight = await page.getByRole('button',{ name:'View' }).first().evaluate(element => getComputedStyle(element).fontWeight);
+  const maximumMainWeight = await page.locator('main *').evaluateAll(elements => Math.max(...elements
+    .filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null)
+    .map(element => Number.parseInt(getComputedStyle(element).fontWeight,10) || 400)));
+
+  expect(catalogTypography.family).toContain('Outfit');
+  expect(catalogTypography.weight).toBe('700');
+  expect(descriptionWeight).toBe('400');
+  expect(processWeight).toBe('600');
+  expect(actionWeight).toBe('600');
+  expect(maximumMainWeight).toBeLessThanOrEqual(700);
+
   const timing = await page.evaluate(() => {
     const entry=performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
     return { duration:entry.duration,domContentLoaded:entry.domContentLoadedEventEnd };

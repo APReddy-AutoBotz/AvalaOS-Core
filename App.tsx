@@ -7,7 +7,7 @@ import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, 
 import { MOCK_USERS, MOCK_TEAMS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES } from './data/mockData';
 import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
-import LoginView from './components/auth/LoginView';
+import EnterpriseAccessView from './components/auth/EnterpriseAccessView';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
 import OnboardingWizard from './components/auth/OnboardingWizard';
@@ -72,6 +72,7 @@ function App() {
   const localRuntimeEnabled = isLocalRuntimeEnabled();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   // App State
   const { user: currentUser, loading: authLoading } = useAuth();
@@ -1256,7 +1257,7 @@ function App() {
   }
 
   if (!currentUser) {
-    return <LoginView />;
+    return <EnterpriseAccessView />;
   }
 
   if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {
@@ -1277,6 +1278,8 @@ function App() {
         onViewChange={handleViewChange}
         onScopeChange={handleScopeChange}
         collapsed={isSidebarCollapsed}
+        mobileOpen={isMobileNavigationOpen}
+        onMobileClose={() => setMobileNavigationOpen(false)}
       />
       <div className="flex flex-col flex-1 overflow-hidden relative">
         <Header
@@ -1288,6 +1291,8 @@ function App() {
           currentUser={currentUser}
           teams={teams}
           projects={projects}
+          mobileNavigationOpen={isMobileNavigationOpen}
+          onToggleNavigation={() => setMobileNavigationOpen(open => !open)}
         />
         {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
         {currentScope.type !== ScopeType.ORGANIZATION && (
@@ -1298,7 +1303,7 @@ function App() {
             onNavigate={handleViewChange}
           />
         )}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 view-transition-enter view-transition-enter-active">
+        <main className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           <React.Suspense fallback={<ViewLoadingFallback />}>
             {renderCurrentView()}
           </React.Suspense>

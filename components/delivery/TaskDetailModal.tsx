@@ -144,15 +144,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
     ];
 
     return (
-        <Modal isOpen={!!task} onClose={onClose} title={task.title}>
+        <Modal isOpen={!!task} onClose={onClose} title={task.title} size="lg" contentClassName="p-0">
             {epic && (
-                <div className="px-6 pb-2">
+                <div className="px-6 pb-2 pt-4">
                     <span className="text-xs font-semibold inline-flex items-center px-2 py-0.5 rounded-full" style={{ backgroundColor: `${epic.color}20`, color: epic.color }}>
                         {epic.name}
                     </span>
                 </div>
             )}
-            <div className="border-b border-slate-200 dark:border-gray-700 mb-4 px-6">
+            <div className={`border-b border-slate-200 px-6 dark:border-gray-700 ${epic ? '' : 'pt-2'}`}>
                 <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
                     {tabItems.map((tab) => {
                         if (tab.name === 'Subtasks' && task.type === 'Subtask') return null;
@@ -173,7 +173,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
                     })}
                 </nav>
             </div>
-            <div className="px-6">
+            <div className="px-6 py-6">
                 {renderContent()}
             </div>
         </Modal>
@@ -270,7 +270,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <MetadataItem icon={statusMap[task.status].icon} color={statusMap[task.status].color} label="Status" value={task.status} />
                 <MetadataItem icon={priorityMap[task.priority].icon} color={priorityMap[task.priority].color} label="Priority" value={task.priority} />
                 <MetadataItem icon={CalendarDaysIcon} label="Due Date" value={formatDateForDisplay(task.dueDate)} />
@@ -285,7 +285,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                 </div>
             )}
             <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-md font-semibold">Description</h3>
                     <div className="flex items-center gap-2">
                         <button onClick={() => onSetEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-abz-ink-900 rounded-lg hover:bg-slate-200 dark:hover:bg-gray-800 focus:outline-none focus:ring-3 focus:ring-abz-primary transition-all">
@@ -321,11 +321,11 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
 };
 
 const MetadataItem: React.FC<{ icon: React.FC<{ className?: string }>, color?: string, label: string, value: string }> = ({ icon: Icon, color = "text-slate-500 dark:text-slate-400", label, value }) => (
-    <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-abz-ink-900 rounded-lg">
-        <Icon className={`w-5 h-5 ${color}`} />
-        <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="font-semibold truncate">{value}</p>
+    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-900">
+        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${color}`} />
+        <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="break-words text-[13px] font-semibold leading-5 text-slate-900 dark:text-white" title={value}>{value}</p>
         </div>
     </div>
 );

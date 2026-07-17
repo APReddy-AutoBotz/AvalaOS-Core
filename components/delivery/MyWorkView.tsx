@@ -103,7 +103,7 @@ const MyWorkView: React.FC<MyWorkViewProps> = ({ view, allTasks, allProjects, al
             case View.LIST:
                 return <TaskListView tasks={filteredTasks} projects={visibleProjects} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
             case View.BOARDS:
-                return <BoardsView tasks={filteredTasks} projects={visibleProjects} epics={visibleEpics} users={[currentUser]} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
+                return <BoardsView tasks={filteredTasks} projects={visibleProjects} epics={visibleEpics} title="My delivery board" contextLabel="Assigned work" users={[currentUser]} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} showProjectLabel={true} />;
             case View.GANTT:
                 return <GanttChartView tasks={filteredTasks} projects={visibleProjects} onSelectTask={onSelectTask} onUpdateTask={onUpdateTask} />;
             case View.CALENDAR:
@@ -120,8 +120,8 @@ const MyWorkView: React.FC<MyWorkViewProps> = ({ view, allTasks, allProjects, al
     
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-text-light dark:text-text-dark">My Work</h2>
+            <div className={`flex items-center ${view === View.BOARDS ? 'mb-3 justify-end' : 'mb-6 justify-between'}`}>
+                {view !== View.BOARDS && <h2 className="text-2xl font-bold text-text-light dark:text-text-dark">My Work</h2>}
                 <FilterBar
                     filters={filters}
                     onFiltersChange={setFilters}

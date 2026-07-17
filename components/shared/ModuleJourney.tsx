@@ -80,38 +80,41 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentSc
     if (visibleModules.length === 0) return null;
 
     return (
-        <div className="border-b border-slate-200/70 bg-white/56 px-4 py-3 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/42 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-[1480px] flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+        <div className="border-b border-slate-200/80 bg-white/70 px-4 py-2 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/55 sm:px-5 lg:px-6">
+            <div className="mx-auto flex max-w-[1540px] items-center gap-4">
+                <div className="hidden min-w-[200px] xl:block">
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
                         {isSingleModule ? 'Configured workspace' : 'Operating lifecycle'}
                     </p>
-                    <p className="mt-1 text-sm font-black text-[#002C4B] dark:text-white">
+                    <p className="mt-0.5 truncate text-xs font-bold text-[#002C4B] dark:text-slate-200">
                         {isSingleModule
                             ? `${visibleModules[0].module.label} module enabled`
                             : formatOperatingLifecycleLabel(journeySteps)}
                     </p>
                 </div>
-                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto xl:justify-end">
+
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
                     {journeySteps.map((step, index) => {
+                        const connector = index > 0 && (
+                            <div className="hidden h-px w-4 flex-none bg-slate-200 dark:bg-slate-700 md:block" />
+                        );
+
                         if (step.kind === 'govern-lite') {
                             return (
                                 <React.Fragment key={step.key}>
-                                    {index > 0 && (
-                                        <div className="hidden h-px min-w-6 flex-1 bg-slate-200 dark:bg-slate-800 md:block" />
-                                    )}
+                                    {connector}
                                     <div
                                         role="listitem"
                                         aria-label={`${step.label}: ${step.detail}`}
                                         title={step.detail}
-                                        className="flex min-w-[210px] items-center gap-3 rounded-2xl border border-[#ffbc03]/45 bg-[#ffbc03]/10 px-4 py-3 text-left shadow-sm shadow-[#ffbc03]/5 dark:border-[#ffbc03]/30 dark:bg-[#ffbc03]/8"
+                                        className="flex min-w-[164px] items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-2 text-left dark:border-amber-400/25 dark:bg-amber-400/8"
                                     >
-                                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#002C4B] text-[#ffbc03] dark:bg-[#ffbc03] dark:text-[#002C4B]">
-                                            <ClipboardDocumentListIcon className="h-5 w-5" />
+                                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#002C4B] text-[#ffbc03] dark:bg-amber-300 dark:text-[#002C4B]">
+                                            <ClipboardDocumentListIcon className="h-4 w-4" />
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="truncate text-sm font-black text-[#002C4B] dark:text-[#ffefb0]">{step.shortLabel}</p>
-                                            <p className="truncate text-xs font-bold text-slate-600 dark:text-slate-300">{step.outcome}</p>
+                                            <p className="truncate text-xs font-extrabold text-[#002C4B] dark:text-amber-100">{step.shortLabel}</p>
+                                            <p className="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">{step.outcome}</p>
                                         </div>
                                     </div>
                                 </React.Fragment>
@@ -125,30 +128,29 @@ const ModuleJourney: React.FC<ModuleJourneyProps> = ({ enabledModules, currentSc
                         const Icon = moduleIcon[module.key];
                         const isActive = activeModule === module.key;
                         const isClickable = access.allowed;
+
                         return (
                             <React.Fragment key={module.key}>
-                                {index > 0 && (
-                                    <div className="hidden h-px min-w-6 flex-1 bg-slate-200 dark:bg-slate-800 md:block" />
-                                )}
+                                {connector}
                                 <button
                                     type="button"
                                     onClick={() => isClickable && onNavigate(homeView)}
                                     disabled={!isClickable}
                                     aria-disabled={!isClickable}
                                     title={isClickable ? module.label : blockedJourneyTitle(access)}
-                                    className={`group flex min-w-[190px] items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${isActive
-                                        ? 'border-[#ffbc03]/70 bg-[#ffbc03]/12 shadow-lg shadow-[#ffbc03]/10'
+                                    className={`group flex min-w-[154px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${isActive
+                                        ? 'border-[#0b4f7d]/45 bg-[#0b4f7d]/8'
                                         : isClickable
-                                            ? 'border-slate-200/80 bg-white/72 hover:border-[#ffbc03]/40 hover:bg-[#ffbc03]/8 dark:border-slate-800 dark:bg-slate-900/54'
-                                            : 'cursor-not-allowed border-slate-200/70 bg-white/50 opacity-60 dark:border-slate-800 dark:bg-slate-900/40'
-                                        }`}
+                                            ? 'border-slate-200 bg-white/80 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:bg-slate-800'
+                                            : 'cursor-not-allowed border-slate-200 bg-white/50 opacity-55 dark:border-slate-800 dark:bg-slate-900/40'
+                                    }`}
                                 >
-                                    <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${isActive ? 'bg-[#ffbc03] text-[#002C4B]' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'}`}>
-                                        {isActive ? <CheckCircleIcon className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isActive ? 'bg-[#0b4f7d] text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                        {isActive ? <CheckCircleIcon className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="truncate text-sm font-black text-slate-950 dark:text-white">{module.shortLabel}</p>
-                                        <p className="truncate text-xs font-bold text-slate-500 dark:text-slate-400">{step.outcome}</p>
+                                        <p className="truncate text-xs font-extrabold text-slate-950 dark:text-white">{module.shortLabel}</p>
+                                        <p className="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">{step.outcome}</p>
                                     </div>
                                 </button>
                             </React.Fragment>

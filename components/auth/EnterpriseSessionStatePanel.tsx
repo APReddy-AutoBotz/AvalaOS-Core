@@ -19,9 +19,9 @@ interface EnterpriseSessionStatePanelProps {
 export const EnterpriseSessionStatePanel: React.FC<EnterpriseSessionStatePanelProps> = ({ state, message, onRefresh }) => {
   const copy = COPY[state as keyof typeof COPY] || ['Workspace unavailable', message || 'The workspace cannot be opened.'];
   return <section data-testid="enterprise-session-boundary" className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl dark:border-slate-800 dark:bg-slate-900">
-    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-600">Enterprise Assess</p>
-    <h1 className="mt-3 text-3xl font-black text-[#002C4B] dark:text-white">{copy[0]}</h1>
-    <p className="mx-auto mt-4 max-w-md text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{message || copy[1]}</p>
-    <button onClick={onRefresh} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B]">Refresh server context</button>
+    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">Enterprise Assess</p>
+    <h1 className="mt-3 text-3xl font-bold text-[#002C4B] dark:text-white">{copy[0]}</h1>
+    <p className="mx-auto mt-4 max-w-md text-sm font-normal leading-6 text-slate-600 dark:text-slate-300">{message || copy[1]}</p>
+    <button onClick={onRefresh} className="mt-6 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-semibold text-[#002C4B]">Refresh server context</button>
   </section>;
 };

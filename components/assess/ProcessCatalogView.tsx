@@ -48,15 +48,15 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
             <div className="premium-surface overflow-hidden rounded-3xl">
                 <div className="flex flex-wrap items-end justify-between gap-4 p-7">
                     <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Assessment control room</p>
-                        <h1 className="mt-1 text-3xl font-black text-[#002C4B] dark:text-white">Process Catalog</h1>
-                        <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Assessment control room</p>
+                        <h1 className="mt-1 text-3xl font-bold text-[#002C4B] dark:text-white">Process Catalog</h1>
+                        <p className="mt-2 max-w-2xl text-sm font-normal leading-6 text-slate-600 dark:text-slate-300">Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.</p>
                     </div>
                     <button
                         onClick={() => canCreateProcess ? setIsCreateModalOpen(true) : alert(createProcessBlockedReason)}
                         disabled={!canCreateProcess}
                         title={!canCreateProcess ? createProcessBlockedReason : undefined}
-                        className="rounded-xl bg-gradient-to-r from-[#002C4B] to-[#ffbc03] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-[#002C4B]/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl bg-gradient-to-r from-[#002C4B] to-[#ffbc03] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#002C4B]/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         New Process
                     </button>
@@ -66,9 +66,9 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                         <div key={label} className="border-b border-slate-200/80 p-5 last:border-b-0 dark:border-slate-800/80 md:border-b-0 md:border-r md:last:border-r-0">
                             <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-                                    <p className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">{value}</p>
-                                    <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-400">{detail}</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                                    <p className="mt-2 text-3xl font-bold tabular-nums text-[#002C4B] dark:text-white">{value}</p>
+                                    <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">{detail}</p>
                                 </div>
                                 <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#ffbc03]/15 text-[#002C4B] dark:text-[#ffcf45]">
                                     <Icon className="h-5 w-5" />
@@ -82,13 +82,13 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
             <div className="premium-surface overflow-hidden rounded-2xl">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
                     <div>
-                        <h2 className="text-lg font-black text-slate-950 dark:text-white">Assessment inventory</h2>
+                        <h2 className="text-lg font-bold text-slate-950 dark:text-white">Assessment inventory</h2>
                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{processes.length} active process records in {currentOrganization.name}</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">Enterprise scope</span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Enterprise scope</span>
                 </div>
                 <table className="w-full text-sm text-left">
-                    <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-500">
+                    <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-500">
                         <tr>
                             <th className="px-6 py-4">Process Name</th>
                             <th className="px-6 py-4">Department</th>
@@ -101,27 +101,27 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                         {processes.map(process => (
                             <tr key={process.id} className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-white dark:border-slate-800 dark:hover:bg-slate-900/80">
                                 <td className="px-6 py-4">
-                                    <button onClick={() => onViewDetail(process.id)} className="text-left font-black text-slate-950 transition-colors hover:text-[#002C4B] dark:text-white dark:hover:text-[#ffcf45]">
+                                    <button onClick={() => onViewDetail(process.id)} className="text-left font-semibold text-slate-950 transition-colors hover:text-[#002C4B] dark:text-white dark:hover:text-[#ffcf45]">
                                         {process.name}
                                     </button>
                                 </td>
-                                <td className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
+                                <td className="px-6 py-4 font-normal text-slate-500 dark:text-slate-400">
                                     {process.department || '-'}
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${criticalityClass(process.criticality)}`}>
+                                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${criticalityClass(process.criticality)}`}>
                                         {process.criticality}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className={`rounded-full px-2.5 py-1 text-xs font-black ring-1 ${statusClass(process.status)}`}>
+                                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(process.status)}`}>
                                         {process.status}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <button
                                         onClick={() => onViewDetail(process.id)}
-                                        className="rounded-xl px-3 py-2 text-sm font-black btn-ghost"
+                                        className="rounded-xl px-3 py-2 text-sm font-semibold btn-ghost"
                                     >
                                         View
                                     </button>

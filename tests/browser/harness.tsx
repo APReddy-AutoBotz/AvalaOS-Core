@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import '../../index.css';
+import TaskDetailModal from '../../components/delivery/TaskDetailModal';
 import Modal from '../../components/shared/Modal';
+import { MOCK_EPICS, MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS } from '../../data/mockData';
 import { persistBeforeCommit } from '../../services/persistenceTransition';
 import { escapePlainText, sanitizeMarkdownHtml, sanitizeMermaidSvg } from '../../services/safeMarkdown';
 import { buildDocumentExportHtml, markSanitizedDocumentBodyHtml } from '../../services/documentHtmlExport';
@@ -11,6 +14,7 @@ const svgAttack = '<svg xmlns="http://www.w3.org/2000/svg"><text>safe diagram</t
 
 const Harness = () => {
   const [modalOpen, setModalOpen] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [persistence, setPersistence] = useState('not-run');
   const [committed, setCommitted] = useState(false);
   const rejectPersistence = async () => {
@@ -42,6 +46,21 @@ const Harness = () => {
     <p role="status" data-testid="persistence-status">{persistence}</p><output data-testid="committed">{String(committed)}</output>
     <button onClick={() => setModalOpen(true)}>Open controlled dialog</button>
     <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Controlled dialog"><button>First action</button><button>Last action</button></Modal>
+    <button onClick={() => setTaskModalOpen(true)}>Open task detail</button>
+    {taskModalOpen && (
+      <TaskDetailModal
+        task={MOCK_TASKS[0]}
+        allTasks={MOCK_TASKS}
+        project={MOCK_PROJECTS[0]}
+        epic={MOCK_EPICS[0]}
+        users={MOCK_USERS}
+        currentUser={MOCK_USERS[0]}
+        onClose={() => setTaskModalOpen(false)}
+        onUpdateTask={() => undefined}
+        onAddTask={() => undefined}
+        onDeleteTask={() => undefined}
+      />
+    )}
   </main>;
 };
 
