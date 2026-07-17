@@ -340,7 +340,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.getByText('4. Agent necessity and evidence').evaluate(element => (element as HTMLElement).click());
   await page.getByRole('button',{name:'Add linked evidence'}).click();
   await page.getByLabel('Evidence 2 claim IDs').fill('assessment.scope, primitive.type');
-  await page.getByLabel('Evidence 2 review status').selectOption('validated');
+  await page.getByLabel('Evidence 2 submission status').selectOption('submitted');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
   await page.getByRole('button',{name:'Reload current draft'}).click();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Capture invoice request');
@@ -379,7 +379,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Approval-bound actions');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Modernization dispositions');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Immutable references');
-  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Claim-linked evidence');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Independent review: pending');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source:');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Document Intelligence');
   expect(fixture.v2Decision?.inputSnapshot.primitives).toHaveLength(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length);
@@ -410,7 +410,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
 
 
 
-test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked review evidence', async ({ page }) => {
+test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked submitted evidence', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
   await page.getByRole('button',{name:'Clone V1 as suggestions'}).click();
