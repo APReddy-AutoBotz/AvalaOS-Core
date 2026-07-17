@@ -1,6 +1,6 @@
 # PR 1D Avala Assess V2 Decision Intelligence Evidence
 
-Status: active correction evidence; local verification complete, GitHub CI pending corrected-head push
+Status: active acceptance evidence; implementation-head CI completed, final acceptance-record CI pending
 
 Baseline: PR #208 / PR 1C accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`
 
@@ -44,7 +44,7 @@ Results below apply only to commands executed against the correction worktree. E
 | PR 1D Markdown relative-link validation | Passed through `npm.cmd run test:docs:pr1d`. |
 | PR 1D buyer-copy/UTF-8 scanner | Passed through `npm.cmd run lint:pr1d`; no changed-file mojibake or legacy `assess.v2.write` references. |
 | `git diff --check` | Passed; line-ending conversion warnings only. |
-| GitHub PR #209 CI, inspected job by job | Not Run locally; GitHub status is external and will be inspected job by job on the pushed corrected head. |
+| GitHub PR #209 implementation-head CI, inspected job by job | Passed for implementation head `f43c98505e0467853e776e993723d8c2f764b508`; push `29548516387` and pull-request `29548518066` completed successfully. Final acceptance-record CI is tracked in GitHub/PR description. |
 | Hosted/live Supabase | Not Run by design. |
 
 No live or hosted infrastructure, production data, logs, secrets, storage objects, deployment controls, or incident actions were accessed. This ledger must not be read as buyer acceptance, deployment readiness, scientific calibration, guaranteed economics, compliance certification, or security certification.
@@ -52,3 +52,11 @@ No live or hosted infrastructure, production data, logs, secrets, storage object
 ## Rollback and recovery
 
 Set the V2 runtime control to disabled or read-only, leave V1 behavior available, preserve all V2 history, imported facts/evidence, canonical snapshots/text, hashes, receipts, and audits, and ship an additive forward fix. Do not reverse the accepted foundation migration destructively, mutate immutable decisions, reinterpret V2 through V1 scoring, restore browser-side decision authority, or claim that local evidence proves hosted readiness.
+
+## Final implementation-head CI
+
+Implementation head: `f43c98505e0467853e776e993723d8c2f764b508`. Push workflow `29548516387` and pull-request workflow `29548518066` completed successfully. Quality Gates, Chromium/accessibility/viewport/performance, and PR 1A-1D migration jobs passed; hosted Supabase smoke was skipped by the intended non-live condition.
+
+The implementation head recorded 98.47% lines, 84.27% branches, and 95.96% functions; 38/38 complete browser journeys and 14/14 focused PR 1D browser journeys passed. Dependency audit found zero vulnerabilities; application and Edge typechecks, PR 1A-1D gates, AI-boundary and secret-hygiene scans, and production build passed. Live/hosted validation was not run.
+
+This final acceptance-record update changes only current evidence/status. It does not alter product behavior, V1 scoring, V2 decision logic, capability authority, RLS, hashes, traceability, clone behavior, audit behavior, or browser behavior. Its own CI is recorded in the PR description and GitHub checks to avoid a self-referential evidence-commit cycle.
