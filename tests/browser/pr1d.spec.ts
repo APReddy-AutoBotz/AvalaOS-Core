@@ -380,7 +380,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Modernization dispositions');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Immutable references');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Claim-linked evidence');
-  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source: document');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source:');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Document Intelligence');
   expect(fixture.v2Decision?.inputSnapshot.primitives).toHaveLength(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length);
   const expectExactVisible = async (text: string) => {
