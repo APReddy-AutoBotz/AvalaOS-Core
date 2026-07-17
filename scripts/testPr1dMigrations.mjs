@@ -186,8 +186,8 @@ try {
   const evidenceId1 = 'f9177f53-6161-50b7-b73e-aea9d29f9ba3';
   const evidenceId2 = '863d45e6-4592-54ba-accb-17acd04d48d6';
   const importedFacts = [
-    { fieldId:'v1.responses.processStructure.trigger',value:'invoice-received',status:'assumed',evidenceIds:[evidenceId1],source:'v1-import' },
     { fieldId:'v1.responses.processStructure.nested.handoffs',value:3,status:'assumed',evidenceIds:[],source:'v1-import' },
+    { fieldId:'v1.responses.processStructure.trigger',value:'invoice-received',status:'assumed',evidenceIds:[evidenceId1],source:'v1-import' },
     { fieldId:'v1.responses.workPattern.volume',value:800,status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.dataProfile.format',value:null,status:'unknown',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.judgment.ambiguity',value:'medium',status:'assumed',evidenceIds:[],source:'v1-import' },
@@ -212,6 +212,13 @@ try {
     "UPDATE assessments SET score_version='assess-core-2026-05',responses=$2,evidence_items=$3,assumptions=$4,status='Ready for Review',version=1 WHERE id=$1",
     [V1, JSON.stringify(v1Responses), JSON.stringify(v1Evidence), JSON.stringify(v1Assumptions)],
   );
+  const sqlEvidenceIds = (await test.query(
+    'SELECT pr1d_v1_evidence_id($1,item)::text id FROM unnest($2::text[]) WITH ORDINALITY source(item,ordinal) ORDER BY ordinal',
+    [V1,['legacy-evidence-1','legacy-evidence-without-owner']],
+  )).rows.map(row => row.id);
+  assert.deepEqual(sqlEvidenceIds,[evidenceId1,evidenceId2]);
+  const sqlResponseFacts = value(await test.query('SELECT pr1d_v1_import_facts($1) value',[JSON.stringify(v1Responses)]));
+  assert.deepEqual(sqlResponseFacts,importedFacts.filter(item=>item.fieldId.startsWith('v1.responses.')).map(item=>({...item,evidenceIds:[]})));
   const approvedV1 = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
     [A, O, W, V1, 'approve', 'Compatibility provenance fixture', 1, req(15), 'v1-approve-before-clone', authorizationVersion],
