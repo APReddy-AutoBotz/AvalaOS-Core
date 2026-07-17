@@ -454,6 +454,7 @@ test('displayed primitive and lifecycle controls allow a scaffolded V2 case to f
   for (const fact of ['interfaceAvailable','operationCovered','apiDocumented','errorContract']) {
     await page.getByLabel(`Interaction 1 ${fact}`).selectOption('true');
   }
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
   await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
