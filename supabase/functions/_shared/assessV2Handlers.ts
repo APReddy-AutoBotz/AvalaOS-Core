@@ -1,7 +1,7 @@
 import { buildDecisionVersionV2 } from '../../../services/assessV2/index.ts';
 import { ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION, assertRuntimeCloneContract, cloneV1AssessmentToV2 } from '../../../services/assessV1Compatibility.ts';
 import { ASSESS_V2_COMMAND_CAPABILITY } from '../../../services/assessV2/capabilities.ts';
-import { AssessV2AtomicCommand, AssessV2Dependencies, AssessV2Envelope, AssessV2Error } from './assessV2Command.ts';
+import { ASSESS_V2_CLONE_REQUIRED_CAPABILITIES, AssessV2AtomicCommand, AssessV2Dependencies, AssessV2Envelope, AssessV2Error } from './assessV2Command.ts';
 
 export const executeAssessV2Command = async (request: Request, envelope: AssessV2Envelope, dependencies: AssessV2Dependencies) => {
   let actor: { id: string };
@@ -10,6 +10,9 @@ export const executeAssessV2Command = async (request: Request, envelope: AssessV
   if (!authority || authority.actorId !== actor.id || authority.organizationId !== envelope.organizationId || authority.workspaceId !== envelope.workspaceId) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
   if (authority.authorizationVersion !== envelope.authorizationVersion) throw new AssessV2Error('AUTHORITY_STALE');
   if (!authority.capabilities.includes(ASSESS_V2_COMMAND_CAPABILITY[envelope.commandType])) throw new AssessV2Error('PERMISSION_DENIED');
+  if (envelope.commandType === 'assessment_v2.clone_from_v1' && ASSESS_V2_CLONE_REQUIRED_CAPABILITIES.some(capability => !authority.capabilities.includes(capability))) {
+    throw new AssessV2Error('PERMISSION_DENIED');
+  }
   const command = { ...envelope, actorId: actor.id } as AssessV2AtomicCommand;
   if (envelope.commandType === 'assessment_v2.clone_from_v1') {
     const sourceAssessmentId = envelope.payload.sourceAssessmentId as string;

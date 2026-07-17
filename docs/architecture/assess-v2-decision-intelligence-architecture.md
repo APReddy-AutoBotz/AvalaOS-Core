@@ -104,7 +104,7 @@ Every envelope and nested payload rejects unknown keys and enforces bounded type
 
 ## V1 Clone Boundary
 
-Clone requires V2 create/clone authority plus readable same-tenant V1 ancestry. The source must be active, non-deleted, and use `assess-core-2026-05`. The server recursively converts only allowlisted response sections into explicit suggested or assumed facts, maps V1 evidence to submitted/unvalidated V2 evidence, persists both in the first immutable V2 version, and reports their actual counts. It records the source assessment and score version and never mutates the V1 row, Govern provenance, Studio handoff, score, or version.
+Clone requires `assess.v2.clone`, `assess.v2.create`, and V1 `assess.read` authority plus readable same-tenant V1 ancestry. The Edge handler enforces all three capabilities before any service-role V1 source load, and the private clone RPC independently repeats all three checks before locking the V1 row. The source must be active, non-deleted, and use `assess-core-2026-05`. The server recursively converts only allowlisted response sections into explicit suggested or assumed facts, maps V1 evidence to submitted/unvalidated V2 evidence, persists both in the first immutable V2 version, and reports their actual counts. It records the source assessment and score version and never mutates the V1 row, Govern provenance, Studio handoff, score, or version.
 
 V1 and V2 IDs, commands, persistence, outputs, and lifecycle states are not interchangeable. Existing V1 Govern and Studio handlers cannot accept V2 cases.
 

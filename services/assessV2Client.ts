@@ -15,6 +15,7 @@ import { supabase } from './supabaseClient';
 import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
 import { buildAssessV2CommandEnvelope } from './assessV2ClientContract';
+import { ASSESS_V2_CAPABILITIES } from './assessV2/capabilities';
 
 export type AssessV2CommandType =
   | 'assessment_v2.create'
@@ -77,6 +78,7 @@ export const draftFromAssessmentCase = (assessment: AssessmentCaseV2, name: stri
 export interface AssessV2Transport {
   invoke(body: Record<string, unknown>): Promise<unknown>;
   readCase(caseId: string): Promise<unknown>;
+  findCaseForProcess(input: { organizationId: string; workspaceId: string; processId: string }): Promise<unknown>;
 }
 
 const parseResource = (value: unknown): AssessV2CommandResource => {
@@ -191,7 +193,22 @@ const defaultTransport: AssessV2Transport = {
       },
     };
   },
-};
+  async findCaseForProcess({ organizationId, workspaceId, processId }) {
+    const { data, error } = await supabase
+      .from('assess_v2_cases')
+      .select('id')
+      .eq('org_id', organizationId)
+      .eq('workspace_id', workspaceId)
+      .eq('process_id', processId)
+      .is('deleted_at', null)
+      .in('status', ['draft', 'reviewer_ready'])
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    return data;
+  },};
 
 const command = async (
   transport: AssessV2Transport,
@@ -253,6 +270,26 @@ export const assertUniqueAssessV2EvidenceIds = (caseSnapshot: unknown): void => 
   }
 };
 
+export const findAssessV2CaseForProcess = async (
+  context: TenantContextProjection,
+  processId: string,
+  transport: AssessV2Transport = defaultTransport,
+): Promise<string | null> => {
+  if (!context.capabilities.includes(ASSESS_V2_CAPABILITIES.read)) {
+    throw new EnterpriseBoundaryError('PERMISSION_DENIED');
+  }
+  if (!processId.trim()) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  const value = await transport.findCaseForProcess({
+    organizationId: context.organizationId,
+    workspaceId: context.workspaceId,
+    processId,
+  });
+  if (value === null) return null;
+  if (!isEnterpriseObject(value) || typeof value.id !== 'string') {
+    throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  }
+  return value.id;
+};
 export const readAssessV2Case = async (
   caseId: string,
   transport: AssessV2Transport = defaultTransport,

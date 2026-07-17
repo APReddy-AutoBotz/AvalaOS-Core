@@ -1,6 +1,7 @@
 import type { Assessment } from '../../../types.ts';
 import type { AgentNecessityFacts, AssessmentCaseV2, CaseFact, EvidenceLink, ImmutableDecisionVersionV2 } from '../../../services/assessV2/index.ts';
 export const ASSESS_V2_COMMAND_TYPES = ['assessment_v2.create', 'assessment_v2.clone_from_v1', 'assessment_v2.draft.upsert', 'assessment_v2.finalize'] as const;
+export const ASSESS_V2_CLONE_REQUIRED_CAPABILITIES = Object.freeze(['assess.v2.clone', 'assess.v2.create', 'assess.read'] as const);
 export type AssessV2CommandType = typeof ASSESS_V2_COMMAND_TYPES[number];
 export type JsonObject = Record<string, unknown>;
 export type AssessV2Envelope = { requestId: string; idempotencyKey: string; commandType: AssessV2CommandType; organizationId: string; workspaceId: string; authorizationVersion: number; expectedVersion?: number; payload: JsonObject };

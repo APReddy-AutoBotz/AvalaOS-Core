@@ -77,6 +77,8 @@ BEGIN
   IF p_clone_contract_version IS DISTINCT FROM 'assess-v1-to-v2-clone-2026-07-15' THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
   PERFORM public.pr1d_assert_enabled();
   PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.clone',p_authorization_version);
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.create',p_authorization_version);
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.read',p_authorization_version);
   SELECT * INTO a FROM public.assessments
    WHERE id=p_source_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id
      AND deleted_at IS NULL AND score_version='assess-core-2026-05'

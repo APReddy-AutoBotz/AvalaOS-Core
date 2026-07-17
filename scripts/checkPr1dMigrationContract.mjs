@@ -18,6 +18,13 @@ assert.ok(correction.includes('p_clone_contract_version text'), 'SQL clone RPC m
 assert.ok(correction.includes(`p_clone_contract_version IS DISTINCT FROM '${cloneContractVersion}'`), 'SQL clone precheck drifted from the canonical TypeScript contract');
 assert.ok(handler.includes('assertRuntimeCloneContract(result.resource, command.serverCloneProjection)'), 'clone command must enforce the runtime conversion contract and exact imported counts');
 assert.ok(handler.includes('contractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION'), 'clone command must bind the canonical contract before database execution');
+const cloneAuthorityStart = correction.indexOf('CREATE OR REPLACE FUNCTION public.pr1d_clone_assess_v2_from_v1(');
+const cloneSourceRead = correction.indexOf('SELECT * INTO a FROM public.assessments', cloneAuthorityStart);
+assert.ok(cloneAuthorityStart >= 0 && cloneSourceRead > cloneAuthorityStart, 'SQL clone authority/source-read boundary missing');
+const cloneAuthorityBoundary = correction.slice(cloneAuthorityStart, cloneSourceRead);
+for (const capability of ['assess.v2.clone', 'assess.v2.create', 'assess.read']) {
+  assert.ok(cloneAuthorityBoundary.includes(`public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'${capability}',p_authorization_version)`), `SQL clone must require ${capability} before reading V1`);
+}
 for (const field of ['p_source_process_id uuid', 'p_source_v1 jsonb', 'p_imported_facts jsonb', 'p_imported_evidence jsonb', 'p_agent_necessity jsonb']) {
   assert.ok(correction.includes(field), `SQL clone projection missing ${field}`);
 }

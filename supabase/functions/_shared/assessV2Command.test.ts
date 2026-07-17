@@ -21,7 +21,8 @@ const frozenV1: Assessment = {
   scores: { ...structuredClone(CANONICAL_AP_ASSESSMENT.scores!), scoreVersion: ASSESS_V1_SCORE_VERSION },
 };
 const commands: AssessV2AtomicCommand[] = [];
-const deps = (): AssessV2Dependencies => ({ authenticate: async () => ({ id: actor }), loadFreshAuthority: async () => ({ actorId: actor, organizationId: org, workspaceId: workspace, authorizationVersion: 7, capabilities: Object.values(ASSESS_V2_CAPABILITIES) }), loadFrozenV1AssessmentForClone: async () => frozenV1, loadLockedCaseForFinalize: async () => stored, executeAtomicCommand: async command => { commands.push(command); return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 1 } }; } });
+const cloneCapabilities = [...Object.values(ASSESS_V2_CAPABILITIES), 'assess.read'];
+const deps = (): AssessV2Dependencies => ({ authenticate: async () => ({ id: actor }), loadFreshAuthority: async () => ({ actorId: actor, organizationId: org, workspaceId: workspace, authorizationVersion: 7, capabilities: cloneCapabilities }), loadFrozenV1AssessmentForClone: async () => frozenV1, loadLockedCaseForFinalize: async () => stored, executeAtomicCommand: async command => { commands.push(command); return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 1 } }; } });
 const req = (body: unknown) => new Request('http://local/assess-v2-command', { method: 'POST', body: JSON.stringify(body) });
 
 const authoring = {
@@ -90,6 +91,23 @@ const main = async () => {
   assert.equal(created.outcome, 'committed'); assert.equal(commands[0].actorId, actor);
   const clone = { ...base, commandType: 'assessment_v2.clone_from_v1', payload: { caseId, sourceAssessmentId: processId, name: 'Clone', description: '' } } as AssessV2Envelope;
   assert.equal(parseAssessV2Envelope(clone).payload.sourceAssessmentId, processId);
+  for (const missingCapability of ['assess.v2.create', 'assess.read']) {
+    const restrictedClone = deps();
+    let sourceLoadAttempts = 0;
+    restrictedClone.loadFreshAuthority = async () => ({
+      actorId: actor,
+      organizationId: org,
+      workspaceId: workspace,
+      authorizationVersion: 7,
+      capabilities: cloneCapabilities.filter(capability => capability !== missingCapability),
+    });
+    restrictedClone.loadFrozenV1AssessmentForClone = async () => { sourceLoadAttempts += 1; return frozenV1; };
+    await assert.rejects(
+      () => executeAssessV2Command(req(clone), parseAssessV2Envelope(clone), restrictedClone),
+      (error: unknown) => error instanceof AssessV2Error && error.code === 'PERMISSION_DENIED',
+    );
+    assert.equal(sourceLoadAttempts, 0, `V1 source must not load without ${missingCapability}`);
+  }
   const validClone = deps();
   let executedClone: AssessV2AtomicCommand | undefined;
   validClone.executeAtomicCommand = async command => {

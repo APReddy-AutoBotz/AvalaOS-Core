@@ -204,7 +204,7 @@ try {
   const cloneArgs = (caseId, sourceAssessmentId, name, contract, requestNumber, idempotencyKey, overrides = {}) => [
     A,O,W,caseId,sourceAssessmentId,name,'',overrides.sourceProcessId ?? P,JSON.stringify(overrides.sourceV1 ?? sourceV1),
     JSON.stringify(overrides.importedFacts ?? importedFacts),JSON.stringify(overrides.importedEvidence ?? importedEvidence),JSON.stringify(overrides.agentNecessity ?? agentNecessity),
-    contract,req(requestNumber),idempotencyKey,authorizationVersion,
+    contract,req(requestNumber),idempotencyKey,overrides.authorizationVersion ?? authorizationVersion,
   ];
   await test.query(
     "UPDATE assessments SET score_version='assess-core-2026-05',responses=$2,evidence_items=$3,status='Ready for Review',version=1 WHERE id=$1",
@@ -238,6 +238,26 @@ try {
   const sourceBefore = (await test.query(
     'SELECT responses,evidence_items,score_version,status,version FROM assessments WHERE id=$1', [V1],
   )).rows[0];
+  for (const [capability, deniedCaseId, key, requestNumber] of [
+    ['assess.v2.create', '31000000-0000-4000-8000-000000000090', 'clone-without-v2-create', 51],
+    ['assess.read', '31000000-0000-4000-8000-000000000091', 'clone-without-v1-read', 52],
+  ]) {
+    await test.query(
+      'DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key=$2',
+      ['11000000-0000-4000-8000-000000000012', capability],
+    );
+    const deniedAuthorizationVersion = Number((await test.query(
+      'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
+    )).rows[0].version);
+    await assert.rejects(asRole(test, 'service_role', () => test.query(
+      'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+      cloneArgs(deniedCaseId,V1,'Denied clone','assess-v1-to-v2-clone-2026-07-15',requestNumber,key,{authorizationVersion:deniedAuthorizationVersion}),
+    )), /PR1B_NOT_FOUND/);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE id=$1',[deniedCaseId])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1',[key])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1',[deniedCaseId])).rows[0].n),0);
+    await test.query('INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,$2)', ['11000000-0000-4000-8000-000000000012', capability]);
+  }
   const rejectedClone = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs('31000000-0000-4000-8000-000000000097',V1,'Rejected clone','wrong-contract',29,'clone-wrong-contract'),

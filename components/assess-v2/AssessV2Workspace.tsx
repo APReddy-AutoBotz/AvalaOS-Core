@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Assessment } from '../../types';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import {
@@ -6,6 +6,7 @@ import {
   createAssessV2Case,
   draftFromAssessmentCase,
   finalizeAssessV2Case,
+  findAssessV2CaseForProcess,
   readAssessV2Case,
   saveAssessV2Draft,
   type AssessV2DraftInput,
@@ -17,6 +18,7 @@ import { FIELD_REGISTRY } from '../../services/assessV2/registry';
 import { createUnknownAgentNecessityFacts, type PrimitiveType } from '../../services/assessV2/types';
 
 interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
+type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
 
 const primitiveTypes: PrimitiveType[] = ['Capture', 'Extract', 'Classify', 'Validate', 'Calculate', 'Reconcile', 'Retrieve', 'Investigate', 'Decide', 'Approve', 'Route', 'Execute', 'Communicate', 'Monitor', 'Audit'];
 const agentKeys = ['irreducibleAmbiguity', 'adaptiveNextStep', 'toolOrPathSelection', 'incrementalValue', 'controllable'] as const;
@@ -67,6 +69,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
   const [result, setResult] = useState<AssessV2ReadProjection | null>(null);
   const [importedFacts, setImportedFacts] = useState<AssessV2ReadProjection['case']['importedFacts']>([]);
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
+  const [discoveryState, setDiscoveryState] = useState<DiscoveryState>('waiting');
   const capabilities = tenantContext?.capabilities ?? [];
   const can = (capability: string) => sessionState === 'ready' && capabilities.includes(capability);
   const isReadOnly = sessionState !== 'ready' || result?.case.status === 'reviewer-ready';
@@ -82,9 +85,49 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     draft.evidenceLinks.some(item => !item.claimIds.length) && 'an exact claim for every evidence item',
   ].filter(Boolean) as string[] : [], [draft]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setDraft(null); setVersion(null); setResult(null); setImportedFacts([]); setMessage(null);
+    if (sessionState !== 'ready' || !tenantContext) {
+      setDiscoveryState('waiting');
+      return () => { cancelled = true; };
+    }
+    if (!tenantContext.capabilities.includes(ASSESS_V2_CAPABILITIES.read)) {
+      setDiscoveryState('ready');
+      return () => { cancelled = true; };
+    }
+    setDiscoveryState('loading');
+    void (async () => {
+      try {
+        const caseId = await findAssessV2CaseForProcess(tenantContext, processId);
+        if (cancelled) return;
+        if (!caseId) { setDiscoveryState('ready'); return; }
+        const projection = await readAssessV2Case(caseId);
+        if (cancelled) return;
+        if (!projection) throw new Error('The existing V2 case is not available.');
+        setVersion(projection.case.version);
+        setImportedFacts(projection.case.importedFacts ?? []);
+        if (projection.decision) {
+          setResult(projection); setDraft(null);
+          setMessage('Existing reviewer-ready Decision Pack reopened in read-only mode.');
+        } else {
+          setResult(null); setDraft(draftFromAssessmentCase(projection.case, projection.name, projection.description));
+          setMessage('Existing V2 draft resumed from the current immutable authoring version.');
+        }
+        setDiscoveryState('ready');
+      } catch (error) {
+        if (cancelled) return;
+        handleEnterpriseBoundary(error);
+        setDiscoveryState('failed');
+        setMessage('Existing V2 case discovery failed. Create and clone remain unavailable to prevent a duplicate case.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [handleEnterpriseBoundary, processId, sessionState, tenantContext]);
   const run = async (action: () => Promise<void>) => { setBusy(true); setMessage(null); try { await action(); } catch (error) { handleEnterpriseBoundary(error); setMessage(error instanceof Error ? error.message : 'The Assess V2 action could not be completed.'); } finally { setBusy(false); } };
   const start = (clone: boolean) => run(async () => {
     if (!tenantContext) throw new Error('A server-issued workspace context is required.');
+    if (discoveryState !== 'ready') throw new Error('Existing V2 case discovery must complete before a case can be created.');
     const caseId = crypto.randomUUID(); const description = processDescription || 'Decision-intelligence assessment';
     const resource = clone && v1Assessment
       ? await cloneAssessV1ToV2(tenantContext, { caseId, sourceAssessmentId: v1Assessment.id, name: processName, description })
@@ -111,8 +154,10 @@ export default function AssessV2Workspace({ processId, processName, processDescr
 
   return <section className="premium-surface rounded-3xl p-2 sm:p-6" data-testid="assess-v2-workspace" aria-labelledby="assess-v2-title">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="max-w-3xl"><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9a6a00] dark:text-[#ffcf45]">Decision intelligence foundation</p><h2 id="assess-v2-title" className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">Avala Assess V2</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Compose the least-complex operating model across process primitives. V2 is additive; it never rewrites the V1 score or recommendation.</p></div>
-      {!draft && !result && <div className="flex flex-wrap gap-2"><button disabled={busy || !can(ASSESS_V2_CAPABILITIES.create)} onClick={() => start(false)} className="rounded-xl bg-[#002C4B] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Create V2 case</button><button disabled={busy || !v1Assessment || !can(ASSESS_V2_CAPABILITIES.create) || !can(ASSESS_V2_CAPABILITIES.clone)} onClick={() => start(true)} className="rounded-xl px-4 py-2.5 text-sm font-black btn-ghost disabled:opacity-50">Clone V1 as suggestions</button></div>}
+      {discoveryState === 'ready' && !draft && !result && <div className="flex flex-wrap gap-2"><button disabled={busy || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create)} onClick={() => start(false)} className="rounded-xl bg-[#002C4B] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Create V2 case</button><button disabled={busy || !v1Assessment || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create) || !can(ASSESS_V2_CAPABILITIES.clone)} onClick={() => start(true)} className="rounded-xl px-4 py-2.5 text-sm font-black btn-ghost disabled:opacity-50">Clone V1 as suggestions</button></div>}
     </div>
+    {discoveryState === 'loading' && <p className="mt-4 text-sm font-semibold text-slate-500" role="status">Checking for an existing V2 case for this process.</p>}
+    {discoveryState === 'failed' && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800" role="alert">Existing V2 case lookup is unavailable. Create and clone are blocked to prevent a duplicate case.</p>}
     {v1Assessment && <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100"><strong>Legacy V1 | assess-core-2026-05.</strong> Final recommendation: {v1Assessment.scores?.recommendation?.category || 'not finalized'}. Cloned values remain unverified suggestions until reviewed.</div>}
     {missing.length > 0 && <p className="mt-4 text-xs font-semibold text-slate-500" role="status">Unavailable actions: {missing.map(item => capabilityCopy[item]).join(', ')}. Server capabilities control every mutation.</p>}
     {message && <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200" role="status">{message}</p>}
