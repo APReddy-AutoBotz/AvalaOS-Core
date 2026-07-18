@@ -196,7 +196,7 @@ try {
   await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [duplicateProcess, O, W, 'V2 duplicate prevention fixture', 'Draft']);
   assert.equal(value(await callCreate(duplicateFirst, 'create-v2-duplicate-first', 100, duplicateProcess)).outcome, 'committed');
   assert.equal(value(await callCreate(duplicateSecond, 'create-v2-duplicate-second', 101, duplicateProcess)).errorCode, 'VERSION_CONFLICT');
-  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL AND status IN (''draft'',''reviewer_ready'')', [O, W, duplicateProcess])).rows[0].n), 1);
+  assert.equal(Number((await test.query(`SELECT count(*) n FROM assess_v2_cases WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL AND status IN ('draft','reviewer_ready')`, [O, W, duplicateProcess])).rows[0].n), 1);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1', ['create-v2-duplicate-second'])).rows[0].n), 0);
   assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1", [duplicateSecond])).rows[0].n), 0);
 
