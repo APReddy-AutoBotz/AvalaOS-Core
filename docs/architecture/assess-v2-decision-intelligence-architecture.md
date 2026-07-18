@@ -108,6 +108,8 @@ Clone requires `assess.v2.clone`, `assess.v2.create`, and V1 `assess.read` autho
 
 V1 and V2 IDs, commands, persistence, outputs, and lifecycle states are not interchangeable. Existing V1 Govern and Studio handlers cannot accept V2 cases.
 
+For V1 compatibility, a scored assessment in `Changes Requested` exposes an explicit keyboard-accessible **Revise requested changes** control. The control invokes the existing authorized V1 draft persistence path, which reopens the assessment as `Draft`, clears the prior score projection, and returns the author to editable sections before a new deterministic score can be calculated and resubmitted. The control is not rendered for other V1 statuses and does not alter V1 score formulas, score version, Govern transition authority, or V2 behavior.
+
 ## Application Interaction And Modernization
 
 Each application/primitive/operation/mode interaction records interface, identity, least privilege, data, transaction, concurrency, idempotency, compensation, audit, errors, capacity, event, testing, monitoring, support, change, and lifecycle facts. Each action is independently classified as allowed, approval-bound, evidence-bound, or prohibited.
@@ -123,6 +125,8 @@ The ERP is retained and integrated or wrapped. Autonomous payment release and ve
 ## Rollback And Safe Fallback
 
 Rollback is operational feature disablement or read-only maintenance, followed by another additive forward fix. It preserves V1 and V2 data, imported facts/evidence, case versions, finalized decisions, canonical snapshots/text, receipts, hashes, and audits. Finalized V2 decisions remain readable. The accepted foundation migration and its correction are not destructively reversed. The system never restores browser authority, silently falls back to V1, reinterprets V2 data using the V1 engine, or destructively down-migrates evidence.
+
+The V1 requested-changes compatibility control can be rolled back by hiding that affordance while retaining the existing server-authoritative assessment and review records. Rollback must not restore a stale score as an editable draft result or bypass the authorized V1 persistence and resubmission transitions.
 
 ## Proof Boundary
 

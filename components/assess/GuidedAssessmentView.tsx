@@ -1103,6 +1103,28 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                             </p>
                                         </div>
                                     )}
+                                    {assessment.status === 'Changes Requested' && (
+                                        <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/30">
+                                            <p className="text-xs font-semibold leading-5 text-amber-900 dark:text-amber-200">
+                                                Reopen this assessment to clear the prior score, revise the requested fields, and calculate a new deterministic result before resubmitting.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={handleReviseRequestedChanges}
+                                                disabled={!savePolicy.enabled}
+                                                title={savePolicy.explanation || undefined}
+                                                aria-describedby={!savePolicy.enabled ? 'assess-reopen-explanation' : undefined}
+                                                className="mt-3 w-full rounded-xl bg-[#002C4B] px-4 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#003c66] focus:outline-none focus:ring-2 focus:ring-[#ffbc03] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-slate-900"
+                                            >
+                                                Revise requested changes
+                                            </button>
+                                            {!savePolicy.enabled && (
+                                                <p id="assess-reopen-explanation" className="mt-2 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-300" role="status">
+                                                    {savePolicy.explanation}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                     <textarea
                                         value={statusReasonDraft}
                                         onChange={(event) => setStatusReasonDraft(event.target.value)}

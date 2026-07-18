@@ -492,10 +492,10 @@ BEGIN
     IF r.request_hash<>h THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
     IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
   END IF;
+  IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT');END IF;
   SELECT * INTO prior FROM public.assess_v2_case_versions WHERE id=c.head_version_id;
   r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment_v2.draft.upsert',p_idempotency_key,p_request_id,h);
   IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response);END IF;
-  IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT');END IF;
   INSERT INTO public.assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,agent_necessity,source_kind,source_snapshot,imported_facts,created_by)
   VALUES(c.id,p_org_id,p_workspace_id,c.version+1,p_authoring->>'name',p_authoring->>'description',p_authoring->'agentNecessity','draft_upsert',prior.source_snapshot,prior.imported_facts,p_actor_id) RETURNING * INTO v;
   FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'primitives') LOOP INSERT INTO public.assess_v2_primitives VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
@@ -518,3 +518,87 @@ EXCEPTION WHEN OTHERS THEN
   RAISE;
 END
 $$;
+
+CREATE OR REPLACE FUNCTION public.pr1b_upsert_assessment_responses(
+  p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_assessment_id uuid,p_responses jsonb,
+  p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  r public.assess_command_receipts;
+  a public.assessments;
+  h text:=md5(concat_ws('|',p_org_id,p_workspace_id,p_assessment_id,p_expected_version,p_responses::text));
+  result jsonb;
+  reopen_requested_changes boolean:=false;
+BEGIN
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.response.write',p_authorization_version);
+  IF p_responses IS NULL OR jsonb_typeof(p_responses)<>'object'
+    OR NOT (p_responses ?& ARRAY['responses','metadata','evidenceItems','assumptions'])
+    OR (SELECT count(*) FROM jsonb_object_keys(p_responses))<>4
+    OR jsonb_typeof(p_responses->'responses')<>'object'
+    OR jsonb_typeof(p_responses->'metadata')<>'object'
+    OR jsonb_typeof(p_responses->'evidenceItems')<>'array'
+    OR jsonb_typeof(p_responses->'assumptions')<>'array'
+  THEN RAISE EXCEPTION 'PR1B_INVALID_COMMAND'; END IF;
+
+  SELECT * INTO r FROM public.assess_command_receipts
+  WHERE org_id=p_org_id AND actor_id=p_actor_id
+    AND command_type='assessment.response.upsert' AND idempotency_key=p_idempotency_key
+  FOR UPDATE;
+  IF r.id IS NOT NULL THEN
+    IF r.request_hash<>h THEN RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'; END IF;
+    IF r.status='succeeded' THEN RETURN r.response; END IF;
+  END IF;
+
+  SELECT * INTO a FROM public.assessments
+  WHERE id=p_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL
+  FOR UPDATE;
+  IF a.id IS NULL THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
+
+  -- A same-key writer can commit while this call waits on the assessment lock.
+  SELECT * INTO r FROM public.assess_command_receipts
+  WHERE org_id=p_org_id AND actor_id=p_actor_id
+    AND command_type='assessment.response.upsert' AND idempotency_key=p_idempotency_key
+  FOR UPDATE;
+  IF r.id IS NOT NULL THEN
+    IF r.request_hash<>h THEN RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'; END IF;
+    IF r.status='succeeded' THEN RETURN r.response; END IF;
+  END IF;
+
+  IF a.version<>p_expected_version OR a.status NOT IN ('Draft','Changes Requested') THEN
+    RAISE EXCEPTION 'PR1B_VERSION_CONFLICT';
+  END IF;
+  reopen_requested_changes:=a.status='Changes Requested';
+
+  r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment.response.upsert',p_idempotency_key,p_request_id,h);
+  IF r.status='succeeded' THEN RETURN r.response; END IF;
+
+  UPDATE public.assessments SET
+    responses=p_responses,
+    status=CASE WHEN reopen_requested_changes THEN 'Draft' ELSE status END,
+    scores=CASE WHEN reopen_requested_changes THEN NULL ELSE scores END,
+    score_version=CASE WHEN reopen_requested_changes THEN NULL ELSE score_version END,
+    version=version+1,updated_by=p_actor_id,updated_at=now()
+  WHERE id=a.id
+  RETURNING * INTO a;
+
+  result:=jsonb_build_object('ok',true,'outcome','committed','resource',
+    jsonb_build_object('assessmentId',a.id,'version',a.version,'status',a.status));
+  INSERT INTO public.privileged_audit_events(
+    org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata
+  ) VALUES(
+    p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment.response.upsert','assessment',a.id,'succeeded',a.version,
+    CASE WHEN reopen_requested_changes THEN jsonb_build_object('reopenedFrom','Changes Requested','scoreCleared',true) ELSE NULL END
+  );
+  UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
+  RETURN result;
+EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM NOT LIKE '%PR1B_%' THEN
+    RAISE LOG 'PR1B_COMMAND_UNAVAILABLE function=pr1b_upsert_assessment_responses sqlstate=%',SQLSTATE;
+  END IF;
+  RETURN public.pr1b_error_envelope(SQLERRM);
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.pr1b_upsert_assessment_responses(uuid,uuid,uuid,uuid,jsonb,bigint,uuid,text,bigint) TO service_role;

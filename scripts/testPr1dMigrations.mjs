@@ -444,6 +444,19 @@ try {
     assets: [], interactions: [], evidence: [],
     agentNecessity: { irreducibleAmbiguity: null, adaptiveNextStep: null, toolOrPathSelection: null, incrementalValue: null, controllable: null },
   };
+  const draftMutationState = async (caseId) => value(await test.query(`SELECT jsonb_build_object(
+    'status',c.status,'version',c.version,'headVersionId',c.head_version_id,'updatedAt',c.updated_at,
+    'caseVersions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=c.id),
+    'primitives',(SELECT count(*) FROM assess_v2_primitives WHERE case_id=c.id),
+    'edges',(SELECT count(*) FROM assess_v2_edges WHERE case_id=c.id),
+    'decisionPoints',(SELECT count(*) FROM assess_v2_decision_points WHERE case_id=c.id),
+    'exceptionPaths',(SELECT count(*) FROM assess_v2_exception_paths WHERE case_id=c.id),
+    'assets',(SELECT count(*) FROM assess_v2_application_assets WHERE case_id=c.id),
+    'interactions',(SELECT count(*) FROM assess_v2_application_interactions WHERE case_id=c.id),
+    'evidence',(SELECT count(*) FROM assess_v2_evidence_links WHERE case_id=c.id),
+    'decisions',(SELECT count(*) FROM assess_v2_decision_versions WHERE case_id=c.id),
+    'draftAudits',(SELECT count(*) FROM privileged_audit_events WHERE resource_id=c.id AND action='assessment_v2.draft.upsert')
+  ) value FROM assess_v2_cases c WHERE c.id=$1`, [caseId]));
   const raceA = await connect(urlFor(dbName));
   const raceB = await connect(urlFor(dbName));
   const upsert = (client, key, number) => asRole(client, 'service_role', () => client.query(
@@ -461,6 +474,13 @@ try {
   assert.equal(race.filter((result) => result.errorCode === 'VERSION_CONFLICT').length, 1);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_decision_points WHERE case_id=$1', [CASE])).rows[0].n), 1);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_exception_paths WHERE case_id=$1', [CASE])).rows[0].n), 1);
+
+  const staleDraftState = await draftMutationState(CASE);
+  const staleDraft = value(await upsert(test, 'stale-upsert-after-race', 43));
+  assert.equal(staleDraft.errorCode, 'VERSION_CONFLICT');
+  assert.deepEqual(await draftMutationState(CASE), staleDraftState);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='stale-upsert-after-race'")).rows[0].n), 0);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1', [req(43)])).rows[0].n), 0);
 
   const sameUpsertA = await connect(urlFor(dbName));
   const sameUpsertB = await connect(urlFor(dbName));
@@ -481,6 +501,7 @@ try {
   assert.equal(sameUpsertRace.every((result) => Number(result.resource?.version) === 2), true);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_case_versions WHERE case_id=$1', [CASE2])).rows[0].n), 2);
   assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='same-upsert' AND status='succeeded'")).rows[0].n), 1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1 AND action='assessment_v2.draft.upsert'", [CASE2])).rows[0].n), 1);
 
   const ruleSetVersion = 'assess-v2-rules-2026-07';
   const decisionVersion = 'assess-v2-decision-2026-07';
@@ -761,6 +782,15 @@ try {
   assert.equal(finalized.resource.status, 'reviewer_ready');
   const finalizedReplay = value(await finalize(CASE, 2, 'finalize-v2', 60, successRequest));
   assert.equal(finalizedReplay.outcome, 'replayed');
+  const finalizedDraftState = await draftMutationState(CASE);
+  const finalizedDraftConflict = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [A, O, W, CASE, 3, { ...authoring, name: 'Must not persist after finalization' }, req(61), 'reviewer-ready-upsert', authorizationVersion],
+  )));
+  assert.equal(finalizedDraftConflict.errorCode, 'VERSION_CONFLICT');
+  assert.deepEqual(await draftMutationState(CASE), finalizedDraftState);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='reviewer-ready-upsert'")).rows[0].n), 0);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1', [req(61)])).rows[0].n), 0);
   const receiptReplay = value(await replayFinalize(CASE, 2, 'finalize-v2'));
   assert.equal(receiptReplay.outcome, 'replayed');
   await test.query('UPDATE assess_v2_runtime_control SET read_only=true');
@@ -801,13 +831,50 @@ try {
   assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000091', 'readonly-v2', 71)).errorCode, 'READ_ONLY');
   await test.query('UPDATE assess_v2_runtime_control SET read_only=false');
 
+  const reopenedResponses = {
+    responses: { processStructure: { trigger: 'Corrected after reviewer feedback' } },
+    metadata: { reopenReason: 'requested changes' },
+    evidenceItems: [],
+    assumptions: [],
+  };
+  const callV1ResponseUpsert = (expectedVersion, key, number, responses = reopenedResponses) => asRole(test, 'service_role', () => test.query(
+    'SELECT pr1b_upsert_assessment_responses($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [A, O, W, V1, responses, expectedVersion, req(number), key, authorizationVersion],
+  ));
   const updatedV1 = await test.query(
-    "UPDATE assessments SET status='Changes Requested',version=1 WHERE id=$1 RETURNING id,org_id,workspace_id,status,version,deleted_at", [V1],
+    "UPDATE assessments SET status='Changes Requested',version=1,scores=jsonb_build_object('scoreVersion','assess-core-2026-05','prior',true),score_version='assess-core-2026-05' WHERE id=$1 RETURNING id,org_id,workspace_id,status,version,deleted_at", [V1],
   );
   assert.equal(updatedV1.rowCount, 1);
+  const reopenedV1 = value(await callV1ResponseUpsert(1, 'responses-reopen-requested-changes', 80));
+  assert.equal(reopenedV1.resource.status, 'Draft');
+  assert.equal(Number(reopenedV1.resource.version), 2);
+  const reopenedV1Row = (await test.query('SELECT status,version,responses,scores,score_version FROM assessments WHERE id=$1', [V1])).rows[0];
+  assert.equal(reopenedV1Row.status, 'Draft');
+  assert.equal(Number(reopenedV1Row.version), 2);
+  assert.deepEqual(reopenedV1Row.responses, reopenedResponses);
+  assert.equal(reopenedV1Row.scores, null);
+  assert.equal(reopenedV1Row.score_version, null);
+  assert.deepEqual(value(await callV1ResponseUpsert(1, 'responses-reopen-requested-changes', 80)), reopenedV1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='responses-reopen-requested-changes' AND status='succeeded'")).rows[0].n), 1);
+  const reopenAudit = (await test.query("SELECT metadata FROM privileged_audit_events WHERE request_id=$1 AND action='assessment.response.upsert'", [req(80)])).rows[0];
+  assert.deepEqual(reopenAudit.metadata, { reopenedFrom: 'Changes Requested', scoreCleared: true });
+
+  await test.query(
+    "UPDATE assessments SET status='Approved',version=3,scores=jsonb_build_object('scoreVersion','assess-core-2026-05','approved',true),score_version='assess-core-2026-05' WHERE id=$1", [V1],
+  );
+  const approvedBefore = (await test.query('SELECT status,version,responses,scores,score_version,updated_at FROM assessments WHERE id=$1', [V1])).rows[0];
+  const approvedWrite = value(await callV1ResponseUpsert(3, 'responses-approved-denied', 81, { ...reopenedResponses, metadata: { forbidden: true } }));
+  assert.equal(approvedWrite.errorCode, 'VERSION_CONFLICT');
+  assert.deepEqual((await test.query('SELECT status,version,responses,scores,score_version,updated_at FROM assessments WHERE id=$1', [V1])).rows[0], approvedBefore);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='responses-approved-denied'")).rows[0].n), 0);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1', [req(81)])).rows[0].n), 0);
+
+  await test.query(
+    "UPDATE assessments SET status='Changes Requested',version=4,scores=jsonb_build_object('scoreVersion','assess-core-2026-05'),score_version='assess-core-2026-05' WHERE id=$1", [V1],
+  );
   const resubmitted = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1c_govern_resolve($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
-    [A, O, W, V1, 'submit', 'resubmitted', 1, req(80), 'govern-resubmit', authorizationVersion],
+    [A, O, W, V1, 'submit', 'resubmitted', 4, req(82), 'govern-resubmit', authorizationVersion],
   )));
   assert.equal(resubmitted.resource.status, 'In Review');
 

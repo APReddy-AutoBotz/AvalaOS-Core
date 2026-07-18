@@ -38,8 +38,8 @@ Results below apply only to commands executed against the correction worktree. E
 | `npm.cmd run test:migrations:pr1a` against isolated PostgreSQL 15 | Passed; fresh, idempotency, supported legacy upgrade, RLS, and failure scenarios passed. |
 | `npm.cmd run test:migrations:pr1b` against isolated PostgreSQL 15 | Passed; complete disposable PostgreSQL tenant-authority, privilege, adversarial, concurrency, upgrade, fallback, and forward-fix matrix passed. |
 | `npm.cmd run test:migrations:pr1c` against isolated PostgreSQL 15 | Passed; ACL, ancestry, idempotency, lifecycle, atomicity, and rollback scenarios passed. |
-| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 15 | Passed; ACL/RLS, clone, canonical digest, atomicity, raw/receipt/read-only replay idempotency, absent-receipt and disabled-mode denial, concurrency, compatibility, and immutability passed. |
-| `npm.cmd run test:browser:pr1d` | Passed; 18/18 desktop/mobile journeys, including the persisted-draft remount scenario and the retained accessibility, overflow, error, and interaction-budget checks. |
+| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 15 | Passed; ACL/RLS, clone, canonical digest, atomicity, raw/receipt/read-only replay idempotency, absent-receipt and disabled-mode denial, zero-side-effect V2 draft conflicts, V1 requested-change reopen and score clearing, concurrency, compatibility, and immutability passed. |
+| `npm.cmd run test:browser:pr1d` | Passed; 24/24 desktop/mobile journeys, including keyboard-accessible V1 requested-change reopen, unrelated-status non-exposure, persisted-draft remount, accessibility, overflow, error, and interaction-budget checks. |
 | `npm.cmd run test:browser` | Passed; 24/24 retained PR 1A/PR 1C desktop/mobile journeys in deterministic single-worker mode. |
 | `npm.cmd run test:ai-boundary-static` | Passed; 0 forbidden hits and 0 stale allowlist entries. |
 | `npm.cmd run test:secret-hygiene` | Passed; 0 forbidden hits and no tracked `.env` files. |
@@ -47,7 +47,7 @@ Results below apply only to commands executed against the correction worktree. E
 | PR 1D Markdown relative-link validation | Passed through `npm.cmd run test:docs:pr1d`. |
 | PR 1D buyer-copy/UTF-8 scanner | Passed through `npm.cmd run lint:pr1d`; no changed-file mojibake or legacy `assess.v2.write` references. |
 | `git diff --check` | Passed; line-ending conversion warnings only. |
-| GitHub PR #209 final correction-head CI | Pending after this evidence-bearing correction commit. The preceding head `fe1170ccc39f565c0133507d1cb6c25b534c249b` exposed the raw finalization replay and remount-test synchronization defects corrected and reproduced locally in this commit. Final workflow identifiers and results are tracked in GitHub checks and the PR description to avoid a self-referential evidence cycle. |
+| GitHub PR #209 final correction-head CI | Pending after this evidence-bearing correction commit. The preceding remote head `16a64b4a982d04a67743d753f8412e0becdc01ab` exposed the V2 draft-receipt ordering and V1 requested-change reopen defects corrected and reproduced locally in this commit. Final workflow identifiers and results are tracked in GitHub checks and the PR description to avoid a self-referential evidence cycle. |
 | Hosted/live Supabase | Not Run by design. |
 
 No live or hosted infrastructure, production data, logs, secrets, storage objects, deployment controls, or incident actions were accessed. This ledger must not be read as buyer acceptance, deployment readiness, scientific calibration, guaranteed economics, compliance certification, or security certification.
@@ -58,7 +58,7 @@ Set the V2 runtime control to disabled or read-only, leave V1 behavior available
 
 ## Final correction-head acceptance
 
-Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 18/18 PR 1D browser journeys, and the production build.
+Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 24/24 PR 1D browser journeys, and the production build.
 
 PR 1D coverage is 98.52% lines, 84.37% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
 
@@ -93,3 +93,11 @@ The final-head Codex review identified two P2 edge cases. First, the receipt rep
 Second, finalization treated any non-empty evidence claim string as meaningful. The locked deterministic validator now rejects every author evidence claim that is not an exact registered V2 field, an exact imported V1 fact field, or a bounded `v1.evidence.<source-id>` provenance claim on a real V1 clone. Tests reject typo/default and unbound V1 claims while preserving the canonical fixture and clone-import boundary. This is validation hardening only; the rule set and decision version are unchanged.
 
 Fresh correction-head CI and review-thread closure remain required before readiness.
+
+### Final review draft-receipt and requested-change correction
+
+The final-head Codex review identified two additional P2 defects. The V2 draft upsert claimed an idempotency receipt before checking the locked case status and expected version, so its normal `VERSION_CONFLICT` return could commit an `in_progress` receipt for a command that made no domain mutation. The correction preserves exact successful replay checks before and after the case lock, but validates mutable draft status and version before `pr1b_claim_command`. The isolated PostgreSQL 15 matrix proves stale-version and reviewer-ready conflicts leave the case, immutable authoring versions, child rows, decisions, receipts, and privileged audits unchanged; a valid same-key race still yields one commit, one exact replay, one succeeded receipt, and one audit.
+
+The V1 `Changes Requested` surface contained a reopen handler but no rendered control, and the accepted enterprise response-upsert RPC neither changed the database status to `Draft` nor cleared the prior score. The UI now exposes an authorization-aware, keyboard-operable **Revise requested changes** control only for that status. The service-role-only response-upsert correction locks the tenant-owned assessment, permits only `Draft` or `Changes Requested`, and atomically persists requested corrections, clears `scores` and `score_version`, increments the version, returns `Draft`, records sanitized audit metadata, and supports exact replay. Other lifecycle states and stale versions fail before receipt creation. The PostgreSQL matrix proves committed reopen, score clearing, exact replay, and `Approved` denial with zero side effects; Playwright proves invocation and non-exposure in `Ready for Review` and `Approved` across desktop and mobile.
+
+These corrections do not change V1 `assess-core-2026-05` formulas, weights, thresholds, hard stops, recommendation logic, or score version. They do not add V2 approval, evidence attestation, Govern resolution, Studio handoff, export, sharing, hosted proof, or deployment claims. Fresh correction-head CI and a final-head review with zero unresolved threads remain required before readiness.

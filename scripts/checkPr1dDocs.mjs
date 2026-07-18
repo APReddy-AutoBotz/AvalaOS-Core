@@ -57,7 +57,9 @@ for (const phrase of [
 const evidence = read(canonicalFiles[1]);
 for (const phrase of [
   'Correction verification ledger', 'Not Run', 'Hosted/live Supabase',
-  '98.52% lines, 84.37% branches, 96.51% functions', 'buyer acceptance', 'additive forward fix',
+  '98.52% lines, 84.37% branches, 96.51% functions', '24/24 PR 1D browser journeys',
+  'Final review draft-receipt and requested-change correction', 'zero side effects',
+  'buyer acceptance', 'additive forward fix',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

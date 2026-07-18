@@ -30,7 +30,7 @@ type FixtureOptions = {
   failCommand?: { type: string; code: BoundaryCode };
   failV2Command?: { type: string; code: BoundaryCode };
   v2Offline?: boolean;
-  initialStatus?: 'Ready for Review' | 'Approved' | 'Handed Off to Docs';
+  initialStatus?: 'Ready for Review' | 'Changes Requested' | 'Approved' | 'Handed Off to Docs';
   trustedApproval?: boolean;
 };
 
@@ -224,10 +224,12 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
           },
         };
       } else if (body.commandType === 'assessment.response.upsert' && assessment) {
+        const reopensRequestedChanges = assessment.status === 'Changes Requested';
         assessment = {
           ...assessment,version:assessment.version+1,status:'Draft',
           responses:body.payload.responses,metadata:body.payload.metadata,
           evidence_items:body.payload.evidenceItems,assumptions:body.payload.assumptions,
+          ...(reopensRequestedChanges ? { score_version:null,scores:undefined } : {}),
         };
       } else if (body.commandType === 'assessment.finalize' && assessment) {
         assessment = {
@@ -297,7 +299,7 @@ const openAssessment = async (page: Page) => {
   await page.goto('/');
   await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible();
   await page.getByRole('button',{ name:'View' }).first().click();
-  await expect(page.getByRole('heading',{ name:'Invoice exception handling' })).toBeVisible();
+  await expect(page.getByRole('heading',{ name:'Invoice exception handling' }).first()).toBeVisible();
   await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
   await expect(page.getByTestId('enterprise-assess')).toBeVisible();
 };
@@ -309,6 +311,33 @@ test.beforeEach(async ({ page }) => {
 });
 
 
+
+test('V1 requested changes expose an accessible control that reopens the draft and clears the prior score', async ({ page }) => {
+  test.setTimeout(60_000);
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Changes Requested' });
+  await openAssessment(page);
+  const reopen = page.getByRole('button', { name:'Revise requested changes' });
+  await expect(reopen).toBeVisible();
+  await reopen.focus();
+  await expect(reopen).toBeFocused();
+  await reopen.press('Enter');
+  await expect(page.getByRole('button', { name:'Save Draft' })).toBeVisible();
+  await expect(page.getByRole('button', { name:'Revise requested changes' })).toHaveCount(0);
+  expect(fixture.assessment?.status).toBe('Draft');
+  expect(fixture.assessment?.score_version).toBeNull();
+  expect(fixture.assessment?.scores).toBeUndefined();
+  const reopenCommands = fixture.committedCommands.filter(item => item.commandType === 'assessment.response.upsert');
+  expect(reopenCommands).toHaveLength(1);
+  expect(reopenCommands[0].payload).not.toHaveProperty('scores');
+});
+
+for (const status of ['Ready for Review', 'Approved'] as const) {
+  test(`V1 requested changes control is not exposed in ${status}`, async ({ page }) => {
+    await installEnterpriseFixture(page, { initialStatus:status });
+    await openAssessment(page);
+    await expect(page.getByRole('button', { name:'Revise requested changes' })).toHaveCount(0);
+  });
+}
 
 test('V2 capability-controlled authoring finalizes server-only decision data and renders read-only on desktop and mobile',async ({ page }) => {
   test.setTimeout(60_000);
