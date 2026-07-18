@@ -189,7 +189,7 @@ try {
   }
   const replay = value(await callCreate(CASE, 'create-v2-0', 20));
   assert.equal(replay.outcome, 'replayed');
-  assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000099', 'create-v2-0', 99)).errorCode, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000099', 'create-v2-0', 99, P)).errorCode, 'IDEMPOTENCY_CONFLICT');
   const duplicateProcess = '12000000-0000-4000-8000-000000000099';
   const duplicateFirst = '31000000-0000-4000-8000-000000000100';
   const duplicateSecond = '31000000-0000-4000-8000-000000000101';
