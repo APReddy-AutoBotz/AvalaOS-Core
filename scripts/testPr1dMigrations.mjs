@@ -87,6 +87,7 @@ const NEG_ALTERED_SNAPSHOT = '31000000-0000-4000-8000-000000000015';
 const NEG_CANONICAL_ORDER = '31000000-0000-4000-8000-000000000016';
 const APPROVED_CLONE = '31000000-0000-4000-8000-000000000017';
 const INACTIVE_CLONE = '31000000-0000-4000-8000-000000000018';
+const NEG_FABRICATED_EVIDENCE = '31000000-0000-4000-8000-000000000019';
 const req = (number) => `41000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 
 let admin;
@@ -180,7 +181,7 @@ try {
     'SELECT pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
     [A, O, W, id, processId, 'V2 Case', '', req(number), key, authorizationVersion],
   ));
-  const createIds = [CASE, CASE2, NEG_DIGEST, NEG_BINDING, NEG_SNAPSHOT, NEG_AUDIT, NEG_INPUT_HASH, NEG_EVIDENCE_HASH, NEG_OUTPUT_HASH, NEG_WORKSPACE, NEG_CASE, NEG_SOURCE_VERSION, NEG_RULE_SET, NEG_ALTERED_SNAPSHOT, NEG_CANONICAL_ORDER];
+  const createIds = [CASE, CASE2, NEG_DIGEST, NEG_BINDING, NEG_SNAPSHOT, NEG_AUDIT, NEG_INPUT_HASH, NEG_EVIDENCE_HASH, NEG_OUTPUT_HASH, NEG_WORKSPACE, NEG_CASE, NEG_SOURCE_VERSION, NEG_RULE_SET, NEG_ALTERED_SNAPSHOT, NEG_CANONICAL_ORDER, NEG_FABRICATED_EVIDENCE];
   for (let index = 0; index < createIds.length; index += 1) {
     await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [createIds[index], O, W, `V2 fixture process ${index}`, 'Draft']);
     const created = value(await callCreate(createIds[index], `create-v2-${index}`, 20 + index));
@@ -540,9 +541,13 @@ try {
   });
   assert.notEqual(reorderedVerifierCanonical, verifierBound.canonical);
   assert.equal(await verifyCanonical({ canonical: reorderedVerifierCanonical, hash: digest(reorderedVerifierCanonical) }), false, 'reordered canonical text');
-  const finalize = (caseId, version, key, number, overrides = {}, client = test) => {
-    const sourceCase = overrides.sourceCase ?? { id: caseId, version };
-    const evidence = overrides.evidence ?? [];
+  const loadAuthoritativeCase = (caseId, version, client = test) => asRole(client, 'service_role', async () => value(await client.query(
+    'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value', [caseId, O, W, version],
+  )));
+  const finalize = async (caseId, version, key, number, overrides = {}, client = test) => {
+    const authoritativeSource = overrides.authoritativeSource ?? await loadAuthoritativeCase(caseId, version, client);
+    const sourceCase = overrides.sourceCase ?? authoritativeSource;
+    const evidence = overrides.evidence ?? authoritativeSource.evidence;
     const output = overrides.output ?? makeOutput(caseId);
     const selectedRuleSetVersion = overrides.ruleSetVersion ?? ruleSetVersion;
     const inputBound = overrides.inputBound ?? bound('input', caseId, version, sourceCase);
@@ -566,14 +571,30 @@ try {
     const caseState = (await test.query('SELECT status,version FROM assess_v2_cases WHERE id=$1', [caseId])).rows[0];
     assert.deepEqual(caseState, { status: 'draft', version: '1' });
     assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_decision_versions WHERE case_id=$1', [caseId])).rows[0].n), 0);
+    for (const table of ['assess_v2_candidate_evaluations', 'assess_v2_gate_results', 'assess_v2_control_requirements', 'assess_v2_modernization_dispositions']) {
+      assert.equal(Number((await test.query(`SELECT count(*) n FROM ${table} WHERE case_id=$1`, [caseId])).rows[0].n), 0);
+    }
     assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1 AND action='assessment_v2.finalize'", [caseId])).rows[0].n), 0);
     assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1', [key])).rows[0].n), 0);
   };
 
   const negativeMatrix = [
     {
+      name: 'fabricated source and output snapshots', caseId: NEG_CASE, key: 'fabricated-source-output', number: 54,
+      overrides: async (caseId) => {
+        const sourceCase = { ...(await loadAuthoritativeCase(caseId, 1)), name: 'Fabricated service-role source' };
+        const output = makeOutput(caseId);
+        output.candidateEvaluations[0].fit = 'Fabricated Fit';
+        return { sourceCase, output };
+      },
+    },
+    {
+      name: 'fabricated evidence snapshot', caseId: NEG_FABRICATED_EVIDENCE, key: 'fabricated-evidence', number: 59,
+      overrides: () => ({ evidence: [{ id: crypto.randomUUID(), claimIds: ['fabricated'], sourceType: 'document', status: 'submitted', validated: false }] }),
+    },
+    {
       name: 'input hash', caseId: NEG_INPUT_HASH, key: 'bad-input-hash', number: 50,
-      overrides: (caseId) => { const sourceCase = { id: caseId, version: 1 }; return { sourceCase, inputBound: { ...bound('input', caseId, 1, sourceCase), hash: '0'.repeat(64) } }; },
+      overrides: async (caseId) => { const sourceCase = await loadAuthoritativeCase(caseId, 1); return { sourceCase, inputBound: { ...bound('input', caseId, 1, sourceCase), hash: '0'.repeat(64) } }; },
     },
     {
       name: 'evidence hash', caseId: NEG_EVIDENCE_HASH, key: 'bad-evidence-hash', number: 51,
@@ -587,10 +608,7 @@ try {
       name: 'wrong workspace', caseId: NEG_WORKSPACE, key: 'wrong-workspace', number: 53,
       overrides: () => ({ workspaceId: WB }), throws: /PR1B_NOT_FOUND/,
     },
-    {
-      name: 'wrong case', caseId: NEG_CASE, key: 'wrong-case', number: 54,
-      overrides: () => ({ sourceCase: { id: CASE, version: 1 } }),
-    },
+
     {
       name: 'wrong source version', caseId: NEG_SOURCE_VERSION, key: 'wrong-source-version', number: 55,
       overrides: (caseId) => ({ sourceCase: { id: caseId, version: 2 } }),
@@ -605,7 +623,7 @@ try {
     },
   ];
   for (const negative of negativeMatrix) {
-    const attempt = () => finalize(negative.caseId, 1, negative.key, negative.number, negative.overrides(negative.caseId));
+    const attempt = async () => finalize(negative.caseId, 1, negative.key, negative.number, await negative.overrides(negative.caseId));
     if (negative.throws) await assert.rejects(attempt(), negative.throws, negative.name);
     else assert.equal(value(await attempt()).errorCode, 'INVALID_COMMAND', negative.name);
     await assertNoFinalizeSideEffects(negative.caseId, negative.key);
@@ -662,8 +680,8 @@ try {
     CREATE TRIGGER pr1d_test_reject_finalize_audit BEFORE INSERT ON privileged_audit_events
       FOR EACH ROW EXECUTE FUNCTION pr1d_test_reject_finalize_audit();
   `);
-  const auditSource = { id: NEG_AUDIT, version: 1 };
-  const auditEvidence = [];
+  const auditSource = await loadAuthoritativeCase(NEG_AUDIT, 1);
+  const auditEvidence = auditSource.evidence;
   const auditOutput = makeOutput(NEG_AUDIT);
   const auditInputBound = bound('input', NEG_AUDIT, 1, auditSource);
   const auditEvidenceBound = bound('evidence', NEG_AUDIT, 1, auditEvidence);
@@ -693,8 +711,8 @@ try {
   await test.query('DROP TRIGGER pr1d_test_reject_finalize_audit ON privileged_audit_events; DROP FUNCTION pr1d_test_reject_finalize_audit()');
   await assertNoFinalizeSideEffects(NEG_AUDIT, 'atomic-finalize');
 
-  const successSource = { id: CASE, version: 2 };
-  const successEvidence = [];
+  const successSource = await loadAuthoritativeCase(CASE, 2);
+  const successEvidence = successSource.evidence;
   const successOutput = makeOutput(CASE);
   const successRequest = {
     sourceCase: successSource, evidence: successEvidence, output: successOutput,
@@ -704,8 +722,8 @@ try {
   };
   const finalizeRaceA = await connect(urlFor(dbName));
   const finalizeRaceB = await connect(urlFor(dbName));
-  const sameFinalizeSource = { id: CASE2, version: 2 };
-  const sameFinalizeEvidence = [];
+  const sameFinalizeSource = await loadAuthoritativeCase(CASE2, 2);
+  const sameFinalizeEvidence = sameFinalizeSource.evidence;
   const sameFinalizeOutput = makeOutput(CASE2);
   const sameFinalizeRequest = {
     sourceCase: sameFinalizeSource, evidence: sameFinalizeEvidence, output: sameFinalizeOutput,
@@ -735,8 +753,10 @@ try {
   const finalizedReplay = value(await finalize(CASE, 2, 'finalize-v2', 60, successRequest));
   assert.equal(finalizedReplay.outcome, 'replayed');
   const decision = (await test.query(
-    'SELECT input_canonical,evidence_canonical,output_canonical,input_hash,evidence_hash,output_hash FROM assess_v2_decision_versions WHERE case_id=$1', [CASE],
+    'SELECT input_snapshot,evidence_snapshot,input_canonical,evidence_canonical,output_canonical,input_hash,evidence_hash,output_hash FROM assess_v2_decision_versions WHERE case_id=$1', [CASE],
   )).rows[0];
+  assert.deepEqual(decision.input_snapshot, successSource);
+  assert.deepEqual(decision.evidence_snapshot, successEvidence);
   for (const domain of ['input', 'evidence', 'output']) {
     assert.equal(digest(decision[`${domain}_canonical`]), decision[`${domain}_hash`]);
   }

@@ -361,6 +361,7 @@ CREATE OR REPLACE FUNCTION public.pr1d_finalize_assess_v2_case(
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE c public.assess_v2_cases;r public.assess_command_receipts;d public.assess_v2_decision_versions;x jsonb;
+  authoritative_source jsonb;authoritative_evidence jsonb;
   h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_expected_version,p_input_hash,p_evidence_hash,p_output_hash),'sha256'),'hex');result jsonb;
 BEGIN
   PERFORM public.pr1d_assert_enabled();
@@ -380,17 +381,24 @@ BEGIN
     IF r.request_hash<>h THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
     IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
   END IF;
-  IF p_source_case->>'id'<>c.id::text OR (p_source_case->>'version')::bigint<>c.version OR p_rule_set_version<>c.rule_set_version OR p_output_snapshot->>'caseId'<>c.id::text OR p_output_snapshot->>'validationStatus'<>'reviewer-ready' THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
-  IF NOT public.pr1d_verify_bound_canonical('input',p_input_canonical,p_source_case,p_input_hash,p_org_id,p_workspace_id,p_case_id,c.version,c.schema_version,p_rule_set_version,p_decision_version)
-    OR NOT public.pr1d_verify_bound_canonical('evidence',p_evidence_canonical,p_evidence_snapshot,p_evidence_hash,p_org_id,p_workspace_id,p_case_id,c.version,c.schema_version,p_rule_set_version,p_decision_version)
+  IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT'); END IF;
+  authoritative_source:=public.pr1d_load_assess_v2_case(c.id,c.org_id,c.workspace_id,c.version);
+  authoritative_evidence:=authoritative_source->'evidence';
+  IF p_source_case IS DISTINCT FROM authoritative_source
+    OR p_evidence_snapshot IS DISTINCT FROM authoritative_evidence
+    OR p_rule_set_version<>c.rule_set_version
+    OR p_output_snapshot->>'caseId'<>c.id::text
+    OR p_output_snapshot->>'validationStatus'<>'reviewer-ready'
+  THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
+  IF NOT public.pr1d_verify_bound_canonical('input',p_input_canonical,authoritative_source,p_input_hash,p_org_id,p_workspace_id,p_case_id,c.version,c.schema_version,p_rule_set_version,p_decision_version)
+    OR NOT public.pr1d_verify_bound_canonical('evidence',p_evidence_canonical,authoritative_evidence,p_evidence_hash,p_org_id,p_workspace_id,p_case_id,c.version,c.schema_version,p_rule_set_version,p_decision_version)
     OR NOT public.pr1d_verify_bound_canonical('output',p_output_canonical,p_output_snapshot,p_output_hash,p_org_id,p_workspace_id,p_case_id,c.version,c.schema_version,p_rule_set_version,p_decision_version)
   THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
 
   r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment_v2.finalize',p_idempotency_key,p_request_id,h);
   IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
-  IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT'); END IF;
   INSERT INTO public.assess_v2_decision_versions(case_id,source_version_id,org_id,workspace_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_canonical,evidence_canonical,output_canonical,input_hash,evidence_hash,output_hash,receipt_id,created_by,created_at)
-  VALUES(c.id,c.head_version_id,p_org_id,p_workspace_id,c.schema_version,p_rule_set_version,p_decision_version,'reviewer-ready',p_source_case,p_evidence_snapshot,p_output_snapshot,p_input_canonical,p_evidence_canonical,p_output_canonical,p_input_hash,p_evidence_hash,p_output_hash,r.id,p_actor_id,p_created_at) RETURNING * INTO d;
+  VALUES(c.id,c.head_version_id,p_org_id,p_workspace_id,c.schema_version,p_rule_set_version,p_decision_version,'reviewer-ready',authoritative_source,authoritative_evidence,p_output_snapshot,p_input_canonical,p_evidence_canonical,p_output_canonical,p_input_hash,p_evidence_hash,p_output_hash,r.id,p_actor_id,p_created_at) RETURNING * INTO d;
   FOR x IN SELECT * FROM jsonb_array_elements(COALESCE(p_output_snapshot->'candidateEvaluations','[]'::jsonb)) LOOP INSERT INTO public.assess_v2_candidate_evaluations VALUES(gen_random_uuid(),d.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
   FOR x IN SELECT * FROM jsonb_array_elements(COALESCE(p_output_snapshot->'gateResults','[]'::jsonb)) LOOP INSERT INTO public.assess_v2_gate_results VALUES(gen_random_uuid(),d.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
   FOR x IN SELECT * FROM jsonb_array_elements(COALESCE(p_output_snapshot->'controlRequirements','[]'::jsonb)) LOOP INSERT INTO public.assess_v2_control_requirements VALUES(gen_random_uuid(),d.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
@@ -412,15 +420,46 @@ EXCEPTION
 END
 $$;
 
+CREATE OR REPLACE FUNCTION public.pr1d_replay_assess_v2_finalize(
+  p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_expected_version bigint,
+  p_idempotency_key text,p_authorization_version bigint
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE r public.assess_command_receipts;
+BEGIN
+  PERFORM public.pr1d_assert_enabled();
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.finalize',p_authorization_version);
+  SELECT * INTO r FROM public.assess_command_receipts
+    WHERE org_id=p_org_id AND actor_id=p_actor_id
+      AND command_type='assessment_v2.finalize' AND idempotency_key=p_idempotency_key
+    FOR UPDATE;
+  IF r.id IS NULL THEN RETURN jsonb_build_object('errorCode','NOT_FOUND'); END IF;
+  IF r.workspace_id<>p_workspace_id
+    OR r.status<>'succeeded'
+    OR r.response->>'id'<>p_case_id::text
+    OR (r.response->>'version')::bigint<>p_expected_version+1
+  THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+  RETURN jsonb_build_object('outcome','replayed','resource',r.response);
+EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM LIKE '%PR1B_AUTHORIZATION_STALE%' THEN RETURN jsonb_build_object('errorCode','AUTHORIZATION_STALE');
+  ELSIF SQLERRM LIKE '%PR1D_FEATURE_DISABLED%' THEN RETURN jsonb_build_object('errorCode','FEATURE_DISABLED');
+  ELSIF SQLERRM LIKE '%PR1D_READ_ONLY%' THEN RETURN jsonb_build_object('errorCode','READ_ONLY');
+  END IF;
+  RAISE;
+END
+$$;
+
 REVOKE ALL ON FUNCTION public.pr1d_v1_import_facts(jsonb),public.pr1d_v1_evidence_id(uuid,text),public.pr1d_canonical_json(jsonb),public.pr1d_verify_bound_canonical(text,text,jsonb,text,uuid,uuid,uuid,bigint,text,text,text) FROM PUBLIC,anon,authenticated,service_role;
 -- These SECURITY DEFINER helpers are implementation details, not callable API.
 -- Keep invocation authority with the function owner so the private RPCs can use
 -- them without exposing a direct bypass to any PostgREST role.
 REVOKE ALL ON FUNCTION public.pr1d_assert_enabled(),public.pr1d_resource(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint) TO service_role;
 
 COMMENT ON COLUMN public.assess_v2_case_versions.imported_facts IS 'Immutable allowlisted V1 facts imported as assumed/unknown with source=v1-import.';
 COMMENT ON FUNCTION public.pr1d_v1_evidence_id(uuid,text) IS 'Internal deterministic V1 evidence surrogate used to compare clone projections with the locked source row.';

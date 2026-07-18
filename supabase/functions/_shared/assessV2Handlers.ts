@@ -37,6 +37,14 @@ export const executeAssessV2Command = async (request: Request, envelope: AssessV
     }
   }
   if (envelope.commandType === 'assessment_v2.finalize') {
+    try {
+      // A completed finalize has already advanced the case out of draft. Probe the
+      // server-owned receipt first so an identical retry can replay without
+      // weakening the locked-source validation required for a new command.
+      return await dependencies.executeAtomicCommand(command);
+    } catch (error) {
+      if (!(error instanceof AssessV2Error) || error.code !== 'RESOURCE_NOT_AVAILABLE') throw error;
+    }
     const source = await dependencies.loadLockedCaseForFinalize({ caseId: envelope.payload.caseId as string, organizationId: envelope.organizationId, workspaceId: envelope.workspaceId, expectedVersion: envelope.expectedVersion! });
     if (!source) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
     command.serverDecision = await buildDecisionVersionV2(source, actor.id, new Date().toISOString());

@@ -6,7 +6,7 @@ import { ASSESS_V1_SCORE_VERSION, ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION } from 
 import { AssessV2AtomicCommand, AssessV2Dependencies, AssessV2Envelope, AssessV2Error, asAssessV2Error, assessV2ErrorBody, parseAssessV2DraftPayload, parseAssessV2Envelope } from './assessV2Command.ts';
 import { executeAssessV2Command } from './assessV2Handlers.ts';
 import { handleAssessV2Request } from './assessV2Router.ts';
-import { assessV2RpcFailureCode, buildAssessV2RpcBody } from './assessV2Db.ts';
+import { assessV2RpcFailureCode, buildAssessV2FinalizeReplayRpcBody, buildAssessV2RpcBody } from './assessV2Db.ts';
 
 const org = '11111111-1111-4111-8111-111111111111';
 const workspace = '22222222-2222-4222-8222-222222222222';
@@ -22,7 +22,10 @@ const frozenV1: Assessment = {
 };
 const commands: AssessV2AtomicCommand[] = [];
 const cloneCapabilities = [...Object.values(ASSESS_V2_CAPABILITIES), 'assess.read'];
-const deps = (): AssessV2Dependencies => ({ authenticate: async () => ({ id: actor }), loadFreshAuthority: async () => ({ actorId: actor, organizationId: org, workspaceId: workspace, authorizationVersion: 7, capabilities: cloneCapabilities }), loadFrozenV1AssessmentForClone: async () => frozenV1, loadLockedCaseForFinalize: async () => stored, executeAtomicCommand: async command => { commands.push(command); return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 1 } }; } });
+const deps = (): AssessV2Dependencies => ({ authenticate: async () => ({ id: actor }), loadFreshAuthority: async () => ({ actorId: actor, organizationId: org, workspaceId: workspace, authorizationVersion: 7, capabilities: cloneCapabilities }), loadFrozenV1AssessmentForClone: async () => frozenV1, loadLockedCaseForFinalize: async () => stored, executeAtomicCommand: async command => {
+  if (command.commandType === 'assessment_v2.finalize' && !command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+  commands.push(command); return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 1 } };
+} });
 const req = (body: unknown) => new Request('http://local/assess-v2-command', { method: 'POST', body: JSON.stringify(body) });
 
 const authoring = {
@@ -177,6 +180,31 @@ const main = async () => {
   assert.equal(JSON.parse(decision.inputCanonical).payload.interactions[0].facts.capacityKnown, true);
   assert.ok(decision.outputSnapshot.trace.every(item => item.fieldIds.length));
   assert.equal((commands[0].payload as Record<string, unknown>).decision, undefined);
+  const replayOnlyCommand = { ...parseAssessV2Envelope(finalize), actorId: actor } as AssessV2AtomicCommand;
+  assert.deepEqual(buildAssessV2FinalizeReplayRpcBody(replayOnlyCommand), {
+    p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,
+    p_expected_version: 2, p_idempotency_key: finalize.idempotencyKey, p_authorization_version: 7,
+  });
+  assert.throws(() => buildAssessV2FinalizeReplayRpcBody(commands[0]), (error: unknown) => error instanceof AssessV2Error && error.code === 'COMMAND_UNAVAILABLE');
+  const replay = deps();
+  let replayLoads = 0;
+  replay.loadLockedCaseForFinalize = async () => { replayLoads += 1; return null; };
+  replay.executeAtomicCommand = async command => {
+    assert.equal(command.serverDecision, undefined);
+    return { outcome: 'replayed', resource: { id: caseId, status: 'reviewer_ready', version: 3, decisionId: processId } };
+  };
+  const replayed = await executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), replay);
+  assert.equal(replayed.outcome, 'replayed');
+  assert.equal(replayed.resource.decisionId, processId);
+  assert.equal(replayLoads, 0, 'a committed finalize retry must replay before draft preflight');
+  const replayConflict = deps();
+  replayConflict.loadLockedCaseForFinalize = async () => { replayLoads += 1; return stored; };
+  replayConflict.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('IDEMPOTENCY_CONFLICT');
+    throw new Error('new finalize must not execute after replay conflict');
+  };
+  await assert.rejects(() => executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), replayConflict), (error: unknown) => error instanceof AssessV2Error && error.code === 'IDEMPOTENCY_CONFLICT');
+  assert.equal(replayLoads, 0, 'a replay conflict must fail closed before draft preflight');
 
   assert.throws(() => parseAssessV2Envelope({ ...base, actorId: actor }), (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND');
   const denied = deps(); denied.loadFreshAuthority = async () => null;
