@@ -159,3 +159,9 @@ Finalizable author evidence claims must bind exactly to a registered V2 decision
 An exact succeeded `assessment_v2.create` or `assessment_v2.clone_from_v1` receipt is a committed, non-mutating response. The additive correction checks it before mutable process or V1-source lifecycle validation, after locking runtime control and revalidating current tenant, workspace, authorization version, and command capabilities. Exact replay therefore survives a later parent/source soft delete.
 
 Disabled mode remains fail-closed. Read-only maintenance permits only an exact succeeded replay; a miss remains `READ_ONLY` and cannot claim a command. A mismatched request hash, workspace, resource ID, failed receipt, or in-progress receipt returns `IDEMPOTENCY_CONFLICT`. In normal mode, a receipt miss proceeds through row-locked parent/source validation, so a deleted or foreign resource returns `NOT_FOUND` without receipt, case, version, evidence, or audit side effects. Rollback remains feature disablement or read-only maintenance plus an additive forward correction; it must not delete committed receipts or restore mutable-resource checks ahead of exact replay.
+
+## Create-case agent-necessity compatibility correction
+
+A newly created unsaved V2 case projects the five canonical agent-necessity facts as complete unknown user facts (`fieldId`, `value: null`, `status: unknown`, empty `evidenceIds`, and `source: user`). The additive correction changes the future column default and explicitly persists that shape in the corrected create RPC.
+
+To preserve immutable upgrade history, the read projection normalizes only the exact legacy version-1 `create` shape whose five canonical keys all contain bare nulls; arbitrary draft, clone, or malformed shapes are not normalized. Rollback remains V2 disablement or read-only maintenance plus an additive forward fix; it must not rewrite immutable authoring versions or restore null-unsafe create projections.

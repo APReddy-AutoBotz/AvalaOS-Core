@@ -52,6 +52,8 @@ for (const phrase of [
   'recomputes each UTF-8 SHA-256 digest', 'sourceV1.importedEvidenceClaimIds',
   'immutable version-1 clone evidence', 'fabricated claim',
   'Final P2 create and clone receipt replay correction', 'two-session same-key create',
+  'Final P2 create-case agent-necessity compatibility correction', 'exact legacy version-1',
+  'freshly created, unsaved case',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -64,6 +66,8 @@ for (const phrase of [
   'Final P1 imported-V1 evidence provenance correction', 'sourceV1.importedEvidenceClaimIds',
   'fabricated `v1.evidence.*` claim', 'Final P2 create and clone receipt replay correction',
   'parent/source soft deletion', 'buyer acceptance', 'additive forward fix',
+  'Final P2 create-case agent-necessity compatibility correction', 'fresh unsaved V2 case',
+  'near-match malformed row',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

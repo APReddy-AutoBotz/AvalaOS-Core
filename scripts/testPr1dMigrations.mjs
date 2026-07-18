@@ -92,8 +92,27 @@ const CREATE_REPLAY_PROCESS = '12000000-0000-4000-8000-000000000090';
 const CREATE_REPLAY_CASE = '31000000-0000-4000-8000-000000000120';
 const CREATE_RACE_PROCESS = '12000000-0000-4000-8000-000000000091';
 const CREATE_RACE_CASE = '31000000-0000-4000-8000-000000000121';
+const LEGACY_CREATE_PROCESS = '12000000-0000-4000-8000-000000000092';
+const LEGACY_CREATE_CASE = '31000000-0000-4000-8000-000000000129';
+const LEGACY_NEAR_MATCH_PROCESS = '12000000-0000-4000-8000-000000000093';
+const LEGACY_NEAR_MATCH_CASE = '31000000-0000-4000-8000-000000000130';
 const RECEIPT_SCOPE_WORKSPACE = '11000000-0000-4000-8000-000000000019';
 const req = (number) => `41000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
+const agentNecessityKeys = ['irreducibleAmbiguity','adaptiveNextStep','toolOrPathSelection','incrementalValue','controllable'];
+const legacyCreateAgentNecessity = Object.fromEntries(agentNecessityKeys.map(key => [key,null]));
+const canonicalUnknownAgentNecessity = Object.fromEntries(agentNecessityKeys.map(key => [key,{
+  fieldId:`agent.${key}`,value:null,status:'unknown',evidenceIds:[],source:'user',
+}]));
+const assertCanonicalUnknownAgentNecessity = (actual) => {
+  assert.deepEqual(Object.keys(actual).sort(), agentNecessityKeys.slice().sort());
+  assert.deepEqual(actual, canonicalUnknownAgentNecessity);
+  assert.deepEqual(agentNecessityKeys.map(key => actual[key].value), [null,null,null,null,null]);
+  assert.equal(Object.values(actual).every(fact =>
+    fact.value === null && fact.status === 'unknown' && fact.source === 'user'
+      && Array.isArray(fact.evidenceIds) && fact.evidenceIds.length === 0
+      && Object.keys(fact).sort().join(',') === 'evidenceIds,fieldId,source,status,value'
+  ), true);
+};
 
 let admin;
 let test;
@@ -123,7 +142,22 @@ try {
   `);
   await apply(test, baseline);
   await tx(test, fixture);
-  await apply(test, [pr1b, pr1c, pr1d, correction]);
+  await apply(test, [pr1b, pr1c, pr1d]);
+  const legacyNearMatchAgentNecessity = {...legacyCreateAgentNecessity,unexpected:null};
+  for (const [processId,caseId,name,agentNecessity] of [
+    [LEGACY_CREATE_PROCESS,LEGACY_CREATE_CASE,'Legacy create upgrade',legacyCreateAgentNecessity],
+    [LEGACY_NEAR_MATCH_PROCESS,LEGACY_NEAR_MATCH_CASE,'Legacy near-match upgrade',legacyNearMatchAgentNecessity],
+  ]) {
+    await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [processId,O,W,name,'Draft']);
+    await test.query('INSERT INTO assess_v2_cases(id,org_id,workspace_id,process_id,owner_id) VALUES($1,$2,$3,$4,$5)', [caseId,O,W,processId,A]);
+    const versionId = (await test.query(
+      'INSERT INTO assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,agent_necessity,source_kind,created_by) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8) RETURNING id',
+      [caseId,O,W,name,'',JSON.stringify(agentNecessity),'create',A],
+    )).rows[0].id;
+    await test.query('UPDATE assess_v2_cases SET head_version_id=$2 WHERE id=$1', [caseId,versionId]);
+  }
+  assert.deepEqual((await test.query('SELECT agent_necessity FROM assess_v2_case_versions WHERE case_id=$1',[LEGACY_CREATE_CASE])).rows[0].agent_necessity,legacyCreateAgentNecessity);
+  await apply(test, [correction]);
 
   await test.query(
     "INSERT INTO role_capabilities(role_id,capability_key) SELECT om.role_id,capability.capability_key FROM organization_members om CROSS JOIN (VALUES ('govern.resolve'),('studio.handoff.create')) capability(capability_key) WHERE om.org_id=$1 AND om.user_id=$2 ON CONFLICT DO NOTHING",
@@ -181,6 +215,16 @@ try {
     }
   }
 
+  const loadedLegacyCreate = value(await asRole(test,'service_role',() => test.query(
+    'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[LEGACY_CREATE_CASE,O,W,1],
+  )));
+  assertCanonicalUnknownAgentNecessity(loadedLegacyCreate.agentNecessity);
+  assert.deepEqual((await test.query('SELECT agent_necessity FROM assess_v2_case_versions WHERE case_id=$1',[LEGACY_CREATE_CASE])).rows[0].agent_necessity,legacyCreateAgentNecessity);
+  const loadedLegacyNearMatch = value(await asRole(test,'service_role',() => test.query(
+    'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[LEGACY_NEAR_MATCH_CASE,O,W,1],
+  )));
+  assert.deepEqual(loadedLegacyNearMatch.agentNecessity,legacyNearMatchAgentNecessity);
+  assert.equal(Object.values(loadedLegacyNearMatch.agentNecessity).some(value => value === null),true);
   let authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
@@ -195,6 +239,13 @@ try {
     assert.equal(created.resource.status, 'draft');
     assert.equal(Number(created.resource.version), 1);
   }
+  const loadedUnsavedCreate = value(await asRole(test,'service_role',() => test.query(
+    'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[CASE,O,W,1],
+  )));
+  assertCanonicalUnknownAgentNecessity(loadedUnsavedCreate.agentNecessity);
+  assertCanonicalUnknownAgentNecessity((await test.query(
+    'SELECT agent_necessity FROM assess_v2_case_versions WHERE case_id=$1',[CASE],
+  )).rows[0].agent_necessity);
   const createReplayState = async () => value(await test.query("SELECT jsonb_build_object('cases',(SELECT count(*) FROM assess_v2_cases WHERE id=$1),'versions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=$1),'receipts',(SELECT count(*) FROM assess_command_receipts WHERE idempotency_key=$2),'audits',(SELECT count(*) FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1)) value", [CREATE_REPLAY_CASE, 'create-replay-after-delete']));
   await test.query('INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,$3,$4)', [RECEIPT_SCOPE_WORKSPACE, O, 'Receipt scope workspace', 'receipt-scope']);
   await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [CREATE_REPLAY_PROCESS, O, W, 'Create replay parent', 'Draft']);
@@ -292,9 +343,7 @@ try {
   ];
   const importedEvidenceClaimIds = ['v1.evidence.legacy-evidence-without-owner'];
   const fabricatedImportedEvidenceClaim = 'v1.evidence.fabricated-author-claim';
-  const agentNecessity = Object.fromEntries([
-    'irreducibleAmbiguity','adaptiveNextStep','toolOrPathSelection','incrementalValue','controllable',
-  ].map(key => [key,{fieldId:`agent.${key}`,value:null,status:'unknown',evidenceIds:[],source:'user'}]));
+  const agentNecessity = canonicalUnknownAgentNecessity;
   const sourceV1 = { assessmentId:V1,scoreVersion:'assess-core-2026-05',clonedAt:'2026-07-15T12:00:00.000Z',importedAs:'unverified-source-facts' };
   const cloneArgs = (caseId, sourceAssessmentId, name, contract, requestNumber, idempotencyKey, overrides = {}) => [
     A,O,W,caseId,sourceAssessmentId,name,'',overrides.sourceProcessId ?? P,JSON.stringify(overrides.sourceV1 ?? sourceV1),

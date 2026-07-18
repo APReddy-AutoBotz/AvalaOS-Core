@@ -2,6 +2,15 @@
 -- Additive only. The accepted 20260714120000 migration remains immutable.
 
 ALTER TABLE public.assess_v2_case_versions
+  ALTER COLUMN agent_necessity SET DEFAULT jsonb_build_object(
+    'irreducibleAmbiguity',jsonb_build_object('fieldId','agent.irreducibleAmbiguity','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'adaptiveNextStep',jsonb_build_object('fieldId','agent.adaptiveNextStep','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'toolOrPathSelection',jsonb_build_object('fieldId','agent.toolOrPathSelection','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'incrementalValue',jsonb_build_object('fieldId','agent.incrementalValue','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'controllable',jsonb_build_object('fieldId','agent.controllable','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user')
+  );
+
+ALTER TABLE public.assess_v2_case_versions
   ADD COLUMN imported_facts jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 ALTER TABLE public.assess_v2_case_versions
@@ -294,6 +303,13 @@ DECLARE
   c public.assess_v2_cases;
   v public.assess_v2_case_versions;
   control public.assess_v2_runtime_control;
+  initial_agent_necessity jsonb := jsonb_build_object(
+    'irreducibleAmbiguity',jsonb_build_object('fieldId','agent.irreducibleAmbiguity','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'adaptiveNextStep',jsonb_build_object('fieldId','agent.adaptiveNextStep','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'toolOrPathSelection',jsonb_build_object('fieldId','agent.toolOrPathSelection','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'incrementalValue',jsonb_build_object('fieldId','agent.incrementalValue','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'controllable',jsonb_build_object('fieldId','agent.controllable','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user')
+  );
   h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_process_id,p_name,p_description),'sha256'),'hex');
   result jsonb;
 BEGIN
@@ -320,8 +336,8 @@ BEGIN
   IF r.status<>'in_progress' THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
   INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id)
   VALUES(p_case_id,p_org_id,p_workspace_id,p_process_id,p_actor_id) RETURNING * INTO c;
-  INSERT INTO public.assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,source_kind,created_by)
-  VALUES(c.id,p_org_id,p_workspace_id,1,p_name,p_description,'create',p_actor_id) RETURNING * INTO v;
+  INSERT INTO public.assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,agent_necessity,source_kind,created_by)
+  VALUES(c.id,p_org_id,p_workspace_id,1,p_name,p_description,initial_agent_necessity,'create',p_actor_id) RETURNING * INTO v;
   UPDATE public.assess_v2_cases SET head_version_id=v.id WHERE id=c.id;
   result:=jsonb_build_object('id',c.id,'status','draft','version',1,'headVersionId',v.id);
   INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version)
@@ -342,7 +358,19 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.pr1d_load_assess_v2_case(p_case_id uuid,p_org_id uuid,p_workspace_id uuid,p_expected_version bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE c public.assess_v2_cases;v public.assess_v2_case_versions;
+DECLARE
+  c public.assess_v2_cases;
+  v public.assess_v2_case_versions;
+  legacy_create_agent_necessity jsonb := jsonb_build_object(
+    'irreducibleAmbiguity',NULL,'adaptiveNextStep',NULL,'toolOrPathSelection',NULL,'incrementalValue',NULL,'controllable',NULL
+  );
+  initial_agent_necessity jsonb := jsonb_build_object(
+    'irreducibleAmbiguity',jsonb_build_object('fieldId','agent.irreducibleAmbiguity','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'adaptiveNextStep',jsonb_build_object('fieldId','agent.adaptiveNextStep','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'toolOrPathSelection',jsonb_build_object('fieldId','agent.toolOrPathSelection','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'incrementalValue',jsonb_build_object('fieldId','agent.incrementalValue','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
+    'controllable',jsonb_build_object('fieldId','agent.controllable','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user')
+  );
 BEGIN
   SELECT * INTO c FROM public.assess_v2_cases WHERE id=p_case_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL FOR SHARE;
   IF c.id IS NULL THEN RETURN NULL; END IF;
@@ -387,7 +415,11 @@ BEGIN
             SELECT 1 FROM public.assess_v2_evidence_links current_evidence
             WHERE current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id
           )
-      ) projected),'[]'),'agentNecessity',v.agent_necessity,'createdAt',c.created_at,'updatedAt',c.updated_at);
+      ) projected),'[]'),'agentNecessity',CASE
+        WHEN v.version=1 AND v.source_kind='create' AND v.agent_necessity=legacy_create_agent_necessity
+        THEN initial_agent_necessity
+        ELSE v.agent_necessity
+      END,'createdAt',c.created_at,'updatedAt',c.updated_at);
 END
 $$;
 
