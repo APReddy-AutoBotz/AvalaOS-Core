@@ -176,12 +176,13 @@ try {
   let authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
-  const callCreate = (id, key, number) => asRole(test, 'service_role', () => test.query(
+  const callCreate = (id, key, number, processId = id) => asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
-    [A, O, W, id, P, 'V2 Case', '', req(number), key, authorizationVersion],
+    [A, O, W, id, processId, 'V2 Case', '', req(number), key, authorizationVersion],
   ));
   const createIds = [CASE, CASE2, NEG_DIGEST, NEG_BINDING, NEG_SNAPSHOT, NEG_AUDIT, NEG_INPUT_HASH, NEG_EVIDENCE_HASH, NEG_OUTPUT_HASH, NEG_WORKSPACE, NEG_CASE, NEG_SOURCE_VERSION, NEG_RULE_SET, NEG_ALTERED_SNAPSHOT, NEG_CANONICAL_ORDER];
   for (let index = 0; index < createIds.length; index += 1) {
+    await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [createIds[index], O, W, `V2 fixture process ${index}`, 'Draft']);
     const created = value(await callCreate(createIds[index], `create-v2-${index}`, 20 + index));
     assert.equal(created.resource.status, 'draft');
     assert.equal(Number(created.resource.version), 1);
@@ -189,6 +190,15 @@ try {
   const replay = value(await callCreate(CASE, 'create-v2-0', 20));
   assert.equal(replay.outcome, 'replayed');
   assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000099', 'create-v2-0', 99)).errorCode, 'IDEMPOTENCY_CONFLICT');
+  const duplicateProcess = '12000000-0000-4000-8000-000000000099';
+  const duplicateFirst = '31000000-0000-4000-8000-000000000100';
+  const duplicateSecond = '31000000-0000-4000-8000-000000000101';
+  await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [duplicateProcess, O, W, 'V2 duplicate prevention fixture', 'Draft']);
+  assert.equal(value(await callCreate(duplicateFirst, 'create-v2-duplicate-first', 100, duplicateProcess)).outcome, 'committed');
+  assert.equal(value(await callCreate(duplicateSecond, 'create-v2-duplicate-second', 101, duplicateProcess)).errorCode, 'VERSION_CONFLICT');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL AND status IN (''draft'',''reviewer_ready'')', [O, W, duplicateProcess])).rows[0].n), 1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1', ['create-v2-duplicate-second'])).rows[0].n), 0);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1", [duplicateSecond])).rows[0].n), 0);
 
   const v1Responses = {
     processStructure: { trigger: 'invoice-received', nested: { handoffs: 3 } },
@@ -248,6 +258,7 @@ try {
     cloneArgs(APPROVED_CLONE,V1,'Approved lifecycle clone','assess-v1-to-v2-clone-2026-07-15',17,'clone-approved-lifecycle'),
   )));
   assert.equal(approvedClone.resource.status, 'draft');
+  await test.query("UPDATE assess_v2_cases SET status='superseded' WHERE id=$1", [APPROVED_CLONE]);
   const handedOffV1 = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1c_create_studio_handoff($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
     [A, O, W, V1, 'Compatibility handoff fixture', 2, req(16), 'v1-handoff-before-clone', authorizationVersion],

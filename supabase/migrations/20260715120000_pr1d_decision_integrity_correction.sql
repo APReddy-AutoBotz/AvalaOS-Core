@@ -13,6 +13,10 @@ ALTER TABLE public.assess_v2_decision_versions
   ADD COLUMN evidence_canonical text,
   ADD COLUMN output_canonical text;
 
+CREATE UNIQUE INDEX pr1d_one_active_case_per_process
+  ON public.assess_v2_cases(org_id,workspace_id,process_id)
+  WHERE deleted_at IS NULL AND status IN ('draft','reviewer_ready');
+
 CREATE OR REPLACE FUNCTION public.pr1d_v1_import_facts(p_responses jsonb)
 RETURNS jsonb
 LANGUAGE sql
