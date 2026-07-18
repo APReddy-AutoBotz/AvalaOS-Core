@@ -110,7 +110,7 @@ DECLARE
     'incrementalValue',jsonb_build_object('fieldId','agent.incrementalValue','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user'),
     'controllable',jsonb_build_object('fieldId','agent.controllable','value',NULL,'status','unknown','evidenceIds','[]'::jsonb,'source','user')
   );
-  h text := encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_source_assessment_id,p_name,p_description,p_source_process_id,p_source_v1::text,p_imported_facts::text,p_imported_evidence::text,p_agent_necessity::text,p_clone_contract_version),'sha256'),'hex');
+  h text := encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_source_assessment_id,p_name,p_description,p_source_process_id,(p_source_v1 - 'clonedAt')::text,p_imported_facts::text,p_imported_evidence::text,p_agent_necessity::text,p_clone_contract_version),'sha256'),'hex');
   result jsonb;
 BEGIN
   IF p_clone_contract_version IS DISTINCT FROM 'assess-v1-to-v2-clone-2026-07-15' THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;

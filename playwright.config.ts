@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
+  testIgnore: 'pr1d.spec.ts',
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,

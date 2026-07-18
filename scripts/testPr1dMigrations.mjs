@@ -332,6 +332,17 @@ try {
   assert.equal(cloned.resource.importedFactCount, 8);
   assert.equal(cloned.resource.importedEvidenceCount, 2);
   assert.equal(cloned.resource.cloneContractVersion, 'assess-v1-to-v2-clone-2026-07-15');
+  const cloneRetryTimestamp = '2026-07-15T12:01:00.000Z';
+  const cloneReplay = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',33,'clone-v1',{sourceV1:{...sourceV1,clonedAt:cloneRetryTimestamp}}),
+  )));
+  assert.equal(cloneReplay.outcome, 'replayed');
+  assert.deepEqual(cloneReplay.resource, cloned.resource);
+  assert.equal((await test.query(
+    "SELECT source_snapshot->>'clonedAt' cloned_at FROM assess_v2_case_versions WHERE case_id=$1 AND version=1",
+    [CLONE],
+  )).rows[0].cloned_at, sourceV1.clonedAt);
   const sourceAfter = (await test.query(
     'SELECT responses,evidence_items,assumptions,score_version,status,version FROM assessments WHERE id=$1', [V1],
   )).rows[0];

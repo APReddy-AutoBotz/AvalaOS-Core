@@ -85,8 +85,10 @@ jobs:
         run: npm ci
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run deterministic desktop and mobile browser gates
-        run: npm run test:browser && npm run test:browser:pr1d
+      - name: Run retained deterministic desktop and mobile browser gates
+        run: npm run test:browser
+      - name: Run PR 1D browser gates with the dedicated pilot-mode configuration
+        run: npm run test:browser:pr1d
   pr1a-migrations:
     name: PR 1A Migration Gates
     runs-on: ubuntu-latest
