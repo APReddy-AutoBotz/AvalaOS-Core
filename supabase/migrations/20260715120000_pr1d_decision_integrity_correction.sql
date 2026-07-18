@@ -425,15 +425,21 @@ CREATE OR REPLACE FUNCTION public.pr1d_replay_assess_v2_finalize(
   p_idempotency_key text,p_authorization_version bigint
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE r public.assess_command_receipts;
+DECLARE r public.assess_command_receipts; control public.assess_v2_runtime_control;
 BEGIN
-  PERFORM public.pr1d_assert_enabled();
+  SELECT * INTO control FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled THEN
+    RAISE EXCEPTION 'PR1D_FEATURE_DISABLED';
+  END IF;
   PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.finalize',p_authorization_version);
   SELECT * INTO r FROM public.assess_command_receipts
     WHERE org_id=p_org_id AND actor_id=p_actor_id
       AND command_type='assessment_v2.finalize' AND idempotency_key=p_idempotency_key
     FOR UPDATE;
-  IF r.id IS NULL THEN RETURN jsonb_build_object('errorCode','NOT_FOUND'); END IF;
+  IF r.id IS NULL THEN
+    IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'; END IF;
+    RETURN jsonb_build_object('errorCode','NOT_FOUND');
+  END IF;
   IF r.workspace_id<>p_workspace_id
     OR r.status<>'succeeded'
     OR r.response->>'id'<>p_case_id::text

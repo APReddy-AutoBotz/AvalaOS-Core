@@ -253,6 +253,13 @@ const materialInputs = (c: AssessmentCaseV2): FieldInput[] => [
 
 export const validateAssessmentV2 = (c: AssessmentCaseV2): string[] => {
   const errors = [...validateFieldRegistry(), ...validateEvidenceLinks(c.evidence), ...validateDecisionFieldInputs(materialInputs(c))];
+  const acceptedEvidenceClaimIds = new Set([...FIELD_REGISTRY.map(item => item.fieldId), ...(c.importedFacts ?? []).map(item => item.fieldId)]);
+  const acceptsEvidenceClaim = (claimId: string): boolean => claimId === claimId.trim() && Boolean(
+    claimId && (acceptedEvidenceClaimIds.has(claimId) || (c.sourceV1 && /^v1\.evidence\.[A-Za-z0-9._:-]+$/.test(claimId))),
+  );
+  for (const item of c.evidence) for (const claimId of item.claimIds) if (!acceptsEvidenceClaim(claimId)) {
+    errors.push(`${item.id}: evidence claim ${JSON.stringify(claimId)} is not a registered decision field or imported V1 claim.`);
+  }
   if (c.schemaVersion !== ASSESS_V2_SCHEMA_VERSION) errors.push('Unsupported Assess V2 schema version.');
   if (c.ruleSetVersion !== ASSESS_V2_RULE_SET_VERSION) errors.push('Unsupported Assess V2 rule-set version.');
   if (!c.organizationId || !c.workspaceId || !c.ownerId || !c.sourceProcessId) errors.push('Organization, workspace, process, and owner ancestry are required.');
@@ -299,7 +306,7 @@ export const validateAssessmentV2 = (c: AssessmentCaseV2): string[] => {
     item.operationName.trim().length > 0 && item.dataClassification !== 'Unknown' &&
     requiredInteractionFacts[item.mode].every(key => item.facts[key] !== null)
   ));
-  const meaningfulEvidence = c.evidence.some(item => item.sourceType !== 'template' && item.claimIds.some(claimId => claimId.trim().length > 0));
+  const meaningfulEvidence = c.evidence.some(item => item.sourceType !== 'template' && item.claimIds.some(acceptsEvidenceClaim));
   if (!c.edges.some(edge => edge.fromPrimitiveId !== edge.toPrimitiveId)) errors.push('A meaningful finalization requires an edge between distinct process primitives.');
   if (!meaningfulDecisionPoint) errors.push('A meaningful finalization requires a decision point with a rule and at least two distinct outcomes.');
   if (!meaningfulExceptionPath) errors.push('A meaningful finalization requires an exception path with a trigger and resolution primitive.');

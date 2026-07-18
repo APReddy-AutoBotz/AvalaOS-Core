@@ -34,11 +34,11 @@ Results below apply only to commands executed against the correction worktree. E
 | `npm.cmd run test:pr1b` | Passed; coverage 95.65% lines, 82.26% branches, 100.00% functions. |
 | `npm.cmd run test:pr1c` | Passed; coverage 80.00% lines, 81.97% branches, 86.96% functions. |
 | `npm.cmd run test:pr1d` | Passed; source, migration contract, CI contract, V1 compatibility, V2 model/command/presentation, Govern compatibility, coverage, and docs gates passed. |
-| `npm.cmd run test:pr1d-coverage` | Passed; 98.51% lines, 84.16% branches, 96.04% functions. |
+| `npm.cmd run test:pr1d-coverage` | Passed; 98.52% lines, 84.37% branches, 96.51% functions. |
 | `npm.cmd run test:migrations:pr1a` against isolated PostgreSQL 15 | Passed; fresh, idempotency, supported legacy upgrade, RLS, and failure scenarios passed. |
 | `npm.cmd run test:migrations:pr1b` against isolated PostgreSQL 15 | Passed; complete disposable PostgreSQL tenant-authority, privilege, adversarial, concurrency, upgrade, fallback, and forward-fix matrix passed. |
 | `npm.cmd run test:migrations:pr1c` against isolated PostgreSQL 15 | Passed; ACL, ancestry, idempotency, lifecycle, atomicity, and rollback scenarios passed. |
-| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 15 | Passed; ACL/RLS, clone, canonical digest, atomicity, receipt and raw-RPC replay idempotency, concurrency, compatibility, and immutability passed. |
+| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 15 | Passed; ACL/RLS, clone, canonical digest, atomicity, raw/receipt/read-only replay idempotency, absent-receipt and disabled-mode denial, concurrency, compatibility, and immutability passed. |
 | `npm.cmd run test:browser:pr1d` | Passed; 18/18 desktop/mobile journeys, including the persisted-draft remount scenario and the retained accessibility, overflow, error, and interaction-budget checks. |
 | `npm.cmd run test:browser` | Passed; 24/24 retained PR 1A/PR 1C desktop/mobile journeys in deterministic single-worker mode. |
 | `npm.cmd run test:ai-boundary-static` | Passed; 0 forbidden hits and 0 stale allowlist entries. |
@@ -60,9 +60,9 @@ Set the V2 runtime control to disabled or read-only, leave V1 behavior available
 
 Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 18/18 PR 1D browser journeys, and the production build.
 
-PR 1D coverage is 98.51% lines, 84.16% branches, and 96.04% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
+PR 1D coverage is 98.52% lines, 84.37% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
 
-The correction changes acceptance harness behavior only: it exercises finalization replay from the immutable pre-finalization source and synchronizes remount testing with the saved-draft acknowledgement. It does not alter product behavior, V1 scoring, V2 decision logic, capability authority, RLS, hashes, traceability, clone behavior, audit behavior, or browser behavior.
+The correction exercises finalization replay from the immutable pre-finalization source, synchronizes remount testing with the saved-draft acknowledgement, restricts finalizable evidence claims to registered V2 fields or bounded V1 import provenance, and permits authorized succeeded receipts to replay during read-only maintenance while disabled mode remains fail-closed. It does not alter V1 scoring, V2 formulas, weights, thresholds, hard stops, recommendation logic, capability authority, RLS, hashes, traceability, clone ownership, or audit ownership.
 
 
 ## P1 independent evidence-attestation correction
@@ -85,3 +85,11 @@ The final Codex review identified a confirmed source defect: the private clone R
 The preceding remote head exposed two acceptance defects. The migration harness attempted a same-key raw finalization replay by reloading a case that had already transitioned to `reviewer_ready`, causing `PR1D_VERSION_CONFLICT` before the database idempotency path could be exercised. The corrected harness reuses the immutable pre-finalization authoritative source for the raw-RPC replay, verifies the service-role receipt replay helper, and proves missing-receipt and cross-case idempotency failures. The exact remote failure reproduced locally before the correction; the complete PR 1D PostgreSQL matrix passed afterward.
 
 The persisted-draft remount browser scenario reloaded immediately after clicking an asynchronous save control, so a slow CI host could reload before the fixture observed the completed save. The test now waits for the visible saved-draft acknowledgement before reloading. The focused remount scenarios passed 2/2 and the complete PR 1D browser suite passed 18/18 across desktop and mobile.
+
+### Final review read-only replay and evidence-claim correction
+
+The final-head Codex review identified two P2 edge cases. First, the receipt replay RPC applied the read-only mutation gate before looking up a previously succeeded finalization receipt. The correction locks the runtime control, preserves disabled-mode fail-closed behavior, revalidates finalize authority, permits only an exact succeeded receipt replay while read-only, and returns `READ_ONLY` for an absent receipt. The isolated PostgreSQL 15 matrix proves the positive replay and both negative controls.
+
+Second, finalization treated any non-empty evidence claim string as meaningful. The locked deterministic validator now rejects every author evidence claim that is not an exact registered V2 field, an exact imported V1 fact field, or a bounded `v1.evidence.<source-id>` provenance claim on a real V1 clone. Tests reject typo/default and unbound V1 claims while preserving the canonical fixture and clone-import boundary. This is validation hardening only; the rule set and decision version are unchanged.
+
+Fresh correction-head CI and review-thread closure remain required before readiness.

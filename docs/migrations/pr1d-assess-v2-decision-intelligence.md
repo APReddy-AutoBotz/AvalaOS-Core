@@ -38,3 +38,9 @@ The browser acceptance path must prove a scaffolded case can supply a known user
 ### Locked-row clone projection acceptance
 
 The correction migration derives the canonical imported-fact and imported-evidence arrays inside the private clone RPC from the locked V1 row. It mirrors the TypeScript contract for declared section ordering, missing and empty response normalization, assumptions, deterministic evidence IDs, linked claims, owners, and last-link fact association, then rejects any non-exact caller projection before claiming an idempotency receipt. The isolated migration harness includes fabricated allowed-section fact and fabricated evidence-owner cases and requires zero case, receipt, privileged-audit, or evidence writes.
+
+## Final review replay and claim-registration correction
+
+The corrected private finalize replay RPC locks the singleton runtime control, preserves `FEATURE_DISABLED` when V2 is disabled, revalidates current finalize authority, and permits an exact succeeded receipt to replay while the runtime is read-only. Missing receipts still return `READ_ONLY`, and mismatched receipt scope, case, version, status, or key remains an idempotency conflict. The disposable PostgreSQL harness covers all three outcomes.
+
+The deterministic finalization validator accepts evidence claims only when they exactly match the V2 field registry, an imported V1 fact on the locked case, or a bounded V1 evidence-provenance identifier on a real clone. This validation correction changes neither the database schema nor any score/rule/decision version.

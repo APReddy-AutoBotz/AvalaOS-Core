@@ -38,6 +38,28 @@ const run = async () => {
   assert.throws(() => canonicalizeDecisionPayload({ invalid: Number.NaN }), /non-finite/);
 
   assert.deepEqual(validateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE), []);
+  const unknownEvidenceClaim = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  unknownEvidenceClaim.evidence[0].claimIds = ['assessment.scope'];
+  assert.ok(validateAssessmentV2(unknownEvidenceClaim).some(error => /assessment\.scope.*not a registered decision field/.test(error)));
+  const unboundV1EvidenceClaim = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  unboundV1EvidenceClaim.evidence[0].claimIds = ['v1.evidence.legacy-evidence-1'];
+  assert.ok(validateAssessmentV2(unboundV1EvidenceClaim).some(error => /v1\.evidence\.legacy-evidence-1.*not a registered decision field/.test(error)));
+  const importedFactClaim = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  importedFactClaim.sourceV1 = {
+    assessmentId: 'legacy-assessment',
+    scoreVersion: 'assess-core-2026-05',
+    clonedAt: '2026-07-14T00:00:00.000Z',
+    importedAs: 'unverified-source-facts',
+  };
+  importedFactClaim.importedFacts = [{
+    fieldId: 'v1.responses.processStructure.trigger',
+    value: 'invoice-received',
+    status: 'assumed',
+    evidenceIds: [importedFactClaim.evidence[0].id],
+    source: 'v1-import',
+  }];
+  importedFactClaim.evidence[0].claimIds = ['v1.responses.processStructure.trigger', 'v1.evidence.legacy-evidence-1'];
+  assert.deepEqual(validateAssessmentV2(importedFactClaim), []);
   const decision = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   assert.equal(decision.confidence, 'Partially Evidenced');
   assert.equal(decision.processReadiness, 'Provisional');

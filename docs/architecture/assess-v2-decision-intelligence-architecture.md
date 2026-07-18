@@ -143,3 +143,9 @@ The V2 workspace exposes canonical primitive fact controls and editable applicat
 ### Locked-row clone projection authority
 
 The private clone RPC reconstructs the complete canonical V1-to-V2 projection from the locked same-tenant V1 assessment row before any receipt or V2 write. It normalizes only the six allowlisted response sections, assumptions, and evidence items; derives deterministic evidence surrogates and claim links; preserves declared section and source-array ordering; and requires exact JSON equality with the server-supplied imported facts and evidence. Shape-valid but fabricated allowed-section values, owners, claims, IDs, or assumption content are rejected with no case, receipt, audit, or evidence side effect.
+
+## Final review replay and claim-registration correction
+
+Read-only mode blocks new finalization work but does not invalidate an already committed response. The private finalize replay boundary locks the runtime control, fails closed when V2 is disabled, revalidates current `assess.v2.finalize` authority, and returns an exact succeeded receipt during read-only maintenance. An absent receipt remains a mutation attempt and returns `READ_ONLY`; a mismatched receipt returns `IDEMPOTENCY_CONFLICT`.
+
+Finalizable author evidence claims must bind exactly to a registered V2 decision field, an imported V1 fact field present in the locked case, or a bounded V1 evidence-provenance claim on a real V1 clone. Arbitrary non-empty strings, whitespace variants, typo/default claims, and unbound V1 provenance claims fail deterministic validation. This adds no new rule, score, threshold, recommendation, approval, or attestation behavior.

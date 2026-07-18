@@ -763,6 +763,12 @@ try {
   assert.equal(finalizedReplay.outcome, 'replayed');
   const receiptReplay = value(await replayFinalize(CASE, 2, 'finalize-v2'));
   assert.equal(receiptReplay.outcome, 'replayed');
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=true');
+  const readOnlyReceiptReplay = value(await replayFinalize(CASE, 2, 'finalize-v2'));
+  assert.equal(readOnlyReceiptReplay.outcome, 'replayed');
+  assert.deepEqual(readOnlyReceiptReplay.resource, finalized.resource);
+  assert.equal(value(await replayFinalize(CASE, 2, 'missing-finalize-receipt')).errorCode, 'READ_ONLY');
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=false');
   assert.deepEqual(receiptReplay.resource, finalized.resource);
   assert.equal(value(await replayFinalize(CASE2, 2, 'finalize-v2')).errorCode, 'IDEMPOTENCY_CONFLICT');
   const decision = (await test.query(
@@ -790,6 +796,7 @@ try {
 
   await test.query('UPDATE assess_v2_runtime_control SET enabled=false');
   assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000090', 'disabled-v2', 70)).errorCode, 'FEATURE_DISABLED');
+  assert.equal(value(await replayFinalize(CASE, 2, 'finalize-v2')).errorCode, 'FEATURE_DISABLED');
   await test.query('UPDATE assess_v2_runtime_control SET enabled=true,read_only=true');
   assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000091', 'readonly-v2', 71)).errorCode, 'READ_ONLY');
   await test.query('UPDATE assess_v2_runtime_control SET read_only=false');
