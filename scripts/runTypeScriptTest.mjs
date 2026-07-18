@@ -25,6 +25,7 @@ const program = ts.createProgram({
     outDir: outputDir,
     noEmit: false,
     esModuleInterop: true,
+    rewriteRelativeImportExtensions: true,
   },
 });
 

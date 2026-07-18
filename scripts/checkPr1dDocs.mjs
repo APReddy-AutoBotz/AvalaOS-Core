@@ -40,6 +40,7 @@ for (const phrase of [
   'additive PR 1D correction migration', 'canonical JSON text', 'PostgreSQL',
   'submitted and unvalidated', 'imported fact and evidence counts',
   'assess.v2.read', 'assess.v2.create', 'assess.v2.clone', 'assess.v2.draft.write', 'assess.v2.finalize',
+  'Edge/Deno import-resolution compatibility correction', 'explicit `.ts` specifier',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -54,6 +55,7 @@ for (const phrase of [
   'Final P2 create and clone receipt replay correction', 'two-session same-key create',
   'Final P2 create-case agent-necessity compatibility correction', 'exact legacy version-1',
   'freshly created, unsaved case',
+  'Final P1 Edge/Deno import-resolution correction', 'extensionless Deno imports',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -68,6 +70,8 @@ for (const phrase of [
   'parent/source soft deletion', 'buyer acceptance', 'additive forward fix',
   'Final P2 create-case agent-necessity compatibility correction', 'fresh unsaved V2 case',
   'near-match malformed row',
+  'Final P1 Edge/Deno import-resolution correction', '19 TypeScript modules and 40 relative edges',
+  'actual `deno check` was not run',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

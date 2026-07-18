@@ -165,3 +165,11 @@ Disabled mode remains fail-closed. Read-only maintenance permits only an exact s
 A newly created unsaved V2 case projects the five canonical agent-necessity facts as complete unknown user facts (`fieldId`, `value: null`, `status: unknown`, empty `evidenceIds`, and `source: user`). The additive correction changes the future column default and explicitly persists that shape in the corrected create RPC.
 
 To preserve immutable upgrade history, the read projection normalizes only the exact legacy version-1 `create` shape whose five canonical keys all contain bare nulls; arbitrary draft, clone, or malformed shapes are not normalized. Rollback remains V2 disablement or read-only maintenance plus an additive forward fix; it must not rewrite immutable authoring versions or restore null-unsafe create projections.
+
+## Edge/Deno import-resolution compatibility correction
+
+The dependency graph reachable from `supabase/functions/assess-v2-command/index.ts` uses an explicit `.ts` specifier for every relative static import, type import, re-export, and dynamic import. This includes the shared command/router/handler/database boundary, V1 clone compatibility, and the complete Assess V2 evaluator graph. A TypeScript-AST guard recursively resolves that graph from the Edge entry point, rejects extensionless or missing relative modules, and asserts that the authority-critical V2 modules remain reachable.
+
+Node/Vite behavior remains compatible through bundler resolution and the repository test transpilers' `rewriteRelativeImportExtensions` setting. This correction changes no command schema, capability, scoring formula, rule, threshold, hard stop, recommendation, snapshot, hash, persistence, or lifecycle behavior.
+
+Rollback remains V2 disablement or read-only maintenance followed by an additive forward fix; do not restore extensionless Edge imports or treat source resolution as hosted deployment proof.

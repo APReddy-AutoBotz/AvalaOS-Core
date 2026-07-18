@@ -1,4 +1,4 @@
-import { EvidenceLink, FieldContract, FieldUnit } from './types';
+import { EvidenceLink, FieldContract, FieldUnit } from './types.ts';
 
 export interface RuleContract { ruleId: string; description: string; engineeringBaseline: boolean }
 

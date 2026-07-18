@@ -1,5 +1,5 @@
-import { Assessment } from '../types';
-import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, AssessmentCaseV2, CaseFact, EvidenceLink, createUnknownAgentNecessityFacts } from './assessV2/types';
+import { Assessment } from '../types.ts';
+import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, AssessmentCaseV2, CaseFact, EvidenceLink, createUnknownAgentNecessityFacts } from './assessV2/types.ts';
 
 export const ASSESS_V1_SCORE_VERSION = 'assess-core-2026-05' as const;
 export const ASSESS_V1_BUYER_LABEL = 'Legacy deterministic heuristic' as const;

@@ -72,3 +72,11 @@ Executed disposable PostgreSQL 15 verification proves create and clone replay af
 The additive correction sets the future `agent_necessity` column default and explicitly seeds every new V2 create version with the five canonical unknown, user-sourced `CaseFact` objects. A freshly created, unsaved case can therefore be loaded by the existing editor without dereferencing null fact entries.
 
 For supported upgrades, the load projection normalizes only the exact legacy version-1 `create` all-null shape. It does not rewrite the immutable stored version, and near-match malformed, draft, or cloned rows are not normalized. Disposable PostgreSQL 15 verification proves both a fresh unsaved create and the exact legacy projection, preserves the raw legacy row, and proves the near-match guard. Rollback remains V2 disable/read-only with immutable history preserved, followed by another additive forward fix; do not restore nullable create facts or rewrite accepted history.
+
+## Final P1 Edge/Deno import-resolution correction
+
+This correction makes no schema change: the accepted foundation migration and both additive migrations remain unchanged. Every relative import reachable from the Assess V2 Edge entry point now carries an explicit `.ts` specifier, including the shared command boundary, V1 compatibility converter, and deterministic V2 evaluator. The recursive TypeScript-AST guard resolves the complete graph and is aggregated into `lint:pr1d`, so an extensionless or missing local Edge dependency fails the feature-owned CI gate.
+
+The repository's Node test transpiler rewrites explicit TypeScript extensions when emitting CommonJS tests, preserving existing V1 compatibility and V2 domain/command execution. This is source compatibility evidence only, not hosted Edge or deployment proof.
+
+Rollback remains V2 disable/read-only with all data and decisions preserved, followed by a forward fix; do not modify migration history or restore extensionless Deno imports.

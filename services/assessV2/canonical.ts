@@ -1,4 +1,4 @@
-import { ASSESS_V2_DECISION_VERSION, ASSESS_V2_SCHEMA_VERSION } from './types';
+import { ASSESS_V2_DECISION_VERSION, ASSESS_V2_SCHEMA_VERSION } from './types.ts';
 
 export const ASSESS_V2_CANONICALIZATION_VERSION = 'avala-canonical-json-1' as const;
 export type DecisionDigestDomain = 'input' | 'evidence' | 'output';

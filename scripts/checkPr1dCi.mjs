@@ -31,7 +31,7 @@ const scripts = packageJson.scripts ?? {};
 for (const command of ['lint:pr1d', 'test:pr1d', 'test:pr1d-coverage', 'test:migrations:pr1d', 'test:browser:pr1d', 'test:docs:pr1d']) {
   if (typeof scripts[command] !== 'string' || scripts[command].length === 0) throw new Error(`PR1D_PACKAGE_GATE_MISSING: ${command}`);
 }
-for (const required of ['checkPr1dSourceBoundaries.mjs', 'checkPr1dMigrationContract.mjs', 'checkPr1dCi.mjs']) {
+for (const required of ['checkPr1dSourceBoundaries.mjs', 'checkPr1dMigrationContract.mjs', 'checkAssessV2EdgeImports.mjs', 'checkPr1dCi.mjs']) {
   if (!scripts['lint:pr1d'].includes(required)) throw new Error(`PR1D_LINT_GATE_MISSING: ${required}`);
 }
 if (!scripts['test:pr1d'].includes('test:docs:pr1d')) throw new Error('PR1D_DOC_GATE_NOT_AGGREGATED');

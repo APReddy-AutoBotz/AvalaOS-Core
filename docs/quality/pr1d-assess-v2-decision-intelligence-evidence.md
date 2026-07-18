@@ -119,3 +119,13 @@ Executed isolated PostgreSQL 15 evidence covers exact create and clone replay af
 The final-head review found that the foundation default created a version-1 case with five null `agent_necessity` entries while the browser editor reads each entry as a `CaseFact`. The additive correction now gives future rows the canonical five unknown, user-sourced facts and explicitly persists that same shape for every new create command.
 
 Executed isolated PostgreSQL 15 evidence proves a fresh unsaved V2 case stores and loads all five canonical facts with safe `.value` access. It also seeds an exact legacy version-1 `create` all-null row before applying the correction and proves the read projection normalizes it without mutating the immutable raw row. A near-match malformed row remains unnormalized, preventing the compatibility boundary from silently repairing unrelated data. The foundation migration remains unchanged, no scoring or decision rule changed, and no live or hosted system was accessed. Rollback remains V2 disable/read-only with history preserved and another additive forward fix.
+
+### Final P1 Edge/Deno import-resolution correction
+
+The final-head review identified a confirmed source defect: the Assess V2 Edge graph reached extensionless TypeScript imports that native Deno resolution would reject. The new recursive TypeScript-AST guard was executed before the complete correction and failed on `services/assessV2/evaluator.ts -> ./types`. After explicit `.ts` specifiers were applied across the reachable graph, the guard passed 19 TypeScript modules and 40 relative edges, including the shared command boundary, V1 compatibility converter, and complete deterministic V2 evaluator.
+
+Executed focused evidence passed `node --check` for both import/transpiler guards, `npm.cmd run typecheck:edge`, `npm.cmd run typecheck`, `npm.cmd run test:assess-v1-compatibility`, `npm.cmd run test:assess-v2-rule-registry`, and `npm.cmd run test:assess-v2-command`. The local Deno CLI was not installed, so an actual `deno check` was not run and is not claimed; the recursive graph guard and Edge TypeScript compiler are source/CI evidence, not hosted or deployed Edge proof.
+
+The CommonJS test transpiler now uses `rewriteRelativeImportExtensions`, preserving existing Node execution while Deno receives resolvable source specifiers. No scoring/version/rule, command authority, persistence, migration, snapshot, hash, review, Govern, Studio, export, or sharing behavior changed.
+
+Rollback remains V2 disable/read-only plus an additive forward fix; do not restore extensionless Edge imports or alter accepted migration history.

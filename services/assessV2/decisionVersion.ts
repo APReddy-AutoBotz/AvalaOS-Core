@@ -1,6 +1,6 @@
-import { buildDecisionCanonicalV2, buildDecisionDigestV2, DecisionDigestBinding, isSha256Hex } from './canonical';
-import { evaluateAssessmentV2 } from './evaluator';
-import { AssessmentCaseV2, ImmutableDecisionVersionV2 } from './types';
+import { buildDecisionCanonicalV2, buildDecisionDigestV2, DecisionDigestBinding, isSha256Hex } from './canonical.ts';
+import { evaluateAssessmentV2 } from './evaluator.ts';
+import { AssessmentCaseV2, ImmutableDecisionVersionV2 } from './types.ts';
 
 const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child); } return value; };
 export interface BuildDecisionVersionOptions { supersedesDecisionId?: string }

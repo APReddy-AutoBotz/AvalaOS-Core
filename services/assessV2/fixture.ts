@@ -1,4 +1,4 @@
-import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, AgentNecessityFacts, AssessmentCaseV2, CaseFact, InteractionFacts, ProcessPrimitive } from './types';
+import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, AgentNecessityFacts, AssessmentCaseV2, CaseFact, InteractionFacts, ProcessPrimitive } from './types.ts';
 
 const EV_API = '71000000-0000-4000-8000-000000000001';
 const EV_OPS = '71000000-0000-4000-8000-000000000002';

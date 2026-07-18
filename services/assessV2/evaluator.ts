@@ -1,4 +1,4 @@
-import { FieldInput, FIELD_REGISTRY, validateDecisionFieldInputs, validateEvidenceLinks, validateFieldRegistry } from './registry';
+import { FieldInput, FIELD_REGISTRY, validateDecisionFieldInputs, validateEvidenceLinks, validateFieldRegistry } from './registry.ts';
 import {
   ASSESS_V2_DECISION_VERSION,
   ASSESS_V2_RULE_SET_VERSION,
@@ -18,7 +18,7 @@ import {
   ProcessPrimitive,
   Readiness,
   RuleTrace,
-} from './types';
+} from './types.ts';
 
 const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
 const modes: readonly InteractionMode[] = ['read', 'write', 'event', 'ui', 'operational'];
