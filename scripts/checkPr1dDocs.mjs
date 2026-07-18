@@ -49,7 +49,8 @@ for (const phrase of [
   '20260714120000_pr1d_assess_v2_decision_intelligence.sql',
   '20260715120000_pr1d_decision_integrity_correction.sql',
   'forward-only', 'submitted/unvalidated', 'canonical input/evidence/output JSON text',
-  'recomputes each UTF-8 SHA-256 digest',
+  'recomputes each UTF-8 SHA-256 digest', 'sourceV1.importedEvidenceClaimIds',
+  'immutable version-1 clone evidence', 'fabricated claim',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -57,9 +58,10 @@ for (const phrase of [
 const evidence = read(canonicalFiles[1]);
 for (const phrase of [
   'Correction verification ledger', 'Not Run', 'Hosted/live Supabase',
-  '98.52% lines, 84.37% branches, 96.51% functions', '24/24 PR 1D browser journeys',
+  '98.52% lines, 84.43% branches, 96.51% functions', '24/24 PR 1D browser journeys',
   'Final review draft-receipt and requested-change correction', 'zero side effects',
-  'buyer acceptance', 'additive forward fix',
+  'Final P1 imported-V1 evidence provenance correction', 'sourceV1.importedEvidenceClaimIds',
+  'fabricated `v1.evidence.*` claim', 'buyer acceptance', 'additive forward fix',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

@@ -254,8 +254,9 @@ const materialInputs = (c: AssessmentCaseV2): FieldInput[] => [
 export const validateAssessmentV2 = (c: AssessmentCaseV2): string[] => {
   const errors = [...validateFieldRegistry(), ...validateEvidenceLinks(c.evidence), ...validateDecisionFieldInputs(materialInputs(c))];
   const acceptedEvidenceClaimIds = new Set([...FIELD_REGISTRY.map(item => item.fieldId), ...(c.importedFacts ?? []).map(item => item.fieldId)]);
+  const importedV1EvidenceClaimIds = new Set(c.sourceV1?.importedEvidenceClaimIds ?? []);
   const acceptsEvidenceClaim = (claimId: string): boolean => claimId === claimId.trim() && Boolean(
-    claimId && (acceptedEvidenceClaimIds.has(claimId) || (c.sourceV1 && /^v1\.evidence\.[A-Za-z0-9._:-]+$/.test(claimId))),
+    claimId && (acceptedEvidenceClaimIds.has(claimId) || importedV1EvidenceClaimIds.has(claimId)),
   );
   for (const item of c.evidence) for (const claimId of item.claimIds) if (!acceptsEvidenceClaim(claimId)) {
     errors.push(`${item.id}: evidence claim ${JSON.stringify(claimId)} is not a registered decision field or imported V1 claim.`);

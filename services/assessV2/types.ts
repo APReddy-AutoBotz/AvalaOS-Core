@@ -118,7 +118,13 @@ export interface AssessmentCaseV2 {
   version: number;
   schemaVersion: typeof ASSESS_V2_SCHEMA_VERSION;
   ruleSetVersion: typeof ASSESS_V2_RULE_SET_VERSION;
-  sourceV1?: { assessmentId: string; scoreVersion: string; clonedAt: string; importedAs: 'unverified-source-facts' };
+  sourceV1?: {
+    assessmentId: string;
+    scoreVersion: string;
+    clonedAt: string;
+    importedAs: 'unverified-source-facts';
+    importedEvidenceClaimIds?: string[];
+  };
   importedFacts?: CaseFact[];
   primitives: ProcessPrimitive[];
   edges: ProcessEdge[];

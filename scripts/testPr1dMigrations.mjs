@@ -212,7 +212,7 @@ try {
     risk: { financial: true },
     forbiddenSecretSection: { token: 'must-not-import' },
   };
-  const v1Evidence = [{ id: 'legacy-evidence-1', linkedField: 'processStructure.trigger', owner: 'process-owner' }, { id: 'legacy-evidence-without-owner', linkedField: 'risk.financial' }];
+  const v1Evidence = [{ id: 'legacy-evidence-1', linkedField: 'processStructure.trigger', owner: 'process-owner' }, { id: 'legacy-evidence-without-owner' }];
   const v1Assumptions = [{ id:'api-availability',description:'The ERP API remains available.' }];
   const evidenceId1 = 'f9177f53-6161-50b7-b73e-aea9d29f9ba3';
   const evidenceId2 = '863d45e6-4592-54ba-accb-17acd04d48d6';
@@ -223,13 +223,15 @@ try {
     { fieldId:'v1.responses.dataProfile.format',value:null,status:'unknown',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.judgment.ambiguity',value:'medium',status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.systems.erp',value:'retained',status:'assumed',evidenceIds:[],source:'v1-import' },
-    { fieldId:'v1.responses.risk.financial',value:true,status:'assumed',evidenceIds:[evidenceId2],source:'v1-import' },
+    { fieldId:'v1.responses.risk.financial',value:true,status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.assumptions.api-availability',value:'The ERP API remains available.',status:'assumed',evidenceIds:[],source:'v1-import' },
   ];
   const importedEvidence = [
     { id:evidenceId1,claimIds:['v1.responses.processStructure.trigger'],sourceType:'document',status:'submitted',validated:false,owner:'process-owner',reviewerIds:[],contradictory:false },
-    { id:evidenceId2,claimIds:['v1.responses.risk.financial'],sourceType:'document',status:'submitted',validated:false,reviewerIds:[],contradictory:false },
+    { id:evidenceId2,claimIds:['v1.evidence.legacy-evidence-without-owner'],sourceType:'document',status:'submitted',validated:false,reviewerIds:[],contradictory:false },
   ];
+  const importedEvidenceClaimIds = ['v1.evidence.legacy-evidence-without-owner'];
+  const fabricatedImportedEvidenceClaim = 'v1.evidence.fabricated-author-claim';
   const agentNecessity = Object.fromEntries([
     'irreducibleAmbiguity','adaptiveNextStep','toolOrPathSelection','incrementalValue','controllable',
   ].map(key => [key,{fieldId:`agent.${key}`,value:null,status:'unknown',evidenceIds:[],source:'user'}]));
@@ -374,7 +376,7 @@ try {
   )).rows.map(row => row.payload);
   assert.equal(clonedEvidenceRows.length, 2);
   const clonedEvidence = clonedEvidenceRows.find(item => item.claimIds.includes('v1.responses.processStructure.trigger'));
-  const ownerlessEvidence = clonedEvidenceRows.find(item => item.claimIds.includes('v1.responses.risk.financial'));
+  const ownerlessEvidence = clonedEvidenceRows.find(item => item.claimIds.includes(importedEvidenceClaimIds[0]));
   assert.ok(clonedEvidence);
   assert.ok(ownerlessEvidence);
   assert.equal(clonedEvidence.status, 'submitted');
@@ -384,6 +386,7 @@ try {
     'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value', [CLONE, O, W, 1],
   )));
   assert.deepEqual(loadedClone.importedFacts, cloneVersion.imported_facts);
+  assert.deepEqual(loadedClone.sourceV1.importedEvidenceClaimIds, importedEvidenceClaimIds);
   assert.equal(Object.hasOwn(ownerlessEvidence, 'owner'), false);
   const expectedAgentFieldIds = ['agent.irreducibleAmbiguity','agent.adaptiveNextStep','agent.toolOrPathSelection','agent.incrementalValue','agent.controllable'].sort();
   assert.deepEqual(Object.values(loadedClone.agentNecessity).map(fact => fact.fieldId).sort(), expectedAgentFieldIds);
@@ -394,7 +397,9 @@ try {
   ), true);
   const reviewedCloneEvidence = clonedEvidenceRows.map(item => item.id === evidenceId1
     ? { ...item, owner:'reviewer-updated-owner' }
-    : item);
+    : item.id === evidenceId2
+      ? { ...item, claimIds:[fabricatedImportedEvidenceClaim] }
+      : item);
   const cloneDraft = {
     caseId:CLONE,name:'Reviewer-authored clone',description:'',primitives:[],edges:[],decisionPoints:[],exceptionPaths:[],
     assets:[],interactions:[],evidence:reviewedCloneEvidence,agentNecessity,
@@ -407,11 +412,14 @@ try {
   const loadedSavedClone = value(await asRole(test,'service_role',() => test.query(
     'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[CLONE,O,W,2],
   )));
-  assert.deepEqual(loadedSavedClone.sourceV1,sourceV1);
+  assert.deepEqual(loadedSavedClone.sourceV1,{...sourceV1,importedEvidenceClaimIds});
   assert.equal(loadedSavedClone.evidence.length,2);
   assert.equal(new Set(loadedSavedClone.evidence.map(item => item.id)).size,2);
   assert.deepEqual(loadedSavedClone.evidence.map(item => item.id).sort(),[evidenceId1,evidenceId2].sort());
   assert.equal(loadedSavedClone.evidence.find(item => item.id === evidenceId1).owner,'reviewer-updated-owner');
+  assert.deepEqual(loadedSavedClone.evidence.find(item => item.id === evidenceId2).claimIds,[fabricatedImportedEvidenceClaim]);
+  assert.equal(loadedSavedClone.sourceV1.importedEvidenceClaimIds.includes(fabricatedImportedEvidenceClaim),false);
+  assert.deepEqual(loadedSavedClone.sourceV1.importedEvidenceClaimIds,importedEvidenceClaimIds);
   assert.deepEqual(loadedSavedClone.importedFacts,cloneVersion.imported_facts);
 
   const hiddenClone = value(await asRole(test, 'service_role', () => test.query(
@@ -593,6 +601,11 @@ try {
   assert.equal(finalizedClone.resource.status,'reviewer_ready');
   assert.equal(Number(finalizedClone.resource.version),3);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_decision_versions WHERE case_id=$1',[CLONE])).rows[0].n),1);
+  const finalizedCloneInput = (await test.query(
+    'SELECT input_snapshot FROM assess_v2_decision_versions WHERE case_id=$1',[CLONE],
+  )).rows[0].input_snapshot;
+  assert.deepEqual(finalizedCloneInput.sourceV1.importedEvidenceClaimIds,importedEvidenceClaimIds);
+  assert.equal(finalizedCloneInput.sourceV1.importedEvidenceClaimIds.includes(fabricatedImportedEvidenceClaim),false);
 
   const assertNoFinalizeSideEffects = async (caseId, key) => {
     const caseState = (await test.query('SELECT status,version FROM assess_v2_cases WHERE id=$1', [caseId])).rows[0];

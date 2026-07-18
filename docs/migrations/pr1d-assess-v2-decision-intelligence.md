@@ -43,7 +43,7 @@ The correction migration derives the canonical imported-fact and imported-eviden
 
 The corrected private finalize replay RPC locks the singleton runtime control, preserves `FEATURE_DISABLED` when V2 is disabled, revalidates current finalize authority, and permits an exact succeeded receipt to replay while the runtime is read-only. Missing receipts still return `READ_ONLY`, and mismatched receipt scope, case, version, status, or key remains an idempotency conflict. The disposable PostgreSQL harness covers all three outcomes.
 
-The deterministic finalization validator accepts evidence claims only when they exactly match the V2 field registry, an imported V1 fact on the locked case, or a bounded V1 evidence-provenance identifier on a real clone. This validation correction changes neither the database schema nor any score/rule/decision version.
+The deterministic finalization validator accepts evidence claims only when they exactly match the V2 field registry, an imported V1 fact on the locked case, or an identifier in the server-projected `sourceV1.importedEvidenceClaimIds` set. PostgreSQL derives that ordered, deduplicated set only from evidence attached to the immutable version-1 `v1_clone`; it never derives membership from author-editable current evidence, identifier syntax, or a recomputed deterministic UUID. This validation correction changes neither any score/rule/decision version nor the accepted clone input RPC shape.
 
 ## Final acceptance draft atomicity and V1 requested-change reopen
 
@@ -54,3 +54,9 @@ The existing service-role-only V1 response-upsert RPC remains protected by fresh
 Executed isolated PostgreSQL 15 verification passed: stale-version and reviewer-ready V2 draft conflicts left case state, immutable versions, decision-owned rows, receipts, and audits unchanged; one valid same-key draft race still yielded one commit and one replay. The same harness proved `Changes Requested -> Draft` clears both score columns with one successful receipt/audit and exact replay, while an unrelated locked V1 status returns `VERSION_CONFLICT` with no response, lifecycle, score, receipt, or audit change. No hosted or live database was accessed.
 
 Rollback remains feature disablement or read-only maintenance with all V1/V2 rows, scores, receipts, audits, and immutable history preserved, followed by another additive forward fix. Do not restore post-claim V2 conflict handling, reopen locked V1 lifecycle states broadly, retain stale scores on a reopened draft, destructively reverse migrations, or alter `assess-core-2026-05` scoring behavior.
+
+## Final P1 imported-evidence provenance correction
+
+The load-for-finalize projection now exposes `sourceV1.importedEvidenceClaimIds` as immutable version-1 clone evidence provenance. The evaluator requires exact membership in that server-derived set before accepting any `v1.evidence.*` claim. A syntactically valid but fabricated claim authored into a later V2 draft therefore cannot acquire imported provenance or pass finalization validation.
+
+The disposable PostgreSQL regression proves the authoritative set contains the real imported evidence claim, remains unchanged after draft evidence is replaced with a fabricated identifier, and remains bound into the final input snapshot without the fabricated identifier. Edge command and domain regressions prove the fabricated claim is rejected before atomic finalization while an actually imported claim remains accepted. Rollback remains V2 disable/read-only with immutable history preserved, followed by another additive forward fix; do not restore prefix-only trust or derive provenance from mutable evidence.

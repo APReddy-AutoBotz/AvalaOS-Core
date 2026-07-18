@@ -45,11 +45,13 @@ const run = async () => {
   unboundV1EvidenceClaim.evidence[0].claimIds = ['v1.evidence.legacy-evidence-1'];
   assert.ok(validateAssessmentV2(unboundV1EvidenceClaim).some(error => /v1\.evidence\.legacy-evidence-1.*not a registered decision field/.test(error)));
   const importedFactClaim = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  const importedV1EvidenceClaim = 'v1.evidence.legacy-evidence-1';
   importedFactClaim.sourceV1 = {
     assessmentId: 'legacy-assessment',
     scoreVersion: 'assess-core-2026-05',
     clonedAt: '2026-07-14T00:00:00.000Z',
     importedAs: 'unverified-source-facts',
+    importedEvidenceClaimIds: [importedV1EvidenceClaim],
   };
   importedFactClaim.importedFacts = [{
     fieldId: 'v1.responses.processStructure.trigger',
@@ -58,8 +60,14 @@ const run = async () => {
     evidenceIds: [importedFactClaim.evidence[0].id],
     source: 'v1-import',
   }];
-  importedFactClaim.evidence[0].claimIds = ['v1.responses.processStructure.trigger', 'v1.evidence.legacy-evidence-1'];
+  importedFactClaim.evidence[0].claimIds = ['v1.responses.processStructure.trigger', importedV1EvidenceClaim];
   assert.deepEqual(validateAssessmentV2(importedFactClaim), []);
+  const fabricatedV1EvidenceClaim = structuredClone(importedFactClaim);
+  fabricatedV1EvidenceClaim.evidence[0].claimIds = ['v1.evidence.fabricated-but-valid'];
+  assert.ok(validateAssessmentV2(fabricatedV1EvidenceClaim).some(error => /v1\.evidence\.fabricated-but-valid.*not a registered decision field/.test(error)));
+  const unprojectedV1EvidenceClaim = structuredClone(importedFactClaim);
+  unprojectedV1EvidenceClaim.sourceV1!.importedEvidenceClaimIds = [];
+  assert.ok(validateAssessmentV2(unprojectedV1EvidenceClaim).some(error => /v1\.evidence\.legacy-evidence-1.*not a registered decision field/.test(error)));
   const decision = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
   assert.equal(decision.confidence, 'Partially Evidenced');
   assert.equal(decision.processReadiness, 'Provisional');

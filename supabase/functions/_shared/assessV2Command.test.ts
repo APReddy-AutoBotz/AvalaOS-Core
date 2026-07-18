@@ -180,6 +180,43 @@ const main = async () => {
   assert.equal(JSON.parse(decision.inputCanonical).payload.interactions[0].facts.capacityKnown, true);
   assert.ok(decision.outputSnapshot.trace.every(item => item.fieldIds.length));
   assert.equal((commands[0].payload as Record<string, unknown>).decision, undefined);
+  const importedV1EvidenceClaim = 'v1.evidence.legacy-evidence-1';
+  const fabricatedV1EvidenceClaim = 'v1.evidence.fabricated-but-valid';
+  const lockedClone = structuredClone(stored);
+  lockedClone.sourceV1 = {
+    assessmentId: processId,
+    scoreVersion: ASSESS_V1_SCORE_VERSION,
+    clonedAt: '2026-07-14T00:00:00.000Z',
+    importedAs: 'unverified-source-facts',
+    importedEvidenceClaimIds: [importedV1EvidenceClaim],
+  };
+  lockedClone.evidence[0].claimIds = [fabricatedV1EvidenceClaim];
+  const fabricatedClaimFinalize = deps();
+  let fabricatedClaimAtomicFinalizeAttempts = 0;
+  fabricatedClaimFinalize.loadLockedCaseForFinalize = async () => lockedClone;
+  fabricatedClaimFinalize.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+    fabricatedClaimAtomicFinalizeAttempts += 1;
+    throw new Error('fabricated V1 evidence claim reached atomic finalization');
+  };
+  await assert.rejects(
+    () => executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), fabricatedClaimFinalize),
+    /v1\.evidence\.fabricated-but-valid.*not a registered decision field/,
+  );
+  assert.equal(fabricatedClaimAtomicFinalizeAttempts, 0, 'fabricated imported-evidence claims must fail before atomic finalization');
+
+  const validImportedClaimFinalize = deps();
+  const validImportedClaimClone = structuredClone(lockedClone);
+  validImportedClaimClone.evidence[0].claimIds = [importedV1EvidenceClaim];
+  let validImportedClaimAtomicFinalizeAttempts = 0;
+  validImportedClaimFinalize.loadLockedCaseForFinalize = async () => validImportedClaimClone;
+  validImportedClaimFinalize.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+    validImportedClaimAtomicFinalizeAttempts += 1;
+    return { outcome: 'committed', resource: { id: caseId, status: 'reviewer_ready', version: 3 } };
+  };
+  assert.equal((await executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), validImportedClaimFinalize)).outcome, 'committed');
+  assert.equal(validImportedClaimAtomicFinalizeAttempts, 1, 'an exact server-projected imported-evidence claim remains finalizable');
   const replayOnlyCommand = { ...parseAssessV2Envelope(finalize), actorId: actor } as AssessV2AtomicCommand;
   assert.deepEqual(buildAssessV2FinalizeReplayRpcBody(replayOnlyCommand), {
     p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,

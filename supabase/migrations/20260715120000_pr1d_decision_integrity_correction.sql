@@ -280,7 +280,23 @@ BEGIN
   IF c.version<>p_expected_version OR c.status<>'draft' THEN RAISE EXCEPTION 'PR1D_VERSION_CONFLICT'; END IF;
   SELECT * INTO v FROM public.assess_v2_case_versions WHERE id=c.head_version_id;
   RETURN jsonb_build_object('id',c.id,'organizationId',c.org_id,'workspaceId',c.workspace_id,'sourceProcessId',c.process_id,'ownerId',c.owner_id,'status','draft','version',c.version,'schemaVersion',c.schema_version,'ruleSetVersion',c.rule_set_version,
-    'sourceV1',CASE WHEN c.source_v1_assessment_id IS NULL THEN NULL ELSE jsonb_build_object('assessmentId',c.source_v1_assessment_id,'scoreVersion',c.source_v1_score_version,'clonedAt',v.source_snapshot->>'clonedAt','importedAs','unverified-source-facts') END,
+    'sourceV1',CASE WHEN c.source_v1_assessment_id IS NULL THEN NULL ELSE jsonb_build_object(
+      'assessmentId',c.source_v1_assessment_id,'scoreVersion',c.source_v1_score_version,
+      'clonedAt',v.source_snapshot->>'clonedAt','importedAs','unverified-source-facts',
+      'importedEvidenceClaimIds',COALESCE((
+        SELECT jsonb_agg(source_claim.claim_id ORDER BY source_claim.claim_id)
+        FROM (
+          SELECT DISTINCT imported_claim.claim_id
+          FROM public.assess_v2_evidence_links imported_evidence
+          JOIN public.assess_v2_case_versions clone_version ON clone_version.id=imported_evidence.version_id
+          CROSS JOIN LATERAL jsonb_array_elements_text(imported_evidence.payload->'claimIds') imported_claim(claim_id)
+          WHERE clone_version.case_id=c.id
+            AND clone_version.version=1
+            AND clone_version.source_kind='v1_clone'
+            AND imported_claim.claim_id ~ '^v1\.evidence\.[A-Za-z0-9._:-]+$'
+        ) source_claim
+      ),'[]'::jsonb)
+    ) END,
     'importedFacts',v.imported_facts,
     'primitives',COALESCE((SELECT jsonb_agg(payload ORDER BY id) FROM public.assess_v2_primitives WHERE version_id=v.id),'[]'),
     'edges',COALESCE((SELECT jsonb_agg(payload ORDER BY id) FROM public.assess_v2_edges WHERE version_id=v.id),'[]'),

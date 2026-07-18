@@ -34,7 +34,7 @@ Results below apply only to commands executed against the correction worktree. E
 | `npm.cmd run test:pr1b` | Passed; coverage 95.65% lines, 82.26% branches, 100.00% functions. |
 | `npm.cmd run test:pr1c` | Passed; coverage 80.00% lines, 81.97% branches, 86.96% functions. |
 | `npm.cmd run test:pr1d` | Passed; source, migration contract, CI contract, V1 compatibility, V2 model/command/presentation, Govern compatibility, coverage, and docs gates passed. |
-| `npm.cmd run test:pr1d-coverage` | Passed; 98.52% lines, 84.37% branches, 96.51% functions. |
+| `npm.cmd run test:pr1d-coverage` | Passed; 98.52% lines, 84.43% branches, 96.51% functions. |
 | `npm.cmd run test:migrations:pr1a` against isolated PostgreSQL 15 | Passed; fresh, idempotency, supported legacy upgrade, RLS, and failure scenarios passed. |
 | `npm.cmd run test:migrations:pr1b` against isolated PostgreSQL 15 | Passed; complete disposable PostgreSQL tenant-authority, privilege, adversarial, concurrency, upgrade, fallback, and forward-fix matrix passed. |
 | `npm.cmd run test:migrations:pr1c` against isolated PostgreSQL 15 | Passed; ACL, ancestry, idempotency, lifecycle, atomicity, and rollback scenarios passed. |
@@ -60,9 +60,9 @@ Set the V2 runtime control to disabled or read-only, leave V1 behavior available
 
 Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 24/24 PR 1D browser journeys, and the production build.
 
-PR 1D coverage is 98.52% lines, 84.37% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
+PR 1D coverage is 98.52% lines, 84.43% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
 
-The correction exercises finalization replay from the immutable pre-finalization source, synchronizes remount testing with the saved-draft acknowledgement, restricts finalizable evidence claims to registered V2 fields or bounded V1 import provenance, and permits authorized succeeded receipts to replay during read-only maintenance while disabled mode remains fail-closed. It does not alter V1 scoring, V2 formulas, weights, thresholds, hard stops, recommendation logic, capability authority, RLS, hashes, traceability, clone ownership, or audit ownership.
+The correction exercises finalization replay from the immutable pre-finalization source, synchronizes remount testing with the saved-draft acknowledgement, restricts finalizable evidence claims to registered V2 fields or immutable server-projected V1 import provenance, and permits authorized succeeded receipts to replay during read-only maintenance while disabled mode remains fail-closed. It does not alter V1 scoring, V2 formulas, weights, thresholds, hard stops, recommendation logic, capability authority, RLS, hashes, traceability, clone ownership, or audit ownership.
 
 
 ## P1 independent evidence-attestation correction
@@ -90,7 +90,7 @@ The persisted-draft remount browser scenario reloaded immediately after clicking
 
 The final-head Codex review identified two P2 edge cases. First, the receipt replay RPC applied the read-only mutation gate before looking up a previously succeeded finalization receipt. The correction locks the runtime control, preserves disabled-mode fail-closed behavior, revalidates finalize authority, permits only an exact succeeded receipt replay while read-only, and returns `READ_ONLY` for an absent receipt. The isolated PostgreSQL 15 matrix proves the positive replay and both negative controls.
 
-Second, finalization treated any non-empty evidence claim string as meaningful. The locked deterministic validator now rejects every author evidence claim that is not an exact registered V2 field, an exact imported V1 fact field, or a bounded `v1.evidence.<source-id>` provenance claim on a real V1 clone. Tests reject typo/default and unbound V1 claims while preserving the canonical fixture and clone-import boundary. This is validation hardening only; the rule set and decision version are unchanged.
+Second, finalization treated any non-empty evidence claim string as meaningful. The locked deterministic validator now rejects every author evidence claim that is not an exact registered V2 field, an exact imported V1 fact field, or a member of the immutable server-projected V1 evidence provenance set. Tests reject typo/default and unbound V1 claims while preserving the canonical fixture and clone-import boundary. This is validation hardening only; the rule set and decision version are unchanged.
 
 Fresh correction-head CI and review-thread closure remain required before readiness.
 
@@ -101,3 +101,9 @@ The final-head Codex review identified two additional P2 defects. The V2 draft u
 The V1 `Changes Requested` surface contained a reopen handler but no rendered control, and the accepted enterprise response-upsert RPC neither changed the database status to `Draft` nor cleared the prior score. The UI now exposes an authorization-aware, keyboard-operable **Revise requested changes** control only for that status. The service-role-only response-upsert correction locks the tenant-owned assessment, permits only `Draft` or `Changes Requested`, and atomically persists requested corrections, clears `scores` and `score_version`, increments the version, returns `Draft`, records sanitized audit metadata, and supports exact replay. Other lifecycle states and stale versions fail before receipt creation. The PostgreSQL matrix proves committed reopen, score clearing, exact replay, and `Approved` denial with zero side effects; Playwright proves invocation and non-exposure in `Ready for Review` and `Approved` across desktop and mobile.
 
 These corrections do not change V1 `assess-core-2026-05` formulas, weights, thresholds, hard stops, recommendation logic, or score version. They do not add V2 approval, evidence attestation, Govern resolution, Studio handoff, export, sharing, hosted proof, or deployment claims. Fresh correction-head CI and a final-head review with zero unresolved threads remain required before readiness.
+
+### Final P1 imported-V1 evidence provenance correction
+
+The final-head Codex review found that syntax alone still allowed a fabricated `v1.evidence.*` claim whenever `sourceV1` existed. The correction adds `sourceV1.importedEvidenceClaimIds` to the locked server projection and derives it only from evidence attached to the immutable version-1 `v1_clone`. The deterministic evaluator now requires exact set membership; it does not trust current author-editable evidence, the identifier prefix, or a client-recomputed evidence UUID.
+
+Executed focused evidence includes domain validation that accepts the actual imported claim and rejects fabricated or absent-projection claims, an Edge finalization regression that rejects the fabricated claim before `executeAtomicCommand`, and the isolated PostgreSQL 15 migration regression. The database test replaces a real imported evidence claim with a syntactically valid fabricated author claim in a later draft and proves the immutable ordered provenance set remains the original real claim in both the loaded case and finalized input snapshot. This changes no scoring formula, weight, threshold, hard stop, recommendation logic, rule-set version, or decision version. Fresh correction-head CI and review-thread closure remain required before readiness.
