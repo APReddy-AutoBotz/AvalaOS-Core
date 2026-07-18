@@ -756,7 +756,7 @@ BEGIN
     org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata
   ) VALUES(
     p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment.response.upsert','assessment',a.id,'succeeded',a.version,
-    CASE WHEN reopen_requested_changes THEN jsonb_build_object('reopenedFrom','Changes Requested','scoreCleared',true) ELSE NULL END
+    CASE WHEN reopen_requested_changes THEN jsonb_build_object('reopenedFrom','Changes Requested','scoreCleared',true) ELSE '{}'::jsonb END
   );
   UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
   RETURN result;

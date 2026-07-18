@@ -191,3 +191,11 @@ Legacy or incomplete V1 assessment metadata may omit `metadata.evidenceQuality`.
 Every PR 1D author evidence payload must be an object with an explicit `suggested` or `submitted` status and `validated: false`. The database trigger explicitly rejects an omitted or JSON-null status before the allowed-status comparison, so SQL three-valued logic cannot bypass the attestation boundary. Compatible submitted/unvalidated rows already present when the additive migration is applied remain unchanged.
 
 This correction changes no V1 scoring formula or score version, V2 rule or decision version, evidence threshold, approval authority, or lifecycle state. Rollback remains the existing read-only/disable fallback followed by an additive forward fix; do not restore null-unsafe Govern Lite normalization or an author-status predicate that permits SQL `NULL`.
+
+## Final normal-draft atomic audit correction
+
+The service-role-only V1 response-upsert compatibility RPC writes the domain update, actor-scoped receipt, and privileged audit in one transaction for both an ordinary `Draft` save and the narrowly authorized `Changes Requested` reopen. Ordinary saves persist an empty JSON object as non-null sanitized audit metadata; reopen saves retain the explicit `reopenedFrom` and `scoreCleared` metadata. An audit failure rolls back the response update and receipt.
+
+Exact same-key replay returns the committed response without another version, receipt, or audit. The populated PostgreSQL matrix proves a normal Draft save commits, increments the assessment version, preserves Draft state, writes one succeeded receipt and one empty-metadata audit, and replays exactly; the requested-change reopen contract remains separately asserted.
+
+This correction changes no V1 formula, weight, threshold, hard stop, recommendation, score version, Govern authority, or V2 behavior. Rollback remains the existing server-authoritative V1 path plus an additive forward fix; do not restore nullable audit metadata or weaken atomic audit ownership.

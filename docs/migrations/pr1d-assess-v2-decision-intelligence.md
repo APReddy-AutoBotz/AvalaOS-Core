@@ -98,3 +98,11 @@ The additive evidence-attestation migration now rejects `payload->>'status' IS N
 The Govern Lite compatibility projection now treats only missing or `undefined` legacy `metadata.evidenceQuality` as insufficient evidence, producing the existing quality gap and preventing L4 autonomy without throwing. Present malformed values remain strict-normalizer failures. No score, threshold, recommendation, rule-set, decision version, approval state, or database authority changes.
 
 Rollback remains V2 disable/read-only with evidence and history preserved, followed by an additive forward fix. Do not restore a status predicate that admits SQL `NULL`, coerce malformed evidence-quality values, or remove the conservative missing-quality gap.
+
+## Final P1 normal-draft audit correction
+
+The corrected `pr1b_upsert_assessment_responses` RPC now supplies `'{}'::jsonb` to `privileged_audit_events.metadata` for an ordinary Draft save and preserves the explicit reopen metadata for `Changes Requested`. Both paths keep assessment mutation, succeeded command receipt, and privileged audit atomic; the non-null audit column can no longer turn a valid normal save into a sanitized unavailable response after rollback.
+
+Executed disposable PostgreSQL 15.8 evidence proves an ordinary Draft save commits, remains Draft, increments the version, persists the exact response payload, records one succeeded receipt and one audit with an empty JSON metadata object, and returns the same resource on exact replay. Existing reopen, disallowed-state, stale-version, and resubmission assertions continue to pass.
+
+No V1 score, formula, threshold, recommendation, score version, lifecycle authority, or V2 behavior changes. Rollback must preserve audit/receipt atomicity and use another additive forward correction; it must not restore SQL `NULL` for required audit metadata.

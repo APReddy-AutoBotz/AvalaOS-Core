@@ -147,3 +147,11 @@ The final-head review found two additional compatibility-boundary defects. A leg
 The author-evidence trigger used `NOT IN` without first rejecting a missing status, allowing SQL `NULL` to make the PL/pgSQL condition non-true. The correction explicitly rejects omitted and JSON-null status. The complete disposable PostgreSQL 15.8 PR 1D matrix passed, including a compatible submitted/unvalidated row preserved across the additive migration, direct rejection of omitted and null status, and acceptance of a new exact submitted/unvalidated row. Static migration/source guards and harness syntax checks also passed.
 
 No live or hosted system was accessed. These corrections change no score, formula, evidence threshold, rule-set, decision version, recommendation, approval, attestation authority, Govern resolution, Studio handoff, export, or sharing behavior. Fresh correction-head CI and another final-head review with zero unresolved threads remain required before human-review readiness.
+
+### Final P1 normal-draft atomic audit correction
+
+The final-head review found that the V1 response-upsert correction supplied SQL `NULL` audit metadata for an ordinary Draft save even though `privileged_audit_events.metadata` is non-null. The database would roll back the valid save, receipt, and audit and return an unavailable envelope. The correction supplies an empty JSON object for the normal path while preserving the explicit requested-change reopen metadata.
+
+Executed static guards, harness syntax, and the complete disposable PostgreSQL 15.8 PR 1D matrix passed. The new regression proves a normal Draft save commits, remains Draft, increments the version, persists its response, writes exactly one succeeded receipt and one audit with an empty metadata object, and replays identically. Existing requested-change reopen, approved denial, and Govern resubmission assertions remain green.
+
+No live or hosted system was accessed. This correction changes no V1 score, formula, threshold, hard stop, recommendation, score version, Govern authority, V2 rule, decision version, approval, attestation, handoff, export, or sharing behavior. Fresh correction-head CI and one more final-head review with zero unresolved threads remain required before human-review readiness.

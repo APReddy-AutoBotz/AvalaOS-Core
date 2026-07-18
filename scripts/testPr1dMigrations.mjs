@@ -1072,6 +1072,21 @@ try {
     'SELECT pr1b_upsert_assessment_responses($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
     [A, O, W, V1, responses, expectedVersion, req(number), key, authorizationVersion],
   ));
+  const normalDraftResponses = {
+    ...reopenedResponses,
+    responses: { processStructure: { trigger: 'Normal draft save' } },
+    metadata: { saveKind: 'draft' },
+  };
+  await test.query("UPDATE assessments SET status='Draft',version=1,scores=NULL,score_version=NULL WHERE id=$1", [V1]);
+  const savedDraftV1 = value(await callV1ResponseUpsert(1, 'responses-normal-draft-save', 79, normalDraftResponses));
+  assert.equal(savedDraftV1.outcome, 'committed');
+  assert.equal(savedDraftV1.resource.status, 'Draft');
+  assert.equal(Number(savedDraftV1.resource.version), 2);
+  assert.deepEqual((await test.query('SELECT responses FROM assessments WHERE id=$1', [V1])).rows[0].responses, normalDraftResponses);
+  assert.deepEqual(value(await callV1ResponseUpsert(1, 'responses-normal-draft-save', 79, normalDraftResponses)), savedDraftV1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='responses-normal-draft-save' AND status='succeeded'")).rows[0].n), 1);
+  const normalDraftAudit = (await test.query("SELECT metadata FROM privileged_audit_events WHERE request_id=$1 AND action='assessment.response.upsert'", [req(79)])).rows[0];
+  assert.deepEqual(normalDraftAudit.metadata, {});
   const updatedV1 = await test.query(
     "UPDATE assessments SET status='Changes Requested',version=1,scores=jsonb_build_object('scoreVersion','assess-core-2026-05','prior',true),score_version='assess-core-2026-05' WHERE id=$1 RETURNING id,org_id,workspace_id,status,version,deleted_at", [V1],
   );

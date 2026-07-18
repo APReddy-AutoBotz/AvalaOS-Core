@@ -82,6 +82,7 @@ for (const canonicalParameter of ['p_input_canonical', 'p_evidence_canonical', '
   requireText(correction, canonicalParameter, `corrected finalize RPC ${canonicalParameter}`);
 }
 requireText(correction, 'imported_facts', 'durable imported V1 facts');
+requireText(correction, "ELSE '{}'::jsonb END", 'normal V1 draft audit metadata remains non-null');
 requireText(correction, 'convert_to', 'UTF-8 canonical digest input');
 requireText(correction, 'digest(', 'database SHA-256 recomputation');
 requireText(database, 'serviceRoleKey', 'private service-role transport');

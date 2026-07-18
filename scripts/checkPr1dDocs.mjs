@@ -45,6 +45,8 @@ for (const phrase of [
   'before the mutable V1 source load',
   'Final evidence-quality and author-status boundary correction', 'SQL three-valued logic',
   'absent or `undefined` value as insufficient evidence',
+  'Final normal-draft atomic audit correction', 'empty JSON object',
+  'An audit failure rolls back the response update and receipt',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -64,6 +66,8 @@ for (const phrase of [
   'read-only miss',
   'Final P2 evidence-quality and status-null correction', "payload->>'status' IS NULL",
   'Present malformed values remain strict-normalizer failures',
+  'Final P1 normal-draft audit correction', "'{}'::jsonb",
+  'ordinary Draft save commits',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -84,6 +88,8 @@ for (const phrase of [
   'exact replay after source deletion', 'zero additional case',
   'Final P2 Govern Lite missing-quality and database status-null correction',
   'compatible submitted/unvalidated row preserved', 'direct rejection of omitted and null status',
+  'Final P1 normal-draft atomic audit correction', 'normal Draft save commits',
+  'one audit with an empty metadata object',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }
