@@ -43,6 +43,8 @@ for (const phrase of [
   'Edge/Deno import-resolution compatibility correction', 'explicit `.ts` specifier',
   'Edge clone-replay preflight correction', 'server-owned replay helper',
   'before the mutable V1 source load',
+  'Final evidence-quality and author-status boundary correction', 'SQL three-valued logic',
+  'absent or `undefined` value as insufficient evidence',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -60,6 +62,8 @@ for (const phrase of [
   'Final P1 Edge/Deno import-resolution correction', 'extensionless Deno imports',
   'Final P2 Edge clone-replay preflight correction', 'private service-role replay helper',
   'read-only miss',
+  'Final P2 evidence-quality and status-null correction', "payload->>'status' IS NULL",
+  'Present malformed values remain strict-normalizer failures',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -78,6 +82,8 @@ for (const phrase of [
   'actual `deno check` was not run',
   'Final P2 Edge clone-replay preflight correction', 'before any V1 source read',
   'exact replay after source deletion', 'zero additional case',
+  'Final P2 Govern Lite missing-quality and database status-null correction',
+  'compatible submitted/unvalidated row preserved', 'direct rejection of omitted and null status',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

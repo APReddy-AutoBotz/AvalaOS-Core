@@ -20,6 +20,7 @@ const pr1b = '20260712120000_pr1b_identity_rbac_rls_assess.sql';
 const pr1c = '20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql';
 const pr1d = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
 const correction = '20260715120000_pr1d_decision_integrity_correction.sql';
+const evidenceBoundary = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const baseline = migrations.slice(0, migrations.indexOf(pr1b));
 const source = (name) => fs.readFileSync(path.join('supabase/migrations', name), 'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql', 'utf8');
@@ -113,6 +114,12 @@ const assertCanonicalUnknownAgentNecessity = (actual) => {
       && Object.keys(fact).sort().join(',') === 'evidenceIds,fieldId,source,status,value'
   ), true);
 };
+const insertEvidencePayload = (client, id, caseId, payload) => client.query(`
+  INSERT INTO assess_v2_evidence_links(id,version_id,case_id,org_id,workspace_id,payload)
+  SELECT $1,v.id,v.case_id,v.org_id,v.workspace_id,$3::jsonb
+  FROM assess_v2_case_versions v
+  WHERE v.case_id=$2 AND v.version=1
+`, [id, caseId, JSON.stringify(payload)]);
 
 let admin;
 let test;
@@ -158,6 +165,45 @@ try {
   }
   assert.deepEqual((await test.query('SELECT agent_necessity FROM assess_v2_case_versions WHERE case_id=$1',[LEGACY_CREATE_CASE])).rows[0].agent_necessity,legacyCreateAgentNecessity);
   await apply(test, [correction]);
+  const legacyEvidenceId = '51000000-0000-4000-8000-000000000129';
+  const legacyEvidencePayload = {
+    id: 'legacy-submitted-evidence',
+    title: 'Legacy submitted evidence',
+    type: 'document',
+    status: 'submitted',
+    validated: false,
+    reviewerIds: [],
+    contradictory: false,
+    claimIds: [],
+  };
+  await insertEvidencePayload(test, legacyEvidenceId, LEGACY_CREATE_CASE, legacyEvidencePayload);
+  await apply(test, [evidenceBoundary]);
+  assert.deepEqual((await test.query(
+    'SELECT payload FROM assess_v2_evidence_links WHERE id=$1 AND case_id=$2',
+    [legacyEvidenceId, LEGACY_CREATE_CASE],
+  )).rows[0].payload, legacyEvidencePayload);
+  const missingStatusPayload = { ...legacyEvidencePayload, id: 'missing-status-evidence' };
+  delete missingStatusPayload.status;
+  await assert.rejects(
+    insertEvidencePayload(test, '51000000-0000-4000-8000-000000000130', LEGACY_CREATE_CASE, missingStatusPayload),
+    /PR1D_AUTHOR_ATTESTATION_FORBIDDEN/,
+  );
+  await assert.rejects(
+    insertEvidencePayload(test, '51000000-0000-4000-8000-000000000131', LEGACY_CREATE_CASE, {
+      ...legacyEvidencePayload,
+      id: 'null-status-evidence',
+      status: null,
+    }),
+    /PR1D_AUTHOR_ATTESTATION_FORBIDDEN/,
+  );
+  await insertEvidencePayload(test, '51000000-0000-4000-8000-000000000132', LEGACY_CREATE_CASE, {
+    ...legacyEvidencePayload,
+    id: 'fresh-submitted-evidence',
+  });
+  assert.equal(Number((await test.query(
+    'SELECT count(*) n FROM assess_v2_evidence_links WHERE case_id=$1',
+    [LEGACY_CREATE_CASE],
+  )).rows[0].n), 2);
 
   await test.query(
     "INSERT INTO role_capabilities(role_id,capability_key) SELECT om.role_id,capability.capability_key FROM organization_members om CROSS JOIN (VALUES ('govern.resolve'),('studio.handoff.create')) capability(capability_key) WHERE om.org_id=$1 AND om.user_id=$2 ON CONFLICT DO NOTHING",

@@ -90,3 +90,11 @@ Normal-mode misses return `NOT_FOUND` and fall through to the existing locked ac
 Executed disposable PostgreSQL 15.8 verification proves the helper ACL, exact replay after source deletion, unchanged case/version/evidence/receipt/audit state, normal and read-only misses, disabled mode, request mismatches, wrong source/case, and authority revocation. Edge command tests prove exact replay and every fail-closed preflight outcome occurs before the V1 loader.
 
 Rollback remains V2 disable/read-only with committed receipts and immutable clone versions preserved, followed by an additive forward fix. Do not grant browser roles helper execution or restore mutable source validation ahead of exact replay.
+
+## Final P2 evidence-quality and status-null correction
+
+The additive evidence-attestation migration now rejects `payload->>'status' IS NULL` before evaluating the `suggested`/`submitted` allowlist. This closes the SQL three-valued-logic path for omitted and JSON-null status while preserving an exact existing or newly inserted submitted/unvalidated author-evidence row. The populated upgrade and fresh-chain assertions run inside the complete disposable PostgreSQL 15.8 matrix.
+
+The Govern Lite compatibility projection now treats only missing or `undefined` legacy `metadata.evidenceQuality` as insufficient evidence, producing the existing quality gap and preventing L4 autonomy without throwing. Present malformed values remain strict-normalizer failures. No score, threshold, recommendation, rule-set, decision version, approval state, or database authority changes.
+
+Rollback remains V2 disable/read-only with evidence and history preserved, followed by an additive forward fix. Do not restore a status predicate that admits SQL `NULL`, coerce malformed evidence-quality values, or remove the conservative missing-quality gap.

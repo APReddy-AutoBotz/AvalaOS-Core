@@ -183,3 +183,11 @@ An exact replay returns the committed response without reading the current V1 ro
 This correction changes no V1 or V2 scoring formula, weight, threshold, hard stop, recommendation, decision version, evidence-attestation boundary, approval state, or lifecycle authority.
 
 Rollback remains V2 feature disablement or read-only maintenance with immutable clone history and receipts preserved, followed by another additive forward fix. Do not restore a V1 source lookup ahead of exact replay or expose the replay helper to browser roles.
+
+## Final evidence-quality and author-status boundary correction
+
+Legacy or incomplete V1 assessment metadata may omit `metadata.evidenceQuality`. Govern Lite treats only an absent or `undefined` value as insufficient evidence: it emits the existing evidence-confidence gap, requires evidence review, and cannot permit L4 autonomy. A present malformed value still reaches the strict canonical V1 evidence-quality normalizer and fails; the compatibility boundary does not silently coerce invalid data.
+
+Every PR 1D author evidence payload must be an object with an explicit `suggested` or `submitted` status and `validated: false`. The database trigger explicitly rejects an omitted or JSON-null status before the allowed-status comparison, so SQL three-valued logic cannot bypass the attestation boundary. Compatible submitted/unvalidated rows already present when the additive migration is applied remain unchanged.
+
+This correction changes no V1 scoring formula or score version, V2 rule or decision version, evidence threshold, approval authority, or lifecycle state. Rollback remains the existing read-only/disable fallback followed by an additive forward fix; do not restore null-unsafe Govern Lite normalization or an author-status predicate that permits SQL `NULL`.

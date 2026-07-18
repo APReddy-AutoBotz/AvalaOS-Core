@@ -91,6 +91,7 @@ requireText(evaluator, 'Bounded Agent', 'bounded-agent necessity gate');
 requireText(evaluator, 'Verified is unreachable', 'PR 1D cannot self-attest evidence');
 requireText(command, "['suggested', 'submitted']", 'draft parser permits only evidence submission states');
 forbidText(command, 'reviewerIds', 'caller-controlled reviewer authority');
+requireText(evidenceBoundary, "payload->>'status' IS NULL", 'database rejects missing or null author evidence status');
 requireText(evidenceBoundary, 'PR1D_AUTHOR_ATTESTATION_FORBIDDEN', 'database rejects author attestation');
 requireText(decisionVersion, 'buildDecisionDigestV2', 'SHA-256 decision references');
 forbidText(decisionVersion, 'sha-lite', 'V1 lightweight hash reuse');

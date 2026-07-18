@@ -139,3 +139,11 @@ Executed focused Edge evidence proves exact succeeded replay returns without cal
 The complete disposable PostgreSQL 15.8 PR 1D matrix passed. It proves private-RPC ACL, exact replay after source deletion, zero additional case, immutable version, evidence, receipt, or privileged-audit side effects, normal/read-only misses, disabled fail-closed behavior, wrong source/name/case conflicts, and current `assess.read` revocation. Static source/migration guards and root plus Edge typechecks also passed.
 
 No live or hosted system was accessed. The correction changes no score, rule, recommendation, approval, evidence-attestation, Govern, Studio, export, or sharing behavior. Fresh correction-head CI and final review-thread closure remain required before human-review readiness.
+
+### Final P2 Govern Lite missing-quality and database status-null correction
+
+The final-head review found two additional compatibility-boundary defects. A legacy or incomplete assessment with absent `metadata.evidenceQuality` reached the strict V1 normalizer through Govern Lite and could throw instead of reporting the established low-confidence gap. The correction treats only missing or `undefined` quality as insufficient evidence, requires evidence review, and prevents L4 autonomy; present malformed values still throw through the canonical normalizer. The focused Govern Lite regression and application typecheck passed.
+
+The author-evidence trigger used `NOT IN` without first rejecting a missing status, allowing SQL `NULL` to make the PL/pgSQL condition non-true. The correction explicitly rejects omitted and JSON-null status. The complete disposable PostgreSQL 15.8 PR 1D matrix passed, including a compatible submitted/unvalidated row preserved across the additive migration, direct rejection of omitted and null status, and acceptance of a new exact submitted/unvalidated row. Static migration/source guards and harness syntax checks also passed.
+
+No live or hosted system was accessed. These corrections change no score, formula, evidence threshold, rule-set, decision version, recommendation, approval, attestation authority, Govern resolution, Studio handoff, export, or sharing behavior. Fresh correction-head CI and another final-head review with zero unresolved threads remain required before human-review readiness.
