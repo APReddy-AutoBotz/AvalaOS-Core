@@ -88,6 +88,11 @@ const NEG_CANONICAL_ORDER = '31000000-0000-4000-8000-000000000016';
 const APPROVED_CLONE = '31000000-0000-4000-8000-000000000017';
 const INACTIVE_CLONE = '31000000-0000-4000-8000-000000000018';
 const NEG_FABRICATED_EVIDENCE = '31000000-0000-4000-8000-000000000019';
+const CREATE_REPLAY_PROCESS = '12000000-0000-4000-8000-000000000090';
+const CREATE_REPLAY_CASE = '31000000-0000-4000-8000-000000000120';
+const CREATE_RACE_PROCESS = '12000000-0000-4000-8000-000000000091';
+const CREATE_RACE_CASE = '31000000-0000-4000-8000-000000000121';
+const RECEIPT_SCOPE_WORKSPACE = '11000000-0000-4000-8000-000000000019';
 const req = (number) => `41000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 
 let admin;
@@ -179,7 +184,7 @@ try {
   let authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
-  const callCreate = (id, key, number, processId = id) => asRole(test, 'service_role', () => test.query(
+  const callCreate = (id, key, number, processId = id, client = test) => asRole(client, 'service_role', () => client.query(
     'SELECT pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
     [A, O, W, id, processId, 'V2 Case', '', req(number), key, authorizationVersion],
   ));
@@ -190,6 +195,61 @@ try {
     assert.equal(created.resource.status, 'draft');
     assert.equal(Number(created.resource.version), 1);
   }
+  const createReplayState = async () => value(await test.query("SELECT jsonb_build_object('cases',(SELECT count(*) FROM assess_v2_cases WHERE id=$1),'versions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=$1),'receipts',(SELECT count(*) FROM assess_command_receipts WHERE idempotency_key=$2),'audits',(SELECT count(*) FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1)) value", [CREATE_REPLAY_CASE, 'create-replay-after-delete']));
+  await test.query('INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,$3,$4)', [RECEIPT_SCOPE_WORKSPACE, O, 'Receipt scope workspace', 'receipt-scope']);
+  await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [CREATE_REPLAY_PROCESS, O, W, 'Create replay parent', 'Draft']);
+  const createdForReplay = value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 102, CREATE_REPLAY_PROCESS));
+  assert.equal(createdForReplay.outcome, 'committed');
+  const createStateBeforeDelete = await createReplayState();
+  await test.query('UPDATE assess_processes SET deleted_at=now() WHERE id=$1', [CREATE_REPLAY_PROCESS]);
+  const createAfterParentDelete = value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 103, CREATE_REPLAY_PROCESS));
+  assert.equal(createAfterParentDelete.outcome, 'replayed');
+  assert.deepEqual(createAfterParentDelete.resource, createdForReplay.resource);
+  assert.deepEqual(await createReplayState(), createStateBeforeDelete);
+  assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000122', 'create-missing-after-delete', 104, CREATE_REPLAY_PROCESS)).errorCode, 'NOT_FOUND');
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='create-missing-after-delete'")).rows[0].n), 0);
+  assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000123', 'create-replay-after-delete', 105, CREATE_REPLAY_PROCESS)).errorCode, 'IDEMPOTENCY_CONFLICT');
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=true');
+  assert.equal(value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 106, CREATE_REPLAY_PROCESS)).outcome, 'replayed');
+  assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000124', 'create-read-only-miss', 107, CREATE_REPLAY_PROCESS)).errorCode, 'READ_ONLY');
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=false,read_only=false');
+  assert.equal(value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 108, CREATE_REPLAY_PROCESS)).errorCode, 'FEATURE_DISABLED');
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=true');
+  await test.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.v2.create'", ['11000000-0000-4000-8000-000000000012']);
+  authorizationVersion = Number((await test.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A])).rows[0].version);
+  await assert.rejects(callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 109, CREATE_REPLAY_PROCESS), /PR1B_NOT_FOUND/);
+  await test.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.v2.create')", ['11000000-0000-4000-8000-000000000012']);
+  authorizationVersion = Number((await test.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A])).rows[0].version);
+  const createRequestHash = (caseId) => digest([O, W, caseId, CREATE_REPLAY_PROCESS, 'V2 Case', ''].join('|'));
+  for (const [status, caseId, key, requestNumber] of [
+    ['failed', '31000000-0000-4000-8000-000000000125', 'create-failed-receipt', 110],
+    ['in_progress', '31000000-0000-4000-8000-000000000126', 'create-in-progress-receipt', 111],
+  ]) {
+    await test.query("INSERT INTO assess_command_receipts(org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status,response) VALUES($1,$2,$3,'assessment_v2.create',$4,$5,$6,$7,$8)", [O, W, A, key, req(requestNumber), createRequestHash(caseId), status, JSON.stringify({ id:caseId,status:'draft',version:1 })]);
+    assert.equal(value(await callCreate(caseId, key, requestNumber, CREATE_REPLAY_PROCESS)).errorCode, 'IDEMPOTENCY_CONFLICT');
+  }
+  const foreignScopeCase = '31000000-0000-4000-8000-000000000127';
+  await test.query("INSERT INTO assess_command_receipts(org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status,response,completed_at) VALUES($1,$2,$3,'assessment_v2.create',$4,$5,$6,'succeeded',$7,now())", [O, RECEIPT_SCOPE_WORKSPACE, A, 'create-foreign-scope-receipt', req(112), createRequestHash(foreignScopeCase), JSON.stringify({ id:foreignScopeCase,status:'draft',version:1 })]);
+  assert.equal(value(await callCreate(foreignScopeCase, 'create-foreign-scope-receipt', 112, CREATE_REPLAY_PROCESS)).errorCode, 'IDEMPOTENCY_CONFLICT');
+  await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [CREATE_RACE_PROCESS, O, W, 'Concurrent create parent', 'Draft']);
+  const createRaceA = await connect(urlFor(dbName));
+  const createRaceB = await connect(urlFor(dbName));
+  let createRace;
+  try {
+    createRace = await Promise.all([
+      callCreate(CREATE_RACE_CASE, 'create-same-key-race', 113, CREATE_RACE_PROCESS, createRaceA),
+      callCreate(CREATE_RACE_CASE, 'create-same-key-race', 113, CREATE_RACE_PROCESS, createRaceB),
+    ]).then((results) => results.map(value));
+  } finally {
+    await createRaceA.end();
+    await createRaceB.end();
+  }
+  assert.equal(createRace.filter((result) => result.outcome === 'committed').length, 1);
+  assert.equal(createRace.filter((result) => result.outcome === 'replayed').length, 1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE id=$1', [CREATE_RACE_CASE])).rows[0].n), 1);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_case_versions WHERE case_id=$1', [CREATE_RACE_CASE])).rows[0].n), 1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='create-same-key-race' AND status='succeeded'")).rows[0].n), 1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1", [CREATE_RACE_CASE])).rows[0].n), 1);
   const replay = value(await callCreate(CASE, 'create-v2-0', 20));
   assert.equal(replay.outcome, 'replayed');
   assert.equal(value(await callCreate('31000000-0000-4000-8000-000000000099', 'create-v2-0', 99, P)).errorCode, 'IDEMPOTENCY_CONFLICT');
@@ -348,6 +408,49 @@ try {
     "SELECT source_snapshot->>'clonedAt' cloned_at FROM assess_v2_case_versions WHERE case_id=$1 AND version=1",
     [CLONE],
   )).rows[0].cloned_at, sourceV1.clonedAt);
+  const cloneReplayState = async () => value(await test.query("SELECT jsonb_build_object('cases',(SELECT count(*) FROM assess_v2_cases WHERE id=$1),'versions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=$1),'evidence',(SELECT count(*) FROM assess_v2_evidence_links WHERE case_id=$1),'receipts',(SELECT count(*) FROM assess_command_receipts WHERE idempotency_key=$2),'audits',(SELECT count(*) FROM privileged_audit_events WHERE action='assessment_v2.clone_from_v1' AND resource_id=$1)) value", [CLONE, 'clone-v1']));
+  const cloneStateBeforeSourceDelete = await cloneReplayState();
+  await test.query('UPDATE assessments SET deleted_at=now() WHERE id=$1', [V1]);
+  const cloneAfterSourceDelete = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',114,'clone-v1',{sourceV1:{...sourceV1,clonedAt:cloneRetryTimestamp}}),
+  )));
+  assert.equal(cloneAfterSourceDelete.outcome, 'replayed');
+  assert.deepEqual(cloneAfterSourceDelete.resource, cloned.resource);
+  assert.deepEqual(await cloneReplayState(), cloneStateBeforeSourceDelete);
+  const missingDeletedClone = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs('31000000-0000-4000-8000-000000000128',V1,'Missing deleted source','assess-v1-to-v2-clone-2026-07-15',115,'clone-missing-after-delete'),
+  )));
+  assert.equal(missingDeletedClone.errorCode, 'NOT_FOUND');
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='clone-missing-after-delete'")).rows[0].n), 0);
+  const mismatchedDeletedClone = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Changed clone request','assess-v1-to-v2-clone-2026-07-15',116,'clone-v1'),
+  )));
+  assert.equal(mismatchedDeletedClone.errorCode, 'IDEMPOTENCY_CONFLICT');
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=true');
+  const readOnlyCloneReplay = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',117,'clone-v1'),
+  )));
+  assert.equal(readOnlyCloneReplay.outcome, 'replayed');
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=false,read_only=false');
+  const disabledCloneReplay = value(await asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',118,'clone-v1'),
+  )));
+  assert.equal(disabledCloneReplay.errorCode, 'FEATURE_DISABLED');
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=true');
+  await test.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.read'", ['11000000-0000-4000-8000-000000000012']);
+  authorizationVersion = Number((await test.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A])).rows[0].version);
+  await assert.rejects(asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+    cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',119,'clone-v1'),
+  )), /PR1B_NOT_FOUND/);
+  await test.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.read')", ['11000000-0000-4000-8000-000000000012']);
+  authorizationVersion = Number((await test.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A])).rows[0].version);
+  await test.query('UPDATE assessments SET deleted_at=NULL WHERE id=$1', [V1]);
   const sourceAfter = (await test.query(
     'SELECT responses,evidence_items,assumptions,score_version,status,version FROM assessments WHERE id=$1', [V1],
   )).rows[0];

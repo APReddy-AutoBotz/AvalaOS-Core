@@ -93,6 +93,7 @@ AS $$
 DECLARE
   a public.assessments;
   r public.assess_command_receipts;
+  control public.assess_v2_runtime_control;
   c public.assess_v2_cases;
   v public.assess_v2_case_versions;
   source_aggregate jsonb;
@@ -114,10 +115,22 @@ DECLARE
   result jsonb;
 BEGIN
   IF p_clone_contract_version IS DISTINCT FROM 'assess-v1-to-v2-clone-2026-07-15' THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
-  PERFORM public.pr1d_assert_enabled();
+  SELECT * INTO control FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'; END IF;
   PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.clone',p_authorization_version);
   PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.create',p_authorization_version);
   PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.read',p_authorization_version);
+  SELECT * INTO r FROM public.assess_command_receipts
+   WHERE org_id=p_org_id AND actor_id=p_actor_id
+     AND command_type='assessment_v2.clone_from_v1' AND idempotency_key=p_idempotency_key
+   FOR UPDATE;
+  IF r.id IS NOT NULL THEN
+    IF r.workspace_id<>p_workspace_id OR r.request_hash<>h OR r.status<>'succeeded'
+      OR r.response->>'id'<>p_case_id::text
+    THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+    RETURN jsonb_build_object('outcome','replayed','resource',r.response);
+  END IF;
+  IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'; END IF;
   SELECT * INTO a FROM public.assessments
    WHERE id=p_source_assessment_id AND org_id=p_org_id AND workspace_id=p_workspace_id
      AND deleted_at IS NULL AND score_version='assess-core-2026-05'
@@ -257,6 +270,62 @@ BEGIN
   INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
   VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment_v2.clone_from_v1','assess_v2_case',c.id,'succeeded',1,
     jsonb_build_object('sourceScoreVersion',a.score_version,'importedFactCount',jsonb_array_length(p_imported_facts),'importedEvidenceCount',jsonb_array_length(p_imported_evidence)));
+  UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
+  RETURN jsonb_build_object('outcome','committed','resource',result);
+EXCEPTION
+  WHEN unique_violation THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT');
+  WHEN OTHERS THEN
+    IF SQLERRM LIKE '%PR1B_IDEMPOTENCY_CONFLICT%' THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT');
+    ELSIF SQLERRM LIKE '%PR1B_AUTHORIZATION_STALE%' THEN RETURN jsonb_build_object('errorCode','AUTHORIZATION_STALE');
+    ELSIF SQLERRM LIKE '%PR1D_FEATURE_DISABLED%' THEN RETURN jsonb_build_object('errorCode','FEATURE_DISABLED');
+    ELSIF SQLERRM LIKE '%PR1D_READ_ONLY%' THEN RETURN jsonb_build_object('errorCode','READ_ONLY');
+    END IF;
+    RAISE;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.pr1d_create_assess_v2_case(
+  p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_process_id uuid,
+  p_name text,p_description text,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  r public.assess_command_receipts;
+  c public.assess_v2_cases;
+  v public.assess_v2_case_versions;
+  control public.assess_v2_runtime_control;
+  h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_process_id,p_name,p_description),'sha256'),'hex');
+  result jsonb;
+BEGIN
+  SELECT * INTO control FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'; END IF;
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.create',p_authorization_version);
+  SELECT * INTO r FROM public.assess_command_receipts
+   WHERE org_id=p_org_id AND actor_id=p_actor_id
+     AND command_type='assessment_v2.create' AND idempotency_key=p_idempotency_key
+   FOR UPDATE;
+  IF r.id IS NOT NULL THEN
+    IF r.workspace_id<>p_workspace_id OR r.request_hash<>h OR r.status<>'succeeded'
+      OR r.response->>'id'<>p_case_id::text
+    THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+    RETURN jsonb_build_object('outcome','replayed','resource',r.response);
+  END IF;
+  IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'; END IF;
+  PERFORM 1 FROM public.assess_processes
+    WHERE id=p_process_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL
+    FOR SHARE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('errorCode','NOT_FOUND'); END IF;
+  r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment_v2.create',p_idempotency_key,p_request_id,h);
+  IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
+  IF r.status<>'in_progress' THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+  INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id)
+  VALUES(p_case_id,p_org_id,p_workspace_id,p_process_id,p_actor_id) RETURNING * INTO c;
+  INSERT INTO public.assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,source_kind,created_by)
+  VALUES(c.id,p_org_id,p_workspace_id,1,p_name,p_description,'create',p_actor_id) RETURNING * INTO v;
+  UPDATE public.assess_v2_cases SET head_version_id=v.id WHERE id=c.id;
+  result:=jsonb_build_object('id',c.id,'status','draft','version',1,'headVersionId',v.id);
+  INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version)
+  VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment_v2.create','assess_v2_case',c.id,'succeeded',1);
   UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
   RETURN jsonb_build_object('outcome','committed','resource',result);
 EXCEPTION

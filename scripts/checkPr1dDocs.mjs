@@ -51,6 +51,7 @@ for (const phrase of [
   'forward-only', 'submitted/unvalidated', 'canonical input/evidence/output JSON text',
   'recomputes each UTF-8 SHA-256 digest', 'sourceV1.importedEvidenceClaimIds',
   'immutable version-1 clone evidence', 'fabricated claim',
+  'Final P2 create and clone receipt replay correction', 'two-session same-key create',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -61,7 +62,8 @@ for (const phrase of [
   '98.52% lines, 84.43% branches, 96.51% functions', '24/24 PR 1D browser journeys',
   'Final review draft-receipt and requested-change correction', 'zero side effects',
   'Final P1 imported-V1 evidence provenance correction', 'sourceV1.importedEvidenceClaimIds',
-  'fabricated `v1.evidence.*` claim', 'buyer acceptance', 'additive forward fix',
+  'fabricated `v1.evidence.*` claim', 'Final P2 create and clone receipt replay correction',
+  'parent/source soft deletion', 'buyer acceptance', 'additive forward fix',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }
