@@ -34,7 +34,7 @@ Results below apply only to commands executed against the correction worktree. E
 | `npm.cmd run test:pr1b` | Passed; coverage 95.65% lines, 82.26% branches, 100.00% functions. |
 | `npm.cmd run test:pr1c` | Passed; coverage 80.00% lines, 81.97% branches, 86.96% functions. |
 | `npm.cmd run test:pr1d` | Passed; source, migration contract, CI contract, V1 compatibility, V2 model/command/presentation, Govern compatibility, coverage, and docs gates passed. |
-| `npm.cmd run test:pr1d-coverage` | Passed; 98.52% lines, 84.43% branches, 96.51% functions. |
+| `npm.cmd run test:pr1d-coverage` | Passed; 98.53% lines, 84.49% branches, 96.51% functions. |
 | `npm.cmd run test:migrations:pr1a` against isolated PostgreSQL 15 | Passed; fresh, idempotency, supported legacy upgrade, RLS, and failure scenarios passed. |
 | `npm.cmd run test:migrations:pr1b` against isolated PostgreSQL 15 | Passed; complete disposable PostgreSQL tenant-authority, privilege, adversarial, concurrency, upgrade, fallback, and forward-fix matrix passed. |
 | `npm.cmd run test:migrations:pr1c` against isolated PostgreSQL 15 | Passed; ACL, ancestry, idempotency, lifecycle, atomicity, and rollback scenarios passed. |
@@ -60,7 +60,7 @@ Set the V2 runtime control to disabled or read-only, leave V1 behavior available
 
 Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 24/24 PR 1D browser journeys, and the production build.
 
-PR 1D coverage is 98.52% lines, 84.43% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
+PR 1D coverage is 98.53% lines, 84.49% branches, and 96.51% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
 
 The correction exercises finalization replay from the immutable pre-finalization source, synchronizes remount testing with the saved-draft acknowledgement, restricts finalizable evidence claims to registered V2 fields or immutable server-projected V1 import provenance, and permits authorized succeeded receipts to replay during read-only maintenance while disabled mode remains fail-closed. It does not alter V1 scoring, V2 formulas, weights, thresholds, hard stops, recommendation logic, capability authority, RLS, hashes, traceability, clone ownership, or audit ownership.
 
@@ -129,3 +129,13 @@ Executed focused evidence passed `node --check` for both import/transpiler guard
 The CommonJS test transpiler now uses `rewriteRelativeImportExtensions`, preserving existing Node execution while Deno receives resolvable source specifiers. No scoring/version/rule, command authority, persistence, migration, snapshot, hash, review, Govern, Studio, export, or sharing behavior changed.
 
 Rollback remains V2 disable/read-only plus an additive forward fix; do not restore extensionless Edge imports or alter accepted migration history.
+
+### Final P2 Edge clone-replay preflight correction
+
+The final-head review found that the Edge clone handler still loaded the mutable V1 source before invoking the corrected clone RPC. A committed retry therefore could not reach the SQL receipt replay path after source deletion or during read-only maintenance. The correction adds a private replay-only RPC and invokes it after fresh authority checks but before any V1 source read.
+
+Executed focused Edge evidence proves exact succeeded replay returns without calling `loadFrozenV1AssessmentForClone`; `IDEMPOTENCY_CONFLICT`, `READ_ONLY`, and `FEATURE_DISABLED` also fail before that loader. A normal `NOT_FOUND` preflight alone falls through to the existing server projection and locked full clone RPC.
+
+The complete disposable PostgreSQL 15.8 PR 1D matrix passed. It proves private-RPC ACL, exact replay after source deletion, zero additional case, immutable version, evidence, receipt, or privileged-audit side effects, normal/read-only misses, disabled fail-closed behavior, wrong source/name/case conflicts, and current `assess.read` revocation. Static source/migration guards and root plus Edge typechecks also passed.
+
+No live or hosted system was accessed. The correction changes no score, rule, recommendation, approval, evidence-attestation, Govern, Studio, export, or sharing behavior. Fresh correction-head CI and final review-thread closure remain required before human-review readiness.

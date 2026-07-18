@@ -15,6 +15,14 @@ export const executeAssessV2Command = async (request: Request, envelope: AssessV
   }
   const command = { ...envelope, actorId: actor.id } as AssessV2AtomicCommand;
   if (envelope.commandType === 'assessment_v2.clone_from_v1') {
+    try {
+      // A committed clone is bound to its immutable version-1 projection. Probe
+      // the server-owned receipt before loading the mutable V1 source so exact
+      // retries survive source deletion and read-only maintenance.
+      return await dependencies.executeAtomicCommand(command);
+    } catch (error) {
+      if (!(error instanceof AssessV2Error) || error.code !== 'RESOURCE_NOT_AVAILABLE') throw error;
+    }
     const sourceAssessmentId = envelope.payload.sourceAssessmentId as string;
     const source = await dependencies.loadFrozenV1AssessmentForClone({ sourceAssessmentId, organizationId: envelope.organizationId, workspaceId: envelope.workspaceId });
     if (!source || source.id !== sourceAssessmentId) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');

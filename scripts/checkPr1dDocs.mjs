@@ -41,6 +41,8 @@ for (const phrase of [
   'submitted and unvalidated', 'imported fact and evidence counts',
   'assess.v2.read', 'assess.v2.create', 'assess.v2.clone', 'assess.v2.draft.write', 'assess.v2.finalize',
   'Edge/Deno import-resolution compatibility correction', 'explicit `.ts` specifier',
+  'Edge clone-replay preflight correction', 'server-owned replay helper',
+  'before the mutable V1 source load',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -56,6 +58,8 @@ for (const phrase of [
   'Final P2 create-case agent-necessity compatibility correction', 'exact legacy version-1',
   'freshly created, unsaved case',
   'Final P1 Edge/Deno import-resolution correction', 'extensionless Deno imports',
+  'Final P2 Edge clone-replay preflight correction', 'private service-role replay helper',
+  'read-only miss',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -63,7 +67,7 @@ for (const phrase of [
 const evidence = read(canonicalFiles[1]);
 for (const phrase of [
   'Correction verification ledger', 'Not Run', 'Hosted/live Supabase',
-  '98.52% lines, 84.43% branches, 96.51% functions', '24/24 PR 1D browser journeys',
+  '98.53% lines, 84.49% branches, 96.51% functions', '24/24 PR 1D browser journeys',
   'Final review draft-receipt and requested-change correction', 'zero side effects',
   'Final P1 imported-V1 evidence provenance correction', 'sourceV1.importedEvidenceClaimIds',
   'fabricated `v1.evidence.*` claim', 'Final P2 create and clone receipt replay correction',
@@ -72,6 +76,8 @@ for (const phrase of [
   'near-match malformed row',
   'Final P1 Edge/Deno import-resolution correction', '19 TypeScript modules and 40 relative edges',
   'actual `deno check` was not run',
+  'Final P2 Edge clone-replay preflight correction', 'before any V1 source read',
+  'exact replay after source deletion', 'zero additional case',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

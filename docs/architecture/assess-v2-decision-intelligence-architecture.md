@@ -173,3 +173,13 @@ The dependency graph reachable from `supabase/functions/assess-v2-command/index.
 Node/Vite behavior remains compatible through bundler resolution and the repository test transpilers' `rewriteRelativeImportExtensions` setting. This correction changes no command schema, capability, scoring formula, rule, threshold, hard stop, recommendation, snapshot, hash, persistence, or lifecycle behavior.
 
 Rollback remains V2 disablement or read-only maintenance followed by an additive forward fix; do not restore extensionless Edge imports or treat source resolution as hosted deployment proof.
+
+## Edge clone-replay preflight correction
+
+After fresh actor, tenant, authorization-version, and capability resolution, the Edge clone handler calls a server-owned replay helper before the mutable V1 source load. The private service-role RPC independently revalidates `assess.v2.clone`, `assess.v2.create`, and `assess.read`, locks runtime control and the actor-scoped receipt, and binds an exact succeeded replay to the immutable version-1 clone projection: organization, workspace, case, source assessment, name, description, contract version, and imported fact/evidence counts.
+
+An exact replay returns the committed response without reading the current V1 row or creating another case, version, evidence link, receipt, or audit. A normal-mode receipt miss returns `NOT_FOUND` to the Edge boundary and proceeds through the existing locked active-source creation path. A read-only miss remains `READ_ONLY`; disabled mode remains `FEATURE_DISABLED`; a failed, in-progress, foreign-scope, wrong-resource, or request-mismatched receipt remains `IDEMPOTENCY_CONFLICT`. Current authority is required even for replay.
+
+This correction changes no V1 or V2 scoring formula, weight, threshold, hard stop, recommendation, decision version, evidence-attestation boundary, approval state, or lifecycle authority.
+
+Rollback remains V2 feature disablement or read-only maintenance with immutable clone history and receipts preserved, followed by another additive forward fix. Do not restore a V1 source lookup ahead of exact replay or expose the replay helper to browser roles.

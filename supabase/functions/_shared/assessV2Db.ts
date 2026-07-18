@@ -65,6 +65,21 @@ export const buildAssessV2FinalizeReplayRpcBody = (command: AssessV2AtomicComman
   };
 };
 
+export const buildAssessV2CloneReplayRpcBody = (command: AssessV2AtomicCommand) => {
+  if (command.commandType !== 'assessment_v2.clone_from_v1' || command.serverCloneProjection) throw new AssessV2Error('COMMAND_UNAVAILABLE');
+  return {
+    p_actor_id: command.actorId,
+    p_org_id: command.organizationId,
+    p_workspace_id: command.workspaceId,
+    p_case_id: command.payload.caseId,
+    p_source_assessment_id: command.payload.sourceAssessmentId,
+    p_name: command.payload.name,
+    p_description: command.payload.description,
+    p_idempotency_key: command.idempotencyKey,
+    p_authorization_version: command.authorizationVersion,
+  };
+};
+
 export const assessV2Dependencies: AssessV2Dependencies = {
   async authenticate(request) { return getAuthUser(request); },
   async loadFreshAuthority(input) { try { const authority = await resolveTenantAuthority(input.actorId, { organizationId: input.organizationId, workspaceId: input.workspaceId }, createTenantAuthorityDatabase(input.request)); return { actorId: authority.userId, organizationId: authority.organizationId, workspaceId: authority.workspaceId, authorizationVersion: authority.authorizationVersion, capabilities: authority.capabilities }; } catch (error) { if (error instanceof TenantAuthorityError && error.code === 'TENANT_ACCESS_DENIED') return null; throw error; } },
@@ -104,9 +119,10 @@ export const assessV2Dependencies: AssessV2Dependencies = {
   },
   async loadLockedCaseForFinalize(input) { const response = await serviceFetch('rpc/pr1d_load_assess_v2_case', { method: 'POST', body: JSON.stringify({ p_case_id: input.caseId, p_org_id: input.organizationId, p_workspace_id: input.workspaceId, p_expected_version: input.expectedVersion }) }); if (response.status === 404) return null; if (!response.ok) return throwAssessV2RpcFailure(response); const value = await response.json(); return (Array.isArray(value) ? value[0] : value) as AssessmentCaseV2 | null; },
   async executeAtomicCommand(command) { try {
+    const cloneReplay = command.commandType === 'assessment_v2.clone_from_v1' && !command.serverCloneProjection;
     const finalizeReplay = command.commandType === 'assessment_v2.finalize' && !command.serverDecision;
-    const rpc = finalizeReplay ? 'pr1d_replay_assess_v2_finalize' : rpcByCommand[command.commandType];
-    const body = finalizeReplay ? buildAssessV2FinalizeReplayRpcBody(command) : buildAssessV2RpcBody(command);
+    const rpc = cloneReplay ? 'pr1d_replay_assess_v2_clone' : finalizeReplay ? 'pr1d_replay_assess_v2_finalize' : rpcByCommand[command.commandType];
+    const body = cloneReplay ? buildAssessV2CloneReplayRpcBody(command) : finalizeReplay ? buildAssessV2FinalizeReplayRpcBody(command) : buildAssessV2RpcBody(command);
     const response = await serviceFetch(`rpc/${rpc}`, { method: 'POST', body: JSON.stringify(body) });
     if (!response.ok) return throwAssessV2RpcFailure(response);
     return controlled(await response.json());

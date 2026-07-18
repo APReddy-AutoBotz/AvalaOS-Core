@@ -6,7 +6,7 @@ import { ASSESS_V1_SCORE_VERSION, ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION } from 
 import { AssessV2AtomicCommand, AssessV2Dependencies, AssessV2Envelope, AssessV2Error, asAssessV2Error, assessV2ErrorBody, parseAssessV2DraftPayload, parseAssessV2Envelope } from './assessV2Command.ts';
 import { executeAssessV2Command } from './assessV2Handlers.ts';
 import { handleAssessV2Request } from './assessV2Router.ts';
-import { assessV2RpcFailureCode, buildAssessV2FinalizeReplayRpcBody, buildAssessV2RpcBody } from './assessV2Db.ts';
+import { assessV2RpcFailureCode, buildAssessV2CloneReplayRpcBody, buildAssessV2FinalizeReplayRpcBody, buildAssessV2RpcBody } from './assessV2Db.ts';
 
 const org = '11111111-1111-4111-8111-111111111111';
 const workspace = '22222222-2222-4222-8222-222222222222';
@@ -23,6 +23,7 @@ const frozenV1: Assessment = {
 const commands: AssessV2AtomicCommand[] = [];
 const cloneCapabilities = [...Object.values(ASSESS_V2_CAPABILITIES), 'assess.read'];
 const deps = (): AssessV2Dependencies => ({ authenticate: async () => ({ id: actor }), loadFreshAuthority: async () => ({ actorId: actor, organizationId: org, workspaceId: workspace, authorizationVersion: 7, capabilities: cloneCapabilities }), loadFrozenV1AssessmentForClone: async () => frozenV1, loadLockedCaseForFinalize: async () => stored, executeAtomicCommand: async command => {
+  if (command.commandType === 'assessment_v2.clone_from_v1' && !command.serverCloneProjection) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
   if (command.commandType === 'assessment_v2.finalize' && !command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
   commands.push(command); return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 1 } };
 } });
@@ -114,6 +115,7 @@ const main = async () => {
   const validClone = deps();
   let executedClone: AssessV2AtomicCommand | undefined;
   validClone.executeAtomicCommand = async command => {
+    if (!command.serverCloneProjection) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
     executedClone = command;
     const projection = command.serverCloneProjection!;
     return { outcome: 'committed', resource: { id: command.payload.caseId, status: 'draft', version: 1, cloneContractVersion: projection.contractVersion, importedFactCount: projection.importedFactCount, importedEvidenceCount: projection.importedEvidenceCount } };
@@ -134,13 +136,43 @@ const main = async () => {
   assert.deepEqual(rpc.p_imported_evidence, projection?.evidence);
   assert.deepEqual(rpc.p_agent_necessity, projection?.agentNecessity);
   assert.equal((rpc as Record<string, unknown>).serverCloneProjection, undefined);
+  const cloneReplayOnlyCommand = { ...parseAssessV2Envelope(clone), actorId: actor } as AssessV2AtomicCommand;
+  assert.deepEqual(buildAssessV2CloneReplayRpcBody(cloneReplayOnlyCommand), {
+    p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,
+    p_source_assessment_id: processId, p_name: 'Clone', p_description: '',
+    p_idempotency_key: clone.idempotencyKey, p_authorization_version: 7,
+  });
+  assert.throws(() => buildAssessV2CloneReplayRpcBody(executedClone!), (error: unknown) => error instanceof AssessV2Error && error.code === 'COMMAND_UNAVAILABLE');
+  const cloneReplay = deps();
+  let cloneReplayLoads = 0;
+  cloneReplay.loadFrozenV1AssessmentForClone = async () => { cloneReplayLoads += 1; return null; };
+  cloneReplay.executeAtomicCommand = async command => {
+    assert.equal(command.serverCloneProjection, undefined);
+    return { outcome: 'replayed', resource: { id: caseId, status: 'draft', version: 1, cloneContractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION, importedFactCount: projection!.importedFactCount, importedEvidenceCount: projection!.importedEvidenceCount } };
+  };
+  const replayedClone = await executeAssessV2Command(req(clone), parseAssessV2Envelope(clone), cloneReplay);
+  assert.equal(replayedClone.outcome, 'replayed');
+  assert.equal(cloneReplayLoads, 0, 'an exact clone retry must replay before the V1 source lookup');
+  for (const code of ['IDEMPOTENCY_CONFLICT', 'READ_ONLY', 'FEATURE_DISABLED'] as const) {
+    const failedReplay = deps();
+    failedReplay.loadFrozenV1AssessmentForClone = async () => { cloneReplayLoads += 1; return frozenV1; };
+    failedReplay.executeAtomicCommand = async command => {
+      if (!command.serverCloneProjection) throw new AssessV2Error(code);
+      throw new Error('clone creation must not execute after a replay preflight failure');
+    };
+    await assert.rejects(() => executeAssessV2Command(req(clone), parseAssessV2Envelope(clone), failedReplay), (error: unknown) => error instanceof AssessV2Error && error.code === code);
+    assert.equal(cloneReplayLoads, 0, `${code} must fail before the V1 source lookup`);
+  }
   for (const resource of [
     { id: caseId, status: 'draft', version: 1, importedFactCount: projection!.importedFactCount, importedEvidenceCount: projection!.importedEvidenceCount },
     { id: caseId, status: 'draft', version: 1, cloneContractVersion: 'wrong-contract', importedFactCount: projection!.importedFactCount, importedEvidenceCount: projection!.importedEvidenceCount },
     { id: caseId, status: 'draft', version: 1, cloneContractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION, importedFactCount: projection!.importedFactCount },
     { id: caseId, status: 'draft', version: 1, cloneContractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION, importedFactCount: 12.5, importedEvidenceCount: 1 },
   ]) {
-    const invalidClone = deps(); invalidClone.executeAtomicCommand = async () => ({ outcome: 'committed', resource });
+    const invalidClone = deps(); invalidClone.executeAtomicCommand = async command => {
+      if (!command.serverCloneProjection) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+      return { outcome: 'committed', resource };
+    };
     await assert.rejects(() => executeAssessV2Command(req(clone), parseAssessV2Envelope(clone), invalidClone), (error: unknown) => error instanceof AssessV2Error && error.code === 'COMMAND_UNAVAILABLE');
   }
   for (const source of [

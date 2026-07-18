@@ -167,6 +167,7 @@ try {
   const oldFinalize = 'pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,jsonb,jsonb,text,text,text,text,text,timestamp with time zone,uuid,text,bigint)';
   const newFinalize = 'pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamp with time zone,uuid,text,bigint)';
   const replayFinalizeSignature = 'pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint)';
+  const replayCloneSignature = 'pr1d_replay_assess_v2_clone(uuid,uuid,uuid,uuid,uuid,text,text,text,bigint)';
   assert.equal((await test.query('SELECT to_regprocedure($1) value', [oldFinalize])).rows[0].value, null);
   assert.ok((await test.query('SELECT to_regprocedure($1) value', [newFinalize])).rows[0].value);
   const cloneSignature = 'pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint)';
@@ -176,6 +177,7 @@ try {
     'pr1d_upsert_assess_v2_draft(uuid,uuid,uuid,uuid,bigint,jsonb,uuid,text,bigint)',
     newFinalize,
     replayFinalizeSignature,
+    replayCloneSignature,
   ]) {
     for (const role of ['anon', 'authenticated', 'pr1d_unprivileged']) {
       assert.equal((await test.query("SELECT has_function_privilege($1,$2,'EXECUTE') ok", [role, signature])).rows[0].ok, false);
@@ -350,6 +352,10 @@ try {
     JSON.stringify(overrides.importedFacts ?? importedFacts),JSON.stringify(overrides.importedEvidence ?? importedEvidence),JSON.stringify(overrides.agentNecessity ?? agentNecessity),
     contract,req(requestNumber),idempotencyKey,overrides.authorizationVersion ?? authorizationVersion,
   ];
+  const replayClone = (caseId, sourceAssessmentId, name, idempotencyKey, overrides = {}) => asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_replay_assess_v2_clone($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [A, O, overrides.workspaceId ?? W, caseId, sourceAssessmentId, name, overrides.description ?? '', idempotencyKey, overrides.authorizationVersion ?? authorizationVersion],
+  ));
   await test.query(
     "UPDATE assessments SET score_version='assess-core-2026-05',responses=$2,evidence_items=$3,assumptions=$4,status='Ready for Review',version=1 WHERE id=$1",
     [V1, JSON.stringify(v1Responses), JSON.stringify(v1Evidence), JSON.stringify(v1Assumptions)],
@@ -460,6 +466,14 @@ try {
   const cloneReplayState = async () => value(await test.query("SELECT jsonb_build_object('cases',(SELECT count(*) FROM assess_v2_cases WHERE id=$1),'versions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=$1),'evidence',(SELECT count(*) FROM assess_v2_evidence_links WHERE case_id=$1),'receipts',(SELECT count(*) FROM assess_command_receipts WHERE idempotency_key=$2),'audits',(SELECT count(*) FROM privileged_audit_events WHERE action='assessment_v2.clone_from_v1' AND resource_id=$1)) value", [CLONE, 'clone-v1']));
   const cloneStateBeforeSourceDelete = await cloneReplayState();
   await test.query('UPDATE assessments SET deleted_at=now() WHERE id=$1', [V1]);
+  const helperCloneAfterSourceDelete = value(await replayClone(CLONE,V1,'Clone','clone-v1'));
+  assert.equal(helperCloneAfterSourceDelete.outcome, 'replayed');
+  assert.deepEqual(helperCloneAfterSourceDelete.resource, cloned.resource);
+  assert.deepEqual(await cloneReplayState(), cloneStateBeforeSourceDelete);
+  assert.equal(value(await replayClone('31000000-0000-4000-8000-000000000128',V1,'Missing deleted source','clone-helper-missing-after-delete')).errorCode, 'NOT_FOUND');
+  assert.equal(value(await replayClone(CLONE,V1,'Changed clone request','clone-v1')).errorCode, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(value(await replayClone(CLONE,V1B,'Clone','clone-v1')).errorCode, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(value(await replayClone(CASE,V1,'Clone','clone-v1')).errorCode, 'IDEMPOTENCY_CONFLICT');
   const cloneAfterSourceDelete = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',114,'clone-v1',{sourceV1:{...sourceV1,clonedAt:cloneRetryTimestamp}}),
@@ -479,12 +493,17 @@ try {
   )));
   assert.equal(mismatchedDeletedClone.errorCode, 'IDEMPOTENCY_CONFLICT');
   await test.query('UPDATE assess_v2_runtime_control SET read_only=true');
+  const readOnlyHelperCloneReplay = value(await replayClone(CLONE,V1,'Clone','clone-v1'));
+  assert.equal(readOnlyHelperCloneReplay.outcome, 'replayed');
+  assert.deepEqual(readOnlyHelperCloneReplay.resource, cloned.resource);
+  assert.equal(value(await replayClone('31000000-0000-4000-8000-000000000128',V1,'Missing deleted source','clone-helper-read-only-miss')).errorCode, 'READ_ONLY');
   const readOnlyCloneReplay = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',117,'clone-v1'),
   )));
   assert.equal(readOnlyCloneReplay.outcome, 'replayed');
   await test.query('UPDATE assess_v2_runtime_control SET enabled=false,read_only=false');
+  assert.equal(value(await replayClone(CLONE,V1,'Clone','clone-v1')).errorCode, 'FEATURE_DISABLED');
   const disabledCloneReplay = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',118,'clone-v1'),
@@ -493,6 +512,7 @@ try {
   await test.query('UPDATE assess_v2_runtime_control SET enabled=true');
   await test.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.read'", ['11000000-0000-4000-8000-000000000012']);
   authorizationVersion = Number((await test.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A])).rows[0].version);
+  await assert.rejects(replayClone(CLONE,V1,'Clone','clone-v1'), /PR1B_NOT_FOUND/);
   await assert.rejects(asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs(CLONE,V1,'Clone','assess-v1-to-v2-clone-2026-07-15',119,'clone-v1'),

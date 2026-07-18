@@ -80,3 +80,13 @@ This correction makes no schema change: the accepted foundation migration and bo
 The repository's Node test transpiler rewrites explicit TypeScript extensions when emitting CommonJS tests, preserving existing V1 compatibility and V2 domain/command execution. This is source compatibility evidence only, not hosted Edge or deployment proof.
 
 Rollback remains V2 disable/read-only with all data and decisions preserved, followed by a forward fix; do not modify migration history or restore extensionless Deno imports.
+
+## Final P2 Edge clone-replay preflight correction
+
+The additive correction adds a private service-role replay helper for `assessment_v2.clone_from_v1`. It locks runtime control, revalidates the three clone capabilities, locks the actor-scoped receipt, and verifies the exact succeeded response against the immutable version-1 `v1_clone` row before returning it. The helper is revoked from `PUBLIC`, `anon`, and `authenticated`; only `service_role` can invoke the RPC, and the Edge handler calls it before any V1 source read.
+
+Normal-mode misses return `NOT_FOUND` and fall through to the existing locked active-source clone RPC. An exact replay remains non-mutating after source deletion and during read-only maintenance; a read-only miss returns `READ_ONLY`, disabled mode returns `FEATURE_DISABLED`, and scope, source, case, name, description, receipt-status, contract, or count mismatches return `IDEMPOTENCY_CONFLICT`. Current `assess.v2.clone`, `assess.v2.create`, and `assess.read` authority remains mandatory.
+
+Executed disposable PostgreSQL 15.8 verification proves the helper ACL, exact replay after source deletion, unchanged case/version/evidence/receipt/audit state, normal and read-only misses, disabled mode, request mismatches, wrong source/case, and authority revocation. Edge command tests prove exact replay and every fail-closed preflight outcome occurs before the V1 loader.
+
+Rollback remains V2 disable/read-only with committed receipts and immutable clone versions preserved, followed by an additive forward fix. Do not grant browser roles helper execution or restore mutable source validation ahead of exact replay.

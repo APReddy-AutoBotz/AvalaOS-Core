@@ -18,6 +18,10 @@ assert.ok(correction.includes('p_clone_contract_version text'), 'SQL clone RPC m
 assert.ok(correction.includes(`p_clone_contract_version IS DISTINCT FROM '${cloneContractVersion}'`), 'SQL clone precheck drifted from the canonical TypeScript contract');
 assert.ok(handler.includes('assertRuntimeCloneContract(result.resource, command.serverCloneProjection)'), 'clone command must enforce the runtime conversion contract and exact imported counts');
 assert.ok(handler.includes('contractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION'), 'clone command must bind the canonical contract before database execution');
+const cloneHandlerStart = handler.indexOf("if (envelope.commandType === 'assessment_v2.clone_from_v1') {");
+const cloneReplayPreflight = handler.indexOf('return await dependencies.executeAtomicCommand(command);', cloneHandlerStart);
+const cloneSourceLoad = handler.indexOf('loadFrozenV1AssessmentForClone', cloneHandlerStart);
+assert.ok(cloneHandlerStart >= 0 && cloneReplayPreflight > cloneHandlerStart && cloneSourceLoad > cloneReplayPreflight, 'Edge clone retries must replay before the mutable V1 source lookup');
 const cloneAuthorityStart = correction.indexOf('CREATE OR REPLACE FUNCTION public.pr1d_clone_assess_v2_from_v1(');
 const cloneSourceRead = correction.indexOf('SELECT * INTO a FROM public.assessments', cloneAuthorityStart);
 assert.ok(cloneAuthorityStart >= 0 && cloneSourceRead > cloneAuthorityStart, 'SQL clone authority/source-read boundary missing');
@@ -92,6 +96,8 @@ for (const token of [
   'REVOKE ALL ON FUNCTION public.pr1d_assert_enabled(),public.pr1d_resource(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role',
   'REVOKE ALL ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) FROM PUBLIC,anon,authenticated',
   'GRANT EXECUTE ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) TO service_role',
+  'REVOKE ALL ON FUNCTION public.pr1d_replay_assess_v2_clone(uuid,uuid,uuid,uuid,uuid,text,text,text,bigint) FROM PUBLIC,anon,authenticated',
+  'GRANT EXECUTE ON FUNCTION public.pr1d_replay_assess_v2_clone(uuid,uuid,uuid,uuid,uuid,text,text,text,bigint) TO service_role',
   'REVOKE ALL ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) FROM PUBLIC,anon,authenticated',
   'GRANT EXECUTE ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) TO service_role',
 ]) assert.ok(correction.includes(token), `correction migration missing ${token}`);

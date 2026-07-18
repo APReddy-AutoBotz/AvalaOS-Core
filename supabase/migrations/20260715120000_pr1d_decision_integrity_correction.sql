@@ -572,6 +572,55 @@ EXCEPTION WHEN OTHERS THEN
 END
 $$;
 
+CREATE OR REPLACE FUNCTION public.pr1d_replay_assess_v2_clone(
+  p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_source_assessment_id uuid,
+  p_name text,p_description text,p_idempotency_key text,p_authorization_version bigint
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  r public.assess_command_receipts;
+  control public.assess_v2_runtime_control;
+  v public.assess_v2_case_versions;
+  imported_evidence_count bigint;
+BEGIN
+  SELECT * INTO control FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'; END IF;
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.clone',p_authorization_version);
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.create',p_authorization_version);
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.read',p_authorization_version);
+  SELECT * INTO r FROM public.assess_command_receipts
+   WHERE org_id=p_org_id AND actor_id=p_actor_id
+     AND command_type='assessment_v2.clone_from_v1' AND idempotency_key=p_idempotency_key
+   FOR UPDATE;
+  IF r.id IS NULL THEN
+    IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'; END IF;
+    RETURN jsonb_build_object('errorCode','NOT_FOUND');
+  END IF;
+  SELECT * INTO v FROM public.assess_v2_case_versions
+   WHERE id::text=r.response->>'headVersionId' AND case_id=p_case_id
+     AND org_id=p_org_id AND workspace_id=p_workspace_id
+     AND version=1 AND source_kind='v1_clone';
+  SELECT count(*) INTO imported_evidence_count FROM public.assess_v2_evidence_links WHERE version_id=v.id;
+  IF r.workspace_id<>p_workspace_id OR r.status<>'succeeded'
+    OR r.request_hash !~ '^[0-9a-f]{64}$'
+    OR r.response->>'id'<>p_case_id::text
+    OR r.response->>'status'<>'draft' OR r.response->>'version'<>'1'
+    OR r.response->>'cloneContractVersion'<>'assess-v1-to-v2-clone-2026-07-15'
+    OR v.id IS NULL OR v.name IS DISTINCT FROM p_name OR v.description IS DISTINCT FROM p_description
+    OR v.source_snapshot->>'assessmentId' IS DISTINCT FROM p_source_assessment_id::text
+    OR r.response->>'importedFactCount' IS DISTINCT FROM jsonb_array_length(v.imported_facts)::text
+    OR r.response->>'importedEvidenceCount' IS DISTINCT FROM imported_evidence_count::text
+  THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+  RETURN jsonb_build_object('outcome','replayed','resource',r.response);
+EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM LIKE '%PR1B_AUTHORIZATION_STALE%' THEN RETURN jsonb_build_object('errorCode','AUTHORIZATION_STALE');
+  ELSIF SQLERRM LIKE '%PR1D_FEATURE_DISABLED%' THEN RETURN jsonb_build_object('errorCode','FEATURE_DISABLED');
+  ELSIF SQLERRM LIKE '%PR1D_READ_ONLY%' THEN RETURN jsonb_build_object('errorCode','READ_ONLY');
+  END IF;
+  RAISE;
+END
+$$;
+
 REVOKE ALL ON FUNCTION public.pr1d_v1_import_facts(jsonb),public.pr1d_v1_evidence_id(uuid,text),public.pr1d_canonical_json(jsonb),public.pr1d_verify_bound_canonical(text,text,jsonb,text,uuid,uuid,uuid,bigint,text,text,text) FROM PUBLIC,anon,authenticated,service_role;
 -- These SECURITY DEFINER helpers are implementation details, not callable API.
 -- Keep invocation authority with the function owner so the private RPCs can use
@@ -579,10 +628,12 @@ REVOKE ALL ON FUNCTION public.pr1d_v1_import_facts(jsonb),public.pr1d_v1_evidenc
 REVOKE ALL ON FUNCTION public.pr1d_assert_enabled(),public.pr1d_resource(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.pr1d_replay_assess_v2_clone(uuid,uuid,uuid,uuid,uuid,text,text,text,bigint) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.pr1d_replay_assess_v2_clone(uuid,uuid,uuid,uuid,uuid,text,text,text,bigint) TO service_role;
 
 COMMENT ON COLUMN public.assess_v2_case_versions.imported_facts IS 'Immutable allowlisted V1 facts imported as assumed/unknown with source=v1-import.';
 COMMENT ON FUNCTION public.pr1d_v1_evidence_id(uuid,text) IS 'Internal deterministic V1 evidence surrogate used to compare clone projections with the locked source row.';
