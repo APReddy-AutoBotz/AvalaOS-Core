@@ -127,6 +127,7 @@ try {
 
   const oldFinalize = 'pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,jsonb,jsonb,text,text,text,text,text,timestamp with time zone,uuid,text,bigint)';
   const newFinalize = 'pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamp with time zone,uuid,text,bigint)';
+  const replayFinalizeSignature = 'pr1d_replay_assess_v2_finalize(uuid,uuid,uuid,uuid,bigint,text,bigint)';
   assert.equal((await test.query('SELECT to_regprocedure($1) value', [oldFinalize])).rows[0].value, null);
   assert.ok((await test.query('SELECT to_regprocedure($1) value', [newFinalize])).rows[0].value);
   const cloneSignature = 'pr1d_clone_assess_v2_from_v1(uuid,uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,jsonb,jsonb,text,uuid,text,bigint)';
@@ -135,6 +136,7 @@ try {
     cloneSignature,
     'pr1d_upsert_assess_v2_draft(uuid,uuid,uuid,uuid,bigint,jsonb,uuid,text,bigint)',
     newFinalize,
+    replayFinalizeSignature,
   ]) {
     for (const role of ['anon', 'authenticated', 'pr1d_unprivileged']) {
       assert.equal((await test.query("SELECT has_function_privilege($1,$2,'EXECUTE') ok", [role, signature])).rows[0].ok, false);
@@ -560,6 +562,10 @@ try {
         selectedRuleSetVersion, decisionVersion, new Date().toISOString(), req(number), key, authorizationVersion],
     ));
   };
+  const replayFinalize = (caseId, version, key, client = test) => asRole(client, 'service_role', () => client.query(
+    'SELECT pr1d_replay_assess_v2_finalize($1,$2,$3,$4,$5,$6,$7) value',
+    [A, O, W, caseId, version, key, authorizationVersion],
+  ));
   const finalizedClone = value(await finalize(CLONE,2,'finalize-reviewed-clone',49,{
     sourceCase:loadedSavedClone,evidence:loadedSavedClone.evidence,output:makeOutput(CLONE),
   }));
@@ -715,6 +721,7 @@ try {
   const successEvidence = successSource.evidence;
   const successOutput = makeOutput(CASE);
   const successRequest = {
+    authoritativeSource: successSource,
     sourceCase: successSource, evidence: successEvidence, output: successOutput,
     inputBound: bound('input',CASE,2,successSource),
     evidenceBound: bound('evidence',CASE,2,successEvidence),
@@ -726,6 +733,7 @@ try {
   const sameFinalizeEvidence = sameFinalizeSource.evidence;
   const sameFinalizeOutput = makeOutput(CASE2);
   const sameFinalizeRequest = {
+    authoritativeSource: sameFinalizeSource,
     sourceCase: sameFinalizeSource, evidence: sameFinalizeEvidence, output: sameFinalizeOutput,
     inputBound: bound('input', CASE2, 2, sameFinalizeSource),
     evidenceBound: bound('evidence', CASE2, 2, sameFinalizeEvidence),
@@ -748,10 +756,15 @@ try {
   assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='same-finalize' AND status='succeeded'")).rows[0].n), 1);
   assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1 AND action='assessment_v2.finalize'", [CASE2])).rows[0].n), 1);
 
+  assert.equal(value(await replayFinalize(CASE, 2, 'missing-finalize-receipt')).errorCode, 'NOT_FOUND');
   const finalized = value(await finalize(CASE, 2, 'finalize-v2', 60, successRequest));
   assert.equal(finalized.resource.status, 'reviewer_ready');
   const finalizedReplay = value(await finalize(CASE, 2, 'finalize-v2', 60, successRequest));
   assert.equal(finalizedReplay.outcome, 'replayed');
+  const receiptReplay = value(await replayFinalize(CASE, 2, 'finalize-v2'));
+  assert.equal(receiptReplay.outcome, 'replayed');
+  assert.deepEqual(receiptReplay.resource, finalized.resource);
+  assert.equal(value(await replayFinalize(CASE2, 2, 'finalize-v2')).errorCode, 'IDEMPOTENCY_CONFLICT');
   const decision = (await test.query(
     'SELECT input_snapshot,evidence_snapshot,input_canonical,evidence_canonical,output_canonical,input_hash,evidence_hash,output_hash FROM assess_v2_decision_versions WHERE case_id=$1', [CASE],
   )).rows[0];

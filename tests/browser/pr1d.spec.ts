@@ -466,6 +466,7 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Persisted restore primitive');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
   await page.getByRole('button',{name:'View'}).first().click();

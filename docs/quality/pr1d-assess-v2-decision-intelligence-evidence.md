@@ -1,6 +1,6 @@
 # PR 1D Avala Assess V2 Decision Intelligence Evidence
 
-Status: active acceptance evidence; implementation-head CI completed, final acceptance-record CI pending
+Status: active acceptance evidence; final correction-head CI and review closure pending
 
 Baseline: PR #208 / PR 1C accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`
 
@@ -26,25 +26,28 @@ Results below apply only to commands executed against the correction worktree. E
 | `npm.cmd run typecheck` | Passed; `tsc --noEmit` emitted no diagnostics. |
 | `npm.cmd run test:assess-v2-rule-registry` | Passed; domain, registry, evaluator, AP fixture, immutable decision, and canonical digest tests passed. |
 | `npm.cmd run test:assess-v2-command` | Passed; exact nested parsing, server authority, canonical decision construction, and sanitized error tests passed. |
-| `npm.cmd ci` | Passed in a disposable detached checkout containing the exact correction: 200 locked dependencies installed and 0 vulnerabilities reported. The original worktree's native Rolldown module remained locally locked by a completed browser process, so it was not used for this clean-install proof. |
+| `npm.cmd ci` | Passed in the correction worktree: 200 lockfile-defined packages installed and 0 vulnerabilities reported. |
 | `npm.cmd audit --audit-level=moderate` | Passed; 0 vulnerabilities. |
 | `npm.cmd run typecheck:edge` | Passed; Edge TypeScript emitted no diagnostics. |
-| `npm.cmd test` | Passed; complete repository suite including PR 1A through PR 1D passed. |
+| `npm.cmd test` | Interrupted by a user turn after its completed green sections; no failure was reported. PR-owned suites were rerun directly below, and the final correction-head GitHub Quality Gates workflow remains the authoritative aggregate proof. |
 | `npm.cmd run test:pr1a` | Passed; coverage 94.90% lines, 93.10% branches, 92.86% functions. |
 | `npm.cmd run test:pr1b` | Passed; coverage 95.65% lines, 82.26% branches, 100.00% functions. |
 | `npm.cmd run test:pr1c` | Passed; coverage 80.00% lines, 81.97% branches, 86.96% functions. |
 | `npm.cmd run test:pr1d` | Passed; source, migration contract, CI contract, V1 compatibility, V2 model/command/presentation, Govern compatibility, coverage, and docs gates passed. |
-| `npm.cmd run test:pr1d-coverage` | Passed; 98.47% lines, 84.27% branches, 95.96% functions. |
-| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 16 | Passed; ACL/RLS, clone, canonical digest, independent input/evidence/output hash and tenant/workspace/case/source/rule-set/snapshot mismatch atomicity, same-key replay concurrency, audit rollback, compatibility, and immutability passed. |
-| `npm.cmd run test:browser:pr1d` | Passed; 14/14 desktop/mobile journeys covering create, real V1 clone/import review, genuine authoring, claim-linked evidence, save/reload, exact Edge parsing, real evaluator/SHA-256 decision construction, structural-finalization denial, final read-only rendering, capability denial, stale authority, version conflict, offline handling, accessibility, overflow, and the retained 5-second decision interaction budget. Local preview teardown suppresses its usual footer; the command completed successfully and the runner registered 14 scenarios. |
-| `npm.cmd run test:browser` | Passed; 38/38 desktop/mobile journeys in deterministic CI-equivalent single-worker mode. Local preview teardown suppresses its usual footer; the command completed successfully and the runner registered 38 scenarios. |
+| `npm.cmd run test:pr1d-coverage` | Passed; 98.51% lines, 84.16% branches, 96.04% functions. |
+| `npm.cmd run test:migrations:pr1a` against isolated PostgreSQL 15 | Passed; fresh, idempotency, supported legacy upgrade, RLS, and failure scenarios passed. |
+| `npm.cmd run test:migrations:pr1b` against isolated PostgreSQL 15 | Passed; complete disposable PostgreSQL tenant-authority, privilege, adversarial, concurrency, upgrade, fallback, and forward-fix matrix passed. |
+| `npm.cmd run test:migrations:pr1c` against isolated PostgreSQL 15 | Passed; ACL, ancestry, idempotency, lifecycle, atomicity, and rollback scenarios passed. |
+| `npm.cmd run test:migrations:pr1d` against isolated PostgreSQL 15 | Passed; ACL/RLS, clone, canonical digest, atomicity, receipt and raw-RPC replay idempotency, concurrency, compatibility, and immutability passed. |
+| `npm.cmd run test:browser:pr1d` | Passed; 18/18 desktop/mobile journeys, including the persisted-draft remount scenario and the retained accessibility, overflow, error, and interaction-budget checks. |
+| `npm.cmd run test:browser` | Passed; 24/24 retained PR 1A/PR 1C desktop/mobile journeys in deterministic single-worker mode. |
 | `npm.cmd run test:ai-boundary-static` | Passed; 0 forbidden hits and 0 stale allowlist entries. |
 | `npm.cmd run test:secret-hygiene` | Passed; 0 forbidden hits and no tracked `.env` files. |
 | `npm.cmd run build` | Passed; production Vite build completed. |
 | PR 1D Markdown relative-link validation | Passed through `npm.cmd run test:docs:pr1d`. |
 | PR 1D buyer-copy/UTF-8 scanner | Passed through `npm.cmd run lint:pr1d`; no changed-file mojibake or legacy `assess.v2.write` references. |
 | `git diff --check` | Passed; line-ending conversion warnings only. |
-| GitHub PR #209 implementation-head CI, inspected job by job | Passed for implementation head `f43c98505e0467853e776e993723d8c2f764b508`; push `29548516387` and pull-request `29548518066` completed successfully. Final acceptance-record CI is tracked in GitHub/PR description. |
+| GitHub PR #209 final correction-head CI | Pending after this evidence-bearing correction commit. The preceding head `fe1170ccc39f565c0133507d1cb6c25b534c249b` exposed the raw finalization replay and remount-test synchronization defects corrected and reproduced locally in this commit. Final workflow identifiers and results are tracked in GitHub checks and the PR description to avoid a self-referential evidence cycle. |
 | Hosted/live Supabase | Not Run by design. |
 
 No live or hosted infrastructure, production data, logs, secrets, storage objects, deployment controls, or incident actions were accessed. This ledger must not be read as buyer acceptance, deployment readiness, scientific calibration, guaranteed economics, compliance certification, or security certification.
@@ -53,13 +56,13 @@ No live or hosted infrastructure, production data, logs, secrets, storage object
 
 Set the V2 runtime control to disabled or read-only, leave V1 behavior available, preserve all V2 history, imported facts/evidence, canonical snapshots/text, hashes, receipts, and audits, and ship an additive forward fix. Do not reverse the accepted foundation migration destructively, mutate immutable decisions, reinterpret V2 through V1 scoring, restore browser-side decision authority, or claim that local evidence proves hosted readiness.
 
-## Final implementation-head CI
+## Final correction-head acceptance
 
-Implementation head: `f43c98505e0467853e776e993723d8c2f764b508`. Push workflow `29548516387` and pull-request workflow `29548518066` completed successfully. Quality Gates, Chromium/accessibility/viewport/performance, and PR 1A-1D migration jobs passed; hosted Supabase smoke was skipped by the intended non-live condition.
+Executed local evidence on the final correction worktree includes a clean lockfile install, zero-vulnerability audit, application and Edge typechecks, PR 1A-1D source and package-owned suites, AI-boundary and secret-hygiene scans, all four disposable PostgreSQL migration matrices, 24/24 retained browser journeys, 18/18 PR 1D browser journeys, and the production build.
 
-The implementation head recorded 98.47% lines, 84.27% branches, and 95.96% functions; 38/38 complete browser journeys and 14/14 focused PR 1D browser journeys passed. Dependency audit found zero vulnerabilities; application and Edge typechecks, PR 1A-1D gates, AI-boundary and secret-hygiene scans, and production build passed. Live/hosted validation was not run.
+PR 1D coverage is 98.51% lines, 84.16% branches, and 96.04% functions. Final correction-head push and pull-request workflow results are recorded in GitHub checks and the PR description after this commit. Hosted/live validation was not run.
 
-This final acceptance-record update changes only current evidence/status. It does not alter product behavior, V1 scoring, V2 decision logic, capability authority, RLS, hashes, traceability, clone behavior, audit behavior, or browser behavior. Its own CI is recorded in the PR description and GitHub checks to avoid a self-referential evidence-commit cycle.
+The correction changes acceptance harness behavior only: it exercises finalization replay from the immutable pre-finalization source and synchronizes remount testing with the saved-draft acknowledgement. It does not alter product behavior, V1 scoring, V2 decision logic, capability authority, RLS, hashes, traceability, clone behavior, audit behavior, or browser behavior.
 
 
 ## P1 independent evidence-attestation correction
@@ -70,9 +73,15 @@ Verified confidence is reserved for an immutable, server-authoritative, independ
 
 ### Final review authoring-completeness correction
 
-The P1 primitive-fact and application-lifecycle editor findings are corrected in the implementation boundary. Executed local evidence includes TypeScript, PR 1D source lint, production build, and the focused displayed-controls finalization browser journey; fresh final-head CI is required before review-thread resolution and readiness.
+The P1 primitive-fact and application-lifecycle editor findings are corrected in the implementation boundary. Executed local evidence includes TypeScript, PR 1D source lint, production build, the focused displayed-controls finalization browser journey, the complete PR 1D browser suite, and the complete PR 1D package-owned suite. Final correction-head CI is required before readiness.
 
 
 ### Final review locked-row clone correction
 
-The final Codex review identified a confirmed source defect: the private clone RPC validated caller-supplied imported fact/evidence shape without proving exact equality to the locked V1 source row. The correction makes PostgreSQL independently derive the canonical projection and reject any mismatch before side effects. Static PR 1D migration/source guards passed locally. The isolated PostgreSQL harness was not run locally because `PR1D_MIGRATION_DATABASE_URL` was unavailable and Docker Desktop was not running; fresh final-head CI is required to execute the migration chain, deterministic evidence parity, fabricated fact/evidence rejection, and zero-side-effect assertions before this finding can be resolved.
+The final Codex review identified a confirmed source defect: the private clone RPC validated caller-supplied imported fact/evidence shape without proving exact equality to the locked V1 source row. The correction makes PostgreSQL independently derive the canonical projection and reject any mismatch before side effects. Static PR 1D migration/source guards and the complete isolated PostgreSQL 15 migration chain passed locally, including deterministic evidence parity, fabricated fact/evidence rejection, and zero-side-effect assertions. Final correction-head CI is still required before readiness.
+
+### Final acceptance replay and browser synchronization correction
+
+The preceding remote head exposed two acceptance defects. The migration harness attempted a same-key raw finalization replay by reloading a case that had already transitioned to `reviewer_ready`, causing `PR1D_VERSION_CONFLICT` before the database idempotency path could be exercised. The corrected harness reuses the immutable pre-finalization authoritative source for the raw-RPC replay, verifies the service-role receipt replay helper, and proves missing-receipt and cross-case idempotency failures. The exact remote failure reproduced locally before the correction; the complete PR 1D PostgreSQL matrix passed afterward.
+
+The persisted-draft remount browser scenario reloaded immediately after clicking an asynchronous save control, so a slow CI host could reload before the fixture observed the completed save. The test now waits for the visible saved-draft acknowledgement before reloading. The focused remount scenarios passed 2/2 and the complete PR 1D browser suite passed 18/18 across desktop and mobile.
