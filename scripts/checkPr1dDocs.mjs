@@ -101,7 +101,7 @@ for (const phrase of [
   'tenant-scoped version-1 `v1_clone` row',
   'Final candidate-confidence and private fact-validation correction',
   'exact five-key fact objects', 'before command receipt claim',
-  'trusted immutable `imported_facts`',
+  'Trusted immutable `imported_facts`',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
