@@ -109,7 +109,7 @@ No V1 score, formula, threshold, recommendation, score version, lifecycle author
 
 ## Final P2 V2 runtime-state presentation correction
 
-No migration changes are required. The existing Edge and private PostgreSQL boundaries already return stable `READ_ONLY` and `FEATURE_DISABLED` codes. The client compatibility parser now preserves both codes and the enterprise session policy maps each to the mutation-blocking `read_only` state with distinct maintenance and disabled messages.
+No migration changes are required for runtime presentation. The existing Edge and private PostgreSQL boundaries already return stable `READ_ONLY` and `FEATURE_DISABLED` codes. The client compatibility parser preserves both codes and the Assess V2 boundary maps each to a V2-local mutation-blocking `read_only` operational state with distinct maintenance and disabled messages; the tenant-wide session remains ready unless a tenant-wide boundary actually fails.
 
 The safe fallback does not clear valid tenant authority, does not substitute demo data, and keeps existing committed V2 decisions readable. Unknown server payloads remain fail-closed as `COMMAND_UNAVAILABLE`; offline transport remains `OFFLINE`.
 
@@ -138,3 +138,11 @@ The corrected draft collision check removes only the immutable row's server-only
 The direct browser read path now loads imported evidence from the tenant-scoped version-1 `v1_clone` row and gives those immutable rows precedence over same-ID current-version rows. It also reconstructs the canonical imported `v1.evidence.*` claim IDs and clone timestamp rather than dropping provenance on later draft reloads.
 
 The focused disposable PostgreSQL 16 matrix covers the normal Edge-shaped save and state, owner, claim, provenance, and server-only-field collisions. Rollback remains V2 disable/read-only with records preserved, followed by an additive forward correction; no destructive down-migration is authorized.
+
+## Final P2 V2-local fallback and dotted legacy evidence-ID correction
+
+The V2 client/provider boundary now treats `READ_ONLY` and `FEATURE_DISABLED` from Assess V2 as V2-local operational state. It retains tenant context and the tenant-wide `ready` session so frozen V1 writes remain available, blocks all V2 mutations, and keeps authorized V2 reads available. Authentication, authority-stale, revocation, and other tenant-wide failures still use the global enterprise handler.
+
+The accepted source evidence-ID alphabet is `^[A-Za-z0-9._:-]+$`; the corrected clone claim validator uses the exact corresponding `^v1\\.evidence\\.[A-Za-z0-9._:-]+$` expression. The PostgreSQL 16 matrix proves a dotted identifier clones, reloads, saves, and finalizes with its complete provenance claim, while space and slash variants return `INVALID_COMMAND` with zero case, receipt, evidence, or audit side effects.
+
+Rollback remains V2-local disable/read-only with V1 available and all V2 history preserved, followed by an additive forward correction. Do not restore a global tenant downgrade for a V2-only runtime condition or a claim regex narrower or broader than the locked source-ID contract.

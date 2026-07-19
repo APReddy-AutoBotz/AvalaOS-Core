@@ -2,6 +2,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/assess-v2/AssessV2Workspace.tsx', 'utf8');
+const providerSource = readFileSync('components/auth/OrganizationProvider.tsx', 'utf8');
+const scopedHandler = providerSource.match(/const handleAssessV2Boundary = useCallback\(\(error: unknown\) => \{([\s\S]*?)\r?\n  \}, \[handleEnterpriseBoundary\]\);/)?.[1] ?? '';
+assert.ok(scopedHandler, 'Assess V2 must have a scoped enterprise-boundary handler.');
+assert.match(scopedHandler, /presentEnterpriseBoundary\(error\.code, 'assess_v2'\)/);
+assert.match(scopedHandler, /setAssessV2OperationalState\('read_only'\)/);
+assert.doesNotMatch(scopedHandler, /setSessionState\(/, 'a V2-only runtime fallback must not downgrade the tenant session');
+
+assert.match(source, /assessV2OperationalState === 'ready' && capabilities\.includes\(capability\)/);
+assert.match(source, /assessV2OperationalState === 'read_only' \|\| result\?\.case\.status === 'reviewer-ready'/);
+assert.match(source, /handleAssessV2Boundary\(error\)/);
+assert.match(source, /disabled=\{busy \|\| !canRead\} onClick=\{reload\}/);
+assert.match(source, /assessV2OperationalMessage \|\| 'Avala Assess V2 changes are blocked/);
+
 
 assert.match(source, /const authorDraftFingerprint = .*JSON\.stringify\(toAuthorDraft\(draft\)\)/);
 assert.match(source, /const hasUnsavedChanges = draft !== null && savedDraftFingerprint !== authorDraftFingerprint\(draft\)/);

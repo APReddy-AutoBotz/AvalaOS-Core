@@ -202,7 +202,7 @@ This correction changes no V1 formula, weight, threshold, hard stop, recommendat
 
 ## Final V2 runtime-state presentation correction
 
-The Assess V2 command client preserves the server's stable `READ_ONLY` and `FEATURE_DISABLED` codes instead of collapsing either to `COMMAND_UNAVAILABLE`. Both outcomes enter the existing mutation-blocking `read_only` enterprise session state without clearing valid tenant authority. They retain distinct user-facing messages so planned maintenance and feature disablement are not presented as the same condition.
+The Assess V2 command client preserves the server's stable `READ_ONLY` and `FEATURE_DISABLED` codes instead of collapsing either to `COMMAND_UNAVAILABLE`. The Assess V2 boundary scopes both outcomes to a V2-local mutation-blocking `read_only` operational state without clearing valid tenant authority or downgrading the tenant-wide session. They retain distinct user-facing messages so planned maintenance and feature disablement are not presented as the same condition.
 
 Existing committed V2 decisions remain readable while new creates, clones, draft writes, and finalization remain blocked by the existing action policy. Unknown or malformed error payloads still fail closed as `COMMAND_UNAVAILABLE`, and offline transport remains `OFFLINE`.
 
@@ -233,3 +233,11 @@ The draft RPC compares a same-ID imported evidence payload against its client-au
 Draft reads for a V1-cloned case query the tenant-scoped version-1 `v1_clone` authoring row, reload its immutable evidence, and merge it with current-version author evidence so immutable imported evidence wins every same-ID collision. The same projection reconstructs `sourceV1.importedEvidenceClaimIds` and `clonedAt`, preserving provenance and preventing a browser reload from inventing a linked-evidence gap.
 
 This is a compatibility-boundary correction only. It changes no V1 or V2 score, formula, weight, threshold, hard stop, rule, recommendation, decision version, approval, attestation, Govern, Studio, handoff, export, or sharing behavior. Rollback remains V2 disable/read-only with immutable records preserved and an additive forward fix.
+
+## Final V2-local fallback and legacy evidence-ID alignment correction
+
+`READ_ONLY` and `FEATURE_DISABLED` returned by an Assess V2 operation are presented as a V2-local operational fallback. The organization session and current tenant authority remain `ready`, so frozen V1 authoring and unrelated enterprise actions remain available. Assess V2 create, clone, draft-save, and finalization stay blocked, while authorized V2 discovery, draft reload, and finalized Decision Pack reads remain available. Authentication, stale authority, tenant revocation, offline, and other enterprise boundary failures continue through the tenant-wide policy.
+
+The V1 clone boundary now validates generated `v1.evidence.<source-id>` claims with the same source evidence-ID alphabet already accepted by the locked V1 projection: `[A-Za-z0-9._:-]+`. Valid dotted identifiers therefore preserve their complete provenance claim. Spaces, slashes, and every other unsupported character remain `INVALID_COMMAND` before case, receipt, evidence, or audit mutation.
+
+This correction changes no V1 scoring behavior, V2 rule or decision version, capability grant, RLS policy, approval, attestation, handoff, export, or sharing scope. Rollback remains V2-local disable/read-only with immutable records preserved and V1 available, followed by an additive forward fix.

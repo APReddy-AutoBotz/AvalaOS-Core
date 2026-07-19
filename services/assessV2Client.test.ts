@@ -55,10 +55,23 @@ for (const code of ['READ_ONLY', 'FEATURE_DISABLED'] as const) {
   assert.equal(readEnterpriseErrorCode({ code }), code);
   assert.equal(presentEnterpriseBoundary(code).state, 'read_only');
   assert.equal(presentEnterpriseBoundary(code).clearAuthority, false);
+  const scoped = presentEnterpriseBoundary(code, 'assess_v2');
+  assert.equal(scoped.scope, 'assess_v2');
+  assert.equal(scoped.clearAuthority, false);
 }
 assert.match(presentEnterpriseBoundary('READ_ONLY').message, /read-only maintenance/);
 assert.match(presentEnterpriseBoundary('FEATURE_DISABLED').message, /disabled/);
 assert.notEqual(presentEnterpriseBoundary('READ_ONLY').message, presentEnterpriseBoundary('FEATURE_DISABLED').message);
+const providerSource = fs.readFileSync('components/auth/OrganizationProvider.tsx', 'utf8');
+const scopedHandler = providerSource.match(/const handleAssessV2Boundary = useCallback\(\(error: unknown\) => \{([\s\S]*?)\r?\n  \}, \[handleEnterpriseBoundary\]\);/)?.[1] ?? '';
+assert.ok(scopedHandler, 'Assess V2 must have a scoped enterprise-boundary handler.');
+assert.match(scopedHandler, /presentEnterpriseBoundary\(error\.code, 'assess_v2'\)/);
+assert.match(scopedHandler, /setAssessV2OperationalState\('read_only'\)/);
+assert.doesNotMatch(scopedHandler, /setSessionState\(/, 'a V2-only runtime fallback must not downgrade the tenant session');
+const workspaceSource = fs.readFileSync('components/assess-v2/AssessV2Workspace.tsx', 'utf8');
+assert.match(workspaceSource, /assessV2OperationalState === 'ready' && capabilities\.includes\(capability\)/);
+assert.match(workspaceSource, /assessV2OperationalState === 'read_only' \|\| result\?\.case\.status === 'reviewer-ready'/);
+assert.match(workspaceSource, /disabled=\{busy \|\| !canRead\} onClick=\{reload\}/);
 const clientSource = fs.readFileSync('services/assessV2Client.ts', 'utf8');
 const immutableProjectionSource = clientSource.match(/export const projectImmutableCloneEvidence = \([\s\S]*?^};/m)?.[0];
 assert.ok(immutableProjectionSource, 'immutable clone evidence projection must remain directly testable');

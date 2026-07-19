@@ -12,9 +12,12 @@ export interface EnterpriseBoundaryPresentation {
   state: EnterpriseSessionState;
   message: string;
   clearAuthority: boolean;
+  scope: 'tenant' | 'assess_v2';
 }
 
-const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentation> = {
+type BaseEnterpriseBoundaryPresentation = Omit<EnterpriseBoundaryPresentation, 'scope'>;
+
+const PRESENTATIONS: Record<EnterpriseBoundaryCode, BaseEnterpriseBoundaryPresentation> = {
   AUTHENTICATION_REQUIRED: {
     state: 'expired_session',
     message: 'Your session expired. Sign in again to continue.',
@@ -69,7 +72,13 @@ const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentati
 
 export const presentEnterpriseBoundary = (
   code: EnterpriseBoundaryCode,
-): EnterpriseBoundaryPresentation => PRESENTATIONS[code];
+  requestedScope: 'tenant' | 'assess_v2' = 'tenant',
+): EnterpriseBoundaryPresentation => {
+  const scope = requestedScope === 'assess_v2' && (code === 'FEATURE_DISABLED' || code === 'READ_ONLY')
+    ? 'assess_v2'
+    : 'tenant';
+  return { ...PRESENTATIONS[code], scope };
+};
 
 export const enterpriseActionPolicy = ({
   sessionState,

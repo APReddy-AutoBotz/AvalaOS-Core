@@ -73,7 +73,13 @@ const inputClass = 'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3
 const list = (items: string[]) => items.length ? <ul className="mt-2 list-disc space-y-1 pl-2 text-sm font-semibold sm:pl-5">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="mt-2 text-sm text-slate-500">None recorded.</p>;
 
 export default function AssessV2Workspace({ processId, processName, processDescription, v1Assessment }: Props) {
-  const { tenantContext, sessionState, handleEnterpriseBoundary } = useOrganizationContext();
+  const {
+    tenantContext,
+    sessionState,
+    assessV2OperationalState,
+    assessV2OperationalMessage,
+    handleAssessV2Boundary,
+  } = useOrganizationContext();
   const [draft, setDraft] = useState<AssessV2DraftInput | null>(null);
   const [version, setVersion] = useState<number | null>(null);
   const [result, setResult] = useState<AssessV2ReadProjection | null>(null);
@@ -83,8 +89,8 @@ export default function AssessV2Workspace({ processId, processName, processDescr
   const [discoveryState, setDiscoveryState] = useState<DiscoveryState>('waiting');
   const capabilities = tenantContext?.capabilities ?? [];
   const canRead = Boolean(tenantContext) && ['ready', 'read_only'].includes(sessionState) && capabilities.includes(ASSESS_V2_CAPABILITIES.read);
-  const can = (capability: string) => sessionState === 'ready' && capabilities.includes(capability);
-  const isReadOnly = sessionState !== 'ready' || result?.case.status === 'reviewer-ready';
+  const can = (capability: string) => sessionState === 'ready' && assessV2OperationalState === 'ready' && capabilities.includes(capability);
+  const isReadOnly = sessionState !== 'ready' || assessV2OperationalState === 'read_only' || result?.case.status === 'reviewer-ready';
   const missing = useMemo(() => Object.keys(capabilityCopy).filter(item => !capabilities.includes(item)), [capabilities]);
   const claimOptions = useMemo(() => [...new Set([...FIELD_REGISTRY.map(field => field.fieldId), ...importedFacts.map(fact => fact.fieldId)])], [importedFacts]);
   const structuralGaps = useMemo(() => draft ? [
@@ -133,14 +139,14 @@ export default function AssessV2Workspace({ processId, processName, processDescr
         setDiscoveryState('ready');
       } catch (error) {
         if (cancelled) return;
-        handleEnterpriseBoundary(error);
+        handleAssessV2Boundary(error);
         setDiscoveryState('failed');
         setMessage('Existing V2 case discovery failed. Create and clone remain unavailable to prevent a duplicate case.');
       }
     })();
     return () => { cancelled = true; };
-  }, [handleEnterpriseBoundary, processId, sessionState, tenantContext]);
-  const run = async (action: () => Promise<void>) => { setBusy(true); setMessage(null); try { await action(); } catch (error) { handleEnterpriseBoundary(error); setMessage(error instanceof Error ? error.message : 'The Assess V2 action could not be completed.'); } finally { setBusy(false); } };
+  }, [handleAssessV2Boundary, processId, sessionState, tenantContext]);
+  const run = async (action: () => Promise<void>) => { setBusy(true); setMessage(null); try { await action(); } catch (error) { handleAssessV2Boundary(error); setMessage(error instanceof Error ? error.message : 'The Assess V2 action could not be completed.'); } finally { setBusy(false); } };
   const start = (clone: boolean) => run(async () => {
     if (!tenantContext) throw new Error('A server-issued workspace context is required.');
     if (discoveryState !== 'ready') throw new Error('Existing V2 case discovery must complete before a case can be created.');
@@ -180,6 +186,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     </div>
     {discoveryState === 'loading' && <p className="mt-4 text-sm font-semibold text-slate-500" role="status">Checking for an existing V2 case for this process.</p>}
     {discoveryState === 'failed' && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800" role="alert">Existing V2 case lookup is unavailable. Create and clone are blocked to prevent a duplicate case.</p>}
+    {assessV2OperationalState === 'read_only' && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950" role="status">{assessV2OperationalMessage || 'Avala Assess V2 changes are blocked. Existing V2 records remain available.'}</p>}
     {v1Assessment && <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100"><strong>Legacy V1 | assess-core-2026-05.</strong> Final recommendation: {v1Assessment.scores?.recommendation?.category || 'not finalized'}. Cloned values remain unverified suggestions until reviewed.</div>}
     {missing.length > 0 && <p className="mt-4 text-xs font-semibold text-slate-500" role="status">Unavailable actions: {missing.map(item => capabilityCopy[item]).join(', ')}. Server capabilities control every mutation.</p>}
     {message && <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200" role="status">{message}</p>}

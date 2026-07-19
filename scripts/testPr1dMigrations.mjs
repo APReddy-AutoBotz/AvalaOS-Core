@@ -371,10 +371,12 @@ try {
     risk: { financial: true },
     forbiddenSecretSection: { token: 'must-not-import' },
   };
-  const v1Evidence = [{ id: 'legacy-evidence-1', linkedField: 'processStructure.trigger', owner: 'process-owner' }, { id: 'legacy-evidence-without-owner' }];
+  const v1Evidence = [{ id: 'legacy-evidence-1', linkedField: 'processStructure.trigger', owner: 'process-owner' }, { id: 'legacy.evidence.without.owner' }];
   const v1Assumptions = [{ id:'api-availability',description:'The ERP API remains available.' }];
   const evidenceId1 = 'f9177f53-6161-50b7-b73e-aea9d29f9ba3';
-  const evidenceId2 = '863d45e6-4592-54ba-accb-17acd04d48d6';
+  const evidenceId2 = (await test.query(
+    'SELECT pr1d_v1_evidence_id($1,$2)::text id', [V1, 'legacy.evidence.without.owner'],
+  )).rows[0].id;
   const importedFacts = [
     { fieldId:'v1.responses.processStructure.nested.handoffs',value:3,status:'assumed',evidenceIds:[],source:'v1-import' },
     { fieldId:'v1.responses.processStructure.trigger',value:'invoice-received',status:'assumed',evidenceIds:[evidenceId1],source:'v1-import' },
@@ -387,9 +389,9 @@ try {
   ];
   const importedEvidence = [
     { id:evidenceId1,claimIds:['v1.responses.processStructure.trigger'],sourceType:'document',status:'submitted',validated:false,owner:'process-owner',reviewerIds:[],contradictory:false },
-    { id:evidenceId2,claimIds:['v1.evidence.legacy-evidence-without-owner'],sourceType:'document',status:'submitted',validated:false,reviewerIds:[],contradictory:false },
+    { id:evidenceId2,claimIds:['v1.evidence.legacy.evidence.without.owner'],sourceType:'document',status:'submitted',validated:false,reviewerIds:[],contradictory:false },
   ];
-  const importedEvidenceClaimIds = ['v1.evidence.legacy-evidence-without-owner'];
+  const importedEvidenceClaimIds = ['v1.evidence.legacy.evidence.without.owner'];
   const fabricatedImportedEvidenceClaim = 'v1.evidence.fabricated-author-claim';
   const agentNecessity = canonicalUnknownAgentNecessity;
   const sourceV1 = { assessmentId:V1,scoreVersion:'assess-core-2026-05',clonedAt:'2026-07-15T12:00:00.000Z',importedAs:'unverified-source-facts' };
@@ -408,7 +410,7 @@ try {
   );
   const sqlEvidenceIds = (await test.query(
     'SELECT pr1d_v1_evidence_id($1,item)::text id FROM unnest($2::text[]) WITH ORDINALITY source(item,ordinal) ORDER BY ordinal',
-    [V1,['legacy-evidence-1','legacy-evidence-without-owner']],
+    [V1,['legacy-evidence-1','legacy.evidence.without.owner']],
   )).rows.map(row => row.id);
   assert.deepEqual(sqlEvidenceIds,[evidenceId1,evidenceId2]);
   const sqlResponseFacts = value(await test.query('SELECT pr1d_v1_import_facts($1) value',[JSON.stringify(v1Responses)]));
@@ -465,6 +467,24 @@ try {
   authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
+  for (const [invalidEvidenceId, caseId, key, requestNumber] of [
+    ['legacy evidence with spaces', '31000000-0000-4000-8000-000000000131', 'clone-invalid-evidence-spaces', 136],
+    ['legacy/evidence/with/slashes', '31000000-0000-4000-8000-000000000132', 'clone-invalid-evidence-slashes', 137],
+  ]) {
+    await test.query('UPDATE assessments SET evidence_items=$2 WHERE id=$1', [
+      V1, JSON.stringify([v1Evidence[0], { id: invalidEvidenceId }]),
+    ]);
+    const invalidEvidenceClone = value(await asRole(test, 'service_role', () => test.query(
+      'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
+      cloneArgs(caseId,V1,'Invalid source evidence','assess-v1-to-v2-clone-2026-07-15',requestNumber,key),
+    )));
+    assert.deepEqual(invalidEvidenceClone, { errorCode: 'INVALID_COMMAND' });
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_cases WHERE id=$1',[caseId])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1',[key])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1',[caseId])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_evidence_links WHERE case_id=$1',[caseId])).rows[0].n),0);
+  }
+  await test.query('UPDATE assessments SET evidence_items=$2 WHERE id=$1', [V1, JSON.stringify(v1Evidence)]);
   const rejectedClone = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
     cloneArgs('31000000-0000-4000-8000-000000000097',V1,'Rejected clone','wrong-contract',29,'clone-wrong-contract'),

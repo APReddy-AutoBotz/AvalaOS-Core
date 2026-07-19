@@ -255,7 +255,7 @@ BEGIN
         SELECT 1 FROM jsonb_array_elements_text(evidence->'claimIds') claim_id
         WHERE NOT (
           claim_id ~ '^v1\.responses\.(processStructure|workPattern|dataProfile|judgment|systems|risk)(\.|$)'
-          OR claim_id ~ '^v1\.evidence\.[^.]+$'
+          OR claim_id ~ '^v1\.evidence\.[A-Za-z0-9._:-]+$'
         )
       )
   ) THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
