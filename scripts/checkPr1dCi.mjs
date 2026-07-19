@@ -13,6 +13,14 @@ for (const fragment of [
 ]) {
   if (!source.includes(fragment)) throw new Error(`PR1D_CI_GATE_MISSING: ${fragment}`);
 }
+const pr1dJobStart = source.indexOf('\n  pr1d-migrations:');
+const pr1dJobEnd = source.indexOf('\n  supabase-smoke:', pr1dJobStart);
+if (pr1dJobStart < 0 || pr1dJobEnd < 0) throw new Error('PR1D_CI_GATE_MISSING: bounded pr1d-migrations job');
+const pr1dJob = source.slice(pr1dJobStart, pr1dJobEnd);
+if (!pr1dJob.includes('image: postgres:16')) {
+  throw new Error('PR1D_CI_GATE_MISSING: PR 1D migration gate must run PostgreSQL 16');
+}
+
 
 for (const retained of [
   'npm run test:pr1b',
