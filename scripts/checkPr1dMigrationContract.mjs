@@ -76,7 +76,11 @@ for (const token of [
   "'importedFacts',v.imported_facts",
   'SELECT current_evidence.id,current_evidence.payload',
   'AND NOT EXISTS (',
-  'current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id',
+  'clone_version.version=1',
+  'imported_evidence.id=current_evidence.id',
+  'authored.payload IS DISTINCT FROM imported_evidence.payload',
+  "AND imported_evidence.id::text=x->>'id'",
+  "errorCode','INVALID_COMMAND",
   'p_input_canonical text',
   'p_evidence_canonical text',
   'p_output_canonical text',
@@ -101,6 +105,10 @@ for (const token of [
   'REVOKE ALL ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) FROM PUBLIC,anon,authenticated',
   'GRANT EXECUTE ON FUNCTION public.pr1d_finalize_assess_v2_case(uuid,uuid,uuid,uuid,bigint,jsonb,text,jsonb,text,jsonb,text,text,text,text,text,text,timestamptz,uuid,text,bigint) TO service_role',
 ]) assert.ok(correction.includes(token), `correction migration missing ${token}`);
+assert.ok(
+  !correction.includes('current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id'),
+  'current draft evidence must never shadow immutable imported V1 evidence',
+);
 
 assert.doesNotMatch(foundation + correction, /UPDATE public\.privileged_audit_events/);
 assert.doesNotMatch(

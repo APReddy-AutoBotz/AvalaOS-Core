@@ -53,6 +53,10 @@ for (const phrase of [
   'assess-v2-decision-2026-07-19', 'server finalization timestamp',
   'Technically Ready financial writes remain approval-bound',
   'exact succeeded draft receipt',
+  'Final read-only discovery and immutable imported-evidence correction',
+  'read-only sessions continue V2 case discovery',
+  'immutable version-1 clone evidence row',
+  'never creates a mutable shadow row',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -79,6 +83,10 @@ for (const phrase of [
   'Final P2 financial-action, decision-time evidence, and draft replay correction',
   'decision-output version', 'current `assess.v2.draft.write` authority',
   'read-only miss', 'disabled mode remains fail-closed',
+  'Final P2/P1 read-only discovery and immutable imported-evidence correction',
+  'altered same-ID author evidence', 'before receipt claim',
+  'defensively prefers the immutable clone row',
+  'assess-v2-decision-2026-07-19',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -106,6 +114,10 @@ for (const phrase of [
   'Final P2 financial-action, decision-time evidence, and draft replay correction',
   'assess-v2-decision-2026-07-19', 'finalization-time expiry',
   'exact succeeded draft replay', 'IDEMPOTENCY_CONFLICT',
+  'Final P2/P1 read-only discovery and immutable imported-evidence correction',
+  '1 passed (39.8s)', 'zero side effects',
+  'exact imported evidence round-trip',
+  '32 total', '0 unresolved',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

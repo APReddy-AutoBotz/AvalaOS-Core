@@ -23,7 +23,7 @@ const ALL_CAPABILITIES = [
 ];
 
 type BoundaryCode = 'AUTHENTICATION_REQUIRED' | 'AUTHORITY_STALE' |
-  'RESOURCE_NOT_AVAILABLE' | 'PERMISSION_DENIED' | 'VERSION_CONFLICT';
+  'RESOURCE_NOT_AVAILABLE' | 'PERMISSION_DENIED' | 'VERSION_CONFLICT' | 'READ_ONLY';
 
 type FixtureOptions = {
   capabilities?: string[];
@@ -61,6 +61,7 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
   const capabilities = options.capabilities ?? ALL_CAPABILITIES;
   const committedCommands: Array<Record<string, any>> = [];
   const receipts = new Map<string,{ signature: string; response: unknown }>();
+  let failV2Command = options.failV2Command;
   let trustedApproval = options.trustedApproval ?? false;
   let v2Version = 0;
   let v2Decision: Record<string,any> | null = null;
@@ -138,8 +139,8 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     if (url.pathname === '/functions/v1/assess-v2-command') {
       const body = request.postDataJSON() as Record<string,any>;
       if (options.v2Offline) return route.abort('internetdisconnected');
-      if (options.failV2Command?.type === body.commandType) {
-        return fail(route, options.failV2Command.code, options.failV2Command.code === 'AUTHENTICATION_REQUIRED' ? 401 : options.failV2Command.code === 'PERMISSION_DENIED' ? 403 : 409);
+      if (failV2Command?.type === body.commandType) {
+        return fail(route, failV2Command.code, failV2Command.code === 'AUTHENTICATION_REQUIRED' ? 401 : failV2Command.code === 'PERMISSION_DENIED' ? 403 : 409);
       }
       if (body.commandType === 'assessment_v2.create' || body.commandType === 'assessment_v2.clone_from_v1') {
         v2Version = 1; v2Name = body.payload.name; v2Description = body.payload.description;
@@ -291,6 +292,23 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     get v2Case(){ return v2Case; },
     get v2Decision(){ return v2Decision; },
     setAssessmentStatus(status: string){ if (assessment) assessment={...assessment,status}; },
+    setV2CommandFailure(failure: FixtureOptions['failV2Command']){ failV2Command = failure; },
+    async seedReviewerReadyV2Decision(){
+      if (!v2Case) throw new Error('A V2 case must exist before a reviewer-ready decision can be seeded.');
+      v2Case = {
+        ...v2Case,
+        primitives:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives),
+        edges:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.edges),
+        decisionPoints:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.decisionPoints),
+        exceptionPaths:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.exceptionPaths),
+        assets:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.assets),
+        interactions:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.interactions),
+        evidence:structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence),
+      };
+      v2Decision = await buildDecisionVersionV2(v2Case, USER, '2026-07-13T00:02:00.000Z');
+      v2Version += 1;
+      v2Case = { ...v2Case, status:'reviewer-ready', version:v2Version };
+    },
     get handoffId(){ return handoffId; },
   };
 };
@@ -503,6 +521,42 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toHaveLength(1);
+});
+
+test('read-only V2 sessions retain discovery across remount while mutations remain unavailable', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByLabel('Primitive 1 name').fill('Read-only discovery primitive');
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
+  const committedBeforeReadOnly = fixture.committedCommands.length;
+
+  fixture.setV2CommandFailure({ type:'assessment_v2.draft.upsert', code:'READ_ONLY' });
+  await page.getByLabel('Primitive 1 name').fill('Unsaved read-only mutation');
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+
+  await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
+  await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Read-only discovery primitive');
+  await expect(page.getByRole('button',{name:'Save V2 draft'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Reload current draft'})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Clone V1 as suggestions'})).toHaveCount(0);
+  expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
+
+  await fixture.seedReviewerReadyV2Decision();
+  await page.getByRole('button',{name:'Back to Catalog'}).click();
+  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await page.getByRole('button',{name:'View'}).first().click();
+  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
+  await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Clone V1 as suggestions'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Save V2 draft'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toHaveCount(0);
+  expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
 });
 
 test('incomplete V2 authoring cannot finalize or send a finalization command', async ({ page }) => {

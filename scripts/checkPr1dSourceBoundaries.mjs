@@ -62,6 +62,10 @@ for (const [key, capability] of Object.entries({
 }
 requireText(handlers, 'ASSESS_V2_COMMAND_CAPABILITY', 'server uses canonical capability mapping');
 requireText(workspace, 'ASSESS_V2_CAPABILITIES.draftWrite', 'UI uses canonical draft-write capability');
+requireText(workspace, "['ready', 'read_only'].includes(sessionState)", 'read-only sessions retain V2 discovery');
+requireText(workspace, 'disabled={busy || !canRead}', 'read-only sessions retain V2 reload');
+requireText(workspace, "sessionState === 'ready' && discoveryState === 'ready'", 'V2 create and clone remain ready-only');
+forbidText(workspace, "if (sessionState !== 'ready' || !tenantContext)", 'read-only discovery short circuit');
 requireText(workspace, 'Independent review: pending', 'Decision Pack states independent review boundary');
 requireText(workspace, 'primitiveFactKeys.map', 'UI exposes primitive fact authoring');
 requireText(workspace, 'accountable owner', 'UI exposes application accountable-owner authoring');
@@ -134,6 +138,11 @@ const draftReadOnlyGate = draftUpsert.indexOf("IF control.read_only THEN RAISE E
 const draftCaseLock = draftUpsert.indexOf('SELECT * INTO c FROM public.assess_v2_cases');
 if (!(firstDraftReceiptLookup >= 0 && firstDraftReceiptLookup < draftReadOnlyGate && draftReadOnlyGate < draftCaseLock)) {
   throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: exact draft receipt replay precedes the read-only mutation gate and case lock');
+requireText(correction, 'authored.payload IS DISTINCT FROM imported_evidence.payload', 'altered imported evidence collision fails closed');
+requireText(correction, "AND imported_evidence.id::text=x->>'id'", 'exact imported evidence round-trip creates no shadow row');
+requireText(correction, 'imported_evidence.id=current_evidence.id', 'authoritative loader prefers immutable imported evidence');
+requireText(correction, 'clone_version.version=1', 'immutable imported evidence binds version one');
+forbidText(correction, 'current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id', 'mutable draft evidence shadowing immutable import');
 }
 for (const table of [
   'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',

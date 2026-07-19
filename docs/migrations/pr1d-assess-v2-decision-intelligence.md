@@ -122,3 +122,11 @@ The deterministic rule registry remains `assess-v2-rules-2026-07`, but the decis
 The corrected `pr1d_upsert_assess_v2_draft` function locks the singleton runtime-control row, rejects disabled mode, revalidates current `assess.v2.draft.write` authority, and then checks the actor-scoped receipt before enforcing the read-only mutation gate. Only an exact succeeded receipt whose workspace, request hash, case ID, Draft status, and committed version match is replayed. A read-only miss returns `READ_ONLY`; a mismatch or non-succeeded receipt returns `IDEMPOTENCY_CONFLICT`; disabled mode remains fail-closed. Normal-mode receipt misses retain the locked case/status/version checks before command claim and mutation.
 
 The disposable migration matrix covers exact read-only replay, read-only miss, stale authorization, disabled mode, and workspace, resource, version, request-hash, and receipt-status mismatches with unchanged domain/version/audit state. Rollback remains feature disablement or read-only maintenance followed by another additive forward correction; immutable receipts and decisions are preserved.
+
+## Final P2/P1 read-only discovery and immutable imported-evidence correction
+
+The client read boundary now permits discovery and reload in both `ready` and `read_only` when valid tenant context includes `assess.v2.read`. All mutation capability checks and create/clone exposure remain `ready`-only.
+
+The corrected draft RPC compares each same-ID authored evidence payload with the locked immutable version-1 `v1_clone` row before receipt claim. Exact imported evidence round-trip is omitted from the new authoring version, while altered same-ID author evidence returns `INVALID_COMMAND` with zero receipt, version, evidence, case-head, or audit side effects. The load projection also defensively prefers the immutable clone row over any current-version collision. The rule set remains `assess-v2-rules-2026-07`, the decision version remains `assess-v2-decision-2026-07-19`, and the accepted foundation migration remains unchanged.
+
+Rollback remains V2 disable/read-only with immutable clone provenance, decisions, receipts, and audits preserved, followed by another additive forward correction. Do not restore mutable imported-evidence shadowing or block authorized reads during read-only maintenance.

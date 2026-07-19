@@ -406,15 +406,22 @@ BEGIN
         SELECT current_evidence.id,current_evidence.payload
         FROM public.assess_v2_evidence_links current_evidence
         WHERE current_evidence.version_id=v.id
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.assess_v2_evidence_links imported_evidence
+            JOIN public.assess_v2_case_versions clone_version ON clone_version.id=imported_evidence.version_id
+            WHERE clone_version.case_id=c.id
+              AND clone_version.version=1
+              AND clone_version.source_kind='v1_clone'
+              AND imported_evidence.id=current_evidence.id
+          )
         UNION ALL
         SELECT imported_evidence.id,imported_evidence.payload
         FROM public.assess_v2_evidence_links imported_evidence
         JOIN public.assess_v2_case_versions clone_version ON clone_version.id=imported_evidence.version_id
-        WHERE clone_version.case_id=c.id AND clone_version.source_kind='v1_clone'
-          AND NOT EXISTS (
-            SELECT 1 FROM public.assess_v2_evidence_links current_evidence
-            WHERE current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id
-          )
+        WHERE clone_version.case_id=c.id
+          AND clone_version.version=1
+          AND clone_version.source_kind='v1_clone'
       ) projected),'[]'),'agentNecessity',CASE
         WHEN v.version=1 AND v.source_kind='create' AND v.agent_necessity=legacy_create_agent_necessity
         THEN initial_agent_necessity
@@ -673,6 +680,19 @@ BEGIN
   END IF;
   IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT');END IF;
   SELECT * INTO prior FROM public.assess_v2_case_versions WHERE id=c.head_version_id;
+  -- A clone's imported evidence is immutable provenance. Exact copies may be
+  -- round-tripped by an authoring client, but an altered same-ID payload must
+  -- fail before the command receipt, version, evidence, or audit is written.
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(COALESCE(p_authoring->'evidence','[]'::jsonb)) authored(payload)
+    JOIN public.assess_v2_evidence_links imported_evidence ON imported_evidence.id::text=authored.payload->>'id'
+    JOIN public.assess_v2_case_versions clone_version ON clone_version.id=imported_evidence.version_id
+    WHERE clone_version.case_id=c.id
+      AND clone_version.version=1
+      AND clone_version.source_kind='v1_clone'
+      AND authored.payload IS DISTINCT FROM imported_evidence.payload
+  ) THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
   r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment_v2.draft.upsert',p_idempotency_key,p_request_id,h);
   IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response);END IF;
   INSERT INTO public.assess_v2_case_versions(case_id,org_id,workspace_id,version,name,description,agent_necessity,source_kind,source_snapshot,imported_facts,created_by)
@@ -683,7 +703,19 @@ BEGIN
   FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'exceptionPaths') LOOP INSERT INTO public.assess_v2_exception_paths VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
   FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'assets') LOOP INSERT INTO public.assess_v2_application_assets VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
   FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'interactions') LOOP INSERT INTO public.assess_v2_application_interactions VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
-  FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'evidence') LOOP INSERT INTO public.assess_v2_evidence_links VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);END LOOP;
+  FOR x IN SELECT * FROM jsonb_array_elements(p_authoring->'evidence') LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.assess_v2_evidence_links imported_evidence
+      JOIN public.assess_v2_case_versions clone_version ON clone_version.id=imported_evidence.version_id
+      WHERE clone_version.case_id=c.id
+        AND clone_version.version=1
+        AND clone_version.source_kind='v1_clone'
+        AND imported_evidence.id::text=x->>'id'
+    ) THEN
+      INSERT INTO public.assess_v2_evidence_links VALUES((x->>'id')::uuid,v.id,c.id,p_org_id,p_workspace_id,x);
+    END IF;
+  END LOOP;
   UPDATE public.assess_v2_cases SET version=v.version,head_version_id=v.id,updated_at=now() WHERE id=c.id;
   result:=jsonb_build_object('id',c.id,'status','draft','version',v.version,'headVersionId',v.id,'importedFactCount',jsonb_array_length(v.imported_facts));
   INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,'assessment_v2.draft.upsert','assess_v2_case',c.id,'succeeded',v.version);

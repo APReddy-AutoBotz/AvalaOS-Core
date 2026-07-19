@@ -613,20 +613,58 @@ try {
       && Array.isArray(fact.evidenceIds) && fact.evidenceIds.length === 0
       && Object.keys(fact).sort().join(',') === 'evidenceIds,fieldId,source,status,value'
   ), true);
-  const reviewedCloneEvidence = clonedEvidenceRows.map(item => item.id === evidenceId1
-    ? { ...item, owner:'reviewer-updated-owner' }
-    : item.id === evidenceId2
-      ? { ...item, claimIds:[fabricatedImportedEvidenceClaim] }
-      : item);
   const cloneDraft = {
     caseId:CLONE,name:'Reviewer-authored clone',description:'',primitives:[],edges:[],decisionPoints:[],exceptionPaths:[],
-    assets:[],interactions:[],evidence:reviewedCloneEvidence,agentNecessity,
+    assets:[],interactions:[],evidence:clonedEvidenceRows,agentNecessity,
   };
+  const cloneMutationState = async () => ({
+    domain: value(await test.query(`SELECT jsonb_build_object(
+      'status',c.status,'version',c.version,'headVersionId',c.head_version_id,'updatedAt',c.updated_at,
+      'caseVersions',(SELECT count(*) FROM assess_v2_case_versions WHERE case_id=c.id),
+      'evidenceRows',(SELECT count(*) FROM assess_v2_evidence_links WHERE case_id=c.id),
+      'draftReceipts',(SELECT count(*) FROM assess_command_receipts WHERE command_type='assessment_v2.draft.upsert' AND response->>'id'=c.id::text),
+      'draftAudits',(SELECT count(*) FROM privileged_audit_events WHERE resource_id=c.id AND action='assessment_v2.draft.upsert')
+    ) value FROM assess_v2_cases c WHERE c.id=$1`, [CLONE])),
+    immutableEvidence: (await test.query(`SELECT evidence.payload
+      FROM assess_v2_evidence_links evidence
+      JOIN assess_v2_case_versions clone_version ON clone_version.id=evidence.version_id
+      WHERE clone_version.case_id=$1 AND clone_version.version=1 AND clone_version.source_kind='v1_clone'
+      ORDER BY evidence.id`, [CLONE])).rows.map(row => row.payload),
+    loaded: value(await asRole(test,'service_role',() => test.query(
+      'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[CLONE,O,W,1],
+    ))),
+  });
+  const collisionAttempts = [
+    {
+      key:'reject-imported-evidence-state-collision',requestNumber:131,
+      evidence:clonedEvidenceRows.map(item => item.id === evidenceId1
+        ? { ...item, status:'suggested',owner:'must-not-replace-imported-owner' }
+        : item),
+    },
+    {
+      key:'reject-imported-evidence-claim-collision',requestNumber:132,
+      evidence:clonedEvidenceRows.map(item => item.id === evidenceId2
+        ? { ...item, claimIds:[fabricatedImportedEvidenceClaim] }
+        : item),
+    },
+  ];
+  for (const collision of collisionAttempts) {
+    const beforeCollision = await cloneMutationState();
+    const rejectedCollision = value(await asRole(test,'service_role',() => test.query(
+      'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+      [A,O,W,CLONE,1,{...cloneDraft,evidence:collision.evidence},req(collision.requestNumber),collision.key,authorizationVersion],
+    )));
+    assert.deepEqual(rejectedCollision,{errorCode:'INVALID_COMMAND'},collision.key);
+    assert.deepEqual(await cloneMutationState(),beforeCollision,`${collision.key} has zero side effects`);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1',[collision.key])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1',[req(collision.requestNumber)])).rows[0].n),0);
+  }
   const savedClone = value(await asRole(test,'service_role',() => test.query(
     'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
     [A,O,W,CLONE,1,cloneDraft,req(33),'save-clone-review',authorizationVersion],
   )));
   assert.equal(Number(savedClone.resource.version),2);
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_evidence_links WHERE version_id=$1',[savedClone.resource.headVersionId])).rows[0].n),0,'exact imported evidence round-trip does not create a mutable shadow row');
   const loadedSavedClone = value(await asRole(test,'service_role',() => test.query(
     'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[CLONE,O,W,2],
   )));
@@ -634,11 +672,15 @@ try {
   assert.equal(loadedSavedClone.evidence.length,2);
   assert.equal(new Set(loadedSavedClone.evidence.map(item => item.id)).size,2);
   assert.deepEqual(loadedSavedClone.evidence.map(item => item.id).sort(),[evidenceId1,evidenceId2].sort());
-  assert.equal(loadedSavedClone.evidence.find(item => item.id === evidenceId1).owner,'reviewer-updated-owner');
-  assert.deepEqual(loadedSavedClone.evidence.find(item => item.id === evidenceId2).claimIds,[fabricatedImportedEvidenceClaim]);
+  for (const immutableEvidence of clonedEvidenceRows) {
+    assert.deepEqual(loadedSavedClone.evidence.find(item => item.id === immutableEvidence.id),immutableEvidence);
+  }
+  assert.equal(loadedSavedClone.evidence.find(item => item.id === evidenceId1).owner,'process-owner');
+  assert.deepEqual(loadedSavedClone.evidence.find(item => item.id === evidenceId2).claimIds,importedEvidenceClaimIds);
   assert.equal(loadedSavedClone.sourceV1.importedEvidenceClaimIds.includes(fabricatedImportedEvidenceClaim),false);
   assert.deepEqual(loadedSavedClone.sourceV1.importedEvidenceClaimIds,importedEvidenceClaimIds);
   assert.deepEqual(loadedSavedClone.importedFacts,cloneVersion.imported_facts);
+  assert.equal(JSON.stringify(loadedSavedClone).includes('must-not-replace-imported-owner'),false);
 
   const hiddenClone = value(await asRole(test, 'service_role', () => test.query(
     'SELECT pr1d_clone_assess_v2_from_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) value',
@@ -876,17 +918,24 @@ try {
     'SELECT pr1d_replay_assess_v2_finalize($1,$2,$3,$4,$5,$6,$7) value',
     [A, O, W, caseId, version, key, authorizationVersion],
   ));
+  const immutableCloneConfidence = 'Partially Evidenced';
+  const immutableCloneOutput = {...makeOutput(CLONE),confidence:immutableCloneConfidence};
   const finalizedClone = value(await finalize(CLONE,2,'finalize-reviewed-clone',49,{
-    sourceCase:loadedSavedClone,evidence:loadedSavedClone.evidence,output:makeOutput(CLONE),
+    sourceCase:loadedSavedClone,evidence:loadedSavedClone.evidence,output:immutableCloneOutput,
   }));
   assert.equal(finalizedClone.resource.status,'reviewer_ready');
   assert.equal(Number(finalizedClone.resource.version),3);
   assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_decision_versions WHERE case_id=$1',[CLONE])).rows[0].n),1);
-  const finalizedCloneInput = (await test.query(
-    'SELECT input_snapshot FROM assess_v2_decision_versions WHERE case_id=$1',[CLONE],
-  )).rows[0].input_snapshot;
-  assert.deepEqual(finalizedCloneInput.sourceV1.importedEvidenceClaimIds,importedEvidenceClaimIds);
-  assert.equal(finalizedCloneInput.sourceV1.importedEvidenceClaimIds.includes(fabricatedImportedEvidenceClaim),false);
+  const finalizedCloneDecision = (await test.query(
+    'SELECT input_snapshot,evidence_snapshot,output_snapshot FROM assess_v2_decision_versions WHERE case_id=$1',[CLONE],
+  )).rows[0];
+  assert.deepEqual(finalizedCloneDecision.input_snapshot,loadedSavedClone);
+  assert.deepEqual(finalizedCloneDecision.evidence_snapshot,loadedSavedClone.evidence);
+  assert.deepEqual(finalizedCloneDecision.output_snapshot,immutableCloneOutput);
+  assert.equal(finalizedCloneDecision.output_snapshot.confidence,immutableCloneConfidence);
+  assert.deepEqual(finalizedCloneDecision.input_snapshot.sourceV1.importedEvidenceClaimIds,importedEvidenceClaimIds);
+  assert.equal(finalizedCloneDecision.input_snapshot.sourceV1.importedEvidenceClaimIds.includes(fabricatedImportedEvidenceClaim),false);
+  assert.equal(JSON.stringify(finalizedCloneDecision).includes('must-not-replace-imported-owner'),false);
 
   const assertNoFinalizeSideEffects = async (caseId, key) => {
     const caseState = (await test.query('SELECT status,version FROM assess_v2_cases WHERE id=$1', [caseId])).rows[0];

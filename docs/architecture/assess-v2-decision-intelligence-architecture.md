@@ -217,3 +217,11 @@ The server finalization timestamp is the single deterministic as-of instant for 
 The private draft-upsert RPC locks runtime control, fails closed when V2 is disabled, and revalidates current `assess.v2.draft.write` authority before replay. During read-only maintenance it may return only an exact succeeded draft receipt bound to organization, actor, workspace, command, request hash, case, Draft status, and committed version. A receipt miss remains `READ_ONLY`; any mismatched, failed, or in-progress receipt remains `IDEMPOTENCY_CONFLICT`; neither path creates a domain, receipt, version, or audit side effect.
 
 This correction adds no V2 approval, evidence attestation, Govern resolution, Studio handoff, export, sharing, PR 1E, or PR 1F behavior. Rollback remains V2 disablement or read-only maintenance with immutable decisions and receipts preserved, followed by an additive forward fix.
+
+## Final read-only discovery and immutable imported-evidence correction
+
+With valid tenant context and `assess.v2.read`, read-only sessions continue V2 case discovery, current-draft reload, and reviewer-ready Decision Pack reads. Create, clone, draft-save, and finalization authority remains strictly `ready`-only; read-only mode exposes no create or clone controls and cannot commit a mutation.
+
+For V1-cloned cases, the immutable version-1 clone evidence row is authoritative for every imported evidence ID. An exact imported payload may round-trip through authoring but never creates a mutable shadow row. Altered same-ID author evidence returns `INVALID_COMMAND` before receipt, authoring version, evidence, case-head, or audit mutation, and the read projection defensively prefers the locked clone row over any historical collision. Imported claims, owner, provenance, confidence, canonical snapshots, and output therefore cannot be changed through an author evidence-ID collision.
+
+This hardening adds no scoring, rule, approval, attestation, Govern, Studio, handoff, export, or sharing behavior. The current rule set remains `assess-v2-rules-2026-07` and the current decision version remains `assess-v2-decision-2026-07-19`; V1 `assess-core-2026-05` remains unchanged. Rollback remains V2 disable/read-only with immutable data preserved plus an additive forward fix.
