@@ -114,3 +114,11 @@ No migration changes are required. The existing Edge and private PostgreSQL boun
 The safe fallback does not clear valid tenant authority, does not substitute demo data, and keeps existing committed V2 decisions readable. Unknown server payloads remain fail-closed as `COMMAND_UNAVAILABLE`; offline transport remains `OFFLINE`.
 
 Focused TypeScript regressions cover nested and top-level code envelopes, distinct copy, retained authority, and read-only state. Rollback remains V2 disable/read-only with data, immutable decisions, receipts, and audits preserved; do not restore error-code collapse or a generic error state that hides the required safe fallback.
+
+## Final P2 financial-action, decision-time evidence, and draft replay correction
+
+The deterministic rule registry remains `assess-v2-rules-2026-07`, but the decision-output version advances to `assess-v2-decision-2026-07-19` because financial write action classification and finalization-time evidence freshness can change the immutable output. The server-supplied finalization timestamp now drives every evidence-validity decision. Technically Ready financial writes remain approval-bound and autonomously prohibited; no scoring formula, threshold, hard stop, recommendation, or V1 `assess-core-2026-05` behavior changes.
+
+The corrected `pr1d_upsert_assess_v2_draft` function locks the singleton runtime-control row, rejects disabled mode, revalidates current `assess.v2.draft.write` authority, and then checks the actor-scoped receipt before enforcing the read-only mutation gate. Only an exact succeeded receipt whose workspace, request hash, case ID, Draft status, and committed version match is replayed. A read-only miss returns `READ_ONLY`; a mismatch or non-succeeded receipt returns `IDEMPOTENCY_CONFLICT`; disabled mode remains fail-closed. Normal-mode receipt misses retain the locked case/status/version checks before command claim and mutation.
+
+The disposable migration matrix covers exact read-only replay, read-only miss, stale authorization, disabled mode, and workspace, resource, version, request-hash, and receipt-status mismatches with unchanged domain/version/audit state. Rollback remains feature disablement or read-only maintenance followed by another additive forward correction; immutable receipts and decisions are preserved.

@@ -32,6 +32,7 @@ const database = read('supabase/functions/_shared/assessV2Db.ts');
 const evaluator = read('services/assessV2/evaluator.ts');
 const registry = read('services/assessV2/registry.ts');
 const decisionVersion = read('services/assessV2/decisionVersion.ts');
+const types = read('services/assessV2/types.ts');
 const client = read('services/assessV2Client.ts');
 const enterpriseBoundary = read('services/enterpriseAssessContract.ts');
 const sessionPolicy = read('services/enterpriseSessionPolicy.ts');
@@ -100,13 +101,40 @@ requireText(router, 'assessV2ErrorBody', 'sanitized stable errors');
 requireText(registry, 'validateFieldRegistry', 'field/rule registry contract');
 requireText(evaluator, 'Bounded Agent', 'bounded-agent necessity gate');
 requireText(evaluator, 'Verified is unreachable', 'PR 1D cannot self-attest evidence');
+requireText(evaluator, "const approvalBound = declared === 'Conditional' || (declared === 'Ready' && writeFinancialAction);", 'financial writes remain approval-bound even when technically ready');
+requireText(evaluator, "const allowedActions = declared === 'Ready' && !approvalBound", 'financial writes cannot appear as directly allowed actions');
+requireText(evaluator, 'deriveEvidenceConfidence(c, asOf)', 'evidence confidence uses the decision as-of timestamp');
 requireText(command, "['suggested', 'submitted']", 'draft parser permits only evidence submission states');
 forbidText(command, 'reviewerIds', 'caller-controlled reviewer authority');
 requireText(evidenceBoundary, "payload->>'status' IS NULL", 'database rejects missing or null author evidence status');
 requireText(evidenceBoundary, 'PR1D_AUTHOR_ATTESTATION_FORBIDDEN', 'database rejects author attestation');
 requireText(decisionVersion, 'buildDecisionDigestV2', 'SHA-256 decision references');
+requireText(decisionVersion, 'evaluateAssessmentV2(inputSnapshot, createdAt)', 'finalization timestamp drives deterministic evidence evaluation');
+requireText(types, "ASSESS_V2_RULE_SET_VERSION = 'assess-v2-rules-2026-07'", 'INT-006 rule-set version remains stable');
+requireText(types, "ASSESS_V2_DECISION_VERSION = 'assess-v2-decision-2026-07-19'", 'corrected action and evidence-time output has a new decision version');
 forbidText(decisionVersion, 'sha-lite', 'V1 lightweight hash reuse');
 
+
+const draftUpsertStart = correction.indexOf('CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft');
+const draftUpsertEnd = correction.indexOf('CREATE OR REPLACE FUNCTION', draftUpsertStart + 1);
+if (draftUpsertStart < 0 || draftUpsertEnd < 0) throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: corrected draft-upsert RPC');
+const draftUpsert = correction.slice(draftUpsertStart, draftUpsertEnd);
+for (const [fragment, label] of [
+  ['FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE', 'draft replay locks runtime control'],
+  ["IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'", 'draft replay remains disabled fail-closed'],
+  ["'assess.v2.draft.write',p_authorization_version", 'draft replay revalidates current authority'],
+  ["r.status<>'succeeded'", 'draft replay accepts succeeded receipts only'],
+  ["r.response->>'id' IS DISTINCT FROM p_case_id::text", 'draft replay binds the case resource'],
+  ["r.response->>'status' IS DISTINCT FROM 'draft'", 'draft replay binds the draft response state'],
+  ["r.response->>'version' IS DISTINCT FROM (p_expected_version+1)::text", 'draft replay binds the committed version'],
+  ["IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'", 'read-only misses remain mutation-blocking'],
+]) requireText(draftUpsert, fragment, label);
+const firstDraftReceiptLookup = draftUpsert.indexOf('SELECT * INTO r FROM public.assess_command_receipts');
+const draftReadOnlyGate = draftUpsert.indexOf("IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'");
+const draftCaseLock = draftUpsert.indexOf('SELECT * INTO c FROM public.assess_v2_cases');
+if (!(firstDraftReceiptLookup >= 0 && firstDraftReceiptLookup < draftReadOnlyGate && draftReadOnlyGate < draftCaseLock)) {
+  throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: exact draft receipt replay precedes the read-only mutation gate and case lock');
+}
 for (const table of [
   'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',
   'assess_v2_decision_points', 'assess_v2_exception_paths', 'assess_v2_application_assets',

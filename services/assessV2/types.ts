@@ -1,6 +1,6 @@
 export const ASSESS_V2_SCHEMA_VERSION = 'assess-v2-schema-2026-07' as const;
 export const ASSESS_V2_RULE_SET_VERSION = 'assess-v2-rules-2026-07' as const;
-export const ASSESS_V2_DECISION_VERSION = 'assess-v2-decision-2026-07' as const;
+export const ASSESS_V2_DECISION_VERSION = 'assess-v2-decision-2026-07-19' as const;
 
 export type EvidenceConfidence = 'Verified' | 'Partially Evidenced' | 'Assumption-Led' | 'Insufficient Evidence';
 export type FitBand = 'Strong Fit' | 'Conditional Fit' | 'Weak Fit' | 'Ineligible' | 'Not Applicable';

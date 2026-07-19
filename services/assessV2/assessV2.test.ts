@@ -4,7 +4,7 @@ import { buildDecisionPackRenderModel, buildDecisionVersionV2 } from './decision
 import { deriveEvidenceConfidence, evaluateAgentNecessity, evaluateAssessmentV2, evaluateCandidateFit, evaluateInteractionReadiness, registeredDecisionFieldIds, validateAssessmentV2 } from './evaluator';
 import { AP_INVOICE_EXCEPTION_V2_FIXTURE } from './fixture';
 import { FIELD_REGISTRY, RULE_REGISTRY, validateDecisionFieldInputs, validateEvidenceLinks, validateFieldRegistry } from './registry';
-import { AgentNecessityFacts, CaseFact, Component, createUnknownAgentNecessityFacts } from './types';
+import { ASSESS_V2_DECISION_VERSION, ASSESS_V2_RULE_SET_VERSION, AgentNecessityFacts, CaseFact, Component, createUnknownAgentNecessityFacts } from './types';
 
 const fact = (fieldId: string, value: boolean | null, evidenceIds: string[] = []): CaseFact<boolean> => ({ fieldId, value, status: value === null ? 'unknown' : 'known', evidenceIds, source: 'user' });
 const agentFacts = (value: boolean | null, evidenceIds: string[] = []): AgentNecessityFacts => ({
@@ -69,6 +69,9 @@ const run = async () => {
   unprojectedV1EvidenceClaim.sourceV1!.importedEvidenceClaimIds = [];
   assert.ok(validateAssessmentV2(unprojectedV1EvidenceClaim).some(error => /v1\.evidence\.legacy-evidence-1.*not a registered decision field/.test(error)));
   const decision = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  assert.equal(ASSESS_V2_RULE_SET_VERSION, 'assess-v2-rules-2026-07', 'the existing INT-006 rule-set contract remains stable');
+  assert.equal(ASSESS_V2_DECISION_VERSION, 'assess-v2-decision-2026-07-19', 'corrected action and evidence-time output uses a new decision version');
+  assert.equal(decision.decisionVersion, ASSESS_V2_DECISION_VERSION);
   assert.equal(decision.confidence, 'Partially Evidenced');
   assert.equal(decision.processReadiness, 'Provisional');
   assert.ok(decision.composedOperatingModel.some(item => item.components.includes('Document Intelligence')));
@@ -171,6 +174,22 @@ const run = async () => {
   assert.deepEqual(evaluateInteractionReadiness(write).ruleIds, ['INT-014', 'INT-001', 'INT-002', 'INT-003', 'INT-005', 'INT-007']);
   write.facts.financialAction = true;
   assert.deepEqual(evaluateInteractionReadiness(write).ruleIds, ['INT-014', 'INT-001', 'INT-002', 'INT-003', 'INT-005', 'INT-007', 'INT-006']);
+  const readyFinancialWrite = structuredClone(base);
+  readyFinancialWrite.mode = 'write';
+  readyFinancialWrite.facts.financialAction = true;
+  const readyFinancialDecision = evaluateInteractionReadiness(readyFinancialWrite);
+  assert.equal(readyFinancialDecision.readiness.write, 'Ready', 'financial approval changes the action boundary, not technical readiness');
+  assert.deepEqual(readyFinancialDecision.allowedActions, []);
+  assert.deepEqual(readyFinancialDecision.approvalBoundActions, [`write with controls: ${readyFinancialWrite.operationName}`]);
+  assert.deepEqual(readyFinancialDecision.prohibitedActions, [`autonomous financial action: ${readyFinancialWrite.operationName}`]);
+  assert.ok(readyFinancialDecision.requiredControls.includes('Human approval'));
+  const readyFinancialCase = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  readyFinancialCase.interactions[0] = readyFinancialWrite;
+  const readyFinancialPack = evaluateAssessmentV2(readyFinancialCase, '2026-07-14T01:00:00.000Z');
+  const readyFinancialTrace = readyFinancialPack.trace.find(item => item.subjectId === readyFinancialWrite.id && item.ruleId === 'INT-006');
+  assert.deepEqual(readyFinancialTrace?.fieldIds, ['interaction.mode', 'interaction.financialAction', 'interaction.idempotent', 'interaction.compensatable']);
+  assert.match(readyFinancialTrace!.outcome, /interaction\.financialAction=true.*interaction\.idempotent=true.*interaction\.compensatable=true.*=> Ready/);
+  assert.deepEqual(evaluateAssessmentV2(readyFinancialCase, '2026-07-14T01:00:00.000Z'), readyFinancialPack, 'financial action trace is deterministic');
 
   const extract = AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.find(item => item.type === 'Extract')!;
   const strong = evaluateCandidateFit(extract, 'Document Intelligence', AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence);
@@ -265,6 +284,16 @@ const run = async () => {
   assert.equal(immutable.inputCanonical, buildDecisionCanonicalV2('input', { organizationId: input.organizationId, workspaceId: input.workspaceId, caseId: input.id, sourceCaseVersion: input.version, schemaVersion: input.schemaVersion, ruleSetVersion: input.ruleSetVersion, decisionVersion: immutable.outputSnapshot.decisionVersion }, immutable.inputSnapshot));
   assert.equal(Object.isFrozen(immutable.outputSnapshot), true);
   assert.equal(input.status, 'draft');
+  const expiresBeforeFinalization = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+  expiresBeforeFinalization.updatedAt = '2026-07-14T00:15:00.000Z';
+  for (const evidence of expiresBeforeFinalization.evidence) evidence.validUntil = '2026-07-14T00:30:00.000Z';
+  assert.equal(deriveEvidenceConfidence(expiresBeforeFinalization), 'Partially Evidenced', 'evidence is current at the draft timestamp');
+  const finalizedAfterExpiry = await buildDecisionVersionV2(expiresBeforeFinalization, 'server-actor', '2026-07-14T01:00:00.000Z');
+  assert.equal(finalizedAfterExpiry.outputSnapshot.confidence, 'Insufficient Evidence', 'finalization evaluates freshness at the server-supplied decision timestamp');
+  assert.equal(finalizedAfterExpiry.createdAt, '2026-07-14T01:00:00.000Z');
+  assert.equal(finalizedAfterExpiry.ruleSetVersion, ASSESS_V2_RULE_SET_VERSION);
+  assert.equal(finalizedAfterExpiry.decisionVersion, ASSESS_V2_DECISION_VERSION);
+  assert.equal(finalizedAfterExpiry.outputSnapshot.decisionVersion, ASSESS_V2_DECISION_VERSION);
   await assert.rejects(() => buildDecisionVersionV2(input, '   ', '2026-07-14T01:00:00.000Z'), /actor is required/);
   await assert.rejects(() => buildDecisionVersionV2(input, 'server-actor', 'not-a-timestamp'), /timestamp is required/);
   const render = buildDecisionPackRenderModel(immutable);

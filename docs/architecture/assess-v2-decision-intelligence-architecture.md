@@ -207,3 +207,13 @@ The Assess V2 command client preserves the server's stable `READ_ONLY` and `FEAT
 Existing committed V2 decisions remain readable while new creates, clones, draft writes, and finalization remain blocked by the existing action policy. Unknown or malformed error payloads still fail closed as `COMMAND_UNAVAILABLE`, and offline transport remains `OFFLINE`.
 
 This is a client compatibility-boundary correction only. It changes no server command, database function, RLS or capability authority, score, rule, threshold, hard stop, recommendation, decision version, lifecycle, approval, attestation, handoff, export, or sharing behavior. Rollback remains V2 disable/read-only with records preserved, followed by an additive forward fix.
+
+## Final financial-action, decision-time evidence, and draft replay correction
+
+Technically Ready financial writes remain approval-bound: they are excluded from directly allowed actions, require Human approval, and retain the prohibition on autonomous financial action. This changes the action-classification output without changing technical readiness or the deterministic `INT-006` rule contract. The rule set therefore remains `assess-v2-rules-2026-07`, while the decision-output version advances to `assess-v2-decision-2026-07-19`. V1 `assess-core-2026-05` remains unchanged.
+
+The server finalization timestamp is the single deterministic as-of instant for evidence freshness, candidate and agent evidence, gaps, assumptions, confidence, trace, and the immutable output snapshot. Draft creation or update time cannot keep evidence current after it has expired before finalization.
+
+The private draft-upsert RPC locks runtime control, fails closed when V2 is disabled, and revalidates current `assess.v2.draft.write` authority before replay. During read-only maintenance it may return only an exact succeeded draft receipt bound to organization, actor, workspace, command, request hash, case, Draft status, and committed version. A receipt miss remains `READ_ONLY`; any mismatched, failed, or in-progress receipt remains `IDEMPOTENCY_CONFLICT`; neither path creates a domain, receipt, version, or audit side effect.
+
+This correction adds no V2 approval, evidence attestation, Govern resolution, Studio handoff, export, sharing, PR 1E, or PR 1F behavior. Rollback remains V2 disablement or read-only maintenance with immutable decisions and receipts preserved, followed by an additive forward fix.

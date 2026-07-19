@@ -10,7 +10,7 @@ export const buildDecisionVersionV2 = async (input: AssessmentCaseV2, createdBy:
   if (!Number.isFinite(Date.parse(createdAt))) throw new Error('A valid decision timestamp is required.');
   const inputSnapshot = structuredClone(input);
   const evidenceSnapshot = structuredClone(input.evidence);
-  const outputSnapshot = evaluateAssessmentV2(inputSnapshot);
+  const outputSnapshot = evaluateAssessmentV2(inputSnapshot, createdAt);
   const binding: DecisionDigestBinding = { organizationId: input.organizationId, workspaceId: input.workspaceId, caseId: input.id, sourceCaseVersion: input.version, schemaVersion: input.schemaVersion, ruleSetVersion: input.ruleSetVersion, decisionVersion: outputSnapshot.decisionVersion };
   const decision: ImmutableDecisionVersionV2 = {
     caseId: input.id,

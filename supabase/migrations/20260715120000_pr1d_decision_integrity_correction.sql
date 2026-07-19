@@ -644,21 +644,32 @@ COMMENT ON FUNCTION public.pr1d_resource(uuid,uuid,uuid) IS 'Internal SECURITY D
 
 CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_expected_version bigint,p_authoring jsonb,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE c public.assess_v2_cases;r public.assess_command_receipts;v public.assess_v2_case_versions;prior public.assess_v2_case_versions;x jsonb;h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_expected_version,p_authoring::text),'sha256'),'hex');result jsonb;
+DECLARE c public.assess_v2_cases;r public.assess_command_receipts;v public.assess_v2_case_versions;prior public.assess_v2_case_versions;control public.assess_v2_runtime_control;x jsonb;h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_expected_version,p_authoring::text),'sha256'),'hex');result jsonb;
 BEGIN
-  PERFORM public.pr1d_assert_enabled();PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.draft.write',p_authorization_version);
+  SELECT * INTO control FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'; END IF;
+  PERFORM public.pr1b_assert_command_authority(p_actor_id,p_org_id,p_workspace_id,'assess.v2.draft.write',p_authorization_version);
   SELECT * INTO r FROM public.assess_command_receipts WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type='assessment_v2.draft.upsert' AND idempotency_key=p_idempotency_key FOR UPDATE;
   IF r.id IS NOT NULL THEN
-    IF r.request_hash<>h THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
-    IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
+    IF r.workspace_id<>p_workspace_id OR r.request_hash<>h OR r.status<>'succeeded'
+      OR r.response->>'id' IS DISTINCT FROM p_case_id::text
+      OR r.response->>'status' IS DISTINCT FROM 'draft'
+      OR r.response->>'version' IS DISTINCT FROM (p_expected_version+1)::text
+    THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+    RETURN jsonb_build_object('outcome','replayed','resource',r.response);
   END IF;
+  IF control.read_only THEN RAISE EXCEPTION 'PR1D_READ_ONLY'; END IF;
   SELECT * INTO c FROM public.assess_v2_cases WHERE id=p_case_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL FOR UPDATE;
   IF c.id IS NULL THEN RETURN jsonb_build_object('errorCode','NOT_FOUND');END IF;
   -- Recheck after the case lock: a concurrent same-key writer may have completed while this call was waiting.
   SELECT * INTO r FROM public.assess_command_receipts WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type='assessment_v2.draft.upsert' AND idempotency_key=p_idempotency_key FOR UPDATE;
   IF r.id IS NOT NULL THEN
-    IF r.request_hash<>h THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
-    IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF;
+    IF r.workspace_id<>p_workspace_id OR r.request_hash<>h OR r.status<>'succeeded'
+      OR r.response->>'id' IS DISTINCT FROM p_case_id::text
+      OR r.response->>'status' IS DISTINCT FROM 'draft'
+      OR r.response->>'version' IS DISTINCT FROM (p_expected_version+1)::text
+    THEN RETURN jsonb_build_object('errorCode','IDEMPOTENCY_CONFLICT'); END IF;
+    RETURN jsonb_build_object('outcome','replayed','resource',r.response);
   END IF;
   IF c.status<>'draft' OR c.version<>p_expected_version THEN RETURN jsonb_build_object('errorCode','VERSION_CONFLICT');END IF;
   SELECT * INTO prior FROM public.assess_v2_case_versions WHERE id=c.head_version_id;

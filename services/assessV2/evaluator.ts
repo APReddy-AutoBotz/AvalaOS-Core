@@ -66,11 +66,11 @@ const requiredEvidence = (c: AssessmentCaseV2): EvidenceRequirement[] => [
   ...c.assets.flatMap(item => ['strategicLifespan', 'technicalHealth', 'businessCriticality', 'ownershipModel', 'vendorRoadmap', 'operatingStability', 'accountableOwner'].map(key => ({ evidenceIds: item.evidenceIds, claimId: `asset.${key}` }))),
 ];
 
-export const deriveEvidenceConfidence = (c: AssessmentCaseV2): EvidenceConfidence => {
+export const deriveEvidenceConfidence = (c: AssessmentCaseV2, asOf = c.updatedAt): EvidenceConfidence => {
   const required = requiredEvidence(c);
   if (!required.length || !c.evidence.length) return 'Insufficient Evidence';
   const byId = new Map(c.evidence.map(item => [item.id, item]));
-  const count = required.filter(({ evidenceIds, claimId }) => evidenceIds.some(evidenceId => submitted(byId.get(evidenceId), c.updatedAt, claimId))).length;
+  const count = required.filter(({ evidenceIds, claimId }) => evidenceIds.some(evidenceId => submitted(byId.get(evidenceId), asOf, claimId))).length;
   return count > 0 ? 'Partially Evidenced' : c.evidence.some(item => item.status === 'suggested' || item.sourceType === 'template') ? 'Assumption-Led' : 'Insufficient Evidence';
 };
 
@@ -198,8 +198,9 @@ export const evaluateInteractionReadiness = (i: ApplicationInteraction): Interac
   if (f.dataClassified !== true || i.dataClassification === 'Unknown') controls.push('Data classification before AI access');
   if (i.mode === 'ui' && declared === 'Conditional') controls.push('Bounded UI scope', 'Change monitoring');
 
-  const allowedActions = declared === 'Ready' ? [`${i.mode}: ${i.operationName}`] : [];
-  const approvalBoundActions = declared === 'Conditional' ? [`${i.mode} with controls: ${i.operationName}`] : [];
+  const approvalBound = declared === 'Conditional' || (declared === 'Ready' && writeFinancialAction);
+  const allowedActions = declared === 'Ready' && !approvalBound ? [`${i.mode}: ${i.operationName}`] : [];
+  const approvalBoundActions = approvalBound ? [`${i.mode} with controls: ${i.operationName}`] : [];
   const prohibitedActions = declared === 'Prohibited' ? [`${i.mode}: ${i.operationName}`] : [];
   if (writeFinancialAction) prohibitedActions.push(`autonomous financial action: ${i.operationName}`);
   if (writeHighImpact && f.rollback !== true) prohibitedActions.push(`unapproved high-impact action: ${i.operationName}`);
@@ -336,13 +337,13 @@ const interactionRuleFields: Record<string, string[]> = {
   'INT-013': ['interaction.untrustedContentWithTools'], 'INT-014': ['interaction.mode'],
 };
 
-export const evaluateAssessmentV2 = (c: AssessmentCaseV2): DecisionPackV2 => {
+export const evaluateAssessmentV2 = (c: AssessmentCaseV2, asOf = c.updatedAt): DecisionPackV2 => {
   const errors = validateAssessmentV2(c);
   if (errors.length) throw new Error(`Invalid Assess V2 case: ${errors.join(' ')}`);
   const interactions = c.interactions.map(evaluateInteractionReadiness);
   const candidates = c.primitives.flatMap(primitive => {
-    const base = componentMap[primitive.type].map(component => evaluateCandidateFit(primitive, component, c.evidence, c.createdAt));
-    return primitive.type === 'Investigate' || primitive.type === 'Decide' ? [...base, evaluateAgentNecessity(primitive.id, primitive.agentNecessity ?? c.agentNecessity, c.evidence, c.createdAt)] : base;
+    const base = componentMap[primitive.type].map(component => evaluateCandidateFit(primitive, component, c.evidence, asOf));
+    return primitive.type === 'Investigate' || primitive.type === 'Decide' ? [...base, evaluateAgentNecessity(primitive.id, primitive.agentNecessity ?? c.agentNecessity, c.evidence, asOf)] : base;
   });
   const composition = c.primitives.map(primitive => {
     const compatible = candidates.filter(item => item.primitiveId === primitive.id && ['Strong Fit', 'Conditional Fit'].includes(item.fit));
@@ -353,17 +354,17 @@ export const evaluateAssessmentV2 = (c: AssessmentCaseV2): DecisionPackV2 => {
     if (owned.some(item => item.mode === 'ui' && interactions.find(result => result.interactionId === item.id)?.readiness.ui === 'Conditional')) eligible.push('RPA / UI Automation');
     return { primitiveId: primitive.id, ...(primitive.businessDisposition ? { businessDisposition: primitive.businessDisposition } : {}), components: unique(eligible) };
   });
-  const confidence = deriveEvidenceConfidence(c);
+  const confidence = deriveEvidenceConfidence(c, asOf);
   const byId = new Map(c.evidence.map(item => [item.id, item]));
   const gaps = unique([
     ...requiredEvidence(c)
-      .filter(({ evidenceIds, claimId }) => !evidenceIds.some(evidenceId => verified(byId.get(evidenceId), c.createdAt, claimId)))
+      .filter(({ evidenceIds, claimId }) => !evidenceIds.some(evidenceId => verified(byId.get(evidenceId), asOf, claimId)))
       .map(({ evidenceIds, claimId }) => evidenceIds.length
         ? `${evidenceIds.join(', ')} do not provide valid evidence for ${claimId}.`
         : `${claimId} has no claim-linked evidence.`),
     ...interactions.flatMap(item => item.evidenceGaps.map(gap => `${item.interactionId}: ${gap}`)),
   ]);
-  const assumptions = unique([...(c.importedFacts ?? []).filter(item => item.status === 'assumed' || item.status === 'suggested').map(item => item.fieldId), ...c.evidence.filter(item => !verified(item, c.createdAt)).map(item => item.id)]);
+  const assumptions = unique([...(c.importedFacts ?? []).filter(item => item.status === 'assumed' || item.status === 'suggested').map(item => item.fieldId), ...c.evidence.filter(item => !verified(item, asOf)).map(item => item.id)]);
   const controls = unique(['Human approval for material state changes', 'Segregation of duties', 'Audit', 'Monitoring', 'Rollback / Compensation', ...interactions.flatMap(item => item.requiredControls)]);
   const modernizationResults = c.assets.map(asset => modernization(asset, c.interactions.filter(item => item.assetId === asset.id).map(item => interactions.find(result => result.interactionId === item.id)!)));
   const gateResults = interactions.flatMap(item => modes.map(mode => ({ ruleId: 'INT-014', subjectId: item.interactionId, status: item.readiness[mode] === 'Ready' ? 'pass' as const : item.readiness[mode] === 'Conditional' ? 'conditional' as const : item.readiness[mode] === 'Prohibited' ? 'fail' as const : item.readiness[mode] === 'Not Applicable' ? 'not-applicable' as const : 'unknown' as const, reason: `${mode} readiness is ${item.readiness[mode]}.` })));

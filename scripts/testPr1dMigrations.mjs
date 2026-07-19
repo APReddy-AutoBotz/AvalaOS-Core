@@ -729,8 +729,71 @@ try {
   assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='same-upsert' AND status='succeeded'")).rows[0].n), 1);
   assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE resource_id=$1 AND action='assessment_v2.draft.upsert'", [CASE2])).rows[0].n), 1);
 
+  const replayDraft = (key, overrides = {}) => asRole(test, 'service_role', () => test.query(
+    'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+    [A, O, W, overrides.caseId ?? CASE2, overrides.expectedVersion ?? 1,
+      overrides.authoring ?? sameAuthoring, req(overrides.requestNumber ?? 42), key,
+      overrides.authorizationVersion ?? authorizationVersion],
+  ));
+  const draftReplayState = async () => ({
+    domain: await draftMutationState(CASE2),
+    receipts: Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE command_type='assessment_v2.draft.upsert'")).rows[0].n),
+    audits: Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE action='assessment_v2.draft.upsert'")).rows[0].n),
+  });
+  const readOnlyDraftState = await draftReplayState();
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=true WHERE singleton=true');
+  const readOnlyDraftReplay = value(await replayDraft('same-upsert'));
+  assert.equal(readOnlyDraftReplay.outcome, 'replayed');
+  assert.deepEqual(readOnlyDraftReplay.resource, sameUpsertRace[0].resource);
+  assert.deepEqual(await draftReplayState(), readOnlyDraftState);
+
+  const readOnlyDraftMiss = value(await replayDraft('read-only-draft-miss', { requestNumber: 44 }));
+  assert.equal(readOnlyDraftMiss.errorCode, 'READ_ONLY');
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='read-only-draft-miss'")).rows[0].n), 0);
+  assert.deepEqual(await draftReplayState(), readOnlyDraftState);
+
+  const staleReadOnlyDraftReplay = value(await replayDraft('same-upsert', {
+    authorizationVersion: Number(authorizationVersion) + 1,
+  }));
+  assert.equal(staleReadOnlyDraftReplay.errorCode, 'AUTHORIZATION_STALE');
+  assert.deepEqual(await draftReplayState(), readOnlyDraftState);
+
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=false WHERE singleton=true');
+  const disabledDraftReplay = value(await replayDraft('same-upsert'));
+  assert.equal(disabledDraftReplay.errorCode, 'FEATURE_DISABLED');
+  assert.deepEqual(await draftReplayState(), readOnlyDraftState);
+  await test.query('UPDATE assess_v2_runtime_control SET enabled=true WHERE singleton=true');
+
+  const receiptScopeWorkspace = '21000000-0000-4000-8000-000000000099';
+  await test.query(`INSERT INTO workspaces(id,org_id,name,slug,status)
+    VALUES($1,$2,'Receipt scope mismatch','pr1d-receipt-scope-mismatch','active')`, [receiptScopeWorkspace, O]);
+  const receiptNegatives = [
+    { key:'read-only-draft-scope-mismatch', workspaceId:receiptScopeWorkspace },
+    { key:'read-only-draft-resource-mismatch', responsePatch:{ id:'31000000-0000-4000-8000-000000000099' } },
+    { key:'read-only-draft-version-mismatch', responsePatch:{ version:3 } },
+    { key:'read-only-draft-hash-mismatch', requestHash:'0'.repeat(64) },
+    { key:'read-only-draft-status-mismatch', status:'failed' },
+  ];
+  for (const negative of receiptNegatives) {
+    const receipt = (await test.query("SELECT * FROM assess_command_receipts WHERE idempotency_key='same-upsert'")).rows[0];
+    const response = { ...receipt.response, ...(negative.responsePatch ?? {}) };
+    await test.query(`INSERT INTO assess_command_receipts(
+      org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status,response,completed_at
+    ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`, [
+      receipt.org_id, negative.workspaceId ?? receipt.workspace_id, receipt.actor_id, receipt.command_type,
+      negative.key, crypto.randomUUID(), negative.requestHash ?? receipt.request_hash,
+      negative.status ?? receipt.status, JSON.stringify(response),
+    ]);
+  }
+  const readOnlyNegativeState = await draftReplayState();
+  for (const negative of receiptNegatives) {
+    assert.equal(value(await replayDraft(negative.key)).errorCode, 'IDEMPOTENCY_CONFLICT', negative.key);
+    assert.deepEqual(await draftReplayState(), readOnlyNegativeState, `${negative.key} has no replay side effects`);
+  }
+  await test.query('UPDATE assess_v2_runtime_control SET read_only=false WHERE singleton=true');
+
   const ruleSetVersion = 'assess-v2-rules-2026-07';
-  const decisionVersion = 'assess-v2-decision-2026-07';
+  const decisionVersion = 'assess-v2-decision-2026-07-19';
   const schemaVersion = 'assess-v2-schema-2026-07';
   const makeOutput = (caseId) => ({
     caseId,

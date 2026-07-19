@@ -49,6 +49,10 @@ for (const phrase of [
   'An audit failure rolls back the response update and receipt',
   'Final V2 runtime-state presentation correction', 'distinct user-facing messages',
   'Existing committed V2 decisions remain readable',
+  'Final financial-action, decision-time evidence, and draft replay correction',
+  'assess-v2-decision-2026-07-19', 'server finalization timestamp',
+  'Technically Ready financial writes remain approval-bound',
+  'exact succeeded draft receipt',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -72,6 +76,9 @@ for (const phrase of [
   'ordinary Draft save commits',
   'Final P2 V2 runtime-state presentation correction', 'mutation-blocking `read_only`',
   'does not clear valid tenant authority',
+  'Final P2 financial-action, decision-time evidence, and draft replay correction',
+  'decision-output version', 'current `assess.v2.draft.write` authority',
+  'read-only miss', 'disabled mode remains fail-closed',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -79,7 +86,7 @@ for (const phrase of [
 const evidence = read(canonicalFiles[1]);
 for (const phrase of [
   'Correction verification ledger', 'Not Run', 'Hosted/live Supabase',
-  '98.53% lines, 84.49% branches, 96.51% functions', '24/24 PR 1D browser journeys',
+  '98.53% lines, 84.69% branches, 96.51% functions', '24/24 PR 1D browser journeys',
   'Final review draft-receipt and requested-change correction', 'zero side effects',
   'Final P1 imported-V1 evidence provenance correction', 'sourceV1.importedEvidenceClaimIds',
   'fabricated `v1.evidence.*` claim', 'Final P2 create and clone receipt replay correction',
@@ -96,6 +103,9 @@ for (const phrase of [
   'one audit with an empty metadata object',
   'Final P2 V2 runtime-state presentation correction', 'nested and top-level runtime codes',
   'distinct maintenance and disabled copy',
+  'Final P2 financial-action, decision-time evidence, and draft replay correction',
+  'assess-v2-decision-2026-07-19', 'finalization-time expiry',
+  'exact succeeded draft replay', 'IDEMPOTENCY_CONFLICT',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }
