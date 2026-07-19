@@ -6,6 +6,8 @@ export type EnterpriseBoundaryCode =
   | 'PERMISSION_DENIED'
   | 'VERSION_CONFLICT'
   | 'IDEMPOTENCY_CONFLICT'
+  | 'FEATURE_DISABLED'
+  | 'READ_ONLY'
   | 'COMMAND_UNAVAILABLE'
   | 'OFFLINE';
 
@@ -24,7 +26,8 @@ export const readEnterpriseErrorCode = (
       : undefined;
   if (code === 'AUTHENTICATION_REQUIRED' || code === 'AUTHORITY_STALE' ||
       code === 'RESOURCE_NOT_AVAILABLE' || code === 'PERMISSION_DENIED' ||
-      code === 'VERSION_CONFLICT' || code === 'IDEMPOTENCY_CONFLICT') return code;
+      code === 'VERSION_CONFLICT' || code === 'IDEMPOTENCY_CONFLICT' ||
+      code === 'FEATURE_DISABLED' || code === 'READ_ONLY') return code;
   return offline ? 'OFFLINE' : 'COMMAND_UNAVAILABLE';
 };
 

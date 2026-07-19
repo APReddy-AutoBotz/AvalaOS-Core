@@ -33,6 +33,8 @@ const evaluator = read('services/assessV2/evaluator.ts');
 const registry = read('services/assessV2/registry.ts');
 const decisionVersion = read('services/assessV2/decisionVersion.ts');
 const client = read('services/assessV2Client.ts');
+const enterpriseBoundary = read('services/enterpriseAssessContract.ts');
+const sessionPolicy = read('services/enterpriseSessionPolicy.ts');
 const workspace = read('components/assess-v2/AssessV2Workspace.tsx');
 const browserFixture = read('tests/browser/pr1d.spec.ts');
 const architecture = read('docs/architecture/assess-v2-decision-intelligence-architecture.md');
@@ -69,6 +71,14 @@ for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'ser
   forbidText(source, "assess.v2.write", `obsolete capability in ${label}`);
 }
 
+requireText(client, 'readEnterpriseErrorCode(payload', 'V2 client parses stable runtime boundary codes');
+requireText(enterpriseBoundary, "code === 'FEATURE_DISABLED' || code === 'READ_ONLY'", 'V2 runtime boundary codes remain distinct');
+requireText(sessionPolicy, 'FEATURE_DISABLED: {', 'disabled mode has a distinct presentation');
+requireText(sessionPolicy, 'READ_ONLY: {', 'maintenance mode has a distinct presentation');
+if ((sessionPolicy.match(/state: 'read_only'/g) ?? []).length < 2) {
+  throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: V2 runtime failures present safe read-only fallbacks');
+}
+requireText(sessionPolicy, 'Existing V2 decisions remain available', 'safe fallback preserves committed V2 reads');
 requireText(command, "exact(rawPayload, ['caseId'])", 'finalize accepts only caseId');
 forbidText(command, "['caseId', 'decision']", 'client-supplied finalized decision');
 forbidText(client, 'evaluateAssessmentV2(', 'browser-side deterministic evaluation');

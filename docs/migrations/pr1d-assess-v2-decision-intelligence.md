@@ -106,3 +106,11 @@ The corrected `pr1b_upsert_assessment_responses` RPC now supplies `'{}'::jsonb` 
 Executed disposable PostgreSQL 15.8 evidence proves an ordinary Draft save commits, remains Draft, increments the version, persists the exact response payload, records one succeeded receipt and one audit with an empty JSON metadata object, and returns the same resource on exact replay. Existing reopen, disallowed-state, stale-version, and resubmission assertions continue to pass.
 
 No V1 score, formula, threshold, recommendation, score version, lifecycle authority, or V2 behavior changes. Rollback must preserve audit/receipt atomicity and use another additive forward correction; it must not restore SQL `NULL` for required audit metadata.
+
+## Final P2 V2 runtime-state presentation correction
+
+No migration changes are required. The existing Edge and private PostgreSQL boundaries already return stable `READ_ONLY` and `FEATURE_DISABLED` codes. The client compatibility parser now preserves both codes and the enterprise session policy maps each to the mutation-blocking `read_only` state with distinct maintenance and disabled messages.
+
+The safe fallback does not clear valid tenant authority, does not substitute demo data, and keeps existing committed V2 decisions readable. Unknown server payloads remain fail-closed as `COMMAND_UNAVAILABLE`; offline transport remains `OFFLINE`.
+
+Focused TypeScript regressions cover nested and top-level code envelopes, distinct copy, retained authority, and read-only state. Rollback remains V2 disable/read-only with data, immutable decisions, receipts, and audits preserved; do not restore error-code collapse or a generic error state that hides the required safe fallback.

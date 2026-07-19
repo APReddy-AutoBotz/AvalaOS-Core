@@ -45,6 +45,16 @@ const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentati
     message: 'This request key was already used for different content. Reload before retrying.',
     clearAuthority: false,
   },
+  FEATURE_DISABLED: {
+    state: 'read_only',
+    message: 'Avala Assess V2 is disabled. Existing V2 decisions remain available in read-only mode; changes are blocked.',
+    clearAuthority: false,
+  },
+  READ_ONLY: {
+    state: 'read_only',
+    message: 'Avala Assess V2 is in read-only maintenance. Existing V2 decisions remain available; changes are blocked.',
+    clearAuthority: false,
+  },
   COMMAND_UNAVAILABLE: {
     state: 'error',
     message: 'The command could not be completed. No success was recorded.',

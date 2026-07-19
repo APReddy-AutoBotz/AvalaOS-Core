@@ -155,3 +155,13 @@ The final-head review found that the V1 response-upsert correction supplied SQL 
 Executed static guards, harness syntax, and the complete disposable PostgreSQL 15.8 PR 1D matrix passed. The new regression proves a normal Draft save commits, remains Draft, increments the version, persists its response, writes exactly one succeeded receipt and one audit with an empty metadata object, and replays identically. Existing requested-change reopen, approved denial, and Govern resubmission assertions remain green.
 
 No live or hosted system was accessed. This correction changes no V1 score, formula, threshold, hard stop, recommendation, score version, Govern authority, V2 rule, decision version, approval, attestation, handoff, export, or sharing behavior. Fresh correction-head CI and one more final-head review with zero unresolved threads remain required before human-review readiness.
+
+### Final P2 V2 runtime-state presentation correction
+
+The exact-head review found that the Assess V2 client passed server errors through a shared parser that did not recognize `READ_ONLY` or `FEATURE_DISABLED`, collapsing both to `COMMAND_UNAVAILABLE`. The correction extends the typed compatibility boundary and preserves nested and top-level runtime codes.
+
+Executed focused evidence passed `npm.cmd run test:assess-v2-presentation`, `npm.cmd run test:pr1c-contract`, and `npm.cmd run typecheck`. The regression proves both stable codes enter `read_only`, retain tenant authority, preserve distinct maintenance and disabled copy, and remain connected to the V2 client's error path. Unknown payload and offline fallbacks remain unchanged.
+
+Complete correction-head local acceptance also passed: `npm.cmd run test:pr1d`, `npm.cmd run typecheck:edge`, `npm.cmd run build`, the disposable PostgreSQL 15.8 migration matrix, and all 24 desktop/mobile browser journeys. The standard Windows Playwright wrapper reported all 24 journeys as passing but lingered while shutting down its child preview server; the identical suite was rerun against a separately managed local preview and exited cleanly with `24 passed (4.7m)`.
+
+No live or hosted system was accessed. This correction changes no migration, server command, capability, RLS, score, formula, rule, threshold, hard stop, recommendation, decision version, lifecycle, approval, attestation, Govern, Studio, export, or sharing behavior. Fresh correction-head CI and final review-thread closure remain required before human-review readiness.

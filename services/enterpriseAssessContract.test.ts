@@ -35,7 +35,7 @@ assert.equal(isEnterpriseObject(null),false);
 
 for (const code of [
   'AUTHENTICATION_REQUIRED','AUTHORITY_STALE','RESOURCE_NOT_AVAILABLE','PERMISSION_DENIED',
-  'VERSION_CONFLICT','IDEMPOTENCY_CONFLICT',
+  'VERSION_CONFLICT','IDEMPOTENCY_CONFLICT','FEATURE_DISABLED','READ_ONLY',
 ] as const) {
   assert.equal(readEnterpriseErrorCode({ error: { code } }),code);
   assert.equal(readEnterpriseErrorCode({ code }),code);
@@ -107,6 +107,13 @@ assert.equal(presentEnterpriseBoundary('RESOURCE_NOT_AVAILABLE').clearAuthority,
 assert.equal(presentEnterpriseBoundary('PERMISSION_DENIED').state,'ready');
 assert.equal(presentEnterpriseBoundary('VERSION_CONFLICT').state,'ready');
 assert.equal(presentEnterpriseBoundary('IDEMPOTENCY_CONFLICT').state,'ready');
+assert.equal(presentEnterpriseBoundary('FEATURE_DISABLED').state,'read_only');
+assert.equal(presentEnterpriseBoundary('FEATURE_DISABLED').clearAuthority,false);
+assert.match(presentEnterpriseBoundary('FEATURE_DISABLED').message,/disabled/);
+assert.equal(presentEnterpriseBoundary('READ_ONLY').state,'read_only');
+assert.equal(presentEnterpriseBoundary('READ_ONLY').clearAuthority,false);
+assert.match(presentEnterpriseBoundary('READ_ONLY').message,/read-only maintenance/);
+assert.notEqual(presentEnterpriseBoundary('FEATURE_DISABLED').message,presentEnterpriseBoundary('READ_ONLY').message);
 assert.equal(presentEnterpriseBoundary('COMMAND_UNAVAILABLE').state,'error');
 assert.equal(presentEnterpriseBoundary('OFFLINE').state,'offline');
 assert.match(presentEnterpriseBoundary('OFFLINE').message,/not be replayed/);

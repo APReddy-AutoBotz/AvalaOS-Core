@@ -199,3 +199,11 @@ The service-role-only V1 response-upsert compatibility RPC writes the domain upd
 Exact same-key replay returns the committed response without another version, receipt, or audit. The populated PostgreSQL matrix proves a normal Draft save commits, increments the assessment version, preserves Draft state, writes one succeeded receipt and one empty-metadata audit, and replays exactly; the requested-change reopen contract remains separately asserted.
 
 This correction changes no V1 formula, weight, threshold, hard stop, recommendation, score version, Govern authority, or V2 behavior. Rollback remains the existing server-authoritative V1 path plus an additive forward fix; do not restore nullable audit metadata or weaken atomic audit ownership.
+
+## Final V2 runtime-state presentation correction
+
+The Assess V2 command client preserves the server's stable `READ_ONLY` and `FEATURE_DISABLED` codes instead of collapsing either to `COMMAND_UNAVAILABLE`. Both outcomes enter the existing mutation-blocking `read_only` enterprise session state without clearing valid tenant authority. They retain distinct user-facing messages so planned maintenance and feature disablement are not presented as the same condition.
+
+Existing committed V2 decisions remain readable while new creates, clones, draft writes, and finalization remain blocked by the existing action policy. Unknown or malformed error payloads still fail closed as `COMMAND_UNAVAILABLE`, and offline transport remains `OFFLINE`.
+
+This is a client compatibility-boundary correction only. It changes no server command, database function, RLS or capability authority, score, rule, threshold, hard stop, recommendation, decision version, lifecycle, approval, attestation, handoff, export, or sharing behavior. Rollback remains V2 disable/read-only with records preserved, followed by an additive forward fix.

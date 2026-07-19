@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import type { TenantContextProjection } from '../types';
 import { ASSESS_V2_CAPABILITIES, ASSESS_V2_COMMAND_CAPABILITY } from './assessV2/capabilities';
 import { buildAssessV2CommandEnvelope } from './assessV2ClientContract';
+import { readEnterpriseErrorCode } from './enterpriseAssessContract';
+import { presentEnterpriseBoundary } from './enterpriseSessionPolicy';
 
 const context: TenantContextProjection = {
   userId: '11111111-1111-4111-8111-111111111111',
@@ -47,7 +49,17 @@ assert.deepEqual(ASSESS_V2_COMMAND_CAPABILITY, {
   'assessment_v2.finalize': 'assess.v2.finalize',
 });
 assert.equal(Object.values(ASSESS_V2_CAPABILITIES).includes(['assess', 'v2', 'write'].join('.') as never), false);
+for (const code of ['READ_ONLY', 'FEATURE_DISABLED'] as const) {
+  assert.equal(readEnterpriseErrorCode({ error: { code } }), code);
+  assert.equal(readEnterpriseErrorCode({ code }), code);
+  assert.equal(presentEnterpriseBoundary(code).state, 'read_only');
+  assert.equal(presentEnterpriseBoundary(code).clearAuthority, false);
+}
+assert.match(presentEnterpriseBoundary('READ_ONLY').message, /read-only maintenance/);
+assert.match(presentEnterpriseBoundary('FEATURE_DISABLED').message, /disabled/);
+assert.notEqual(presentEnterpriseBoundary('READ_ONLY').message, presentEnterpriseBoundary('FEATURE_DISABLED').message);
 const clientSource = fs.readFileSync('services/assessV2Client.ts', 'utf8');
+assert.match(clientSource, /readEnterpriseErrorCode\(payload,/);
 assert.match(clientSource, /evidenceIds\.has\(evidence\.id\)/);
 assert.match(clientSource, /throw new EnterpriseBoundaryError\('COMMAND_UNAVAILABLE'\)/);
 assert.match(clientSource, /assertUniqueAssessV2EvidenceIds\(value\.case_snapshot\)/);

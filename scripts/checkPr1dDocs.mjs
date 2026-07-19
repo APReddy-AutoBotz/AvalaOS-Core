@@ -47,6 +47,8 @@ for (const phrase of [
   'absent or `undefined` value as insufficient evidence',
   'Final normal-draft atomic audit correction', 'empty JSON object',
   'An audit failure rolls back the response update and receipt',
+  'Final V2 runtime-state presentation correction', 'distinct user-facing messages',
+  'Existing committed V2 decisions remain readable',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -68,6 +70,8 @@ for (const phrase of [
   'Present malformed values remain strict-normalizer failures',
   'Final P1 normal-draft audit correction', "'{}'::jsonb",
   'ordinary Draft save commits',
+  'Final P2 V2 runtime-state presentation correction', 'mutation-blocking `read_only`',
+  'does not clear valid tenant authority',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -90,6 +94,8 @@ for (const phrase of [
   'compatible submitted/unvalidated row preserved', 'direct rejection of omitted and null status',
   'Final P1 normal-draft atomic audit correction', 'normal Draft save commits',
   'one audit with an empty metadata object',
+  'Final P2 V2 runtime-state presentation correction', 'nested and top-level runtime codes',
+  'distinct maintenance and disabled copy',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }
