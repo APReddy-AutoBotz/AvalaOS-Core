@@ -21,6 +21,7 @@ const pr1c = '20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql
 const pr1d = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
 const correction = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundary = '20260717120000_pr1d_evidence_attestation_boundary.sql';
+const factValidation = '20260719130000_pr1d_author_fact_validation.sql';
 const baseline = migrations.slice(0, migrations.indexOf(pr1b));
 const source = (name) => fs.readFileSync(path.join('supabase/migrations', name), 'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql', 'utf8');
@@ -178,6 +179,7 @@ try {
   };
   await insertEvidencePayload(test, legacyEvidenceId, LEGACY_CREATE_CASE, legacyEvidencePayload);
   await apply(test, [evidenceBoundary]);
+  await apply(test, [factValidation]);
   assert.deepEqual((await test.query(
     'SELECT payload FROM assess_v2_evidence_links WHERE id=$1 AND case_id=$2',
     [legacyEvidenceId, LEGACY_CREATE_CASE],
@@ -741,16 +743,21 @@ try {
   const primitive = '51000000-0000-4000-8000-000000000003';
   const decisionPoint = '51000000-0000-4000-8000-000000000001';
   const exceptionPath = '51000000-0000-4000-8000-000000000002';
+  const primitiveFact = { fieldId:'primitive.rulesStable',value:true,status:'suggested',evidenceIds:[],source:'template' };
   const authoring = {
     caseId: CASE,
     name: 'Edited',
     description: '',
-    primitives: [{ id: primitive }],
+    primitives: [{
+      id: primitive,
+      facts: { 'primitive.rulesStable': primitiveFact },
+      agentNecessity: structuredClone(canonicalUnknownAgentNecessity),
+    }],
     edges: [],
     decisionPoints: [{ id: decisionPoint, primitiveId: primitive, name: 'Gate', ruleDescription: 'Route', outcomeLabels: ['continue', 'exception'], evidenceIds: [] }],
     exceptionPaths: [{ id: exceptionPath, fromPrimitiveId: primitive, name: 'Exception', trigger: 'Failure', resolutionPrimitiveIds: [primitive], evidenceIds: [] }],
     assets: [], interactions: [], evidence: [],
-    agentNecessity: { irreducibleAmbiguity: null, adaptiveNextStep: null, toolOrPathSelection: null, incrementalValue: null, controllable: null },
+    agentNecessity: structuredClone(canonicalUnknownAgentNecessity),
   };
   const draftMutationState = async (caseId) => value(await test.query(`SELECT jsonb_build_object(
     'status',c.status,'version',c.version,'headVersionId',c.head_version_id,'updatedAt',c.updated_at,
@@ -765,6 +772,66 @@ try {
     'decisions',(SELECT count(*) FROM assess_v2_decision_versions WHERE case_id=c.id),
     'draftAudits',(SELECT count(*) FROM privileged_audit_events WHERE resource_id=c.id AND action='assessment_v2.draft.upsert')
   ) value FROM assess_v2_cases c WHERE c.id=$1`, [caseId]));
+  const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).filter(([entry]) => entry !== key));
+  const invalidAuthoringAttempts = [
+    {
+      key:'reject-author-primitive-v1-import',requestNumber:140,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].source='v1-import'; },
+    },
+    {
+      key:'reject-author-primitive-agent-v1-import',requestNumber:141,
+      mutate:draft => { draft.primitives[0].agentNecessity.irreducibleAmbiguity.source='v1-import'; },
+    },
+    {
+      key:'reject-author-top-agent-v1-import',requestNumber:142,
+      mutate:draft => { draft.agentNecessity.irreducibleAmbiguity.source='v1-import'; },
+    },
+    {
+      key:'reject-author-extra-fact-key',requestNumber:143,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].extra=true; },
+    },
+    {
+      key:'reject-author-missing-fact-key',requestNumber:144,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable']=withoutKey(draft.primitives[0].facts['primitive.rulesStable'],'status'); },
+    },
+    {
+      key:'reject-author-fact-map-mismatch',requestNumber:145,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].fieldId='primitive.other'; },
+    },
+    {
+      key:'reject-author-unknown-non-null',requestNumber:146,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].status='unknown'; },
+    },
+    {
+      key:'reject-author-invalid-evidence-id',requestNumber:147,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].evidenceIds=['not-a-uuid']; },
+    },
+    {
+      key:'reject-author-agent-non-boolean',requestNumber:148,
+      mutate:draft => { const fact=draft.agentNecessity.controllable; fact.value='yes'; fact.status='known'; },
+    },
+    {
+      key:'reject-author-template-known',requestNumber:149,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].status='known'; },
+    },
+    {
+      key:'reject-author-null-non-unknown',requestNumber:150,
+      mutate:draft => { const fact=draft.agentNecessity.controllable; fact.value=null; fact.status='assumed'; },
+    },
+  ];
+  for (const attempt of invalidAuthoringAttempts) {
+    const invalidAuthoring = structuredClone(authoring);
+    attempt.mutate(invalidAuthoring);
+    const beforeInvalidAuthoring = await draftMutationState(CASE);
+    const rejectedAuthoring = value(await asRole(test,'service_role',() => test.query(
+      'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+      [A,O,W,CASE,1,invalidAuthoring,req(attempt.requestNumber),attempt.key,authorizationVersion],
+    )));
+    assert.deepEqual(rejectedAuthoring,{errorCode:'INVALID_COMMAND'},attempt.key);
+    assert.deepEqual(await draftMutationState(CASE),beforeInvalidAuthoring,`${attempt.key} has zero side effects`);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key=$1',[attempt.key])).rows[0].n),0);
+    assert.equal(Number((await test.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1',[req(attempt.requestNumber)])).rows[0].n),0);
+  }
   const raceA = await connect(urlFor(dbName));
   const raceB = await connect(urlFor(dbName));
   const upsert = (client, key, number) => asRole(client, 'service_role', () => client.query(
@@ -875,7 +942,7 @@ try {
   await test.query('UPDATE assess_v2_runtime_control SET read_only=false WHERE singleton=true');
 
   const ruleSetVersion = 'assess-v2-rules-2026-07';
-  const decisionVersion = 'assess-v2-decision-2026-07-19';
+  const decisionVersion = 'assess-v2-decision-2026-07-19-2';
   const schemaVersion = 'assess-v2-schema-2026-07';
   const makeOutput = (caseId) => ({
     caseId,

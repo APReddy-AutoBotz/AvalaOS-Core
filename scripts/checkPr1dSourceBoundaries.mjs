@@ -14,16 +14,18 @@ const forbidText = (source, fragment, label) => {
 const foundationName = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
 const correctionName = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundaryName = '20260717120000_pr1d_evidence_attestation_boundary.sql';
+const factValidationName = '20260719130000_pr1d_author_fact_validation.sql';
 const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d')).sort();
-for (const expected of [foundationName, correctionName, evidenceBoundaryName]) {
+for (const expected of [foundationName, correctionName, evidenceBoundaryName, factValidationName]) {
   if (!migrationNames.includes(expected)) throw new Error(`PR1D_MIGRATION_MISSING: ${expected}`);
 }
-if (migrationNames.length !== 3) throw new Error(`PR1D_MIGRATION_COUNT: expected 3, received ${migrationNames.length}`);
+if (migrationNames.length !== 4) throw new Error(`PR1D_MIGRATION_COUNT: expected 4, received ${migrationNames.length}`);
 
 const foundation = read(`supabase/migrations/${foundationName}`);
 const correction = read(`supabase/migrations/${correctionName}`);
 const evidenceBoundary = read(`supabase/migrations/${evidenceBoundaryName}`);
-const migrations = `${foundation}\n${correction}\n${evidenceBoundary}`;
+const factValidation = read(`supabase/migrations/${factValidationName}`);
+const migrations = `${foundation}\n${correction}\n${evidenceBoundary}\n${factValidation}`;
 const capabilities = read('services/assessV2/capabilities.ts');
 const command = read('supabase/functions/_shared/assessV2Command.ts');
 const handlers = read('supabase/functions/_shared/assessV2Handlers.ts');
@@ -119,14 +121,14 @@ requireText(evidenceBoundary, 'PR1D_AUTHOR_ATTESTATION_FORBIDDEN', 'database rej
 requireText(decisionVersion, 'buildDecisionDigestV2', 'SHA-256 decision references');
 requireText(decisionVersion, 'evaluateAssessmentV2(inputSnapshot, createdAt)', 'finalization timestamp drives deterministic evidence evaluation');
 requireText(types, "ASSESS_V2_RULE_SET_VERSION = 'assess-v2-rules-2026-07'", 'INT-006 rule-set version remains stable');
-requireText(types, "ASSESS_V2_DECISION_VERSION = 'assess-v2-decision-2026-07-19'", 'corrected action and evidence-time output has a new decision version');
+requireText(types, "ASSESS_V2_DECISION_VERSION = 'assess-v2-decision-2026-07-19-2'", 'corrected confidence output has a new decision version');
 forbidText(decisionVersion, 'sha-lite', 'V1 lightweight hash reuse');
 
 
-const draftUpsertStart = correction.indexOf('CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft');
-const draftUpsertEnd = correction.indexOf('CREATE OR REPLACE FUNCTION', draftUpsertStart + 1);
+const draftUpsertStart = factValidation.indexOf('CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft');
+const draftUpsertEnd = factValidation.indexOf('REVOKE ALL ON FUNCTION public.pr1d_upsert_assess_v2_draft', draftUpsertStart + 1);
 if (draftUpsertStart < 0 || draftUpsertEnd < 0) throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: corrected draft-upsert RPC');
-const draftUpsert = correction.slice(draftUpsertStart, draftUpsertEnd);
+const draftUpsert = factValidation.slice(draftUpsertStart, draftUpsertEnd);
 for (const [fragment, label] of [
   ['FROM public.assess_v2_runtime_control WHERE singleton=true FOR SHARE', 'draft replay locks runtime control'],
   ["IF control.singleton IS NULL OR NOT control.enabled THEN RAISE EXCEPTION 'PR1D_FEATURE_DISABLED'", 'draft replay remains disabled fail-closed'],
@@ -147,6 +149,18 @@ requireText(correction, "imported_evidence.payload - ARRAY['reviewerIds','contra
 requireText(correction, "AND imported_evidence.id::text=x->>'id'", 'exact imported evidence round-trip creates no shadow row');
 requireText(correction, 'imported_evidence.id=current_evidence.id', 'authoritative loader prefers immutable imported evidence');
 requireText(correction, 'clone_version.version=1', 'immutable imported evidence binds version one');
+for (const [fragment, label] of [
+  ["p_fact ?& ARRAY['fieldId','value','status','evidenceIds','source']", 'exact author fact keys'],
+  ["p_fact->>'source' NOT IN ('user','system','template')", 'author fact sources exclude v1-import'],
+  ["p_fact->>'source'='template' AND p_fact->>'status'='known'", 'template facts cannot self-attest as known'],
+  ['pr1d_author_agent_necessity_valid', 'canonical primitive and top-level agent fact validation'],
+  ["RETURN jsonb_build_object('errorCode','INVALID_COMMAND')", 'invalid direct RPC envelope'],
+]) requireText(factValidation, fragment, label);
+const draftFactValidation = draftUpsert.indexOf('IF NOT public.pr1d_authoring_facts_valid(p_authoring)');
+const draftCommandClaim = draftUpsert.indexOf('r:=public.pr1b_claim_command');
+if (!(draftFactValidation >= 0 && draftFactValidation < draftCommandClaim)) {
+  throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: author fact validation precedes draft receipt claim');
+}
 forbidText(correction, 'current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id', 'mutable draft evidence shadowing immutable import');
 for (const table of [
   'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',

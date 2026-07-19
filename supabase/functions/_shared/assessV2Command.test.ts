@@ -159,6 +159,26 @@ const main = async () => {
     (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND',
     'a clone author draft cannot relabel an agent-necessity fact as an immutable V1 import',
   );
+  const clonedDraftWithForgedImportedPrimitiveAgent = {
+    ...base,
+    commandType: 'assessment_v2.draft.upsert',
+    expectedVersion: 1,
+    payload: {
+      ...authoring,
+      primitives: [{
+        ...authoring.primitives[0],
+        agentNecessity: {
+          ...authoring.agentNecessity,
+          irreducibleAmbiguity: { ...authoring.agentNecessity.irreducibleAmbiguity, value: null, status: 'unknown', source: 'v1-import' },
+        },
+      }, ...authoring.primitives.slice(1)],
+    },
+  };
+  assert.throws(
+    () => parseAssessV2Envelope(clonedDraftWithForgedImportedPrimitiveAgent),
+    (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND',
+    'a clone author draft cannot relabel a primitive agent fact as an immutable V1 import',
+  );
   const cloneReplayOnlyCommand = { ...parseAssessV2Envelope(clone), actorId: actor } as AssessV2AtomicCommand;
   assert.deepEqual(buildAssessV2CloneReplayRpcBody(cloneReplayOnlyCommand), {
     p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,

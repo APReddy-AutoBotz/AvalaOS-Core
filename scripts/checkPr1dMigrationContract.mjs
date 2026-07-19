@@ -9,6 +9,10 @@ const correction = fs.readFileSync(
   'supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql',
   'utf8',
 );
+const factValidation = fs.readFileSync(
+  'supabase/migrations/20260719130000_pr1d_author_fact_validation.sql',
+  'utf8',
+);
 const compatibility = fs.readFileSync('services/assessV1Compatibility.ts', 'utf8');
 const handler = fs.readFileSync('supabase/functions/_shared/assessV2Handlers.ts', 'utf8');
 const cloneContractVersion = compatibility.match(/ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION = '([^']+)'/)?.[1];
@@ -108,6 +112,28 @@ for (const token of [
 assert.ok(
   !correction.includes('current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id'),
   'current draft evidence must never shadow immutable imported V1 evidence',
+);
+for (const token of [
+  'public.pr1d_author_fact_valid',
+  'public.pr1d_author_agent_necessity_valid',
+  'public.pr1d_authoring_facts_valid',
+  "p_fact ?& ARRAY['fieldId','value','status','evidenceIds','source']",
+  "p_fact->>'source' NOT IN ('user','system','template')",
+  "jsonb_typeof(p_fact->'evidenceIds')<>'array'",
+  "p_fact->>'source'='template' AND p_fact->>'status'='known'",
+  "jsonb_typeof(p_fact->'value')<>'boolean'",
+  "RETURN jsonb_build_object('errorCode','INVALID_COMMAND')",
+  'prior.imported_facts',
+  'FROM PUBLIC,anon,authenticated,service_role',
+  'TO service_role',
+]) assert.ok(factValidation.includes(token), `fact-validation migration missing ${token}`);
+const factGuard = factValidation.indexOf('IF NOT public.pr1d_authoring_facts_valid(p_authoring)');
+const receiptClaim = factValidation.indexOf('r:=public.pr1b_claim_command', factGuard);
+const versionInsert = factValidation.indexOf('INSERT INTO public.assess_v2_case_versions', factGuard);
+assert.ok(factGuard >= 0 && receiptClaim > factGuard && versionInsert > receiptClaim, 'author fact validation must precede receipt claim and persistence');
+assert.doesNotMatch(
+  factValidation,
+  /GRANT EXECUTE ON FUNCTION public\.pr1d_(?:author_fact_valid|author_agent_necessity_valid|authoring_facts_valid)[^;]+TO (?:PUBLIC|anon|authenticated|service_role)/,
 );
 
 assert.doesNotMatch(foundation + correction, /UPDATE public\.privileged_audit_events/);

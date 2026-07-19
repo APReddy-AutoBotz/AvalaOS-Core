@@ -127,7 +127,7 @@ The disposable migration matrix covers exact read-only replay, read-only miss, s
 
 The client read boundary now permits discovery and reload in both `ready` and `read_only` when valid tenant context includes `assess.v2.read`. All mutation capability checks and create/clone exposure remain `ready`-only.
 
-The corrected draft RPC compares each same-ID authored evidence payload with the locked immutable version-1 `v1_clone` row before receipt claim. Exact imported evidence round-trip is omitted from the new authoring version, while altered same-ID author evidence returns `INVALID_COMMAND` with zero receipt, version, evidence, case-head, or audit side effects. The load projection also defensively prefers the immutable clone row over any current-version collision. The rule set remains `assess-v2-rules-2026-07`, the decision version remains `assess-v2-decision-2026-07-19`, and the accepted foundation migration remains unchanged.
+The corrected draft RPC compares each same-ID authored evidence payload with the locked immutable version-1 `v1_clone` row before receipt claim. Exact imported evidence round-trip is omitted from the new authoring version, while altered same-ID author evidence returns `INVALID_COMMAND` with zero receipt, version, evidence, case-head, or audit side effects. The load projection also defensively prefers the immutable clone row over any current-version collision. The rule set remains `assess-v2-rules-2026-07`, and the accepted foundation migration remains unchanged.
 
 Rollback remains V2 disable/read-only with immutable clone provenance, decisions, receipts, and audits preserved, followed by another additive forward correction. Do not restore mutable imported-evidence shadowing or block authorized reads during read-only maintenance.
 
@@ -136,6 +136,14 @@ Rollback remains V2 disable/read-only with immutable clone provenance, decisions
 The corrected draft collision check removes only the immutable row's server-only `reviewerIds` and `contradictory` keys before comparing it with author input. This admits the normal Edge-shaped payload while preserving all author-visible state, owner, claims, source provenance, and validation fields. Supplying server-only evidence fields or altering an author-visible field returns `INVALID_COMMAND` before command claim with zero domain, receipt, or audit writes; an accepted save still creates no imported-evidence shadow row.
 
 The direct browser read path now loads imported evidence from the tenant-scoped version-1 `v1_clone` row and gives those immutable rows precedence over same-ID current-version rows. It also reconstructs the canonical imported `v1.evidence.*` claim IDs and clone timestamp rather than dropping provenance on later draft reloads.
+
+## Final candidate-confidence and private fact-validation correction
+
+The forward-only migration `20260719130000_pr1d_author_fact_validation.sql` adds private validation helpers and replaces only `pr1d_upsert_assess_v2_draft`. Primitive fact maps, optional primitive agent necessity, and top-level agent necessity must contain exact five-key fact objects with map-key/`fieldId` equality, permitted author sources, unknown/null equivalence, valid UUID evidence arrays, canonical five agent fields, and boolean-or-null agent values. Template facts cannot assert `known`, and author input cannot assert `v1-import`.
+
+Invalid direct private-RPC input returns `INVALID_COMMAND` before command receipt claim and before version, child-row, case-head, or audit persistence. Trusted immutable `imported_facts` continue to be copied unchanged from the prior server-owned case version. Valid user facts and non-known template facts remain accepted.
+
+The deterministic candidate, agent, and overall evidence boundary is aligned without changing technical fit or the `assess-v2-rules-2026-07` rules. A fresh submitted exact required claim produces `Partially Evidenced`; no relevant evidence produces `Insufficient Evidence`; suggestion-only, template, expired, or unrelated evidence produces `Assumption-Led`; and `Verified` is unreachable in PR 1D. The decision-output version advances to `assess-v2-decision-2026-07-19-2`. Rollback remains V2 disable/read-only with immutable records preserved and a later additive forward correction.
 
 The focused disposable PostgreSQL 16 matrix covers the normal Edge-shaped save and state, owner, claim, provenance, and server-only-field collisions. Rollback remains V2 disable/read-only with records preserved, followed by an additive forward correction; no destructive down-migration is authorized.
 

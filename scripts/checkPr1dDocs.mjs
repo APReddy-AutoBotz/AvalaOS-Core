@@ -60,6 +60,11 @@ for (const phrase of [
   'Final Edge-shaped clone authoring and immutable client reload correction',
   'client-authorable projection',
   'immutable imported evidence wins every same-ID collision',
+  'Final candidate-confidence and private fact-validation correction',
+  'assess-v2-decision-2026-07-19-2',
+  '`Verified` remains unreachable',
+  'fresh submitted exact required claim',
+  'private service-role draft RPC',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -69,6 +74,7 @@ for (const phrase of [
   '20260714120000_pr1d_assess_v2_decision_intelligence.sql',
   '20260715120000_pr1d_decision_integrity_correction.sql',
   'forward-only', 'submitted/unvalidated', 'canonical input/evidence/output JSON text',
+  '20260719130000_pr1d_author_fact_validation.sql',
   'recomputes each UTF-8 SHA-256 digest', 'sourceV1.importedEvidenceClaimIds',
   'immutable version-1 clone evidence', 'fabricated claim',
   'Final P2 create and clone receipt replay correction', 'two-session same-key create',
@@ -93,6 +99,9 @@ for (const phrase of [
   'Final P1/P2 Edge-shaped imported-evidence save and client reload correction',
   'server-only evidence fields',
   'tenant-scoped version-1 `v1_clone` row',
+  'Final candidate-confidence and private fact-validation correction',
+  'exact five-key fact objects', 'before command receipt claim',
+  'trusted immutable `imported_facts`',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -127,6 +136,9 @@ for (const phrase of [
   'Final P1/P2 Edge-shaped imported-evidence save and client reload correction',
   'PostgreSQL 16 migration matrix passed',
   '34 total review threads',
+  'Final candidate-confidence and private fact-validation correction',
+  'assess-v2-decision-2026-07-19-2',
+  'INVALID_COMMAND', 'zero side effects',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

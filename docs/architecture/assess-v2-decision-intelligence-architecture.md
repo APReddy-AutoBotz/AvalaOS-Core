@@ -65,7 +65,7 @@ The V2 rule set evaluates independent layers and never collapses them into one w
 
 Business value and evidence confidence cannot increase technical fit. Data sensitivity changes controls, not data quality. Mandatory human approval changes the action boundary, not component suitability. API facts and UI/RPA facts remain separate. Modernization never derives solely from agent readiness.
 
-A bounded agent is ineligible when any required necessity condition is proven false. When all five conditions are asserted true but one or more lack valid claim-linked evidence, the result remains `Conditional Fit` with `Assumption-Led` confidence; only claim-linked evidence can raise that confidence to `Verified`. Extraction, summarization, retrieval, or drafting alone cannot satisfy this gate.
+A bounded agent is ineligible when any required necessity condition is proven false. When all five conditions are asserted true but lack a fresh submitted exact claim, the result remains `Conditional Fit` with `Assumption-Led` confidence; at least one fresh submitted exact required claim raises it only to `Partially Evidenced`. `Verified` remains unreachable in PR 1D. Extraction, summarization, retrieval, or drafting alone cannot satisfy this gate.
 
 ## Rule And Evidence Registry
 
@@ -224,13 +224,21 @@ With valid tenant context and `assess.v2.read`, read-only sessions continue V2 c
 
 For V1-cloned cases, the immutable version-1 clone evidence row is authoritative for every imported evidence ID. An exact imported payload may round-trip through authoring but never creates a mutable shadow row. Altered same-ID author evidence returns `INVALID_COMMAND` before receipt, authoring version, evidence, case-head, or audit mutation, and the read projection defensively prefers the locked clone row over any historical collision. Imported claims, owner, provenance, confidence, canonical snapshots, and output therefore cannot be changed through an author evidence-ID collision.
 
-This hardening adds no scoring, rule, approval, attestation, Govern, Studio, handoff, export, or sharing behavior. The current rule set remains `assess-v2-rules-2026-07` and the current decision version remains `assess-v2-decision-2026-07-19`; V1 `assess-core-2026-05` remains unchanged. Rollback remains V2 disable/read-only with immutable data preserved plus an additive forward fix.
+This hardening adds no scoring, rule, approval, attestation, Govern, Studio, handoff, export, or sharing behavior. The rule set remains `assess-v2-rules-2026-07`; V1 `assess-core-2026-05` remains unchanged. Rollback remains V2 disable/read-only with immutable data preserved plus an additive forward fix.
 
 ## Final Edge-shaped clone authoring and immutable client reload correction
 
 The draft RPC compares a same-ID imported evidence payload against its client-authorable projection, which intentionally omits the server-only `reviewerIds` and `contradictory` fields rejected by the Edge parser. An exact Edge-shaped round-trip can therefore save a later V2 draft without copying a mutable shadow row. Altered status, owner, claims, provenance, or an attempt to supply server-only evidence fields remains `INVALID_COMMAND` before receipt claim and has zero side effects.
 
 Draft reads for a V1-cloned case query the tenant-scoped version-1 `v1_clone` authoring row, reload its immutable evidence, and merge it with current-version author evidence so immutable imported evidence wins every same-ID collision. The same projection reconstructs `sourceV1.importedEvidenceClaimIds` and `clonedAt`, preserving provenance and preventing a browser reload from inventing a linked-evidence gap.
+
+## Final candidate-confidence and private fact-validation correction
+
+Candidate, agent, and overall confidence now share the PR 1D author-evidence boundary. No relevant evidence is `Insufficient Evidence`; suggestions, templates, expired evidence, and unrelated claims are `Assumption-Led`; at least one fresh submitted exact required claim is `Partially Evidenced`. `Verified` remains unreachable until a later independently authorized attestation milestone. These confidence changes do not change candidate fit, agent fit, V1 scoring, or the `assess-v2-rules-2026-07` rule contract. Because immutable output can change, the decision version advances to `assess-v2-decision-2026-07-19-2`.
+
+The additive `20260719130000_pr1d_author_fact_validation.sql` migration mirrors the Edge parser at the private service-role draft RPC. It validates primitive facts, optional primitive agent facts, and top-level agent facts as exact five-key fact objects; binds fact-map keys to `fieldId`; permits only user, system, and template author sources; enforces unknown/null equivalence; rejects template-known facts and author-supplied `v1-import`; validates evidence UUID arrays; and restricts canonical agent values to boolean or null.
+
+Validation returns `INVALID_COMMAND` before command receipt claim or draft persistence, producing zero side effects. Trusted immutable `imported_facts` remain copied from the prior server-owned version and are never accepted from author input. Rollback remains V2 disable/read-only with immutable records preserved, followed by an additive forward correction.
 
 This is a compatibility-boundary correction only. It changes no V1 or V2 score, formula, weight, threshold, hard stop, rule, recommendation, decision version, approval, attestation, Govern, Studio, handoff, export, or sharing behavior. Rollback remains V2 disable/read-only with immutable records preserved and an additive forward fix.
 

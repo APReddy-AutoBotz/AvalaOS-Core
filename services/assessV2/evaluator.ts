@@ -71,7 +71,7 @@ export const deriveEvidenceConfidence = (c: AssessmentCaseV2, asOf = c.updatedAt
   if (!required.length || !c.evidence.length) return 'Insufficient Evidence';
   const byId = new Map(c.evidence.map(item => [item.id, item]));
   const count = required.filter(({ evidenceIds, claimId }) => evidenceIds.some(evidenceId => submitted(byId.get(evidenceId), asOf, claimId))).length;
-  return count > 0 ? 'Partially Evidenced' : c.evidence.some(item => item.status === 'suggested' || item.sourceType === 'template') ? 'Assumption-Led' : 'Insufficient Evidence';
+  return count > 0 ? 'Partially Evidenced' : 'Assumption-Led';
 };
 
 const confidenceForEvidence = (ids: readonly string[], evidence: readonly EvidenceLink[], asOf = '1970-01-01T00:00:00.000Z', claimIds: readonly string[] = []): EvidenceConfidence => {
@@ -91,20 +91,19 @@ export const evaluateAgentNecessity = (primitiveId: string, facts: AgentNecessit
   const ruleIds = entries.map(([key]) => agentRuleByKey[key]);
   const hasFalse = entries.some(([, item]) => item.value === false);
   const hasUnknown = entries.some(([, item]) => item.value === null || item.status === 'unknown');
-  const allEvidenced = entries.every(([, item]) => item.evidenceIds.some(id => {
-    const link = evidence.find(candidate => candidate.id === id);
-    return verified(link, asOf, item.fieldId);
-  }));
-  if (hasFalse) return { primitiveId, component: 'Bounded Agent', fit: 'Ineligible', confidence: confidenceForEvidence(evidenceIds, evidence, asOf), rationale: ['At least one required agent-necessity condition is proven false.'], ruleIds, fieldIds, evidenceIds };
-  if (hasUnknown) return { primitiveId, component: 'Bounded Agent', fit: 'Weak Fit', confidence: confidenceForEvidence(evidenceIds, evidence, asOf), rationale: ['No condition is false, but one or more agent-necessity facts require evidence.'], ruleIds, fieldIds, evidenceIds };
+  const confidence = confidenceForEvidence(evidenceIds, evidence, asOf, fieldIds);
+  if (hasFalse) return { primitiveId, component: 'Bounded Agent', fit: 'Ineligible', confidence, rationale: ['At least one required agent-necessity condition is proven false.'], ruleIds, fieldIds, evidenceIds };
+  if (hasUnknown) return { primitiveId, component: 'Bounded Agent', fit: 'Weak Fit', confidence, rationale: ['No condition is false, but one or more agent-necessity facts require evidence.'], ruleIds, fieldIds, evidenceIds };
   return {
     primitiveId,
     component: 'Bounded Agent',
     fit: 'Conditional Fit',
-    confidence: allEvidenced ? 'Verified' : 'Assumption-Led',
-    rationale: [allEvidenced
-      ? 'All five necessity conditions have valid claim-linked evidence; bounded agency remains conditional on action-specific controls and human approval.'
-      : 'All five conditions are asserted true but at least one remains unverified; bounded agency is assumption-led and conditional.'],
+    confidence,
+    rationale: [confidence === 'Partially Evidenced'
+      ? 'At least one necessity condition has fresh submitted claim-linked evidence; bounded agency remains conditional on action-specific controls and human approval.'
+      : confidence === 'Insufficient Evidence'
+        ? 'All five conditions are asserted true but have no referenced evidence; bounded agency remains insufficiently evidenced and conditional.'
+        : 'All five conditions are asserted true but lack fresh submitted claim-linked evidence; bounded agency is assumption-led and conditional.'],
     ruleIds,
     fieldIds,
     evidenceIds,
@@ -138,15 +137,7 @@ export const evaluateCandidateFit = (primitive: ProcessPrimitive, component: Com
   const facts = required.map(id => primitive.facts[id]);
   const fieldIds = ['primitive.type', ...required];
   const evidenceIds = unique(facts.flatMap(item => item?.evidenceIds ?? []));
-  const evidencedClaims = required.filter((claimId, index) => (facts[index]?.evidenceIds ?? []).some(evidenceId =>
-    verified(evidence.find(item => item.id === evidenceId), asOf, claimId))).length;
-  const confidence: EvidenceConfidence = !evidenceIds.length
-    ? 'Insufficient Evidence'
-    : evidencedClaims === required.length
-      ? 'Verified'
-      : evidencedClaims > 0
-        ? 'Partially Evidenced'
-        : 'Assumption-Led';
+  const confidence = confidenceForEvidence(evidenceIds, evidence, asOf, required);
   const fit = facts.some(item => item?.value === false) ? 'Ineligible' : facts.some(item => !item || item.value === null || item.status === 'unknown') ? 'Conditional Fit' : 'Strong Fit';
   const rationale = fit === 'Strong Fit'
     ? [`Applicable technical facts support ${component}; confidence remains separately evidence-qualified.`]
