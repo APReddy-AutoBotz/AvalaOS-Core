@@ -249,3 +249,11 @@ Browser-authored primitive and agent facts accept only `user`, `system`, or `tem
 The PR 1D source-boundary guard executes its imported-evidence require/forbid assertions on every successful run, outside the preceding draft-replay-order failure branch. A mutation probe that removes the client-authorable imported-evidence projection must fail the guard rather than bypass those assertions.
 
 This correction changes no scoring, rule, decision version, capability, RLS, lifecycle, approval, attestation, handoff, export, or sharing behavior. Rollback remains V2-local disable/read-only with immutable records preserved and V1 available.
+
+## Final V1 clone eligibility correction
+
+The browser exposes V1-to-V2 clone only when the source assessment matches the server contract: lifecycle `Approved` or `Handed Off to Docs`, and frozen score version `assess-core-2026-05` from the scored or top-level compatibility projection. Draft, Ready for Review, Changes Requested, and non-frozen assessments remain visible as V1 history but are not eligible clone sources.
+
+The clone control is disabled for an ineligible source, the component presents local safe-unavailable copy, and the start path returns before any command or enterprise-boundary handler. Create V2 remains available when independently authorized, so a known clone ineligibility cannot clear tenant context or block unrelated work.
+
+This correction changes no server eligibility, score, rule, decision version, capability, RLS, lifecycle, approval, or V1 behavior. Rollback remains V2-local disable/read-only with V1 available.

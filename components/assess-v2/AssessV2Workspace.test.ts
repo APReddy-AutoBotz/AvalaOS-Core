@@ -15,6 +15,19 @@ assert.match(source, /handleAssessV2Boundary\(error\)/);
 assert.match(source, /disabled=\{busy \|\| !canRead\} onClick=\{reload\}/);
 assert.match(source, /assessV2OperationalMessage \|\| 'Avala Assess V2 changes are blocked/);
 
+assert.match(source, /const V1_CLONE_ELIGIBLE_STATUSES = new Set<Assessment\['status'\]>\(\['Approved', 'Handed Off to Docs'\]\)/);
+assert.match(source, /\(assessment\.scores\?\.scoreVersion \?\? assessment\.scoreVersion\) === ASSESS_V1_SCORE_VERSION/);
+assert.match(source, /disabled=\{busy \|\| !v1CloneEligible \|\| !can\(ASSESS_V2_CAPABILITIES\.read\)/);
+assert.match(source, /data-testid="assess-v2-clone-unavailable"/);
+
+const startAction = source.match(/const start = \(clone: boolean\) => \{([\s\S]*?)\r?\n  \};\r?\n  const save/)?.[1] ?? '';
+assert.match(startAction, /if \(clone && !v1CloneEligible\)/);
+assert.match(startAction, /setMessage\(V1_CLONE_UNAVAILABLE_MESSAGE\)/);
+assert.ok(
+  startAction.indexOf('if (clone && !v1CloneEligible)') < startAction.indexOf('return run'),
+  'An ineligible V1 clone must stop locally before the command boundary.',
+);
+
 
 assert.match(source, /const authorDraftFingerprint = .*JSON\.stringify\(toAuthorDraft\(draft\)\)/);
 assert.match(source, /const hasUnsavedChanges = draft !== null && savedDraftFingerprint !== authorDraftFingerprint\(draft\)/);

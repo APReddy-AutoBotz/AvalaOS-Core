@@ -16,6 +16,7 @@ import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 import { buildDecisionPackRenderModel } from '../../services/assessV2/decisionVersion';
 import { FIELD_REGISTRY } from '../../services/assessV2/registry';
 import { createUnknownAgentNecessityFacts, type CaseFact, type PrimitiveType } from '../../services/assessV2/types';
+import { ASSESS_V1_SCORE_VERSION } from '../../services/assessV1Compatibility';
 
 interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
@@ -33,6 +34,12 @@ const unknownInteractionFacts = () => ({
 type InteractionFactKey = keyof ReturnType<typeof unknownInteractionFacts>;
 const interactionFactKeys = Object.keys(unknownInteractionFacts()) as InteractionFactKey[];
 const contextualInteractionFacts = new Set<InteractionFactKey>(['highImpact', 'financialAction', 'untrustedContentWithTools']);
+const V1_CLONE_ELIGIBLE_STATUSES = new Set<Assessment['status']>(['Approved', 'Handed Off to Docs']);
+const V1_CLONE_UNAVAILABLE_MESSAGE = `V1 cloning is unavailable. Clone requires an Approved or Handed Off to Docs assessment finalized with ${ASSESS_V1_SCORE_VERSION}.`;
+const isEligibleV1CloneSource = (assessment: Assessment | null): assessment is Assessment => Boolean(
+  assessment && V1_CLONE_ELIGIBLE_STATUSES.has(assessment.status) &&
+    (assessment.scores?.scoreVersion ?? assessment.scoreVersion) === ASSESS_V1_SCORE_VERSION,
+);
 const emptyDraft = (caseId: string, name: string, description: string): AssessV2DraftInput => ({
   caseId, name, description, primitives: [], edges: [], decisionPoints: [], exceptionPaths: [], applicationAssets: [],
   interactions: [], evidenceLinks: [], agentNecessity: createUnknownAgentNecessityFacts(), candidateEvaluations: [],
@@ -93,6 +100,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
   const isReadOnly = sessionState !== 'ready' || assessV2OperationalState === 'read_only' || result?.case.status === 'reviewer-ready';
   const missing = useMemo(() => Object.keys(capabilityCopy).filter(item => !capabilities.includes(item)), [capabilities]);
   const claimOptions = useMemo(() => [...new Set([...FIELD_REGISTRY.map(field => field.fieldId), ...importedFacts.map(fact => fact.fieldId)])], [importedFacts]);
+  const v1CloneEligible = isEligibleV1CloneSource(v1Assessment);
   const structuralGaps = useMemo(() => draft ? [
     draft.primitives.length < 2 && 'at least two process primitives', !draft.edges.length && 'a process edge',
     !draft.decisionPoints.length && 'a decision point', !draft.exceptionPaths.length && 'an exception path',
@@ -147,7 +155,12 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     return () => { cancelled = true; };
   }, [handleAssessV2Boundary, processId, sessionState, tenantContext]);
   const run = async (action: () => Promise<void>) => { setBusy(true); setMessage(null); try { await action(); } catch (error) { handleAssessV2Boundary(error); setMessage(error instanceof Error ? error.message : 'The Assess V2 action could not be completed.'); } finally { setBusy(false); } };
-  const start = (clone: boolean) => run(async () => {
+  const start = (clone: boolean) => {
+    if (clone && !v1CloneEligible) {
+      setMessage(V1_CLONE_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    return run(async () => {
     if (!tenantContext) throw new Error('A server-issued workspace context is required.');
     if (discoveryState !== 'ready') throw new Error('Existing V2 case discovery must complete before a case can be created.');
     const caseId = crypto.randomUUID(); const description = processDescription || 'Decision-intelligence assessment';
@@ -167,7 +180,8 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     }
     setVersion(resource.version);
     if (!clone) setMessage('V2 case created. Add the minimum assessment structure before finalization.');
-  });
+    });
+  };
   const save = () => run(async () => { if (!tenantContext || !draft || version === null) throw new Error('No editable V2 case is open.'); const authorDraft = toAuthorDraft(draft); const resource = await saveAssessV2Draft(tenantContext, authorDraft, version); setVersion(resource.version); setSavedDraftFingerprint(authorDraftFingerprint(authorDraft)); setMessage('Draft saved as a new immutable authoring version.'); });
   const reload = () => run(async () => { if (!draft) throw new Error('No V2 case is open.'); const projection = await readAssessV2Case(draft.caseId); if (!projection) throw new Error('The V2 case is not available.'); const reloadedDraft = projection.decision ? null : draftFromAssessmentCase(projection.case, projection.name, projection.description); setVersion(projection.case.version); setImportedFacts(projection.case.importedFacts ?? []); setResult(projection.decision ? projection : null); setDraft(reloadedDraft); setSavedDraftFingerprint(reloadedDraft ? authorDraftFingerprint(reloadedDraft) : null); setMessage(projection.decision ? 'Reviewer-ready Decision Pack reloaded.' : 'Current immutable draft projection reloaded.'); });
   const finalize = () => run(async () => { if (!tenantContext || !draft || version === null) throw new Error('No V2 case is ready to finalize.'); if (hasUnsavedChanges) throw new Error('Save the current V2 authoring changes before finalization.'); if (structuralGaps.length) throw new Error(`Complete ${structuralGaps.join(', ')} before finalization.`); const resource = await finalizeAssessV2Case(tenantContext, draft.caseId, version); const projection = await readAssessV2Case(resource.caseId); if (!projection?.decision) throw new Error('The server committed finalization but no readable Decision Pack is available.'); setVersion(resource.version); setResult(projection); setDraft(null); setSavedDraftFingerprint(null); setMessage('Reviewer-ready Decision Pack finalized. It is read-only.'); });
@@ -182,12 +196,13 @@ export default function AssessV2Workspace({ processId, processName, processDescr
 
   return <section className="premium-surface rounded-3xl p-2 sm:p-6" data-testid="assess-v2-workspace" aria-labelledby="assess-v2-title">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="max-w-3xl"><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9a6a00] dark:text-[#ffcf45]">Decision intelligence foundation</p><h2 id="assess-v2-title" className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">Avala Assess V2</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Compose the least-complex operating model across process primitives. V2 is additive; it never rewrites the V1 score or recommendation.</p></div>
-      {sessionState === 'ready' && discoveryState === 'ready' && !draft && !result && <div className="flex flex-wrap gap-2"><button disabled={busy || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create)} onClick={() => start(false)} className="rounded-xl bg-[#002C4B] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Create V2 case</button><button disabled={busy || !v1Assessment || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create) || !can(ASSESS_V2_CAPABILITIES.clone)} onClick={() => start(true)} className="rounded-xl px-4 py-2.5 text-sm font-black btn-ghost disabled:opacity-50">Clone V1 as suggestions</button></div>}
+      {sessionState === 'ready' && discoveryState === 'ready' && !draft && !result && <div className="flex flex-wrap gap-2"><button disabled={busy || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create)} onClick={() => start(false)} className="rounded-xl bg-[#002C4B] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Create V2 case</button><button disabled={busy || !v1CloneEligible || !can(ASSESS_V2_CAPABILITIES.read) || !can(ASSESS_V2_CAPABILITIES.create) || !can(ASSESS_V2_CAPABILITIES.clone)} onClick={() => start(true)} className="rounded-xl px-4 py-2.5 text-sm font-black btn-ghost disabled:opacity-50">Clone V1 as suggestions</button></div>}
     </div>
     {discoveryState === 'loading' && <p className="mt-4 text-sm font-semibold text-slate-500" role="status">Checking for an existing V2 case for this process.</p>}
     {discoveryState === 'failed' && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800" role="alert">Existing V2 case lookup is unavailable. Create and clone are blocked to prevent a duplicate case.</p>}
     {assessV2OperationalState === 'read_only' && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950" role="status">{assessV2OperationalMessage || 'Avala Assess V2 changes are blocked. Existing V2 records remain available.'}</p>}
-    {v1Assessment && <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100"><strong>Legacy V1 | assess-core-2026-05.</strong> Final recommendation: {v1Assessment.scores?.recommendation?.category || 'not finalized'}. Cloned values remain unverified suggestions until reviewed.</div>}
+    {v1Assessment && <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100"><strong>Legacy V1 | {v1Assessment.scoreVersion || 'score version unavailable'}.</strong> Final recommendation: {v1Assessment.scores?.recommendation?.category || 'not finalized'}. Cloned values remain unverified suggestions until reviewed.</div>}
+    {v1Assessment && !v1CloneEligible && <p data-testid="assess-v2-clone-unavailable" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950" role="status">{V1_CLONE_UNAVAILABLE_MESSAGE}</p>}
     {missing.length > 0 && <p className="mt-4 text-xs font-semibold text-slate-500" role="status">Unavailable actions: {missing.map(item => capabilityCopy[item]).join(', ')}. Server capabilities control every mutation.</p>}
     {message && <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200" role="status">{message}</p>}
 

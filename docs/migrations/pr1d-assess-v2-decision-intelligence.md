@@ -154,3 +154,11 @@ No database migration change is required. The Edge author parser now rejects `so
 The source-boundary guard now runs all five immutable imported-evidence checks on its normal success path. Direct execution passes, while an isolated mutation probe removing the Edge-shaped immutable projection fails with `PR1D_SOURCE_BOUNDARY_MISSING`.
 
 Rollback remains V2-local disable/read-only with imported provenance and immutable history preserved. Do not restore author-controlled V1 provenance or nest mandatory protections inside an unreachable failure branch.
+
+## Final P2 V1 clone eligibility correction
+
+No database migration change is required. The client now mirrors the existing Edge and private RPC source eligibility exactly: `Approved` or `Handed Off to Docs` plus `assess-core-2026-05`. Ineligible lifecycle or score-version sources cannot invoke the clone command.
+
+The local fail-closed path retains tenant context and independently authorized V2 creation. Focused browser coverage proves Draft, Ready for Review, Changes Requested, and non-frozen Approved sources expose safe unavailable copy and send zero clone commands; an eligible Approved source still clones successfully.
+
+Rollback remains V2-local disable/read-only with immutable history preserved. Do not broaden source eligibility or route a known ineligible clone through the tenant-wide failure boundary.

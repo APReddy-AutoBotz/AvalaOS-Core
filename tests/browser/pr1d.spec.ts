@@ -32,7 +32,8 @@ type FixtureOptions = {
   failCommand?: { type: string; code: BoundaryCode };
   failV2Command?: { type: string; code: BoundaryCode };
   v2Offline?: boolean;
-  initialStatus?: 'Ready for Review' | 'Changes Requested' | 'Approved' | 'Handed Off to Docs';
+  initialStatus?: 'Draft' | 'Ready for Review' | 'Changes Requested' | 'Approved' | 'Handed Off to Docs';
+  initialScoreVersion?: string | null;
   trustedApproval?: boolean;
 };
 
@@ -81,7 +82,9 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     org_id: ORG,
     workspace_id: WS,
     version: options.initialStatus === 'Handed Off to Docs' ? 3 : 1,
-    score_version: CANONICAL_AP_ASSESSMENT.scores?.scoreVersion || 'assess-core-2026-05',
+    score_version: options.initialScoreVersion === undefined
+      ? CANONICAL_AP_ASSESSMENT.scores?.scoreVersion || ASSESS_V1_SCORE_VERSION
+      : options.initialScoreVersion,
     status: options.initialStatus,
     metadata: CANONICAL_AP_ASSESSMENT.metadata,
     responses: CANONICAL_AP_ASSESSMENT.responses,
@@ -89,7 +92,9 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     assumptions: CANONICAL_AP_ASSESSMENT.assumptions,
     completion_by_section: CANONICAL_AP_ASSESSMENT.completionBySection,
     review: CANONICAL_AP_ASSESSMENT.review,
-    scores: CANONICAL_AP_ASSESSMENT.scores,
+    scores: options.initialScoreVersion === undefined
+      ? CANONICAL_AP_ASSESSMENT.scores
+      : { ...CANONICAL_AP_ASSESSMENT.scores, scoreVersion: options.initialScoreVersion },
   } : null;
 
   const user = {
@@ -489,7 +494,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
 
 
 test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked submitted evidence', async ({ page }) => {
-  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Approved' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
   await page.getByRole('button',{name:'Clone V1 as suggestions'}).click();
   const expectedClone = cloneV1AssessmentToV2({
@@ -527,6 +532,27 @@ test('V1 clone reports real counts, exposes imported suggestions, and persists c
   expect(clone?.payload).toEqual({ caseId:clone?.payload.caseId, sourceAssessmentId:ASSESSMENT, name:'Invoice exception handling', description:'Resolve invoice exceptions before payment release.' });
   expect(clone?.payload.importedFacts).toBeUndefined();
 });
+
+for (const source of [
+  { label:'Draft lifecycle', initialStatus:'Draft' as const },
+  { label:'Ready for Review lifecycle', initialStatus:'Ready for Review' as const },
+  { label:'Changes Requested lifecycle', initialStatus:'Changes Requested' as const },
+  { label:'non-frozen score version', initialStatus:'Approved' as const, initialScoreVersion:'assess-core-2026-04' },
+]) {
+  test(`V1 clone stays locally unavailable for ${source.label} without clearing tenant context`, async ({ page }) => {
+    const fixture = await installEnterpriseFixture(page, source);
+    await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+    const cloneButton = page.getByRole('button',{name:'Clone V1 as suggestions'});
+    await expect(cloneButton).toBeDisabled();
+    await expect(page.getByTestId('assess-v2-clone-unavailable')).toContainText(
+      `Clone requires an Approved or Handed Off to Docs assessment finalized with ${ASSESS_V1_SCORE_VERSION}.`,
+    );
+    await expect(page.getByRole('button',{name:'Create V2 case'})).toBeEnabled();
+    await cloneButton.evaluate(element => (element as HTMLButtonElement).click());
+    await expect(page.getByRole('button',{name:'Create V2 case'})).toBeEnabled();
+    expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.clone_from_v1')).toHaveLength(0);
+  });
+}
 
 test('displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
