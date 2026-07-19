@@ -146,3 +146,11 @@ The V2 client/provider boundary now treats `READ_ONLY` and `FEATURE_DISABLED` fr
 The accepted source evidence-ID alphabet is `^[A-Za-z0-9._:-]+$`; the corrected clone claim validator uses the exact corresponding `^v1\\.evidence\\.[A-Za-z0-9._:-]+$` expression. The PostgreSQL 16 matrix proves a dotted identifier clones, reloads, saves, and finalizes with its complete provenance claim, while space and slash variants return `INVALID_COMMAND` with zero case, receipt, evidence, or audit side effects.
 
 Rollback remains V2-local disable/read-only with V1 available and all V2 history preserved, followed by an additive forward correction. Do not restore a global tenant downgrade for a V2-only runtime condition or a claim regex narrower or broader than the locked source-ID contract.
+
+## Final P2 author-provenance and source-guard correction
+
+No database migration change is required. The Edge author parser now rejects `source: v1-import` for browser-authored primitive and agent facts regardless of fact status. Only the trusted clone projection may carry `v1-import` facts into the private clone RPC; existing locked clone load and finalization behavior remains unchanged.
+
+The source-boundary guard now runs all five immutable imported-evidence checks on its normal success path. Direct execution passes, while an isolated mutation probe removing the Edge-shaped immutable projection fails with `PR1D_SOURCE_BOUNDARY_MISSING`.
+
+Rollback remains V2-local disable/read-only with imported provenance and immutable history preserved. Do not restore author-controlled V1 provenance or nest mandatory protections inside an unreachable failure branch.

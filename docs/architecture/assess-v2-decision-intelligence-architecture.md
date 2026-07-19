@@ -241,3 +241,11 @@ This is a compatibility-boundary correction only. It changes no V1 or V2 score, 
 The V1 clone boundary now validates generated `v1.evidence.<source-id>` claims with the same source evidence-ID alphabet already accepted by the locked V1 projection: `[A-Za-z0-9._:-]+`. Valid dotted identifiers therefore preserve their complete provenance claim. Spaces, slashes, and every other unsupported character remain `INVALID_COMMAND` before case, receipt, evidence, or audit mutation.
 
 This correction changes no V1 scoring behavior, V2 rule or decision version, capability grant, RLS policy, approval, attestation, handoff, export, or sharing scope. Rollback remains V2-local disable/read-only with immutable records preserved and V1 available, followed by an additive forward fix.
+
+## Final author-provenance and executable-guard correction
+
+Browser-authored primitive and agent facts accept only `user`, `system`, or `template` sources. `v1-import` is reserved for the server-created clone projection derived from the locked V1 source and cannot be asserted through draft authoring, including after a legitimate clone. Trusted imported facts remain immutable case provenance and continue through the private clone RPC and deterministic finalization path.
+
+The PR 1D source-boundary guard executes its imported-evidence require/forbid assertions on every successful run, outside the preceding draft-replay-order failure branch. A mutation probe that removes the client-authorable imported-evidence projection must fail the guard rather than bypass those assertions.
+
+This correction changes no scoring, rule, decision version, capability, RLS, lifecycle, approval, attestation, handoff, export, or sharing behavior. Rollback remains V2-local disable/read-only with immutable records preserved and V1 available.

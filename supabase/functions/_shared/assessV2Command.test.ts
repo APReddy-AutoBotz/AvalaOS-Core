@@ -73,6 +73,11 @@ const main = async () => {
     { ...firstFact, value: Number.NaN },
   ];
   for (const fact of invalidFacts) assert.throws(() => parseAssessV2DraftPayload({ ...authoring, primitives: [{ ...firstPrimitive, facts: { ...firstPrimitive.facts, [firstFactKey]: fact } }, ...authoring.primitives.slice(1)] }), /INVALID_COMMAND/);
+  assert.throws(
+    () => parseAssessV2DraftPayload({ ...authoring, primitives: [{ ...firstPrimitive, facts: { ...firstPrimitive.facts, [firstFactKey]: { ...firstFact, value: 'forged-imported-value', source: 'v1-import', status: 'assumed' } } }, ...authoring.primitives.slice(1)] }),
+    (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND',
+    'an ordinary author draft cannot label a primitive fact as an immutable V1 import',
+  );
   for (const evidence of [
     { ...authoring.evidenceLinks[0], status: 'submitted', validated: true },
     { ...authoring.evidenceLinks[0], status: 'validated', validated: true, owner: '', claimIds: [] },
@@ -127,6 +132,7 @@ const main = async () => {
   assert.equal(projection?.sourceProcessId, processId);
   assert.equal(projection?.sourceV1.scoreVersion, ASSESS_V1_SCORE_VERSION);
   assert.ok(projection?.importedFacts.length);
+  assert.ok(projection?.importedFacts.every(fact => fact.source === 'v1-import' && ['assumed', 'unknown'].includes(fact.status)));
   assert.ok(projection?.evidence.every(item => /^[0-9a-f-]{36}$/.test(item.id) && item.validated === false));
   assert.deepEqual(Object.values(projection!.agentNecessity).map(fact => [fact.status, fact.value]), Array.from({ length: 5 }, () => ['unknown', null]));
   const rpc = buildAssessV2RpcBody(executedClone!) as Record<string, unknown>;
@@ -136,6 +142,23 @@ const main = async () => {
   assert.deepEqual(rpc.p_imported_evidence, projection?.evidence);
   assert.deepEqual(rpc.p_agent_necessity, projection?.agentNecessity);
   assert.equal((rpc as Record<string, unknown>).serverCloneProjection, undefined);
+  const clonedDraftWithForgedImportedAgent = {
+    ...base,
+    commandType: 'assessment_v2.draft.upsert',
+    expectedVersion: 1,
+    payload: {
+      ...authoring,
+      agentNecessity: {
+        ...authoring.agentNecessity,
+        irreducibleAmbiguity: { ...authoring.agentNecessity.irreducibleAmbiguity, value: null, status: 'unknown', source: 'v1-import' },
+      },
+    },
+  };
+  assert.throws(
+    () => parseAssessV2Envelope(clonedDraftWithForgedImportedAgent),
+    (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND',
+    'a clone author draft cannot relabel an agent-necessity fact as an immutable V1 import',
+  );
   const cloneReplayOnlyCommand = { ...parseAssessV2Envelope(clone), actorId: actor } as AssessV2AtomicCommand;
   assert.deepEqual(buildAssessV2CloneReplayRpcBody(cloneReplayOnlyCommand), {
     p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,
@@ -222,6 +245,7 @@ const main = async () => {
     importedAs: 'unverified-source-facts',
     importedEvidenceClaimIds: [importedV1EvidenceClaim],
   };
+  lockedClone.importedFacts = [...projection!.importedFacts];
   lockedClone.evidence[0].claimIds = [fabricatedV1EvidenceClaim];
   const fabricatedClaimFinalize = deps();
   let fabricatedClaimAtomicFinalizeAttempts = 0;

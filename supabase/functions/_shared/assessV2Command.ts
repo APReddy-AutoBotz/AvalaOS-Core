@@ -51,14 +51,13 @@ const jsonValue = (value: unknown, seen = new Set<object>()): unknown => {
 
 const primitiveTypes = ['Capture', 'Extract', 'Classify', 'Validate', 'Calculate', 'Reconcile', 'Retrieve', 'Investigate', 'Decide', 'Approve', 'Route', 'Execute', 'Communicate', 'Monitor', 'Audit'] as const;
 const businessDispositions = ['Monitor / Do Nothing', 'Simplify', 'Redesign', 'Human-Led', 'Existing Product Configuration', 'Custom Application'] as const;
-const factSources = ['user', 'system', 'template', 'v1-import'] as const;
+const authorFactSources = ['user', 'system', 'template'] as const;
 const parseFact = (value: unknown): CaseFact => {
   const item = obj(value); exact(item, ['fieldId', 'value', 'status', 'evidenceIds', 'source']);
   const parsedValue = jsonValue(item.value);
-  const fact = { fieldId: text(item.fieldId, 160), value: parsedValue, status: enumOf(item.status, ['known', 'unknown', 'suggested', 'assumed'] as const), evidenceIds: uuids(item.evidenceIds), source: enumOf(item.source, factSources) } as CaseFact;
+  const fact = { fieldId: text(item.fieldId, 160), value: parsedValue, status: enumOf(item.status, ['known', 'unknown', 'suggested', 'assumed'] as const), evidenceIds: uuids(item.evidenceIds), source: enumOf(item.source, authorFactSources) } as CaseFact;
   if ((fact.status === 'unknown') !== (fact.value === null)) bad();
   if (fact.source === 'template' && fact.status === 'known') bad();
-  if (fact.source === 'v1-import' && fact.status !== 'assumed' && fact.status !== 'unknown') bad();
   return fact;
 };
 const agentKeys = ['irreducibleAmbiguity', 'adaptiveNextStep', 'toolOrPathSelection', 'incrementalValue', 'controllable'] as const;

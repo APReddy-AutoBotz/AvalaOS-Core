@@ -142,12 +142,12 @@ const draftReadOnlyGate = draftUpsert.indexOf("IF control.read_only THEN RAISE E
 const draftCaseLock = draftUpsert.indexOf('SELECT * INTO c FROM public.assess_v2_cases');
 if (!(firstDraftReceiptLookup >= 0 && firstDraftReceiptLookup < draftReadOnlyGate && draftReadOnlyGate < draftCaseLock)) {
   throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: exact draft receipt replay precedes the read-only mutation gate and case lock');
+}
 requireText(correction, "imported_evidence.payload - ARRAY['reviewerIds','contradictory']", 'Edge-shaped imported evidence saves while server-only metadata remains immutable');
 requireText(correction, "AND imported_evidence.id::text=x->>'id'", 'exact imported evidence round-trip creates no shadow row');
 requireText(correction, 'imported_evidence.id=current_evidence.id', 'authoritative loader prefers immutable imported evidence');
 requireText(correction, 'clone_version.version=1', 'immutable imported evidence binds version one');
 forbidText(correction, 'current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id', 'mutable draft evidence shadowing immutable import');
-}
 for (const table of [
   'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',
   'assess_v2_decision_points', 'assess_v2_exception_paths', 'assess_v2_application_assets',
