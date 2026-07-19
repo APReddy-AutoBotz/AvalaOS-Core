@@ -99,6 +99,36 @@ const parseResource = (value: unknown): AssessV2CommandResource => {
   };
 };
 
+export const projectImmutableCloneEvidence = (
+  currentEvidence: unknown[],
+  importedEvidence: unknown[],
+): { evidence: unknown[]; importedEvidenceClaimIds: string[] } => {
+  const asEvidenceObject = (value: unknown): Record<string, unknown> | null =>
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  const evidenceId = (value: unknown): string | null => {
+    const evidence = asEvidenceObject(value);
+    return evidence && typeof evidence.id === 'string' ? evidence.id : null;
+  };
+  const importedEvidenceIds = new Set(importedEvidence.map(evidenceId).filter((id): id is string => id !== null));
+  const evidence = [
+    ...currentEvidence.filter(item => {
+      const id = evidenceId(item);
+      return id === null || !importedEvidenceIds.has(id);
+    }),
+    ...importedEvidence,
+  ].sort((left, right) => (evidenceId(left) ?? '').localeCompare(evidenceId(right) ?? ''));
+  const importedEvidenceClaimIds = Array.from(new Set(importedEvidence.flatMap(item => {
+    const imported = asEvidenceObject(item);
+    return imported && Array.isArray(imported.claimIds)
+      ? imported.claimIds.filter((claimId): claimId is string =>
+        typeof claimId === 'string' && /^v1\.evidence\.[A-Za-z0-9._:-]+$/.test(claimId))
+      : [];
+  }))).sort();
+  return { evidence, importedEvidenceClaimIds };
+};
+
 const defaultTransport: AssessV2Transport = {
   async invoke(body) {
     const { data, error } = await supabase.functions.invoke('assess-v2-command', { body });
@@ -125,18 +155,39 @@ const defaultTransport: AssessV2Transport = {
       if (caseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
       if (!currentCase) return null;
       const { data: head, error: headError } = await supabase.from('assess_v2_case_versions')
-        .select('name,description,agent_necessity,source_snapshot,created_at,imported_facts')
+        .select('name,description,agent_necessity,imported_facts')
         .eq('id', currentCase.head_version_id).maybeSingle();
       if (headError || !head) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-      const child = async (table: string) => {
-        const { data, error } = await supabase.from(table).select('payload').eq('version_id', currentCase.head_version_id);
+      const child = async (table: string, versionId: string = currentCase.head_version_id) => {
+        const { data, error } = await supabase.from(table).select('payload').eq('version_id', versionId);
         if (error) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
         return (data ?? []).map(row => row.payload);
       };
-      const [primitives, edges, decisionPoints, exceptionPaths, assets, interactions, evidence] = await Promise.all([
+      const [primitives, edges, decisionPoints, exceptionPaths, assets, interactions, currentEvidence] = await Promise.all([
         child('assess_v2_primitives'), child('assess_v2_edges'), child('assess_v2_decision_points'), child('assess_v2_exception_paths'),
         child('assess_v2_application_assets'), child('assess_v2_application_interactions'), child('assess_v2_evidence_links'),
       ]);
+      let immutableCloneVersion: { id: string; source_snapshot: unknown; created_at: string } | null = null;
+      let importedEvidence: unknown[] = [];
+      if (currentCase.source_v1_assessment_id) {
+        const { data, error } = await supabase.from('assess_v2_case_versions')
+          .select('id,source_snapshot,created_at')
+          .eq('case_id', currentCase.id)
+          .eq('org_id', currentCase.org_id)
+          .eq('workspace_id', currentCase.workspace_id)
+          .eq('version', 1)
+          .eq('source_kind', 'v1_clone')
+          .maybeSingle();
+        if (error || !data || typeof data.id !== 'string' || typeof data.created_at !== 'string') {
+          throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+        }
+        immutableCloneVersion = data;
+        importedEvidence = await child('assess_v2_evidence_links', immutableCloneVersion.id);
+      }
+      const { evidence, importedEvidenceClaimIds } = projectImmutableCloneEvidence(currentEvidence, importedEvidence);
+      const cloneSource = immutableCloneVersion && isEnterpriseObject(immutableCloneVersion.source_snapshot)
+        ? immutableCloneVersion.source_snapshot
+        : null;
       return { case_id: caseId, name: head.name, description: head.description, case_snapshot: {
         id: currentCase.id,
         organizationId: currentCase.org_id,
@@ -150,8 +201,11 @@ const defaultTransport: AssessV2Transport = {
         ...(currentCase.source_v1_assessment_id ? { sourceV1: {
           assessmentId: currentCase.source_v1_assessment_id,
           scoreVersion: currentCase.source_v1_score_version,
-          clonedAt: head.created_at,
+          clonedAt: cloneSource && typeof cloneSource.clonedAt === 'string'
+            ? cloneSource.clonedAt
+            : immutableCloneVersion!.created_at,
           importedAs: 'unverified-source-facts',
+          importedEvidenceClaimIds,
         } } : {}),
         importedFacts: head.imported_facts ?? [],
         primitives, edges, decisionPoints, exceptionPaths, assets, interactions, evidence,

@@ -613,9 +613,13 @@ try {
       && Array.isArray(fact.evidenceIds) && fact.evidenceIds.length === 0
       && Object.keys(fact).sort().join(',') === 'evidenceIds,fieldId,source,status,value'
   ), true);
+  const clientAuthorableImportedEvidence = clonedEvidenceRows.map(item => {
+    const { reviewerIds: _reviewerIds, contradictory: _contradictory, ...clientProjection } = item;
+    return clientProjection;
+  });
   const cloneDraft = {
     caseId:CLONE,name:'Reviewer-authored clone',description:'',primitives:[],edges:[],decisionPoints:[],exceptionPaths:[],
-    assets:[],interactions:[],evidence:clonedEvidenceRows,agentNecessity,
+    assets:[],interactions:[],evidence:clientAuthorableImportedEvidence,agentNecessity,
   };
   const cloneMutationState = async () => ({
     domain: value(await test.query(`SELECT jsonb_build_object(
@@ -637,15 +641,31 @@ try {
   const collisionAttempts = [
     {
       key:'reject-imported-evidence-state-collision',requestNumber:131,
-      evidence:clonedEvidenceRows.map(item => item.id === evidenceId1
-        ? { ...item, status:'suggested',owner:'must-not-replace-imported-owner' }
+      evidence:clientAuthorableImportedEvidence.map(item => item.id === evidenceId1
+        ? { ...item, status:'suggested' }
         : item),
     },
     {
-      key:'reject-imported-evidence-claim-collision',requestNumber:132,
-      evidence:clonedEvidenceRows.map(item => item.id === evidenceId2
+      key:'reject-imported-evidence-owner-collision',requestNumber:132,
+      evidence:clientAuthorableImportedEvidence.map(item => item.id === evidenceId1
+        ? { ...item, owner:'must-not-replace-imported-owner' }
+        : item),
+    },
+    {
+      key:'reject-imported-evidence-claim-collision',requestNumber:133,
+      evidence:clientAuthorableImportedEvidence.map(item => item.id === evidenceId2
         ? { ...item, claimIds:[fabricatedImportedEvidenceClaim] }
         : item),
+    },
+    {
+      key:'reject-imported-evidence-provenance-collision',requestNumber:134,
+      evidence:clientAuthorableImportedEvidence.map(item => item.id === evidenceId1
+        ? { ...item, sourceType:'interview' }
+        : item),
+    },
+    {
+      key:'reject-imported-evidence-server-fields-collision',requestNumber:135,
+      evidence:clonedEvidenceRows,
     },
   ];
   for (const collision of collisionAttempts) {
@@ -664,7 +684,7 @@ try {
     [A,O,W,CLONE,1,cloneDraft,req(33),'save-clone-review',authorizationVersion],
   )));
   assert.equal(Number(savedClone.resource.version),2);
-  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_evidence_links WHERE version_id=$1',[savedClone.resource.headVersionId])).rows[0].n),0,'exact imported evidence round-trip does not create a mutable shadow row');
+  assert.equal(Number((await test.query('SELECT count(*) n FROM assess_v2_evidence_links WHERE version_id=$1',[savedClone.resource.headVersionId])).rows[0].n),0,'Edge-shaped imported evidence round-trip does not create a mutable shadow row');
   const loadedSavedClone = value(await asRole(test,'service_role',() => test.query(
     'SELECT pr1d_load_assess_v2_case($1,$2,$3,$4) value',[CLONE,O,W,2],
   )));

@@ -57,6 +57,9 @@ for (const phrase of [
   'read-only sessions continue V2 case discovery',
   'immutable version-1 clone evidence row',
   'never creates a mutable shadow row',
+  'Final Edge-shaped clone authoring and immutable client reload correction',
+  'client-authorable projection',
+  'immutable imported evidence wins every same-ID collision',
 ]) {
   if (!architecture.includes(phrase)) throw new Error(`PR1D_ARCHITECTURE_CONTRACT_MISSING: ${phrase}`);
 }
@@ -87,6 +90,9 @@ for (const phrase of [
   'altered same-ID author evidence', 'before receipt claim',
   'defensively prefers the immutable clone row',
   'assess-v2-decision-2026-07-19',
+  'Final P1/P2 Edge-shaped imported-evidence save and client reload correction',
+  'server-only evidence fields',
+  'tenant-scoped version-1 `v1_clone` row',
 ]) {
   if (!migration.includes(phrase)) throw new Error(`PR1D_MIGRATION_DOC_CONTRACT_MISSING: ${phrase}`);
 }
@@ -118,6 +124,9 @@ for (const phrase of [
   '1 passed (39.8s)', 'zero side effects',
   'exact imported evidence round-trip',
   '32 total', '0 unresolved',
+  'Final P1/P2 Edge-shaped imported-evidence save and client reload correction',
+  'PostgreSQL 16 migration matrix passed',
+  '34 total review threads',
 ]) {
   if (!evidence.includes(phrase)) throw new Error(`PR1D_EVIDENCE_CONTRACT_MISSING: ${phrase}`);
 }

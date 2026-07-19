@@ -78,7 +78,7 @@ for (const token of [
   'AND NOT EXISTS (',
   'clone_version.version=1',
   'imported_evidence.id=current_evidence.id',
-  'authored.payload IS DISTINCT FROM imported_evidence.payload',
+  "imported_evidence.payload - ARRAY['reviewerIds','contradictory']",
   "AND imported_evidence.id::text=x->>'id'",
   "errorCode','INVALID_COMMAND",
   'p_input_canonical text',

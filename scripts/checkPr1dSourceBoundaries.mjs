@@ -77,6 +77,10 @@ for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'ser
 }
 
 requireText(client, 'readEnterpriseErrorCode(payload', 'V2 client parses stable runtime boundary codes');
+requireText(client, 'projectImmutableCloneEvidence', 'client projects immutable clone evidence into later draft reads');
+requireText(client, ".eq('source_kind', 'v1_clone')", 'client binds imported evidence to the immutable clone version');
+requireText(client, "child('assess_v2_evidence_links', immutableCloneVersion.id)", 'client reloads immutable imported evidence');
+requireText(client, 'importedEvidenceClaimIds', 'client preserves imported evidence provenance claims');
 requireText(enterpriseBoundary, "code === 'FEATURE_DISABLED' || code === 'READ_ONLY'", 'V2 runtime boundary codes remain distinct');
 requireText(sessionPolicy, 'FEATURE_DISABLED: {', 'disabled mode has a distinct presentation');
 requireText(sessionPolicy, 'READ_ONLY: {', 'maintenance mode has a distinct presentation');
@@ -138,7 +142,7 @@ const draftReadOnlyGate = draftUpsert.indexOf("IF control.read_only THEN RAISE E
 const draftCaseLock = draftUpsert.indexOf('SELECT * INTO c FROM public.assess_v2_cases');
 if (!(firstDraftReceiptLookup >= 0 && firstDraftReceiptLookup < draftReadOnlyGate && draftReadOnlyGate < draftCaseLock)) {
   throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: exact draft receipt replay precedes the read-only mutation gate and case lock');
-requireText(correction, 'authored.payload IS DISTINCT FROM imported_evidence.payload', 'altered imported evidence collision fails closed');
+requireText(correction, "imported_evidence.payload - ARRAY['reviewerIds','contradictory']", 'Edge-shaped imported evidence saves while server-only metadata remains immutable');
 requireText(correction, "AND imported_evidence.id::text=x->>'id'", 'exact imported evidence round-trip creates no shadow row');
 requireText(correction, 'imported_evidence.id=current_evidence.id', 'authoritative loader prefers immutable imported evidence');
 requireText(correction, 'clone_version.version=1', 'immutable imported evidence binds version one');

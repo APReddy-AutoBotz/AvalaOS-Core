@@ -130,3 +130,11 @@ The client read boundary now permits discovery and reload in both `ready` and `r
 The corrected draft RPC compares each same-ID authored evidence payload with the locked immutable version-1 `v1_clone` row before receipt claim. Exact imported evidence round-trip is omitted from the new authoring version, while altered same-ID author evidence returns `INVALID_COMMAND` with zero receipt, version, evidence, case-head, or audit side effects. The load projection also defensively prefers the immutable clone row over any current-version collision. The rule set remains `assess-v2-rules-2026-07`, the decision version remains `assess-v2-decision-2026-07-19`, and the accepted foundation migration remains unchanged.
 
 Rollback remains V2 disable/read-only with immutable clone provenance, decisions, receipts, and audits preserved, followed by another additive forward correction. Do not restore mutable imported-evidence shadowing or block authorized reads during read-only maintenance.
+
+## Final P1/P2 Edge-shaped imported-evidence save and client reload correction
+
+The corrected draft collision check removes only the immutable row's server-only `reviewerIds` and `contradictory` keys before comparing it with author input. This admits the normal Edge-shaped payload while preserving all author-visible state, owner, claims, source provenance, and validation fields. Supplying server-only evidence fields or altering an author-visible field returns `INVALID_COMMAND` before command claim with zero domain, receipt, or audit writes; an accepted save still creates no imported-evidence shadow row.
+
+The direct browser read path now loads imported evidence from the tenant-scoped version-1 `v1_clone` row and gives those immutable rows precedence over same-ID current-version rows. It also reconstructs the canonical imported `v1.evidence.*` claim IDs and clone timestamp rather than dropping provenance on later draft reloads.
+
+The focused disposable PostgreSQL 16 matrix covers the normal Edge-shaped save and state, owner, claim, provenance, and server-only-field collisions. Rollback remains V2 disable/read-only with records preserved, followed by an additive forward correction; no destructive down-migration is authorized.

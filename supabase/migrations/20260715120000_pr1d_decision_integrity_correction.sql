@@ -691,7 +691,9 @@ BEGIN
     WHERE clone_version.case_id=c.id
       AND clone_version.version=1
       AND clone_version.source_kind='v1_clone'
-      AND authored.payload IS DISTINCT FROM imported_evidence.payload
+      AND authored.payload IS DISTINCT FROM (
+        imported_evidence.payload - ARRAY['reviewerIds','contradictory']
+      )
   ) THEN RETURN jsonb_build_object('errorCode','INVALID_COMMAND'); END IF;
   r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,'assessment_v2.draft.upsert',p_idempotency_key,p_request_id,h);
   IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response);END IF;

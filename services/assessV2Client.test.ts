@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import ts from 'typescript';
 
 import type { TenantContextProjection } from '../types';
 import { ASSESS_V2_CAPABILITIES, ASSESS_V2_COMMAND_CAPABILITY } from './assessV2/capabilities';
@@ -59,6 +60,38 @@ assert.match(presentEnterpriseBoundary('READ_ONLY').message, /read-only maintena
 assert.match(presentEnterpriseBoundary('FEATURE_DISABLED').message, /disabled/);
 assert.notEqual(presentEnterpriseBoundary('READ_ONLY').message, presentEnterpriseBoundary('FEATURE_DISABLED').message);
 const clientSource = fs.readFileSync('services/assessV2Client.ts', 'utf8');
+const immutableProjectionSource = clientSource.match(/export const projectImmutableCloneEvidence = \([\s\S]*?^};/m)?.[0];
+assert.ok(immutableProjectionSource, 'immutable clone evidence projection must remain directly testable');
+const projectionModule = { exports: {} as Record<string, unknown> };
+new Function('exports', 'module', ts.transpileModule(immutableProjectionSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText)(projectionModule.exports, projectionModule);
+const projectImmutableCloneEvidence = projectionModule.exports.projectImmutableCloneEvidence as (
+  currentEvidence: unknown[],
+  importedEvidence: unknown[],
+) => { evidence: unknown[]; importedEvidenceClaimIds: string[] };
+const immutableImportedEvidence = {
+  id: '11111111-1111-4111-8111-111111111111',
+  claimIds: ['v1.responses.processStructure.trigger', 'v1.evidence.legacy-evidence-1'],
+  sourceType: 'document',
+  status: 'submitted',
+  validated: false,
+};
+const authoredEvidence = {
+  id: '22222222-2222-4222-8222-222222222222',
+  claimIds: ['primitive.intake.structure'],
+  sourceType: 'test',
+  status: 'submitted',
+  validated: false,
+};
+const alteredImportedCollision = { ...immutableImportedEvidence, claimIds: ['fabricated.claim'] };
+const laterCloneProjection = projectImmutableCloneEvidence(
+  [authoredEvidence, alteredImportedCollision],
+  [immutableImportedEvidence],
+);
+assert.deepEqual(laterCloneProjection.evidence, [immutableImportedEvidence, authoredEvidence]);
+assert.deepEqual(laterCloneProjection.importedEvidenceClaimIds, ['v1.evidence.legacy-evidence-1']);
+
 assert.match(clientSource, /readEnterpriseErrorCode\(payload,/);
 assert.match(clientSource, /evidenceIds\.has\(evidence\.id\)/);
 assert.match(clientSource, /throw new EnterpriseBoundaryError\('COMMAND_UNAVAILABLE'\)/);
@@ -70,4 +103,8 @@ assert.match(clientSource, /\.eq\('workspace_id', workspaceId\)/);
 assert.match(clientSource, /\.eq\('process_id', processId\)/);
 assert.match(clientSource, /\.is\('deleted_at', null\)/);
 assert.match(clientSource, /\.in\('status', \['draft', 'reviewer_ready'\]\)/);
+assert.match(clientSource, /\.eq\('case_id', currentCase\.id\)[\s\S]*\.eq\('org_id', currentCase\.org_id\)[\s\S]*\.eq\('workspace_id', currentCase\.workspace_id\)[\s\S]*\.eq\('version', 1\)[\s\S]*\.eq\('source_kind', 'v1_clone'\)/);
+assert.match(clientSource, /child\('assess_v2_evidence_links', immutableCloneVersion\.id\)/);
+assert.match(clientSource, /clonedAt: cloneSource && typeof cloneSource\.clonedAt === 'string'/);
+assert.match(clientSource, /importedEvidenceClaimIds,/);
 console.log('Assess V2 client boundary regression passed.');
