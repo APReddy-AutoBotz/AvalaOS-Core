@@ -265,3 +265,7 @@ The browser exposes V1-to-V2 clone only when the source assessment matches the s
 The clone control is disabled for an ineligible source, the component presents local safe-unavailable copy, and the start path returns before any command or enterprise-boundary handler. Create V2 remains available when independently authorized, so a known clone ineligibility cannot clear tenant context or block unrelated work.
 
 This correction changes no server eligibility, score, rule, decision version, capability, RLS, lifecycle, approval, or V1 behavior. Rollback remains V2-local disable/read-only with V1 available.
+
+## PR 1E governed review extension
+
+PR 1E does not redesign this decision model. It binds append-only assignment, attestation, resolution, Govern, and Studio-source records to the exact organization, workspace, case, case version, decision, evidence, claims, actor, and authorization version. `Verified` becomes available only after every current material required claim has an accepted independent server-authoritative attestation. Any new case revision requires new finalization and a new decision; prior review cannot authorize it.

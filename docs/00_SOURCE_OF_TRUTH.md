@@ -93,7 +93,10 @@ Do not read the full historical planning/evidence corpus by default.
 2. PR 1A, Platform Safety and Fail-Closed Runtime Foundation, is accepted through PR #206.
 3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is accepted on `main` at `de87c86`.
 4. PR #208 / PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is accepted at the PR #208 merge baseline.
-6. Continue through Studio/private artifacts, Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
+5. PR 1D is accepted; PR 1E adds V2 governed review, approval, action-specific Govern resolution, and durable Studio source handoff.
+6. PR 1F remains reserved for economics and calibration.
+7. Application Portfolio & AI-Assisted Modernization Assessment follows PR 1F; broader Studio/private-artifact work remains later.
+8. Continue through Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
 PR 1C remains one substantial vertical PR. It does not authorize deployment, live-system access, later workstreams, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.
 
@@ -106,10 +109,8 @@ PR 1C remains one substantial vertical PR. It does not authorize deployment, liv
 
 ## PR 1D Current Authority
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. Current authority baseline: `30883509b46b848eaf1d0d5fc4bb5898bade98a3`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
+PR 1D accepted at closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` (accepted head `2c288870f14755c24da4f8c6465271cc2365ebbc`, merge `08c5d70649b1af83de267a1a0c909e3fec4b7667`). PR 1E is the active governed-review implementation boundary.
 
 V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
-
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+V1 `assess-core-2026-05` behavior remains unchanged. PR 1E appends review authority without mutating PR 1D decisions. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven.

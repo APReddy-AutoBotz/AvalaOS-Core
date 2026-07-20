@@ -144,7 +144,7 @@ Current candidate status: server-issued organization/workspace projection, enter
 
 Primary order:
 
-`P0 gate → 1A → 1B → 1C → 2 → 3 → 4 → 6`
+`P0 gate → 1A → 1B → 1C → PR 1D accepted → PR 1E governed review/approval/Govern/handoff → PR 1F economics/calibration → Application Portfolio & AI-Assisted Modernization Assessment → broader Studio/private artifact work → 3 → 4 → 6`
 
 Workstream 5 is demand-driven, not a bucket for quality deferred from product PRs.
 

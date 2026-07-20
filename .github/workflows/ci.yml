@@ -49,6 +49,9 @@ jobs:
       - name: PR 1D V1 compatibility and V2 decision-intelligence source lint
         run: npm run lint:pr1d
 
+      - name: PR 1E governed review authority source lint
+        run: npm run lint:pr1e
+
       - name: Static AI boundary scan
         run: npm run test:ai-boundary-static
 
@@ -66,6 +69,9 @@ jobs:
 
       - name: PR 1D compatibility, rules, commands, presentation, coverage, and docs gates
         run: npm run test:pr1d
+
+      - name: PR 1E review, approval, Govern, handoff, coverage, and docs gates
+        run: npm run test:pr1e
 
       - name: Production build
         run: npm run build
@@ -89,6 +95,8 @@ jobs:
         run: npm run test:browser
       - name: Run PR 1D browser gates with the dedicated pilot-mode configuration
         run: npm run test:browser:pr1d
+      - name: Run PR 1E desktop/mobile accessibility and viewport gates
+        run: npm run test:browser:pr1e
   pr1a-migrations:
     name: PR 1A Migration Gates
     runs-on: ubuntu-latest
@@ -212,6 +220,33 @@ jobs:
         run: npm ci
       - name: Fresh, PR 1C upgrade, populated, ACL, RLS, hash, idempotency, concurrency, audit, and rollback checks
         run: npm run test:migrations:pr1d
+
+  pr1e-migrations:
+    name: PR 1E PostgreSQL 16 Review, Govern, Studio, RLS, and Private-RPC Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PR1E_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fresh and ordered-upgrade schema, forced-RLS, and private-RPC ACL checks
+        run: npm run test:migrations:pr1e
 
   supabase-smoke:
     name: Supabase Smoke Checks

@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql',import.meta.url),'utf8');
+for(const capability of ['assess.v2.review','assess.v2.evidence.attest','assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff'])assert.ok(migration.includes(capability),capability);
+for(const command of ['review.assign','evidence.attest','review.resolve','revision.start','govern.resolve','studio.handoff'])assert.ok(migration.includes(`assessment_v2.${command}`),command);
+for(const table of ['review_assignments','evidence_attestations','review_resolutions','govern_resolutions','studio_handoffs','studio_sources'])assert.ok(migration.includes(`assess_v2_${table}`),table);
+assert.match(migration,/REVOKE ALL ON FUNCTION public\.pr1e_review_command[\s\S]*FROM PUBLIC,anon,authenticated/);
+assert.match(migration,/GRANT EXECUTE ON FUNCTION public\.pr1e_[\s\S]*TO service_role/);
+assert.ok(migration.includes('FORCE ROW LEVEL SECURITY'));
+assert.ok(migration.includes('pr1e_review_projection'));
+assert.ok(migration.includes('assess_v2_review_queue'));
+assert.ok(migration.includes('assess_v2_review_workspace'));
+assert.ok(!migration.includes("UPDATE public.assess_v2_decision_versions"),'PR 1D decisions must remain immutable');
+console.log('PR 1E authority/persistence source contract passed');

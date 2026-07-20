@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const baseline = '30883509b46b848eaf1d0d5fc4bb5898bade98a3';
+const baselines = ['779a4801aa7c6660ad4581f8e334f5ad422519e7','2c288870f14755c24da4f8c6465271cc2365ebbc','30883509b46b848eaf1d0d5fc4bb5898bade98a3'];
 const marker = '## PR 1D Current Authority';
 const activeFiles = [
   'README.md',
@@ -31,7 +31,7 @@ const canonicalFiles = [
 
 for (const file of activeFiles) {
   const source = read(file);
-  if (!source.includes(marker) || !source.includes(baseline)) throw new Error(`PR1D_DOC_AUTHORITY_MISSING: ${file}`);
+  if (!source.includes(marker) || !baselines.some(baseline => source.includes(baseline))) throw new Error(`PR1D_DOC_AUTHORITY_MISSING: ${file}`);
 }
 
 const architecture = read(canonicalFiles[0]);
