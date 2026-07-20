@@ -37,6 +37,7 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
   const [conditions, setConditions] = useState('');
   const [governRationale, setGovernRationale] = useState('');
   const capabilities = tenantContext?.capabilities ?? [];
+  const hasReviewAccess = capabilities.some(capability => Object.values(ASSESS_V2_REVIEW_CAPABILITIES).includes(capability as never));
   const isReadOnly = sessionState !== 'ready' || assessV2OperationalState === 'read_only';
   const can = (capability: string) => !isReadOnly && capabilities.includes(capability);
 
@@ -48,6 +49,7 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
 
   const load = useCallback(async (caseId?: string) => {
     if (!tenantContext) { setLoadState('empty'); setMessage('A server-issued workspace context is required.'); return; }
+    if (!hasReviewAccess) { setLoadState('empty'); setMessage('No governed review capability is assigned.'); return; }
     setLoadState('loading'); setMessage('Loading assigned reviews.');
     try {
       const assigned = await readAssessV2ReviewQueue(tenantContext);
@@ -57,9 +59,9 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
       const current = await readAssessV2ReviewWorkspace(tenantContext, target);
       setSelectedCaseId(target); setReview(current); setLoadState('ready'); setMessage('Current committed review loaded.');
     } catch (error) {
-      handleAssessV2Boundary(error); setReview(null); setLoadState('failed'); setMessage(describeReviewError(error, online));
+      setReview(null); setLoadState('failed'); setMessage(describeReviewError(error, online));
     }
-  }, [handleAssessV2Boundary, initialCaseId, online, selectedCaseId, tenantContext]);
+  }, [hasReviewAccess, initialCaseId, online, selectedCaseId, tenantContext]);
 
   useEffect(() => { void load(initialCaseId); }, [initialCaseId, tenantContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
