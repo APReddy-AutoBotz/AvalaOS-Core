@@ -4,7 +4,7 @@ This ledger records the current canonical milestone status. Evidence links are h
 
 ## Active Enterprise Workstream 1
 
-PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. The active boundary is the single substantial PR 1C candidate on `codex/pr-1c-enterprise-assess-ui-govern-studio-handoff`.
+PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #209 / PR 1D is merged and post-merge verified on `main`.
 
 - Maturity: credible deterministic enterprise demo with substantial source-level governance scaffolding; not a coherent server-authoritative, tenant-safe pilot or production platform.
 - P0: AP classified `extract-document-text` as **NOT DEPLOYED** after manual inspection; the repository did not access live infrastructure or record identifiers.
@@ -126,8 +126,8 @@ The acceleration plan, target architecture, active risk register, and `PLANS.md`
 - KlarityFlow Health is not an active AvalaOS Core milestone in this ledger.
 - TBD evidence placeholders are intentionally removed; future work uses "Not created" until evidence exists.
 
-## PR 1D Current Authority
+## PR 1D Post-Merge Authority
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
 
-| Workstream 1 PR 1D | WS1-PR1D | Active implementation candidate | AP/Codex | V1 compatibility; V2 rules, persistence, commands, working UI, Decision Pack, tests, evidence, rollback | V1 unchanged; reviewer-ready V2; no approval/handoff; exact local/CI evidence | `docs/architecture/assess-v2-decision-intelligence-architecture.md` | One draft PR; no merge, tag, deployment, or live validation |
+V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
