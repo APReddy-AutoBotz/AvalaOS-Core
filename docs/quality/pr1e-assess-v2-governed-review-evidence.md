@@ -12,7 +12,13 @@ Additive immutable V2 review assignments, evidence attestations, review resoluti
 - `npm audit --audit-level=moderate`: passed; zero vulnerabilities.
 - TypeScript and Edge typecheck: passed.
 - `npm run test:pr1e`: passed.
-- Focused PR 1E coverage: 97.42% lines, 97.62% functions, 86.18% branches.
+- Focused PR 1E coverage after governed-review correction: 98.47% lines, 97.78% functions, 83.72% branches.
+- The corrected PR 1E migration validates every command-specific state, lineage, separation-of-duty, evidence, review, Govern, control-disposition, and handoff condition before receipt claim; exact succeeded replay remains before mutable-resource checks.
+- Review persistence separates `review_schema_version` from `review_sequence` and binds the immutable decision ID/version and `decision.source_version_id` authoring version. Assignment and acting-reviewer authorization versions are retained separately.
+- Approval confidence uses the assignment's locked material-claim registry, not the set of evidence rows. Missing, unrelated, expired, contradictory, rejected, needs-information, or unattested evidence cannot yield `Verified`.
+- Requested-change revision copies the decision source version's immutable `source_snapshot`, `imported_facts`, imported evidence rows, and claim identifiers without accepting browser replacements.
+- Every PR 1E direct-table read policy requires current workspace capability plus an active same-tenant parent case and valid case/decision/source ancestry. PostgreSQL 16 CI owns executable cross-tenant and parent-soft-delete coverage.
+- Govern records one explicit disposition per server-derived required control. Studio handoff rejects absent, unknown, unresolved, or unsatisfied conditional controls.
 - Retained deterministic V1 scoring, PR 1A, PR 1B, PR 1C, and corrected PR 1D gates: passed through the recorded focused reruns; the initial aggregate run stopped only on stale additive-capability test expectations, which were corrected.
 - AI boundary: 15 patterns, 742 allowed, zero forbidden, zero stale allowlist entries.
 - Secret hygiene: five rules, 759 allowed classified hits, zero forbidden, zero tracked environment files.

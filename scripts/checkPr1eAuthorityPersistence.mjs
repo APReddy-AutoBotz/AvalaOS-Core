@@ -11,4 +11,17 @@ assert.ok(migration.includes('pr1e_review_projection'));
 assert.ok(migration.includes('assess_v2_review_queue'));
 assert.ok(migration.includes('assess_v2_review_workspace'));
 assert.ok(!migration.includes("UPDATE public.assess_v2_decision_versions"),'PR 1D decisions must remain immutable');
+const claim=migration.indexOf('r:=public.pr1b_claim_command');
+for(const validation of ["IF p_command='assessment_v2.review.assign'","ELSIF p_command='assessment_v2.evidence.attest'","ELSIF p_command='assessment_v2.review.resolve'","ELSIF p_command='assessment_v2.revision.start'","ELSIF p_command='assessment_v2.govern.resolve'","ELSIF p_command='assessment_v2.studio.handoff'"]){
+  const position=migration.indexOf(validation);assert.ok(position>0&&position<claim,`${validation} must validate before receipt claim`);
+}
+assert.ok(migration.indexOf("IF r.id IS NOT NULL")<migration.indexOf('SELECT * INTO c FROM public.assess_v2_cases'),'successful replay must precede mutable-resource checks');
+for(const token of ['source_version_id','source_case_version','decision_version','review_schema_version','review_sequence','assigned_reviewer_authorization_version','reviewer_authorization_version'])assert.ok(migration.includes(token),token);
+assert.match(migration,/d\.source_version_id,sv\.version/,'review provenance derives from the immutable decision source version');
+assert.match(migration,/material_claims jsonb NOT NULL/);
+assert.match(migration,/jsonb_array_length\(a\.material_claims\)=0/);
+assert.match(migration,/sv\.source_snapshot,sv\.imported_facts/,'revision preserves immutable clone provenance');
+assert.match(migration,/public\.pr1e_can_read_lineage\(org_id,workspace_id,case_id,decision_id\)/);
+assert.match(migration,/controlDispositions/);
+assert.match(migration,/conditionSatisfied/);
 console.log('PR 1E authority/persistence source contract passed');

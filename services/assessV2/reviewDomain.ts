@@ -16,7 +16,8 @@ export interface ReviewBinding {
 
 export interface ReviewAssignment extends ReviewBinding {
   id: string;
-  reviewVersion: typeof ASSESS_V2_REVIEW_VERSION;
+  reviewSchemaVersion: typeof ASSESS_V2_REVIEW_VERSION;
+  reviewSequence: number;
   authorActorId: string;
   reviewerActorId: string;
   reviewerAuthorizationVersion: number;
@@ -46,7 +47,8 @@ export interface EvidenceAttestation extends ReviewBinding {
 export interface ReviewResolution extends ReviewBinding {
   id: string;
   assignmentId: string;
-  reviewVersion: typeof ASSESS_V2_REVIEW_VERSION;
+  reviewSchemaVersion: typeof ASSESS_V2_REVIEW_VERSION;
+  reviewSequence: number;
   status: Exclude<ReviewStatus, 'reviewer_ready' | 'in_review'>;
   reviewerActorId: string;
   reviewerAuthorizationVersion: number;
@@ -86,9 +88,7 @@ export const validateAttestation = (assignment: ReviewAssignment, evidence: Evid
   if (assignment.id !== attestation.assignmentId || evidence.id !== attestation.evidenceId || !exactSet(evidence.claimIds, attestation.claimIds)) {
     throw new ReviewDomainError('INVALID_BINDING', 'The review resource was not found.');
   }
-  if (attestation.reviewerActorId !== assignment.reviewerActorId || attestation.reviewerAuthorizationVersion !== assignment.reviewerAuthorizationVersion) {
-    throw new ReviewDomainError('STALE_VERSION', 'Reviewer authority changed.');
-  }
+  if (attestation.reviewerActorId !== assignment.reviewerActorId || !Number.isSafeInteger(attestation.reviewerAuthorizationVersion) || attestation.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
   if (attestation.reviewerActorId === assignment.authorActorId || attestation.reviewerActorId === evidence.submittedBy || attestation.evidenceSubmitterActorId !== evidence.submittedBy) {
     throw new ReviewDomainError('SEPARATION_OF_DUTY', 'Independent evidence review is required.');
   }
@@ -117,7 +117,7 @@ export const resolveReview = (assignment: ReviewAssignment, status: ReviewResolu
   validateReviewAssignment(assignment);
   assertBinding(assignment, resolution);
   if (resolution.assignmentId !== assignment.id || resolution.reviewerActorId !== assignment.reviewerActorId) throw new ReviewDomainError('SEPARATION_OF_DUTY', 'Independent decision review is required.');
-  if (resolution.reviewerAuthorizationVersion !== assignment.reviewerAuthorizationVersion) throw new ReviewDomainError('STALE_VERSION', 'Reviewer authority changed.');
+  if (!Number.isSafeInteger(resolution.reviewerAuthorizationVersion) || resolution.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
   if (resolution.status !== status || !resolution.rationale.trim()) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'A valid resolution and rationale are required.');
   const confidence = deriveReviewedConfidence(assignment, claims, evidence, attestations, resolution.resolvedAt);
   if (status === 'approved' && (confidence !== 'Verified' || attestations.some(item => { try { assertBinding(assignment, item); } catch { return false; } return item.outcome !== 'accepted'; }))) {
@@ -136,14 +136,28 @@ export const startRevision = (binding: ReviewBinding, resolution: ReviewResoluti
 export type GovernActionCategory = 'allowed' | 'approval-bound' | 'evidence-bound' | 'prohibited';
 export interface GovernAction { actionId: string; category: GovernActionCategory; highImpact: boolean; financial: boolean; externalCommunication: boolean; irreversible: boolean }
 export interface GovernResolution extends ReviewBinding {
-  id: string; reviewResolutionId: string; reviewVersion: string; resolverActorId: string; rationale: string;
-  actions: readonly GovernAction[]; requiredControls: readonly string[]; rollbackRequirements: readonly string[];
+  id: string; reviewResolutionId: string; reviewSchemaVersion: string; reviewSequence: number; resolverActorId: string; rationale: string;
+  actions: readonly GovernAction[]; requiredControls: readonly GovernControlDisposition[]; rollbackRequirements: readonly string[];
   monitoringRequirements: readonly string[]; reviewFrequency: string; accountableOwner: string; resolvedAt: string;
 }
 
+export type GovernControlStatus = 'resolved' | 'conditionally-resolved' | 'unresolved';
+export interface GovernControlDisposition {
+  controlId: string;
+  status: GovernControlStatus;
+  condition?: string;
+  owner?: string;
+  dueDate?: string;
+  conditionSatisfied?: boolean;
+}
+
+const controlsComplete = (controls: readonly GovernControlDisposition[]): boolean => controls.length > 0 && controls.every(control =>
+  control.status === 'resolved' || (control.status === 'conditionally-resolved' && Boolean(control.condition?.trim()) && Boolean(control.owner?.trim()) && Boolean(control.dueDate) && control.conditionSatisfied === true),
+);
+
 export const validateGovernResolution = (assignment: ReviewAssignment, review: ReviewResolution, deterministicActions: readonly GovernAction[], govern: GovernResolution): void => {
   assertBinding(assignment, govern);
-  if (review.status !== 'approved' || govern.reviewResolutionId !== review.id || govern.reviewVersion !== review.reviewVersion) throw new ReviewDomainError('STALE_VERSION', 'Govern requires the current approved review.');
+  if (review.status !== 'approved' || govern.reviewResolutionId !== review.id || govern.reviewSchemaVersion !== review.reviewSchemaVersion || govern.reviewSequence !== review.reviewSequence) throw new ReviewDomainError('STALE_VERSION', 'Govern requires the current approved review.');
   if (govern.resolverActorId === assignment.authorActorId) throw new ReviewDomainError('SEPARATION_OF_DUTY', 'The case author cannot resolve Govern.');
   if (deterministicActions.some(action => (action.category === 'prohibited' && govern.actions.find(item => item.actionId === action.actionId)?.category !== 'prohibited') || (action.category === 'approval-bound' && govern.actions.find(item => item.actionId === action.actionId)?.category === 'allowed'))) {
     throw new ReviewDomainError('PROHIBITED_ACTION', 'Govern cannot weaken deterministic action constraints.');
@@ -152,16 +166,17 @@ export const validateGovernResolution = (assignment: ReviewAssignment, review: R
     throw new ReviewDomainError('SEPARATION_OF_DUTY', 'High-impact Govern resolution requires an additional independent actor.');
   }
   if (!govern.rationale.trim() || !govern.accountableOwner.trim() || !govern.reviewFrequency.trim()) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Govern provenance and ownership are required.');
+  if (!controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Every required Govern control needs an explicit satisfied disposition.');
 };
 
 export interface StudioHandoffPackage {
   binding: ReviewBinding; decision: DecisionPackV2; evidence: readonly EvidenceSubmission[]; attestations: readonly EvidenceAttestation[];
-  review: ReviewResolution; govern: GovernResolution; schemaVersion: string; ruleSetVersion: string; reviewVersion: string;
+  review: ReviewResolution; govern: GovernResolution; schemaVersion: string; ruleSetVersion: string; reviewSchemaVersion: string; reviewSequence: number;
   canonicalHashes: Readonly<Record<string, string>>; sourceReferences: readonly string[]; createdAt: string;
 }
 
 export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: DecisionPackV2, evidence: readonly EvidenceSubmission[], attestations: readonly EvidenceAttestation[], review: ReviewResolution, govern: GovernResolution, canonicalHashes: Readonly<Record<string, string>>, sourceReferences: readonly string[], createdAt: string): StudioHandoffPackage => {
   assertBinding(binding, review); assertBinding(binding, govern);
-  if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, and Govern resolution.');
-  return Object.freeze({ binding: Object.freeze({ ...binding }), decision, evidence: Object.freeze([...evidence]), attestations: Object.freeze([...attestations]), review, govern, schemaVersion: decision.schemaVersion, ruleSetVersion: decision.ruleSetVersion, reviewVersion: review.reviewVersion, canonicalHashes: Object.freeze({ ...canonicalHashes }), sourceReferences: Object.freeze([...sourceReferences]), createdAt });
+  if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id || !controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, Govern resolution, and satisfied controls.');
+  return Object.freeze({ binding: Object.freeze({ ...binding }), decision, evidence: Object.freeze([...evidence]), attestations: Object.freeze([...attestations]), review, govern, schemaVersion: decision.schemaVersion, ruleSetVersion: decision.ruleSetVersion, reviewSchemaVersion: review.reviewSchemaVersion, reviewSequence: review.reviewSequence, canonicalHashes: Object.freeze({ ...canonicalHashes }), sourceReferences: Object.freeze([...sourceReferences]), createdAt });
 };
