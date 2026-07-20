@@ -15,17 +15,19 @@ const foundationName = '20260714120000_pr1d_assess_v2_decision_intelligence.sql'
 const correctionName = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundaryName = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const factValidationName = '20260719130000_pr1d_author_fact_validation.sql';
+const hardeningName = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';
 const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d')).sort();
-for (const expected of [foundationName, correctionName, evidenceBoundaryName, factValidationName]) {
+for (const expected of [foundationName, correctionName, evidenceBoundaryName, factValidationName, hardeningName]) {
   if (!migrationNames.includes(expected)) throw new Error(`PR1D_MIGRATION_MISSING: ${expected}`);
 }
-if (migrationNames.length !== 4) throw new Error(`PR1D_MIGRATION_COUNT: expected 4, received ${migrationNames.length}`);
+if (migrationNames.length !== 5) throw new Error(`PR1D_MIGRATION_COUNT: expected 5, received ${migrationNames.length}`);
 
 const foundation = read(`supabase/migrations/${foundationName}`);
 const correction = read(`supabase/migrations/${correctionName}`);
 const evidenceBoundary = read(`supabase/migrations/${evidenceBoundaryName}`);
 const factValidation = read(`supabase/migrations/${factValidationName}`);
-const migrations = `${foundation}\n${correction}\n${evidenceBoundary}\n${factValidation}`;
+const hardening = read(`supabase/migrations/${hardeningName}`);
+const migrations = `${foundation}\n${correction}\n${evidenceBoundary}\n${factValidation}\n${hardening}`;
 const capabilities = read('services/assessV2/capabilities.ts');
 const command = read('supabase/functions/_shared/assessV2Command.ts');
 const handlers = read('supabase/functions/_shared/assessV2Handlers.ts');
@@ -156,6 +158,13 @@ for (const [fragment, label] of [
   ['pr1d_author_agent_necessity_valid', 'canonical primitive and top-level agent fact validation'],
   ["RETURN jsonb_build_object('errorCode','INVALID_COMMAND')", 'invalid direct RPC envelope'],
 ]) requireText(factValidation, fragment, label);
+for (const [fragment, label] of [
+  ["jsonb_typeof(p_fact->'source')<>'string'", 'author fact source must be an explicit JSON string'],
+  ["request_payload jsonb:=jsonb_build_object(", 'create idempotency uses a structured request payload'],
+  ["digest(request_payload::text,'sha256')", 'create idempotency hashes canonical JSON'],
+  ['existing_version.name IS NOT DISTINCT FROM p_name', 'legacy create replay binds persisted name'],
+  ['existing_version.description IS NOT DISTINCT FROM p_description', 'legacy create replay binds persisted description'],
+]) requireText(hardening, fragment, label);
 const draftFactValidation = draftUpsert.indexOf('IF NOT public.pr1d_authoring_facts_valid(p_authoring)');
 const draftCommandClaim = draftUpsert.indexOf('r:=public.pr1b_claim_command');
 if (!(draftFactValidation >= 0 && draftFactValidation < draftCommandClaim)) {

@@ -278,9 +278,9 @@ try {
   let authorizationVersion = Number((await test.query(
     'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2', [O, A],
   )).rows[0].version);
-  const callCreate = (id, key, number, processId = id, client = test) => asRole(client, 'service_role', () => client.query(
+  const callCreate = (id, key, number, processId = id, client = test, name = 'V2 Case', description = '') => asRole(client, 'service_role', () => client.query(
     'SELECT pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
-    [A, O, W, id, processId, 'V2 Case', '', req(number), key, authorizationVersion],
+    [A, O, W, id, processId, name, description, req(number), key, authorizationVersion],
   ));
   const createIds = [CASE, CASE2, NEG_DIGEST, NEG_BINDING, NEG_SNAPSHOT, NEG_AUDIT, NEG_INPUT_HASH, NEG_EVIDENCE_HASH, NEG_OUTPUT_HASH, NEG_WORKSPACE, NEG_CASE, NEG_SOURCE_VERSION, NEG_RULE_SET, NEG_ALTERED_SNAPSHOT, NEG_CANONICAL_ORDER, NEG_FABRICATED_EVIDENCE];
   for (let index = 0; index < createIds.length; index += 1) {
@@ -301,6 +301,18 @@ try {
   await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [CREATE_REPLAY_PROCESS, O, W, 'Create replay parent', 'Draft']);
   const createdForReplay = value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 102, CREATE_REPLAY_PROCESS));
   assert.equal(createdForReplay.outcome, 'committed');
+  const CREATE_HASH_CASE = '31000000-0000-4000-8000-000000000133';
+  const CREATE_HASH_PROCESS = '12000000-0000-4000-8000-000000000133';
+  await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [CREATE_HASH_PROCESS, O, W, 'Create hash fixture', 'Draft']);
+  const createHashCommitted = value(await callCreate(CREATE_HASH_CASE, 'create-hash-delimiter', 151, CREATE_HASH_PROCESS, test, 'A|B', 'C'));
+  assert.equal(createHashCommitted.outcome, 'committed');
+  const legacyCreateHash = digest([O,W,CREATE_HASH_CASE,CREATE_HASH_PROCESS,'A|B','C'].join('|'));
+  await test.query("UPDATE assess_command_receipts SET request_hash=$1 WHERE idempotency_key='create-hash-delimiter'", [legacyCreateHash]);
+  assert.equal(value(await callCreate(CREATE_HASH_CASE, 'create-hash-delimiter', 152, CREATE_HASH_PROCESS, test, 'A|B', 'C')).outcome, 'replayed', 'exact legacy create receipt remains replayable');
+  assert.equal(value(await callCreate(CREATE_HASH_CASE, 'create-hash-delimiter', 153, CREATE_HASH_PROCESS, test, 'A', 'B|C')).errorCode, 'IDEMPOTENCY_CONFLICT', 'delimiter-colliding create payload is rejected');
+  assert.deepEqual((await test.query('SELECT name,description FROM assess_v2_case_versions WHERE case_id=$1 AND version=1', [CREATE_HASH_CASE])).rows[0], { name:'A|B',description:'C' });
+  assert.equal(Number((await test.query("SELECT count(*) n FROM assess_command_receipts WHERE idempotency_key='create-hash-delimiter'")).rows[0].n), 1);
+  assert.equal(Number((await test.query("SELECT count(*) n FROM privileged_audit_events WHERE action='assessment_v2.create' AND resource_id=$1", [CREATE_HASH_CASE])).rows[0].n), 1);
   const createStateBeforeDelete = await createReplayState();
   await test.query('UPDATE assess_processes SET deleted_at=now() WHERE id=$1', [CREATE_REPLAY_PROCESS]);
   const createAfterParentDelete = value(await callCreate(CREATE_REPLAY_CASE, 'create-replay-after-delete', 103, CREATE_REPLAY_PROCESS));
@@ -817,6 +829,18 @@ try {
     {
       key:'reject-author-null-non-unknown',requestNumber:150,
       mutate:draft => { const fact=draft.agentNecessity.controllable; fact.value=null; fact.status='assumed'; },
+    },
+    {
+      key:'reject-author-primitive-null-source',requestNumber:154,
+      mutate:draft => { draft.primitives[0].facts['primitive.rulesStable'].source=null; },
+    },
+    {
+      key:'reject-author-primitive-agent-null-source',requestNumber:155,
+      mutate:draft => { draft.primitives[0].agentNecessity.controllable.source=null; },
+    },
+    {
+      key:'reject-author-top-agent-null-source',requestNumber:156,
+      mutate:draft => { draft.agentNecessity.controllable.source=null; },
     },
   ];
   for (const attempt of invalidAuthoringAttempts) {

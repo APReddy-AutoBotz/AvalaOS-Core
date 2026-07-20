@@ -13,6 +13,10 @@ const factValidation = fs.readFileSync(
   'supabase/migrations/20260719130000_pr1d_author_fact_validation.sql',
   'utf8',
 );
+const hardening = fs.readFileSync(
+  'supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql',
+  'utf8',
+);
 const compatibility = fs.readFileSync('services/assessV1Compatibility.ts', 'utf8');
 const handler = fs.readFileSync('supabase/functions/_shared/assessV2Handlers.ts', 'utf8');
 const cloneContractVersion = compatibility.match(/ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION = '([^']+)'/)?.[1];
@@ -134,6 +138,18 @@ assert.ok(factGuard >= 0 && receiptClaim > factGuard && versionInsert > receiptC
 assert.doesNotMatch(
   factValidation,
   /GRANT EXECUTE ON FUNCTION public\.pr1d_(?:author_fact_valid|author_agent_necessity_valid|authoring_facts_valid)[^;]+TO (?:PUBLIC|anon|authenticated|service_role)/,
+);
+for (const token of [
+  "jsonb_typeof(p_fact->'source')<>'string'",
+  "request_payload jsonb:=jsonb_build_object(",
+  "h text:=encode(public.digest(request_payload::text,'sha256'),'hex')",
+  "legacy_h text:=encode(public.digest(concat_ws('|',p_org_id,p_workspace_id,p_case_id,p_process_id,p_name,p_description),'sha256'),'hex')",
+  'existing_version.name IS NOT DISTINCT FROM p_name',
+  'existing_version.description IS NOT DISTINCT FROM p_description',
+]) assert.ok(hardening.includes(token), `hardening migration missing ${token}`);
+assert.ok(
+  hardening.indexOf("r.request_hash<>legacy_h") < hardening.indexOf('existing_version.name IS NOT DISTINCT FROM p_name'),
+  'legacy create receipt replay must verify persisted request fields',
 );
 
 assert.doesNotMatch(foundation + correction, /UPDATE public\.privileged_audit_events/);
