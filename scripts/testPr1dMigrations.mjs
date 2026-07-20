@@ -22,6 +22,7 @@ const pr1d = '20260714120000_pr1d_assess_v2_decision_intelligence.sql';
 const correction = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundary = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const factValidation = '20260719130000_pr1d_author_fact_validation.sql';
+const hardening = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';
 const baseline = migrations.slice(0, migrations.indexOf(pr1b));
 const source = (name) => fs.readFileSync(path.join('supabase/migrations', name), 'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql', 'utf8');
@@ -180,6 +181,7 @@ try {
   await insertEvidencePayload(test, legacyEvidenceId, LEGACY_CREATE_CASE, legacyEvidencePayload);
   await apply(test, [evidenceBoundary]);
   await apply(test, [factValidation]);
+  await apply(test, [hardening]);
   assert.deepEqual((await test.query(
     'SELECT payload FROM assess_v2_evidence_links WHERE id=$1 AND case_id=$2',
     [legacyEvidenceId, LEGACY_CREATE_CASE],

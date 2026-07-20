@@ -17,6 +17,7 @@ const hardening = fs.readFileSync(
   'supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql',
   'utf8',
 );
+const migrationHarness = fs.readFileSync('scripts/testPr1dMigrations.mjs', 'utf8');
 const compatibility = fs.readFileSync('services/assessV1Compatibility.ts', 'utf8');
 const handler = fs.readFileSync('supabase/functions/_shared/assessV2Handlers.ts', 'utf8');
 const cloneContractVersion = compatibility.match(/ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION = '([^']+)'/)?.[1];
@@ -150,6 +151,11 @@ for (const token of [
 assert.ok(
   hardening.indexOf("r.request_hash<>legacy_h") < hardening.indexOf('existing_version.name IS NOT DISTINCT FROM p_name'),
   'legacy create receipt replay must verify persisted request fields',
+);
+assert.ok(
+  migrationHarness.includes("const hardening = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';")
+    && migrationHarness.includes('await apply(test, [hardening]);'),
+  'PR 1D migration matrix must apply the hardening migration',
 );
 
 assert.doesNotMatch(foundation + correction, /UPDATE public\.privileged_audit_events/);
