@@ -24,4 +24,7 @@ assert.match(migration,/sv\.source_snapshot,sv\.imported_facts/,'revision preser
 assert.match(migration,/public\.pr1e_can_read_lineage\(org_id,workspace_id,case_id,decision_id\)/);
 assert.match(migration,/controlDispositions/);
 assert.match(migration,/conditionSatisfied/);
+assert.match(migration,/v_submitter:=sv\.created_by/,'evidence submitter is the immutable source authoring actor, never a payload label');
+assert.match(migration,/supplied->>'status' NOT IN\('resolved','conditionally-resolved'\)/,'incomplete Govern controls fail before receipt claim');
+assert.match(migration,/supplied->>'conditionSatisfied'\)::boolean,false\)=false/,'unsatisfied conditional controls fail before receipt claim');
 console.log('PR 1E authority/persistence source contract passed');

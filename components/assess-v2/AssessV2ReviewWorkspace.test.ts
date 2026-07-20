@@ -10,6 +10,7 @@ assert.match(source, /Reject evidence/);
 assert.match(source, /Approve reviewed decision/);
 assert.match(source, /Request changes/);
 assert.match(source, /Avala Govern action and control review/);
+assert.match(source, /controlStatuses\[control\.controlId\] \?\? control\.status/,'reviewer disposition edits override the loaded projection');
 assert.match(source, /Create durable Studio handoff/);
 for (const state of ['Offline', 'stale', 'revoked', 'conflicted', 'Read-only mode', 'Persistence failed']) assert.match(source, new RegExp(state, 'i'));
 assert.ok(source.indexOf('const committed = await action()') < source.indexOf('setMessage(success)'), 'success must render only after a committed response');

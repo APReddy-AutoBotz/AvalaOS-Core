@@ -125,7 +125,9 @@ BEGIN
  ELSIF p_command='assessment_v2.evidence.attest' THEN
    SELECT * INTO a FROM public.assess_v2_review_assignments WHERE review_sequence=(p_payload->>'reviewSequence')::bigint AND case_id=c.id AND decision_id=d.id AND source_version_id=d.source_version_id AND decision_version=d.decision_version AND org_id=p_org_id AND workspace_id=p_workspace_id;
    SELECT * INTO e FROM public.assess_v2_evidence_links WHERE id=(p_payload->>'evidenceId')::uuid AND version_id=d.source_version_id AND case_id=c.id AND org_id=p_org_id AND workspace_id=p_workspace_id;
-   BEGIN v_submitter:=COALESCE(NULLIF(e.payload->>'submittedBy','')::uuid,NULLIF(e.payload->>'owner','')::uuid);EXCEPTION WHEN invalid_text_representation THEN RETURN public.pr1e_review_result('INVALID_COMMAND');END;
+   -- Evidence is persisted by the immutable source authoring command.  Human-readable
+   -- payload owner labels are presentation data and are never actor authority.
+   v_submitter:=sv.created_by;
    IF a.id IS NULL OR e.id IS NULL OR a.reviewer_id<>p_actor_id OR c.owner_id=p_actor_id OR v_submitter IS NULL OR v_submitter=p_actor_id OR c.status<>'in_review' OR COALESCE(e.payload->>'status','')<>'submitted' OR NOT (e.payload->'claimIds' @> p_payload->'claimIds' AND e.payload->'claimIds' <@ p_payload->'claimIds') THEN RETURN public.pr1e_review_result('NOT_FOUND');END IF;
  ELSIF p_command='assessment_v2.review.resolve' THEN
    SELECT * INTO a FROM public.assess_v2_review_assignments WHERE review_sequence=(p_payload->>'reviewSequence')::bigint AND case_id=c.id AND decision_id=d.id AND source_version_id=d.source_version_id AND decision_version=d.decision_version AND org_id=p_org_id AND workspace_id=p_workspace_id;
@@ -155,7 +157,7 @@ BEGIN
    ) required;
    IF rr.id IS NULL OR c.status<>'approved' OR c.owner_id=p_actor_id OR jsonb_array_length(v_required_controls)=0 OR jsonb_array_length(p_payload->'controlDispositions')<>jsonb_array_length(v_required_controls)
     OR EXISTS(SELECT 1 FROM jsonb_array_elements(v_required_controls) required WHERE (SELECT count(*) FROM jsonb_array_elements(p_payload->'controlDispositions') supplied WHERE supplied->>'controlId'=required->>'controlId')<>1)
-    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_payload->'controlDispositions') supplied WHERE supplied->>'status'='conditionally-resolved' AND (btrim(COALESCE(supplied->>'condition',''))='' OR btrim(COALESCE(supplied->>'owner',''))='' OR btrim(COALESCE(supplied->>'dueDate',''))=''))
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_payload->'controlDispositions') supplied WHERE supplied->>'status' NOT IN('resolved','conditionally-resolved') OR (supplied->>'status'='conditionally-resolved' AND (COALESCE((supplied->>'conditionSatisfied')::boolean,false)=false OR btrim(COALESCE(supplied->>'condition',''))='' OR btrim(COALESCE(supplied->>'owner',''))='' OR btrim(COALESCE(supplied->>'dueDate',''))='')))
    THEN RETURN public.pr1e_review_result('INVALID_COMMAND');END IF;
    IF EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(d.output_snapshot->'actionControls','[]')) x WHERE x->>'category'='approval-bound') AND rr.reviewer_id=p_actor_id THEN RETURN public.pr1e_review_result('INVALID_COMMAND');END IF;
  ELSIF p_command='assessment_v2.studio.handoff' THEN
