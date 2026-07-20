@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: accepted `main` at `de87c86` through PR 1B; PR #208 / PR 1C is accepted; PR 1D is the active implementation candidate.
+Baseline: accepted `main` at `de87c86` through PR 1B; PR #208 / PR 1C and PR #209 / PR 1D are accepted and post-merge verified.
 
 ## Honest Maturity Verdict
 
@@ -61,8 +61,8 @@ Complete PR 1D verification and human review; do not merge under the PR 1D imple
 
 No deployment, tag, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation is part of this candidate.
 
-## PR 1D Current Authority
+## PR 1D Post-Merge Authority
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
 
-PR 1D candidate scope is additive V2 domain/rules, normalized persistence, typed commands, immutable SHA-256 decision versions, a capability-controlled working UI slice, the canonical AP Invoice Exception V2 outcome, feature-owned tests/CI, and operational read-only rollback. V2 approval and Studio handoff remain not implemented.
+V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
