@@ -572,6 +572,28 @@ test('displayed primitive and lifecycle controls allow a scaffolded V2 case to f
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
 });
+test('Retrieve and Execute primitives expose and persist interface dependency knowledge', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
+  await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
+  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByLabel('Primitive 1 type').selectOption('Retrieve');
+  await page.getByLabel('Primitive 2 type').selectOption('Execute');
+  await expect(page.getByLabel('Primitive 1 primitive.interfaceDependencyKnown')).toBeVisible();
+  await expect(page.getByLabel('Primitive 2 primitive.interfaceDependencyKnown')).toBeVisible();
+  await page.getByLabel('Primitive 1 primitive.interfaceDependencyKnown').selectOption('true');
+  await page.getByLabel('Primitive 2 primitive.interfaceDependencyKnown').selectOption('false');
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+
+  const saved = fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert').at(-1);
+  expect(saved?.payload.primitives[0].facts['primitive.interfaceDependencyKnown']).toMatchObject({
+    fieldId:'primitive.interfaceDependencyKnown', value:true, status:'known', source:'user',
+  });
+  expect(saved?.payload.primitives[1].facts['primitive.interfaceDependencyKnown']).toMatchObject({
+    fieldId:'primitive.interfaceDependencyKnown', value:false, status:'known', source:'user',
+  });
+});
+
 test('persisted V2 draft is resumed after remount without duplicate creation', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();

@@ -110,6 +110,7 @@ assert.match(clientSource, /evidenceIds\.has\(evidence\.id\)/);
 assert.match(clientSource, /throw new EnterpriseBoundaryError\('COMMAND_UNAVAILABLE'\)/);
 assert.match(clientSource, /assertUniqueAssessV2EvidenceIds\(value\.case_snapshot\)/);
 assert.match(clientSource, /findAssessV2CaseForProcess/);
+assert.match(clientSource, /async readCase\(caseId\) \{[\s\S]*data: activeCase[\s\S]*\.from\('assess_v2_cases'\)[\s\S]*\.is\('deleted_at', null\)[\s\S]*if \(!activeCase\) return null;/);
 assert.match(clientSource, /capabilities\.includes\(ASSESS_V2_CAPABILITIES\.read\)/);
 assert.match(clientSource, /\.eq\('org_id', organizationId\)/);
 assert.match(clientSource, /\.eq\('workspace_id', workspaceId\)/);

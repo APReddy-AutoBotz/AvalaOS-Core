@@ -140,6 +140,15 @@ const defaultTransport: AssessV2Transport = {
     return data;
   },
   async readCase(caseId) {
+    const { data: activeCase, error: activeCaseError } = await supabase
+      .from('assess_v2_cases')
+      .select('id')
+      .eq('id', caseId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (activeCaseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    if (!activeCase) return null;
+
     const { data: decision, error: decisionError } = await supabase
       .from('assess_v2_decision_versions')
       .select('case_id,source_version_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,input_canonical,evidence_canonical,output_canonical,supersedes_decision_id,created_by,created_at')
@@ -151,7 +160,9 @@ const defaultTransport: AssessV2Transport = {
     if (!decision) {
       const { data: currentCase, error: caseError } = await supabase.from('assess_v2_cases')
         .select('id,org_id,workspace_id,process_id,owner_id,status,version,schema_version,rule_set_version,source_v1_assessment_id,source_v1_score_version,created_at,updated_at,head_version_id')
-        .eq('id', caseId).maybeSingle();
+        .eq('id', caseId)
+        .is('deleted_at', null)
+        .maybeSingle();
       if (caseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
       if (!currentCase) return null;
       const { data: head, error: headError } = await supabase.from('assess_v2_case_versions')

@@ -170,3 +170,12 @@ No database migration change is required. The client now mirrors the existing Ed
 The local fail-closed path retains tenant context and independently authorized V2 creation. Focused browser coverage proves Draft, Ready for Review, Changes Requested, and non-frozen Approved sources expose safe unavailable copy and send zero clone commands; an eligible Approved source still clones successfully.
 
 Rollback remains V2-local disable/read-only with immutable history preserved. Do not broaden source eligibility or route a known ineligible clone through the tenant-wide failure boundary.
+
+
+## Final P2 soft-delete visibility and interface-dependency authoring correction
+
+The forward-only migration `20260720120000_pr1d_soft_delete_visibility_hardening.sql` makes an active parent case a mandatory read condition. Authenticated reads exclude a case when `deleted_at` is set, and every mutable or immutable child table requires the same tenant-scoped active parent. The direct client read path performs that active-case check before querying either draft or finalized snapshots, so a soft-deleted case cannot be reconstructed from child rows.
+
+The V2 workspace now exposes `primitive.interfaceDependencyKnown` for every primitive, including the Retrieve and Execute types whose deterministic evaluator requires it. Browser coverage proves both types can persist explicit known values, while the PostgreSQL 16 matrix proves an authorized reader sees the case, version, and evidence before deletion, none after deletion, and all again after an administrative restore used only inside the disposable test database.
+
+Rollback remains V2 disable/read-only with immutable history preserved, followed by an additive forward correction. Do not restore read policies that authorize child snapshots independently of the active parent case.

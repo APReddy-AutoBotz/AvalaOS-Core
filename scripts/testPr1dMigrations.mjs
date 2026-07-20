@@ -23,6 +23,7 @@ const correction = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundary = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const factValidation = '20260719130000_pr1d_author_fact_validation.sql';
 const hardening = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';
+const visibilityHardening = '20260720120000_pr1d_soft_delete_visibility_hardening.sql';
 const baseline = migrations.slice(0, migrations.indexOf(pr1b));
 const source = (name) => fs.readFileSync(path.join('supabase/migrations', name), 'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql', 'utf8');
@@ -182,6 +183,7 @@ try {
   await apply(test, [evidenceBoundary]);
   await apply(test, [factValidation]);
   await apply(test, [hardening]);
+  await apply(test, [visibilityHardening]);
   assert.deepEqual((await test.query(
     'SELECT payload FROM assess_v2_evidence_links WHERE id=$1 AND case_id=$2',
     [legacyEvidenceId, LEGACY_CREATE_CASE],
@@ -208,6 +210,21 @@ try {
     'SELECT count(*) n FROM assess_v2_evidence_links WHERE case_id=$1',
     [LEGACY_CREATE_CASE],
   )).rows[0].n), 2);
+
+  await test.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [A]);
+  const readVisibility = async () => asRole(test, 'authenticated', async () => (await test.query(
+    `SELECT
+      (SELECT count(*)::int FROM assess_v2_cases WHERE id=$1) cases,
+      (SELECT count(*)::int FROM assess_v2_case_versions WHERE case_id=$1) versions,
+      (SELECT count(*)::int FROM assess_v2_evidence_links WHERE case_id=$1) evidence`,
+    [LEGACY_CREATE_CASE],
+  )).rows[0]);
+  assert.deepEqual(await readVisibility(), { cases: 1, versions: 1, evidence: 2 });
+  await test.query('UPDATE assess_v2_cases SET deleted_at=now() WHERE id=$1', [LEGACY_CREATE_CASE]);
+  assert.deepEqual(await readVisibility(), { cases: 0, versions: 0, evidence: 0 });
+  await test.query('UPDATE assess_v2_cases SET deleted_at=NULL WHERE id=$1', [LEGACY_CREATE_CASE]);
+  assert.deepEqual(await readVisibility(), { cases: 1, versions: 1, evidence: 2 });
+  await test.query("SELECT set_config('request.jwt.claim.sub','',false)");
 
   await test.query(
     "INSERT INTO role_capabilities(role_id,capability_key) SELECT om.role_id,capability.capability_key FROM organization_members om CROSS JOIN (VALUES ('govern.resolve'),('studio.handoff.create')) capability(capability_key) WHERE om.org_id=$1 AND om.user_id=$2 ON CONFLICT DO NOTHING",

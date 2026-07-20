@@ -17,6 +17,10 @@ const hardening = fs.readFileSync(
   'supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql',
   'utf8',
 );
+const visibilityHardening = fs.readFileSync(
+  'supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql',
+  'utf8',
+);
 const migrationHarness = fs.readFileSync('scripts/testPr1dMigrations.mjs', 'utf8');
 const compatibility = fs.readFileSync('services/assessV1Compatibility.ts', 'utf8');
 const handler = fs.readFileSync('supabase/functions/_shared/assessV2Handlers.ts', 'utf8');
@@ -156,6 +160,26 @@ assert.ok(
   migrationHarness.includes("const hardening = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';")
     && migrationHarness.includes('await apply(test, [hardening]);'),
   'PR 1D migration matrix must apply the hardening migration',
+);
+
+for (const token of [
+  'DROP POLICY IF EXISTS pr1d_cases_read ON public.assess_v2_cases',
+  'deleted_at IS NULL',
+  'pr1d_active_case_read',
+  'active_case.deleted_at IS NULL',
+  'active_case.id = %I.case_id',
+]) assert.ok(visibilityHardening.includes(token), `visibility-hardening migration missing ${token}`);
+for (const table of [
+  'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',
+  'assess_v2_application_assets', 'assess_v2_application_interactions', 'assess_v2_evidence_links',
+  'assess_v2_decision_versions', 'assess_v2_decision_points', 'assess_v2_exception_paths',
+  'assess_v2_candidate_evaluations', 'assess_v2_gate_results', 'assess_v2_control_requirements',
+  'assess_v2_modernization_dispositions',
+]) assert.ok(visibilityHardening.includes(`('${table}',`), `visibility hardening missing ${table}`);
+assert.ok(
+  migrationHarness.includes("const visibilityHardening = '20260720120000_pr1d_soft_delete_visibility_hardening.sql';")
+    && migrationHarness.includes('await apply(test, [visibilityHardening]);'),
+  'PR 1D migration matrix must apply the soft-delete visibility hardening migration',
 );
 
 assert.doesNotMatch(foundation + correction, /UPDATE public\.privileged_audit_events/);

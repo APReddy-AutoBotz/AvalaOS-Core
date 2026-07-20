@@ -16,18 +16,20 @@ const correctionName = '20260715120000_pr1d_decision_integrity_correction.sql';
 const evidenceBoundaryName = '20260717120000_pr1d_evidence_attestation_boundary.sql';
 const factValidationName = '20260719130000_pr1d_author_fact_validation.sql';
 const hardeningName = '20260720100000_pr1d_fact_source_and_create_hash_hardening.sql';
+const visibilityHardeningName = '20260720120000_pr1d_soft_delete_visibility_hardening.sql';
 const migrationNames = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.includes('pr1d')).sort();
-for (const expected of [foundationName, correctionName, evidenceBoundaryName, factValidationName, hardeningName]) {
+for (const expected of [foundationName, correctionName, evidenceBoundaryName, factValidationName, hardeningName, visibilityHardeningName]) {
   if (!migrationNames.includes(expected)) throw new Error(`PR1D_MIGRATION_MISSING: ${expected}`);
 }
-if (migrationNames.length !== 5) throw new Error(`PR1D_MIGRATION_COUNT: expected 5, received ${migrationNames.length}`);
+if (migrationNames.length !== 6) throw new Error(`PR1D_MIGRATION_COUNT: expected 6, received ${migrationNames.length}`);
 
 const foundation = read(`supabase/migrations/${foundationName}`);
 const correction = read(`supabase/migrations/${correctionName}`);
 const evidenceBoundary = read(`supabase/migrations/${evidenceBoundaryName}`);
 const factValidation = read(`supabase/migrations/${factValidationName}`);
 const hardening = read(`supabase/migrations/${hardeningName}`);
-const migrations = `${foundation}\n${correction}\n${evidenceBoundary}\n${factValidation}\n${hardening}`;
+const visibilityHardening = read(`supabase/migrations/${visibilityHardeningName}`);
+const migrations = `${foundation}\n${correction}\n${evidenceBoundary}\n${factValidation}\n${hardening}\n${visibilityHardening}`;
 const capabilities = read('services/assessV2/capabilities.ts');
 const command = read('supabase/functions/_shared/assessV2Command.ts');
 const handlers = read('supabase/functions/_shared/assessV2Handlers.ts');
@@ -72,6 +74,8 @@ requireText(workspace, "sessionState === 'ready' && discoveryState === 'ready'",
 forbidText(workspace, "if (sessionState !== 'ready' || !tenantContext)", 'read-only discovery short circuit');
 requireText(workspace, 'Independent review: pending', 'Decision Pack states independent review boundary');
 requireText(workspace, 'primitiveFactKeys.map', 'UI exposes primitive fact authoring');
+requireText(workspace, "'primitive.interfaceDependencyKnown'", 'UI exposes Retrieve/Execute interface dependency authoring');
+requireText(browserFixture, 'Retrieve and Execute primitives expose and persist interface dependency knowledge', 'browser proves interface dependency authoring persists');
 requireText(workspace, 'accountable owner', 'UI exposes application accountable-owner authoring');
 requireText(browserFixture, 'displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', 'browser proves displayed required controls can finalize');
 forbidText(workspace, "['suggested','submitted','validated','rejected']", 'validated authoring control');
@@ -81,6 +85,9 @@ for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'ser
 }
 
 requireText(client, 'readEnterpriseErrorCode(payload', 'V2 client parses stable runtime boundary codes');
+requireText(client, 'data: activeCase', 'V2 reads preflight an active case');
+requireText(client, ".is('deleted_at', null)", 'V2 reads exclude soft-deleted cases');
+requireText(client, 'if (!activeCase) return null', 'V2 reads stop before child snapshots for deleted cases');
 requireText(client, 'projectImmutableCloneEvidence', 'client projects immutable clone evidence into later draft reads');
 requireText(client, ".eq('source_kind', 'v1_clone')", 'client binds imported evidence to the immutable clone version');
 requireText(client, "child('assess_v2_evidence_links', immutableCloneVersion.id)", 'client reloads immutable imported evidence');
@@ -171,6 +178,8 @@ if (!(draftFactValidation >= 0 && draftFactValidation < draftCommandClaim)) {
   throw new Error('PR1D_SOURCE_BOUNDARY_MISSING: author fact validation precedes draft receipt claim');
 }
 forbidText(correction, 'current_evidence.version_id=v.id AND current_evidence.id=imported_evidence.id', 'mutable draft evidence shadowing immutable import');
+requireText(visibilityHardening, 'pr1d_active_case_read', 'child reads require an active parent case');
+requireText(visibilityHardening, 'active_case.deleted_at IS NULL', 'soft-deleted parent hides child snapshots');
 for (const table of [
   'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_primitives', 'assess_v2_edges',
   'assess_v2_decision_points', 'assess_v2_exception_paths', 'assess_v2_application_assets',

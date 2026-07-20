@@ -24,7 +24,7 @@ type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
 const primitiveTypes: PrimitiveType[] = ['Capture', 'Extract', 'Classify', 'Validate', 'Calculate', 'Reconcile', 'Retrieve', 'Investigate', 'Decide', 'Approve', 'Route', 'Execute', 'Communicate', 'Monitor', 'Audit'];
 const agentKeys = ['irreducibleAmbiguity', 'adaptiveNextStep', 'toolOrPathSelection', 'incrementalValue', 'controllable'] as const;
 const dispositions = ['Monitor / Do Nothing', 'Simplify', 'Redesign', 'Human-Led', 'Existing Product Configuration', 'Custom Application'] as const;
-const primitiveFactKeys = ['primitive.rulesStable', 'primitive.workflowPatternKnown', 'primitive.documentQualityRepresentative', 'primitive.exceptionSamplesAvailable', 'primitive.ambiguityCharacterized', 'primitive.controlRequirementsKnown'] as const;
+const primitiveFactKeys = ['primitive.rulesStable', 'primitive.workflowPatternKnown', 'primitive.documentQualityRepresentative', 'primitive.exceptionSamplesAvailable', 'primitive.ambiguityCharacterized', 'primitive.controlRequirementsKnown', 'primitive.interfaceDependencyKnown'] as const;
 const unknownInteractionFacts = () => ({
   interfaceAvailable: null, operationCovered: null, apiDocumented: null, machineIdentity: null, leastPrivilege: null,
   dataQuality: null, dataClassified: null, auditable: null, idempotent: null, compensatable: null, rollback: null,
