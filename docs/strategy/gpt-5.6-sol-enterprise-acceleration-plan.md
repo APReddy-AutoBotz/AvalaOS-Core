@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan; PR 1A is accepted through PR #206, PR 1B is accepted at `de87c86`, and PR #208 / PR 1C is accepted; PR 1D is the active implementation candidate
+Status: active plan; PR 1A is accepted through PR #206, PR 1B is accepted at `de87c86`, and PR #208 / PR 1C and PR #209 / PR 1D are accepted and post-merge verified
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
@@ -269,8 +269,8 @@ Document:
 Create one intentional branch from current main, a small number of logical and reviewable commits, and one draft PR. Do not merge, deploy, rotate keys, disable a live endpoint, or begin PR 1B without the required approval and accepted PR 1A evidence.
 ```
 
-## PR 1D Current Authority
+## PR 1D Post-Merge Authority
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
 
-PR 1D delivers the V1 compatibility boundary and a working reviewer-ready V2 foundation. PR 1E owns review/approval/handoff authority and PR 1F owns calibration/economics. The three boundaries precede broader Studio/private-artifact work.
+V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
