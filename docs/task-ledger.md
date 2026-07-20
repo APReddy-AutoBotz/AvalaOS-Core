@@ -126,7 +126,7 @@ The acceleration plan, target architecture, active risk register, and `PLANS.md`
 - KlarityFlow Health is not an active AvalaOS Core milestone in this ledger.
 - TBD evidence placeholders are intentionally removed; future work uses "Not created" until evidence exists.
 
-## PR 1D Post-Merge Authority
+## PR 1D Current Authority
 
 PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
 
