@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/assess-v2/AssessV2ReviewWorkspace.tsx', 'utf8');
 assert.match(source, /Assigned-review queue/);
+assert.match(source, /Assign independent reviewer/);
+assert.match(source, /readEligibleAssessV2Reviewers/);
+assert.match(source, /Eligible reviewer/);
+assert.match(source, /Commit reviewer assignment/);
+assert.doesNotMatch(source, /type=["']text["'][^>]*reviewer|reviewer[^\n]*type=["']text["']/i,'reviewer identity must not be free text');
 assert.match(source, /Exact claims:/);
 assert.match(source, /Accept evidence/);
 assert.match(source, /Request more information/);

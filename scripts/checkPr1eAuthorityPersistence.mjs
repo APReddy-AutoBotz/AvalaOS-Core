@@ -24,6 +24,11 @@ assert.match(migration,/sv\.source_snapshot,sv\.imported_facts/,'revision preser
 assert.match(migration,/public\.pr1e_can_read_lineage\(org_id,workspace_id,case_id,decision_id\)/);
 assert.match(migration,/controlDispositions/);
 assert.match(migration,/conditionSatisfied/);
+assert.match(migration,/assess_v2_eligible_reviewers/,'tenant-scoped eligible reviewer projection is required');
+for(const capability of ['assess.v2.review','assess.v2.evidence.attest','assess.v2.approve'])assert.match(migration,new RegExp(`pr1e_actor_has_workspace_capability\\(p\\.id,p_org_id,p_workspace_id,'${capability.replaceAll('.', '\\.')}'\\)`),`eligible reviewers require ${capability}`);
+assert.match(migration,/pr1b_assert_command_authority\(\(p_payload->>'reviewerId'\)::uuid,p_org_id,p_workspace_id,'assess\.v2\.evidence\.attest',v_reviewer_auth\)/);
+assert.match(migration,/pr1b_assert_command_authority\(\(p_payload->>'reviewerId'\)::uuid,p_org_id,p_workspace_id,'assess\.v2\.approve',v_reviewer_auth\)/);
+assert.doesNotMatch(migration,/c\.owner_id=p_actor_id OR c\.owner_id=\(p_payload->>'reviewerId'\)/,'an authorized author may assign an independent reviewer');
 assert.match(migration,/v_submitter:=sv\.created_by/,'evidence submitter is the immutable source authoring actor, never a payload label');
 assert.match(migration,/supplied->>'status' NOT IN\('resolved','conditionally-resolved'\)/,'incomplete Govern controls fail before receipt claim');
 assert.match(migration,/supplied->>'conditionSatisfied'\)::boolean,false\)=false/,'unsatisfied conditional controls fail before receipt claim');

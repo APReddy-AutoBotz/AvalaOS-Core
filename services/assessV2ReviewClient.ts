@@ -44,11 +44,13 @@ export interface AssessV2ReviewProjection {
 }
 
 export interface AssessV2ReviewQueueItem { assignmentId: string; caseId: string; caseName: string; status: ReviewLifecycle; dueAt?: string }
+export interface EligibleAssessV2Reviewer { actorId: string; label: string; authorizationVersion: number }
 
 export interface AssessV2ReviewTransport {
   invoke(body: Record<string, unknown>): Promise<unknown>;
   readQueue(context: TenantContextProjection): Promise<unknown>;
   readWorkspace(context: TenantContextProjection, caseId: string): Promise<unknown>;
+  readEligibleReviewers(context: TenantContextProjection, caseId: string, decisionId: string): Promise<unknown>;
 }
 
 const networkCode = (payload: unknown) => readEnterpriseErrorCode(payload, typeof navigator !== 'undefined' && !navigator.onLine);
@@ -72,6 +74,11 @@ const defaultTransport: AssessV2ReviewTransport = {
     if (error) throw new EnterpriseBoundaryError(networkCode(error));
     return data;
   },
+  async readEligibleReviewers(context, caseId, decisionId) {
+    const { data, error } = await supabase.rpc('assess_v2_eligible_reviewers', { p_org_id: context.organizationId, p_workspace_id: context.workspaceId, p_case_id: caseId, p_decision_id: decisionId });
+    if (error) throw new EnterpriseBoundaryError(networkCode(error));
+    return data;
+  },
 };
 
 const asString = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback;
@@ -82,6 +89,10 @@ const parseQueueItem = (value: unknown): AssessV2ReviewQueueItem => {
 const parseProjection = (value: unknown): AssessV2ReviewProjection => {
   if (!isEnterpriseObject(value) || typeof value.caseId !== 'string' || typeof value.decisionId !== 'string' || !Number.isSafeInteger(value.caseVersion) || typeof value.reviewSchemaVersion !== 'string' || !Number.isSafeInteger(value.reviewSequence) || !Array.isArray(value.evidence) || !Array.isArray(value.actions) || !Array.isArray(value.controls)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   return value as unknown as AssessV2ReviewProjection;
+};
+const parseEligibleReviewer = (value: unknown): EligibleAssessV2Reviewer => {
+  if (!isEnterpriseObject(value) || typeof value.actorId !== 'string' || typeof value.label !== 'string' || !Number.isSafeInteger(value.authorizationVersion)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  return value as unknown as EligibleAssessV2Reviewer;
 };
 
 const committedProjection = (value: unknown): AssessV2ReviewProjection => {
@@ -95,6 +106,11 @@ export const readAssessV2ReviewQueue = async (context: TenantContextProjection, 
   return value.map(parseQueueItem);
 };
 export const readAssessV2ReviewWorkspace = async (context: TenantContextProjection, caseId: string, transport: AssessV2ReviewTransport = defaultTransport) => parseProjection(await transport.readWorkspace(context, caseId));
+export const readEligibleAssessV2Reviewers = async (context: TenantContextProjection, caseId: string, decisionId: string, transport: AssessV2ReviewTransport = defaultTransport) => {
+  const value = await transport.readEligibleReviewers(context, caseId, decisionId);
+  if (!Array.isArray(value)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  return value.map(parseEligibleReviewer);
+};
 
 const execute = async (context: TenantContextProjection, commandType: string, projection: AssessV2ReviewProjection, payload: Record<string, unknown>, operation: string, transport: AssessV2ReviewTransport) => {
   const idempotencyKey = `${operation}:${projection.caseId}:${projection.decisionId}:${projection.reviewSequence}`;
@@ -103,6 +119,7 @@ const execute = async (context: TenantContextProjection, commandType: string, pr
 };
 
 export const attestAssessV2Evidence = (context: TenantContextProjection, projection: AssessV2ReviewProjection, evidenceId: string, claimIds: string[], outcome: EvidenceAttestationOutcome, rationale: string, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.evidence.attest', projection, { evidenceId, claimIds, outcome, rationale }, `attest:${evidenceId}:${outcome}`, transport);
+export const assignAssessV2Review = (context: TenantContextProjection, projection: AssessV2ReviewProjection, reviewer: EligibleAssessV2Reviewer, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.review.assign', projection, { reviewerId: reviewer.actorId }, `assign:${reviewer.actorId}`, transport);
 export const resolveAssessV2Review = (context: TenantContextProjection, projection: AssessV2ReviewProjection, resolution: ReviewResolution, rationale: string, conditions: string[], transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.review.resolve', projection, { resolution, rationale, conditions }, `review:${resolution}`, transport);
 export const startAssessV2Revision = (context: TenantContextProjection, projection: AssessV2ReviewProjection, rationale: string, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.revision.start', projection, { rationale }, 'revision', transport);
 export const resolveAssessV2Govern = (context: TenantContextProjection, projection: AssessV2ReviewProjection, rationale: string, controlDispositions: GovernControlProjection[], transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.govern.resolve', projection, { rationale, controlDispositions: controlDispositions.map(control => ({ controlId: control.controlId, status: control.status, condition: control.condition ?? '', owner: control.owner ?? '', dueDate: control.dueDate ?? '', conditionSatisfied: control.conditionSatisfied ?? false })) }, 'govern', transport);

@@ -14,5 +14,6 @@ for (const token of [
   'assessment_v2.review.assign','assessment_v2.evidence.attest','assessment_v2.review.resolve','assessment_v2.revision.start','assessment_v2.govern.resolve','assessment_v2.studio.handoff',
 ]) if (!joined.includes(token)) throw new Error(`PR1E_CONTRACT_MISSING: ${token}`);
 const client = fs.readFileSync('services/assessV2ReviewClient.ts','utf8');
-if (/reviewerId\s*:|approved\s*:|handoffPackage\s*:/.test(client)) throw new Error('PR1E_BROWSER_AUTHORITY_FORBIDDEN');
+if (/approved\s*:|handoffPackage\s*:/.test(client)) throw new Error('PR1E_BROWSER_AUTHORITY_FORBIDDEN');
+if (!/reviewerId: reviewer\.actorId/.test(client) || /reviewerId[^\n]*(input|trim|target\.value)/i.test(client)) throw new Error('PR1E_REVIEWER_SELECTION_NOT_PROJECTION_BOUND');
 console.log('PR 1E source boundaries passed.');

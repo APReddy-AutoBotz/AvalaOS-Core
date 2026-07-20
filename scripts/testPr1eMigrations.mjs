@@ -26,6 +26,8 @@ try{
     assert.equal((await test.query("SELECT has_function_privilege('authenticated',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,false);
     assert.equal((await test.query("SELECT has_function_privilege('service_role',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,true);
   }
+  assert.equal((await test.query("SELECT has_function_privilege('authenticated','public.assess_v2_eligible_reviewers(uuid,uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,true);
+  assert.equal((await test.query("SELECT has_function_privilege('anon','public.assess_v2_eligible_reviewers(uuid,uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false);
   const actor='91000000-0000-4000-8000-000000000001',submitter='91000000-0000-4000-8000-000000000002';
   const org='91000000-0000-4000-8000-000000000010',foreignOrg='92000000-0000-4000-8000-000000000010';
   const workspace='91000000-0000-4000-8000-000000000011',foreignWorkspace='92000000-0000-4000-8000-000000000011';

@@ -78,6 +78,16 @@ DO $$DECLARE t text;BEGIN FOREACH t IN ARRAY ARRAY['assess_v2_review_assignments
 END LOOP;END$$;
 
 CREATE OR REPLACE FUNCTION public.pr1e_review_result(p_error text) RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$SELECT jsonb_build_object('errorCode',p_error)$$;
+CREATE OR REPLACE FUNCTION public.pr1e_actor_has_workspace_capability(p_actor uuid,p_org uuid,p_workspace uuid,p_capability text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+SELECT EXISTS(
+ SELECT 1 FROM public.profiles p
+ JOIN public.organization_members om ON om.user_id=p.id AND om.org_id=p_org
+ JOIN public.workspace_memberships wm ON wm.user_id=p.id AND wm.org_id=om.org_id AND wm.workspace_id=p_workspace
+ JOIN public.organizations o ON o.id=om.org_id JOIN public.workspaces w ON w.id=wm.workspace_id AND w.org_id=om.org_id
+ WHERE p.id=p_actor AND p.status='active' AND p.deleted_at IS NULL AND om.status='active' AND om.deleted_at IS NULL AND wm.status='active' AND wm.deleted_at IS NULL AND o.status='active' AND o.deleted_at IS NULL AND w.status='active' AND w.deleted_at IS NULL
+ AND (EXISTS(SELECT 1 FROM public.roles r JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability WHERE r.id=om.role_id AND r.scope='organization' AND r.org_id=p_org AND r.workspace_id IS NULL AND r.status='active' AND r.deleted_at IS NULL)
+   OR EXISTS(SELECT 1 FROM public.roles r JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability WHERE r.id=wm.role_id AND r.scope='workspace' AND r.org_id=p_org AND r.workspace_id=p_workspace AND r.status='active' AND r.deleted_at IS NULL))
+)$$;
 CREATE OR REPLACE FUNCTION public.pr1e_review_projection(p_org uuid,p_workspace uuid,p_case uuid,p_decision uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 SELECT jsonb_build_object(
  'assignmentId',COALESCE(a.id::text,''),'caseId',c.id,'caseName',v.name,'caseVersion',c.version,'sourceCaseVersion',sv.version,'sourceVersionId',d.source_version_id,'decisionId',d.id,'decisionVersion',d.decision_version,
@@ -113,10 +123,12 @@ BEGIN
 
  -- All command-specific validation is complete before a receipt can be claimed.
  IF p_command='assessment_v2.review.assign' THEN
-   IF c.status<>'reviewer_ready' OR c.owner_id=p_actor_id OR c.owner_id=(p_payload->>'reviewerId')::uuid OR (p_payload->>'reviewSequence')::bigint<>1 THEN RETURN public.pr1e_review_result('INVALID_COMMAND');END IF;
+   IF c.status<>'reviewer_ready' OR c.owner_id=(p_payload->>'reviewerId')::uuid OR (p_payload->>'reviewSequence')::bigint<>1 THEN RETURN public.pr1e_review_result('INVALID_COMMAND');END IF;
    SELECT version INTO v_reviewer_auth FROM public.authorization_versions WHERE org_id=p_org_id AND user_id=(p_payload->>'reviewerId')::uuid;
    IF v_reviewer_auth IS NULL THEN RETURN public.pr1e_review_result('NOT_FOUND');END IF;
    PERFORM public.pr1b_assert_command_authority((p_payload->>'reviewerId')::uuid,p_org_id,p_workspace_id,'assess.v2.review',v_reviewer_auth);
+   PERFORM public.pr1b_assert_command_authority((p_payload->>'reviewerId')::uuid,p_org_id,p_workspace_id,'assess.v2.evidence.attest',v_reviewer_auth);
+   PERFORM public.pr1b_assert_command_authority((p_payload->>'reviewerId')::uuid,p_org_id,p_workspace_id,'assess.v2.approve',v_reviewer_auth);
    SELECT COALESCE(jsonb_agg(jsonb_build_object('claimId',claim_id,'evidenceIds',evidence_ids) ORDER BY claim_id),'[]') INTO v_material_claims FROM (
     SELECT claim_id,COALESCE((SELECT jsonb_agg(el.id ORDER BY el.id) FROM public.assess_v2_evidence_links el WHERE el.version_id=d.source_version_id AND COALESCE(el.payload->'claimIds','[]') ? claim_id),'[]') evidence_ids
     FROM (SELECT DISTINCT jsonb_array_elements_text(COALESCE(trace_item->'fieldIds','[]')) claim_id FROM jsonb_array_elements(COALESCE(d.output_snapshot->'trace','[]')) trace_item) claims WHERE claim_id<>'evidence.coverage'
@@ -204,10 +216,22 @@ DO $$DECLARE n text;command_name text;BEGIN FOREACH n IN ARRAY ARRAY['assign_ass
 
 CREATE OR REPLACE FUNCTION public.assess_v2_review_queue(p_org_id uuid,p_workspace_id uuid) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$SELECT jsonb_build_object('assignmentId',a.id,'caseId',c.id,'caseName',v.name,'status',CASE WHEN c.status IN('govern_resolved','handed_off') THEN 'approved' ELSE c.status END) FROM public.assess_v2_review_assignments a JOIN public.assess_v2_cases c ON c.id=a.case_id AND c.org_id=a.org_id AND c.workspace_id=a.workspace_id JOIN public.assess_v2_decision_versions d ON d.id=a.decision_id AND d.source_version_id=a.source_version_id JOIN public.assess_v2_case_versions v ON v.id=d.source_version_id WHERE a.org_id=p_org_id AND a.workspace_id=p_workspace_id AND a.reviewer_id=auth.uid() AND c.deleted_at IS NULL AND public.has_workspace_capability(p_workspace_id,p_org_id,'assess.v2.read') ORDER BY a.assigned_at$$;
 CREATE OR REPLACE FUNCTION public.assess_v2_review_workspace(p_org_id uuid,p_workspace_id uuid,p_case_id uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$SELECT CASE WHEN NOT public.has_workspace_capability(p_workspace_id,p_org_id,'assess.v2.read') THEN NULL ELSE (SELECT public.pr1e_review_projection(p_org_id,p_workspace_id,c.id,d.id) FROM public.assess_v2_cases c JOIN public.assess_v2_decision_versions d ON d.case_id=c.id AND d.org_id=c.org_id AND d.workspace_id=c.workspace_id JOIN public.assess_v2_case_versions v ON v.id=d.source_version_id AND v.case_id=c.id WHERE c.id=p_case_id AND c.org_id=p_org_id AND c.workspace_id=p_workspace_id AND c.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 1) END$$;
+CREATE OR REPLACE FUNCTION public.assess_v2_eligible_reviewers(p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_decision_id uuid) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT jsonb_build_object('actorId',p.id,'label',COALESCE(NULLIF(btrim(p.full_name),''),p.email),'authorizationVersion',av.version)
+ FROM public.assess_v2_cases c JOIN public.assess_v2_decision_versions d ON d.id=p_decision_id AND d.case_id=c.id AND d.source_version_id=c.head_version_id AND d.org_id=c.org_id AND d.workspace_id=c.workspace_id
+ JOIN public.profiles p ON p.id<>c.owner_id JOIN public.authorization_versions av ON av.org_id=c.org_id AND av.user_id=p.id
+ WHERE c.id=p_case_id AND c.org_id=p_org_id AND c.workspace_id=p_workspace_id AND c.status='reviewer_ready' AND c.deleted_at IS NULL
+ AND public.has_workspace_capability(p_workspace_id,p_org_id,'assess.v2.review')
+ AND public.pr1e_actor_has_workspace_capability(p.id,p_org_id,p_workspace_id,'assess.v2.review')
+ AND public.pr1e_actor_has_workspace_capability(p.id,p_org_id,p_workspace_id,'assess.v2.evidence.attest')
+ AND public.pr1e_actor_has_workspace_capability(p.id,p_org_id,p_workspace_id,'assess.v2.approve')
+ ORDER BY COALESCE(NULLIF(btrim(p.full_name),''),p.email),p.id
+$$;
 
 REVOKE ALL ON FUNCTION public.pr1e_can_read_lineage(uuid,uuid,uuid,uuid) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.pr1e_actor_has_workspace_capability(uuid,uuid,uuid,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1e_can_read_lineage(uuid,uuid,uuid,uuid) TO authenticated;
 DO $$DECLARE n text;BEGIN FOREACH n IN ARRAY ARRAY['assign_assess_v2_review','attest_assess_v2_evidence','resolve_assess_v2_review','start_assess_v2_revision','resolve_assess_v2_govern','handoff_assess_v2_studio'] LOOP EXECUTE format('REVOKE ALL ON FUNCTION public.pr1e_%I(uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb) FROM PUBLIC,anon,authenticated',n);EXECUTE format('GRANT EXECUTE ON FUNCTION public.pr1e_%I(uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb) TO service_role',n);END LOOP;END$$;
-REVOKE ALL ON FUNCTION public.assess_v2_review_queue(uuid,uuid),public.assess_v2_review_workspace(uuid,uuid,uuid) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.assess_v2_review_queue(uuid,uuid),public.assess_v2_review_workspace(uuid,uuid,uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.assess_v2_review_queue(uuid,uuid),public.assess_v2_review_workspace(uuid,uuid,uuid),public.assess_v2_eligible_reviewers(uuid,uuid,uuid,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.assess_v2_review_queue(uuid,uuid),public.assess_v2_review_workspace(uuid,uuid,uuid),public.assess_v2_eligible_reviewers(uuid,uuid,uuid,uuid) TO authenticated;

@@ -187,6 +187,13 @@
       "lines": [110, 118, 119],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/pr1e.spec.ts",
+      "lines": [39],
+      "reason": "test/control documentation",
+      "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup confined to PR 1E browser tests; do not treat it as runtime authority."
     }
   ]
 }
