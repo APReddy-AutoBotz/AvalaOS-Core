@@ -7,6 +7,7 @@ import { Assessment } from '../../types';
 import { buildAvalaGovernLiteCard } from '../../services/avalaGovernLiteService';
 import { buildAssessToStudioHandoffPayload } from '../../services/assessToStudioHandoff';
 import AvalaGovernLiteCardPanel from './AvalaGovernLiteCardPanel';
+import AssessV2Workspace from '../assess-v2/AssessV2Workspace';
 import {
     getBacklogSeedItems,
     getDecisionGovernanceControlItems,
@@ -94,7 +95,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
 
     const stats = [
         { label: 'Decision', value: scores?.gateDecision || 'In discovery', icon: CheckCircleIcon },
-        { label: 'Best fit', value: topFit ? topFit[0] : 'Pending score', icon: SparklesIcon },
+        { label: 'Legacy V1 best fit', value: topFit ? topFit[0] : 'Pending score', icon: SparklesIcon },
         { label: 'Risk tier', value: scores?.riskTier || process.criticality, icon: ExclamationTriangleIcon },
         { label: 'Confidence', value: scores?.confidenceBand || `${assessment?.metadata.completionQuality || 0}% complete`, icon: ChartPieIcon },
     ];
@@ -113,7 +114,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                     <div className="p-7">
                         <div className="flex flex-wrap items-center gap-3 mb-4">
                             <span className="rounded-full bg-[#ffbc03]/15 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#002C4B] ring-1 ring-[#ffbc03]/35 dark:text-[#ffcf45]">
-                                {assessment?.status || process.status}
+                                Legacy V1 &middot; {assessment?.status || process.status}
                             </span>
                             {template && (
                                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800">
@@ -275,6 +276,13 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                     </button>
                 </div>
             )}
+
+            <AssessV2Workspace
+                processId={process.id}
+                processName={process.name}
+                processDescription={process.description || ''}
+                v1Assessment={assessment}
+            />
 
             <section className="premium-surface rounded-3xl p-6">
                 <h2 className="text-lg font-black text-slate-950 dark:text-white mb-4">Process metadata foundation</h2>

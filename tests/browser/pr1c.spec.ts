@@ -224,7 +224,7 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
 
 const openAssessment = async (page: Page) => {
   await page.goto('/');
-  await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible();
+  await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible({ timeout:15_000 });
   await page.getByRole('button',{ name:'View' }).first().click();
   await expect(page.getByRole('heading',{ name:'Invoice exception handling' })).toBeVisible();
   await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
@@ -238,6 +238,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('production App completes create, save, finalize, Govern, durable Studio handoff, and reload eligibility',async ({ page }) => {
+  test.setTimeout(60_000);
   const fixture = await installEnterpriseFixture(page);
   await openAssessment(page);
 

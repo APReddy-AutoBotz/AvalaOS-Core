@@ -8,6 +8,14 @@ import {
   AvalaGovernStatus,
   RiskTier,
 } from '../types';
+import { meetsGovernLiteEvidenceThreshold } from './assessV1Compatibility';
+
+const hasSufficientGovernLiteEvidenceQuality = (assessment: Assessment): boolean => {
+  const evidenceQuality = assessment.metadata?.evidenceQuality;
+  return evidenceQuality === undefined
+    ? false
+    : meetsGovernLiteEvidenceThreshold(evidenceQuality);
+};
 
 const splitSystems = (...values: Array<string | undefined>) =>
   values
@@ -104,7 +112,7 @@ const evidenceGapsFor = (assessment: Assessment, riskLevel: AvalaGovernRiskLevel
     });
   }
 
-  if ((assessment.metadata.evidenceQuality || 0) < 70) {
+  if (!hasSufficientGovernLiteEvidenceQuality(assessment)) {
     gaps.push({
       label: 'Evidence confidence is below Govern Lite threshold.',
       severity: riskLevel === 'Low' ? 'Medium' : riskLevel,
@@ -174,7 +182,7 @@ const mapAutonomyLevel = (
   const blocked = hasBlockedGate(assessment) || riskLevel === 'Blocked';
   const evidenceConfidenceSufficient = assessment.evidenceItems.length > 0
     && evidenceGaps.length === 0
-    && (assessment.metadata.evidenceQuality || 0) >= 70;
+    && hasSufficientGovernLiteEvidenceQuality(assessment);
   const riskAllowsL4 = !(['High', 'Critical', 'Blocked'] as AvalaGovernRiskLevel[]).includes(riskLevel);
   const l4Allowed = Boolean(
     judgment.autonomousExecutionAllowed

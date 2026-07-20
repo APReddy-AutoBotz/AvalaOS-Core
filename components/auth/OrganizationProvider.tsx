@@ -25,6 +25,8 @@ interface OrganizationContextType {
   tenantContext: TenantContextProjection | null;
   sessionState: EnterpriseSessionState;
   sessionMessage: string | null;
+  assessV2OperationalState: 'ready' | 'read_only';
+  assessV2OperationalMessage: string | null;
   loading: boolean;
   selectOrganization: (organizationId: string) => void;
   selectWorkspace: (workspaceId: string) => void;
@@ -34,6 +36,7 @@ interface OrganizationContextType {
   refreshOrgs: () => Promise<void>;
   hasCapability: (capability: EnterpriseMutationCapability) => boolean;
   handleEnterpriseBoundary: (error: unknown) => boolean;
+  handleAssessV2Boundary: (error: unknown) => boolean;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -66,8 +69,12 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
   const [sessionState, setSessionState] = useState<EnterpriseSessionState>('loading');
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const [assessV2OperationalState, setAssessV2OperationalState] = useState<'ready' | 'read_only'>('ready');
+  const [assessV2OperationalMessage, setAssessV2OperationalMessage] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
+    setAssessV2OperationalState('ready');
+    setAssessV2OperationalMessage(null);
     if (!user) {
       setOrganizations([]);
       setContexts([]);
@@ -163,10 +170,22 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setSessionMessage(presentation.message);
     return true;
   }, []);
+  const handleAssessV2Boundary = useCallback((error: unknown) => {
+    if (!(error instanceof EnterpriseBoundaryError)) return false;
+    const presentation = presentEnterpriseBoundary(error.code, 'assess_v2');
+    if (presentation.scope === 'assess_v2') {
+      setAssessV2OperationalState('read_only');
+      setAssessV2OperationalMessage(presentation.message);
+      return true;
+    }
+    return handleEnterpriseBoundary(error);
+  }, [handleEnterpriseBoundary]);
   const selectContext = useCallback((next: TenantContextProjection) => {
     const organization = organizations.find(item => item.id === next.organizationId) || null;
     setCurrentContext(next);
     setCurrentOrganization(organization);
+    setAssessV2OperationalState('ready');
+    setAssessV2OperationalMessage(null);
     sessionStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify({
       organizationId: next.organizationId,
       workspaceId: next.workspaceId,
@@ -228,6 +247,8 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     tenantContext: currentContext,
     sessionState,
     sessionMessage,
+    assessV2OperationalState,
+    assessV2OperationalMessage,
     loading: sessionState === 'loading',
     selectOrganization,
     selectWorkspace,
@@ -237,6 +258,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     refreshOrgs: loadSession,
     hasCapability,
     handleEnterpriseBoundary,
+    handleAssessV2Boundary,
   }}>{children}</OrganizationContext.Provider>;
 };
 

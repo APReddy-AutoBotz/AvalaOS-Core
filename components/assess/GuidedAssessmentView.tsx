@@ -202,6 +202,22 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
         }
     }, [assessment, currentOrganization, completeAssessment, getAssessmentForProcess, processId]);
 
+    const handleReviseRequestedChanges = useCallback(async () => {
+        if (!assessment || assessment.status !== 'Changes Requested') return;
+        try {
+            const reopened = await saveAssessmentDraft({ ...assessment, status: 'Draft', scores: undefined });
+            if (reopened) {
+                const snapshot = JSON.parse(JSON.stringify(reopened));
+                setAssessment(snapshot);
+                setOriginalAssessment(snapshot);
+                setCurrentSection(SECTIONS[0].key);
+                setErrorMsg(null);
+            }
+        } catch (err: any) {
+            setErrorMsg(err.message || 'Unable to reopen the requested changes.');
+        }
+    }, [assessment, saveAssessmentDraft]);
+
     const statusActionRequiresReason = useCallback((kind: 'submit' | 'approve' | 'changes' | 'reject' | 'docs' | 'delivery') => {
         if (!assessment) return false;
         const restrictedDecision = assessment.scores?.decisionPack?.finalDecision === 'No-Go'
@@ -949,7 +965,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                     <button onClick={() => attemptExit(onExit)} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-slate-500 transition-colors hover:text-[#002C4B] dark:hover:text-slate-200">
                         Back to Process
                     </button>
-                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Assess</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Assess · Legacy V1</p>
                     <h2 className="mt-1 text-xl font-black text-[#002C4B] dark:text-white leading-tight">Decision Intake</h2>
                     <p className="text-xs font-medium text-slate-500 mt-1 truncate">{currentProcess?.name}</p>
                     <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
@@ -1087,6 +1103,28 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
                                             </p>
                                         </div>
                                     )}
+                                    {assessment.status === 'Changes Requested' && (
+                                        <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/30">
+                                            <p className="text-xs font-semibold leading-5 text-amber-900 dark:text-amber-200">
+                                                Reopen this assessment to clear the prior score, revise the requested fields, and calculate a new deterministic result before resubmitting.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={handleReviseRequestedChanges}
+                                                disabled={!savePolicy.enabled}
+                                                title={savePolicy.explanation || undefined}
+                                                aria-describedby={!savePolicy.enabled ? 'assess-reopen-explanation' : undefined}
+                                                className="mt-3 w-full rounded-xl bg-[#002C4B] px-4 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#003c66] focus:outline-none focus:ring-2 focus:ring-[#ffbc03] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-slate-900"
+                                            >
+                                                Revise requested changes
+                                            </button>
+                                            {!savePolicy.enabled && (
+                                                <p id="assess-reopen-explanation" className="mt-2 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-300" role="status">
+                                                    {savePolicy.explanation}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                     <textarea
                                         value={statusReasonDraft}
                                         onChange={(event) => setStatusReasonDraft(event.target.value)}
@@ -1212,7 +1250,7 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
 
                             {assessment.scores.gatesTriggered.length > 0 && (
                                 <div className="p-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-xl">
-                                    <h3 className="text-lg font-bold text-red-900 dark:text-red-400 mb-2 flex items-center gap-2">🛑 Hard Stop Gates Triggered</h3>
+                                    <h3 className="text-lg font-bold text-red-900 dark:text-red-400 mb-2 flex items-center gap-2">🚫 Hard Stop Gates Triggered</h3>
                                     <p className="text-sm text-red-700 dark:text-red-300 mb-4">This process hit critical rule violations and is gated from final automation routing.</p>
                                     <ul className="list-disc pl-5 space-y-1 mb-4">
                                         {assessment.scores.gatesTriggered.map((gate, i) => (

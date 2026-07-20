@@ -133,7 +133,7 @@ export const VIEW_ACCESS_METADATA: Record<View, ViewAccessMetadata> = {
     view: View.DOCS_FORGE,
     module: 'docs',
     allowedScopes: DOCS_WORK_SCOPES,
-    requiredPermissions: ['docs.generate', 'docs.review', 'ai.configure'],
+    requiredPermissions: ['docs.generate', 'docs.review', 'ai.configure', 'studio.handoff.read'],
     status: 'active',
     fallbackView: View.DOCS_FORGE,
   },

@@ -12,9 +12,12 @@ export interface EnterpriseBoundaryPresentation {
   state: EnterpriseSessionState;
   message: string;
   clearAuthority: boolean;
+  scope: 'tenant' | 'assess_v2';
 }
 
-const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentation> = {
+type BaseEnterpriseBoundaryPresentation = Omit<EnterpriseBoundaryPresentation, 'scope'>;
+
+const PRESENTATIONS: Record<EnterpriseBoundaryCode, BaseEnterpriseBoundaryPresentation> = {
   AUTHENTICATION_REQUIRED: {
     state: 'expired_session',
     message: 'Your session expired. Sign in again to continue.',
@@ -45,6 +48,16 @@ const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentati
     message: 'This request key was already used for different content. Reload before retrying.',
     clearAuthority: false,
   },
+  FEATURE_DISABLED: {
+    state: 'read_only',
+    message: 'Avala Assess V2 is disabled. Existing V2 decisions remain available in read-only mode; changes are blocked.',
+    clearAuthority: false,
+  },
+  READ_ONLY: {
+    state: 'read_only',
+    message: 'Avala Assess V2 is in read-only maintenance. Existing V2 decisions remain available; changes are blocked.',
+    clearAuthority: false,
+  },
   COMMAND_UNAVAILABLE: {
     state: 'error',
     message: 'The command could not be completed. No success was recorded.',
@@ -59,7 +72,13 @@ const PRESENTATIONS: Record<EnterpriseBoundaryCode, EnterpriseBoundaryPresentati
 
 export const presentEnterpriseBoundary = (
   code: EnterpriseBoundaryCode,
-): EnterpriseBoundaryPresentation => PRESENTATIONS[code];
+  requestedScope: 'tenant' | 'assess_v2' = 'tenant',
+): EnterpriseBoundaryPresentation => {
+  const scope = requestedScope === 'assess_v2' && (code === 'FEATURE_DISABLED' || code === 'READ_ONLY')
+    ? 'assess_v2'
+    : 'tenant';
+  return { ...PRESENTATIONS[code], scope };
+};
 
 export const enterpriseActionPolicy = ({
   sessionState,

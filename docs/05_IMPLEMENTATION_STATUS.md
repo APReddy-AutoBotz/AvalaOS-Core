@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: accepted `main` at `de87c86` through PR 1B; PR 1C is an implementation candidate pending review, GitHub CI, and merge.
+Baseline: accepted `main` at `de87c86` through PR 1B; PR #208 / PR 1C is accepted; PR 1D is the active implementation candidate.
 
 ## Honest Maturity Verdict
 
@@ -57,6 +57,12 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 
 ## Next Acceptance Boundary
 
-Finish PR 1C GitHub CI and review, then merge only through the normal approval process.
+Complete PR 1D verification and human review; do not merge under the PR 1D implementation task.
 
 No deployment, tag, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation is part of this candidate.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+PR 1D candidate scope is additive V2 domain/rules, normalized persistence, typed commands, immutable SHA-256 decision versions, a capability-controlled working UI slice, the canonical AP Invoice Exception V2 outcome, feature-owned tests/CI, and operational read-only rollback. V2 approval and Studio handoff remain not implemented.

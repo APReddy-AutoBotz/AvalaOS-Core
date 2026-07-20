@@ -320,6 +320,58 @@ console.log('Running Avala Govern Lite service regression tests...');
 }
 
 {
+  const lowFivePointEvidence = createAssessment({
+    metadata: { ...createAssessment().metadata, evidenceQuality: 3 },
+  });
+  const acceptableFivePointEvidence = createAssessment({
+    metadata: { ...createAssessment().metadata, evidenceQuality: 4 },
+  });
+
+  assert.ok(buildAvalaGovernLiteCard(lowFivePointEvidence, baseProcess).evidenceGaps.some(
+    gap => gap.label === 'Evidence confidence is below Govern Lite threshold.',
+  ));
+  assert.equal(buildAvalaGovernLiteCard(acceptableFivePointEvidence, baseProcess).evidenceGaps.some(
+    gap => gap.label === 'Evidence confidence is below Govern Lite threshold.',
+  ), false);
+}
+
+{
+  const { evidenceQuality: _omittedEvidenceQuality, ...metadataWithoutEvidenceQuality } = createAssessment().metadata;
+  const missingEvidenceQuality = createAssessment({
+    metadata: metadataWithoutEvidenceQuality as Assessment['metadata'],
+  });
+  const undefinedEvidenceQuality = createAssessment({
+    metadata: { ...createAssessment().metadata, evidenceQuality: undefined as unknown as number },
+  });
+
+  for (const assessment of [missingEvidenceQuality, undefinedEvidenceQuality]) {
+    const card = buildAvalaGovernLiteCard(assessment, baseProcess);
+    assert.equal(card.evidenceRequired, true);
+    assert.equal(card.governanceStatus, 'Evidence Review Required');
+    assert.notEqual(card.autonomyLevel, 'L4 Autonomous Within Guardrails');
+    assert.ok(card.evidenceGaps.some(
+      gap => gap.label === 'Evidence confidence is below Govern Lite threshold.',
+    ));
+  }
+}
+
+{
+  for (const malformedEvidenceQuality of [Number.NaN, -1, 101, Number.POSITIVE_INFINITY, null, '4']) {
+    const assessment = createAssessment({
+      metadata: {
+        ...createAssessment().metadata,
+        evidenceQuality: malformedEvidenceQuality as unknown as number,
+      },
+    });
+
+    assert.throws(
+      () => buildAvalaGovernLiteCard(assessment, baseProcess),
+      /V1 evidence quality must be on the inclusive 1-5 scale or legacy 0-100 percent scale/,
+    );
+  }
+}
+
+{
   const assessment = createAssessment();
   const governCard = buildAvalaGovernLiteCard(assessment, baseProcess);
   const markdown = renderAssessmentDecisionPackMarkdown(assessment, baseProcess.name, governCard);

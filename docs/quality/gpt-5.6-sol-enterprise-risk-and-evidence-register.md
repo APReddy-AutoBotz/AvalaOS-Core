@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: accepted `main` at `de87c86` through PR 1B; PR 1C candidate evidence is explicitly pending acceptance
+Baseline: PR #208 / PR 1C accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; PR 1D implementation evidence accepted for human review preparation; hosted/live readiness remains unproven
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -142,4 +142,10 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 
 ## Readiness Decision
 
-PR 1A is accepted through PR #206 and PR 1B is accepted on `main` at `de87c86`. P0 deployment classification remains **NOT DEPLOYED** based on AP-provided manual inspection; no repository-side live access occurred. PR 1C is the active implementation candidate with executed local source, regression, coverage, production build-preview Chromium desktop/mobile, accessibility, viewport, and performance evidence. Its expanded disposable PostgreSQL suite was not run locally because no disposable server was available, but both GitHub push and pull-request PR 1C migration jobs passed in runs `29308403238` and `29308405309`; review and merge remain required. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven.
+PR 1A is accepted through PR #206 and PR 1B is accepted on `main` at `de87c86`. P0 deployment classification remains **NOT DEPLOYED** based on AP-provided manual inspection; no repository-side live access occurred. PR #208 / PR 1C is accepted with source, CI, disposable PostgreSQL, Chromium desktop/mobile, accessibility, viewport, and performance evidence. Its expanded disposable PostgreSQL suite was not run locally because no disposable server was available, but both GitHub push and pull-request PR 1C migration jobs passed in runs `29308403238` and `29308405309`; review and merge remain required. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+PR 1D active risks include V1/V2 type confusion, client-supplied decisions or hashes, incomplete rule-field coverage, template/import values treated as evidence, cross-tenant V2 disclosure, non-atomic finalization, and misleading whole-process technology claims. Closure requires strict typed commands, independent server authorization, forced RLS, immutable canonical SHA-256 snapshots, registry/property tests, genuine two-tenant tests, browser evidence, and explicit non-claims.

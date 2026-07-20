@@ -53,3 +53,9 @@ PR #205 is the explicitly authorized one-time docs/config-only enterprise rebase
 - Read a historical file only when an active document links to it, a regression needs its exact prior contract, or a task explicitly requests an audit.
 - Do not bulk-read or reconcile the historical corpus during ordinary implementation.
 - Correct current drift in active authority; do not rewrite history.
+
+## PR 1D Current Authority
+
+PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+
+| Avala Assess V2 domain, rule, command, persistence, compatibility, and rollback architecture | `docs/architecture/assess-v2-decision-intelligence-architecture.md` |

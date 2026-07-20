@@ -228,4 +228,16 @@ assert.equal(existingModuleEnabledViewResult.allowed, true);
 assert.equal(existingModuleEnabledViewResult.reason, 'allowed');
 assert.equal(existingModuleEnabledViewResult.module, 'delivery');
 
+const handoffReadRouteResult = resolveViewAccess({
+  user: makeUser(['studio.handoff.read']),
+  authLoading: false,
+  organization: makeOrganization(['docs']),
+  enabledModules: ['docs'],
+  view: View.DOCS_FORGE,
+  scope: myWorkScope,
+});
+
+assert.equal(handoffReadRouteResult.allowed, true);
+assert.equal(hasViewPermission(makeUser(['studio.handoff.read']), ['docs.generate']), false);
+
 console.log('View access guard regression passed.');
