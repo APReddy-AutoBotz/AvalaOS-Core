@@ -584,6 +584,7 @@ test('Retrieve and Execute primitives expose and persist interface dependency kn
   await page.getByLabel('Primitive 1 primitive.interfaceDependencyKnown').selectOption('true');
   await page.getByLabel('Primitive 2 primitive.interfaceDependencyKnown').selectOption('false');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
 
   const saved = fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert').at(-1);
   expect(saved?.payload.primitives[0].facts['primitive.interfaceDependencyKnown']).toMatchObject({
