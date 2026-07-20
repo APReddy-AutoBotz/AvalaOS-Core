@@ -3,7 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
-  testIgnore: 'pr1d.spec.ts',
+  // PR 1D and PR 1E use dedicated pilot-mode fixtures and preview ports.
+  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts'],
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
