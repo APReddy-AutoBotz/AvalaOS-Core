@@ -144,7 +144,7 @@ The full sanitized execution record is `docs/quality/pr1a-platform-safety-fail-c
 
 PR 1A is accepted through PR #206 and PR 1B is accepted on `main` at `de87c86`. P0 deployment classification remains **NOT DEPLOYED** based on AP-provided manual inspection; no repository-side live access occurred. PR #208 / PR 1C is accepted with source, CI, disposable PostgreSQL, Chromium desktop/mobile, accessibility, viewport, and performance evidence. Its expanded disposable PostgreSQL suite was not run locally because no disposable server was available, but both GitHub push and pull-request PR 1C migration jobs passed in runs `29308403238` and `29308405309`; review and merge remain required. No enterprise readiness domain closes: deployment, hosted schema, RLS/tenant isolation, private Storage, pilot, production, buyer, release-candidate, security-certification, and compliance readiness remain unproven.
 
-## PR 1D Post-Merge Authority
+## PR 1D Current Authority
 
 PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
 
