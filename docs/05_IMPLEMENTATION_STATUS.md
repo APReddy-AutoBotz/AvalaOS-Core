@@ -55,18 +55,16 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 - Server Assess scoring parity and durable Assess lifecycle.
 - Private storage, export, signed URL, rollback, incident, backup/restore, observability, pilot, production, buyer, release-candidate, security, or compliance readiness.
 
-## Next Acceptance Boundary
+## PR 1E Implementation Candidate
 
-Complete PR 1D verification and human review; do not merge under the PR 1D implementation task.
+PR 1D is accepted. PR 1E adds immutable evidence attestation and review history, independent approval, action-specific Govern resolution, and a durable governed Studio source package. Browser state is projection only; privileged mutations reauthorize and persist state, receipt, and audit atomically.
 
 No deployment, tag, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation is part of this candidate.
 
 ## PR 1D Current Authority
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. Current authority baseline: `30883509b46b848eaf1d0d5fc4bb5898bade98a3`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
+PR 1D accepted at closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7`. PR 1E is active; PR 1F economics/calibration, Application Portfolio Assessment, and broader Studio/private-artifact work remain reserved.
 
 V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
-
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+V1 `assess-core-2026-05` behavior and immutable PR 1D decisions remain unchanged. Hosted/live validation and readiness remain unproven.

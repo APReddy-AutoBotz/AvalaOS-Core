@@ -42,12 +42,23 @@ assert.deepEqual(Object.values(ASSESS_V2_CAPABILITIES), [
   'assess.v2.clone',
   'assess.v2.draft.write',
   'assess.v2.finalize',
+  'assess.v2.review',
+  'assess.v2.evidence.attest',
+  'assess.v2.approve',
+  'assess.v2.govern.resolve',
+  'assess.v2.studio.handoff',
 ]);
 assert.deepEqual(ASSESS_V2_COMMAND_CAPABILITY, {
   'assessment_v2.create': 'assess.v2.create',
   'assessment_v2.clone_from_v1': 'assess.v2.clone',
   'assessment_v2.draft.upsert': 'assess.v2.draft.write',
   'assessment_v2.finalize': 'assess.v2.finalize',
+  'assessment_v2.review.assign': 'assess.v2.review',
+  'assessment_v2.evidence.attest': 'assess.v2.evidence.attest',
+  'assessment_v2.review.resolve': 'assess.v2.approve',
+  'assessment_v2.revision.start': 'assess.v2.draft.write',
+  'assessment_v2.govern.resolve': 'assess.v2.govern.resolve',
+  'assessment_v2.studio.handoff': 'assess.v2.studio.handoff',
 });
 assert.equal(Object.values(ASSESS_V2_CAPABILITIES).includes(['assess', 'v2', 'write'].join('.') as never), false);
 for (const code of ['READ_ONLY', 'FEATURE_DISABLED'] as const) {
