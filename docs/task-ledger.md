@@ -4,7 +4,7 @@ This ledger records the current canonical milestone status. Evidence links are h
 
 ## Active Enterprise Workstream 1
 
-PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #209 / PR 1D is merged and post-merge verified on `main`.
+PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #209 / PR 1D and PR #211 / PR 1E are merged and post-merge verified on `main`; PR 1E verification main is `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
 
 - Maturity: credible deterministic enterprise demo with substantial source-level governance scaffolding; not a coherent server-authoritative, tenant-safe pilot or production platform.
 - P0: AP classified `extract-document-text` as **NOT DEPLOYED** after manual inspection; the repository did not access live infrastructure or record identifiers.
@@ -20,6 +20,7 @@ The acceleration plan, target architecture, active risk register, and `PLANS.md`
 | Workstream 1 PR 1A | WS1-PR1A | Complete/Accepted | AP/Codex | Runtime, adapters, Edge functions, one canonical migration, tests, CI, and active evidence docs | P0 disposition; fail-closed runtime; directly related P0/P1 remediation; feature-owned local and CI evidence; rollback | `docs/quality/pr1a-platform-safety-fail-closed-runtime-evidence.md`; `docs/migrations/pr1a-platform-safety-fail-closed-runtime.md` | Accepted through PR #206; no deployment or readiness claim |
 | Workstream 1 PR 1B | WS1-PR1B | Complete/Accepted | AP/Codex | Identity/RBAC/RLS migration, TenantContext and Assess Edge handlers, tests, CI, and active evidence docs | Immediate revocation; two-tenant non-disclosure; scoring parity; migration; concurrency/idempotency/audit; rollback | `docs/quality/pr1b-server-authoritative-identity-rbac-rls-assess-evidence.md`; `docs/migrations/pr1b-server-authoritative-identity-rbac-rls-assess.md` | Accepted on `main` at `de87c86`; no deployment or readiness claim |
 | Workstream 1 PR 1C | WS1-PR1C | Implementation candidate; acceptance pending | AP/Codex | Enterprise Assess UI, tenant-session projection, Govern/Studio handlers, one additive migration, tests, CI, and evidence docs | No Govern bypass; atomic handoff/audit; explicit failures; ACL/adversarial and browser gates; rollback | `docs/quality/pr1c-enterprise-assess-ui-govern-studio-handoff-evidence.md`; `docs/migrations/pr1c-enterprise-assess-ui-govern-studio-handoff.md` | Local gates passed; GitHub CI/review/merge pending; no live-system, deployment, or readiness claim |
+| Workstream 1 PR 1E | WS1-PR1E | Complete/Accepted | AP/Codex | Immutable review/attestation/approval, action-specific Govern, durable Studio-source handoff, UI, migration, tests, CI, and evidence | Independent review; exact authority; atomic handoff; RLS/private RPC; browser/accessibility; rollback | `docs/quality/pr1e-assess-v2-governed-review-evidence.md`; `docs/quality/pr1e-assess-v2-governed-review-approval-studio-handoff-post-merge-verification.md` | PR #211 accepted; head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e`, merge/main `d3074e5b99b3d40f33a472679b7a861bcac1700a`; no deployment/readiness claim |
 | M0 | M0-001 | Complete | AP/Codex | Migration docs, package metadata, main branch | AvalaOS Core migration complete | `docs/08_MIGRATION_FROM_KLARITYPM.md` | Accepted |
 | M0.2 | M02-001 | Complete | Codex | `AGENTS.md`, `.agent/**`, `docs/**` | Build Control Pack created and verified | `docs/quality/m0.2-final-evidence-review.md`; `docs/quality/m0.2-post-merge-verification.md` | Accepted |
 | M1 | M1-001 | Complete | AP/Codex | Avala Govern approved files | Govern hardening complete | `docs/quality/m1-final-evidence-review.md`; `docs/quality/m1-post-merge-verification.md` | Accepted |
@@ -128,6 +129,10 @@ The acceleration plan, target architecture, active risk register, and `PLANS.md`
 
 ## PR 1D Current Authority
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. Current authority baseline: `30883509b46b848eaf1d0d5fc4bb5898bade98a3`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable.
 
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+### PR 1E Accepted Closure
+
+PR #211 is merged and post-merge verified. Accepted head: `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e`. Merge and verified main: `d3074e5b99b3d40f33a472679b7a861bcac1700a`. Exact-head workflow `29760010656` and post-merge main workflow `29802046983` succeeded; unresolved review threads: 0.
+
+V1 scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F and Application Portfolio Assessment are not started.

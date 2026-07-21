@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: accepted `main` at `de87c86` through PR 1B; PR #208 / PR 1C and PR #209 / PR 1D are accepted and post-merge verified.
+Baseline: PR #211 / PR 1E accepted and post-merge verified on `main` at `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
 
 ## Honest Maturity Verdict
 
@@ -55,16 +55,16 @@ Unsafe HTML rendering primitives are confirmed in three UI sinks; exploitability
 - Server Assess scoring parity and durable Assess lifecycle.
 - Private storage, export, signed URL, rollback, incident, backup/restore, observability, pilot, production, buyer, release-candidate, security, or compliance readiness.
 
-## PR 1E Implementation Candidate
+## PR 1E Accepted Implementation
 
-PR 1D is accepted. PR 1E adds immutable evidence attestation and review history, independent approval, action-specific Govern resolution, and a durable governed Studio source package. Browser state is projection only; privileged mutations reauthorize and persist state, receipt, and audit atomically.
+PR #211 accepted immutable evidence attestation and review history, independent approval, action-specific Govern resolution, and a durable governed Studio source package. Browser state is projection only; privileged mutations reauthorize and persist state, receipt, and audit atomically.
 
-No deployment, tag, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation is part of this candidate.
+Accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` merged as `d3074e5b99b3d40f33a472679b7a861bcac1700a`. Exact-head workflow `29760010656` and post-merge main workflow `29802046983` succeeded; review threads unresolved: 0. No deployment, live-system inspection, secret action, incident action, readiness claim, or later-workstream implementation occurred.
 
 ## PR 1D Current Authority
 
-PR 1D accepted at closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7`. PR 1E is active; PR 1F economics/calibration, Application Portfolio Assessment, and broader Studio/private-artifact work remain reserved.
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable.
 
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+### PR 1E Accepted Closure
 
-V1 `assess-core-2026-05` behavior and immutable PR 1D decisions remain unchanged. Hosted/live validation and readiness remain unproven.
+PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F and Application Portfolio Assessment are not started.

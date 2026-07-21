@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: PR #208 / PR 1C accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; PR 1D implementation evidence accepted for human review preparation; hosted/live readiness remains unproven
+Baseline: PR #211 / PR 1E accepted and post-merge verified on main `d3074e5b99b3d40f33a472679b7a861bcac1700a`; hosted/live readiness remains unproven
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -146,12 +146,12 @@ PR 1A is accepted through PR #206 and PR 1B is accepted on `main` at `de87c86`. 
 
 ## PR 1D Current Authority
 
-### PR 1E active candidate risk boundary
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable.
+
+### PR 1E Accepted Risk Boundary
 
 - Independent attestation, approval, Govern resolution, and Studio handoff use additive immutable records; PR 1D decisions and V1 scoring are not mutated.
-- Remaining acceptance evidence is source/local/CI candidate evidence only. Hosted RLS, deployment, live infrastructure, pilot, production, security-certification, buyer, and compliance readiness remain not run or unproven.
+- Accepted source/local/CI evidence includes exact-head workflow `29760010656`, post-merge main workflow `29802046983`, and zero unresolved review threads. Hosted RLS, deployment, live infrastructure, pilot, production, security-certification, buyer, and compliance readiness remain not run or unproven.
 - Rollback is fail-closed: disable V2 review commands or enter read-only mode, preserve all immutable records, and forward-fix the additive migration. Exact committed receipt replay remains readable in read-only mode.
 
-PR #209 (PR 1D: Avala Assess V2 Decision Intelligence Foundation) is merged on `main`. Accepted head: `2c288870f14755c24da4f8c6465271cc2365ebbc`. Merge commit: `08c5d70649b1af83de267a1a0c909e3fec4b7667`. The accepted head is contained in `main`; exact-head PR workflows passed. The post-merge verification record is `docs/quality/pr1d-assess-v2-decision-intelligence-post-merge-verification.md`.
-
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+PR #211 accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` merged as and is contained in main `d3074e5b99b3d40f33a472679b7a861bcac1700a`. V1 scoring is unchanged; PR 1D decisions remain immutable; PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F and Application Portfolio Assessment are not started.

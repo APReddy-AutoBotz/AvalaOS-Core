@@ -4,7 +4,7 @@
 
 Historical M0–M5.7 and post-M5.7 milestone records remain accepted for the limited proof stated in their evidence. Source hardening through PR #204 is present on `main`. Those records do not establish a server-authoritative, tenant-safe pilot or production platform.
 
-PR 1A is accepted through PR #206. PR #208 / PR 1C and PR #209 / PR 1D are accepted; PR 1D post-merge verification is complete.
+PR 1A is accepted through PR #206. PR #208 / PR 1C, PR #209 / PR 1D, and PR #211 / PR 1E are accepted; PR 1E post-merge verification is complete at main `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
 
 ## Active Sequence
 
@@ -39,8 +39,10 @@ KlarityFlow Health, scoring changes, runtime agent execution, MCP/A2A controls, 
 
 ## PR 1D Current Authority
 
-PR 1D accepted at closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7`. PR 1E is the active implementation boundary.
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable.
 
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+### PR 1E Accepted Closure
 
-V1 `assess-core-2026-05` behavior is unchanged. PR 1F, Application Portfolio Assessment, and broader Studio/private-artifact work are not started.
+PR #211 accepted V2 independent review and approval, action-specific Govern resolution, and durable Studio-source handoff. Accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` is contained in merge/main `d3074e5b99b3d40f33a472679b7a861bcac1700a`; post-merge verification is complete with zero unresolved review threads.
+
+V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. No deployment or hosted/live validation occurred. PR 1F, Application Portfolio Assessment, and broader Studio/private-artifact work are not started.

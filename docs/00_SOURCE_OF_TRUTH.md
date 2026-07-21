@@ -33,7 +33,7 @@ Do not read the full historical planning/evidence corpus by default.
 - Rebaseline anchor: `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 - Latest accepted repository baseline: PR #205, AvalaOS Enterprise Rebaseline, merged as `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`.
 - Latest accepted source hardening before the rebaseline: PR #204, Server-Side Export Storage and Signed URL Guard Hardening Implementation Gate.
-- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is accepted on `main` at `de87c86`. PR #208 / PR 1C and PR #209 / PR 1D are accepted; PR 1D post-merge verification is complete.
+- PR 1A is accepted through PR #206 at `3ef9c9ae1b91881d12fab8d753ba152ec078c3fa`. PR 1B is accepted on `main` at `de87c86`. PR #208 / PR 1C, PR #209 / PR 1D, and PR #211 / PR 1E are accepted; PR 1E merged as `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
 
 ## Maturity Verdict
 
@@ -93,7 +93,7 @@ Do not read the full historical planning/evidence corpus by default.
 2. PR 1A, Platform Safety and Fail-Closed Runtime Foundation, is accepted through PR #206.
 3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is accepted on `main` at `de87c86`.
 4. PR #208 / PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is accepted at the PR #208 merge baseline.
-5. PR 1D is accepted; PR 1E adds V2 governed review, approval, action-specific Govern resolution, and durable Studio source handoff.
+5. PR 1D is accepted; PR #211 / PR 1E governed review, approval, action-specific Govern resolution, and durable Studio source handoff is accepted.
 6. PR 1F remains reserved for economics and calibration.
 7. Application Portfolio & AI-Assisted Modernization Assessment follows PR 1F; broader Studio/private-artifact work remains later.
 8. Continue through Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
@@ -109,8 +109,10 @@ PR 1C remains one substantial vertical PR. It does not authorize deployment, liv
 
 ## PR 1D Current Authority
 
-PR 1D accepted at closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` (accepted head `2c288870f14755c24da4f8c6465271cc2365ebbc`, merge `08c5d70649b1af83de267a1a0c909e3fec4b7667`). PR 1E is the active governed-review implementation boundary.
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable.
 
-V1 `assess-core-2026-05` behavior is unchanged. V2 finalization remains reviewer-ready only: V2 approval and V2 Studio handoff are not implemented. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. PR 1E and PR 1F are not started.
+### PR 1E Accepted Closure
 
-V1 `assess-core-2026-05` behavior remains unchanged. PR 1E appends review authority without mutating PR 1D decisions. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven.
+PR #211 is accepted with head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e`, merge commit and post-merge verified main `d3074e5b99b3d40f33a472679b7a861bcac1700a`, successful exact-head workflow `29760010656`, successful post-merge main workflow `29802046983`, and zero unresolved review threads. The closure evidence is `docs/quality/pr1e-assess-v2-governed-review-approval-studio-handoff-post-merge-verification.md`.
+
+V1 `assess-core-2026-05` scoring remains unchanged and PR 1D decisions remain immutable. PR 1E review, approval, action-specific Govern resolution, and durable Studio-source handoff are accepted. Hosted/live validation and deployment were not run. PR 1F and Application Portfolio Assessment are not started.
