@@ -104,7 +104,15 @@
     "test:docs:pr1e": "node scripts/checkPr1eDocs.mjs",
     "test:pr1e": "npm run lint:pr1e && npm run test:pr1e-domain && npm run test:pr1e-command && npm run test:pr1e-workspace && npm run test:pr1e-coverage && npm run test:docs:pr1e",
     "test:migrations:pr1e": "node scripts/testPr1eMigrations.mjs",
-    "test:browser:pr1e": "playwright test --config=playwright.pr1e.config.ts"
+    "test:browser:pr1e": "playwright test --config=playwright.pr1e.config.ts",
+    "lint:pr1f": "node scripts/checkPr1fSourceBoundaries.mjs",
+    "test:pr1f-domain": "node scripts/runPr1fTypeScriptTest.mjs services/assessV2/economics/domain.ts services/assessV2Economics.test.ts",
+    "test:pr1f-workspace": "node scripts/runPr1fTypeScriptTest.mjs services/assessV2/economics/domain.ts components/assess-v2/AssessV2EconomicsWorkspace.ts components/assess-v2/AssessV2EconomicsWorkspace.test.ts",
+    "test:pr1f-coverage": "node scripts/runPr1fCoverage.mjs",
+    "test:pr1f": "npm run lint:pr1f && npm run test:pr1f-domain && npm run test:pr1f-command && npm run test:migrations:pr1f && npm run test:pr1f-workspace && npm run test:pr1f-coverage",
+    "test:pr1f-command": "node scripts/runEdgeTypeScriptTest.mjs supabase/functions/_shared/assessV2Command.ts supabase/functions/_shared/assessV2EconomicsCommand.ts supabase/functions/_shared/assessV2EconomicsCommand.test.ts",
+    "test:browser:pr1f": "playwright test --config=playwright.pr1f.config.ts",
+    "test:migrations:pr1f": "node scripts/testPr1fMigrations.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

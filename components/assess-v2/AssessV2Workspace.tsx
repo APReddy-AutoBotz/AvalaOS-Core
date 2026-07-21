@@ -18,6 +18,7 @@ import { FIELD_REGISTRY } from '../../services/assessV2/registry';
 import { createUnknownAgentNecessityFacts, type CaseFact, type PrimitiveType } from '../../services/assessV2/types';
 import { ASSESS_V1_SCORE_VERSION } from '../../services/assessV1Compatibility';
 import AssessV2ReviewWorkspace from './AssessV2ReviewWorkspace';
+import AssessV2EconomicsWorkspace from './AssessV2EconomicsWorkspace';
 
 interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
@@ -234,6 +235,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
       <section className={sectionClass}><h4 className="font-black">Immutable references</h4><dl className="mt-3 grid gap-2 text-xs md:grid-cols-2"><div><dt className="font-black">Schema version</dt><dd>{renderModel.references.schemaVersion}</dd></div><div><dt className="font-black">Rule-set version</dt><dd>{renderModel.references.ruleSetVersion}</dd></div><div><dt className="font-black">Decision version</dt><dd>{renderModel.references.decisionVersion}</dd></div><div><dt className="font-black">Input hash</dt><dd className="break-all">{renderModel.references.inputHash}</dd></div><div><dt className="font-black">Evidence hash</dt><dd className="break-all">{renderModel.references.evidenceHash}</dd></div><div><dt className="font-black">Output hash</dt><dd className="break-all">{renderModel.references.outputHash}</dd></div></dl></section>
       <section className={sectionClass}><h4 className="font-black">Explicit non-claims</h4><div className="mt-2 space-y-1 text-sm font-semibold">{renderModel.nonClaims.map(item => { const copy = item === 'No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim' ? 'No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.' : item; return <p key={item}>{copy}</p>; })}</div><p className="mt-4 text-xs font-semibold text-slate-500">V2 approval, Govern resolution, Studio generation, export, and external sharing are not available in this foundation boundary.</p><p className="mt-2 text-xs font-semibold text-slate-500">PR 1E approval, Govern resolution, and durable Studio source handoff require the separate server-authoritative governed review journey below.</p></section>
       <AssessV2ReviewWorkspace initialCaseId={result?.case.id} />
+      {tenantContext && result?.case.id && result?.decision.id && <AssessV2EconomicsWorkspace tenantContext={tenantContext} caseId={result.case.id} decisionId={result.decision.id} />}
     </div>}
   </section>;
 }

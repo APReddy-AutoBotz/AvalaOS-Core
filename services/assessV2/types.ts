@@ -173,6 +173,7 @@ export interface DecisionPackV2 {
 }
 
 export interface ImmutableDecisionVersionV2 {
+  id?: string;
   caseId: string;
   sourceCaseVersion: number;
   schemaVersion: string;

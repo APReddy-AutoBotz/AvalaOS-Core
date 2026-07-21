@@ -149,3 +149,8 @@ PR 1E extends the immutable PR 1D decision boundary with append-only review assi
 PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
 
 PR 1D adds separate V2 case-authoring, decision-intelligence, command-authority, and read-projection bounded contexts. The detailed target is routed through [Assess V2 Decision Intelligence Architecture](assess-v2-decision-intelligence-architecture.md).
+
+
+## PR 1F active candidate
+
+PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.

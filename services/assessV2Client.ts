@@ -151,7 +151,7 @@ const defaultTransport: AssessV2Transport = {
 
     const { data: decision, error: decisionError } = await supabase
       .from('assess_v2_decision_versions')
-      .select('case_id,source_version_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,input_canonical,evidence_canonical,output_canonical,supersedes_decision_id,created_by,created_at')
+      .select('id,case_id,source_version_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,input_canonical,evidence_canonical,output_canonical,supersedes_decision_id,created_by,created_at')
       .eq('case_id', caseId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -237,6 +237,7 @@ const defaultTransport: AssessV2Transport = {
       description: version.description,
       case_snapshot: decision.input_snapshot,
       decision_snapshot: {
+        id: decision.id,
         caseId: decision.case_id,
         sourceCaseVersion: (decision.input_snapshot as AssessmentCaseV2).version,
         schemaVersion: decision.schema_version,

@@ -94,7 +94,7 @@ Do not read the full historical planning/evidence corpus by default.
 3. PR 1B, Server-Authoritative Identity, RBAC, RLS, and Assess, is accepted on `main` at `de87c86`.
 4. PR #208 / PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is accepted at the PR #208 merge baseline.
 5. PR 1D is accepted; PR #211 / PR 1E governed review, approval, action-specific Govern resolution, and durable Studio source handoff is accepted.
-6. PR 1F remains reserved for economics and calibration.
+6. PR 1F is the active candidate for Assess V2 economics, calibration reporting, realized outcomes, and portfolio intelligence.
 7. Application Portfolio & AI-Assisted Modernization Assessment follows PR 1F; broader Studio/private-artifact work remains later.
 8. Continue through Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
@@ -115,4 +115,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 PR #211 is accepted with head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e`, merge commit and post-merge verified main `d3074e5b99b3d40f33a472679b7a861bcac1700a`, successful exact-head workflow `29760010656`, successful post-merge main workflow `29802046983`, and zero unresolved review threads. The closure evidence is `docs/quality/pr1e-assess-v2-governed-review-approval-studio-handoff-post-merge-verification.md`.
 
-V1 `assess-core-2026-05` scoring remains unchanged and PR 1D decisions remain immutable. PR 1E review, approval, action-specific Govern resolution, and durable Studio-source handoff are accepted. Hosted/live validation and deployment were not run. PR 1F and Application Portfolio Assessment are not started.
+V1 `assess-core-2026-05` scoring remains unchanged and PR 1D decisions remain immutable. PR 1E review, approval, action-specific Govern resolution, and durable Studio-source handoff are accepted. Hosted/live validation and deployment were not run. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+
+
+## PR 1F active candidate
+
+PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
