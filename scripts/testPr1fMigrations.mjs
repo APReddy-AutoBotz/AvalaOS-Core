@@ -9,6 +9,7 @@ const checks = [
   'pr1f_calculate_economics','pr1f_derive_confidence','pr1f_read_assess_v2_economics_projection','FORCE ROW LEVEL SECURITY','REVOKE ALL ON FUNCTION public.pr1f_execute_assess_v2_economics_command','GRANT EXECUTE ON FUNCTION public.pr1f_execute_assess_v2_economics_command',
   'public.pr1b_assert_command_authority','assessment_v2.economics.create','assessment_v2.economics.draft.upsert','assessment_v2.economics.finalize','assessment_v2.economics.review.resolve','assessment_v2.economics.revision.start','assessment_v2.outcomes.record','assessment_v2.outcomes.review','assessment_v2.calibration.snapshot.create',
   'PR1F_APPROVED_REVIEW_REQUIRED','PR1F_INVALID_LIFECYCLE','PR1F_INVALID_LIFECYCLE','PR1F_INCOMPLETE_ECONOMICS','PR1F_READ_ONLY','PR1F_IDEMPOTENCY_CONFLICT','privileged_audit_events','assess.v2.calibration.write'
+  ,'annualRevenueValue','annualExpectedRiskAdjustedValue','qualitySlaSafetyValue','RETURNING * INTO recorded_outcome',"jsonb_build_object('outcomeId',recorded_outcome.id)",'sourceAuthoringVersionId','analysisHorizonYears',"COALESCE(econ.assumptions->'benefits','[]'::jsonb)"
 ];
 for (const check of checks) if (!sql.includes(check)) throw new Error(`PR 1F migration contract missing ${check}`);
 

@@ -4,4 +4,7 @@ const migration=fs.readFileSync('supabase/migrations/20260721120000_pr1f_assess_
 for(const cap of required) if(!migration.includes(cap)) throw new Error(`missing capability ${cap}`);
 const domain=fs.readFileSync('services/assessV2/economics/domain.ts','utf8');
 for(const forbidden of ['Monte Carlo','assess-core-2026-05']) if(domain.includes(forbidden)) throw new Error(`forbidden economics domain coupling ${forbidden}`);
+const client=fs.readFileSync('services/assessV2EconomicsClient.ts','utf8');
+for(const requiredClientBoundary of ["supabase.functions.invoke('assess-v2-command'","supabase.rpc('pr1f_read_assess_v2_economics_projection'"]) if(!client.includes(requiredClientBoundary)) throw new Error(`missing Supabase economics transport boundary ${requiredClientBoundary}`);
+if(client.includes("fetch('/functions/")||client.includes("fetch('/rest/")) throw new Error('economics transport must not target the application origin');
 console.log('PR 1F source boundary checks passed');

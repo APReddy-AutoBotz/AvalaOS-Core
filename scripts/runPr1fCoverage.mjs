@@ -19,9 +19,7 @@ const outputDir = path.resolve('.agent/pr1f-coverage');
 fs.rmSync(outputDir, { recursive: true, force: true });
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(path.join(outputDir, 'package.json'), JSON.stringify({ type: 'commonjs' }));
-const program = ts.createProgram({
-  rootNames: roots,
-  options: {
+const options = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS,
     moduleResolution: ts.ModuleResolutionKind.Node10,
@@ -32,8 +30,14 @@ const program = ts.createProgram({
     esModuleInterop: true,
     rewriteRelativeImportExtensions: true,
     lib: ['lib.es2022.d.ts', 'lib.dom.d.ts'],
-  },
-});
+};
+const host = ts.createCompilerHost(options);
+const readFile = host.readFile.bind(host);
+const supabaseClient = path.resolve('services/supabaseClient.ts');
+host.readFile = file => path.resolve(file) === supabaseClient
+  ? "export const supabase:any={functions:{invoke:async()=>{throw new Error('UNEXPECTED_LIVE_TRANSPORT')}},rpc:async()=>{throw new Error('UNEXPECTED_LIVE_TRANSPORT')}};"
+  : readFile(file);
+const program = ts.createProgram({ rootNames: roots, options, host });
 const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length) {
   console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCanonicalFileName: f => f, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' }));
