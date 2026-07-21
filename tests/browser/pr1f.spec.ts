@@ -21,7 +21,7 @@ const OUTCOME='93000000-0000-4000-8000-000000000001';
 const OUTCOME_REVIEW='94000000-0000-4000-8000-000000000001';
 const EVIDENCE='95000000-0000-4000-8000-000000000001';
 const API='http://127.0.0.1:59999';
-const APP='http://127.0.0.1:4185';
+const APP_ORIGINS=new Set(['http://127.0.0.1:4173','http://127.0.0.1:4185']);
 const CAPABILITIES=['assess.read','assess.v2.read','assess.v2.economics.write','assess.v2.economics.finalize','assess.v2.economics.review','assess.v2.outcomes.record','assess.v2.outcomes.review'];
 const headers={'access-control-allow-origin':'*','access-control-allow-headers':'*','content-type':'application/json'};
 const scenarios=[
@@ -47,8 +47,8 @@ const installEconomicsFixture=async(page:Page)=>{
   const projection=()=>({version:version?{...version,id:server.id,version:server.version,status:server.status}:undefined,technicalReady:true,governanceApproved:true,latestOutcome,latestOutcomeReview,calibrationStatus:'Insufficient Data',portfolioDisposition:'Proceed to controlled design'});
   await page.route('**/*',async route=>{
     const request=route.request();const url=new URL(request.url());
-    if(url.origin!==APP&&url.origin!==API)return route.abort();
-    if(url.origin===APP&&!['/auth/','/functions/','/rest/'].some(prefix=>url.pathname.startsWith(prefix)))return route.continue();
+    if(!APP_ORIGINS.has(url.origin)&&url.origin!==API)return route.abort();
+    if(APP_ORIGINS.has(url.origin)&&!['/auth/','/functions/','/rest/'].some(prefix=>url.pathname.startsWith(prefix)))return route.continue();
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
     if(url.pathname==='/auth/v1/user')return ok(route,user);
     if(url.pathname==='/auth/v1/token')return ok(route,{access_token:'browser-fixture-token',refresh_token:'browser-fixture-refresh',token_type:'bearer',expires_in:3600,user});
