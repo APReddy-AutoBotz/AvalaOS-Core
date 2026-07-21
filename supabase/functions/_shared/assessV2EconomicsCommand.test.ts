@@ -5,7 +5,7 @@ const [org,ws,caseId,decisionId,econId]=ids;const reqId='66666666-6666-4666-8666
 const base={requestId:reqId,idempotencyKey:'econ-key-001',organizationId:org,workspaceId:ws,authorizationVersion:7,expectedVersion:1};
 const deps=(caps:string[],actor='author'):EconomicsDependencies=>({authenticate:async()=>({id:actor}),loadFreshAuthority:async()=>({actorId:actor,organizationId:org,workspaceId:ws,authorizationVersion:7,capabilities:caps}),executeAtomicEconomicsCommand:async c=>({outcome:'committed',resource:{id:(c.payload.economicVersionId??c.payload.outcomeId) as string,status:'committed',version:c.expectedVersion+1}})});
 async function main(){
-const create={...base,commandType:'assessment_v2.economics.create',payload:{caseId,decisionId,approvedReviewId:'77777777-7777-4777-8777-777777777777',economicVersionId:econId,currency:'USD',baselinePeriod:'2026'}};
+const create={...base,commandType:'assessment_v2.economics.create',payload:{caseId,decisionId,economicVersionId:econId,currency:'USD',baselinePeriod:'2026'}};
 assert.equal(parseEconomicsEnvelope(create).payload.currency,'USD');
 await assert.rejects(()=>executeEconomicsCommand(new Request('http://x'),parseEconomicsEnvelope(create),deps([])),/PERMISSION_DENIED/);
 const ok=await executeEconomicsCommand(new Request('http://x'),parseEconomicsEnvelope(create),deps(['assess.v2.economics.write']));assert.equal(ok.resource.id,econId);

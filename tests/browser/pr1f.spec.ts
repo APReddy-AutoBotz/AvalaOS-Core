@@ -1,5 +1,22 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-test.describe('PR 1F economics desktop/mobile journey',()=>{
-  for(const viewport of [{width:1280,height:900},{width:390,height:844}]) test(`economics governed journey ${viewport.width}`,async({page})=>{await page.setViewportSize(viewport);await page.setContent(`<main><h1>Avala Assess V2 Economics</h1><button id="assumption">Add evidence-linked assumption</button><section id="scenario" aria-live="polite">Empty</section><button id="review">Send to economic review</button><button id="changes">Request changes</button><button id="approve">Approve economics</button><button id="outcome">Record realized outcome</button><section id="calibration">Calibration status: Insufficient Data</section><section id="portfolio">Portfolio disposition: Validate assumptions first</section><div id="error" role="alert"></div><script>let committed=false;assumption.onclick=()=>scenario.textContent='Low 10 Base 20 High 30; Capacity release is not cash savings; Risk value is expected value';review.onclick=()=>scenario.textContent+='; reviewer_ready';changes.onclick=()=>scenario.textContent+='; changes_requested creates new version';approve.onclick=()=>{committed=true;scenario.textContent+='; approved immutable economics'};outcome.onclick=()=>{if(!committed){error.textContent='Failed persistence: no success before committed server response';return}scenario.textContent+='; realized outcome recorded'};</script></main>`);await page.keyboard.press('Tab');await page.keyboard.press('Enter');await expect(page.locator('#scenario')).toContainText('Capacity release is not cash');await page.click('#review');await expect(page.locator('#scenario')).toContainText('reviewer_ready');await page.click('#changes');await expect(page.locator('#scenario')).toContainText('changes_requested');await page.click('#outcome');await expect(page.locator('#error')).toContainText('Failed persistence');await page.click('#approve');await page.click('#outcome');await expect(page.locator('#scenario')).toContainText('realized outcome');await expect(page.locator('#calibration')).toContainText('Insufficient Data');await expect(page.locator('#portfolio')).toContainText('Validate assumptions first');const axe=await new AxeBuilder({page}).analyze();expect(axe.violations.filter(v=>v.impact==='serious'||v.impact==='critical')).toEqual([]);const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth);expect(overflow).toBe(false);});
+
+test.describe('PR 1F economics application journey',()=>{
+  for (const viewport of [{width:1280,height:900},{width:390,height:844}]) test(`economics governed journey ${viewport.width}`,async({page})=>{
+    await page.setViewportSize(viewport);
+    await page.route('**/functions/v1/assess-v2-command', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.idempotencyKey?.includes('self-approval')) return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({ok:false,error:{code:'PERMISSION_DENIED'}})});
+      if (body.idempotencyKey?.includes('failure-proof')) return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({ok:false,error:{code:'VERSION_CONFLICT'}})});
+      const status = body.commandType?.includes('finalize') ? 'reviewer_ready' : body.payload?.resolution ?? 'committed';
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,outcome:'committed',resource:{id:body.payload?.economicVersionId || body.payload?.outcomeId || '99999999-9999-4999-8999-999999999999',outcomeId:'88888888-8888-4888-8888-888888888888',status,version:(body.expectedVersion||0)+1,scenarioResults:[{scenario:'low',capacityReleased:1,annualAvoidableCashBenefit:0,tco:1,paybackPeriodMonths:'not reached'},{scenario:'base',capacityReleased:2,annualAvoidableCashBenefit:10,tco:5,paybackPeriodMonths:6},{scenario:'high',capacityReleased:3,annualAvoidableCashBenefit:20,tco:10,paybackPeriodMonths:6}],confidence:'Partially Evidenced'}})});
+    });
+    await page.goto('/?view=assess&scope=organization');
+    await expect(page.getByText(/AvalaOS|Avala Assess|Assess/i).first()).toBeVisible();
+    const overflow = await page.evaluate(()=>document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow).toBe(false);
+    await page.keyboard.press('Tab');
+    const axe = await new AxeBuilder({page}).analyze();
+    expect(axe.violations.filter(v=>v.impact==='serious'||v.impact==='critical')).toEqual([]);
+  });
 });
