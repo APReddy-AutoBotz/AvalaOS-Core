@@ -1,6 +1,6 @@
 # AvalaOS Core Implementation Status
 
-Baseline: PR #211 / PR 1E accepted and post-merge verified on `main` at `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
+Baseline: PR #212 / PR 1F accepted and post-merge verified on `main` at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.
 
 ## Honest Maturity Verdict
 
@@ -67,9 +67,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 ### PR 1E Accepted Closure
 
-PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F is accepted; PR 1G Application Portfolio Assessment is not started.
 
 
-## PR 1F active candidate
+## PR 1F Accepted Closure
 
-PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+PR #212 is accepted with head `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6`, merge and verified main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`, successful exact-head workflows `29842917740` and `29842914443`, successful main workflow `29844001756`, and zero unresolved threads. Versioned economics, deterministic scenarios, independent review, append-only outcomes, **Insufficient Data** calibration reporting, and tenant/workspace portfolio dispositions are accepted. V1 scoring, PR 1D immutability, and PR 1E authority are unchanged. Deployment/hosted validation were not run; PR 1G and broader Studio/private-artifact work are not started.

@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, and PR #211 / PR 1E are accepted; PR 1E is post-merge verified at `d3074e5b99b3d40f33a472679b7a861bcac1700a`
+Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are accepted; PR 1F is post-merge verified at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 
@@ -277,9 +277,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 PR #211 is merged on `main`. Accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` is contained in merge and verified main `d3074e5b99b3d40f33a472679b7a861bcac1700a`. Exact-head workflow `29760010656` and post-merge main workflow `29802046983` succeeded; all three review threads are resolved. The closure record is `docs/quality/pr1e-assess-v2-governed-review-approval-studio-handoff-post-merge-verification.md`.
 
-V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Hosted/live validation and deployment were not run. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Hosted/live validation and deployment were not run. PR 1F is accepted; PR 1G Application Portfolio Assessment is not started.
 
 
-## PR 1F active candidate
+## PR 1F Accepted Closure
 
-PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+PR #212 is accepted and post-merge verified: accepted head `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6`, merge/main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`, exact-head workflows `29842917740` and `29842914443`, merge-triggered main workflow `29844001756`, and zero unresolved threads. Calibration remains **Insufficient Data**. V1 scoring, PR 1D decision immutability, and PR 1E authority are unchanged. Deployment and hosted/live validation were not run. PR 1G Application Portfolio Assessment and broader Studio/private-artifact work are not started.

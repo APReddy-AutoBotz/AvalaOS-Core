@@ -4,13 +4,13 @@ This ledger records the current canonical milestone status. Evidence links are h
 
 ## Active Enterprise Workstream 1
 
-PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #209 / PR 1D and PR #211 / PR 1E are merged and post-merge verified on `main`; PR 1E verification main is `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
+PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are merged and post-merge verified on `main`; PR 1F verification main is `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.
 
 - Maturity: credible deterministic enterprise demo with substantial source-level governance scaffolding; not a coherent server-authoritative, tenant-safe pilot or production platform.
 - P0: AP classified `extract-document-text` as **NOT DEPLOYED** after manual inspection; the repository did not access live infrastructure or record identifiers.
-- Candidate: server-issued organization/workspace projection, Assess create/save/finalize cutover, Govern resolution, atomic Studio handoff, explicit failure states, and feature-owned CI implemented.
-- Evidence: local source, type, Edge, coverage, build, disposable PostgreSQL, and production-preview Chromium desktop/mobile/axe/performance gates passed; GitHub CI/review/merge pending.
-- Sequence: finish PR 1C acceptance, then stop at the substantial PR boundary. No deployment or readiness claim.
+- Accepted boundary: server-issued organization/workspace authority through PR 1B, enterprise Assess/Govern/Studio handoff through PR 1E, and versioned economics, outcomes, calibration reporting, and portfolio dispositions through PR 1F.
+- Evidence: exact-head and post-merge CI, PostgreSQL 16, deterministic browser desktop/mobile/accessibility, local type/coverage/build, and static security gates passed; hosted/live validation was not run.
+- Sequence: PR 1F is closed. PR 1G Application Portfolio Assessment and broader Studio/private-artifact work are not started. No deployment or readiness claim.
 
 The acceleration plan, target architecture, active risk register, and `PLANS.md` supersede the prior routine micro-PR control pattern. Historical ledger entries and evidence remain unchanged below.
 
@@ -135,9 +135,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 PR #211 is merged and post-merge verified. Accepted head: `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e`. Merge and verified main: `d3074e5b99b3d40f33a472679b7a861bcac1700a`. Exact-head workflow `29760010656` and post-merge main workflow `29802046983` succeeded; unresolved review threads: 0.
 
-V1 scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+V1 scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F is accepted; PR 1G Application Portfolio Assessment is not started.
 
 
-## PR 1F active candidate
+## PR 1F Accepted Closure
 
-PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+PR #212 is merged and post-merge verified. Accepted head: `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6`. Merge and verified main: `480cc9b943e8b51b074873c20c2a9f30dc6521c2`. Exact-head workflows `29842917740` and `29842914443` and main workflow `29844001756` succeeded; unresolved review threads: 0. Calibration status remains **Insufficient Data**. V1 scoring is unchanged, PR 1D decisions remain immutable, and PR 1E authority is unchanged. Deployment and hosted/live validation were not run. PR 1G Application Portfolio Assessment and broader Studio/private-artifact work are not started.

@@ -4,7 +4,7 @@
 
 Historical M0–M5.7 and post-M5.7 milestone records remain accepted for the limited proof stated in their evidence. Source hardening through PR #204 is present on `main`. Those records do not establish a server-authoritative, tenant-safe pilot or production platform.
 
-PR 1A is accepted through PR #206. PR #208 / PR 1C, PR #209 / PR 1D, and PR #211 / PR 1E are accepted; PR 1E post-merge verification is complete at main `d3074e5b99b3d40f33a472679b7a861bcac1700a`.
+PR 1A is accepted through PR #206. PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are accepted; PR 1F post-merge verification is complete at main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.
 
 ## Active Sequence
 
@@ -16,7 +16,7 @@ PR 1A is accepted through PR #206. PR #208 / PR 1C, PR #209 / PR 1D, and PR #211
 | 1C | Enterprise Assess UI Cutover, Govern Resolution, Studio Handoff | PR 1B accepted | Accessible enterprise journey with atomic Govern/handoff and no false success. |
 | 1D | Avala Assess V2 Decision Intelligence Foundation | PR 1C accepted | Accepted immutable reviewer-ready V2 decision foundation. |
 | 1E | V2 Governed Review, Approval and Studio Handoff | PR 1D accepted | Independent attestation, approval, action-specific Govern, and durable Studio source handoff. |
-| 1F | V2 Economics and Calibration | PR 1E accepted | Reserved economics and calibration boundary. |
+| 1F | V2 Economics and Calibration | Accepted and post-merge verified in PR #212 | Versioned economics, realized outcomes, Insufficient Data calibration reporting, and tenant/workspace portfolio dispositions. |
 | 1G | Application Portfolio & AI-Assisted Modernization Assessment | PR 1F accepted | Reserved later portfolio-assessment boundary. |
 | 2 | Studio, documents, private artifacts | Workstream 1 accepted | Server-controlled documents, approval/versioning, private artifacts, scoped export/download. |
 | 3 | Delivery and lineage | Workstream 2 contracts stable | Canonical import, lineage, idempotent handoff, workflow controls, audit, soft delete. |
@@ -45,9 +45,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 PR #211 accepted V2 independent review and approval, action-specific Govern resolution, and durable Studio-source handoff. Accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` is contained in merge/main `d3074e5b99b3d40f33a472679b7a861bcac1700a`; post-merge verification is complete with zero unresolved review threads.
 
-V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. No deployment or hosted/live validation occurred. PR 1F, Application Portfolio Assessment, and broader Studio/private-artifact work are not started.
+V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. No deployment or hosted/live validation occurred. PR 1F is accepted; PR 1G Application Portfolio Assessment and broader Studio/private-artifact work are not started.
 
 
-## PR 1F active candidate
+## PR 1F Accepted Closure
 
-PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+PR #212 is accepted and post-merge verified at main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`; exact-head and merge-triggered CI passed with zero unresolved threads. Calibration remains **Insufficient Data**. V1 scoring is unchanged, PR 1D decisions remain immutable, and PR 1E authority is unchanged. No deployment or hosted/live validation occurred. PR 1G Application Portfolio Assessment and broader Studio/private-artifact work are not started.

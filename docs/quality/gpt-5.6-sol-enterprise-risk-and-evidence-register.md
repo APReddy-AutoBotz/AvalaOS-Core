@@ -1,6 +1,6 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-Baseline: PR #211 / PR 1E accepted and post-merge verified on main `d3074e5b99b3d40f33a472679b7a861bcac1700a`; hosted/live readiness remains unproven
+Baseline: PR #212 / PR 1F accepted and post-merge verified on main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`; hosted/live readiness remains unproven
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.
 
@@ -154,9 +154,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 - Accepted source/local/CI evidence includes exact-head workflow `29760010656`, post-merge main workflow `29802046983`, and zero unresolved review threads. Hosted RLS, deployment, live infrastructure, pilot, production, security-certification, buyer, and compliance readiness remain not run or unproven.
 - Rollback is fail-closed: disable V2 review commands or enter read-only mode, preserve all immutable records, and forward-fix the additive migration. Exact committed receipt replay remains readable in read-only mode.
 
-PR #211 accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` merged as and is contained in main `d3074e5b99b3d40f33a472679b7a861bcac1700a`. V1 scoring is unchanged; PR 1D decisions remain immutable; PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+PR #211 accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` merged as and is contained in main `d3074e5b99b3d40f33a472679b7a861bcac1700a`. V1 scoring is unchanged; PR 1D decisions remain immutable; PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Deployment and hosted/live validation were not run. PR 1F is accepted; PR 1G Application Portfolio Assessment is not started.
 
 
-## PR 1F active candidate
+## PR 1F Accepted Risk Boundary
 
-PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+PR #212 is accepted at head `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6` and merge/main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`. Exact-head workflows `29842917740` and `29842914443` and merge-triggered main workflow `29844001756` passed; unresolved threads are zero. Calibration remains **Insufficient Data** and does not alter formulas, thresholds, scoring, or forecasts. V1 scoring, PR 1D immutability, and PR 1E authority remain unchanged. Hosted/live validation and deployment were not run; PR 1G and broader Studio/private-artifact work are not started. Rollback remains fail-closed feature disablement or read-only maintenance with preserved immutable records and additive forward fixes.
