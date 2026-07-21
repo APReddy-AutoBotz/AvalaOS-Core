@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS public.assess_v2_outcome_reviews(
  FOREIGN KEY(outcome_id,economic_version_id,case_id,workspace_id,org_id) REFERENCES public.assess_v2_realized_outcomes(id,economic_version_id,case_id,workspace_id,org_id) ON DELETE RESTRICT,
  CHECK(reviewer_id IS NOT NULL)
 );
+CREATE TABLE IF NOT EXISTS public.assess_v2_economic_review_resolutions(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), org_id uuid NOT NULL, workspace_id uuid NOT NULL, case_id uuid NOT NULL, decision_id uuid NOT NULL, economic_version_id uuid NOT NULL, approved_review_id uuid NOT NULL, reviewer_id uuid NOT NULL, reviewer_authorization_version bigint NOT NULL, resolution text NOT NULL CHECK(resolution IN('approved','changes_requested','rejected')), rationale text NOT NULL, conditions text[] NOT NULL DEFAULT '{}', receipt_id uuid UNIQUE REFERENCES public.assess_command_receipts(id) ON DELETE RESTRICT, audit_event_id uuid, reviewed_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(economic_version_id,case_id,workspace_id,org_id) REFERENCES public.assess_v2_economic_versions(id,case_id,workspace_id,org_id) ON DELETE RESTRICT,
+ FOREIGN KEY(approved_review_id,case_id,decision_id,workspace_id,org_id) REFERENCES public.assess_v2_review_resolutions(id,case_id,decision_id,workspace_id,org_id) ON DELETE RESTRICT,
+ CHECK(reviewer_id IS NOT NULL)
+);
 CREATE TABLE IF NOT EXISTS public.assess_v2_calibration_snapshots(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), org_id uuid NOT NULL, workspace_id uuid NOT NULL, formula_version text NOT NULL,
  cohort_definition jsonb NOT NULL, sample_count int NOT NULL CHECK(sample_count>=0), status text NOT NULL CHECK(status IN('Insufficient Data','Indicative Only','Calibrated for Defined Cohort')),
@@ -52,18 +58,35 @@ DROP TRIGGER IF EXISTS trg_pr1f_realized_outcomes_immutable ON public.assess_v2_
 CREATE TRIGGER trg_pr1f_realized_outcomes_immutable BEFORE UPDATE OR DELETE ON public.assess_v2_realized_outcomes FOR EACH ROW EXECUTE FUNCTION public.pr1f_reject_immutable();
 DROP TRIGGER IF EXISTS trg_pr1f_outcome_reviews_immutable ON public.assess_v2_outcome_reviews;
 CREATE TRIGGER trg_pr1f_outcome_reviews_immutable BEFORE UPDATE OR DELETE ON public.assess_v2_outcome_reviews FOR EACH ROW EXECUTE FUNCTION public.pr1f_reject_immutable();
+DROP TRIGGER IF EXISTS trg_pr1f_economic_review_resolutions_immutable ON public.assess_v2_economic_review_resolutions;
+CREATE TRIGGER trg_pr1f_economic_review_resolutions_immutable BEFORE UPDATE OR DELETE ON public.assess_v2_economic_review_resolutions FOR EACH ROW EXECUTE FUNCTION public.pr1f_reject_immutable();
 ALTER TABLE public.assess_v2_economic_versions ENABLE ROW LEVEL SECURITY; ALTER TABLE public.assess_v2_economic_versions FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.assess_v2_realized_outcomes ENABLE ROW LEVEL SECURITY; ALTER TABLE public.assess_v2_realized_outcomes FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.assess_v2_calibration_snapshots ENABLE ROW LEVEL SECURITY; ALTER TABLE public.assess_v2_calibration_snapshots FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.assess_v2_outcome_reviews ENABLE ROW LEVEL SECURITY; ALTER TABLE public.assess_v2_outcome_reviews FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.assess_v2_economic_review_resolutions ENABLE ROW LEVEL SECURITY; ALTER TABLE public.assess_v2_economic_review_resolutions FORCE ROW LEVEL SECURITY;
 CREATE POLICY pr1f_economics_read ON public.assess_v2_economic_versions FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,'assess.v2.economics.read') AND EXISTS(SELECT 1 FROM public.assess_v2_cases c JOIN public.assess_v2_decision_versions d ON d.case_id=c.id AND d.org_id=c.org_id AND d.workspace_id=c.workspace_id WHERE c.id=assess_v2_economic_versions.case_id AND c.org_id=assess_v2_economic_versions.org_id AND c.workspace_id=assess_v2_economic_versions.workspace_id AND c.deleted_at IS NULL AND d.id=assess_v2_economic_versions.decision_id));
 CREATE POLICY pr1f_outcomes_read ON public.assess_v2_realized_outcomes FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,'assess.v2.economics.read') AND EXISTS(SELECT 1 FROM public.assess_v2_cases c JOIN public.assess_v2_economic_versions e ON e.case_id=c.id AND e.org_id=c.org_id AND e.workspace_id=c.workspace_id WHERE c.id=assess_v2_realized_outcomes.case_id AND c.org_id=assess_v2_realized_outcomes.org_id AND c.workspace_id=assess_v2_realized_outcomes.workspace_id AND c.deleted_at IS NULL AND e.id=assess_v2_realized_outcomes.economic_version_id));
+CREATE POLICY pr1f_economic_reviews_read ON public.assess_v2_economic_review_resolutions FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,'assess.v2.economics.read') AND EXISTS(SELECT 1 FROM public.assess_v2_cases c WHERE c.id=assess_v2_economic_review_resolutions.case_id AND c.org_id=assess_v2_economic_review_resolutions.org_id AND c.workspace_id=assess_v2_economic_review_resolutions.workspace_id AND c.deleted_at IS NULL));
 CREATE POLICY pr1f_calibration_read ON public.assess_v2_calibration_snapshots FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,'assess.v2.calibration.read'));
 CREATE POLICY pr1f_outcome_reviews_read ON public.assess_v2_outcome_reviews FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,'assess.v2.economics.read') AND EXISTS(SELECT 1 FROM public.assess_v2_cases c JOIN public.assess_v2_economic_versions e ON e.case_id=c.id AND e.org_id=c.org_id AND e.workspace_id=c.workspace_id WHERE c.id=assess_v2_outcome_reviews.case_id AND c.org_id=assess_v2_outcome_reviews.org_id AND c.workspace_id=assess_v2_outcome_reviews.workspace_id AND c.deleted_at IS NULL AND e.id=assess_v2_outcome_reviews.economic_version_id AND e.decision_id=assess_v2_outcome_reviews.decision_id));
 REVOKE ALL ON public.assess_v2_economic_versions, public.assess_v2_realized_outcomes, public.assess_v2_outcome_reviews, public.assess_v2_calibration_snapshots FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.assess_v2_economic_versions TO authenticated; GRANT SELECT ON public.assess_v2_realized_outcomes TO authenticated; GRANT SELECT ON public.assess_v2_outcome_reviews TO authenticated; GRANT SELECT ON public.assess_v2_calibration_snapshots TO authenticated;
+GRANT SELECT ON public.assess_v2_economic_versions TO authenticated; GRANT SELECT ON public.assess_v2_realized_outcomes TO authenticated; GRANT SELECT ON public.assess_v2_outcome_reviews TO authenticated; GRANT SELECT ON public.assess_v2_economic_review_resolutions TO authenticated; GRANT SELECT ON public.assess_v2_calibration_snapshots TO authenticated;
 COMMENT ON TABLE public.assess_v2_economic_versions IS 'PR 1F additive exact-version-linked economics; capacity is not cash without explicit evidence-backed realization.';
 COMMENT ON TABLE public.assess_v2_calibration_snapshots IS 'PR 1F transparent calibration reporting only; synthetic records excluded and formulas are never tuned automatically.';
+
+CREATE OR REPLACE FUNCTION public.pr1f_derive_confidence(p_assumptions jsonb) RETURNS text LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
+DECLARE item jsonb; has_items boolean:=false;
+BEGIN
+ FOR item IN SELECT * FROM jsonb_array_elements(COALESCE(p_assumptions->'benefits','[]'::jsonb)||COALESCE(p_assumptions->'costs','[]'::jsonb)) LOOP
+  has_items:=true;
+  IF COALESCE(jsonb_array_length(COALESCE(item->'evidenceIds','[]'::jsonb)),0)=0 OR COALESCE(item->>'owner','')='' THEN RETURN 'Insufficient Evidence'; END IF;
+  IF item->>'confidence'='Insufficient Evidence' THEN RETURN 'Insufficient Evidence'; END IF;
+  IF item->>'confidence'='Assumption-Led' THEN RETURN 'Assumption-Led'; END IF;
+ END LOOP;
+ IF NOT has_items THEN RETURN 'Insufficient Evidence'; END IF;
+ RETURN 'Partially Evidenced';
+END$$;
 
 CREATE OR REPLACE FUNCTION public.pr1f_calculate_economics(p_assumptions jsonb,p_horizon int,p_discount numeric)
 RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
@@ -111,17 +134,19 @@ BEGIN
  ELSIF p_command_type='assessment_v2.economics.draft.upsert' THEN
    SELECT * INTO econ FROM public.assess_v2_economic_versions WHERE id=(p_payload->>'economicVersionId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND lifecycle IN('draft','changes_requested') FOR SHARE; IF econ.id IS NULL OR econ.version<>p_expected_version THEN RAISE EXCEPTION 'PR1F_VERSION_CONFLICT'; END IF;
    next_version:=econ.version+1; INSERT INTO public.assess_v2_economic_versions(org_id,workspace_id,case_id,source_version_id,decision_id,approved_review_id,model_version,formula_version,lifecycle,version,currency,baseline_period,analysis_horizon_years,implementation_horizon_months,discount_rate,author_id,assumptions,confidence,prior_economic_version_id,receipt_id)
-   VALUES(p_org_id,p_workspace_id,econ.case_id,econ.source_version_id,econ.decision_id,econ.approved_review_id,econ.model_version,econ.formula_version,'draft',next_version,econ.currency,econ.baseline_period,(p_payload->>'analysisHorizonYears')::int,(p_payload->>'implementationHorizonMonths')::int,NULLIF(p_payload->>'discountRate','')::numeric,p_actor_id,p_payload,'Partially Evidenced',econ.id,r.id) RETURNING * INTO econ;
+   VALUES(p_org_id,p_workspace_id,econ.case_id,econ.source_version_id,econ.decision_id,econ.approved_review_id,econ.model_version,econ.formula_version,'draft',next_version,econ.currency,econ.baseline_period,(p_payload->>'analysisHorizonYears')::int,(p_payload->>'implementationHorizonMonths')::int,NULLIF(p_payload->>'discountRate','')::numeric,p_actor_id,p_payload,public.pr1f_derive_confidence(p_payload),econ.id,r.id) RETURNING * INTO econ;
  ELSIF p_command_type IN('assessment_v2.economics.finalize','assessment_v2.economics.review.resolve','assessment_v2.economics.revision.start') THEN
    SELECT * INTO econ FROM public.assess_v2_economic_versions WHERE id=(p_payload->>'economicVersionId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id FOR SHARE; IF econ.id IS NULL OR econ.version<>p_expected_version THEN RAISE EXCEPTION 'PR1F_VERSION_CONFLICT'; END IF;
    IF p_command_type='assessment_v2.economics.review.resolve' AND econ.lifecycle<>'reviewer_ready' THEN RAISE EXCEPTION 'PR1F_INVALID_LIFECYCLE'; END IF;
    IF p_command_type='assessment_v2.economics.review.resolve' AND econ.author_id=p_actor_id THEN RAISE EXCEPTION 'PR1F_PERMISSION_DENIED'; END IF;
    SELECT * INTO rr FROM public.assess_v2_review_resolutions WHERE id=econ.approved_review_id AND case_id=econ.case_id AND decision_id=econ.decision_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND resolution='approved'; IF rr.id IS NULL THEN RAISE EXCEPTION 'PR1F_APPROVED_REVIEW_REQUIRED'; END IF;
    IF p_command_type='assessment_v2.economics.finalize' AND econ.lifecycle<>'draft' THEN RAISE EXCEPTION 'PR1F_INVALID_LIFECYCLE'; END IF;
+   IF p_command_type='assessment_v2.economics.revision.start' AND econ.lifecycle<>'changes_requested' THEN RAISE EXCEPTION 'PR1F_INVALID_LIFECYCLE'; END IF;
    scenarios:=CASE WHEN p_command_type='assessment_v2.economics.finalize' THEN public.pr1f_calculate_economics(econ.assumptions,econ.analysis_horizon_years,econ.discount_rate) ELSE econ.scenario_results END;
    IF p_command_type='assessment_v2.economics.review.resolve' AND p_payload->>'resolution'='approved' AND (econ.confidence='Insufficient Evidence' OR jsonb_array_length(econ.scenario_results)<>3) THEN RAISE EXCEPTION 'PR1F_INCOMPLETE_ECONOMICS'; END IF;
+   IF p_command_type='assessment_v2.economics.review.resolve' THEN INSERT INTO public.assess_v2_economic_review_resolutions(org_id,workspace_id,case_id,decision_id,economic_version_id,approved_review_id,reviewer_id,reviewer_authorization_version,resolution,rationale,conditions,receipt_id) VALUES(p_org_id,p_workspace_id,econ.case_id,econ.decision_id,econ.id,econ.approved_review_id,p_actor_id,p_authorization_version,p_payload->>'resolution',p_payload->>'rationale',ARRAY(SELECT jsonb_array_elements_text(COALESCE(p_payload->'conditions','[]'::jsonb))),r.id); END IF;
    next_version:=econ.version+1; INSERT INTO public.assess_v2_economic_versions(org_id,workspace_id,case_id,source_version_id,decision_id,approved_review_id,model_version,formula_version,lifecycle,version,currency,baseline_period,analysis_horizon_years,implementation_horizon_months,discount_rate,author_id,reviewer_id,assumptions,scenario_results,confidence,prior_economic_version_id,receipt_id)
-   VALUES(p_org_id,p_workspace_id,econ.case_id,econ.source_version_id,econ.decision_id,econ.approved_review_id,econ.model_version,econ.formula_version,CASE WHEN p_command_type='assessment_v2.economics.finalize' THEN 'reviewer_ready' WHEN p_command_type='assessment_v2.economics.revision.start' THEN 'draft' WHEN p_payload->>'resolution'='approved' THEN 'approved' WHEN p_payload->>'resolution'='changes_requested' THEN 'changes_requested' ELSE 'rejected' END,next_version,econ.currency,econ.baseline_period,econ.analysis_horizon_years,econ.implementation_horizon_months,econ.discount_rate,econ.author_id,CASE WHEN p_command_type='assessment_v2.economics.review.resolve' THEN p_actor_id ELSE NULL END,econ.assumptions,scenarios,CASE WHEN p_command_type='assessment_v2.economics.finalize' AND jsonb_array_length(scenarios)=3 THEN 'Partially Evidenced' ELSE econ.confidence END,econ.id,r.id) RETURNING * INTO econ;
+   VALUES(p_org_id,p_workspace_id,econ.case_id,econ.source_version_id,econ.decision_id,econ.approved_review_id,econ.model_version,econ.formula_version,CASE WHEN p_command_type='assessment_v2.economics.finalize' THEN 'reviewer_ready' WHEN p_command_type='assessment_v2.economics.revision.start' THEN 'draft' WHEN p_payload->>'resolution'='approved' THEN 'approved' WHEN p_payload->>'resolution'='changes_requested' THEN 'changes_requested' ELSE 'rejected' END,next_version,econ.currency,econ.baseline_period,econ.analysis_horizon_years,econ.implementation_horizon_months,econ.discount_rate,econ.author_id,CASE WHEN p_command_type='assessment_v2.economics.review.resolve' THEN p_actor_id ELSE NULL END,econ.assumptions,scenarios,CASE WHEN p_command_type='assessment_v2.economics.finalize' AND jsonb_array_length(scenarios)=3 THEN public.pr1f_derive_confidence(econ.assumptions) ELSE econ.confidence END,econ.id,r.id) RETURNING * INTO econ;
  ELSIF p_command_type='assessment_v2.outcomes.record' THEN
    SELECT * INTO econ FROM public.assess_v2_economic_versions WHERE id=(p_payload->>'economicVersionId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND lifecycle='approved' FOR SHARE; IF econ.id IS NULL THEN RAISE EXCEPTION 'PR1F_NOT_FOUND'; END IF;
    INSERT INTO public.assess_v2_realized_outcomes(org_id,workspace_id,case_id,economic_version_id,observation_period,project_reference,owner_id,collection_method,actuals,evidence_ids,observation_completeness,receipt_id) VALUES(p_org_id,p_workspace_id,econ.case_id,econ.id,p_payload->>'observationPeriod',p_payload->>'projectReference',p_actor_id,p_payload->>'collectionMethod',p_payload->'actuals',ARRAY(SELECT jsonb_array_elements_text(p_payload->'evidenceIds')),(p_payload->>'observationCompleteness')::numeric,r.id);
@@ -135,8 +160,23 @@ BEGIN
  INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,p_command_type,'assess_v2_economics',COALESCE(econ.id,(p_payload->>'economicVersionId')::uuid),'succeeded',COALESCE(econ.version,p_expected_version+1));
  RETURN jsonb_build_object('outcome','committed','resource',res);
 END$$;
+
+CREATE OR REPLACE FUNCTION public.pr1f_read_assess_v2_economics_projection(p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_decision_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE econ public.assess_v2_economic_versions; outc public.assess_v2_realized_outcomes; outrev public.assess_v2_outcome_reviews; cal public.assess_v2_calibration_snapshots;
+BEGIN
+ IF NOT public.has_workspace_capability(p_workspace_id,p_org_id,'assess.v2.economics.read') THEN RAISE EXCEPTION 'PR1F_NOT_FOUND'; END IF;
+ SELECT e.* INTO econ FROM public.assess_v2_economic_versions e JOIN public.assess_v2_cases c ON c.id=e.case_id AND c.org_id=e.org_id AND c.workspace_id=e.workspace_id WHERE e.org_id=p_org_id AND e.workspace_id=p_workspace_id AND e.case_id=p_case_id AND e.decision_id=p_decision_id AND c.deleted_at IS NULL ORDER BY e.version DESC LIMIT 1;
+ IF econ.id IS NULL THEN RETURN jsonb_build_object('version',NULL,'calibrationStatus','Insufficient Data'); END IF;
+ SELECT * INTO outc FROM public.assess_v2_realized_outcomes WHERE org_id=p_org_id AND workspace_id=p_workspace_id AND case_id=p_case_id AND economic_version_id=econ.id ORDER BY created_at DESC LIMIT 1;
+ IF outc.id IS NOT NULL THEN SELECT * INTO outrev FROM public.assess_v2_outcome_reviews WHERE org_id=p_org_id AND workspace_id=p_workspace_id AND case_id=p_case_id AND economic_version_id=econ.id AND outcome_id=outc.id ORDER BY reviewed_at DESC LIMIT 1; END IF;
+ SELECT * INTO cal FROM public.assess_v2_calibration_snapshots WHERE org_id=p_org_id AND workspace_id=p_workspace_id ORDER BY created_at DESC LIMIT 1;
+ RETURN jsonb_build_object('version',jsonb_build_object('id',econ.id,'version',econ.version,'status',econ.lifecycle,'currency',econ.currency,'baselinePeriod',econ.baseline_period,'scenarioResults',econ.scenario_results,'confidenceDerived',econ.confidence,'approvedReviewId',econ.approved_review_id,'reviewerId',econ.reviewer_id),'approvedReviewAncestry',jsonb_build_object('approvedReviewId',econ.approved_review_id,'caseId',econ.case_id,'decisionId',econ.decision_id),'technicalReady',true,'governanceApproved',true,'latestOutcome',CASE WHEN outc.id IS NULL THEN NULL ELSE jsonb_build_object('id',outc.id,'period',outc.observation_period) END,'latestOutcomeReview',CASE WHEN outrev.id IS NULL THEN NULL ELSE jsonb_build_object('id',outrev.id,'resolution',outrev.resolution) END,'calibrationStatus',COALESCE(cal.status,'Insufficient Data'),'portfolioDisposition','Validate assumptions first');
+END$$;
 REVOKE ALL ON FUNCTION public.pr1f_execute_assess_v2_economics_command(uuid,uuid,uuid,uuid,text,bigint,bigint,text,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pr1f_execute_assess_v2_economics_command(uuid,uuid,uuid,uuid,text,bigint,bigint,text,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pr1f_read_assess_v2_economics_projection(uuid,uuid,uuid,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.pr1f_read_assess_v2_economics_projection(uuid,uuid,uuid,uuid) TO authenticated,service_role;
 CREATE OR REPLACE FUNCTION public.pr1f_outcome_review_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'PR1F_IMMUTABLE_RECORD'; END IF;
