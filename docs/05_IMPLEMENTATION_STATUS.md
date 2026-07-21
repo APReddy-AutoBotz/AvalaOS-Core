@@ -67,4 +67,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 ### PR 1E Accepted Closure
 
-PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F and Application Portfolio Assessment are not started.
+PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+
+
+## PR 1F active candidate
+
+PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.

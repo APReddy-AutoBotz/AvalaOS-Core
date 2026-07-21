@@ -277,4 +277,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 PR #211 is merged on `main`. Accepted head `be502c9faf4f768d3a60e2f9debd5ffc40b6b66e` is contained in merge and verified main `d3074e5b99b3d40f33a472679b7a861bcac1700a`. Exact-head workflow `29760010656` and post-merge main workflow `29802046983` succeeded; all three review threads are resolved. The closure record is `docs/quality/pr1e-assess-v2-governed-review-approval-studio-handoff-post-merge-verification.md`.
 
-V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Hosted/live validation and deployment were not run. PR 1F and Application Portfolio Assessment are not started.
+V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. PR 1E governed review/approval/Govern/Studio-source handoff is accepted. Hosted/live validation and deployment were not run. PR 1F is active candidate work; Application Portfolio Assessment is not started.
+
+
+## PR 1F active candidate
+
+PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.

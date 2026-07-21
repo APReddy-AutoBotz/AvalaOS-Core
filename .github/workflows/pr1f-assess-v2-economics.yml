@@ -1,0 +1,31 @@
+name: PR 1F Assess V2 Economics
+on:
+  pull_request:
+    paths:
+      - 'services/assessV2/economics/**'
+      - 'components/assess-v2/AssessV2EconomicsWorkspace*'
+      - 'supabase/migrations/*pr1f*'
+      - 'scripts/*Pr1f*'
+      - 'docs/architecture/assess-v2-economics-calibration-architecture.md'
+  push:
+    branches:
+      - codex/pr-1f-assess-v2-economics-calibration-portfolio-intelligence
+jobs:
+  pr1f:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:pr1f
+      - run: npm run test:migrations:pr1f
+      - run: npx playwright install chromium
+      - run: npm run test:browser:pr1f
+      - run: npm run typecheck
+      - run: npm run typecheck:edge
+      - run: npm run test:ai-boundary-static
+      - run: npm run test:secret-hygiene
+      - run: npm run build

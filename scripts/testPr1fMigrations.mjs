@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+const sql=fs.readFileSync('supabase/migrations/20260721120000_pr1f_assess_v2_economics.sql','utf8');
+const checks=['CREATE TABLE IF NOT EXISTS public.assess_v2_economic_versions','CREATE TABLE IF NOT EXISTS public.assess_v2_realized_outcomes','CREATE TABLE IF NOT EXISTS public.assess_v2_calibration_snapshots','FORCE ROW LEVEL SECURITY','REVOKE ALL ON FUNCTION public.pr1f_execute_assess_v2_economics_command','GRANT EXECUTE ON FUNCTION public.pr1f_execute_assess_v2_economics_command','public.pr1b_assert_command_authority','assessment_v2.economics.create','assessment_v2.economics.draft.upsert','assessment_v2.economics.finalize','assessment_v2.economics.review.resolve','assessment_v2.economics.revision.start','assessment_v2.outcomes.record','assessment_v2.outcomes.review','assessment_v2.calibration.snapshot.create','PR1F_READ_ONLY','PR1F_IDEMPOTENCY_CONFLICT','privileged_audit_events'];
+for(const check of checks) if(!sql.includes(check)) throw new Error(`PR 1F migration contract missing ${check}`);
+console.log('PR 1F migration contract checks passed (static; PostgreSQL 16 execution requires CI database).');
