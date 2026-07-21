@@ -1,5 +1,5 @@
 -- PR 1F additive Assess V2 economics, outcomes, calibration and portfolio authority.
-INSERT INTO public.capabilities(key,domain,description) VALUES
+INSERT INTO public.capabilities(capability_key,module,description) VALUES
  ('assess.v2.economics.read','assess','Read Assess V2 approved economics projections'),
  ('assess.v2.economics.write','assess','Create or update Assess V2 economic drafts'),
  ('assess.v2.economics.finalize','assess','Finalize immutable Assess V2 economic versions'),
@@ -7,8 +7,9 @@ INSERT INTO public.capabilities(key,domain,description) VALUES
  ('assess.v2.outcomes.record','assess','Record append-only realized outcomes'),
  ('assess.v2.outcomes.review','assess','Independently review realized outcomes'),
  ('assess.v2.calibration.read','assess','Read bounded calibration snapshots'),
+ ('assess.v2.calibration.write','assess','Create bounded calibration snapshots'),
  ('assess.v2.portfolio.read','assess','Read workspace-scoped Assess V2 portfolio intelligence')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT(capability_key) DO UPDATE SET module=excluded.module,description=excluded.description;
 CREATE TABLE IF NOT EXISTS public.assess_v2_economic_versions(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), org_id uuid NOT NULL, workspace_id uuid NOT NULL, case_id uuid NOT NULL,
  source_version_id uuid NOT NULL, decision_id uuid NOT NULL, approved_review_id uuid NOT NULL,
@@ -65,7 +66,7 @@ BEGIN
        WHEN p_command_type='assessment_v2.economics.review.resolve' THEN 'assess.v2.economics.review'
        WHEN p_command_type='assessment_v2.outcomes.record' THEN 'assess.v2.outcomes.record'
        WHEN p_command_type='assessment_v2.outcomes.review' THEN 'assess.v2.outcomes.review'
-       WHEN p_command_type='assessment_v2.calibration.snapshot.create' THEN 'assess.v2.calibration.read' ELSE 'invalid' END, p_authorization_version);
+       WHEN p_command_type='assessment_v2.calibration.snapshot.create' THEN 'assess.v2.calibration.write' ELSE 'invalid' END, p_authorization_version);
  SELECT * INTO r FROM public.assess_command_receipts WHERE actor_id=p_actor_id AND org_id=p_org_id AND workspace_id=p_workspace_id AND command_type=p_command_type AND idempotency_key=p_idempotency_key FOR UPDATE;
  IF r.id IS NOT NULL THEN IF r.request_hash<>h THEN RAISE EXCEPTION 'PR1F_IDEMPOTENCY_CONFLICT'; END IF; IF r.status='succeeded' THEN RETURN jsonb_build_object('outcome','replayed','resource',r.response); END IF; RAISE EXCEPTION 'PR1F_IDEMPOTENCY_CONFLICT'; END IF;
  IF control.read_only THEN RAISE EXCEPTION 'PR1F_READ_ONLY'; END IF;

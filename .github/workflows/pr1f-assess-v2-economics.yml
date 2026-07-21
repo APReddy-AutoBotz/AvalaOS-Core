@@ -9,7 +9,8 @@ on:
       - 'docs/architecture/assess-v2-economics-calibration-architecture.md'
   push:
     branches:
-      - codex/pr-1f-assess-v2-economics-calibration-portfolio-intelligence
+      - codex/implement-avala-assess-v2-economics-pr-1f
+      - codex/pr-1f-*
 jobs:
   pr1f:
     runs-on: ubuntu-latest
