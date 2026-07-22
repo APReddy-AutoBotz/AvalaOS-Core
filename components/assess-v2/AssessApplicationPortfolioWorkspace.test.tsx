@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
-assert.equal(renderApplicationPortfolioState({loading:true,applications:[]}).state,'loading');
-assert.equal(renderApplicationPortfolioState({offline:true,applications:[]}).state,'offline');
-assert.equal(renderApplicationPortfolioState({readOnly:true,applications:[]}).state,'read-only');
-assert.equal(renderApplicationPortfolioState({failedPersistence:true,applications:[]}).state,'failed-persistence');
-assert.equal(renderApplicationPortfolioState({applications:[]}).state,'empty');
-const fixture=syntheticApplicationPortfolioFixture();
-assert.equal(fixture.length,3);assert.equal(fixture[0].metadata.synthetic,true);assert.match(fixture[0].metadata.description,/not verified enterprise data/i);
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import AssessApplicationPortfolioWorkspace,{ renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
+assert.equal(renderApplicationPortfolioState({loading:true,applications:[]}).state,'loading');assert.equal(renderApplicationPortfolioState({offline:true,applications:[]}).state,'offline');assert.equal(renderApplicationPortfolioState({readOnly:true,applications:[]}).state,'read-only');assert.equal(renderApplicationPortfolioState({failedPersistence:true,applications:[]}).state,'failed-persistence');assert.equal(renderApplicationPortfolioState({revoked:true,applications:[]}).state,'revoked');assert.equal(renderApplicationPortfolioState({conflict:true,applications:[]}).state,'conflict');assert.equal(renderApplicationPortfolioState({stale:true,applications:[]}).state,'stale');assert.equal(renderApplicationPortfolioState({superseded:true,applications:[]}).state,'superseded');assert.equal(renderApplicationPortfolioState({applications:[]}).state,'empty');assert.equal(renderApplicationPortfolioState({applications:[{} as any]}).state,'ready');
+const fixture=syntheticApplicationPortfolioFixture();assert.equal(fixture.length,3);assert.equal(fixture[0].metadata.synthetic,true);assert.match(fixture[0].metadata.description,/not verified enterprise data/i);
+const tenant={userId:'u',organizationId:'o',organizationName:'Org',workspaceId:'w',workspaceName:'Ws',authorizationVersion:1,capabilities:['assess.applications.read','assess.applications.write','assess.applications.import','assess.applications.finalize','assess.applications.review','assess.applications.portfolio.read']};
+const html=renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWorkspace,{tenantContext:tenant as any,transport:{loadProjection:async()=>({inventory:[],metadataVersions:[],processLinks:[],dependencies:[],assessments:[],dimensions:[],recommendations:[],reviews:[],waves:[],economicsReferences:[],rowOutcomes:[]}),invoke:async()=>({outcome:'committed' as const,resource:{id:'server',version:1,status:'draft'}})}}));
+assert.match(html,/Application Portfolio/);assert.match(html,/Create manual application/);assert.match(renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWorkspace,{tenantContext:tenant as any,readOnly:true})),/Read-only mode/);
 console.log('PR 1G application portfolio workspace state tests passed.');

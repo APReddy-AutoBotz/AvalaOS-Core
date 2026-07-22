@@ -40,9 +40,17 @@ const options = {
 const host = ts.createCompilerHost(options);
 const readFile = host.readFile.bind(host);
 const supabaseClient = path.resolve('services/supabaseClient.ts');
-host.readFile = file => path.resolve(file) === supabaseClient
-  ? "export const supabase:any={functions:{invoke:async()=>({data:{ok:true,outcome:'committed',resource:{id:'server',version:1,status:'draft'}}})},rpc:async()=>({data:{inventory:[],metadataVersions:[],processLinks:[],dependencies:[],assessments:[],dimensions:[],recommendations:[],reviews:[],waves:[],economicsReferences:[],rowOutcomes:[]}})};"
-  : readFile(file);
+const edgeSupabase = path.resolve('supabase/functions/_shared/supabase.ts');
+const tenantAuthority = path.resolve('supabase/functions/_shared/tenantAuthority.ts');
+const tenantAuthorityDb = path.resolve('supabase/functions/_shared/tenantAuthorityDb.ts');
+host.readFile = file => {
+  const resolved = path.resolve(file);
+  if (resolved === supabaseClient) return "export const supabase:any={functions:{invoke:(...args:any[])=>(globalThis as any).__pr1gSupabaseClient.functions.invoke(...args)},rpc:(...args:any[])=>(globalThis as any).__pr1gSupabaseClient.rpc(...args)};";
+  if (resolved === edgeSupabase) return "export const getAuthUser=async(request:any)=>({id:(globalThis as any).__pr1gActorId??'44444444-4444-4444-8444-444444444444'});export const postgrest=async <T=any>(path:string,init:any={}):Promise<T>=>{const h=(globalThis as any).__pr1gPostgrest;if(h)return h(path,init);return {outcome:'committed',resource:{id:'server-resource',version:1,status:'committed'}} as T;};";
+  if (resolved === tenantAuthority) return "export class TenantAuthorityError extends Error{constructor(public code:string){super(code)}};export const resolveTenantAuthority=async(actorId:string,input:any,db?:any)=>{const h=(globalThis as any).__pr1gResolveAuthority;if(h)return h(actorId,input);return{userId:actorId,organizationId:input.organizationId,workspaceId:input.workspaceId,authorizationVersion:7,capabilities:['assess.applications.read','assess.applications.write','assess.applications.import','assess.applications.finalize','assess.applications.review','assess.applications.portfolio.read']};};";
+  if (resolved === tenantAuthorityDb) return "export const createTenantAuthorityDatabase=(request:any)=>({request});";
+  return readFile(file);
+};
 const program = ts.createProgram({ rootNames: roots, options, host });
 const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length) {
@@ -50,19 +58,12 @@ if (diagnostics.length) {
   process.exit(1);
 }
 if (program.emit().emitSkipped) process.exit(1);
-// Browser component rendering and service-role network adapters are covered by dedicated browser/Edge tests;
-// keep Node/V8 coverage focused on deterministic executable units while still instrumenting the PR 1G source set.
-for (const relative of ['components/assess-v2/AssessApplicationPortfolioWorkspace.js','supabase/functions/_shared/assessV2ApplicationPortfolioDb.js','services/assessV2ApplicationPortfolioClient.js']) {
-  const compiled = path.join(outputDir, relative);
-  fs.writeFileSync(compiled, '/* node:coverage disable */\n' + fs.readFileSync(compiled, 'utf8') + '\n/* node:coverage enable */\n');
-}
 const out = value => path.join(outputDir, value).replace(/\\/g, '/');
 const includes = [
   'services/assessV2/applicationPortfolio.js',
   'supabase/functions/_shared/assessV2ApplicationPortfolioCommand.js',
-  'supabase/functions/_shared/assessV2ApplicationPortfolioDb.js','services/assessV2ApplicationPortfolioClient.js',
+  'supabase/functions/_shared/assessV2ApplicationPortfolioDb.js',
   'services/assessV2ApplicationPortfolioClient.js',
-  'components/assess-v2/AssessApplicationPortfolioWorkspace.js',
 ].map(out);
 const tests = [
   'services/assessV2/applicationPortfolio.test.js',
