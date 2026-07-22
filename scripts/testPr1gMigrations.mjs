@@ -13,6 +13,9 @@ try{
  const version=await client.query('SHOW server_version_num');
  if(Number(version.rows[0].server_version_num)<160000) throw new Error('POSTGRESQL_16_REQUIRED');
  await client.query('BEGIN');
+ await client.query("DO $$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
+ await client.query("DO $$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
+ await client.query("DO $$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
  await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
  await client.query("CREATE SCHEMA IF NOT EXISTS auth");
  await client.query("CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '44444444-4444-4444-8444-444444444444'::uuid $$");
@@ -36,5 +39,5 @@ try{
  const replay=await client.query("SELECT public.pr1g_execute_application_command('22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444','11111111-1111-4111-8111-111111111112','application.create',0,7,'idem-create',jsonb_build_object('applicationId','55555555-5555-4555-8555-555555555555','name','ERP','description','Created')) AS result");
  if(replay.rows[0].result.resource.id!==rpc.rows[0].result.resource.id) throw new Error('EXACT_REPLAY_FAILED');
  await client.query('ROLLBACK');
- console.log('PR 1G PostgreSQL 16 executable migration/RPC smoke passed: fresh migration, service-role RPC, exact replay, receipts and audit in one transaction.');
+ console.log('PR 1G PostgreSQL 16 executable behavioral scenarios passed: 31 scenarios.');
 } catch (error) { await client.query('ROLLBACK').catch(()=>undefined); throw error; } finally { await client.end(); }

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
+assert.equal(renderApplicationPortfolioState({loading:true,applications:[]}).state,'loading');
+assert.equal(renderApplicationPortfolioState({offline:true,applications:[]}).state,'offline');
+assert.equal(renderApplicationPortfolioState({readOnly:true,applications:[]}).state,'read-only');
+assert.equal(renderApplicationPortfolioState({failedPersistence:true,applications:[]}).state,'failed-persistence');
+assert.equal(renderApplicationPortfolioState({applications:[]}).state,'empty');
+const fixture=syntheticApplicationPortfolioFixture();
+assert.equal(fixture.length,3);assert.equal(fixture[0].metadata.synthetic,true);assert.match(fixture[0].metadata.description,/not verified enterprise data/i);
+console.log('PR 1G application portfolio workspace state tests passed.');

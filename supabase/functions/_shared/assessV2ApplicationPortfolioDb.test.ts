@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { mapApplicationRpcError } from './assessV2ApplicationPortfolioDb.ts';
+assert.equal(mapApplicationRpcError(new Error('PR1G_READ_ONLY')).code,'READ_ONLY');
+assert.equal(mapApplicationRpcError(new Error('PR1G_FEATURE_DISABLED')).code,'FEATURE_DISABLED');
+assert.equal(mapApplicationRpcError(new Error('PR1G_AUTHORIZATION_STALE')).code,'AUTHORITY_STALE');
+assert.equal(mapApplicationRpcError(new Error('PR1G_VERSION_CONFLICT')).code,'VERSION_CONFLICT');
+assert.equal(mapApplicationRpcError(new Error('PR1G_IDEMPOTENCY_CONFLICT')).code,'IDEMPOTENCY_CONFLICT');
+assert.equal(mapApplicationRpcError(new Error('PR1G_PERMISSION_DENIED')).code,'PERMISSION_DENIED');
+assert.equal(mapApplicationRpcError(new Error('PR1G_NOT_FOUND')).code,'RESOURCE_NOT_AVAILABLE');
+assert.equal(mapApplicationRpcError(new Error('PR1G_INVALID_COMMAND')).code,'INVALID_COMMAND');
+assert.equal(mapApplicationRpcError(new Error('other')).code,'COMMAND_UNAVAILABLE');
+console.log('PR 1G application portfolio DB error mapping tests passed.');
