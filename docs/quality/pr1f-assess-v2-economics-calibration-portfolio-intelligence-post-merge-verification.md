@@ -34,6 +34,18 @@
 | `npm run test:secret-hygiene` | Passed; 0 forbidden hits and 0 tracked `.env` files |
 | `git diff --check` | Passed |
 
+## Tag-closure browser stabilization
+
+The initial documentation closure commit `5a8ce399558b849866c959616de9bec959db2ff1` triggered main workflow `29844902031`. Its retained PR 1E desktop/mobile browser gate failed, and the failed-job rerun repeated the same assertion on both Desktop Chrome and Pixel 7. Tag creation stopped as required.
+
+The deterministic root cause was confined to `tests/browser/pr1e.spec.ts`: after a successful evidence attestation rendered, the test clicked **Approve reviewed decision** before the component's asynchronous busy state had re-enabled the button. No `assessment_v2.review.resolve` request was sent, while the prior intentionally rejected attestation's stale conflict message satisfied the shallow message-visibility assertion. The rejected-command and false-success product behavior was not defective.
+
+Corrective PR #213, `test: stabilize retained PR 1E browser rejection proof`, changed only `tests/browser/pr1e.spec.ts`. It waits for the review button to become enabled, records the rejection count before clicking, waits for exactly one additional rejection, verifies that the newest rejection is `assessment_v2.review.resolve`, and verifies that no review-resolution success message appears. Its accepted head is `8226511a889f520551cbee6940b81f9f891c17d8`; exact-head workflow `29847385519` passed; unresolved review threads were zero; and it merged as `c2dd386573010ade0acbf9917d49270a82efbc3d`.
+
+Merge-triggered main workflow `29886767606` passed at `c2dd386573010ade0acbf9917d49270a82efbc3d`. Quality Gates; retained PR 1A, PR 1B, PR 1C, and PR 1D migration gates; the retained PR 1E PostgreSQL 16/RLS/private-RPC gate; and retained desktop/mobile browser, accessibility, viewport, and performance gates succeeded. Hosted Supabase smoke remained skipped under the intended non-live condition.
+
+This correction is test-only and changes no product behavior, V1 scoring, PR 1D decisions, PR 1E review/Govern/handoff authority, PR 1F economics, formulas, migrations, RLS, authorization, calibration, or UI. PR #212 post-merge verification is complete and tag closure is ready, subject only to green CI for this final documentation closure commit.
+
 ## Accepted boundary and non-claims
 
 - V1 `assess-core-2026-05` scoring behavior is unchanged.
