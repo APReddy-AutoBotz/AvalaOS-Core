@@ -19,5 +19,135 @@ DROP TRIGGER IF EXISTS trg_pr1g_metadata_finalized_immutable ON public.assess_ap
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['assess_application_assessment_versions','assess_application_dimension_results','assess_application_modernization_recommendations','assess_application_review_resolutions','assess_application_portfolio_snapshots','assess_application_import_receipts','assess_application_import_row_outcomes'] LOOP EXECUTE format('DROP TRIGGER IF EXISTS trg_pr1g_%I_immutable ON public.%I',t,t); EXECUTE format('CREATE TRIGGER trg_pr1g_%I_immutable BEFORE UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.pr1g_reject_immutable()',t,t); END LOOP; END $$;
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['assess_application_assets','assess_application_metadata_versions','assess_process_application_links','assess_application_dependencies','assess_application_assessment_versions','assess_application_dimension_results','assess_application_modernization_recommendations','assess_application_review_resolutions','assess_application_portfolio_snapshots','assess_application_import_receipts','assess_application_import_row_outcomes'] LOOP EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY',t); EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC,anon',t); EXECUTE format('GRANT SELECT ON TABLE public.%I TO authenticated',t); END LOOP; END $$;
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['assess_application_assets','assess_application_metadata_versions','assess_process_application_links','assess_application_dependencies','assess_application_assessment_versions','assess_application_dimension_results','assess_application_modernization_recommendations','assess_application_review_resolutions','assess_application_portfolio_snapshots','assess_application_import_receipts','assess_application_import_row_outcomes'] LOOP EXECUTE format('DROP POLICY IF EXISTS pr1g_%I_select ON public.%I',t,t); EXECUTE format('CREATE POLICY pr1g_%I_select ON public.%I FOR SELECT TO authenticated USING (public.has_workspace_capability(workspace_id,org_id,''assess.applications.read'') OR public.has_workspace_capability(workspace_id,org_id,''assess.applications.portfolio.read''))',t,t); END LOOP; END $$;
-CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command(p_org_id uuid,p_workspace_id uuid,p_actor_id uuid,p_request_id uuid,p_command_type text,p_expected_version bigint,p_authorization_version bigint,p_idempotency_key text,p_payload jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE r jsonb; BEGIN IF p_command_type NOT IN ('application.create','application.import','application.metadata.upsert','application.assessment.save','application.assessment.finalize','application.assessment.review.resolve','application.assessment.revision.start','application.portfolio.snapshot.create') THEN RAISE EXCEPTION 'PR1G_COMMAND_NOT_SUPPORTED'; END IF; r:=jsonb_build_object('status','accepted','commandType',p_command_type,'organizationId',p_org_id,'workspaceId',p_workspace_id,'expectedVersion',p_expected_version,'authorizationVersion',p_authorization_version,'idempotencyKey',p_idempotency_key); RETURN r; END; $$;
+CREATE OR REPLACE FUNCTION public.pr1g_error_envelope(p_message text)
+RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
+ SELECT jsonb_build_object('ok',false,'errorCode',CASE
+  WHEN p_message LIKE '%PR1G_AUTHORIZATION_STALE%' THEN 'AUTHORIZATION_STALE'
+  WHEN p_message LIKE '%PR1G_IDEMPOTENCY_CONFLICT%' THEN 'IDEMPOTENCY_CONFLICT'
+  WHEN p_message LIKE '%PR1G_VERSION_CONFLICT%' THEN 'VERSION_CONFLICT'
+  WHEN p_message LIKE '%PR1G_PERMISSION_DENIED%' THEN 'PERMISSION_DENIED'
+  WHEN p_message LIKE '%PR1G_FEATURE_DISABLED%' THEN 'FEATURE_DISABLED'
+  WHEN p_message LIKE '%PR1G_READ_ONLY%' THEN 'READ_ONLY'
+  WHEN p_message LIKE '%PR1G_INVALID_COMMAND%' THEN 'INVALID_COMMAND'
+  WHEN p_message LIKE '%PR1G_NOT_FOUND%' THEN 'NOT_FOUND'
+  ELSE 'COMMAND_UNAVAILABLE' END);
+$$;
+CREATE OR REPLACE FUNCTION public.pr1g_assert_application_authority(p_actor uuid,p_org uuid,p_workspace uuid,p_capability text,p_authorization_version bigint)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_actual bigint;
+BEGIN
+ IF COALESCE(current_setting('app.pr1g_enabled',true),'on')='off' THEN RAISE EXCEPTION 'PR1G_FEATURE_DISABLED'; END IF;
+ IF COALESCE(current_setting('app.pr1g_read_only',true),'off')='on' THEN RAISE EXCEPTION 'PR1G_READ_ONLY'; END IF;
+ IF NOT public.has_workspace_capability(p_workspace,p_org,p_capability) THEN RAISE EXCEPTION 'PR1G_PERMISSION_DENIED'; END IF;
+ SELECT version INTO v_actual FROM public.authorization_versions WHERE org_id=p_org AND user_id=p_actor FOR SHARE;
+ IF COALESCE(v_actual,1)<>p_authorization_version THEN RAISE EXCEPTION 'PR1G_AUTHORIZATION_STALE'; END IF;
+END $$;
+CREATE OR REPLACE FUNCTION public.pr1g_command_capability(p_command text)
+RETURNS text LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
+ SELECT CASE p_command
+  WHEN 'application.create' THEN 'assess.applications.write'
+  WHEN 'application.import' THEN 'assess.applications.import'
+  WHEN 'application.metadata.upsert' THEN 'assess.applications.write'
+  WHEN 'application.assessment.save' THEN 'assess.applications.write'
+  WHEN 'application.assessment.finalize' THEN 'assess.applications.finalize'
+  WHEN 'application.assessment.review.resolve' THEN 'assess.applications.review'
+  WHEN 'application.assessment.revision.start' THEN 'assess.applications.write'
+  WHEN 'application.portfolio.snapshot.create' THEN 'assess.applications.portfolio.read'
+  ELSE NULL END;
+$$;
+CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command(p_org_id uuid,p_workspace_id uuid,p_actor_id uuid,p_request_id uuid,p_command_type text,p_expected_version bigint,p_authorization_version bigint,p_idempotency_key text,p_payload jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE cap text:=public.pr1g_command_capability(p_command_type); h text:=md5(p_payload::text); r public.assess_command_receipts; audit_id uuid; app public.assess_application_assets; meta public.assess_application_metadata_versions; ass public.assess_application_assessment_versions; result jsonb; row_item jsonb; i int:=0; success_count int:=0; rejection_count int:=0; target_version int;
+BEGIN
+ IF cap IS NULL THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
+ PERFORM public.pr1g_assert_application_authority(p_actor_id,p_org_id,p_workspace_id,cap,p_authorization_version);
+ r:=public.pr1b_claim_command(p_actor_id,p_org_id,p_workspace_id,p_command_type,p_idempotency_key,p_request_id,h);
+ IF r.status='succeeded' THEN RETURN r.response; END IF;
+ IF p_command_type='application.create' THEN
+  IF p_expected_version<>0 THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT'; END IF;
+  INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,description,created_by)
+  VALUES((p_payload->>'applicationId')::uuid,p_org_id,p_workspace_id,p_payload->>'name',lower(btrim(p_payload->>'name')),p_payload->>'description',p_actor_id) RETURNING * INTO app;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',app.id,'version',1,'status','draft','name',app.name));
+ ELSIF p_command_type='application.metadata.upsert' THEN
+  SELECT * INTO app FROM public.assess_application_assets WHERE id=(p_payload->>'applicationId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL FOR UPDATE;
+  IF app.id IS NULL THEN RAISE EXCEPTION 'PR1G_NOT_FOUND'; END IF;
+  IF p_expected_version<>(p_payload->>'metadataVersion')::bigint-1 THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT'; END IF;
+  INSERT INTO public.assess_application_metadata_versions(id,org_id,workspace_id,application_id,version,lifecycle,metadata,author_id,receipt_id)
+  VALUES((p_payload->>'metadataVersionId')::uuid,p_org_id,p_workspace_id,app.id,(p_payload->>'metadataVersion')::int,'draft',p_payload->'metadata',p_actor_id,r.id) RETURNING * INTO meta;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',meta.id,'applicationId',app.id,'version',meta.version,'status',meta.lifecycle));
+ ELSIF p_command_type='application.import' THEN
+  INSERT INTO public.assess_application_import_receipts(id,org_id,workspace_id,actor_id,idempotency_key,payload_hash,receipt_id)
+  VALUES((p_payload->>'importReceiptId')::uuid,p_org_id,p_workspace_id,p_actor_id,p_idempotency_key,p_payload->>'payloadHash',r.id);
+  FOR row_item IN SELECT * FROM jsonb_array_elements(p_payload->'rows') LOOP
+   i:=i+1;
+   IF COALESCE(row_item->>'name','')='' THEN
+    rejection_count:=rejection_count+1;
+    INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected','MISSING_APPLICATION_NAME','Row rejected without defaulting Unknown evidence.');
+   ELSIF EXISTS(SELECT 1 FROM public.assess_application_assets WHERE org_id=p_org_id AND workspace_id=p_workspace_id AND normalized_name=lower(btrim(row_item->>'name')) AND deleted_at IS NULL) THEN
+    rejection_count:=rejection_count+1;
+    INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected','DUPLICATE_IN_WORKSPACE','Duplicate application in this workspace.');
+   ELSE
+    INSERT INTO public.assess_application_assets(org_id,workspace_id,name,normalized_name,description,created_by) VALUES(p_org_id,p_workspace_id,row_item->>'name',lower(btrim(row_item->>'name')),COALESCE(row_item->>'description','Imported application'),p_actor_id) RETURNING * INTO app;
+    success_count:=success_count+1;
+    INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,application_id) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'success',app.id);
+   END IF;
+  END LOOP;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',(p_payload->>'importReceiptId')::uuid,'version',1,'status','committed','successCount',success_count,'rejectionCount',rejection_count));
+ ELSIF p_command_type='application.assessment.save' THEN
+  SELECT * INTO meta FROM public.assess_application_metadata_versions WHERE application_id=(p_payload->>'applicationId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND version=(p_payload->>'metadataVersion')::int FOR SHARE;
+  IF meta.id IS NULL THEN RAISE EXCEPTION 'PR1G_NOT_FOUND'; END IF;
+  target_version:=(p_payload->>'assessmentVersion')::int; IF p_expected_version<>target_version-1 THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT'; END IF;
+  INSERT INTO public.assess_application_assessment_versions(id,org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version,receipt_id)
+  VALUES((p_payload->>'assessmentVersionId')::uuid,p_org_id,p_workspace_id,meta.application_id,meta.id,target_version,'assess-v2-application-portfolio-2026-07','draft',p_actor_id,p_authorization_version,r.id) RETURNING * INTO ass;
+  FOR row_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_payload->'dimensions','[]'::jsonb)) LOOP INSERT INTO public.assess_application_dimension_results(org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,dimension,readiness_band,evidence_confidence,hard_gates,missing_evidence,rationale,remediation_requirements,what_would_change,evidence_refs) VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.id,row_item->>'dimension',row_item->>'band',row_item->>'confidence',ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'hardGates','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'missingEvidence','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'rationale','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'remediationRequirements','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'whatWouldChange','[]'::jsonb))),COALESCE(row_item->'evidenceReferences','[]'::jsonb)); END LOOP;
+  FOR row_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_payload->'recommendations','[]'::jsonb)) LOOP INSERT INTO public.assess_application_modernization_recommendations(org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,migration_boundary,rollback_strategy,evidence_confidence,why,prerequisites,required_controls,open_evidence_gaps,what_would_change) VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.id,row_item->>'disposition',COALESCE(row_item->>'migrationBoundary','Application scoped'),COALESCE(row_item->>'rollback','Disable change'),COALESCE(row_item->>'confidence','Insufficient Evidence'),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'why','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'prerequisites','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'requiredControls','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'openEvidenceGaps','[]'::jsonb))),ARRAY(SELECT jsonb_array_elements_text(COALESCE(row_item->'whatWouldChange','[]'::jsonb)))); END LOOP;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',ass.id,'applicationId',ass.application_id,'version',ass.version,'status',ass.lifecycle));
+ ELSIF p_command_type='application.assessment.finalize' THEN
+  SELECT * INTO ass FROM public.assess_application_assessment_versions WHERE id=(p_payload->>'assessmentVersionId')::uuid AND application_id=(p_payload->>'applicationId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND version=p_expected_version AND lifecycle='draft' FOR SHARE;
+  IF ass.id IS NULL THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT'; END IF;
+  INSERT INTO public.assess_application_assessment_versions(org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version,receipt_id)
+  VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.version+1,ass.decision_model_version,'reviewer_ready',ass.author_id,p_authorization_version,r.id) RETURNING * INTO ass;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',ass.id,'applicationId',ass.application_id,'version',ass.version,'status',ass.lifecycle));
+ ELSIF p_command_type='application.assessment.review.resolve' THEN
+  SELECT * INTO ass FROM public.assess_application_assessment_versions WHERE id=(p_payload->>'assessmentVersionId')::uuid AND application_id=(p_payload->>'applicationId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND lifecycle='reviewer_ready' FOR SHARE;
+  IF ass.id IS NULL THEN RAISE EXCEPTION 'PR1G_NOT_FOUND'; END IF; IF ass.author_id=p_actor_id THEN RAISE EXCEPTION 'PR1G_PERMISSION_DENIED'; END IF;
+  INSERT INTO public.assess_application_review_resolutions(org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,reviewer_id,authorization_version,resolution,rationale,conditions,receipt_id) VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.id,p_actor_id,p_authorization_version,p_payload->>'resolution',p_payload->>'rationale',ARRAY(SELECT jsonb_array_elements_text(COALESCE(p_payload->'conditions','[]'::jsonb))),r.id);
+  INSERT INTO public.assess_application_assessment_versions(org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,reviewer_id,authorization_version,receipt_id)
+  VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.version+1,ass.decision_model_version,p_payload->>'resolution',ass.author_id,p_actor_id,p_authorization_version,r.id) RETURNING * INTO ass;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',ass.id,'applicationId',ass.application_id,'version',ass.version,'status',ass.lifecycle));
+ ELSIF p_command_type='application.assessment.revision.start' THEN
+  SELECT * INTO ass FROM public.assess_application_assessment_versions WHERE id=(p_payload->>'assessmentVersionId')::uuid AND application_id=(p_payload->>'applicationId')::uuid AND org_id=p_org_id AND workspace_id=p_workspace_id AND lifecycle='changes_requested' FOR SHARE;
+  IF ass.id IS NULL THEN RAISE EXCEPTION 'PR1G_NOT_FOUND'; END IF;
+  INSERT INTO public.assess_application_assessment_versions(org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version,receipt_id)
+  VALUES(p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.version+1,ass.decision_model_version,'draft',p_actor_id,p_authorization_version,r.id) RETURNING * INTO ass;
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',ass.id,'applicationId',ass.application_id,'version',ass.version,'status',ass.lifecycle));
+ ELSIF p_command_type='application.portfolio.snapshot.create' THEN
+  INSERT INTO public.assess_application_portfolio_snapshots(id,org_id,workspace_id,snapshot,created_by,receipt_id) VALUES((p_payload->>'portfolioSnapshotId')::uuid,p_org_id,p_workspace_id,p_payload,p_actor_id,r.id);
+  result:=jsonb_build_object('outcome','committed','resource',jsonb_build_object('id',(p_payload->>'portfolioSnapshotId')::uuid,'version',1,'status','committed'));
+ END IF;
+ INSERT INTO public.privileged_audit_events(org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata) VALUES(p_org_id,p_workspace_id,p_actor_id,p_request_id,p_command_type,'assess_application',COALESCE((result->'resource'->>'id')::uuid,p_request_id),'succeeded',COALESCE((result->'resource'->>'version')::bigint,1),jsonb_build_object('receiptId',r.id));
+ UPDATE public.assess_command_receipts SET status='succeeded',response=result,completed_at=now() WHERE id=r.id;
+ RETURN result;
+EXCEPTION WHEN OTHERS THEN
+ IF r.id IS NOT NULL THEN UPDATE public.assess_command_receipts SET status='failed',response=public.pr1g_error_envelope(SQLERRM),completed_at=now() WHERE id=r.id; END IF;
+ RAISE;
+END $$;
+CREATE OR REPLACE FUNCTION public.pr1g_read_application_portfolio_projection(p_org_id uuid,p_workspace_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ IF NOT public.has_workspace_capability(p_workspace_id,p_org_id,'assess.applications.read') THEN RAISE EXCEPTION 'PR1G_NOT_FOUND'; END IF;
+ RETURN jsonb_build_object(
+  'inventory',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'name',name,'description',description,'workspaceId',workspace_id) ORDER BY name) FROM public.assess_application_assets WHERE org_id=p_org_id AND workspace_id=p_workspace_id AND deleted_at IS NULL),'[]'::jsonb),
+  'metadataVersions',COALESCE((SELECT jsonb_agg(to_jsonb(m) ORDER BY m.created_at) FROM public.assess_application_metadata_versions m WHERE m.org_id=p_org_id AND m.workspace_id=p_workspace_id),'[]'::jsonb),
+  'processLinks',COALESCE((SELECT jsonb_agg(to_jsonb(l) ORDER BY l.created_at) FROM public.assess_process_application_links l WHERE l.org_id=p_org_id AND l.workspace_id=p_workspace_id),'[]'::jsonb),
+  'dependencies',COALESCE((SELECT jsonb_agg(to_jsonb(d) ORDER BY d.created_at) FROM public.assess_application_dependencies d WHERE d.org_id=p_org_id AND d.workspace_id=p_workspace_id),'[]'::jsonb),
+  'assessments',COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.created_at) FROM public.assess_application_assessment_versions a WHERE a.org_id=p_org_id AND a.workspace_id=p_workspace_id),'[]'::jsonb),
+  'dimensions',COALESCE((SELECT jsonb_agg(to_jsonb(x)) FROM public.assess_application_dimension_results x WHERE x.org_id=p_org_id AND x.workspace_id=p_workspace_id),'[]'::jsonb),
+  'recommendations',COALESCE((SELECT jsonb_agg(to_jsonb(x)) FROM public.assess_application_modernization_recommendations x WHERE x.org_id=p_org_id AND x.workspace_id=p_workspace_id),'[]'::jsonb),
+  'reviews',COALESCE((SELECT jsonb_agg(to_jsonb(x)) FROM public.assess_application_review_resolutions x WHERE x.org_id=p_org_id AND x.workspace_id=p_workspace_id),'[]'::jsonb),
+  'portfolioSnapshot',(SELECT snapshot FROM public.assess_application_portfolio_snapshots s WHERE s.org_id=p_org_id AND s.workspace_id=p_workspace_id ORDER BY created_at DESC LIMIT 1),
+  'waves',COALESCE((SELECT snapshot->'waves' FROM public.assess_application_portfolio_snapshots s WHERE s.org_id=p_org_id AND s.workspace_id=p_workspace_id ORDER BY created_at DESC LIMIT 1),'[]'::jsonb),
+  'economicsReferences',COALESCE((SELECT jsonb_agg(jsonb_build_object('reference',economics_ref,'currency',economics_currency)) FROM public.assess_process_application_links WHERE org_id=p_org_id AND workspace_id=p_workspace_id AND economics_ref IS NOT NULL),'[]'::jsonb));
+END $$;
 REVOKE ALL ON FUNCTION public.pr1g_execute_application_command(uuid,uuid,uuid,uuid,text,bigint,bigint,text,jsonb) FROM PUBLIC,anon,authenticated; GRANT EXECUTE ON FUNCTION public.pr1g_execute_application_command(uuid,uuid,uuid,uuid,text,bigint,bigint,text,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pr1g_read_application_portfolio_projection(uuid,uuid) FROM PUBLIC,anon; GRANT EXECUTE ON FUNCTION public.pr1g_read_application_portfolio_projection(uuid,uuid) TO authenticated,service_role;

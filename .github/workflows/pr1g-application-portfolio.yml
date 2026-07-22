@@ -34,6 +34,8 @@ jobs:
         with: { node-version: '22', cache: 'npm' }
       - run: npm ci
       - run: npm run test:migrations:pr1g
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/avalaos_pr1g
   pr1g-browser:
     runs-on: ubuntu-latest
     steps:
