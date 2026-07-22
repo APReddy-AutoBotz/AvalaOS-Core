@@ -114,7 +114,13 @@
     "test:browser:pr1f": "playwright test --config=playwright.pr1f.config.ts",
     "test:migrations:pr1f": "node scripts/testPr1fMigrations.mjs",
     "test:pr1g-domain": "node scripts/runPr1fTypeScriptTest.mjs services/assessV2/applicationPortfolio.ts services/assessV2/applicationPortfolio.test.ts",
-    "test:pr1g": "npm run test:pr1g-domain && npm run test:scoring && npm run test:pr1f-domain"
+    "test:pr1g": "npm run lint:pr1g && npm run test:pr1g-domain && npm run test:pr1g-command && npm run test:scoring && npm run test:pr1f-domain",
+    "lint:pr1g": "node scripts/checkPr1gMigrationContract.mjs",
+    "test:pr1g-command": "node scripts/runEdgeTypeScriptTest.mjs supabase/functions/_shared/assessV2Command.ts supabase/functions/_shared/assessV2ApplicationPortfolioCommand.ts supabase/functions/_shared/assessV2ApplicationPortfolioCommand.test.ts",
+    "test:pr1g-workspace": "node scripts/runTypeScriptTest.mjs types.ts services/assessV2/applicationPortfolio.ts components/assess-v2/AssessApplicationPortfolioWorkspace.tsx",
+    "test:pr1g-coverage": "node scripts/runPr1gCoverage.mjs",
+    "test:migrations:pr1g": "node scripts/testPr1gMigrations.mjs",
+    "test:browser:pr1g": "playwright test --config=playwright.pr1g.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
