@@ -112,7 +112,9 @@
     "test:pr1f": "npm run lint:pr1f && npm run test:pr1f-domain && npm run test:pr1f-command && npm run test:migrations:pr1f && npm run test:pr1f-workspace && npm run test:pr1f-coverage",
     "test:pr1f-command": "node scripts/runEdgeTypeScriptTest.mjs supabase/functions/_shared/assessV2Command.ts supabase/functions/_shared/assessV2EconomicsCommand.ts supabase/functions/_shared/assessV2EconomicsCommand.test.ts",
     "test:browser:pr1f": "playwright test --config=playwright.pr1f.config.ts",
-    "test:migrations:pr1f": "node scripts/testPr1fMigrations.mjs"
+    "test:migrations:pr1f": "node scripts/testPr1fMigrations.mjs",
+    "test:pr1g-domain": "node scripts/runPr1fTypeScriptTest.mjs services/assessV2/applicationPortfolio.ts services/assessV2/applicationPortfolio.test.ts",
+    "test:pr1g": "npm run test:pr1g-domain && npm run test:scoring && npm run test:pr1f-domain"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
