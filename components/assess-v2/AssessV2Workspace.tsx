@@ -19,6 +19,7 @@ import { createUnknownAgentNecessityFacts, type CaseFact, type PrimitiveType } f
 import { ASSESS_V1_SCORE_VERSION } from '../../services/assessV1Compatibility';
 import AssessV2ReviewWorkspace from './AssessV2ReviewWorkspace';
 import AssessV2EconomicsWorkspace from './AssessV2EconomicsWorkspace';
+import AssessApplicationPortfolioWorkspace from './AssessApplicationPortfolioWorkspace';
 
 interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
@@ -237,5 +238,6 @@ export default function AssessV2Workspace({ processId, processName, processDescr
       <AssessV2ReviewWorkspace initialCaseId={result?.case.id} />
       {tenantContext && result?.case.id && result?.decision.id && <AssessV2EconomicsWorkspace tenantContext={tenantContext} caseId={result.case.id} decisionId={result.decision.id} />}
     </div>}
+    <AssessApplicationPortfolioWorkspace tenantContext={tenantContext} readOnly={isReadOnly} offline={sessionState === 'offline'} />
   </section>;
 }
