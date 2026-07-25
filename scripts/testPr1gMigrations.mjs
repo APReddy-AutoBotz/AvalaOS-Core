@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 
 execFileSync(process.execPath, ['scripts/checkPr1gMigrationContract.mjs'], { stdio: 'inherit' });
 
@@ -45,6 +45,11 @@ const REVIEWER_B = '44444444-4444-4444-8444-444444444446';
 const OTHER_ORG = '22222222-2222-4222-8222-222222222223';
 const OTHER_WS = '33333333-3333-4333-8333-333333333334';
 const OTHER_APP = '55555555-5555-4555-8555-555555555556';
+const ORG_ROLE = '55555555-5555-4555-8555-555555555557';
+const OTHER_ACTOR = '44444444-4444-4444-8444-444444444447';
+const ORG_ONLY_ACTOR = '44444444-4444-4444-8444-444444444448';
+const OTHER_ROLE = '55555555-5555-4555-8555-555555555558';
+const WORKSPACE_ROLE = '55555555-5555-4555-8555-555555555559';
 const AUTH_VERSION = 7;
 const canonicalDimensions = [
   'integration_accessibility',
@@ -101,13 +106,23 @@ const rpc = async (connection, {
   org = ORG,
   workspace = WS,
 }) => {
-  const result = await connection.query(
-    `SELECT public.pr1g_execute_application_command(
-      $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text,$6::bigint,$7::bigint,$8::text,$9::jsonb
-    ) AS result`,
-    [org, workspace, actor, requestId, type, expected, AUTH_VERSION, key, JSON.stringify(payload)],
-  );
-  return result.rows[0].result;
+  await connection.query('BEGIN');
+  try {
+    await connection.query('SET LOCAL ROLE service_role');
+    const caller=await connection.query('SELECT auth.uid() actor');
+    assert(caller.rows[0].actor===null,'SERVICE_ROLE_CALLER_UID_MUST_BE_NULL');
+    const result = await connection.query(
+      `SELECT public.pr1g_execute_application_command(
+        $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text,$6::bigint,$7::bigint,$8::text,$9::jsonb
+      ) AS result`,
+      [org, workspace, actor, requestId, type, expected, AUTH_VERSION, key, JSON.stringify(payload)],
+    );
+    await connection.query('COMMIT');
+    return result.rows[0].result;
+  } catch(error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  }
 };
 const createApplication = async (name, id = nextUuid()) => {
   const result = await rpc(client, {
@@ -179,38 +194,27 @@ try {
 
   await scenario('disposable database schema recreation', async () => {
     await client.query('DROP SCHEMA IF EXISTS public CASCADE');
+    await client.query('DROP SCHEMA IF EXISTS auth CASCADE');
     await client.query('CREATE SCHEMA public');
     await client.query('GRANT ALL ON SCHEMA public TO postgres');
     await client.query('GRANT USAGE ON SCHEMA public TO PUBLIC');
   });
-  await scenario('prerequisite schema and role setup', async () => {
+  await scenario('accepted migration-chain and role setup', async () => {
     await client.query("DO $$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
     await client.query("DO $$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
     await client.query("DO $$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$");
-    await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public');
-    await client.query('CREATE SCHEMA IF NOT EXISTS auth');
-    await client.query(`CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '${ACTOR}'::uuid $$`);
-    await client.query('CREATE TABLE public.profiles(id uuid PRIMARY KEY)');
-    await client.query('CREATE TABLE public.organizations(id uuid PRIMARY KEY, deleted_at timestamptz)');
-    await client.query('CREATE TABLE public.workspaces(id uuid NOT NULL, org_id uuid NOT NULL, deleted_at timestamptz, PRIMARY KEY(id,org_id))');
-    await client.query('CREATE TABLE public.capabilities(capability_key text PRIMARY KEY,module text NOT NULL,description text NOT NULL)');
-    await client.query('CREATE TABLE public.authorization_versions(org_id uuid NOT NULL,user_id uuid NOT NULL,version bigint NOT NULL DEFAULT 1,PRIMARY KEY(org_id,user_id))');
-    await client.query("CREATE TABLE public.assess_command_receipts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,actor_id uuid NOT NULL,command_type text NOT NULL,idempotency_key text NOT NULL,request_id uuid NOT NULL,request_hash text NOT NULL,status text NOT NULL,response jsonb,created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,UNIQUE(org_id,actor_id,command_type,idempotency_key))");
-    await client.query("CREATE TABLE public.privileged_audit_events(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,actor_id uuid NOT NULL,request_id uuid NOT NULL,action text NOT NULL,resource_type text NOT NULL,resource_id uuid NOT NULL,outcome text NOT NULL,resource_version bigint,metadata jsonb NOT NULL DEFAULT '{}'::jsonb,created_at timestamptz NOT NULL DEFAULT now())");
-    await client.query('CREATE TABLE public.workspace_capability_grants(org_id uuid NOT NULL,workspace_id uuid NOT NULL,capability_key text NOT NULL,PRIMARY KEY(org_id,workspace_id,capability_key))');
-    await client.query("CREATE OR REPLACE FUNCTION public.has_workspace_capability(p_workspace_id uuid,p_org_id uuid,p_capability_key text) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT EXISTS(SELECT 1 FROM public.workspaces w JOIN public.organizations o ON o.id=w.org_id JOIN public.workspace_capability_grants g ON g.org_id=w.org_id AND g.workspace_id=w.id AND g.capability_key=p_capability_key WHERE w.id=p_workspace_id AND w.org_id=p_org_id AND w.deleted_at IS NULL AND o.deleted_at IS NULL) $$");
-    await client.query("CREATE OR REPLACE FUNCTION public.pr1b_claim_command(p_actor uuid,p_org uuid,p_workspace uuid,p_type text,p_key text,p_request uuid,p_hash text) RETURNS public.assess_command_receipts LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE v_row public.assess_command_receipts; BEGIN INSERT INTO public.assess_command_receipts(org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status) VALUES(p_org,p_workspace,p_actor,p_type,p_key,p_request,p_hash,'in_progress') ON CONFLICT(org_id,actor_id,command_type,idempotency_key) DO NOTHING RETURNING * INTO v_row; IF v_row.id IS NULL THEN SELECT * INTO v_row FROM public.assess_command_receipts WHERE org_id=p_org AND actor_id=p_actor AND command_type=p_type AND idempotency_key=p_key FOR UPDATE; IF v_row.request_hash<>p_hash THEN RAISE EXCEPTION 'PR1G_IDEMPOTENCY_CONFLICT'; END IF; END IF; RETURN v_row; END $$");
+    await client.query('CREATE SCHEMA auth');
+    await client.query('CREATE TABLE auth.users(id uuid PRIMARY KEY)');
+    await client.query("CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('request.jwt.claim.sub',true),'')::uuid $$");
+    await client.query('GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role');
+    await client.query('GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated,service_role');
+    const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
+    const throughPr1g=migrations.slice(0,migrations.indexOf('20260722120000_pr1g_application_portfolio.sql')+1);
+    for(const migration of throughPr1g)await client.query(await readFile(`supabase/migrations/${migration}`,'utf8'));
   });
-
-  const sql = await readFile('supabase/migrations/20260722120000_pr1g_application_portfolio.sql', 'utf8');
-  await scenario('fresh migration', async () => client.query(sql));
   await scenario('accepted PR1F schema fixture compatibility', async () => {
-    await client.query('CREATE TABLE public.assess_v2_review_resolutions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,resolution text NOT NULL)');
-    await client.query('CREATE TABLE public.assess_v2_economics_versions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,status text NOT NULL,currency char(3))');
-    await client.query('INSERT INTO public.assess_v2_review_resolutions(org_id,workspace_id,resolution) VALUES($1,$2,$3)', [ORG, WS, 'approved']);
-    await client.query("INSERT INTO public.assess_v2_economics_versions(org_id,workspace_id,status,currency) VALUES($1,$2,'approved','USD')", [ORG, WS]);
-    const result = await client.query('SELECT (SELECT count(*)::int FROM public.assess_v2_review_resolutions) reviews,(SELECT count(*)::int FROM public.assess_v2_economics_versions) economics');
-    assert(result.rows[0].reviews === 1 && result.rows[0].economics === 1, 'PR1F_FIXTURE_COMPATIBILITY_FAILED');
+    const result = await client.query("SELECT to_regclass('public.assess_v2_review_resolutions') reviews,to_regclass('public.assess_v2_economic_versions') economics");
+    assert(result.rows[0].reviews && result.rows[0].economics, 'PR1F_SCHEMA_COMPATIBILITY_FAILED');
   });
   await scenario('capabilities schema', async () => {
     const result = await client.query("SELECT count(*)::int n FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'");
@@ -232,12 +236,68 @@ try {
   });
 
   await scenario('tenant and actor authority fixtures', async () => {
-    await client.query('INSERT INTO public.profiles(id) VALUES($1),($2),($3)', [ACTOR, REVIEWER_A, REVIEWER_B]);
-    await client.query('INSERT INTO public.organizations(id) VALUES($1),($2)', [ORG, OTHER_ORG]);
-    await client.query('INSERT INTO public.workspaces(id,org_id) VALUES($1,$2),($3,$4)', [WS, ORG, OTHER_WS, OTHER_ORG]);
-    await client.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,$4),($1,$3,$4),($1,$5,$4)', [ORG, ACTOR, REVIEWER_A, AUTH_VERSION, REVIEWER_B]);
-    await client.query("INSERT INTO public.workspace_capability_grants(org_id,workspace_id,capability_key) SELECT $1,$2,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [ORG, WS]);
+    await client.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4),($5)', [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
+    await client.query("INSERT INTO public.profiles(id,email) VALUES($1,'actor@example.invalid'),($2,'reviewer-a@example.invalid'),($3,'reviewer-b@example.invalid'),($4,'other@example.invalid'),($5,'org-only@example.invalid')", [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
+    await client.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'Tenant A','tenant-a'),($2,'Tenant B','tenant-b')", [ORG, OTHER_ORG]);
+    await client.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Workspace A','workspace-a'),($3,$4,'Workspace B','workspace-b')", [WS, ORG, OTHER_WS, OTHER_ORG]);
+    await client.query("INSERT INTO public.roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'PR1G authority','pr1g-authority','organization','[]'),($3,$4,'Other authority','other-authority','organization','[]')", [ORG_ROLE, ORG, OTHER_ROLE, OTHER_ORG]);
+    await client.query("INSERT INTO public.roles(id,org_id,workspace_id,name,slug,scope,permissions) VALUES($1,$2,$3,'Workspace authority','workspace-authority','workspace','[]')",[WORKSPACE_ROLE,ORG,WS]);
+    await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [ORG_ROLE]);
+    await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [OTHER_ROLE]);
+    await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [WORKSPACE_ROLE]);
+    await client.query('ALTER TABLE public.organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');
+    await client.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$5,'active'),($1,$3,$5,'active'),($1,$4,$5,'active'),($1,$9,$5,'active'),($6,$7,$8,'active')", [ORG, ACTOR, REVIEWER_A, REVIEWER_B, ORG_ROLE, OTHER_ORG, OTHER_ACTOR, OTHER_ROLE, ORG_ONLY_ACTOR]);
+    await client.query('ALTER TABLE public.organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope');
+    await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$2,$4,NULL,'active'),($1,$2,$5,$9,'active'),($6,$7,$8,NULL,'active')", [ORG, WS, ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
+    await client.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,$5),($1,$3,$5),($1,$4,$5),($1,$8,$5),($6,$7,$5) ON CONFLICT(org_id,user_id) DO UPDATE SET version=excluded.version', [ORG, ACTOR, REVIEWER_A, REVIEWER_B, AUTH_VERSION, OTHER_ORG, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query('INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,description,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)', [OTHER_APP, OTHER_ORG, OTHER_WS, 'Other tenant app', 'other tenant app', 'Tenant B', ACTOR]);
+  });
+
+  const resetActorVersion=()=>client.query('UPDATE public.authorization_versions SET version=$1 WHERE org_id=$2 AND user_id IN($3,$4,$5,$6)',[AUTH_VERSION,ORG,ACTOR,REVIEWER_A,REVIEWER_B,ORG_ONLY_ACTOR]);
+  const restoreOrganizationMembership=async()=>{await client.query('ALTER TABLE organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');try{await client.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[ORG,ACTOR,ORG_ROLE])}finally{await client.query('ALTER TABLE organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope')}};
+  const deniedAuthority=async(name,actor,change,restore,expected='PR1B_NOT_FOUND')=>{
+    await change();
+    await expectSqlFailure(name,expected,()=>rpc(client,{actor,type:'application.create',payload:{applicationId:nextUuid(),name:'Denied actor',description:'Denied'}}));
+    await restore();
+    await resetActorVersion();
+  };
+  await expectSqlFailure('fabricated actor governed denial','PR1B_NOT_FOUND',()=>rpc(client,{actor:nextUuid(),type:'application.create',payload:{applicationId:nextUuid(),name:'Denied',description:'Denied'}}));
+  await deniedAuthority('inactive profile governed denial',ACTOR,()=>client.query("UPDATE profiles SET status='disabled' WHERE id=$1",[ACTOR]),()=>client.query("UPDATE profiles SET status='active' WHERE id=$1",[ACTOR]));
+  await deniedAuthority('deleted profile governed denial',ACTOR,()=>client.query('UPDATE profiles SET deleted_at=now() WHERE id=$1',[ACTOR]),()=>client.query('UPDATE profiles SET deleted_at=NULL WHERE id=$1',[ACTOR]));
+  await deniedAuthority('missing organization membership governed denial',ACTOR,()=>client.query('DELETE FROM organization_members WHERE org_id=$1 AND user_id=$2',[ORG,ACTOR]),restoreOrganizationMembership);
+  await deniedAuthority('inactive organization membership governed denial',ACTOR,()=>client.query("UPDATE organization_members SET status='disabled' WHERE org_id=$1 AND user_id=$2",[ORG,ACTOR]),()=>client.query("UPDATE organization_members SET status='active' WHERE org_id=$1 AND user_id=$2",[ORG,ACTOR]));
+  await deniedAuthority('deleted organization membership governed denial',ACTOR,()=>client.query('UPDATE organization_members SET deleted_at=now() WHERE org_id=$1 AND user_id=$2',[ORG,ACTOR]),()=>client.query('UPDATE organization_members SET deleted_at=NULL WHERE org_id=$1 AND user_id=$2',[ORG,ACTOR]));
+  await deniedAuthority('missing workspace membership governed denial',ACTOR,()=>client.query('DELETE FROM workspace_memberships WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3',[ORG,WS,ACTOR]),()=>client.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[ORG,WS,ACTOR]));
+  await deniedAuthority('inactive workspace membership governed denial',ACTOR,()=>client.query("UPDATE workspace_memberships SET status='disabled' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]),()=>client.query("UPDATE workspace_memberships SET status='active' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]));
+  await deniedAuthority('deleted workspace membership governed denial',ACTOR,()=>client.query('UPDATE workspace_memberships SET deleted_at=now() WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3',[ORG,WS,ACTOR]),()=>client.query('UPDATE workspace_memberships SET deleted_at=NULL WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3',[ORG,WS,ACTOR]));
+  await deniedAuthority('inactive organization governed denial',ACTOR,()=>client.query("UPDATE organizations SET status='disabled' WHERE id=$1",[ORG]),()=>client.query("UPDATE organizations SET status='active' WHERE id=$1",[ORG]));
+  await deniedAuthority('deleted organization governed denial',ACTOR,()=>client.query('UPDATE organizations SET deleted_at=now() WHERE id=$1',[ORG]),()=>client.query('UPDATE organizations SET deleted_at=NULL WHERE id=$1',[ORG]));
+  await deniedAuthority('inactive workspace governed denial',ACTOR,()=>client.query("UPDATE workspaces SET status='disabled' WHERE id=$1 AND org_id=$2",[WS,ORG]),()=>client.query("UPDATE workspaces SET status='active' WHERE id=$1 AND org_id=$2",[WS,ORG]));
+  await deniedAuthority('deleted workspace governed denial',ACTOR,()=>client.query('UPDATE workspaces SET deleted_at=now() WHERE id=$1 AND org_id=$2',[WS,ORG]),()=>client.query('UPDATE workspaces SET deleted_at=NULL WHERE id=$1 AND org_id=$2',[WS,ORG]));
+  await deniedAuthority('missing organization role capability governed denial',ACTOR,()=>client.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.applications.write'",[ORG_ROLE]),()=>client.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.applications.write')",[ORG_ROLE]));
+  await deniedAuthority('inactive organization role governed denial',ACTOR,()=>client.query("UPDATE roles SET status='disabled' WHERE id=$1",[ORG_ROLE]),()=>client.query("UPDATE roles SET status='active' WHERE id=$1",[ORG_ROLE]));
+  await deniedAuthority('deleted organization role governed denial',ACTOR,()=>client.query('UPDATE roles SET deleted_at=now() WHERE id=$1',[ORG_ROLE]),()=>client.query('UPDATE roles SET deleted_at=NULL WHERE id=$1',[ORG_ROLE]));
+  const disableOrganizationWrite=()=>client.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.applications.write'",[ORG_ROLE]);
+  const restoreOrganizationWrite=()=>client.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.applications.write') ON CONFLICT DO NOTHING",[ORG_ROLE]);
+  await deniedAuthority('missing workspace role capability governed denial',REVIEWER_B,async()=>{await disableOrganizationWrite();await client.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.applications.write'",[WORKSPACE_ROLE])},async()=>{await client.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.applications.write')",[WORKSPACE_ROLE]);await restoreOrganizationWrite()});
+  await deniedAuthority('inactive workspace role governed denial',REVIEWER_B,async()=>{await disableOrganizationWrite();await client.query("UPDATE roles SET status='disabled' WHERE id=$1",[WORKSPACE_ROLE])},async()=>{await client.query("UPDATE roles SET status='active' WHERE id=$1",[WORKSPACE_ROLE]);await restoreOrganizationWrite()});
+  await deniedAuthority('deleted workspace role governed denial',REVIEWER_B,async()=>{await disableOrganizationWrite();await client.query('UPDATE roles SET deleted_at=now() WHERE id=$1',[WORKSPACE_ROLE])},async()=>{await client.query('UPDATE roles SET deleted_at=NULL WHERE id=$1',[WORKSPACE_ROLE]);await restoreOrganizationWrite()});
+  await expectSqlFailure('actor belonging only to another tenant governed denial','PR1B_NOT_FOUND',()=>rpc(client,{actor:OTHER_ACTOR,type:'application.create',payload:{applicationId:nextUuid(),name:'Other tenant',description:'Denied'}}));
+  await expectSqlFailure('organization actor without target workspace governed denial','PR1B_NOT_FOUND',()=>rpc(client,{actor:ORG_ONLY_ACTOR,type:'application.create',payload:{applicationId:nextUuid(),name:'Org only',description:'Denied'}}));
+  await expectSqlFailure('stale authorization version governed denial','PR1B_AUTHORIZATION_STALE',async()=>{await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Stale',description:'Denied'}})}finally{await resetActorVersion()}});
+  await expectSqlFailure('feature-disabled governed denial','PR1G_FEATURE_DISABLED',async()=>{await client.query("SELECT set_config('app.pr1g_enabled','off',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Disabled',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_enabled','on',false)")}});
+  await expectSqlFailure('read-only governed denial','PR1G_READ_ONLY',async()=>{await client.query("SELECT set_config('app.pr1g_read_only','on',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Read only',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_read_only','off',false)")}});
+  await scenario('service-role mutation accepts valid actor with null auth uid',async()=>{const id=await createApplication('Null caller uid authority');assert(Boolean(id),'VALID_ACTOR_SERVICE_ROLE_FAILED')});
+  await scenario('concurrent authorization lock serializes revocation and next mutation denies',async()=>{
+    const authoritySession=new pg.Client({connectionString:url}),revocationSession=new pg.Client({connectionString:url});await Promise.all([authoritySession.connect(),revocationSession.connect()]);
+    try{
+      await authoritySession.query('BEGIN');await authoritySession.query("SELECT public.pr1b_assert_command_authority($1,$2,$3,'assess.applications.write',$4)",[ACTOR,ORG,WS,AUTH_VERSION]);
+      let revoked=false;const revocation=revocationSession.query("UPDATE workspace_memberships SET status='disabled' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]).then(()=>{revoked=true});
+      await new Promise(resolve=>setTimeout(resolve,50));assert(!revoked,'REVOCATION_INTERLEAVED_WITH_AUTHORITY_LOCK');
+      await authoritySession.query('COMMIT');await revocation;
+      await expectSqlFailure('post-revocation next mutation governed denial','PR1B_NOT_FOUND',()=>rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Revoked',description:'Denied'}}));
+      await revocationSession.query("UPDATE workspace_memberships SET status='active' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);await resetActorVersion();
+    }finally{await Promise.all([authoritySession.end(),revocationSession.end()])}
   });
 
   const gatedApp = await createApplication('Gated UI');
@@ -388,9 +448,9 @@ try {
   });
   await scenario('mixed-currency snapshot rejection', async () => {
     await client.query(
-      `INSERT INTO public.assess_process_application_links(org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id,interaction_type,govern_state,economics_ref,economics_currency,created_by)
-       VALUES($1,$2,$3,'p-usd',$4,$5,'read','approved',$6,'USD',$7),($1,$2,$8,'p-eur',$9,$10,'read','approved',$11,'EUR',$7)`,
-      [ORG, WS, nextUuid(), readyApp, readyMeta, nextUuid(), ACTOR, nextUuid(), gatedApp, gatedMeta, nextUuid()],
+      `INSERT INTO public.assess_process_application_links(org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id,assessment_version_id,interaction_type,govern_state,economics_ref,economics_currency,created_by)
+       VALUES($1,$2,$3,'p-usd',$4,$5,$6,'read','approved',$7,'USD',$8),($1,$2,$9,'p-eur',$10,$11,$12,'read','approved',$13,'EUR',$8)`,
+      [ORG, WS, nextUuid(), readyApp, readyMeta, readyAssessment, nextUuid(), ACTOR, nextUuid(), gatedApp, gatedMeta, gatedAssessment, nextUuid()],
     );
     try {
       await createSnapshot(0);
@@ -421,7 +481,11 @@ try {
   await expectSqlFailure('stale snapshot expected-version rejection', 'PR1G_VERSION_CONFLICT', () => createSnapshot(0));
 
   await scenario('full projection shape and nested committed authority data', async () => {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[ACTOR]);
+    await client.query('SET LOCAL ROLE authenticated');
     const result = await client.query('SELECT public.pr1g_read_application_portfolio_projection($1,$2) projection', [ORG, WS]);
+    await client.query('COMMIT');
     const projection = result.rows[0].projection;
     for (const key of ['inventory', 'metadataVersions', 'importReceipts', 'rowOutcomes', 'processLinks', 'dependencies', 'assessments', 'dimensions', 'recommendations', 'reviews', 'portfolioSnapshot', 'waves', 'economicsReferences']) {
       assert(Object.hasOwn(projection, key), `PROJECTION_KEY_MISSING_${key}`);
@@ -432,6 +496,9 @@ try {
     assert(nested?.metadataVersion === 1 && nested.version === 1 && nested.dimensions.length === 7 && nested.recommendations.length === 1, 'PROJECTION_NESTED_ASSESSMENT_SHAPE_FAILED');
     assert(projection.importReceipts.some((row) => row.id === importReceiptId), 'PROJECTION_IMPORT_RECEIPT_MISSING');
     assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 5, 'PROJECTION_ROW_OUTCOMES_MISSING');
+    const projectionPath=`/tmp/avalaos-pr1g-projection-${process.pid}.json`;
+    await writeFile(projectionPath,JSON.stringify(projection),{mode:0o600});
+    try{execFileSync(process.execPath,['scripts/runPr1gProjectionDecoderBridge.mjs',projectionPath,ORG,WS],{stdio:'inherit'})}finally{await unlink(projectionPath)}
   });
 
   const lifecycleApp = await createApplication('Lifecycle authority');
@@ -447,7 +514,7 @@ try {
     assert(first.resource.id === replay.resource.id && first.resource.version === replay.resource.version, 'REVIEW_EXACT_REPLAY_FAILED');
     return first.resource;
   });
-  await expectSqlFailure('review changed-payload idempotency conflict', 'PR1G_IDEMPOTENCY_CONFLICT', () => resolveReview(client, REVIEWER_A, lifecycleApp, lifecycleReady.id, 2, reviewKey, 'approved'));
+  await expectSqlFailure('review changed-payload idempotency conflict', 'PR1B_IDEMPOTENCY_CONFLICT', () => resolveReview(client, REVIEWER_A, lifecycleApp, lifecycleReady.id, 2, reviewKey, 'approved'));
   await expectSqlFailure('stale review resolution rejection', 'PR1G_VERSION_CONFLICT', () => resolveReview(client, REVIEWER_B, lifecycleApp, lifecycleReady.id, 2, `stale-review-${nextUuid()}`));
   const revisionKey = `revision-replay-${nextUuid()}`;
   const revised = await scenario('revision start exact replay success', async () => {
@@ -456,7 +523,7 @@ try {
     assert(first.resource.id === replay.resource.id && first.resource.version === replay.resource.version, 'REVISION_EXACT_REPLAY_FAILED');
     return first.resource;
   });
-  await expectSqlFailure('revision changed-payload idempotency conflict', 'PR1G_IDEMPOTENCY_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, revisionKey, 'Changed payload'));
+  await expectSqlFailure('revision changed-payload idempotency conflict', 'PR1B_IDEMPOTENCY_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, revisionKey, 'Changed payload'));
   await expectSqlFailure('stale revision-start rejection', 'PR1G_VERSION_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, `stale-revision-${nextUuid()}`));
   assert(revised.version === 4, 'REVISION_VERSION_FAILED');
 
