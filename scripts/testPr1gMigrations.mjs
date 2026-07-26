@@ -218,7 +218,7 @@ try {
   });
   await scenario('capabilities schema', async () => {
     const result = await client.query("SELECT count(*)::int n FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'");
-    assert(result.rows[0].n === 6, 'CAPABILITY_SCHEMA_FAILED');
+    assert(result.rows[0].n === 7, 'CAPABILITY_SCHEMA_FAILED');
   });
   await scenario('RPC privilege boundaries', async () => {
     const result = await client.query(`SELECT
@@ -254,6 +254,15 @@ try {
   });
 
   const resetActorVersion=()=>client.query('UPDATE public.authorization_versions SET version=$1 WHERE org_id=$2 AND user_id IN($3,$4,$5,$6)',[AUTH_VERSION,ORG,ACTOR,REVIEWER_A,REVIEWER_B,ORG_ONLY_ACTOR]);
+  const replaceOrganizationApplicationCapabilities=async(capabilities)=>{
+    await client.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key LIKE 'assess.applications.%'",[ORG_ROLE]);
+    for(const capability of capabilities)await client.query('INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,$2)',[ORG_ROLE,capability]);
+    await resetActorVersion();
+  };
+  const restoreOrganizationApplicationCapabilities=()=>replaceOrganizationApplicationCapabilities([
+    'assess.applications.read','assess.applications.write','assess.applications.import','assess.applications.finalize',
+    'assess.applications.review','assess.applications.portfolio.read','assess.applications.portfolio.write',
+  ]);
   const restoreOrganizationMembership=async()=>{await client.query('ALTER TABLE organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');try{await client.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[ORG,ACTOR,ORG_ROLE])}finally{await client.query('ALTER TABLE organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope')}};
   const deniedAuthority=async(name,actor,change,restore,expected='PR1B_NOT_FOUND')=>{
     await change();
@@ -285,6 +294,17 @@ try {
   await expectSqlFailure('actor belonging only to another tenant governed denial','PR1B_NOT_FOUND',()=>rpc(client,{actor:OTHER_ACTOR,type:'application.create',payload:{applicationId:nextUuid(),name:'Other tenant',description:'Denied'}}));
   await expectSqlFailure('organization actor without target workspace governed denial','PR1B_NOT_FOUND',()=>rpc(client,{actor:ORG_ONLY_ACTOR,type:'application.create',payload:{applicationId:nextUuid(),name:'Org only',description:'Denied'}}));
   await expectSqlFailure('stale authorization version governed denial','PR1B_AUTHORIZATION_STALE',async()=>{await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Stale',description:'Denied'}})}finally{await resetActorVersion()}});
+  for(const [name,capability] of [
+    ['portfolio read alone cannot create snapshot','assess.applications.portfolio.read'],
+    ['general application read cannot create snapshot','assess.applications.read'],
+    ['general application write cannot create snapshot','assess.applications.write'],
+  ])await expectSqlFailure(name,'PR1B_NOT_FOUND',async()=>{await replaceOrganizationApplicationCapabilities([capability]);try{return await createSnapshot(0)}finally{await restoreOrganizationApplicationCapabilities()}});
+  await scenario('portfolio write permits snapshot for valid active actor',async()=>{
+    await replaceOrganizationApplicationCapabilities(['assess.applications.portfolio.write']);
+    try{await client.query("SELECT public.pr1g_assert_application_authority($1,$2,$3,'assess.applications.portfolio.write',$4)",[ACTOR,ORG,WS,AUTH_VERSION])}finally{await restoreOrganizationApplicationCapabilities()}
+  });
+  await expectSqlFailure('revoked actor cannot create snapshot with portfolio write','PR1B_NOT_FOUND',async()=>{await client.query("UPDATE workspace_memberships SET status='disabled' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);try{return await createSnapshot(0)}finally{await client.query("UPDATE workspace_memberships SET status='active' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);await resetActorVersion()}});
+  await expectSqlFailure('cross-tenant actor cannot create snapshot with portfolio write','PR1B_NOT_FOUND',()=>rpc(client,{actor:OTHER_ACTOR,type:'application.portfolio.snapshot.create',expected:0,payload:{portfolioSnapshotId:nextUuid()}}));
   await expectSqlFailure('feature-disabled governed denial','PR1G_FEATURE_DISABLED',async()=>{await client.query("SELECT set_config('app.pr1g_enabled','off',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Disabled',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_enabled','on',false)")}});
   await expectSqlFailure('read-only governed denial','PR1G_READ_ONLY',async()=>{await client.query("SELECT set_config('app.pr1g_read_only','on',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Read only',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_read_only','off',false)")}});
   await scenario('service-role mutation accepts valid actor with null auth uid',async()=>{const id=await createApplication('Null caller uid authority');assert(Boolean(id),'VALID_ACTOR_SERVICE_ROLE_FAILED')});
@@ -324,9 +344,44 @@ try {
       [gatedAssessment],
     );
     assert(result.rowCount === 1, 'SERVER_RECOMMENDATION_REQUIRED');
-    assert(result.rows[0].disposition === 'Blocked pending prerequisite', 'HARD_GATE_DISPOSITION_MISMATCH');
+    assert(result.rows[0].disposition === 'Insufficient evidence', 'HARD_GATE_DISPOSITION_MISMATCH');
     assert(result.rows[0].ui_gates.includes('UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'), 'UI_HARD_GATE_MISSING');
     assert(result.rows[0].prerequisites.includes('UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'), 'RECOMMENDATION_GATE_MISSING');
+  });
+  const completeBridge={stableInterface:true,controlAccessibility:true,deterministicErrorDetection:true,reversibilityOrCompensation:true,materialActionApproval:true,monitoring:true,humanOwner:true};
+  const completeAi={legalSourceRights:true,executableAcceptanceTests:true,reproducibleBuild:true,controlledSecurityReview:true,humanEngineeringOwner:true,controlledDeploymentRollback:true};
+  const parityDefinitions=[
+    {name:'native API event',metadata:canonicalMetadata('Native API event',{interfaces:['REST/GraphQL','messaging/event']})},
+    {name:'file batch',metadata:canonicalMetadata('File batch',{interfaces:['file/batch'],batch:true,realTime:false,synchronous:false})},
+    {name:'low documentation',metadata:canonicalMetadata('Low documentation',{documentationQuality:'low'})},
+    {name:'regulated data',metadata:canonicalMetadata('Regulated data',{regulatedData:true})},
+    {name:'unavailable source',metadata:canonicalMetadata('Unavailable source',{sourceCode:'unavailable'})},
+    {name:'batch execution',metadata:canonicalMetadata('Batch execution',{batch:true,realTime:false,synchronous:false})},
+    {name:'UI incomplete bridge',metadata:canonicalMetadata('UI incomplete bridge',{interfaces:['UI-only'],bridgeEvidence:{stableInterface:true}})},
+    {name:'UI complete bridge',metadata:canonicalMetadata('UI complete bridge',{interfaces:['UI-only'],bridgeEvidence:completeBridge})},
+    {name:'incomplete AI controls',metadata:canonicalMetadata('Incomplete AI controls',{aiControls:{legalSourceRights:true}})},
+    {name:'complete AI insufficient evidence',metadata:canonicalMetadata('Complete AI insufficient evidence',{aiControls:completeAi}),evidence:[]},
+    {name:'complete AI accepted evidence',metadata:canonicalMetadata('Complete AI accepted evidence',{aiControls:completeAi})},
+    {name:'age invariant young',assetName:'Age invariant young asset',metadata:canonicalMetadata('Age invariant',{ageYears:2})},
+    {name:'age invariant old',assetName:'Age invariant old asset',metadata:canonicalMetadata('Age invariant',{ageYears:47})},
+  ];
+  await scenario('mechanical PostgreSQL and production TypeScript evaluator parity',async()=>{
+    const bridgeFixtures=[];
+    for(const definition of parityDefinitions){
+      const evidence=definition.evidence??evidenceFor();
+      const applicationId=await createApplication(definition.assetName??definition.name);
+      await createMetadata(applicationId,definition.metadata,evidence);
+      const assessmentVersionId=nextUuid();
+      await saveAssessment(applicationId,assessmentVersionId);
+      const dimensionsResult=await client.query(`SELECT dimension,readiness_band AS band,evidence_confidence AS confidence,hard_gates AS "hardGates",missing_evidence AS "missingEvidence"
+        FROM assess_application_dimension_results WHERE assessment_version_id=$1 ORDER BY dimension`,[assessmentVersionId]);
+      const recommendationResult=await client.query(`SELECT disposition,evidence_confidence AS confidence
+        FROM assess_application_modernization_recommendations WHERE assessment_version_id=$1 ORDER BY id LIMIT 1`,[assessmentVersionId]);
+      bridgeFixtures.push({name:definition.name,applicationId,orgId:ORG,workspaceId:WS,metadata:definition.metadata,evidence,postgres:{dimensions:dimensionsResult.rows,recommendation:recommendationResult.rows[0]}});
+    }
+    const parityPath=`/tmp/avalaos-pr1g-parity-${process.pid}.json`;
+    await writeFile(parityPath,JSON.stringify(bridgeFixtures),{mode:0o600});
+    try{execFileSync(process.execPath,['scripts/runPr1gApplicationPortfolioParityBridge.mjs',parityPath],{stdio:'inherit'})}finally{await unlink(parityPath)}
   });
   await scenario('client-authored authority fields are rejected', async () => {
     for (const field of ['dimensions', 'recommendations', 'confidence', 'bands', 'gates', 'dispositions']) {
@@ -365,6 +420,7 @@ try {
     { ...canonicalMetadata('Unknown property'), unsupportedAuthority: true },
     { ...canonicalMetadata('Wrong array'), interfaces: 'REST/GraphQL' },
     { ...canonicalMetadata('Wrong enum'), sourceCode: 'trusted' },
+    { ...canonicalMetadata('Malformed evidence'), evidence:[{id:'bad',claimIds:'not-an-array',sourceType:'test',fresh:true,independent:true,accepted:true}] },
   ];
   const importReceiptId = nextUuid();
   await scenario('strict malformed import-row rejection', async () => {
@@ -377,7 +433,7 @@ try {
       "SELECT count(*) FILTER(WHERE outcome='success')::int successes,count(*) FILTER(WHERE outcome='rejected')::int rejections,count(*) FILTER(WHERE outcome='rejected' AND error_code='INVALID_METADATA')::int invalid FROM public.assess_application_import_row_outcomes WHERE import_receipt_id=$1",
       [importReceiptId],
     );
-    assert(result.rows[0].successes === 1 && result.rows[0].rejections === 4 && result.rows[0].invalid === 4, 'STRICT_IMPORT_REJECTION_FAILED');
+    assert(result.rows[0].successes === 1 && result.rows[0].rejections === 5 && result.rows[0].invalid === 5, 'STRICT_IMPORT_REJECTION_FAILED');
   });
   await scenario('import receipt counts match persisted row outcomes', async () => {
     const result = await client.query(
@@ -392,6 +448,26 @@ try {
     const row = result.rows[0];
     assert(row.success_count === row.persisted_successes && row.rejection_count === row.persisted_rejections, 'IMPORT_RECEIPT_COUNTS_MISMATCH');
   });
+  const duplicateReceipt=nextUuid(),duplicateKey=`import-duplicates-${nextUuid()}`,duplicatePayload={importReceiptId:duplicateReceipt,payloadHash:'duplicates',rows:[canonicalMetadata('Duplicate in batch'),canonicalMetadata('Duplicate in batch'),canonicalMetadata('Imported valid')]};
+  await scenario('mixed import persists batch and existing-workspace duplicate outcomes',async()=>{
+    const result=await rpc(client,{type:'application.import',key:duplicateKey,payload:duplicatePayload});
+    assert(result.resource.successCount===1&&result.resource.rejectionCount===2,'DUPLICATE_IMPORT_COUNTS_FAILED');
+    const outcomes=await client.query('SELECT outcome,error_code FROM assess_application_import_row_outcomes WHERE import_receipt_id=$1 ORDER BY row_number',[duplicateReceipt]);
+    assert(outcomes.rows[0].outcome==='success'&&outcomes.rows.slice(1).every(row=>row.error_code==='DUPLICATE_IN_WORKSPACE'),'DUPLICATE_IMPORT_OUTCOMES_FAILED');
+  });
+  await scenario('import exact replay returns durable receipt without duplicate outcomes',async()=>{
+    const replay=await rpc(client,{type:'application.import',key:duplicateKey,payload:duplicatePayload});
+    assert(replay.resource.id===duplicateReceipt,'IMPORT_REPLAY_RECEIPT_FAILED');
+    const count=await client.query('SELECT count(*)::int n FROM assess_application_import_row_outcomes WHERE import_receipt_id=$1',[duplicateReceipt]);
+    assert(count.rows[0].n===3,'IMPORT_REPLAY_DUPLICATED_OUTCOMES');
+  });
+  await expectSqlFailure('import changed-payload idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{type:'application.import',key:duplicateKey,payload:{...duplicatePayload,payloadHash:'changed'}}));
+  await scenario('500-row import boundary persists exactly 500 governed outcomes',async()=>{
+    const receipt=nextUuid(),rows=Array.from({length:500},(_,index)=>canonicalMetadata(`Boundary application ${index}`));
+    const result=await rpc(client,{type:'application.import',payload:{importReceiptId:receipt,payloadHash:'boundary-500',rows}});
+    assert(result.resource.successCount===500&&result.resource.rejectionCount===0,'IMPORT_500_BOUNDARY_FAILED');
+  });
+  await expectSqlFailure('501-row import rejected before receipt persistence','PR1G_INVALID_COMMAND',()=>rpc(client,{type:'application.import',payload:{importReceiptId:nextUuid(),payloadHash:'boundary-501',rows:Array.from({length:501},(_,index)=>canonicalMetadata(`Rejected boundary ${index}`))}}));
 
   await expectSqlFailure('missing dependency rejection', 'violates foreign key constraint', () => saveAssessment(
     syntheticApp,
@@ -413,6 +489,12 @@ try {
     readyApp,
     canonicalMetadata('Verified API', {
       interfaces: ['REST/GraphQL'],
+      documentationQuality:'high',
+      regulatedData:false,
+      sourceCode:'available_legal_access',
+      deploymentRepeatability:'deterministic',
+      realTime:true,
+      synchronous:true,
       aiControls: {
         legalSourceRights: true,
         executableAcceptanceTests: true,
@@ -495,10 +577,20 @@ try {
     const nested = projection.assessments.find((row) => row.id === gatedAssessment);
     assert(nested?.metadataVersion === 1 && nested.version === 1 && nested.dimensions.length === 7 && nested.recommendations.length === 1, 'PROJECTION_NESTED_ASSESSMENT_SHAPE_FAILED');
     assert(projection.importReceipts.some((row) => row.id === importReceiptId), 'PROJECTION_IMPORT_RECEIPT_MISSING');
-    assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 5, 'PROJECTION_ROW_OUTCOMES_MISSING');
+    assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 6, 'PROJECTION_ROW_OUTCOMES_MISSING');
     const projectionPath=`/tmp/avalaos-pr1g-projection-${process.pid}.json`;
     await writeFile(projectionPath,JSON.stringify(projection),{mode:0o600});
     try{execFileSync(process.execPath,['scripts/runPr1gProjectionDecoderBridge.mjs',projectionPath,ORG,WS],{stdio:'inherit'})}finally{await unlink(projectionPath)}
+  });
+  const incompleteApp=await createApplication('Incomplete latest decisions');
+  const incompleteMeta=await createMetadata(incompleteApp,canonicalMetadata('Incomplete latest decisions'),evidenceFor());
+  await client.query(`INSERT INTO assess_application_assessment_versions(id,org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version)
+    VALUES($1,$2,$3,$4,$5,1,'assess-v2-application-portfolio-2026-07','draft',$6,$7)`,[nextUuid(),ORG,WS,incompleteApp,incompleteMeta,ACTOR,AUTH_VERSION]);
+  await scenario('snapshot independently fails closed on incomplete latest decisions',async()=>{
+    const snapshot=await createSnapshot(1);
+    const persisted=await client.query('SELECT snapshot FROM assess_application_portfolio_snapshots WHERE id=$1',[snapshot.resource.id]);
+    const wave=persisted.rows[0].snapshot.waves.find(row=>row.applicationId===incompleteApp);
+    assert(wave?.qualified===false,'INCOMPLETE_DECISION_SET_QUALIFIED');
   });
 
   const lifecycleApp = await createApplication('Lifecycle authority');
@@ -526,6 +618,24 @@ try {
   await expectSqlFailure('revision changed-payload idempotency conflict', 'PR1B_IDEMPOTENCY_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, revisionKey, 'Changed payload'));
   await expectSqlFailure('stale revision-start rejection', 'PR1G_VERSION_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, `stale-revision-${nextUuid()}`));
   assert(revised.version === 4, 'REVISION_VERSION_FAILED');
+  await scenario('decision rows survive save finalize changes-requested and revision projection reload',async()=>{
+    const rows=await client.query(`SELECT a.version,a.lifecycle,count(DISTINCT d.dimension)::int dimensions,count(DISTINCT q.id)::int recommendations
+      FROM assess_application_assessment_versions a
+      LEFT JOIN assess_application_dimension_results d ON d.assessment_version_id=a.id
+      LEFT JOIN assess_application_modernization_recommendations q ON q.assessment_version_id=a.id
+      WHERE a.application_id=$1 GROUP BY a.id ORDER BY a.version`,[lifecycleApp]);
+    assert(rows.rows.length===4,'LIFECYCLE_VERSION_COUNT_FAILED');
+    for(const row of rows.rows)assert(row.dimensions===7&&row.recommendations>=1,`INCOMPLETE_LIFECYCLE_DECISIONS_${row.lifecycle}`);
+  });
+  const approvedApp=await createApplication('Approved lifecycle authority');
+  await createMetadata(approvedApp,canonicalMetadata('Approved lifecycle authority'),evidenceFor());
+  const approvedDraft=nextUuid();await saveAssessment(approvedApp,approvedDraft);
+  const approvedReady=(await finalizeAssessment(approvedApp,approvedDraft,1)).resource;
+  const approved=(await resolveReview(client,REVIEWER_A,approvedApp,approvedReady.id,2,`approved-${nextUuid()}`,'approved')).resource;
+  await scenario('approved review preserves complete decisions and projection reloads',async()=>{
+    const rows=await client.query('SELECT count(DISTINCT dimension)::int dimensions,(SELECT count(*)::int FROM assess_application_modernization_recommendations WHERE assessment_version_id=$1) recommendations FROM assess_application_dimension_results WHERE assessment_version_id=$1',[approved.id]);
+    assert(rows.rows[0].dimensions===7&&rows.rows[0].recommendations>=1,'APPROVED_DECISIONS_NOT_PRESERVED');
+  });
 
   const mismatchApp = await createApplication('Mismatch authority');
   await createMetadata(mismatchApp, canonicalMetadata('Mismatch authority'), evidenceFor());

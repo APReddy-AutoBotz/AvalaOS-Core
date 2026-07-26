@@ -18,7 +18,9 @@ for(const [commandType,payload] of [
 ] as any[]) assert.equal(parseApplicationEnvelope(body({commandType,payload})).commandType,commandType);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.assessment.save',payload:{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,assessmentVersion:1,dimensions:[],recommendations:[],processLinks:[],dependencies:[]}})),/INVALID_COMMAND/);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.portfolio.snapshot.create',payload:{portfolioSnapshotId:uuid('a'),economicsReferences:[]}})),/INVALID_COMMAND/);
-for(const invalid of [{...meta,interfaces:'REST'},{...meta,regulatedData:'yes'},{...meta,sourceCode:'maybe'},{...meta,synthetic:'false'},{...meta,ageYears:-1},{...meta,extra:true}])assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[invalid]}})),/INVALID_COMMAND/);
+for(const invalid of [{...meta,interfaces:'REST'},{...meta,regulatedData:'yes'},{...meta,sourceCode:'maybe'},{...meta,synthetic:'false'},{...meta,ageYears:-1},{...meta,extra:true}])assert.deepEqual((parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[invalid]}})).payload.rows as unknown[])[0],invalid);
+assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[null]}})),/INVALID_COMMAND/);
+assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:Array.from({length:501},()=>({}))}})),/INVALID_COMMAND/);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.metadata.upsert',payload:{applicationId:ids.app,metadataVersionId:uuid('7'),metadataVersion:1,metadata:meta,evidence:[{id:'e',claimIds:['x'],sourceType:'bad',fresh:true,independent:true,accepted:true}]}})),/INVALID_COMMAND/);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'unknown.command'})),/COMMAND_NOT_SUPPORTED/);
 assert.throws(()=>parseApplicationEnvelope(body({idempotencyKey:'bad key'})),/INVALID_COMMAND/);
@@ -27,6 +29,9 @@ const parsed=parseApplicationEnvelope(body()); assert.equal(parsed.commandType,'
 const req=new Request('http://localhost',{method:'POST'}); const first=await executeApplicationCommand(req,parsed,deps()); assert.equal(first.outcome,'committed'); const replay=await executeApplicationCommand(req,parsed,deps()); assert.equal(replay.outcome,'replayed'); assert.equal(commits,1);
 assert.throws(()=>parseApplicationEnvelope(body({payload:{applicationId:ids.app,name:'ERP',description:'desc',extra:true}})),/INVALID_COMMAND/);
 await assert.rejects(()=>executeApplicationCommand(req,parsed,deps(['assess.applications.read'])),/PERMISSION_DENIED/);
+const snapshot=parseApplicationEnvelope(body({idempotencyKey:'snapshot-idem-1',commandType:'application.portfolio.snapshot.create',payload:{portfolioSnapshotId:uuid('a')}}));
+for(const insufficient of [['assess.applications.portfolio.read'],['assess.applications.read'],['assess.applications.write']])await assert.rejects(()=>executeApplicationCommand(req,snapshot,deps(insufficient)),/PERMISSION_DENIED/);
+assert.equal((await executeApplicationCommand(req,snapshot,deps(['assess.applications.portfolio.write']))).outcome,'committed');
 await assert.rejects(()=>executeApplicationCommand(req,{...parsed,authorizationVersion:8},deps()),/AUTHORITY_STALE/);
 const projection=await readApplicationProjection(req,{organizationId:ids.org,workspaceId:ids.ws},deps()); assert.equal((projection.inventory as any[])[0].name,'ERP');
 console.log('PR 1G application portfolio command tests passed.');

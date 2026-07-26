@@ -16,6 +16,8 @@ The additive PostgreSQL migration uses the accepted `capabilities(capability_key
 
 Typed Edge command support parses strict envelopes for `application.create`, `application.import`, `application.metadata.upsert`, `application.assessment.save`, `application.assessment.finalize`, `application.assessment.review.resolve`, `application.assessment.revision.start`, and `application.portfolio.snapshot.create`; it enforces fresh tenant authority, capabilities, authorization version, expected version, actor-scoped idempotency, payload hash, stable non-disclosing errors, and exact successful replay through the injected atomic persistence dependency.
 
+Portfolio snapshot reads require `assess.applications.portfolio.read`. Creation of an immutable modernization snapshot is a distinct mutation requiring `assess.applications.portfolio.write`; neither general application read/write nor portfolio read grants snapshot mutation authority.
+
 ## Dimensions and Dispositions
 
 Every dimension returns a deterministic readiness band, evidence confidence, hard gates, evidence references, missing evidence, rationale, contradictions, remediation requirements, and what would change the result. Evidence confidence is claim-linked per dimension: empty evidence is insufficient; verified evidence must be current, independent, accepted, non-synthetic, and claim-linked; stale, contradicted, or synthetic-only evidence lowers confidence.
