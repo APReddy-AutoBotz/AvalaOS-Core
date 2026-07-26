@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 const sql=fs.readFileSync('supabase/migrations/20260722120000_pr1g_application_portfolio.sql','utf8');
+const corrective=fs.readFileSync('supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql','utf8');
 const router=fs.readFileSync('supabase/functions/_shared/assessV2Router.ts','utf8');
 const edge=fs.readFileSync('supabase/functions/assess-v2-command/index.ts','utf8');
 const db=fs.readFileSync('supabase/functions/_shared/assessV2ApplicationPortfolioDb.ts','utf8');
@@ -8,5 +9,22 @@ const missing=required.filter(x=>!sql.includes(x));
 if(missing.length){console.error(`PR 1G migration contract missing: ${missing.join(', ')}`);process.exit(1)}
 for(const table of ['assess_application_assets','assess_application_metadata_versions','assess_process_application_links','assess_application_dependencies','assess_application_assessment_versions','assess_application_dimension_results','assess_application_modernization_recommendations','assess_application_review_resolutions','assess_application_portfolio_snapshots','assess_application_import_receipts','assess_application_import_row_outcomes']){if(!sql.includes(table)){console.error(`Missing table ${table}`);process.exit(1)}}
 if(/RAISE EXCEPTION 'PR1G_PRIVATE_RPC_REQUIRES_SERVICE_IMPLEMENTATION'/.test(sql)||/status','accepted/.test(sql)){console.error('Placeholder RPC remains');process.exit(1)}
+const correctiveRequired=[
+  "has_workspace_capability(workspace_id,org_id,''assess.applications.read'')",
+  "has_workspace_capability(workspace_id,org_id,'assess.applications.portfolio.read')",
+  'pr1g_derive_process_link_authority',
+  'pr1g_verified_process_links',
+  'assess_v2_govern_resolutions',
+  'assess_v2_economic_review_resolutions',
+  "RAISE EXCEPTION 'PR1G_VERSION_CONFLICT'",
+  'pg_advisory_xact_lock',
+  'COALESCE(max(version),0)+1',
+  'UNIQUE(org_id,workspace_id,version)',
+  'ORDER BY s.version DESC',
+];
+const missingCorrective=correctiveRequired.filter(x=>!corrective.includes(x));
+if(missingCorrective.length){console.error(`PR 1G corrective migration contract missing: ${missingCorrective.join(', ')}`);process.exit(1)}
+if(!corrective.includes("GENERATED ALWAYS AS ((snapshot->>'version')::bigint) STORED")){console.error('Snapshot version is not relationally enforced');process.exit(1)}
+if(/count\\(\\*\\)\\+1 FROM public\\.assess_application_portfolio_snapshots/.test(corrective)){console.error('Unlocked snapshot count authority remains in corrective path');process.exit(1)}
 if(!router.includes('if(!applicationDependencies)throw new ApplicationPortfolioError')||!edge.includes('assessV2ApplicationPortfolioDependencies')||!db.includes("rpc/pr1g_execute_application_command")){console.error('PR 1G commands are not wired to concrete database dependencies');process.exit(1)}
 console.log('PR 1G migration, RPC, read projection, and Edge wiring contract checks passed.');
