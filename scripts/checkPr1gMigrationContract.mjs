@@ -21,6 +21,9 @@ const correctiveRequired=[
   'COALESCE(max(version),0)+1',
   'UNIQUE(org_id,workspace_id,version)',
   'ORDER BY s.version DESC',
+  'request_hash:=md5(sanitized::text)',
+  'REVOKE ALL ON FUNCTION public.pr1g_assert_application_authority(uuid,uuid,uuid,text,bigint) FROM PUBLIC,anon,authenticated,service_role',
+  'REVOKE ALL ON FUNCTION public.pr1g_verified_process_links(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role',
 ];
 const missingCorrective=correctiveRequired.filter(x=>!corrective.includes(x));
 if(missingCorrective.length){console.error(`PR 1G corrective migration contract missing: ${missingCorrective.join(', ')}`);process.exit(1)}

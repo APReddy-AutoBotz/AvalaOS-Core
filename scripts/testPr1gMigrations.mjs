@@ -19,8 +19,10 @@ await client.connect();
 
 const executed = [];
 const scenario = async (name, fn) => {
+  console.log(`PR 1G PostgreSQL scenario started: ${name}`);
   const result = await fn();
   executed.push(name);
+  console.log(`PR 1G PostgreSQL scenario passed: ${name}`);
   return result;
 };
 const assert = (condition, message) => {
@@ -230,6 +232,47 @@ try {
     const row = result.rows[0];
     assert(!row.public_execute && !row.anon_execute && !row.authenticated_execute && row.service_execute && row.authenticated_read, 'RPC_PRIVILEGE_BOUNDARY_FAILED');
   });
+  await scenario('internal PR 1G function ACL matrix', async () => {
+    const signatures = [
+      'pr1g_reject_immutable()',
+      'pr1g_reject_finalized_metadata_update()',
+      'pr1g_error_envelope(text)',
+      'pr1g_assert_application_authority(uuid,uuid,uuid,text,bigint)',
+      'pr1g_command_capability(text)',
+      'pr1g_evidence_valid(jsonb)',
+      'pr1g_metadata_valid(jsonb)',
+      'pr1g_evidence_confidence(uuid,text)',
+      'pr1g_copy_application_decisions(uuid,uuid)',
+      'pr1g_dimension_missing_evidence(jsonb,text)',
+      'pr1g_derive_process_link_authority()',
+      'pr1g_verified_process_links(uuid,uuid)',
+    ];
+    for (const signature of signatures) {
+      const result = await client.query(
+        `SELECT has_function_privilege('public',$1,'EXECUTE') public_execute,
+          has_function_privilege('anon',$1,'EXECUTE') anon_execute,
+          has_function_privilege('authenticated',$1,'EXECUTE') authenticated_execute,
+          has_function_privilege('service_role',$1,'EXECUTE') service_execute`,
+        [`public.${signature}`],
+      );
+      assert(Object.values(result.rows[0]).every((value) => value === false), `INTERNAL_FUNCTION_ACL_EXPOSED_${signature}`);
+    }
+  });
+  const expectRoleHelperDenial = async (name, role, sql, parameters = []) => expectSqlFailure(name, 'permission denied for function', async () => {
+    await client.query('BEGIN');
+    try {
+      await client.query(`SET LOCAL ROLE ${role}`);
+      await client.query(sql, parameters);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+  await expectRoleHelperDenial('anon internal helper direct invocation denial','anon',"SELECT public.pr1g_evidence_confidence($1,'security_and_control')",[nextUuid()]);
+  await expectRoleHelperDenial('authenticated detailed helper direct invocation denial','authenticated',"SELECT public.pr1g_evidence_confidence($1,'security_and_control')",[nextUuid()]);
+  await expectRoleHelperDenial('authenticated snapshot helper direct invocation denial','authenticated','SELECT * FROM public.pr1g_verified_process_links($1,$2)',[ORG,WS]);
+  await expectRoleHelperDenial('cross-tenant internal helper direct invocation denial','authenticated','SELECT * FROM public.pr1g_verified_process_links($1,$2)',[OTHER_ORG,OTHER_WS]);
   await scenario('forced RLS on every PR 1G tenant table', async () => {
     const result = await client.query("SELECT count(*)::int n FROM pg_class WHERE relname LIKE 'assess_application_%' AND relforcerowsecurity");
     assert(result.rows[0].n === 11, 'RLS_NOT_FORCED_ON_ALL_TABLES');
@@ -828,6 +871,45 @@ try {
   await saveAssessment(ancestryApp, ancestryV2, {}, 1, 2);
   await expectSqlFailure('superseded ancestry rejection', 'PR1G_VERSION_CONFLICT', () => finalizeAssessment(ancestryApp, ancestryV1, 1));
 
+  const replayApp=await createApplication('Assessment replay authority');
+  await createMetadata(replayApp,canonicalMetadata('Assessment replay authority'),evidenceFor());
+  const replayAssessmentId=nextUuid();
+  const replayKey=`assessment-replay-${nextUuid()}`;
+  const replayPayload={assessmentVersionId:replayAssessmentId,applicationId:replayApp,metadataVersion:1,assessmentVersion:1,processLinks:[],dependencies:[]};
+  const replayFirst=await rpc(client,{type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload});
+  await finalizeAssessment(replayApp,replayAssessmentId,1);
+  await scenario('assessment save exact replay precedes advanced-version validation',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE application_id=$1) assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND actor_id=$3 AND command_type='application.assessment.save' AND idempotency_key=$4) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND actor_id=$3 AND action='application.assessment.save' AND resource_id=$5) audits`,
+    [replayApp,ORG,ACTOR,replayKey,replayAssessmentId]);
+    const replay=await rpc(client,{type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload});
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE application_id=$1) assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND actor_id=$3 AND command_type='application.assessment.save' AND idempotency_key=$4) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND actor_id=$3 AND action='application.assessment.save' AND resource_id=$5) audits`,
+    [replayApp,ORG,ACTOR,replayKey,replayAssessmentId]);
+    assert(replay.resource.id===replayFirst.resource.id&&replay.resource.version===replayFirst.resource.version,'ASSESSMENT_EXACT_REPLAY_RESPONSE_FAILED');
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'ASSESSMENT_EXACT_REPLAY_SIDE_EFFECT');
+  });
+  await expectSqlFailure('assessment save changed-payload idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+    type:'application.assessment.save',expected:0,key:replayKey,payload:{...replayPayload,dependencies:[{upstreamApplicationId:gatedApp,downstreamApplicationId:replayApp,dependencyType:'runtime'}]},
+  }));
+  await expectSqlFailure('assessment save stale actor rejected before version evaluation','PR1B_AUTHORIZATION_STALE',async()=>{
+    await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);
+    try{return await rpc(client,{type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000}})}
+    finally{await resetActorVersion()}
+  });
+  await expectSqlFailure('assessment save unauthorized actor rejected before version evaluation','PR1B_NOT_FOUND',async()=>{
+    await disableOrganizationWrite();
+    try{return await rpc(client,{type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000}})}
+    finally{await restoreOrganizationWrite();await resetActorVersion()}
+  });
+  await expectSqlFailure('assessment save cross-tenant actor non-disclosure before version evaluation','PR1B_NOT_FOUND',()=>rpc(client,{
+    actor:OTHER_ACTOR,type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000},
+  }));
+
   const concurrentApp = await createApplication('Concurrent review');
   await createMetadata(concurrentApp, canonicalMetadata('Concurrent review'), evidenceFor());
   const concurrentDraft = nextUuid();
@@ -908,9 +990,12 @@ try {
   });
 
   console.log(`PR 1G PostgreSQL 16 executable behavioral scenarios passed: ${executed.length} passed, 0 failed.`);
+  console.log('Internal function ACL scenarios: all PR 1G helpers deny PUBLIC, anon, authenticated and service-role direct execution; authenticated projection and service-role command remain executable.');
+  console.log('Direct helper denial scenarios: anon, authenticated, capability-limited and cross-tenant invocations are permission denied without rows or mutations.');
   console.log('Capability-isolation scenarios: direct table and projection/RPC access for applications.read, portfolio.read, both, neither, revoked/inactive and cross-tenant authority.');
   console.log('Authoritative Process × Application linkage scenarios: verified ancestry plus forged, cross-tenant, stale Govern and economics fail-closed rejection.');
-  console.log('Assessment version progression scenarios: first, successor, stale conflict and application-scoped lifecycle authority.');
+  console.log('Assessment version progression scenarios: first, successor, exact replay after advancement, changed-payload conflict, authorization-before-version, stale conflict and application-scoped lifecycle authority.');
+  console.log('Concurrent assessment allocation: exactly one committed version 1 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
   console.log('Concurrent snapshot allocation: one committed version 3 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
   console.log(`Scenario detail: ${executed.join('; ')}.`);
 } finally {

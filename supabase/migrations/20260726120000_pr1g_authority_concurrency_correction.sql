@@ -224,6 +224,7 @@ CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command(
   p_expected_version bigint,p_authorization_version bigint,p_idempotency_key text,p_payload jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE
+  cap text:=public.pr1g_command_capability(p_command_type);
   sanitized jsonb:=p_payload;
   link jsonb;
   derived_links jsonb:='[]'::jsonb;
@@ -237,15 +238,10 @@ DECLARE
 BEGIN
   IF p_command_type='application.assessment.save' THEN
     selected_application_id:=(p_payload->>'applicationId')::uuid;
-    PERFORM pg_advisory_xact_lock(hashtextextended(
-      'pr1g-assessment:'||p_org_id::text||':'||p_workspace_id::text||':'||selected_application_id::text,0));
-    SELECT COALESCE(max(version),0) INTO latest_assessment_version
-    FROM public.assess_application_assessment_versions
-    WHERE application_id=selected_application_id AND org_id=p_org_id AND workspace_id=p_workspace_id;
-    IF p_expected_version<>latest_assessment_version
-      OR (p_payload->>'assessmentVersion')::bigint<>latest_assessment_version+1
-      THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT';
-    END IF;
+    IF cap IS NULL THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
+    PERFORM public.pr1g_assert_application_authority(
+      p_actor_id,p_org_id,p_workspace_id,cap,p_authorization_version
+    );
     FOR link IN SELECT value FROM jsonb_array_elements(COALESCE(p_payload->'processLinks','[]'::jsonb)) LOOP
       derived_links:=derived_links||jsonb_build_array(
         jsonb_build_object(
@@ -259,6 +255,23 @@ BEGIN
       );
     END LOOP;
     sanitized:=jsonb_set(p_payload,'{processLinks}',derived_links,true);
+    request_hash:=md5(sanitized::text);
+    SELECT * INTO receipt FROM public.assess_command_receipts
+      WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type=p_command_type
+        AND idempotency_key=p_idempotency_key FOR UPDATE;
+    IF receipt.id IS NOT NULL THEN
+      IF receipt.request_hash<>request_hash THEN RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'; END IF;
+      IF receipt.status='succeeded' THEN RETURN receipt.response; END IF;
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      'pr1g-assessment:'||p_org_id::text||':'||p_workspace_id::text||':'||selected_application_id::text,0));
+    SELECT COALESCE(max(version),0) INTO latest_assessment_version
+    FROM public.assess_application_assessment_versions
+    WHERE application_id=selected_application_id AND org_id=p_org_id AND workspace_id=p_workspace_id;
+    IF p_expected_version<>latest_assessment_version
+      OR (p_payload->>'assessmentVersion')::bigint<>latest_assessment_version+1
+      THEN RAISE EXCEPTION 'PR1G_VERSION_CONFLICT';
+    END IF;
     RETURN public.pr1g_execute_application_command_merged(
       p_org_id,p_workspace_id,p_actor_id,p_request_id,p_command_type,p_expected_version,
       p_authorization_version,p_idempotency_key,sanitized
@@ -416,3 +429,19 @@ REVOKE ALL ON FUNCTION public.pr1g_read_application_portfolio_projection_merged(
 GRANT EXECUTE ON FUNCTION public.pr1g_read_application_portfolio_projection_merged(uuid,uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.pr1g_read_application_portfolio_projection(uuid,uuid) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pr1g_read_application_portfolio_projection(uuid,uuid) TO authenticated,service_role;
+
+-- PR 1G RPC boundary: only the projection is client-executable. Commands and
+-- renamed compatibility entry points are service-role only; helpers are owner
+-- internal and receive no client or service-role direct-execution grant.
+REVOKE ALL ON FUNCTION public.pr1g_reject_immutable() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_reject_finalized_metadata_update() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_error_envelope(text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_assert_application_authority(uuid,uuid,uuid,text,bigint) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_command_capability(text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_evidence_valid(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_metadata_valid(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_evidence_confidence(uuid,text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_copy_application_decisions(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_dimension_missing_evidence(jsonb,text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_derive_process_link_authority() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.pr1g_verified_process_links(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
