@@ -2,7 +2,7 @@
 INSERT INTO public.capabilities(capability_key,module,description) VALUES
  ('assess.applications.read','assess','Read tenant-scoped application portfolio assessment records'),('assess.applications.write','assess','Create and update draft application metadata'),('assess.applications.import','assess','Import validated CSV/JSON application records'),('assess.applications.finalize','assess','Finalize application assessment versions for review'),('assess.applications.review','assess','Independently resolve application assessment reviews'),('assess.applications.portfolio.read','assess','Read tenant-scoped application portfolio snapshots'),('assess.applications.portfolio.write','assess','Create immutable application modernization portfolio snapshots')
 ON CONFLICT(capability_key) DO NOTHING;
-CREATE TABLE IF NOT EXISTS public.assess_application_assets(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,name text NOT NULL,normalized_name text NOT NULL,description text,deleted_at timestamptz,created_by uuid NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,org_id,workspace_id),UNIQUE(org_id,workspace_id,normalized_name));
+CREATE TABLE IF NOT EXISTS public.assess_application_assets(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,name text NOT NULL,normalized_name text NOT NULL,description text,deleted_at timestamptz,created_by uuid NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,org_id,workspace_id),CONSTRAINT assess_application_assets_workspace_normalized_name_key UNIQUE(org_id,workspace_id,normalized_name));
 CREATE TABLE IF NOT EXISTS public.assess_application_metadata_versions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,application_id uuid NOT NULL,version int NOT NULL CHECK(version>0),lifecycle text NOT NULL CHECK(lifecycle IN('draft','reviewer_ready','approved','changes_requested','rejected','superseded')),metadata jsonb NOT NULL,author_id uuid NOT NULL,receipt_id uuid REFERENCES public.assess_command_receipts(id) ON DELETE RESTRICT,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,application_id,org_id,workspace_id),UNIQUE(application_id,org_id,workspace_id,version),FOREIGN KEY(application_id,org_id,workspace_id) REFERENCES public.assess_application_assets(id,org_id,workspace_id) ON DELETE RESTRICT);
 CREATE TABLE IF NOT EXISTS public.assess_application_source_evidence(id uuid PRIMARY KEY,org_id uuid NOT NULL,workspace_id uuid NOT NULL,application_id uuid NOT NULL,metadata_version_id uuid NOT NULL,evidence_key text NOT NULL,claim_ids text[] NOT NULL,source_type text NOT NULL CHECK(source_type IN('manual','document','review','test','synthetic_fixture')),fresh boolean NOT NULL,independent boolean NOT NULL,accepted boolean NOT NULL,contradicts boolean NOT NULL DEFAULT false,synthetic boolean NOT NULL DEFAULT false,created_by uuid NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,application_id,metadata_version_id,org_id,workspace_id),UNIQUE(metadata_version_id,evidence_key),FOREIGN KEY(metadata_version_id,application_id,org_id,workspace_id) REFERENCES public.assess_application_metadata_versions(id,application_id,org_id,workspace_id) ON DELETE RESTRICT);
 CREATE TABLE IF NOT EXISTS public.assess_process_application_links(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),org_id uuid NOT NULL,workspace_id uuid NOT NULL,process_id uuid NOT NULL,primitive_id text NOT NULL,application_id uuid NOT NULL,application_metadata_version_id uuid NOT NULL,assessment_version_id uuid NOT NULL,interaction_type text NOT NULL,govern_state text NOT NULL CHECK(govern_state IN('approved','approval_required','rejected','Unknown')),economics_ref uuid,economics_currency char(3),created_by uuid NOT NULL,receipt_id uuid REFERENCES public.assess_command_receipts(id) ON DELETE RESTRICT,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,org_id,workspace_id),UNIQUE(org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id),FOREIGN KEY(application_id,org_id,workspace_id) REFERENCES public.assess_application_assets(id,org_id,workspace_id) ON DELETE RESTRICT,FOREIGN KEY(application_metadata_version_id,application_id,org_id,workspace_id) REFERENCES public.assess_application_metadata_versions(id,application_id,org_id,workspace_id) ON DELETE RESTRICT);
@@ -86,7 +86,7 @@ CREATE OR REPLACE FUNCTION public.pr1g_metadata_valid(p jsonb) RETURNS boolean L
  AND p->>'automatedTestMaturity'=ANY(ARRAY['executable_acceptance','unit_or_integration','manual_only','none','Unknown'])
  AND p->>'deploymentRepeatability'=ANY(ARRAY['deterministic','repeatable_manual','ad_hoc','Unknown'])
  AND p->>'observability'=ANY(ARRAY['strong','partial','weak','Unknown'])
- AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['regulatedData','realTime','eventDriven','synchronous','batch']) AS keys(key) WHERE p->>key NOT IN('true','false','Unknown'))
+ AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['regulatedData','realTime','eventDriven','synchronous','batch']) AS keys(key) WHERE NOT (jsonb_typeof(p->key)='boolean' OR (jsonb_typeof(p->key)='string' AND p->>key='Unknown')))
  AND (NOT p ? 'eolStatus' OR p->>'eolStatus'=ANY(ARRAY['supported','eol_announced','eol','Unknown']))
  AND (NOT p ? 'ageYears' OR (jsonb_typeof(p->'ageYears')='number' AND (p->>'ageYears')::numeric>=0))
  AND jsonb_typeof(p->'synthetic')='boolean'
@@ -122,12 +122,12 @@ RETURNS text[] LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
   WHEN 'state_and_execution' THEN CASE WHEN p_metadata->>'realTime'='Unknown' OR p_metadata->>'synchronous'='Unknown' THEN ARRAY['EXECUTION_CHARACTERISTICS'] ELSE ARRAY[]::text[] END
   WHEN 'security_and_control' THEN CASE WHEN p_metadata->>'regulatedData'='Unknown' THEN ARRAY['REGULATED_DATA_FLAGS'] ELSE ARRAY[]::text[] END
   WHEN 'architecture_changeability' THEN ARRAY(SELECT x FROM unnest(ARRAY[CASE WHEN p_metadata->>'sourceCode'='Unknown' THEN 'SOURCE_RIGHTS' END,CASE WHEN p_metadata->>'deploymentRepeatability'='Unknown' THEN 'DEPLOYMENT_REPEATABILITY' END]) x WHERE x IS NOT NULL)
-  WHEN 'ui_automation_readiness' THEN CASE WHEN (p_metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] THEN ARRAY(SELECT key FROM jsonb_each(COALESCE(p_metadata->'bridgeEvidence','{}'::jsonb)) controls(key,value) WHERE value<>'true'::jsonb) || ARRAY(SELECT gate FROM unnest(ARRAY['stableInterface','controlAccessibility','deterministicErrorDetection','reversibilityOrCompensation','materialActionApproval','monitoring','humanOwner']) gate WHERE NOT COALESCE(p_metadata->'bridgeEvidence','{}'::jsonb) ? gate) ELSE ARRAY[]::text[] END
+  WHEN 'ui_automation_readiness' THEN CASE WHEN (p_metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] THEN ARRAY(SELECT gate FROM unnest(ARRAY['stableInterface','controlAccessibility','deterministicErrorDetection','reversibilityOrCompensation','materialActionApproval','monitoring','humanOwner']) WITH ORDINALITY controls(gate,position) WHERE COALESCE(p_metadata#>(ARRAY['bridgeEvidence',gate]),'false'::jsonb)<>'true'::jsonb ORDER BY position) ELSE ARRAY[]::text[] END
   ELSE ARRAY[]::text[] END;
 $$;
 CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command(p_org_id uuid,p_workspace_id uuid,p_actor_id uuid,p_request_id uuid,p_command_type text,p_expected_version bigint,p_authorization_version bigint,p_idempotency_key text,p_payload jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE cap text:=public.pr1g_command_capability(p_command_type); h text:=md5(p_payload::text); r public.assess_command_receipts; audit_id uuid:=gen_random_uuid(); app public.assess_application_assets; meta public.assess_application_metadata_versions; ass public.assess_application_assessment_versions; source_assessment_id uuid; result jsonb; row_item jsonb; evidence_item jsonb; i int:=0; v_success_count int:=0; v_rejection_count int:=0; target_version int;
+DECLARE cap text:=public.pr1g_command_capability(p_command_type); h text:=md5(p_payload::text); r public.assess_command_receipts; audit_id uuid:=gen_random_uuid(); app public.assess_application_assets; meta public.assess_application_metadata_versions; ass public.assess_application_assessment_versions; source_assessment_id uuid; result jsonb; row_item jsonb; evidence_item jsonb; i int:=0; v_success_count int:=0; v_rejection_count int:=0; target_version int; v_constraint_name text;
 BEGIN
  IF cap IS NULL THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
  PERFORM public.pr1g_assert_application_authority(p_actor_id,p_org_id,p_workspace_id,cap,p_authorization_version);
@@ -168,9 +168,22 @@ BEGIN
     END LOOP;
     v_success_count:=v_success_count+1;
     INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,application_id) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'success',app.id);
-   EXCEPTION WHEN OTHERS THEN
-    v_rejection_count:=v_rejection_count+1;
-    INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected',CASE WHEN SQLERRM LIKE '%PR1G_DUPLICATE_IMPORT_ROW%' OR SQLSTATE='23505' THEN 'DUPLICATE_IN_WORKSPACE' ELSE 'INVALID_METADATA' END,CASE WHEN SQLERRM LIKE '%PR1G_DUPLICATE_IMPORT_ROW%' OR SQLSTATE='23505' THEN 'Duplicate application in this workspace.' ELSE 'Row failed the canonical application metadata schema.' END);
+   EXCEPTION
+    WHEN unique_violation THEN
+     GET STACKED DIAGNOSTICS v_constraint_name=CONSTRAINT_NAME;
+     IF v_constraint_name<>'assess_application_assets_workspace_normalized_name_key' THEN RAISE; END IF;
+     v_rejection_count:=v_rejection_count+1;
+     INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected','DUPLICATE_IN_WORKSPACE','Duplicate application in this workspace.');
+    WHEN raise_exception THEN
+     IF SQLERRM='PR1G_INVALID_IMPORT_ROW' THEN
+      v_rejection_count:=v_rejection_count+1;
+      INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected','INVALID_METADATA','Row failed the canonical application metadata schema.');
+     ELSIF SQLERRM='PR1G_DUPLICATE_IMPORT_ROW' THEN
+      v_rejection_count:=v_rejection_count+1;
+      INSERT INTO public.assess_application_import_row_outcomes(org_id,workspace_id,import_receipt_id,row_number,outcome,error_code,error_message) VALUES(p_org_id,p_workspace_id,(p_payload->>'importReceiptId')::uuid,i,'rejected','DUPLICATE_IN_WORKSPACE','Duplicate application in this workspace.');
+     ELSE
+      RAISE;
+     END IF;
    END;
   END LOOP;
   UPDATE public.assess_application_import_receipts AS receipt SET success_count=v_success_count,rejection_count=v_rejection_count,audit_event_id=audit_id WHERE receipt.id=(p_payload->>'importReceiptId')::uuid;
@@ -201,27 +214,81 @@ BEGIN
      WHEN 'security_and_control' THEN CASE WHEN meta.metadata->>'regulatedData'='true' THEN ARRAY['REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW'] ELSE ARRAY[]::text[] END
      WHEN 'architecture_changeability' THEN CASE WHEN meta.metadata->>'sourceCode'='unavailable' THEN ARRAY['NO_LEGAL_SOURCE_ACCESS'] ELSE ARRAY[]::text[] END
      WHEN 'ui_automation_readiness' THEN CASE WHEN (meta.metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] AND NOT (COALESCE((meta.metadata#>>'{bridgeEvidence,stableInterface}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,controlAccessibility}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,deterministicErrorDetection}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,reversibilityOrCompensation}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,materialActionApproval}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,monitoring}')::boolean,false) AND COALESCE((meta.metadata#>>'{bridgeEvidence,humanOwner}')::boolean,false)) THEN ARRAY['UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'] ELSE ARRAY[]::text[] END
-     WHEN 'ai_assisted_engineering_readiness' THEN ARRAY(SELECT 'AI_REBUILD_REQUIRES_'||upper(key) FROM jsonb_each(COALESCE(meta.metadata->'aiControls','{}'::jsonb)) controls(key,value) WHERE value<>'true'::jsonb) || ARRAY(SELECT 'AI_REBUILD_REQUIRES_'||upper(gate) FROM unnest(ARRAY['legalSourceRights','executableAcceptanceTests','reproducibleBuild','controlledSecurityReview','humanEngineeringOwner','controlledDeploymentRollback']) gate WHERE NOT COALESCE(meta.metadata->'aiControls','{}'::jsonb) ? gate)
+     WHEN 'ai_assisted_engineering_readiness' THEN ARRAY(SELECT 'AI_REBUILD_REQUIRES_'||upper(gate) FROM unnest(ARRAY['legalSourceRights','executableAcceptanceTests','reproducibleBuild','controlledSecurityReview','humanEngineeringOwner','controlledDeploymentRollback']) WITH ORDINALITY controls(gate,position) WHERE COALESCE(meta.metadata#>(ARRAY['aiControls',gate]),'false'::jsonb)<>'true'::jsonb ORDER BY position)
      ELSE ARRAY[]::text[] END,
     public.pr1g_dimension_missing_evidence(meta.metadata,row_item#>>'{}'),
-    ARRAY['Derived inside PostgreSQL from committed metadata and immutable source evidence.'],ARRAY['Human-controlled remediation and independent review required.'],ARRAY['Fresh accepted non-synthetic evidence may change this result.'],
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.evidence_key,'claimIds',e.claim_ids,'sourceType',e.source_type,'fresh',e.fresh,'independent',e.independent,'accepted',e.accepted,'contradicts',e.contradicts,'synthetic',e.synthetic)) FROM public.assess_application_source_evidence e WHERE e.metadata_version_id=meta.id AND row_item#>>'{}'=ANY(e.claim_ids)),'[]'::jsonb));
+    CASE row_item#>>'{}'
+     WHEN 'integration_accessibility' THEN ARRAY['Interfaces: '||COALESCE(NULLIF(ARRAY_TO_STRING(ARRAY(SELECT jsonb_array_elements_text(meta.metadata->'interfaces')),', '),''),'Unknown')]
+     WHEN 'semantic_and_data_clarity' THEN ARRAY['Documentation quality is '||(meta.metadata->>'documentationQuality')||'.']
+     WHEN 'state_and_execution' THEN ARRAY['State, feedback, reversibility and transaction boundaries are independent.']
+     WHEN 'security_and_control' THEN ARRAY['Security/control readiness never follows from API availability.']
+     WHEN 'architecture_changeability' THEN ARRAY['Application age alone is ignored.']
+     WHEN 'ui_automation_readiness' THEN ARRAY['UI-only or absent API never automatically implies RPA/UI automation.']
+     WHEN 'ai_assisted_engineering_readiness' THEN ARRAY['AI may summarize evidence but cannot approve rebuild, rewrite or deploy.'] END,
+    CASE row_item#>>'{}'
+     WHEN 'integration_accessibility' THEN ARRAY['Evidence native API/event, façade, semantic translation, event bridge, workflow bridge, or UI bridge controls.']
+     WHEN 'semantic_and_data_clarity' THEN ARRAY['Add schema, data dictionary, canonical identifiers, field validation and source-of-truth evidence.']
+     WHEN 'state_and_execution' THEN ARRAY['Document transaction boundaries, compensation and partial-failure visibility.']
+     WHEN 'security_and_control' THEN ARRAY['Evidence authn/authz, service identity, SoD, audit, approvals and license controls.']
+     WHEN 'architecture_changeability' THEN ARRAY['Secure source rights, tests, build, deployment and observability evidence.']
+     WHEN 'ui_automation_readiness' THEN ARRAY['Prove stable interface, accessibility, deterministic errors, reversibility, approvals, monitoring and ownership.']
+     WHEN 'ai_assisted_engineering_readiness' THEN ARRAY['Provide legal source rights, executable acceptance tests, reproducible build, security review, human owner, deployment/rollback.'] END,
+    CASE row_item#>>'{}'
+     WHEN 'integration_accessibility' THEN ARRAY['Fresh accepted interface contract would change this result.']
+     WHEN 'semantic_and_data_clarity' THEN ARRAY['Accepted semantic evidence would change this result.']
+     WHEN 'state_and_execution' THEN ARRAY['Executable workflow/compensation evidence would change this result.']
+     WHEN 'security_and_control' THEN ARRAY['Approved controls would change this result.']
+     WHEN 'architecture_changeability' THEN ARRAY['Legal source plus reproducible build evidence would change this result.']
+     WHEN 'ui_automation_readiness' THEN ARRAY['Complete governed bridge evidence would change this result.']
+     WHEN 'ai_assisted_engineering_readiness' THEN ARRAY['All hard gates plus independent review would change this result.'] END,
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.evidence_key,'claimIds',e.claim_ids,'sourceType',e.source_type,'fresh',e.fresh,'independent',e.independent,'accepted',e.accepted,'contradicts',e.contradicts,'synthetic',e.synthetic) ORDER BY e.evidence_key) FROM public.assess_application_source_evidence e WHERE e.metadata_version_id=meta.id AND row_item#>>'{}'=ANY(e.claim_ids)),'[]'::jsonb));
   END LOOP;
   IF (SELECT count(*) FROM public.assess_application_dimension_results WHERE assessment_version_id=ass.id)<>7 THEN RAISE EXCEPTION 'PR1G_INVALID_DIMENSIONS'; END IF;
-  INSERT INTO public.assess_application_modernization_recommendations(org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,migration_boundary,rollback_strategy,evidence_confidence,why,prerequisites,required_controls,open_evidence_gaps,what_would_change)
-  SELECT p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.id,
-   CASE WHEN bool_or(cardinality(missing_evidence)>0) THEN 'Insufficient evidence'
-        WHEN meta.metadata->>'sourceCode'='available_legal_access' AND meta.metadata->>'lifecycleState'='unsupported' AND COALESCE((meta.metadata#>>'{aiControls,legalSourceRights}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,executableAcceptanceTests}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,reproducibleBuild}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,controlledSecurityReview}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,humanEngineeringOwner}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,controlledDeploymentRollback}')::boolean,false) THEN 'Rebuild through controlled AI-assisted delivery'
-        WHEN (meta.metadata->'interfaces') ?| ARRAY['REST/GraphQL','SOAP','messaging/event'] THEN 'Enable native API/event integration'
-        WHEN (meta.metadata->'interfaces') ?| ARRAY['file/batch','database'] THEN 'Add API façade and semantic translation'
-        WHEN (meta.metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] AND NOT bool_or(cardinality(hard_gates)>0) THEN 'Use governed workflow/RPA bridge'
-        WHEN (meta.metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] THEN 'Blocked pending prerequisite'
-        ELSE 'Retain and monitor' END,
-   'Application-scoped modernization; no autonomous code rewrite or deployment.','Disable new integration path and preserve immutable assessment history.',
-   CASE WHEN bool_or(cardinality(missing_evidence)>0) OR bool_or(evidence_confidence='Insufficient Evidence') THEN 'Insufficient Evidence' WHEN bool_or(evidence_confidence='Assumption-Led') THEN 'Assumption-Led' ELSE 'Partially Evidenced' END,
-   ARRAY['Server-derived from committed facts; application age alone is not a decision.'],ARRAY(SELECT unnest(hard_gates) FROM public.assess_application_dimension_results WHERE assessment_version_id=ass.id),ARRAY['independent human review for every material recommendation','privileged audit receipt'],
-   ARRAY(SELECT unnest(missing_evidence) FROM public.assess_application_dimension_results WHERE assessment_version_id=ass.id),ARRAY['Committed evidence or controls may change this recommendation.']
-  FROM public.assess_application_dimension_results WHERE assessment_version_id=ass.id;
+  WITH decision AS (
+   SELECT
+    ARRAY(SELECT gate FROM public.assess_application_dimension_results d CROSS JOIN LATERAL unnest(d.hard_gates) WITH ORDINALITY values(gate,position) WHERE d.assessment_version_id=ass.id ORDER BY array_position(ARRAY['integration_accessibility','semantic_and_data_clarity','state_and_execution','security_and_control','architecture_changeability','ui_automation_readiness','ai_assisted_engineering_readiness'],d.dimension),position) AS gates,
+    ARRAY(SELECT gap FROM public.assess_application_dimension_results d CROSS JOIN LATERAL unnest(d.missing_evidence) WITH ORDINALITY values(gap,position) WHERE d.assessment_version_id=ass.id ORDER BY array_position(ARRAY['integration_accessibility','semantic_and_data_clarity','state_and_execution','security_and_control','architecture_changeability','ui_automation_readiness','ai_assisted_engineering_readiness'],d.dimension),position) AS open_gaps,
+    ARRAY(SELECT change FROM public.assess_application_dimension_results d CROSS JOIN LATERAL unnest(d.what_would_change) WITH ORDINALITY values(change,position) WHERE d.assessment_version_id=ass.id ORDER BY array_position(ARRAY['integration_accessibility','semantic_and_data_clarity','state_and_execution','security_and_control','architecture_changeability','ui_automation_readiness','ai_assisted_engineering_readiness'],d.dimension),position) AS changes,
+    EXISTS(SELECT 1 FROM public.assess_application_dimension_results d WHERE d.assessment_version_id=ass.id AND d.evidence_confidence='Insufficient Evidence') AS insufficient,
+    EXISTS(SELECT 1 FROM public.assess_application_dimension_results d WHERE d.assessment_version_id=ass.id AND d.evidence_confidence='Assumption-Led') AS assumption_led
+  ), selected AS (
+   SELECT decision.*,
+    CASE WHEN cardinality(open_gaps)>0 THEN 'Insufficient evidence'
+     WHEN meta.metadata->>'sourceCode'='available_legal_access' AND meta.metadata->>'lifecycleState'='unsupported' AND COALESCE((meta.metadata#>>'{aiControls,legalSourceRights}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,executableAcceptanceTests}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,reproducibleBuild}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,controlledSecurityReview}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,humanEngineeringOwner}')::boolean,false) AND COALESCE((meta.metadata#>>'{aiControls,controlledDeploymentRollback}')::boolean,false) THEN 'Rebuild through controlled AI-assisted delivery'
+     WHEN (meta.metadata->'interfaces') ?| ARRAY['REST/GraphQL','SOAP','messaging/event'] THEN 'Enable native API/event integration'
+     WHEN (meta.metadata->'interfaces') ?| ARRAY['file/batch','database'] THEN 'Add API façade and semantic translation'
+     WHEN (meta.metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] AND cardinality(gates)=0 THEN 'Use governed workflow/RPA bridge'
+     WHEN (meta.metadata->'interfaces') ?| ARRAY['UI-only','desktop/mainframe/Citrix'] THEN 'Blocked pending prerequisite'
+     ELSE 'Retain and monitor' END AS disposition
+   FROM decision
+  )
+  INSERT INTO public.assess_application_modernization_recommendations(org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,affected_processes,affected_primitives,why,alternatives_considered,alternatives_rejected,prerequisites,required_controls,migration_boundary,dependency_impacts,rollback_strategy,evidence_confidence,open_evidence_gaps,what_would_change)
+  SELECT p_org_id,p_workspace_id,ass.application_id,ass.metadata_version_id,ass.id,disposition,
+   meta.metadata->'supportedProcesses','[]'::jsonb,
+   CASE disposition
+    WHEN 'Insufficient evidence' THEN ARRAY['Unknown information remains Unknown.']
+    WHEN 'Rebuild through controlled AI-assisted delivery' THEN ARRAY['All AI-assisted engineering hard gates pass; human review is still required.']
+    WHEN 'Enable native API/event integration' THEN ARRAY['Native interface exists; autonomous agent suitability still depends on process, app and Govern gates.']
+    WHEN 'Add API façade and semantic translation' THEN ARRAY['Non-native or batch/data interface needs semantic and control boundary.']
+    WHEN 'Use governed workflow/RPA bridge' THEN ARRAY['Positive governed bridge evidence passed all UI automation gates.']
+    WHEN 'Blocked pending prerequisite' THEN ARRAY['UI-only application lacks positive bridge evidence; RPA/UI automation is not inferred.']
+    ELSE ARRAY['No deterministic modernization trigger from age or EOL alone.'] END,
+   ARRAY['native API/event','API façade','event bridge','workflow/RPA bridge','governed UI bridge','refactor','replace','rebuild','retire'],
+   CASE WHEN cardinality(gates)>0 THEN gates ELSE ARRAY['No rejected alternative without evidence.'] END,
+   CASE disposition
+    WHEN 'Insufficient evidence' THEN open_gaps
+    WHEN 'Rebuild through controlled AI-assisted delivery' THEN ARRAY['controlled security review','controlled deployment and rollback']
+    WHEN 'Add API façade and semantic translation' THEN ARRAY['schema/data dictionary','approval controls']
+    WHEN 'Use governed workflow/RPA bridge' THEN ARRAY['material action approvals','monitoring']
+    WHEN 'Blocked pending prerequisite' THEN ARRAY['complete governed bridge evidence']
+    ELSE ARRAY[]::text[] END,
+   ARRAY['independent human review for material decisions','authorization version','privileged audit receipt'],
+   'Application-scoped modernization; no autonomous code rewrite or deployment.',
+   ARRAY(SELECT dependency FROM (SELECT value#>>'{}' dependency,1 collection,ordinality FROM jsonb_array_elements(meta.metadata->'upstreamDependencies') WITH ORDINALITY UNION ALL SELECT value#>>'{}',2,ordinality FROM jsonb_array_elements(meta.metadata->'downstreamDependencies') WITH ORDINALITY) dependencies ORDER BY collection,ordinality),
+   'Disable new integration path and retain prior application/process behavior; immutable assessment history remains.',
+   CASE WHEN cardinality(open_gaps)>0 OR insufficient THEN 'Insufficient Evidence' WHEN assumption_led THEN 'Assumption-Led' ELSE 'Partially Evidenced' END,
+   open_gaps,changes
+  FROM selected;
   FOR row_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_payload->'processLinks','[]'::jsonb)) LOOP
    IF row_item->>'approvedEconomics'='false' AND row_item ? 'economicsRef' AND row_item->>'economicsRef' IS NOT NULL THEN RAISE EXCEPTION 'PR1G_UNAPPROVED_ECONOMICS'; END IF;
    INSERT INTO public.assess_process_application_links(org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id,assessment_version_id,interaction_type,govern_state,economics_ref,economics_currency,created_by,receipt_id) VALUES(p_org_id,p_workspace_id,(row_item->>'processId')::uuid,row_item->>'primitiveId',(row_item->>'applicationId')::uuid,ass.metadata_version_id,ass.id,row_item->>'interactionType',row_item->>'governState',NULLIF(row_item->>'economicsRef','')::uuid,NULLIF(row_item->>'economicsCurrency',''),p_actor_id,r.id);

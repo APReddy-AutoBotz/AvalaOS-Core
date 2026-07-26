@@ -338,7 +338,7 @@ try {
   });
   await scenario('server-derived recommendation and hard-gate behavior', async () => {
     const result = await client.query(
-      `SELECT r.disposition,r.evidence_confidence,r.prerequisites,
+      `SELECT r.disposition,r.evidence_confidence,r.prerequisites,r.alternatives_rejected,
         (SELECT hard_gates FROM public.assess_application_dimension_results WHERE assessment_version_id=$1 AND dimension='ui_automation_readiness') ui_gates
        FROM public.assess_application_modernization_recommendations r WHERE r.assessment_version_id=$1`,
       [gatedAssessment],
@@ -346,7 +346,8 @@ try {
     assert(result.rowCount === 1, 'SERVER_RECOMMENDATION_REQUIRED');
     assert(result.rows[0].disposition === 'Insufficient evidence', 'HARD_GATE_DISPOSITION_MISMATCH');
     assert(result.rows[0].ui_gates.includes('UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'), 'UI_HARD_GATE_MISSING');
-    assert(result.rows[0].prerequisites.includes('UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'), 'RECOMMENDATION_GATE_MISSING');
+    assert(result.rows[0].alternatives_rejected.includes('UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'), 'RECOMMENDATION_GATE_MISSING');
+    assert(result.rows[0].prerequisites.includes('stableInterface'), 'RECOMMENDATION_EVIDENCE_PREREQUISITE_MISSING');
   });
   const completeBridge={stableInterface:true,controlAccessibility:true,deterministicErrorDetection:true,reversibilityOrCompensation:true,materialActionApproval:true,monitoring:true,humanOwner:true};
   const completeAi={legalSourceRights:true,executableAcceptanceTests:true,reproducibleBuild:true,controlledSecurityReview:true,humanEngineeringOwner:true,controlledDeploymentRollback:true};
@@ -373,11 +374,11 @@ try {
       await createMetadata(applicationId,definition.metadata,evidence);
       const assessmentVersionId=nextUuid();
       await saveAssessment(applicationId,assessmentVersionId);
-      const dimensionsResult=await client.query(`SELECT dimension,readiness_band AS band,evidence_confidence AS confidence,hard_gates AS "hardGates",missing_evidence AS "missingEvidence"
+      const dimensionsResult=await client.query(`SELECT dimension,readiness_band AS band,evidence_confidence AS confidence,hard_gates AS "hardGates",evidence_refs AS "evidenceReferences",missing_evidence AS "missingEvidence",rationale,contradictions,remediation_requirements AS "remediationRequirements",what_would_change AS "whatWouldChange"
         FROM assess_application_dimension_results WHERE assessment_version_id=$1 ORDER BY dimension`,[assessmentVersionId]);
-      const recommendationResult=await client.query(`SELECT disposition,evidence_confidence AS confidence
+      const recommendationResult=await client.query(`SELECT disposition,application_id AS "applicationId",1 AS "metadataVersion",affected_processes AS "affectedProcesses",affected_primitives AS "affectedPrimitives",why,alternatives_considered AS "alternativesConsidered",alternatives_rejected AS "alternativesRejected",prerequisites,required_controls AS "requiredControls",migration_boundary AS "migrationBoundary",dependency_impacts AS "dependencyImpacts",rollback_strategy AS rollback,evidence_confidence AS confidence,open_evidence_gaps AS "openEvidenceGaps",what_would_change AS "whatWouldChange"
         FROM assess_application_modernization_recommendations WHERE assessment_version_id=$1 ORDER BY id LIMIT 1`,[assessmentVersionId]);
-      bridgeFixtures.push({name:definition.name,applicationId,orgId:ORG,workspaceId:WS,metadata:definition.metadata,evidence,postgres:{dimensions:dimensionsResult.rows,recommendation:recommendationResult.rows[0]}});
+      bridgeFixtures.push({name:definition.name,applicationId,orgId:ORG,workspaceId:WS,metadataVersion:1,metadata:definition.metadata,evidence,postgres:{dimensions:dimensionsResult.rows,recommendation:recommendationResult.rows[0]}});
     }
     const parityPath=`/tmp/avalaos-pr1g-parity-${process.pid}.json`;
     await writeFile(parityPath,JSON.stringify(bridgeFixtures),{mode:0o600});
@@ -420,7 +421,14 @@ try {
     { ...canonicalMetadata('Unknown property'), unsupportedAuthority: true },
     { ...canonicalMetadata('Wrong array'), interfaces: 'REST/GraphQL' },
     { ...canonicalMetadata('Wrong enum'), sourceCode: 'trusted' },
+    { ...canonicalMetadata('Wrong boolean'), regulatedData: 'false' },
+    { ...canonicalMetadata('Malformed bridge controls'), bridgeEvidence: { stableInterface: 'yes' } },
+    { ...canonicalMetadata('Malformed AI controls'), aiControls: { legalSourceRights: 1 } },
     { ...canonicalMetadata('Malformed evidence'), evidence:[{id:'bad',claimIds:'not-an-array',sourceType:'test',fresh:true,independent:true,accepted:true}] },
+    { ...canonicalMetadata('Duplicate evidence identifiers'), evidence:[
+      {id:'duplicate',claimIds:['integration_accessibility'],sourceType:'test',fresh:true,independent:true,accepted:true},
+      {id:'duplicate',claimIds:['semantic_and_data_clarity'],sourceType:'test',fresh:true,independent:true,accepted:true},
+    ] },
   ];
   const importReceiptId = nextUuid();
   await scenario('strict malformed import-row rejection', async () => {
@@ -433,7 +441,7 @@ try {
       "SELECT count(*) FILTER(WHERE outcome='success')::int successes,count(*) FILTER(WHERE outcome='rejected')::int rejections,count(*) FILTER(WHERE outcome='rejected' AND error_code='INVALID_METADATA')::int invalid FROM public.assess_application_import_row_outcomes WHERE import_receipt_id=$1",
       [importReceiptId],
     );
-    assert(result.rows[0].successes === 1 && result.rows[0].rejections === 5 && result.rows[0].invalid === 5, 'STRICT_IMPORT_REJECTION_FAILED');
+    assert(result.rows[0].successes === 1 && result.rows[0].rejections === 9 && result.rows[0].invalid === 9, 'STRICT_IMPORT_REJECTION_FAILED');
   });
   await scenario('import receipt counts match persisted row outcomes', async () => {
     const result = await client.query(
@@ -454,6 +462,38 @@ try {
     assert(result.resource.successCount===1&&result.resource.rejectionCount===2,'DUPLICATE_IMPORT_COUNTS_FAILED');
     const outcomes=await client.query('SELECT outcome,error_code FROM assess_application_import_row_outcomes WHERE import_receipt_id=$1 ORDER BY row_number',[duplicateReceipt]);
     assert(outcomes.rows[0].outcome==='success'&&outcomes.rows.slice(1).every(row=>row.error_code==='DUPLICATE_IN_WORKSPACE'),'DUPLICATE_IMPORT_OUTCOMES_FAILED');
+  });
+  await scenario('unexpected import infrastructure failure aborts and rolls back the complete command',async()=>{
+    const receiptId=nextUuid(),requestId=nextUuid(),key=`infrastructure-failure-${nextUuid()}`;
+    const validName=`Valid before infrastructure failure ${nextUuid()}`;
+    const failureName=`Injected infrastructure failure ${nextUuid()}`;
+    await client.query(`CREATE FUNCTION public.pr1g_test_import_infrastructure_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.name LIKE 'Injected infrastructure failure %' THEN RAISE EXCEPTION 'PR1G_TEST_UNEXPECTED_DATABASE_FAILURE'; END IF; RETURN NEW; END $$`);
+    await client.query(`CREATE TRIGGER pr1g_test_import_infrastructure_failure BEFORE INSERT ON public.assess_application_assets
+      FOR EACH ROW EXECUTE FUNCTION public.pr1g_test_import_infrastructure_failure()`);
+    try{
+      let failure;
+      try{
+        await rpc(client,{type:'application.import',key,requestId,payload:{importReceiptId:receiptId,payloadHash:'infrastructure-failure',rows:[
+          {...canonicalMetadata(validName),evidence:evidenceFor()},
+          {...canonicalMetadata(failureName),evidence:evidenceFor()},
+        ]}});
+      }catch(error){failure=error}
+      assert(failure&&String(failure.message).includes('PR1G_TEST_UNEXPECTED_DATABASE_FAILURE'),'INFRASTRUCTURE_FAILURE_NOT_RETHROWN');
+      assert(!String(failure.message).includes('INVALID_METADATA')&&!String(failure.message).includes('DUPLICATE_IN_WORKSPACE'),'INFRASTRUCTURE_FAILURE_CLASSIFIED_AS_ROW_REJECTION');
+      const persisted=await client.query(`SELECT
+        (SELECT count(*)::int FROM assess_application_import_receipts WHERE id=$1) receipts,
+        (SELECT count(*)::int FROM assess_application_import_row_outcomes WHERE import_receipt_id=$1) outcomes,
+        (SELECT count(*)::int FROM assess_application_assets WHERE name=ANY($2::text[])) applications,
+        (SELECT count(*)::int FROM assess_application_metadata_versions m JOIN assess_application_assets a ON a.id=m.application_id WHERE a.name=ANY($2::text[])) metadata,
+        (SELECT count(*)::int FROM assess_application_source_evidence e JOIN assess_application_assets a ON a.id=e.application_id WHERE a.name=ANY($2::text[])) evidence,
+        (SELECT count(*)::int FROM privileged_audit_events WHERE request_id=$3 AND action='application.import' AND outcome='succeeded') audits,
+        (SELECT count(*)::int FROM assess_command_receipts WHERE request_id=$3) commands`,[receiptId,[validName,failureName],requestId]);
+      assert(Object.values(persisted.rows[0]).every(value=>value===0),'INFRASTRUCTURE_FAILURE_LEFT_COMMITTED_IMPORT_STATE');
+    }finally{
+      await client.query('DROP TRIGGER IF EXISTS pr1g_test_import_infrastructure_failure ON public.assess_application_assets');
+      await client.query('DROP FUNCTION IF EXISTS public.pr1g_test_import_infrastructure_failure()');
+    }
   });
   await scenario('import exact replay returns durable receipt without duplicate outcomes',async()=>{
     const replay=await rpc(client,{type:'application.import',key:duplicateKey,payload:duplicatePayload});
@@ -577,7 +617,7 @@ try {
     const nested = projection.assessments.find((row) => row.id === gatedAssessment);
     assert(nested?.metadataVersion === 1 && nested.version === 1 && nested.dimensions.length === 7 && nested.recommendations.length === 1, 'PROJECTION_NESTED_ASSESSMENT_SHAPE_FAILED');
     assert(projection.importReceipts.some((row) => row.id === importReceiptId), 'PROJECTION_IMPORT_RECEIPT_MISSING');
-    assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 6, 'PROJECTION_ROW_OUTCOMES_MISSING');
+    assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 10, 'PROJECTION_ROW_OUTCOMES_MISSING');
     const projectionPath=`/tmp/avalaos-pr1g-projection-${process.pid}.json`;
     await writeFile(projectionPath,JSON.stringify(projection),{mode:0o600});
     try{execFileSync(process.execPath,['scripts/runPr1gProjectionDecoderBridge.mjs',projectionPath,ORG,WS],{stdio:'inherit'})}finally{await unlink(projectionPath)}
@@ -618,7 +658,14 @@ try {
   await expectSqlFailure('revision changed-payload idempotency conflict', 'PR1B_IDEMPOTENCY_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, revisionKey, 'Changed payload'));
   await expectSqlFailure('stale revision-start rejection', 'PR1G_VERSION_CONFLICT', () => startRevision(client, lifecycleApp, reviewed.id, 3, `stale-revision-${nextUuid()}`));
   assert(revised.version === 4, 'REVISION_VERSION_FAILED');
-  await scenario('decision rows survive save finalize changes-requested and revision projection reload',async()=>{
+  const decisionSemantics=async(applicationId,version)=>{
+    const result=await client.query(`SELECT
+      COALESCE((SELECT jsonb_agg(to_jsonb(d)-ARRAY['id','assessment_version_id'] ORDER BY d.dimension) FROM assess_application_dimension_results d WHERE d.assessment_version_id=a.id),'[]'::jsonb) dimensions,
+      COALESCE((SELECT jsonb_agg(to_jsonb(q)-ARRAY['id','assessment_version_id'] ORDER BY q.id) FROM assess_application_modernization_recommendations q WHERE q.assessment_version_id=a.id),'[]'::jsonb) recommendations
+      FROM assess_application_assessment_versions a WHERE a.application_id=$1 AND a.version=$2`,[applicationId,version]);
+    return result.rows[0];
+  };
+  await scenario('full decision semantics survive finalize changes-requested review and revision start',async()=>{
     const rows=await client.query(`SELECT a.version,a.lifecycle,count(DISTINCT d.dimension)::int dimensions,count(DISTINCT q.id)::int recommendations
       FROM assess_application_assessment_versions a
       LEFT JOIN assess_application_dimension_results d ON d.assessment_version_id=a.id
@@ -626,15 +673,19 @@ try {
       WHERE a.application_id=$1 GROUP BY a.id ORDER BY a.version`,[lifecycleApp]);
     assert(rows.rows.length===4,'LIFECYCLE_VERSION_COUNT_FAILED');
     for(const row of rows.rows)assert(row.dimensions===7&&row.recommendations>=1,`INCOMPLETE_LIFECYCLE_DECISIONS_${row.lifecycle}`);
+    const semantics=await Promise.all([1,2,3,4].map(version=>decisionSemantics(lifecycleApp,version)));
+    for(let index=1;index<semantics.length;index++)assert(JSON.stringify(semantics[index])===JSON.stringify(semantics[0]),`LIFECYCLE_FULL_SEMANTIC_COPY_MISMATCH_V${index+1}`);
   });
   const approvedApp=await createApplication('Approved lifecycle authority');
   await createMetadata(approvedApp,canonicalMetadata('Approved lifecycle authority'),evidenceFor());
   const approvedDraft=nextUuid();await saveAssessment(approvedApp,approvedDraft);
   const approvedReady=(await finalizeAssessment(approvedApp,approvedDraft,1)).resource;
   const approved=(await resolveReview(client,REVIEWER_A,approvedApp,approvedReady.id,2,`approved-${nextUuid()}`,'approved')).resource;
-  await scenario('approved review preserves complete decisions and projection reloads',async()=>{
+  await scenario('approved review preserves complete full decision semantics',async()=>{
     const rows=await client.query('SELECT count(DISTINCT dimension)::int dimensions,(SELECT count(*)::int FROM assess_application_modernization_recommendations WHERE assessment_version_id=$1) recommendations FROM assess_application_dimension_results WHERE assessment_version_id=$1',[approved.id]);
     assert(rows.rows[0].dimensions===7&&rows.rows[0].recommendations>=1,'APPROVED_DECISIONS_NOT_PRESERVED');
+    const semantics=await Promise.all([1,2,3].map(version=>decisionSemantics(approvedApp,version)));
+    assert(semantics.slice(1).every(value=>JSON.stringify(value)===JSON.stringify(semantics[0])),'APPROVED_FULL_SEMANTIC_COPY_MISMATCH');
   });
 
   const mismatchApp = await createApplication('Mismatch authority');
