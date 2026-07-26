@@ -174,6 +174,7 @@ const deterministicBrowserAuthFixturePaths = new Set([
   'tests/browser/pr1d.spec.ts',
   'tests/browser/pr1e.spec.ts',
   'tests/browser/pr1f.spec.ts',
+  'tests/browser/pr1g.spec.ts',
 ]);
 const isDeterministicBrowserAuthFixtureWrite = (relativePath, lineText) => {
   const fixtureKey = ['sb', '127', 'auth', token.toLowerCase()].join('-');

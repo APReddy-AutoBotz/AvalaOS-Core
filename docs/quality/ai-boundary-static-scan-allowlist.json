@@ -24,181 +24,279 @@
       "pathPrefix": "scripts/check-ai-boundary.mjs",
       "reason": "test/control documentation",
       "futureAction": "Keep scan pattern declarations in the control script only."
+    },
+    {
+      "pattern": "localStorage",
+      "pathPrefix": "tests/browser/pr1g.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep deterministic production-App PR 1G browser fixture setup confined to browser tests; do not treat it as runtime authority."
     }
   ],
   "entries": [
     {
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
-      "lines": [162],
+      "lines": [
+        162
+      ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
     },
     {
       "pattern": "localStorage",
       "path": "App.tsx",
-      "lines": [162],
+      "lines": [
+        162
+      ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1c.spec.ts",
-      "lines": [83, 91, 92],
+      "lines": [
+        83,
+        91,
+        92
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
     },
     {
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "vite-env.d.ts",
-      "lines": [4],
+      "lines": [
+        4
+      ],
       "reason": "deferred M3.1c cleanup",
       "futureAction": "Remove or replace after approved demo/dev fallback replacement; do not use for pilot or production."
     },
     {
       "pattern": "getAiProvider",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 85, 99, 133],
+      "lines": [
+        1,
+        85,
+        99,
+        133
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },
     {
       "pattern": "getAiProviderApiKey",
       "path": "services/aiOrchestrator.ts",
-      "lines": [1, 94],
+      "lines": [
+        1,
+        94
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
     },
     {
       "pattern": "getAiProviderApiKey",
       "path": "services/geminiService.ts",
-      "lines": [11, 25],
+      "lines": [
+        11,
+        25
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "VITE_GROQ_API_KEY",
       "path": "services/geminiService.ts",
-      "lines": [17],
+      "lines": [
+        17
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback; M3.2 owns server-side key-reference resolution."
     },
     {
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "services/geminiService.ts",
-      "lines": [18],
+      "lines": [
+        18
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback; M3.2 owns server-side key-reference resolution."
     },
     {
       "pattern": "getAiProvider",
       "path": "services/geminiService.ts",
-      "lines": [21],
+      "lines": [
+        21
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "new GroqProvider",
       "path": "services/geminiService.ts",
-      "lines": [34],
+      "lines": [
+        34
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "new GeminiProvider",
       "path": "services/geminiService.ts",
-      "lines": [35],
+      "lines": [
+        35
+      ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only as demo/dev fallback until approved server-side replacement or removal."
     },
     {
       "pattern": "GROQ_API_KEY",
       "path": "supabase/functions/_shared/ai.ts",
-      "lines": [12],
+      "lines": [
+        12
+      ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "M3.2 owns provider config and key-reference hardening for server-side execution."
     },
     {
       "pattern": "GEMINI_API_KEY",
       "path": "supabase/functions/_shared/ai.ts",
-      "lines": [13],
+      "lines": [
+        13
+      ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "M3.2 owns provider config and key-reference hardening for server-side execution."
     },
     {
       "pattern": "GROQ_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
-      "lines": [119],
+      "lines": [
+        119
+      ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
     },
     {
       "pattern": "GEMINI_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
-      "lines": [120],
+      "lines": [
+        120
+      ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
     },
     {
       "pattern": "localStorage",
       "path": "services/storage.ts",
-      "lines": [34, 44, 51],
+      "lines": [
+        34,
+        44,
+        51
+      ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep generic storage classified separately from provider-key storage; do not add provider-key writes."
     },
     {
       "pattern": "localStorage",
       "path": "services/adapters/authAdapter.ts",
-      "lines": [34, 50, 56, 62],
+      "lines": [
+        34,
+        50,
+        56,
+        62
+      ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep current-user/demo state classified separately from provider-key storage."
     },
     {
       "pattern": "localStorage",
       "path": "components/shared/CustomDashboardView.tsx",
-      "lines": [63, 66, 69, 77, 84],
+      "lines": [
+        63,
+        66,
+        69,
+        77,
+        84
+      ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep dashboard layout/config persistence classified separately from provider-key storage."
     },
     {
       "pattern": "localStorage",
       "path": "docs/architecture/m4.0a-codebase-module-inventory.md",
-      "lines": [36, 50, 55, 57, 58, 59, 60, 70, 77, 106, 109],
+      "lines": [
+        36,
+        50,
+        55,
+        57,
+        58,
+        59,
+        60,
+        70,
+        77,
+        106,
+        109
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep M4.0a architecture inventory references classified as audit/control documentation; do not treat them as runtime permission."
     },
     {
       "pattern": "localStorage",
       "path": "docs/architecture/m4.0a-logic-data-flow-map.md",
-      "lines": [15, 17, 67, 76, 77, 82, 85, 87, 98, 112, 116, 119, 148, 149],
+      "lines": [
+        15,
+        17,
+        67,
+        76,
+        77,
+        82,
+        85,
+        87,
+        98,
+        112,
+        116,
+        119,
+        148,
+        149
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep M4.0a logic/data-flow references classified as audit/control documentation; do not treat them as runtime permission."
     },
     {
       "pattern": "localStorage",
       "path": "docs/architecture/m4.2b-canonical-demo-data-map.md",
-      "lines": [125, 127],
+      "lines": [
+        125,
+        127
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep M4.2b canonical demo data planning references classified as audit/control documentation; do not treat them as runtime permission or browser-secret storage."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1d.spec.ts",
-      "lines": [110, 118, 119],
+      "lines": [
+        110,
+        118,
+        119
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1e.spec.ts",
-      "lines": [39],
+      "lines": [
+        39
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup confined to PR 1E browser tests; do not treat it as runtime authority."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1f.spec.ts",
-      "lines": [44],
+      "lines": [
+        44
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup confined to PR 1F browser tests; do not treat it as runtime authority."
     }

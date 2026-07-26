@@ -661,7 +661,7 @@ test('V2 mutation capability denial is visible and no command is sent', async ({
   const fixture = await installEnterpriseFixture(page, { capabilities:['assess.read', ASSESS_V2_CAPABILITIES.read] });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByRole('button',{name:'Create V2 case'})).toBeDisabled();
-  await expect(page.getByRole('status')).toContainText('Create a V2 case');
+  await expect(page.getByRole('status').filter({ hasText: 'Create a V2 case' })).toContainText('Create a V2 case');
   expect(fixture.committedCommands.filter(item => String(item.commandType).startsWith('assessment_v2.'))).toEqual([]);
 });
 

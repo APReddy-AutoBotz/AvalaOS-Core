@@ -67,9 +67,9 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 ### PR 1E Accepted Closure
 
-PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F is accepted; PR 1G Application Portfolio Assessment is not started.
+PR 1E review, approval, Govern, and Studio-source handoff are accepted. V1 `assess-core-2026-05` scoring is unchanged and PR 1D decisions remain immutable. Hosted/live validation and deployment were not run; readiness remains unproven. PR 1F is accepted; PR 1G Application Portfolio Assessment is implemented as a candidate Assess extension.
 
 
 ## PR 1F Accepted Closure
 
-PR #212 is accepted with head `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6`, merge and verified main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`, successful exact-head workflows `29842917740` and `29842914443`, successful main workflow `29844001756`, and zero unresolved threads. Versioned economics, deterministic scenarios, independent review, append-only outcomes, **Insufficient Data** calibration reporting, and tenant/workspace portfolio dispositions are accepted. V1 scoring, PR 1D immutability, and PR 1E authority are unchanged. Deployment/hosted validation were not run; PR 1G and broader Studio/private-artifact work are not started.
+PR #212 is accepted with head `f793f9dd9f75adf874fa3ee82b1f4adb2b2734f6`, merge and verified main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`, successful exact-head workflows `29842917740` and `29842914443`, successful main workflow `29844001756`, and zero unresolved threads. Versioned economics, deterministic scenarios, independent review, append-only outcomes, **Insufficient Data** calibration reporting, and tenant/workspace portfolio dispositions are accepted. V1 scoring, PR 1D immutability, and PR 1E authority are unchanged. Deployment/hosted validation were not run; PR 1G Application Portfolio Assessment is implemented as a candidate Assess extension; broader Studio/private-artifact work is not started.

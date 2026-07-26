@@ -61,3 +61,4 @@ PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Works
 | Avala Assess V2 domain, rule, command, persistence, compatibility, and rollback architecture | `docs/architecture/assess-v2-decision-intelligence-architecture.md` |
 
 | Assess V2 economics, formula, calibration, realized-outcome, and portfolio-intelligence architecture | `docs/architecture/assess-v2-economics-calibration-architecture.md` |
+| Application Portfolio & AI-Assisted Modernization Assessment architecture | `docs/architecture/application-portfolio-assessment-architecture.md` |
