@@ -1,5 +1,10 @@
 # AvalaOS Core Implementation Status
 
+## Studio PR A implementation boundary
+
+Studio PR A owns exact accepted PR 1E ancestry, immutable structured-JSON versions, durable staged provider attempts, independent review, and separate approval. Provider calls are not cross-system atomic. PR B private storage/export remains future work; legacy `document_generations` is unverified. Rollback is mutation/provider disablement with read-only committed projection and additive forward fixes.
+
+
 Baseline: PR #212 / PR 1F accepted and post-merge verified on `main` at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.
 
 ## Honest Maturity Verdict

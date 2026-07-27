@@ -1,5 +1,10 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Studio PR A acceleration boundary
+
+Studio PR A now owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. PR B remains the future private-storage, rendition, scoped-download, retention, hold, and deletion boundary. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
+
+
 Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are accepted; PR 1F is post-merge verified at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10

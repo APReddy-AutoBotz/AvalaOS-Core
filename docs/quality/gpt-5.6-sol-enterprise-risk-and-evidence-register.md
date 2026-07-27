@@ -1,5 +1,10 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Studio PR A active boundary
+
+PR 1G remains accepted; Studio PR A addresses governed artifact authority in source and CI without claiming hosted/live, deployment, private-storage, export, pilot, or production proof. Provider calls remain non-atomic external effects surrounded by durable request/completion/failure transactions. Legacy `document_generations` remains unverified and non-canonical. Residual private storage, rendition, scoped download, retention, legal hold, and deletion risks are deferred to PR B. Rollback is mutation/provider disablement, read-only projection, and additive forward fixes.
+
+
 Baseline: PR #212 / PR 1F accepted and post-merge verified on main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`; hosted/live readiness remains unproven
 
 This is the active source for enterprise security, reliability, quality, migration, and readiness risks. Historical evidence remains immutable and does not override this register.

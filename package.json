@@ -120,7 +120,12 @@
     "test:pr1g-workspace": "node scripts/runPr1gCoverage.mjs",
     "test:pr1g-coverage": "node scripts/runPr1gCoverage.mjs",
     "test:migrations:pr1g": "node scripts/testPr1gMigrations.mjs",
-    "test:browser:pr1g": "playwright test --config=playwright.pr1g.config.ts"
+    "test:browser:pr1g": "playwright test --config=playwright.pr1g.config.ts",
+    "lint:studio-artifacts": "node scripts/checkStudioArtifactBoundaries.mjs && node scripts/checkStudioArtifactMigrationContract.mjs",
+    "test:studio-artifacts": "node scripts/runEdgeTypeScriptTest.mjs services/studioArtifacts/contracts.ts supabase/functions/_shared/studioArtifactCommand.ts supabase/functions/_shared/studioArtifactHandler.ts supabase/functions/_shared/studioArtifactCommand.test.ts",
+    "test:studio-artifacts-coverage": "node scripts/runStudioArtifactCoverage.mjs",
+    "test:migrations:studio-artifacts": "node scripts/testStudioArtifactMigrations.mjs",
+    "test:browser:studio-artifacts": "playwright test --config=playwright.studio-artifacts.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

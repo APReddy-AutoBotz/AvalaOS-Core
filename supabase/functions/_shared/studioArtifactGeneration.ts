@@ -1,0 +1,21 @@
+import { runProviderGovernedOperation, type ProviderGovernedOperationDeps } from './providerResolverIntegration.ts';
+import type { JsonObject } from './studioArtifactCommand.ts';
+import type { GenerationClaim } from './studioArtifactDb.ts';
+
+export type StudioProviderOutput={content:unknown;providerOperationId?:string};
+export interface StudioGenerationDependencies { runProvider(input:{apiKey:string;provider:'gemini'|'groq';sourcePackage:JsonObject;template:string;artifactType:'brd'|'frd'|'pdd';signal?:AbortSignal}):Promise<StudioProviderOutput>; complete(input:{attemptId:string;content:JsonObject;contentHash:string;providerOperationId?:string}):Promise<unknown>; fail(attemptId:string,failureCode:StudioGenerationFailureCode):Promise<void>; providerGovernance?:ProviderGovernedOperationDeps; }
+export type StudioGenerationFailureCode='provider_governance_blocked'|'provider_request_failed'|'provider_output_invalid'|'provider_output_oversized'|'generation_completion_conflict';
+export type StudioGenerationResult={status:'completed';resource:unknown}|{status:'failed';failureCode:StudioGenerationFailureCode};
+const object=(v:unknown):v is JsonObject=>typeof v==='object'&&v!==null&&!Array.isArray(v);
+const validTree=(v:unknown,depth=0):boolean=>depth<=10&&(v===null||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v)||typeof v==='string'&&v.length<=20_000||Array.isArray(v)&&v.length<=200&&v.every(x=>validTree(x,depth+1))||object(v)&&Object.keys(v).length<=200&&Object.entries(v).every(([k,x])=>k.length>0&&k.length<=120&&validTree(x,depth+1)));
+export const validateStudioDraft=(value:unknown):JsonObject=>{if(!object(value)||!validTree(value))throw new Error('invalid');const keys=Object.keys(value);if(keys.some(k=>!['title','summary','sections'].includes(k))||keys.length!==3||typeof value.title!=='string'||!value.title.trim()||value.title.length>300||typeof value.summary!=='string'||value.summary.length>5000||!Array.isArray(value.sections)||value.sections.length<1||value.sections.length>100)throw new Error('invalid');for(const section of value.sections){if(!object(section)||Object.keys(section).length!==2||typeof section.title!=='string'||!section.title.trim()||section.title.length>300||typeof section.content!=='string'||section.content.length>20_000)throw new Error('invalid');}return value;};
+const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+const recordFailure=async(deps:StudioGenerationDependencies,id:string,code:StudioGenerationFailureCode):Promise<StudioGenerationResult>=>{await deps.fail(id,code);return{status:'failed',failureCode:code};};
+
+/** Runs only after the human request transaction committed. Browser callers cannot reach this operation directly. */
+export const executeClaimedStudioGeneration=async(claim:GenerationClaim,deps:StudioGenerationDependencies):Promise<StudioGenerationResult>=>{
+ const governed=await runProviderGovernedOperation({operation:'generate_document',orgId:claim.organizationId,workspaceId:claim.workspaceId,actorId:claim.actorId,correlationId:claim.requestId,evidenceRef:claim.attemptId,scannerReference:`studio-template:${claim.templateHash}`,runAllowed:({provider,apiKey})=>deps.runProvider({provider,apiKey,sourcePackage:claim.sourcePackage,template:claim.templatePayload,artifactType:claim.artifactType})},deps.providerGovernance);
+ if(governed.status==='blocked')return recordFailure(deps,claim.attemptId,governed.body.failureClass==='provider_call_blocked'?'provider_request_failed':'provider_governance_blocked');
+ let content:JsonObject;try{const serialized=JSON.stringify(governed.value.content);if(serialized.length>500_000)return recordFailure(deps,claim.attemptId,'provider_output_oversized');content=validateStudioDraft(governed.value.content);}catch{return recordFailure(deps,claim.attemptId,'provider_output_invalid');}
+ try{const resource=await deps.complete({attemptId:claim.attemptId,content,contentHash:await hash(JSON.stringify(content)),providerOperationId:governed.value.providerOperationId});return{status:'completed',resource};}catch{return recordFailure(deps,claim.attemptId,'generation_completion_conflict');}
+};
