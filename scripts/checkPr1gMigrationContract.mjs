@@ -22,11 +22,28 @@ const correctiveRequired=[
   'UNIQUE(org_id,workspace_id,version)',
   'ORDER BY s.version DESC',
   'request_hash:=md5(sanitized::text)',
+  "'pr1g-receipt:'||p_org_id::text||':'||p_actor_id::text||':'||",
+  'WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type=p_command_type',
+  'IF receipt.id IS NOT NULL AND receipt.workspace_id<>p_workspace_id THEN',
+  "RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'",
   'REVOKE ALL ON FUNCTION public.pr1g_assert_application_authority(uuid,uuid,uuid,text,bigint) FROM PUBLIC,anon,authenticated,service_role',
   'REVOKE ALL ON FUNCTION public.pr1g_verified_process_links(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role',
 ];
 const missingCorrective=correctiveRequired.filter(x=>!corrective.includes(x));
 if(missingCorrective.length){console.error(`PR 1G corrective migration contract missing: ${missingCorrective.join(', ')}`);process.exit(1)}
+const wrapperIndex=corrective.indexOf('CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command(');
+const authorityIndex=corrective.indexOf('PERFORM public.pr1g_assert_application_authority(',wrapperIndex);
+const receiptIndex=corrective.indexOf('SELECT * INTO receipt FROM public.assess_command_receipts',authorityIndex);
+const workspaceGuardIndex=corrective.indexOf('IF receipt.id IS NOT NULL AND receipt.workspace_id<>p_workspace_id THEN',receiptIndex);
+const assessmentHashIndex=corrective.indexOf('request_hash:=md5(sanitized::text)',workspaceGuardIndex);
+const delegatedIndex=corrective.indexOf("IF p_command_type<>'application.portfolio.snapshot.create' THEN",workspaceGuardIndex);
+const snapshotHashIndex=corrective.indexOf("request_hash:=encode(public.digest(",workspaceGuardIndex);
+if([wrapperIndex,authorityIndex,receiptIndex,workspaceGuardIndex,assessmentHashIndex,delegatedIndex,snapshotHashIndex].some(index=>index<0)
+  ||!(wrapperIndex<authorityIndex&&authorityIndex<receiptIndex&&receiptIndex<workspaceGuardIndex&&workspaceGuardIndex<assessmentHashIndex
+    &&workspaceGuardIndex<delegatedIndex&&workspaceGuardIndex<snapshotHashIndex)){
+  console.error('PR 1G workspace receipt guard ordering is not authorization-first and hash/resource-safe');
+  process.exit(1);
+}
 if(!corrective.includes("GENERATED ALWAYS AS ((snapshot->>'version')::bigint) STORED")){console.error('Snapshot version is not relationally enforced');process.exit(1)}
 if(/count\\(\\*\\)\\+1 FROM public\\.assess_application_portfolio_snapshots/.test(corrective)){console.error('Unlocked snapshot count authority remains in corrective path');process.exit(1)}
 if(!router.includes('if(!applicationDependencies)throw new ApplicationPortfolioError')||!edge.includes('assessV2ApplicationPortfolioDependencies')||!db.includes("rpc/pr1g_execute_application_command")){console.error('PR 1G commands are not wired to concrete database dependencies');process.exit(1)}

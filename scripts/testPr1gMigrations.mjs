@@ -41,6 +41,7 @@ let uuidSequence = 1;
 const nextUuid = () => `00000000-0000-4000-8000-${String(uuidSequence++).padStart(12, '0')}`;
 const ORG = '22222222-2222-4222-8222-222222222222';
 const WS = '33333333-3333-4333-8333-333333333333';
+const WS_B = '33333333-3333-4333-8333-333333333335';
 const ACTOR = '44444444-4444-4444-8444-444444444444';
 const REVIEWER_A = '44444444-4444-4444-8444-444444444445';
 const REVIEWER_B = '44444444-4444-4444-8444-444444444446';
@@ -282,7 +283,7 @@ try {
     await client.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4),($5)', [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.profiles(id,email) VALUES($1,'actor@example.invalid'),($2,'reviewer-a@example.invalid'),($3,'reviewer-b@example.invalid'),($4,'other@example.invalid'),($5,'org-only@example.invalid')", [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'Tenant A','tenant-a'),($2,'Tenant B','tenant-b')", [ORG, OTHER_ORG]);
-    await client.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Workspace A','workspace-a'),($3,$4,'Workspace B','workspace-b')", [WS, ORG, OTHER_WS, OTHER_ORG]);
+    await client.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Workspace A','workspace-a'),($3,$2,'Workspace B','workspace-b'),($4,$5,'Other tenant workspace','other-workspace')", [WS, ORG, WS_B, OTHER_WS, OTHER_ORG]);
     await client.query("INSERT INTO public.roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'PR1G authority','pr1g-authority','organization','[]'),($3,$4,'Other authority','other-authority','organization','[]')", [ORG_ROLE, ORG, OTHER_ROLE, OTHER_ORG]);
     await client.query("INSERT INTO public.roles(id,org_id,workspace_id,name,slug,scope,permissions) VALUES($1,$2,$3,'Workspace authority','workspace-authority','workspace','[]')",[WORKSPACE_ROLE,ORG,WS]);
     await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [ORG_ROLE]);
@@ -291,7 +292,7 @@ try {
     await client.query('ALTER TABLE public.organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');
     await client.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$5,'active'),($1,$3,$5,'active'),($1,$4,$5,'active'),($1,$9,$5,'active'),($6,$7,$8,'active')", [ORG, ACTOR, REVIEWER_A, REVIEWER_B, ORG_ROLE, OTHER_ORG, OTHER_ACTOR, OTHER_ROLE, ORG_ONLY_ACTOR]);
     await client.query('ALTER TABLE public.organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope');
-    await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$2,$4,NULL,'active'),($1,$2,$5,$9,'active'),($6,$7,$8,NULL,'active')", [ORG, WS, ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
+    await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$4,$3,NULL,'active'),($1,$2,$5,NULL,'active'),($1,$2,$6,$10,'active'),($7,$8,$9,NULL,'active')", [ORG, WS, ACTOR, WS_B, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
     await client.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,$5),($1,$3,$5),($1,$4,$5),($1,$8,$5),($6,$7,$5) ON CONFLICT(org_id,user_id) DO UPDATE SET version=excluded.version', [ORG, ACTOR, REVIEWER_A, REVIEWER_B, AUTH_VERSION, OTHER_ORG, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query('INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,description,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)', [OTHER_APP, OTHER_ORG, OTHER_WS, 'Other tenant app', 'other tenant app', 'Tenant B', ACTOR]);
   });
@@ -351,6 +352,58 @@ try {
   await expectSqlFailure('feature-disabled governed denial','PR1G_FEATURE_DISABLED',async()=>{await client.query("SELECT set_config('app.pr1g_enabled','off',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Disabled',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_enabled','on',false)")}});
   await expectSqlFailure('read-only governed denial','PR1G_READ_ONLY',async()=>{await client.query("SELECT set_config('app.pr1g_read_only','on',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Read only',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_read_only','off',false)")}});
   await scenario('service-role mutation accepts valid actor with null auth uid',async()=>{const id=await createApplication('Null caller uid authority');assert(Boolean(id),'VALID_ACTOR_SERVICE_ROLE_FAILED')});
+  const delegatedWorkspaceGuardId=nextUuid();
+  const delegatedWorkspaceGuardKey=`delegated-workspace-${nextUuid()}`;
+  const delegatedWorkspaceGuardPayload={applicationId:delegatedWorkspaceGuardId,name:'Delegated workspace guard',description:'Workspace A authority'};
+  const delegatedWorkspaceGuardFirst=await rpc(client,{type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload});
+  await scenario('delegated command same-workspace exact replay',async()=>{
+    const replay=await rpc(client,{type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload});
+    assert(replay.resource.id===delegatedWorkspaceGuardFirst.resource.id,'DELEGATED_SAME_WORKSPACE_REPLAY_RESOURCE_FAILED');
+  });
+  await expectSqlFailure('delegated command same-workspace changed-payload conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+    type:'application.create',key:delegatedWorkspaceGuardKey,payload:{...delegatedWorkspaceGuardPayload,description:'Changed payload'},
+  }));
+  await scenario('delegated-command cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assets WHERE org_id=$1 AND workspace_id=$2) applications,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits`,[ORG,WS_B]);
+    await expectSqlFailure('delegated cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assets WHERE org_id=$1 AND workspace_id=$2) applications,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits,
+      (SELECT count(*)::int FROM assess_application_assets WHERE id=$3 AND org_id=$1 AND workspace_id=$2) disclosed_resource`,
+    [ORG,WS_B,delegatedWorkspaceGuardId]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify({
+      applications:after.rows[0].applications,receipts:after.rows[0].receipts,audits:after.rows[0].audits,
+    }),'DELEGATED_CROSS_WORKSPACE_SIDE_EFFECT');
+    assert(after.rows[0].disclosed_resource===0,'DELEGATED_CROSS_WORKSPACE_RESOURCE_DISCLOSED');
+  });
+  await scenario('authorization-before-receipt inspection',async()=>{
+    await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);
+    try {
+      await expectSqlFailure('stale actor rejected before foreign-workspace receipt inspection','PR1B_AUTHORIZATION_STALE',()=>rpc(client,{
+        workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+      }));
+    } finally {
+      await resetActorVersion();
+    }
+    await disableOrganizationWrite();
+    try {
+      await expectSqlFailure('unauthorized actor rejected before foreign-workspace receipt inspection','PR1B_NOT_FOUND',()=>rpc(client,{
+        workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+      }));
+    } finally {
+      await restoreOrganizationWrite();
+      await resetActorVersion();
+    }
+    await expectSqlFailure('cross-tenant actor rejected before receipt inspection','PR1B_NOT_FOUND',()=>rpc(client,{
+      actor:OTHER_ACTOR,workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+    }));
+  });
   await scenario('concurrent authorization lock serializes revocation and next mutation denies',async()=>{
     const authoritySession=new pg.Client({connectionString:url}),revocationSession=new pg.Client({connectionString:url});await Promise.all([authoritySession.connect(),revocationSession.connect()]);
     try{
@@ -794,11 +847,42 @@ try {
   const incompleteMeta=await createMetadata(incompleteApp,canonicalMetadata('Incomplete latest decisions'),evidenceFor());
   await client.query(`INSERT INTO assess_application_assessment_versions(id,org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version)
     VALUES($1,$2,$3,$4,$5,1,'assess-v2-application-portfolio-2026-07','draft',$6,$7)`,[nextUuid(),ORG,WS,incompleteApp,incompleteMeta,ACTOR,AUTH_VERSION]);
+  const snapshotWorkspaceGuardId=nextUuid();
+  const snapshotWorkspaceGuardKey=`snapshot-workspace-${nextUuid()}`;
+  let snapshotWorkspaceGuardFirst;
   await scenario('snapshot independently fails closed on incomplete latest decisions',async()=>{
-    const snapshot=await createSnapshot(1);
-    const persisted=await client.query('SELECT snapshot FROM assess_application_portfolio_snapshots WHERE id=$1',[snapshot.resource.id]);
+    snapshotWorkspaceGuardFirst=await createSnapshot(1,snapshotWorkspaceGuardId,snapshotWorkspaceGuardKey);
+    const persisted=await client.query('SELECT snapshot FROM assess_application_portfolio_snapshots WHERE id=$1',[snapshotWorkspaceGuardFirst.resource.id]);
     const wave=persisted.rows[0].snapshot.waves.find(row=>row.applicationId===incompleteApp);
     assert(wave?.qualified===false,'INCOMPLETE_DECISION_SET_QUALIFIED');
+  });
+  await scenario('snapshot same-workspace exact replay',async()=>{
+    const replay=await createSnapshot(1,snapshotWorkspaceGuardId,snapshotWorkspaceGuardKey);
+    assert(replay.resource.id===snapshotWorkspaceGuardFirst.resource.id&&replay.resource.version===snapshotWorkspaceGuardFirst.resource.version,'SNAPSHOT_SAME_WORKSPACE_REPLAY_FAILED');
+  });
+  await expectSqlFailure('snapshot same-workspace changed-payload conflict','PR1G_IDEMPOTENCY_CONFLICT',()=>createSnapshot(1,nextUuid(),snapshotWorkspaceGuardKey));
+  await scenario('snapshot cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$2) source_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type='application.portfolio.snapshot.create' AND idempotency_key=$4) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND action='application.portfolio.snapshot.create' AND resource_id=$5) source_audits,
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$6) target_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$6) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$6) target_audits`,
+    [ORG,WS,ACTOR,snapshotWorkspaceGuardKey,snapshotWorkspaceGuardId,WS_B]);
+    await expectSqlFailure('snapshot cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.portfolio.snapshot.create',expected:0,key:snapshotWorkspaceGuardKey,
+      payload:{portfolioSnapshotId:snapshotWorkspaceGuardId},
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$2) source_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type='application.portfolio.snapshot.create' AND idempotency_key=$4) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND action='application.portfolio.snapshot.create' AND resource_id=$5) source_audits,
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$6) target_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$6) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$6) target_audits`,
+    [ORG,WS,ACTOR,snapshotWorkspaceGuardKey,snapshotWorkspaceGuardId,WS_B]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'SNAPSHOT_CROSS_WORKSPACE_SIDE_EFFECT_OR_DISCLOSURE');
   });
 
   const lifecycleApp = await createApplication('Lifecycle authority');
@@ -892,6 +976,28 @@ try {
     [replayApp,ORG,ACTOR,replayKey,replayAssessmentId]);
     assert(replay.resource.id===replayFirst.resource.id&&replay.resource.version===replayFirst.resource.version,'ASSESSMENT_EXACT_REPLAY_RESPONSE_FAILED');
     assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'ASSESSMENT_EXACT_REPLAY_SIDE_EFFECT');
+  });
+  await scenario('assessment-save cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$2 AND application_id=$3) source_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$6) source_audits,
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$7) target_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$7) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$7) target_audits`,
+    [ORG,WS,replayApp,ACTOR,replayKey,replayAssessmentId,WS_B]);
+    await expectSqlFailure('assessment save cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload,
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$2 AND application_id=$3) source_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$6) source_audits,
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$7) target_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$7) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$7) target_audits`,
+    [ORG,WS,replayApp,ACTOR,replayKey,replayAssessmentId,WS_B]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'ASSESSMENT_CROSS_WORKSPACE_SIDE_EFFECT_OR_DISCLOSURE');
   });
   await expectSqlFailure('assessment save changed-payload idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
     type:'application.assessment.save',expected:0,key:replayKey,payload:{...replayPayload,dependencies:[{upstreamApplicationId:gatedApp,downstreamApplicationId:replayApp,dependencyType:'runtime'}]},
@@ -994,6 +1100,12 @@ try {
   console.log('Direct helper denial scenarios: anon, authenticated, capability-limited and cross-tenant invocations are permission denied without rows or mutations.');
   console.log('Capability-isolation scenarios: direct table and projection/RPC access for applications.read, portfolio.read, both, neither, revoked/inactive and cross-tenant authority.');
   console.log('Authoritative Process × Application linkage scenarios: verified ancestry plus forged, cross-tenant, stale Govern and economics fail-closed rejection.');
+  console.log('Delegated-command cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT with no resource, Workspace B application, receipt or audit event.');
+  console.log('Assessment-save cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT before replay or application-version inspection with no resource or Workspace B mutation.');
+  console.log('Snapshot cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT without a unique violation, resource disclosure or Workspace B mutation.');
+  console.log('Same-workspace exact replay: delegated command, assessment save and snapshot creation returned their original committed resources without duplicate effects.');
+  console.log('Same-workspace changed-payload conflict: delegated command, assessment save and snapshot creation returned stable idempotency conflicts.');
+  console.log('Authorization-before-receipt inspection: stale, unauthorized and cross-tenant actors were denied before the canonical receipt guard.');
   console.log('Assessment version progression scenarios: first, successor, exact replay after advancement, changed-payload conflict, authorization-before-version, stale conflict and application-scoped lifecycle authority.');
   console.log('Concurrent assessment allocation: exactly one committed version 1 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
   console.log('Concurrent snapshot allocation: one committed version 3 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');

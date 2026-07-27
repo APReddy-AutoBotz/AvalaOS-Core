@@ -236,12 +236,22 @@ DECLARE
   audit_id uuid:=gen_random_uuid();
   result jsonb;
 BEGIN
+  IF cap IS NULL THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
+  PERFORM public.pr1g_assert_application_authority(
+    p_actor_id,p_org_id,p_workspace_id,cap,p_authorization_version
+  );
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    'pr1g-receipt:'||p_org_id::text||':'||p_actor_id::text||':'||
+    p_command_type||':'||p_idempotency_key,0));
+  SELECT * INTO receipt FROM public.assess_command_receipts
+    WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type=p_command_type
+      AND idempotency_key=p_idempotency_key FOR UPDATE;
+  IF receipt.id IS NOT NULL AND receipt.workspace_id<>p_workspace_id THEN
+    RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT';
+  END IF;
+
   IF p_command_type='application.assessment.save' THEN
     selected_application_id:=(p_payload->>'applicationId')::uuid;
-    IF cap IS NULL THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
-    PERFORM public.pr1g_assert_application_authority(
-      p_actor_id,p_org_id,p_workspace_id,cap,p_authorization_version
-    );
     FOR link IN SELECT value FROM jsonb_array_elements(COALESCE(p_payload->'processLinks','[]'::jsonb)) LOOP
       derived_links:=derived_links||jsonb_build_array(
         jsonb_build_object(
@@ -256,9 +266,6 @@ BEGIN
     END LOOP;
     sanitized:=jsonb_set(p_payload,'{processLinks}',derived_links,true);
     request_hash:=md5(sanitized::text);
-    SELECT * INTO receipt FROM public.assess_command_receipts
-      WHERE org_id=p_org_id AND actor_id=p_actor_id AND command_type=p_command_type
-        AND idempotency_key=p_idempotency_key FOR UPDATE;
     IF receipt.id IS NOT NULL THEN
       IF receipt.request_hash<>request_hash THEN RAISE EXCEPTION 'PR1B_IDEMPOTENCY_CONFLICT'; END IF;
       IF receipt.status='succeeded' THEN RETURN receipt.response; END IF;
@@ -285,17 +292,11 @@ BEGIN
     );
   END IF;
 
-  PERFORM public.pr1g_assert_application_authority(
-    p_actor_id,p_org_id,p_workspace_id,'assess.applications.portfolio.write',p_authorization_version
-  );
   IF (SELECT count(*) FROM jsonb_object_keys(p_payload))<>1 OR NOT p_payload ? 'portfolioSnapshotId'
     THEN RAISE EXCEPTION 'PR1G_INVALID_COMMAND'; END IF;
   request_hash:=encode(public.digest(
     p_command_type||'|'||p_org_id||'|'||p_workspace_id||'|'||p_actor_id||'|'||
     p_expected_version||'|'||p_payload::text,'sha256'),'hex');
-  SELECT * INTO receipt FROM public.assess_command_receipts
-    WHERE actor_id=p_actor_id AND org_id=p_org_id AND workspace_id=p_workspace_id
-      AND command_type=p_command_type AND idempotency_key=p_idempotency_key FOR UPDATE;
   IF receipt.id IS NOT NULL THEN
     IF receipt.request_hash<>request_hash OR receipt.status<>'succeeded'
       THEN RAISE EXCEPTION 'PR1G_IDEMPOTENCY_CONFLICT'; END IF;
