@@ -42,12 +42,26 @@ await scenario('cross-workspace receipt isolation',async()=>{const body=(await a
 await scenario('read-only and disabled modes',async()=>{await admin.query('select enabled,read_only,provider_enabled from public.studio_artifact_runtime_control')});
 await scenario('audit failure rollback',async()=>assert(await scalar("select count(*) n from information_schema.columns where table_schema='public' and table_name='privileged_audit_events'")>0,'audit unavailable'));
 
-for(const name of ['fabricated handoff rejection','missing handoff rejection','stale handoff rejection','unresolved handoff rejection','cross-tenant handoff rejection','malformed provider output rejection','oversized provider output rejection','provider retry safety','revision successor serialization','changes requested','review rejection','final rejection','atomic supersession','stale authority','revoked actor'])await scenario(name,async()=>assert(true,'static authority assertion'));
+await scenario('canonical database content hash authority',async()=>{
+ const contentA={sections:[{body:'Body',heading:'Summary'}],title:'Artifact'};
+ const contentB={title:'Artifact',sections:[{heading:'Summary',body:'Body'}]};
+ const {rows}=await admin.query("select encode(public.digest(convert_to($1::jsonb::text,'UTF8'),'sha256'),'hex') a,encode(public.digest(convert_to($2::jsonb::text,'UTF8'),'sha256'),'hex') b",[JSON.stringify(contentA),JSON.stringify(contentB)]);
+ assert(rows[0].a===rows[0].b,'jsonb key ordering changed the canonical hash');
+ const args=(await admin.query("select pg_get_function_identity_arguments(p.oid) args from pg_proc p where p.pronamespace='public'::regnamespace and p.proname='studio_artifact_generation_complete'")).rows;
+ assert(args.length===1&&!args[0].args.includes('content_hash'),'caller-authored content hash remains executable');
+});
+await scenario('generation terminal replay contract',async()=>{
+ const body=(await admin.query("select pg_get_functiondef('public.studio_complete_generation(uuid,text,jsonb,text)'::regprocedure) body")).rows[0].body;
+ assert(/x\.state\s+IN\s*\('completed',\s*'failed'\)/i.test(body)&&/'outcome',\s*'replayed'/.test(body),'terminal replay is not explicit');
+});
+await scenario('generation claim replay has no executable claim',async()=>{
+ const body=(await admin.query("select pg_get_functiondef('public.studio_artifact_command_claim(jsonb)'::regprocedure) body")).rows[0].body;
+ assert(/IF\s+result->>'outcome'\s*=\s*'replayed'\s+THEN\s+RETURN\s+result\s*-\s*'ok'/i.test(body),'replay does not return before claim construction');
+});
 
-await scenario('independent-session concurrent generation serialization',async()=>{const a=new pg.Client({connectionString:url}),b=new pg.Client({connectionString:url});await Promise.all([a.connect(),b.connect()]);await Promise.all([a.query('begin; lock table public.studio_artifact_generation_attempts in share mode; commit'),b.query('begin; lock table public.studio_artifact_generation_attempts in share mode; commit')]);await Promise.all([a.end(),b.end()])});
-for(const name of ['concurrent completion serialization','concurrent revision serialization','concurrent review resolution serialization','concurrent final approval serialization'])await scenario(name,async()=>assert(await scalar("select count(*) n from pg_indexes where schemaname='public' and indexname='studio_one_active_generation_attempt'")===1,'serialization constraint'));
-
-await scenario('actual SQL projection through production decoder',async()=>{const {rows}=await admin.query("select a.org_id,a.workspace_id,public.studio_artifact_projection(a.org_id,a.workspace_id,a.id) projection from public.studio_artifact_aggregates a where a.current_version_id is not null limit 1");if(!rows[0])return;const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(rows[0].projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,rows[0].org_id,rows[0].workspace_id],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}});
+const projectionRow=(await admin.query("select a.org_id,a.workspace_id,public.studio_artifact_projection(a.org_id,a.workspace_id,a.id) projection from public.studio_artifact_aggregates a where a.current_version_id is not null order by a.id limit 1")).rows[0];
+if(projectionRow)await scenario('actual SQL projection through production decoder',async()=>{const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projectionRow.projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,projectionRow.org_id,projectionRow.workspace_id],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}});
+else console.log('NOT RUN actual SQL projection through production decoder (no committed fixture artifact)');
 
 console.log(`Studio PostgreSQL scenarios: ${passed.length} passed, ${failed.length} failed.`);
 await admin.end();if(failed.length)process.exit(1);

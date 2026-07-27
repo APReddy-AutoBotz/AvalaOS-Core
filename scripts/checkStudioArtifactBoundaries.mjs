@@ -22,3 +22,8 @@ for (const file of ['components/docs/DocsProvider.tsx', 'services/docsService.ts
   if (!source.includes('legacyLocalOnly') || !source.includes('allowLocalAuthority')) throw new Error(`LEGACY_STUDIO_LOCAL_GUARD_MISSING: ${file}`);
 }
 console.log(`Studio artifact source boundaries passed (${files.length} source files inspected; legacy adapter isolated).`);
+const workflow = fs.readFileSync('.github/workflows/studio-governed-artifacts.yml', 'utf8');
+const checkoutCount = [...workflow.matchAll(/uses: actions\/checkout@v4/g)].length;
+const fullHistoryCount = [...workflow.matchAll(/fetch-depth:\s*0/g)].length;
+if (checkoutCount !== 3 || fullHistoryCount !== checkoutCount) throw new Error('STUDIO_CI_FULL_HISTORY_REQUIRED_FOR_RETAINED_GATES');
+console.log(`Studio CI checkout contract passed (${fullHistoryCount} full-history jobs).`);

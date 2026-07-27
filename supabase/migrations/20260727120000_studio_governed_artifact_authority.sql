@@ -106,16 +106,41 @@ CREATE OR REPLACE FUNCTION public.studio_version_content_immutable() RETURNS tri
 END$$;
 CREATE TRIGGER trg_studio_artifact_version_content_immutable BEFORE UPDATE OR DELETE ON public.studio_artifact_versions FOR EACH ROW EXECUTE FUNCTION public.studio_version_content_immutable();
 
-CREATE OR REPLACE FUNCTION public.studio_artifact_projection(p_org uuid,p_workspace uuid,p_artifact uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT jsonb_build_object('artifactId',a.id,'organizationId',a.org_id,'workspaceId',a.workspace_id,'handoffId',a.handoff_id,'artifactType',a.artifact_type,
- 'aggregateVersion',a.aggregate_version,'lifecycle',a.lifecycle,'ancestry',jsonb_build_object('caseId',a.case_id,'sourceVersionId',a.source_version_id,'sourceCaseVersion',a.source_case_version,'decisionId',a.decision_id,'decisionVersion',a.decision_version,'reviewResolutionId',a.review_resolution_id,'governResolutionId',a.govern_resolution_id,'packageHash',a.source_package_hash,'schemaVersion',a.source_schema_version,'ruleSetVersion',a.rule_set_version,'reviewSchemaVersion',a.review_schema_version,'reviewSequence',a.review_sequence),
- 'currentVersion',CASE WHEN v.id IS NULL THEN NULL ELSE jsonb_build_object('id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,'rendererVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,'lifecycle',v.lifecycle,'authorId',v.author_id,'createdAt',v.created_at) END,
- 'currentApprovedVersionId',a.current_approved_version_id,'review',CASE WHEN ra.id IS NULL THEN NULL ELSE jsonb_build_object('assignmentId',ra.id,'reviewerId',ra.reviewer_id,'outcome',rr.outcome,'rationale',rr.rationale,'conditions',rr.conditions) END,
- 'approval',CASE WHEN ar.id IS NULL THEN NULL ELSE jsonb_build_object('id',ar.id,'approverId',ar.approver_id,'outcome',ar.outcome,'rationale',ar.rationale,'conditions',ar.conditions,'supersededVersionId',ar.superseded_version_id) END)
- FROM public.studio_artifact_aggregates a LEFT JOIN public.studio_artifact_versions v ON v.id=a.current_version_id AND v.artifact_id=a.id
- LEFT JOIN public.studio_system_template_versions t ON t.id=v.template_id LEFT JOIN public.studio_artifact_review_assignments ra ON ra.artifact_version_id=v.id
- LEFT JOIN public.studio_artifact_review_resolutions rr ON rr.assignment_id=ra.id LEFT JOIN public.studio_artifact_approval_resolutions ar ON ar.review_resolution_id=rr.id
- WHERE a.id=p_artifact AND a.org_id=p_org AND a.workspace_id=p_workspace
+CREATE OR REPLACE FUNCTION public.studio_artifact_projection(p_org uuid,p_workspace uuid,p_artifact uuid)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT jsonb_build_object(
+  'id',a.id,'artifactType',a.artifact_type,'aggregateVersion',a.aggregate_version,'lifecycle',a.lifecycle,
+  'ancestry',jsonb_build_object('organizationId',a.org_id,'workspaceId',a.workspace_id,'caseId',a.case_id,
+   'sourceCaseVersionId',a.source_version_id,'sourceCaseVersion',a.source_case_version,'decisionId',a.decision_id,
+   'decisionVersion',a.decision_version,'reviewResolutionId',a.review_resolution_id,'governResolutionId',a.govern_resolution_id,
+   'studioHandoffId',a.handoff_id,'sourcePackageHash',a.source_package_hash,'sourceSchemaVersion',a.source_schema_version,
+   'ruleSetVersion',a.rule_set_version,'reviewSchemaVersion',a.review_schema_version,'reviewSequence',a.review_sequence),
+  'currentVersion',cv.dto,'currentApprovedVersion',cav.dto,'versions',COALESCE(vs.items,'[]'::jsonb),
+  'review',CASE WHEN ra.id IS NULL THEN NULL ELSE jsonb_build_object('assignmentId',ra.id,'reviewerId',ra.reviewer_id,
+   'outcome',rr.outcome,'rationale',rr.rationale,'conditions',COALESCE(rr.conditions,'[]'::jsonb)) END,
+  'approval',CASE WHEN ar.id IS NULL THEN NULL ELSE jsonb_build_object('approverId',ar.approver_id,'outcome',ar.outcome,
+   'rationale',ar.rationale,'conditions',ar.conditions,'supersededVersionId',ar.superseded_version_id) END,
+  'readOnly',NOT ctl.enabled OR ctl.read_only)
+ FROM public.studio_artifact_aggregates a CROSS JOIN public.studio_artifact_runtime_control ctl
+ LEFT JOIN LATERAL (SELECT jsonb_build_object('id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,
+  'lifecycle',v.lifecycle,'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
+  'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,'authorId',v.author_id,'createdAt',v.created_at) dto
+  FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
+  WHERE v.id=a.current_version_id AND v.artifact_id=a.id) cv ON true
+ LEFT JOIN LATERAL (SELECT jsonb_build_object('id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,
+  'lifecycle',v.lifecycle,'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
+  'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,'authorId',v.author_id,'createdAt',v.created_at) dto
+  FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
+  WHERE v.id=a.current_approved_version_id AND v.artifact_id=a.id) cav ON true
+ LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,
+  'lifecycle',v.lifecycle,'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
+  'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,'authorId',v.author_id,'createdAt',v.created_at)
+  ORDER BY v.version) items FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
+  WHERE v.artifact_id=a.id AND v.org_id=a.org_id AND v.workspace_id=a.workspace_id) vs ON true
+ LEFT JOIN public.studio_artifact_review_assignments ra ON ra.artifact_version_id=a.current_version_id
+ LEFT JOIN public.studio_artifact_review_resolutions rr ON rr.assignment_id=ra.id
+ LEFT JOIN public.studio_artifact_approval_resolutions ar ON ar.artifact_version_id=a.current_version_id
+ WHERE ctl.singleton AND a.id=p_artifact AND a.org_id=p_org AND a.workspace_id=p_workspace
 $$;
 CREATE OR REPLACE FUNCTION public.studio_read_artifact(p_org_id uuid,p_workspace_id uuid,p_artifact_id uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT CASE WHEN public.has_workspace_capability(p_workspace_id,p_org_id,'studio.artifacts.read') THEN public.studio_artifact_projection(p_org_id,p_workspace_id,p_artifact_id) ELSE NULL END
@@ -160,19 +185,32 @@ DECLARE h public.assess_v2_studio_handoffs;g public.assess_v2_govern_resolutions
  RETURN jsonb_build_object('ok',true,'outcome','committed','receiptId',r.id,'resourceId',a.id,'resource',jsonb_build_object('attemptId',attempt.id,'artifactId',a.id,'state','requested'));
 END$$;
 
-CREATE OR REPLACE FUNCTION public.studio_complete_generation(p_attempt_id uuid,p_provider_operation_id text,p_content jsonb,p_failure_code text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE attempt public.studio_artifact_generation_attempts;a public.studio_artifact_aggregates;t public.studio_system_template_versions;v public.studio_artifact_versions;next_version bigint;content_hash text;BEGIN
- SELECT * INTO attempt FROM public.studio_artifact_generation_attempts WHERE id=p_attempt_id FOR UPDATE;IF attempt.id IS NULL THEN RAISE EXCEPTION 'STUDIO_NOT_FOUND';END IF;
- IF attempt.state IN('completed','failed') THEN RETURN jsonb_build_object('outcome','replayed','attemptId',attempt.id,'state',attempt.state);END IF;
- IF p_failure_code IS NOT NULL THEN IF p_failure_code!~'^[A-Z0-9_]{1,64}$' THEN p_failure_code:='PROVIDER_FAILURE';END IF;UPDATE public.studio_artifact_generation_attempts SET state='failed',failure_code=p_failure_code,provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=attempt.id;RETURN jsonb_build_object('outcome','committed','attemptId',attempt.id,'state','failed');END IF;
- IF jsonb_typeof(p_content)<>'object' OR pg_column_size(p_content)>1048576 OR NOT (p_content ? 'title' AND p_content ? 'sections') OR jsonb_typeof(p_content->'title')<>'string' OR jsonb_typeof(p_content->'sections')<>'array' THEN RAISE EXCEPTION 'STUDIO_INVALID_PROVIDER_OUTPUT';END IF;
- SELECT * INTO a FROM public.studio_artifact_aggregates WHERE id=attempt.artifact_id AND org_id=attempt.org_id AND workspace_id=attempt.workspace_id FOR UPDATE;SELECT * INTO t FROM public.studio_system_template_versions WHERE id=attempt.template_id;
- SELECT COALESCE(max(version),0)+1 INTO next_version FROM public.studio_artifact_versions WHERE artifact_id=a.id;content_hash:=encode(public.digest(convert_to(p_content::text,'UTF8'),'sha256'),'hex');
+CREATE OR REPLACE FUNCTION public.studio_complete_generation(p_attempt_id uuid,p_provider_operation_id text,p_content jsonb,p_failure_code text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE x public.studio_artifact_generation_attempts; a public.studio_artifact_aggregates;t public.studio_system_template_versions;
+ v public.studio_artifact_versions; next_version bigint; safe_code text; audit_id uuid:=gen_random_uuid(); BEGIN
+ SELECT * INTO x FROM public.studio_artifact_generation_attempts WHERE id=p_attempt_id FOR UPDATE;
+ IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE='RESOURCE_NOT_AVAILABLE'; END IF;
+ IF x.state IN ('completed','failed') THEN RETURN jsonb_build_object('ok',true,'outcome','replayed','resourceId',x.artifact_id,'resource',jsonb_build_object('attemptId',x.id,'state',x.state,'failureCode',x.failure_code)); END IF;
+ IF x.state IS DISTINCT FROM 'generating' THEN RAISE EXCEPTION USING MESSAGE='VERSION_CONFLICT'; END IF;
+ SELECT * INTO a FROM public.studio_artifact_aggregates WHERE id=x.artifact_id AND org_id=x.org_id AND workspace_id=x.workspace_id FOR UPDATE;
+ IF p_failure_code IS NOT NULL THEN
+  safe_code:=CASE WHEN p_failure_code IN ('PROVIDER_GOVERNANCE_BLOCKED','PROVIDER_REQUEST_FAILED','PROVIDER_OUTPUT_INVALID','PROVIDER_OUTPUT_OVERSIZED','GENERATION_COMPLETION_CONFLICT','GENERATION_START_CONFLICT') THEN p_failure_code ELSE 'GENERATION_FAILED' END;
+  INSERT INTO public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
+   VALUES(audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,'studio.artifact.generation.fail','studio_generation_attempt',x.id,'failed',a.aggregate_version,jsonb_build_object('attemptId',x.id,'failureCode',safe_code));
+  UPDATE public.studio_artifact_generation_attempts SET state='failed',failure_code=safe_code,provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=x.id;
+  RETURN jsonb_build_object('ok',true,'outcome','generation_failed','resourceId',a.id,'resource',jsonb_build_object('attemptId',x.id,'state','failed','failureCode',safe_code));
+ END IF;
+ IF jsonb_typeof(p_content) IS DISTINCT FROM 'object' OR pg_column_size(p_content)>1048576 OR jsonb_typeof(p_content->'title') IS DISTINCT FROM 'string' OR jsonb_typeof(p_content->'sections') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION USING MESSAGE='INVALID_COMMAND'; END IF;
+ SELECT * INTO t FROM public.studio_system_template_versions WHERE id=x.template_id;
+ next_version:=COALESCE((SELECT max(version) FROM public.studio_artifact_versions WHERE artifact_id=a.id),0)+1;
  INSERT INTO public.studio_artifact_versions(artifact_id,org_id,workspace_id,version,parent_version_id,template_id,content_schema_version,renderer_version,content,content_hash,lifecycle,generation_attempt_id,author_id,author_authorization_version)
- VALUES(a.id,a.org_id,a.workspace_id,next_version,a.current_version_id,t.id,t.content_schema_version,t.renderer_version,p_content,content_hash,'draft',attempt.id,attempt.requested_by,(SELECT version FROM public.authorization_versions WHERE org_id=a.org_id AND user_id=attempt.requested_by)) RETURNING * INTO v;
+ VALUES(a.id,a.org_id,a.workspace_id,next_version,a.current_version_id,t.id,t.content_schema_version,t.renderer_version,p_content,encode(public.digest(convert_to(p_content::text,'UTF8'),'sha256'),'hex'),'draft',x.id,x.requested_by,(SELECT version FROM public.authorization_versions WHERE org_id=a.org_id AND user_id=x.requested_by)) RETURNING * INTO v;
  UPDATE public.studio_artifact_aggregates SET current_version_id=v.id,aggregate_version=aggregate_version+1,lifecycle='draft',updated_at=now() WHERE id=a.id;
- UPDATE public.studio_artifact_generation_attempts SET state='completed',provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=attempt.id;
- RETURN jsonb_build_object('outcome','committed','artifactId',a.id,'versionId',v.id,'version',v.version);
+ UPDATE public.studio_artifact_generation_attempts SET state='completed',provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=x.id;
+ INSERT INTO public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
+  VALUES(audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,'studio.artifact.generation.complete','studio_artifact',a.id,'succeeded',a.aggregate_version+1,jsonb_build_object('attemptId',x.id,'versionId',v.id));
+ RETURN jsonb_build_object('ok',true,'outcome','generation_completed','resourceId',a.id,'resource',public.studio_artifact_projection(a.org_id,a.workspace_id,a.id));
 END$$;
 
 -- One transactional human command boundary. Only exact current rows are actionable.
@@ -209,105 +247,6 @@ CREATE OR REPLACE FUNCTION public.studio_artifact_projection(p_org_id uuid,p_wor
  SELECT public.studio_artifact_projection(p_org_id,p_workspace_id,a.id) FROM public.studio_artifact_aggregates a WHERE a.org_id=p_org_id AND a.workspace_id=p_workspace_id AND a.handoff_id=p_handoff_id AND a.artifact_type=p_artifact_type AND public.has_workspace_capability(p_workspace_id,p_org_id,'studio.artifacts.read')
 $$;
 
-CREATE OR REPLACE FUNCTION public.studio_artifact_command_claim(p_command jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE result jsonb;receipt uuid;resource uuid;attempt public.studio_artifact_generation_attempts;a public.studio_artifact_aggregates;h public.assess_v2_studio_handoffs;t public.studio_system_template_versions;reviewer_auth bigint;BEGIN
- IF p_command->>'commandType'='studio.artifact.generation.request' THEN
-  result:=public.studio_request_generation((p_command->>'actorId')::uuid,(p_command->>'organizationId')::uuid,(p_command->>'workspaceId')::uuid,(p_command#>>'{payload,studioHandoffId}')::uuid,p_command#>>'{payload,artifactType}',(p_command->>'expectedAggregateVersion')::bigint,(p_command->>'requestId')::uuid,p_command->>'idempotencyKey',(p_command->>'authorizationVersion')::bigint);
-  resource:=(result#>>'{resource,artifactId}')::uuid;SELECT * INTO attempt FROM public.studio_artifact_generation_attempts WHERE id=(result#>>'{resource,attemptId}')::uuid;SELECT * INTO a FROM public.studio_artifact_aggregates WHERE id=resource;SELECT * INTO h FROM public.assess_v2_studio_handoffs WHERE id=a.handoff_id;SELECT * INTO t FROM public.studio_system_template_versions WHERE id=attempt.template_id;
-  result:=jsonb_build_object('generationClaim',jsonb_build_object('attemptId',attempt.id,'artifactId',a.id,'organizationId',a.org_id,'workspaceId',a.workspace_id,'actorId',attempt.requested_by,'requestId',attempt.request_id,'sourcePackage',h.package,'sourcePackageHash',h.package_hash,'artifactType',a.artifact_type,'templateVersion',t.template_version,'templatePayload',t.provider_instructions::text,'templateHash',t.template_hash,'contentSchemaVersion',t.content_schema_version,'projectionVersion',t.renderer_version));
- ELSE
-  IF p_command->>'commandType'='studio.artifact.review.assign' THEN SELECT version INTO reviewer_auth FROM public.authorization_versions WHERE org_id=(p_command->>'organizationId')::uuid AND user_id=(p_command#>>'{payload,reviewerId}')::uuid;p_command:=jsonb_set(p_command,'{payload,reviewerAuthorizationVersion}',to_jsonb(reviewer_auth));END IF;
-  resource:=(p_command#>>'{payload,artifactId}')::uuid;result:=public.studio_artifact_command(p_command->>'commandType',(p_command->>'actorId')::uuid,(p_command->>'organizationId')::uuid,(p_command->>'workspaceId')::uuid,resource,(p_command->>'expectedAggregateVersion')::bigint,(p_command->>'expectedArtifactVersion')::bigint,(p_command->>'requestId')::uuid,p_command->>'idempotencyKey',(p_command->>'authorizationVersion')::bigint,p_command->'payload');result:=result->'resource';
- END IF;
- SELECT id INTO receipt FROM public.studio_artifact_command_receipts WHERE org_id=(p_command->>'organizationId')::uuid AND actor_id=(p_command->>'actorId')::uuid AND command_type=p_command->>'commandType' AND idempotency_key=p_command->>'idempotencyKey';
- RETURN jsonb_build_object('outcome','committed','resource',result,'receiptId',receipt);
-END$$;
-CREATE OR REPLACE FUNCTION public.studio_artifact_generation_complete(p_attempt_id uuid,p_content jsonb,p_content_hash text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$DECLARE calculated text;result jsonb;BEGIN calculated:=encode(public.digest(convert_to(p_content::text,'UTF8'),'sha256'),'hex');IF calculated<>p_content_hash THEN RAISE EXCEPTION 'STUDIO_INVALID_PROVIDER_OUTPUT';END IF;result:=public.studio_complete_generation(p_attempt_id,NULL,p_content,NULL);RETURN jsonb_build_object('artifactId',result->>'artifactId','artifactVersionId',result->>'versionId','version',(result->>'version')::bigint);END$$;
-CREATE OR REPLACE FUNCTION public.studio_artifact_generation_fail(p_attempt_id uuid,p_failure_code text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$BEGIN PERFORM public.studio_complete_generation(p_attempt_id,NULL,NULL,p_failure_code);END$$;
-
-DO $$DECLARE t text;BEGIN FOREACH t IN ARRAY ARRAY['studio_artifact_runtime_control','studio_system_template_versions','studio_artifact_aggregates','studio_artifact_generation_attempts','studio_artifact_versions','studio_artifact_command_receipts','studio_artifact_review_assignments','studio_artifact_review_resolutions','studio_artifact_approval_resolutions'] LOOP EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY',t);EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC,anon,authenticated',t);END LOOP;END$$;
-CREATE POLICY studio_artifacts_read ON public.studio_artifact_aggregates FOR SELECT TO authenticated USING(public.has_workspace_capability(workspace_id,org_id,'studio.artifacts.read'));
-CREATE POLICY studio_versions_read ON public.studio_artifact_versions FOR SELECT TO authenticated USING(public.has_workspace_capability(workspace_id,org_id,'studio.artifacts.read'));
-GRANT SELECT ON TABLE public.studio_artifact_aggregates,public.studio_artifact_versions TO authenticated;
-
-REVOKE ALL ON FUNCTION public.studio_reject_immutable(),public.studio_artifact_projection(uuid,uuid,uuid),public.studio_assert_actor(uuid,uuid,uuid,text,bigint),public.studio_claim_receipt(text,uuid,uuid,uuid,uuid,text,text) FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION public.studio_request_generation(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint),public.studio_complete_generation(uuid,text,jsonb,text),public.studio_artifact_command(text,uuid,uuid,uuid,uuid,bigint,bigint,uuid,text,bigint,jsonb) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.studio_request_generation(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint),public.studio_complete_generation(uuid,text,jsonb,text),public.studio_artifact_command(text,uuid,uuid,uuid,uuid,bigint,bigint,uuid,text,bigint,jsonb) TO service_role;
-REVOKE ALL ON FUNCTION public.studio_read_artifact(uuid,uuid,uuid) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.studio_read_artifact(uuid,uuid,uuid) TO authenticated;
-REVOKE ALL ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_handoffs(uuid,uuid),public.studio_artifact_projection(uuid,uuid,uuid,text) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_handoffs(uuid,uuid),public.studio_artifact_projection(uuid,uuid,uuid,text) TO authenticated;
-REVOKE ALL ON FUNCTION public.studio_artifact_command_claim(jsonb),public.studio_artifact_generation_complete(uuid,jsonb,text),public.studio_artifact_generation_fail(uuid,text) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_command_claim(jsonb),public.studio_artifact_generation_complete(uuid,jsonb,text),public.studio_artifact_generation_fail(uuid,text) TO service_role;
-
-COMMENT ON TABLE public.document_generations IS 'Legacy/unverified only: not accepted PR 1E ancestry or canonical Studio authority; enterprise paths must not write, review, approve, export, or deliver these rows.';
-
--- Correction boundary: generation reservations are relational, not advisory.
-CREATE UNIQUE INDEX studio_one_active_generation_attempt
- ON public.studio_artifact_generation_attempts(artifact_id)
- WHERE state IN ('requested','generating');
-
--- Canonical projection.  Keep this JSON construction in one function so the
--- authenticated overload, Edge responses and the production decoder cannot
--- acquire subtly different representations.
-CREATE OR REPLACE FUNCTION public.studio_artifact_projection(p_org uuid,p_workspace uuid,p_artifact uuid)
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT jsonb_build_object(
-  'id',a.id,'artifactType',a.artifact_type,'aggregateVersion',a.aggregate_version,'lifecycle',a.lifecycle,
-  'ancestry',jsonb_build_object(
-   'organizationId',a.org_id,'workspaceId',a.workspace_id,'caseId',a.case_id,
-   'sourceCaseVersionId',a.source_version_id,'sourceCaseVersion',a.source_case_version,
-   'decisionId',a.decision_id,'decisionVersion',a.decision_version,
-   'reviewResolutionId',a.review_resolution_id,'governResolutionId',a.govern_resolution_id,
-   'studioHandoffId',a.handoff_id,'sourcePackageHash',a.source_package_hash,
-   'sourceSchemaVersion',a.source_schema_version,'ruleSetVersion',a.rule_set_version,
-   'reviewSchemaVersion',a.review_schema_version,'reviewSequence',a.review_sequence),
-  'currentVersion',cv.dto,
-  'currentApprovedVersion',cav.dto,
-  'versions',COALESCE(vs.items,'[]'::jsonb),
-  'review',CASE WHEN ra.id IS NULL THEN NULL ELSE jsonb_build_object(
-    'assignmentId',ra.id,'reviewerId',ra.reviewer_id,'outcome',rr.outcome,
-    'rationale',rr.rationale,'conditions',COALESCE(rr.conditions,'[]'::jsonb)) END,
-  'approval',CASE WHEN ar.id IS NULL THEN NULL ELSE jsonb_build_object(
-    'approverId',ar.approver_id,'outcome',ar.outcome,'rationale',ar.rationale,
-    'conditions',ar.conditions,'supersededVersionId',ar.superseded_version_id) END,
-  'readOnly',NOT ctl.enabled OR ctl.read_only)
- FROM public.studio_artifact_aggregates a
- CROSS JOIN public.studio_artifact_runtime_control ctl
- LEFT JOIN LATERAL (SELECT jsonb_build_object(
-   'id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,'lifecycle',v.lifecycle,
-   'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
-   'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,
-   'authorId',v.author_id,'createdAt',v.created_at) dto
-   FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
-   WHERE v.id=a.current_version_id AND v.artifact_id=a.id) cv ON true
- LEFT JOIN LATERAL (SELECT jsonb_build_object(
-   'id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,'lifecycle',v.lifecycle,
-   'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
-   'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,
-   'authorId',v.author_id,'createdAt',v.created_at) dto
-   FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
-   WHERE v.id=a.current_approved_version_id AND v.artifact_id=a.id) cav ON true
- LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object(
-   'id',v.id,'version',v.version,'parentVersionId',v.parent_version_id,'lifecycle',v.lifecycle,
-   'templateVersion',t.template_version,'contentSchemaVersion',v.content_schema_version,
-   'projectionVersion',v.renderer_version,'content',v.content,'contentHash',v.content_hash,
-   'authorId',v.author_id,'createdAt',v.created_at) ORDER BY v.version) items
-   FROM public.studio_artifact_versions v JOIN public.studio_system_template_versions t ON t.id=v.template_id
-   WHERE v.artifact_id=a.id AND v.org_id=a.org_id AND v.workspace_id=a.workspace_id) vs ON true
- LEFT JOIN public.studio_artifact_review_assignments ra ON ra.artifact_version_id=a.current_version_id
- LEFT JOIN public.studio_artifact_review_resolutions rr ON rr.assignment_id=ra.id
- LEFT JOIN public.studio_artifact_approval_resolutions ar ON ar.artifact_version_id=a.current_version_id
- WHERE ctl.singleton AND a.id=p_artifact AND a.org_id=p_org AND a.workspace_id=p_workspace
-$$;
-
--- Private fresh-authority lookup.  Browser callers never supply an arbitrary
--- actor identifier; the only caller is the service-role Edge boundary.
-REVOKE ALL ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid) TO service_role;
-
--- The provider effect starts only after this durable transition and audit row
--- commit. Replays are safe and terminal attempts cannot restart.
 CREATE OR REPLACE FUNCTION public.studio_artifact_generation_start(p_attempt_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE x public.studio_artifact_generation_attempts; audit_id uuid:=gen_random_uuid(); BEGIN
@@ -321,39 +260,6 @@ DECLARE x public.studio_artifact_generation_attempts; audit_id uuid:=gen_random_
  RETURN jsonb_build_object('ok',true,'outcome','committed','resourceId',x.artifact_id,'resource',jsonb_build_object('attemptId',x.id,'state','generating'));
 END$$;
 
--- Service-only completion/failure is serialized by the attempt and aggregate
--- locks. Version allocation occurs only while holding the aggregate lock.
-CREATE OR REPLACE FUNCTION public.studio_complete_generation(p_attempt_id uuid,p_provider_operation_id text,p_content jsonb,p_failure_code text DEFAULT NULL)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE x public.studio_artifact_generation_attempts; a public.studio_artifact_aggregates;t public.studio_system_template_versions;
- v public.studio_artifact_versions; next_version bigint; safe_code text; audit_id uuid:=gen_random_uuid(); BEGIN
- SELECT * INTO x FROM public.studio_artifact_generation_attempts WHERE id=p_attempt_id FOR UPDATE;
- IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE='RESOURCE_NOT_AVAILABLE'; END IF;
- IF x.state IN ('completed','failed') THEN RETURN jsonb_build_object('ok',true,'outcome','replayed','resourceId',x.artifact_id,'resource',jsonb_build_object('attemptId',x.id,'state',x.state,'failureCode',x.failure_code)); END IF;
- IF x.state IS DISTINCT FROM 'generating' THEN RAISE EXCEPTION USING MESSAGE='VERSION_CONFLICT'; END IF;
- SELECT * INTO a FROM public.studio_artifact_aggregates WHERE id=x.artifact_id AND org_id=x.org_id AND workspace_id=x.workspace_id FOR UPDATE;
- IF p_failure_code IS NOT NULL THEN
-  safe_code:=CASE WHEN p_failure_code IN ('PROVIDER_GOVERNANCE_BLOCKED','PROVIDER_REQUEST_FAILED','PROVIDER_OUTPUT_INVALID','PROVIDER_OUTPUT_OVERSIZED','GENERATION_COMPLETION_CONFLICT','GENERATION_START_CONFLICT') THEN p_failure_code ELSE 'GENERATION_FAILED' END;
-  INSERT INTO public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
-   VALUES(audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,'studio.artifact.generation.fail','studio_generation_attempt',x.id,'failed',a.aggregate_version,jsonb_build_object('attemptId',x.id,'failureCode',safe_code));
-  UPDATE public.studio_artifact_generation_attempts SET state='failed',failure_code=safe_code,provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=x.id;
-  RETURN jsonb_build_object('ok',true,'outcome','generation_failed','resourceId',a.id,'resource',jsonb_build_object('attemptId',x.id,'state','failed','failureCode',safe_code));
- END IF;
- IF jsonb_typeof(p_content) IS DISTINCT FROM 'object' OR pg_column_size(p_content)>1048576 OR jsonb_typeof(p_content->'title') IS DISTINCT FROM 'string' OR jsonb_typeof(p_content->'sections') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION USING MESSAGE='INVALID_COMMAND'; END IF;
- SELECT * INTO t FROM public.studio_system_template_versions WHERE id=x.template_id;
- next_version:=COALESCE((SELECT max(version) FROM public.studio_artifact_versions WHERE artifact_id=a.id),0)+1;
- INSERT INTO public.studio_artifact_versions(artifact_id,org_id,workspace_id,version,parent_version_id,template_id,content_schema_version,renderer_version,content,content_hash,lifecycle,generation_attempt_id,author_id,author_authorization_version)
- VALUES(a.id,a.org_id,a.workspace_id,next_version,a.current_version_id,t.id,t.content_schema_version,t.renderer_version,p_content,encode(public.digest(convert_to(p_content::text,'UTF8'),'sha256'),'hex'),'draft',x.id,x.requested_by,(SELECT version FROM public.authorization_versions WHERE org_id=a.org_id AND user_id=x.requested_by)) RETURNING * INTO v;
- UPDATE public.studio_artifact_aggregates SET current_version_id=v.id,aggregate_version=aggregate_version+1,lifecycle='draft',updated_at=now() WHERE id=a.id;
- UPDATE public.studio_artifact_generation_attempts SET state='completed',provider_operation_id=left(p_provider_operation_id,200),completed_at=now() WHERE id=x.id;
- INSERT INTO public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
-  VALUES(audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,'studio.artifact.generation.complete','studio_artifact',a.id,'succeeded',a.aggregate_version+1,jsonb_build_object('attemptId',x.id,'versionId',v.id));
- RETURN jsonb_build_object('ok',true,'outcome','generation_completed','resourceId',a.id,'resource',public.studio_artifact_projection(a.org_id,a.workspace_id,a.id));
-END$$;
-
-REVOKE ALL ON FUNCTION public.studio_artifact_generation_start(uuid) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_generation_start(uuid) TO service_role;
-
 CREATE OR REPLACE FUNCTION public.studio_artifact_eligible_reviewers(p_org_id uuid,p_workspace_id uuid,p_artifact_id uuid,p_artifact_version_id uuid)
 RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT jsonb_build_object('actorId',p.id,'displayName',COALESCE(NULLIF(btrim(p.full_name),''),p.email))
@@ -366,9 +272,6 @@ RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_cata
   AND public.pr1e_actor_has_workspace_capability(p.id,p_org_id,p_workspace_id,'studio.artifacts.review')
  ORDER BY COALESCE(NULLIF(btrim(p.full_name),''),p.email),p.id
 $$;
-REVOKE ALL ON FUNCTION public.studio_artifact_eligible_reviewers(uuid,uuid,uuid,uuid) FROM PUBLIC,anon,service_role;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_eligible_reviewers(uuid,uuid,uuid,uuid) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.studio_artifact_command_claim(p_command jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE result jsonb; receipt uuid; resource uuid; attempt public.studio_artifact_generation_attempts;
@@ -401,18 +304,26 @@ DECLARE result jsonb; receipt uuid; resource uuid; attempt public.studio_artifac
  RETURN jsonb_build_object('outcome',result->>'outcome','receiptId',receipt,'resourceId',resource,'resource',result->'resource');
 END$$;
 
-CREATE OR REPLACE FUNCTION public.studio_artifact_generation_complete(p_attempt_id uuid,p_content jsonb,p_content_hash text,p_provider_operation_id text DEFAULT NULL)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE calculated text; BEGIN
- calculated:=encode(public.digest(convert_to(p_content::text,'UTF8'),'sha256'),'hex');
- IF calculated IS DISTINCT FROM p_content_hash THEN RAISE EXCEPTION USING MESSAGE='INVALID_COMMAND'; END IF;
- RETURN public.studio_complete_generation(p_attempt_id,p_provider_operation_id,p_content,NULL);
-END$$;
+CREATE OR REPLACE FUNCTION public.studio_artifact_generation_complete(p_attempt_id uuid,p_content jsonb,p_provider_operation_id text DEFAULT NULL)
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT public.studio_complete_generation(p_attempt_id,p_provider_operation_id,p_content,NULL)
+$$;
 CREATE OR REPLACE FUNCTION public.studio_artifact_generation_fail(p_attempt_id uuid,p_failure_code text)
-RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$SELECT public.studio_complete_generation(p_attempt_id,NULL,NULL,p_failure_code)$$;
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT public.studio_complete_generation(p_attempt_id,NULL,NULL,p_failure_code)
+$$;
 
-REVOKE ALL ON FUNCTION public.studio_artifact_command_claim(jsonb),public.studio_artifact_generation_complete(uuid,jsonb,text,text),public.studio_artifact_generation_fail(uuid,text) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.studio_artifact_command_claim(jsonb),public.studio_artifact_generation_complete(uuid,jsonb,text,text),public.studio_artifact_generation_fail(uuid,text) TO service_role;
+DO $$DECLARE t text;BEGIN FOREACH t IN ARRAY ARRAY['studio_artifact_runtime_control','studio_system_template_versions','studio_artifact_aggregates','studio_artifact_generation_attempts','studio_artifact_versions','studio_artifact_command_receipts','studio_artifact_review_assignments','studio_artifact_review_resolutions','studio_artifact_approval_resolutions'] LOOP EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY',t);EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC,anon,authenticated',t);END LOOP;END$$;
+CREATE POLICY studio_artifacts_read ON public.studio_artifact_aggregates FOR SELECT TO authenticated USING(public.has_workspace_capability(workspace_id,org_id,'studio.artifacts.read'));
+CREATE POLICY studio_versions_read ON public.studio_artifact_versions FOR SELECT TO authenticated USING(public.has_workspace_capability(workspace_id,org_id,'studio.artifacts.read'));
+GRANT SELECT ON TABLE public.studio_artifact_aggregates,public.studio_artifact_versions TO authenticated;
+
+COMMENT ON TABLE public.document_generations IS 'Legacy/unverified only: not accepted PR 1E ancestry or canonical Studio authority; enterprise paths must not write, review, approve, export, or deliver these rows.';
+
+
+CREATE UNIQUE INDEX studio_one_active_generation_attempt
+ ON public.studio_artifact_generation_attempts(artifact_id)
+ WHERE state IN ('requested','generating');
 
 CREATE OR REPLACE FUNCTION public.studio_conditions_valid(value jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
@@ -425,12 +336,32 @@ ALTER TABLE public.studio_artifact_review_resolutions
 ALTER TABLE public.studio_artifact_approval_resolutions
  ADD CONSTRAINT studio_approval_conditions_bounded CHECK(public.studio_conditions_valid(conditions));
 
--- Internal helpers are owner-to-owner calls.  The service role receives only
--- the three deliberate entry points above, never direct mutation primitives.
-REVOKE ALL ON FUNCTION public.studio_request_generation(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint),
+
+-- Final ACL authority. No Studio function is executable through PostgreSQL's
+-- default PUBLIC grant; only the explicitly listed projections and private
+-- service entry points are exposed.
+REVOKE ALL ON FUNCTION
+ public.studio_reject_immutable(),public.studio_version_content_immutable(),
+ public.studio_artifact_projection(uuid,uuid,uuid),public.studio_assert_actor(uuid,uuid,uuid,text,bigint),
+ public.studio_claim_receipt(text,uuid,uuid,uuid,uuid,text,text),
+ public.studio_request_generation(uuid,uuid,uuid,uuid,text,bigint,uuid,text,bigint),
  public.studio_complete_generation(uuid,text,jsonb,text),
  public.studio_artifact_command(text,uuid,uuid,uuid,uuid,bigint,bigint,uuid,text,bigint,jsonb),
- public.studio_assert_actor(uuid,uuid,uuid,text,bigint),
- public.studio_claim_receipt(text,uuid,uuid,uuid,uuid,text,text),
  public.studio_conditions_valid(jsonb)
  FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION
+ public.studio_read_artifact(uuid,uuid,uuid),public.studio_artifact_handoffs(uuid,uuid),
+ public.studio_artifact_projection(uuid,uuid,uuid,text),public.studio_artifact_eligible_reviewers(uuid,uuid,uuid,uuid),
+ public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_command_claim(jsonb),
+ public.studio_artifact_generation_start(uuid),public.studio_artifact_generation_complete(uuid,jsonb,text),
+ public.studio_artifact_generation_fail(uuid,text)
+ FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION
+ public.studio_read_artifact(uuid,uuid,uuid),public.studio_artifact_handoffs(uuid,uuid),
+ public.studio_artifact_projection(uuid,uuid,uuid,text),public.studio_artifact_eligible_reviewers(uuid,uuid,uuid,uuid)
+ TO authenticated;
+GRANT EXECUTE ON FUNCTION
+ public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_command_claim(jsonb),
+ public.studio_artifact_generation_start(uuid),public.studio_artifact_generation_complete(uuid,jsonb,text),
+ public.studio_artifact_generation_fail(uuid,text)
+ TO service_role;

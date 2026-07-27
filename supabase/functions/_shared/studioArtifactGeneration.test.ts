@@ -12,5 +12,7 @@ void(async()=>{
  events.length=0;const oversized=await executeClaimedStudioGeneration(claim,{...deps,runProvider:async()=>({content:{...valid,summary:'x'.repeat(500_001)}})});assert(oversized.state==='failed'&&events.includes('fail:PROVIDER_OUTPUT_OVERSIZED'),'oversized output classified');
  events.length=0;const providerFailure=await executeClaimedStudioGeneration(claim,{...deps,runProvider:async()=>{throw new Error('secret')}});assert(providerFailure.state==='failed'&&events.includes('fail:PROVIDER_REQUEST_FAILED'),'provider detail sanitized');
  events.length=0;const conflict=await executeClaimedStudioGeneration(claim,{...deps,complete:async()=>{throw new Error('conflict')}});assert(conflict.state==='failed'&&events.includes('fail:GENERATION_COMPLETION_CONFLICT'),'completion conflict classified');
- console.log('studio artifact generation tests passed (10 scenarios)');
+ events.length=0;let providerCalls=0;const terminal=await executeClaimedStudioGeneration(claim,{...deps,start:async()=>{throw new Error('terminal attempt')},runProvider:async()=>{providerCalls++;return{content:valid}}});assert(terminal.state==='failed'&&providerCalls===0&&events.includes('fail:GENERATION_START_CONFLICT'),'terminal attempt cannot restart provider');
+ let completionInput:Record<string,unknown>|undefined;await executeClaimedStudioGeneration(claim,{...deps,complete:async input=>{completionInput=input;return{version:1}}});assert(completionInput!==undefined&&!('contentHash' in completionInput),'caller cannot supply authoritative content hash');
+ console.log('studio artifact generation tests passed (12 scenarios)');
 })().catch(error=>{console.error(error);throw error});

@@ -20,9 +20,19 @@ const authority=sql.indexOf('PERFORM public.studio_assert_actor');
 const receipt=sql.indexOf("studio_claim_receipt('studio.artifact.generation.request");
 if(authority<0||receipt<0||authority>receipt){console.error('Authorization must precede receipt inspection');process.exit(1)}
 if(/CREATE (?:OR REPLACE )?TABLE public\.document_generations|ALTER TABLE public\.document_generations/.test(sql)){console.error('Legacy document_generations structure was modified');process.exit(1)}
-const finalAuthorityAcl=sql.lastIndexOf('REVOKE ALL ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role');
-const unsafeAuthorityGrant=sql.lastIndexOf('GRANT EXECUTE ON FUNCTION public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_handoffs');
-if(finalAuthorityAcl<unsafeAuthorityGrant){console.error('Actor authority RPC must finish service-role-only');process.exit(1)}
+for(const name of ['studio_artifact_projection','studio_artifact_command_claim','studio_artifact_generation_complete','studio_artifact_generation_fail','studio_complete_generation']){
+ const count=(sql.match(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\(`,'g'))??[]).length;
+ const expected=name==='studio_artifact_projection'?2:1;
+ if(count!==expected){console.error(`${name} has ${count} definitions; expected ${expected} authoritative signature(s)`);process.exit(1)}
+}
+if(sql.includes('studio_artifact_generation_complete(uuid,jsonb,text,text)')||/studio_artifact_generation_complete\(p_attempt_id uuid,p_content jsonb,p_content_hash/.test(sql)){
+ console.error('Generation completion must not accept a caller-authored content hash');process.exit(1)
+}
+const acl=sql.slice(sql.indexOf('-- Final ACL authority.'));
+if(!acl.includes('public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_command_claim(jsonb)')||
+ !acl.includes('TO service_role;')||acl.includes('studio_artifact_authority(uuid,uuid,uuid) TO authenticated')){
+ console.error('Actor authority RPC must be service-role-only');process.exit(1)
+}
 if(!sql.includes("p_command->'expectedArtifactVersion' IS DISTINCT FROM 'null'::jsonb")||!sql.includes('p_expected_version IS NULL')){console.error('Expected-version null semantics missing');process.exit(1)}
 for(const excluded of ['storage.objects','signed_url','legal_hold','retention_until'])if(sql.toLowerCase().includes(excluded)){console.error(`Excluded PR B authority found: ${excluded}`);process.exit(1)}
 console.log(`Studio artifact migration contract: ${required.length+5} authority, ancestry, ACL, lifecycle, and legacy assertions passed.`);
