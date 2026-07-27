@@ -22,9 +22,17 @@ const connect=async url=>{const c=new Client({connectionString:url});await c.con
 const transaction=async(c,label,sql)=>{await c.query('BEGIN');try{await c.query(sql);await c.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await c.query('ROLLBACK');throw Error(`${label}: ${error instanceof Error?error.message:String(error)}`)}};
 const bootstrap=async c=>transaction(c,'Supabase auth bootstrap',`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid'; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
 const apply=async(c,list)=>{for(const name of list)await transaction(c,name,await readFile(join('supabase/migrations',name),'utf8'))};
-const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);if((await admin.query('select 1 from pg_database where datname=$1',[name])).rowCount)throw Error(`refusing to overwrite existing database ${name}`);await admin.query(`CREATE DATABASE ${name}`);createdDatabases.push(name);const c=await connect(urlFor(name));await bootstrap(c);return c};
+const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);if((await admin.query('select 1 from pg_database where datname=$1',[name])).rowCount)throw Error(`refusing to overwrite existing database ${name}`);await admin.query(`CREATE DATABASE ${name}`);createdDatabases.push(name);console.log(`CREATED DATABASE ${name}`);const c=await connect(urlFor(name));await bootstrap(c);return c};
 const passed=[];const failed=[];
 const scenario=async(name,fn)=>{try{await fn();passed.push(name);console.log(`PASS ${name}`)}catch(error){failed.push(name);console.error(`FAIL ${name}: ${error instanceof Error?error.message:String(error)}`)}};
+const canonicalStudioTables=['studio_artifact_runtime_control','studio_system_template_versions','studio_artifact_aggregates','studio_artifact_generation_attempts','studio_artifact_versions','studio_artifact_command_receipts','studio_artifact_review_assignments','studio_artifact_review_resolutions','studio_artifact_approval_resolutions'];
+const assertCanonicalRlsInventory=rows=>{
+ const byName=new Map(rows.map(row=>[row.relname,row]));
+ assert.equal(rows.length,canonicalStudioTables.length,'canonical Studio table inventory must contain exactly nine tables');
+ for(const table of canonicalStudioTables){const row=byName.get(table);assert.ok(row,`canonical Studio table missing from RLS inventory: ${table}`);assert.equal(row.relrowsecurity,true,`${table} must enable RLS`);assert.equal(row.relforcerowsecurity,true,`${table} must force RLS`)}
+};
+// Mutation guard: this assertion must reject an inventory with any expected table removed.
+assert.throws(()=>assertCanonicalRlsInventory([...canonicalStudioTables.slice(1),'not_a_canonical_table'].map(relname=>({relname,relrowsecurity:true,relforcerowsecurity:true}))),/missing/);
 let admin;
 try{
  admin=await connect(adminUrl);
@@ -54,7 +62,10 @@ try{
  await scenario('legacy document_generations remains non-canonical',async()=>assert.match((await authority.query("select obj_description('public.document_generations'::regclass) comment")).rows[0].comment,/Legacy\/unverified/));
  await scenario('BRD FRD PDD immutable templates are active',async()=>assert.deepEqual((await authority.query('select artifact_type from public.studio_system_template_versions where superseded_at is null order by artifact_type')).rows.map(r=>r.artifact_type),['brd','frd','pdd']));
  await scenario('one active generation attempt relational constraint',async()=>assert.equal((await authority.query("select count(*)::int n from pg_indexes where indexname='studio_one_active_generation_attempt'")).rows[0].n,1));
- await scenario('all canonical tables force RLS',async()=>assert.equal((await authority.query("select bool_and(relrowsecurity and relforcerowsecurity) ok from pg_class where relnamespace='public'::regnamespace and relname like 'studio_artifact%'")).rows[0].ok,true));
+ await scenario('exact canonical table inventory enables and forces RLS',async()=>{
+   const inventory=await authority.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relkind in ('r','p') and relname = any($1::text[]) order by relname",[canonicalStudioTables]);
+   assertCanonicalRlsInventory(inventory.rows);
+ });
  await scenario('private generation RPC ACLs',async()=>{for(const signature of ['public.studio_artifact_generation_start(uuid)','public.studio_artifact_generation_complete(uuid,jsonb,text)','public.studio_artifact_generation_fail(uuid,text)']){assert.equal((await authority.query("select has_function_privilege('authenticated',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,false);assert.equal((await authority.query("select has_function_privilege('service_role',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,true)}});
  await scenario('caller supplied content hash is impossible',async()=>assert.equal((await authority.query("select count(*)::int n from pg_proc where pronamespace='public'::regnamespace and proname='studio_artifact_generation_complete' and pg_get_function_identity_arguments(oid) like '%hash%'")).rows[0].n,0));
  await scenario('canonical jsonb hash ignores object key order',async()=>{const r=(await authority.query("select encode(public.digest(convert_to($1::jsonb::text,'UTF8'),'sha256'),'hex') a,encode(public.digest(convert_to($2::jsonb::text,'UTF8'),'sha256'),'hex') b",['{"title":"A","sections":[]}','{"sections":[],"title":"A"}'])).rows[0];assert.equal(r.a,r.b)});
@@ -77,5 +88,5 @@ try{
  console.log(`Studio PostgreSQL executable scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length)process.exitCode=1;
 }finally{
  for(const c of clients.reverse())if(c!==admin)await c.end().catch(()=>{});
- if(admin){for(const name of createdDatabases.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{});for(const role of createdRoles.reverse())await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(()=>{});await admin.end().catch(()=>{})}
+ if(admin){let cleanupFailed=false;for(const name of createdDatabases.reverse())try{await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);console.log(`CLEANUP DROPPED DATABASE ${name}`)}catch(error){cleanupFailed=true;console.error(`CLEANUP FAILED DATABASE ${name}: ${error instanceof Error?error.message:String(error)}`)}for(const role of createdRoles.reverse())try{await admin.query(`DROP ROLE IF EXISTS ${role}`)}catch(error){cleanupFailed=true;console.error(`CLEANUP FAILED ROLE ${role}: ${error instanceof Error?error.message:String(error)}`)}await admin.end().catch(()=>{});console.log(`CLEANUP ${cleanupFailed?'FAILED':'PASS'}`);if(cleanupFailed)process.exitCode=1}
 }

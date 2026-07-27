@@ -27,6 +27,10 @@ const checkoutCount = [...workflow.matchAll(/uses: actions\/checkout@v4/g)].leng
 const fullHistoryCount = [...workflow.matchAll(/fetch-depth:\s*0/g)].length;
 if (checkoutCount !== 3 || fullHistoryCount !== checkoutCount) throw new Error('STUDIO_CI_FULL_HISTORY_REQUIRED_FOR_RETAINED_GATES');
 console.log(`Studio CI checkout contract passed (${fullHistoryCount} full-history jobs).`);
+for (const token of ['set -o pipefail', 'tee studio-postgresql-16.log', 'actions/upload-artifact@v4', 'if: always()', 'studio-postgresql-16.log']) {
+  if (!workflow.includes(token)) throw new Error(`STUDIO_POSTGRESQL_FAILURE_EVIDENCE_MISSING: ${token}`);
+}
+console.log('Studio PostgreSQL CI evidence contract passed (pipefail, retained log and always-upload).');
 const defaultPlaywright = fs.readFileSync('playwright.config.ts', 'utf8');
 const studioPlaywright = fs.readFileSync('playwright.studio-artifacts.config.ts', 'utf8');
 if (!/testIgnore:[^\n]*studioArtifacts\.spec\.ts/.test(defaultPlaywright)) {
