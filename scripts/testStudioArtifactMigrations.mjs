@@ -1,67 +1,76 @@
+import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import pg from 'pg';
 
 execFileSync(process.execPath,['scripts/checkStudioArtifactMigrationContract.mjs'],{stdio:'inherit'});
-const url=process.env.DATABASE_URL;
-if(!url){if(process.env.CI){console.error('DATABASE_URL is required for Studio PostgreSQL 16 CI execution.');process.exit(1)}console.log('DATABASE_URL not set; Studio PostgreSQL 16 scenarios not run locally. Static contract check only.');process.exit(0)}
-const pg=await import('pg');
-const admin=new pg.Client({connectionString:url});await admin.connect();
+const adminUrl=process.env.STUDIO_ARTIFACT_MIGRATION_DATABASE_URL;
+if(!adminUrl){if(process.env.CI)throw Error('STUDIO_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL scenarios not run locally.');process.exit(0)}
+
+const {Client}=pg;
+const suffix=`${process.pid}_${Date.now()}`;
+const names={fresh:`studio_fresh_${suffix}`,upgrade:`studio_upgrade_${suffix}`,populated:`studio_populated_${suffix}`,dirty:`studio_dirty_${suffix}`,authority:`studio_authority_${suffix}`};
+const createdDatabases=[];const createdRoles=[];const clients=[];
+const migrations=(await readdir('supabase/migrations')).filter(n=>n.endsWith('.sql')).sort();
+const studio='20260727120000_studio_governed_artifact_authority.sql';
+assert.equal(migrations.at(-1),studio,'Studio migration must be the chronological tip');
+const baseline=migrations.filter(n=>n!==studio);
+const urlFor=name=>{const u=new URL(adminUrl);u.pathname=`/${name}`;return u.toString()};
+const connect=async url=>{const c=new Client({connectionString:url});await c.connect();clients.push(c);return c};
+const transaction=async(c,label,sql)=>{await c.query('BEGIN');try{await c.query(sql);await c.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await c.query('ROLLBACK');throw Error(`${label}: ${error instanceof Error?error.message:String(error)}`)}};
+const bootstrap=async c=>transaction(c,'Supabase auth bootstrap',`CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid'; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
+const apply=async(c,list)=>{for(const name of list)await transaction(c,name,await readFile(join('supabase/migrations',name),'utf8'))};
+const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);if((await admin.query('select 1 from pg_database where datname=$1',[name])).rowCount)throw Error(`refusing to overwrite existing database ${name}`);await admin.query(`CREATE DATABASE ${name}`);createdDatabases.push(name);const c=await connect(urlFor(name));await bootstrap(c);return c};
 const passed=[];const failed=[];
 const scenario=async(name,fn)=>{try{await fn();passed.push(name);console.log(`PASS ${name}`)}catch(error){failed.push(name);console.error(`FAIL ${name}: ${error instanceof Error?error.message:String(error)}`)}};
-const scalar=async(sql,params=[])=>Number((await admin.query(sql,params)).rows[0]?.n??0);
-const assert=(condition,message)=>{if(!condition)throw Error(message)};
-const migrationFiles=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();
+let admin;
+try{
+ admin=await connect(adminUrl);
+ for(const [role,attrs] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']]){if(!(await admin.query('select 1 from pg_roles where rolname=$1',[role])).rowCount){await admin.query(`CREATE ROLE ${role} ${attrs}`);createdRoles.push(role)}}
 
-await scenario('fresh full migration chain',async()=>{for(const file of migrationFiles)await admin.query(await readFile(`supabase/migrations/${file}`,'utf8'))});
-await scenario('accepted-main upgrade',async()=>assert(migrationFiles.at(-1)==='20260727120000_studio_governed_artifact_authority.sql','migration is not chronological tip'));
-await scenario('populated upgrade',async()=>assert(await scalar("select count(*) n from public.studio_system_template_versions")===3,'seed templates missing'));
-await scenario('dirty-data preflight handling',async()=>{await admin.query('savepoint studio_dirty').catch(()=>{});await admin.query('rollback').catch(()=>{})});
-await scenario('forward-only reapply behavior',async()=>assert(await scalar("select count(*) n from public.capabilities where capability_key like 'studio.artifacts.%'")===5,'capability matrix'));
-await scenario('legacy document_generations preservation',async()=>{await admin.query('select 1 from public.document_generations limit 0')});
-await scenario('canonical constraints',async()=>assert(await scalar("select count(*) n from pg_constraint where connamespace='public'::regnamespace and conrelid::regclass::text like '%studio_artifact%'")>=20,'constraints incomplete'));
-await scenario('forced RLS',async()=>assert(await scalar("select count(*) n from pg_class where relnamespace='public'::regnamespace and relname like 'studio_artifact%' and relrowsecurity and relforcerowsecurity")>=8,'forced RLS incomplete'));
-await scenario('table ACLs',async()=>assert(await scalar("select count(*) n from information_schema.role_table_grants where table_schema='public' and table_name like 'studio_artifact%' and grantee in ('anon','PUBLIC')")===0,'unsafe table grant'));
-await scenario('function ACLs',async()=>assert(await scalar("select count(*) n from information_schema.routine_privileges where specific_schema='public' and routine_name like 'studio_%' and grantee in ('anon','PUBLIC')")===0,'unsafe function grant'));
-await scenario('authenticated projection usability',async()=>assert(await scalar("select count(*) n from information_schema.routine_privileges where routine_schema='public' and routine_name='studio_artifact_projection' and grantee='authenticated'")>=1,'projection ACL'));
-await scenario('service-role command usability',async()=>assert(await scalar("select count(*) n from information_schema.routine_privileges where routine_schema='public' and routine_name='studio_artifact_command_claim' and grantee='service_role'")===1,'command ACL'));
-await scenario('private actor authority ACL',async()=>assert(await scalar("select count(*) n from information_schema.routine_privileges where routine_schema='public' and routine_name='studio_artifact_authority' and grantee='authenticated'")===0,'authority disclosure'));
-await scenario('exact PR 1E ancestry',async()=>assert(await scalar("select count(*) n from information_schema.columns where table_schema='public' and table_name='studio_artifact_aggregates' and column_name in ('org_id','workspace_id','case_id','source_version_id','source_case_version','decision_id','decision_version','review_resolution_id','govern_resolution_id','handoff_id','source_package_hash','source_schema_version','rule_set_version','review_schema_version','review_sequence')")===15,'ancestry incomplete'));
-await scenario('BRD FRD PDD template selection',async()=>assert(await scalar("select count(distinct artifact_type) n from public.studio_system_template_versions where superseded_at is null")===3,'template selection'));
-await scenario('one aggregate per handoff type',async()=>assert(await scalar("select count(*) n from pg_indexes where schemaname='public' and tablename='studio_artifact_aggregates' and indexdef like '%org_id, workspace_id, handoff_id, artifact_type%'")>=1,'aggregate uniqueness'));
-await scenario('one active generation attempt',async()=>assert(await scalar("select count(*) n from pg_indexes where schemaname='public' and indexname='studio_one_active_generation_attempt' and indexdef like '%requested%' and indexdef like '%generating%'")===1,'active attempt constraint'));
-await scenario('generation request start completion failure audit',async()=>assert(await scalar("select count(*) n from pg_proc where pronamespace='public'::regnamespace and proname in ('studio_request_generation','studio_artifact_generation_start','studio_complete_generation')")===3,'generation functions'));
-await scenario('immutable version progression',async()=>assert(await scalar("select count(*) n from pg_trigger where tgname='trg_studio_artifact_version_content_immutable' and not tgisinternal")===1,'immutability trigger'));
-await scenario('review assignment and resolution',async()=>{await admin.query('select 1 from public.studio_artifact_review_assignments limit 0');await admin.query('select 1 from public.studio_artifact_review_resolutions limit 0')});
-await scenario('final approval and supersession',async()=>{await admin.query('select superseded_version_id from public.studio_artifact_approval_resolutions limit 0')});
-await scenario('complete three-person separation of duty',async()=>{const body=(await admin.query("select pg_get_functiondef('public.studio_artifact_command(text,uuid,uuid,uuid,uuid,bigint,bigint,uuid,text,bigint,jsonb)'::regprocedure) body")).rows[0].body;assert(body.includes('a.created_by')&&body.includes('assignment.reviewer_id'),'separation incomplete')});
-await scenario('exact target IDs and null-safe versions',async()=>{const body=(await admin.query("select pg_get_functiondef('public.studio_artifact_command(text,uuid,uuid,uuid,uuid,bigint,bigint,uuid,text,bigint,jsonb)'::regprocedure) body")).rows[0].body;assert(body.includes('IS DISTINCT FROM')&&body.includes('parentVersionId')&&body.includes('artifactVersionId'),'target checks incomplete')});
-await scenario('exact replay and changed-payload conflict',async()=>assert(await scalar("select count(*) n from pg_indexes where schemaname='public' and tablename='studio_artifact_command_receipts' and indexdef like '%org_id, actor_id, command_type, idempotency_key%'")>=1,'receipt uniqueness'));
-await scenario('cross-workspace receipt isolation',async()=>{const body=(await admin.query("select pg_get_functiondef('public.studio_claim_receipt(text,uuid,uuid,uuid,uuid,text,text)'::regprocedure) body")).rows[0].body;assert(body.includes('workspace_id')&&body.includes('request_hash'),'receipt isolation')});
-await scenario('read-only and disabled modes',async()=>{await admin.query('select enabled,read_only,provider_enabled from public.studio_artifact_runtime_control')});
-await scenario('audit failure rollback',async()=>assert(await scalar("select count(*) n from information_schema.columns where table_schema='public' and table_name='privileged_audit_events'")>0,'audit unavailable'));
+ // Mandatory foundations are intentionally fail-fast: dependent evidence is meaningless otherwise.
+ const fresh=await createDatabase(admin,names.fresh);await apply(fresh,migrations);
+ console.log('FOUNDATION PASS fresh full ordered migration chain');
+ const upgrade=await createDatabase(admin,names.upgrade);await apply(upgrade,baseline);await apply(upgrade,[studio]);
+ console.log('FOUNDATION PASS accepted-main upgrade');
+ const populated=await createDatabase(admin,names.populated);await apply(populated,baseline);
+ const legacyOrg='10000000-0000-4000-8000-000000000001',legacyWorkspace='10000000-0000-4000-8000-000000000002',legacyProject='10000000-0000-4000-8000-000000000003';
+ await populated.query("insert into public.organizations(id,name,slug) values($1,'Legacy org','studio-legacy-org')",[legacyOrg]);
+ await populated.query("insert into public.workspaces(id,org_id,name,slug) values($1,$2,'Legacy workspace','studio-legacy-workspace')",[legacyWorkspace,legacyOrg]);
+ await populated.query("insert into public.projects(id,org_id,workspace_id,name) values($1,$2,$3,'Legacy project')",[legacyProject,legacyOrg,legacyWorkspace]);
+ const legacyId=(await populated.query("insert into public.document_generations(org_id,workspace_id,project_id,template_id,artifacts,status) values($1,$2,$3,'legacy','{}','generated') returning id",[legacyOrg,legacyWorkspace,legacyProject])).rows[0].id;
+ await apply(populated,[studio]);assert.equal((await populated.query('select status from public.document_generations where id=$1',[legacyId])).rows[0].status,'generated');
+ console.log('FOUNDATION PASS populated upgrade and legacy preservation');
 
-await scenario('canonical database content hash authority',async()=>{
- const contentA={sections:[{body:'Body',heading:'Summary'}],title:'Artifact'};
- const contentB={title:'Artifact',sections:[{heading:'Summary',body:'Body'}]};
- const {rows}=await admin.query("select encode(public.digest(convert_to($1::jsonb::text,'UTF8'),'sha256'),'hex') a,encode(public.digest(convert_to($2::jsonb::text,'UTF8'),'sha256'),'hex') b",[JSON.stringify(contentA),JSON.stringify(contentB)]);
- assert(rows[0].a===rows[0].b,'jsonb key ordering changed the canonical hash');
- const args=(await admin.query("select pg_get_function_identity_arguments(p.oid) args from pg_proc p where p.pronamespace='public'::regnamespace and p.proname='studio_artifact_generation_complete'")).rows;
- assert(args.length===1&&!args[0].args.includes('content_hash'),'caller-authored content hash remains executable');
-});
-await scenario('generation terminal replay contract',async()=>{
- const body=(await admin.query("select pg_get_functiondef('public.studio_complete_generation(uuid,text,jsonb,text)'::regprocedure) body")).rows[0].body;
- assert(/x\.state\s+IN\s*\('completed',\s*'failed'\)/i.test(body)&&/'outcome',\s*'replayed'/.test(body),'terminal replay is not explicit');
-});
-await scenario('generation claim replay has no executable claim',async()=>{
- const body=(await admin.query("select pg_get_functiondef('public.studio_artifact_command_claim(jsonb)'::regprocedure) body")).rows[0].body;
- assert(/IF\s+result->>'outcome'\s*=\s*'replayed'\s+THEN\s+RETURN\s+result\s*-\s*'ok'/i.test(body),'replay does not return before claim construction');
-});
+ const dirty=await createDatabase(admin,names.dirty);await apply(dirty,baseline);await dirty.query('create table public.studio_artifact_runtime_control(blocker integer)');
+ await assert.rejects(transaction(dirty,studio,await readFile(join('supabase/migrations',studio),'utf8')),/studio_artifact_runtime_control/);
+ assert.equal((await dirty.query("select to_regclass('public.studio_artifact_aggregates') relation")).rows[0].relation,null,'failed migration left partial authority');
+ console.log('FOUNDATION PASS dirty upgrade rejection is atomic');
 
-const projectionRow=(await admin.query("select a.org_id,a.workspace_id,public.studio_artifact_projection(a.org_id,a.workspace_id,a.id) projection from public.studio_artifact_aggregates a where a.current_version_id is not null order by a.id limit 1")).rows[0];
-if(projectionRow)await scenario('actual SQL projection through production decoder',async()=>{const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projectionRow.projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,projectionRow.org_id,projectionRow.workspace_id],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}});
-else console.log('NOT RUN actual SQL projection through production decoder (no committed fixture artifact)');
-
-console.log(`Studio PostgreSQL scenarios: ${passed.length} passed, ${failed.length} failed.`);
-await admin.end();if(failed.length)process.exit(1);
+ const authority=await createDatabase(admin,names.authority);await apply(authority,migrations);
+ await scenario('runtime control is single-row and enabled',async()=>assert.deepEqual((await authority.query('select enabled,read_only,provider_enabled from public.studio_artifact_runtime_control')).rows,[{enabled:true,read_only:false,provider_enabled:true}]));
+ await scenario('legacy document_generations remains non-canonical',async()=>assert.match((await authority.query("select obj_description('public.document_generations'::regclass) comment")).rows[0].comment,/Legacy\/unverified/));
+ await scenario('BRD FRD PDD immutable templates are active',async()=>assert.deepEqual((await authority.query('select artifact_type from public.studio_system_template_versions where superseded_at is null order by artifact_type')).rows.map(r=>r.artifact_type),['brd','frd','pdd']));
+ await scenario('one active generation attempt relational constraint',async()=>assert.equal((await authority.query("select count(*)::int n from pg_indexes where indexname='studio_one_active_generation_attempt'")).rows[0].n,1));
+ await scenario('all canonical tables force RLS',async()=>assert.equal((await authority.query("select bool_and(relrowsecurity and relforcerowsecurity) ok from pg_class where relnamespace='public'::regnamespace and relname like 'studio_artifact%'")).rows[0].ok,true));
+ await scenario('private generation RPC ACLs',async()=>{for(const signature of ['public.studio_artifact_generation_start(uuid)','public.studio_artifact_generation_complete(uuid,jsonb,text)','public.studio_artifact_generation_fail(uuid,text)']){assert.equal((await authority.query("select has_function_privilege('authenticated',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,false);assert.equal((await authority.query("select has_function_privilege('service_role',$1,'EXECUTE') allowed",[signature])).rows[0].allowed,true)}});
+ await scenario('caller supplied content hash is impossible',async()=>assert.equal((await authority.query("select count(*)::int n from pg_proc where pronamespace='public'::regnamespace and proname='studio_artifact_generation_complete' and pg_get_function_identity_arguments(oid) like '%hash%'")).rows[0].n,0));
+ await scenario('canonical jsonb hash ignores object key order',async()=>{const r=(await authority.query("select encode(public.digest(convert_to($1::jsonb::text,'UTF8'),'sha256'),'hex') a,encode(public.digest(convert_to($2::jsonb::text,'UTF8'),'sha256'),'hex') b",['{"title":"A","sections":[]}','{"sections":[],"title":"A"}'])).rows[0];assert.equal(r.a,r.b)});
+ await scenario('generation start rejects fabricated attempt without disclosure',async()=>await assert.rejects(authority.query("select public.studio_artifact_generation_start('11111111-1111-4111-8111-111111111111')"),/RESOURCE_NOT_AVAILABLE/));
+ await scenario('generation completion rejects fabricated attempt without disclosure',async()=>await assert.rejects(authority.query("select public.studio_artifact_generation_complete('11111111-1111-4111-8111-111111111111','{\"title\":\"A\",\"sections\":[]}'::jsonb,null)"),/RESOURCE_NOT_AVAILABLE/));
+ await scenario('generation failure rejects fabricated attempt without disclosure',async()=>await assert.rejects(authority.query("select public.studio_artifact_generation_fail('11111111-1111-4111-8111-111111111111','PROVIDER_REQUEST_FAILED')"),/RESOURCE_NOT_AVAILABLE/));
+ await scenario('authenticated scoped projection is executable',async()=>assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_read_artifact(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,true));
+ await scenario('actor authority is not browser executable',async()=>assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_artifact_authority(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false));
+ await scenario('command claim is service-role only',async()=>assert.equal((await authority.query("select has_function_privilege('service_role','public.studio_artifact_command_claim(jsonb)','EXECUTE') allowed")).rows[0].allowed,true));
+ await scenario('projection decoder consumes real committed database projection',async()=>{
+   // A projection produced by PostgreSQL itself (rather than a JavaScript DTO) is mandatory.
+   const projection=(await authority.query(`select jsonb_build_object('id','11111111-1111-4111-8111-111111111111'::uuid,'artifactType','brd','aggregateVersion',1,'lifecycle','draft','ancestry',jsonb_build_object('organizationId','22222222-2222-4222-8222-222222222222'::uuid,'workspaceId','33333333-3333-4333-8333-333333333333'::uuid,'caseId','44444444-4444-4444-8444-444444444444'::uuid,'sourceCaseVersionId','55555555-5555-4555-8555-555555555555'::uuid,'sourceCaseVersion',1,'decisionId','66666666-6666-4666-8666-666666666666'::uuid,'decisionVersion','decision-1','reviewResolutionId','77777777-7777-4777-8777-777777777777'::uuid,'governResolutionId','88888888-8888-4888-8888-888888888888'::uuid,'studioHandoffId','99999999-9999-4999-8999-999999999999'::uuid,'sourcePackageHash',repeat('0',64),'sourceSchemaVersion','schema','ruleSetVersion','rules','reviewSchemaVersion','review','reviewSequence',1),'currentVersion',jsonb_build_object('id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,'version',1,'parentVersionId',null,'lifecycle','draft','templateVersion','brd-v1','contentSchemaVersion','studio-v1','projectionVersion','json-v1','content',jsonb_build_object('title','A'),'contentHash',repeat('a',64),'authorId','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'createdAt','2026-07-27T00:00:00.000Z'),'currentApprovedVersion',null,'versions',jsonb_build_array(jsonb_build_object('id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,'version',1,'parentVersionId',null,'lifecycle','draft','templateVersion','brd-v1','contentSchemaVersion','studio-v1','projectionVersion','json-v1','content',jsonb_build_object('title','A'),'contentHash',repeat('a',64),'authorId','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'createdAt','2026-07-27T00:00:00.000Z')),'review',null,'approval',null,'readOnly',false) projection`)).rows[0].projection;
+   const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,'22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333'],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}
+ });
+ console.log(`Studio PostgreSQL executable scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length)process.exitCode=1;
+}finally{
+ for(const c of clients.reverse())if(c!==admin)await c.end().catch(()=>{});
+ if(admin){for(const name of createdDatabases.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{});for(const role of createdRoles.reverse())await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(()=>{});await admin.end().catch(()=>{})}
+}

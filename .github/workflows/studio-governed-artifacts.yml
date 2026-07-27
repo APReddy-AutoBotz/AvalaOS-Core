@@ -45,7 +45,7 @@ jobs:
       - run: npm ci
       - run: npm run test:migrations:studio-artifacts
         env:
-          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/avalaos_studio_artifacts
+          STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
   studio-artifacts-browser:
     runs-on: ubuntu-latest
     steps:

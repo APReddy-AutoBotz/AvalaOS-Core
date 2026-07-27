@@ -27,3 +27,15 @@ const checkoutCount = [...workflow.matchAll(/uses: actions\/checkout@v4/g)].leng
 const fullHistoryCount = [...workflow.matchAll(/fetch-depth:\s*0/g)].length;
 if (checkoutCount !== 3 || fullHistoryCount !== checkoutCount) throw new Error('STUDIO_CI_FULL_HISTORY_REQUIRED_FOR_RETAINED_GATES');
 console.log(`Studio CI checkout contract passed (${fullHistoryCount} full-history jobs).`);
+const defaultPlaywright = fs.readFileSync('playwright.config.ts', 'utf8');
+const studioPlaywright = fs.readFileSync('playwright.studio-artifacts.config.ts', 'utf8');
+if (!/testIgnore:[^\n]*studioArtifacts\.spec\.ts/.test(defaultPlaywright)) {
+  throw new Error('STUDIO_BROWSER_MUST_BE_EXCLUDED_FROM_RETAINED_PLAYWRIGHT_SUITE');
+}
+if (!/testMatch:\s*['"]studioArtifacts\.spec\.ts['"]/.test(studioPlaywright)) {
+  throw new Error('STUDIO_BROWSER_DEDICATED_CONFIG_MUST_SELECT_STUDIO_SPEC');
+}
+if (!/npm run test:browser:studio-artifacts/.test(workflow)) {
+  throw new Error('STUDIO_WORKFLOW_MUST_INVOKE_DEDICATED_BROWSER_COMMAND');
+}
+console.log('Studio browser CI ownership contract passed (retained exclusion, dedicated selection and workflow command).');
