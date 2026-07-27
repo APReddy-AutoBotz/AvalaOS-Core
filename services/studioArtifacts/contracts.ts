@@ -25,6 +25,19 @@ export const STUDIO_COMMAND_TYPES = [
 ] as const;
 export type StudioCommandType = (typeof STUDIO_COMMAND_TYPES)[number];
 
+export type StudioConditions = readonly string[];
+export type StudioReviewOutcome = 'approve' | 'changes_requested' | 'reject';
+export type StudioApprovalOutcome = 'approve' | 'reject';
+
+export interface StudioCommandPayloads {
+  'studio.artifact.generation.request': { studioHandoffId: string; artifactType: StudioArtifactType };
+  'studio.artifact.draft.revise': { artifactId: string; parentVersionId: string; content: Record<string, unknown> };
+  'studio.artifact.review.submit': { artifactId: string; artifactVersionId: string };
+  'studio.artifact.review.assign': { artifactId: string; artifactVersionId: string; reviewerId: string };
+  'studio.artifact.review.resolve': { artifactId: string; artifactVersionId: string; outcome: StudioReviewOutcome; rationale: string; conditions: StudioConditions };
+  'studio.artifact.approval.resolve': { artifactId: string; artifactVersionId: string; outcome: StudioApprovalOutcome; rationale: string; conditions: StudioConditions };
+}
+
 export interface StudioCommandEnvelope<TPayload extends Record<string, unknown>> {
   requestId: string;
   idempotencyKey: string;
@@ -44,7 +57,7 @@ export interface StudioArtifactAncestryDto {
   sourceCaseVersionId: string;
   sourceCaseVersion: number;
   decisionId: string;
-  decisionVersion: number;
+  decisionVersion: string;
   reviewResolutionId: string;
   governResolutionId: string;
   studioHandoffId: string;
@@ -78,7 +91,34 @@ export interface StudioArtifactProjectionDto {
   currentVersion: StudioArtifactVersionDto;
   currentApprovedVersion: StudioArtifactVersionDto | null;
   versions: readonly StudioArtifactVersionDto[];
+  review: StudioArtifactReviewDto | null;
+  approval: StudioArtifactApprovalDto | null;
   readOnly: boolean;
+}
+
+export interface StudioArtifactReviewDto {
+  assignmentId: string;
+  reviewerId: string;
+  outcome: 'approved' | 'changes_requested' | 'rejected' | null;
+  rationale: string | null;
+  conditions: StudioConditions;
+}
+
+export interface StudioArtifactApprovalDto {
+  approverId: string;
+  outcome: 'approved' | 'rejected';
+  rationale: string;
+  conditions: StudioConditions;
+  supersededVersionId: string | null;
+}
+
+export type StudioCommandOutcome = 'committed' | 'replayed' | 'generation_completed' | 'generation_failed';
+export interface StudioCommandResponse {
+  ok: true;
+  outcome: StudioCommandOutcome;
+  receiptId: string;
+  resourceId: string;
+  resource: Record<string, unknown>;
 }
 
 export const STUDIO_CAPABILITIES = [

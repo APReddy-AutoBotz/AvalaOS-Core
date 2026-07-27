@@ -1,6 +1,16 @@
-import { validateStudioDraft } from './studioArtifactGeneration.ts';
+import { executeClaimedStudioGeneration, validateStudioDraft } from './studioArtifactGeneration.ts';
 const assert=(v:unknown,m:string)=>{if(!v)throw new Error(m)};
 const valid={title:'Requirements',summary:'A governed draft.',sections:[{title:'Scope',content:'Bounded content'}]};
 assert(validateStudioDraft(valid)===valid,'valid strict draft accepted');
-for(const invalid of [{...valid,html:'<script>'},{...valid,sections:[]},{...valid,sections:[{title:'x',content:'y',authority:'client'}]},{title:'x',summary:'x',sections:[{title:'x',content:'x'.repeat(20_001)}]}]){let failed=false;try{validateStudioDraft(invalid)}catch{failed=true}assert(failed,'untrusted output rejected');}
-console.log('studio artifact generation validation tests passed (5 scenarios)');
+for(const invalid of [{...valid,html:'<script>'},{...valid,sections:[]},{...valid,sections:[{title:'x',content:'y',authority:'client'}]},{title:'x',summary:'x',sections:[{title:'x',content:'x'.repeat(20_001)}]}]){let failed=false;try{validateStudioDraft(invalid)}catch{failed=true}assert(failed,'untrusted output rejected')}
+const claim={attemptId:'10000000-0000-4000-8000-000000000001',artifactId:'10000000-0000-4000-8000-000000000002',organizationId:'10000000-0000-4000-8000-000000000003',workspaceId:'10000000-0000-4000-8000-000000000004',actorId:'10000000-0000-4000-8000-000000000005',requestId:'10000000-0000-4000-8000-000000000006',sourcePackage:{accepted:true},sourcePackageHash:'a'.repeat(64),artifactType:'brd' as const,templateVersion:'1',templatePayload:'system',templateHash:'b'.repeat(64),contentSchemaVersion:'1',projectionVersion:'1'};
+const events:string[]=[];
+const deps={start:async()=>{events.push('start')},runProvider:async()=>({content:valid,providerOperationId:'provider-op'}),complete:async(input:{providerOperationId?:string})=>{events.push(`complete:${input.providerOperationId}`);return{version:1}},fail:async(_id:string,code:string)=>{events.push(`fail:${code}`)},runGoverned:async(_claim:unknown,run:()=>Promise<{content:unknown;providerOperationId?:string}>)=>({status:'allowed' as const,value:await run()})};
+void(async()=>{
+ const success=await executeClaimedStudioGeneration(claim,deps);assert(success.state==='completed'&&events.join(',')==='start,complete:provider-op','start precedes completed persistence');
+ events.length=0;const invalid=await executeClaimedStudioGeneration(claim,{...deps,runProvider:async()=>({content:{bad:true}})});assert(invalid.state==='failed'&&events.join(',')==='start,fail:PROVIDER_OUTPUT_INVALID','invalid output durably failed');
+ events.length=0;const oversized=await executeClaimedStudioGeneration(claim,{...deps,runProvider:async()=>({content:{...valid,summary:'x'.repeat(500_001)}})});assert(oversized.state==='failed'&&events.includes('fail:PROVIDER_OUTPUT_OVERSIZED'),'oversized output classified');
+ events.length=0;const providerFailure=await executeClaimedStudioGeneration(claim,{...deps,runProvider:async()=>{throw new Error('secret')}});assert(providerFailure.state==='failed'&&events.includes('fail:PROVIDER_REQUEST_FAILED'),'provider detail sanitized');
+ events.length=0;const conflict=await executeClaimedStudioGeneration(claim,{...deps,complete:async()=>{throw new Error('conflict')}});assert(conflict.state==='failed'&&events.includes('fail:GENERATION_COMPLETION_CONFLICT'),'completion conflict classified');
+ console.log('studio artifact generation tests passed (10 scenarios)');
+})().catch(error=>{console.error(error);throw error});
