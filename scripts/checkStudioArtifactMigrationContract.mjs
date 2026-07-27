@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 const path='supabase/migrations/20260727120000_studio_governed_artifact_authority.sql';
 const sql=fs.readFileSync(path,'utf8');
+const postgresHarness=fs.readFileSync('scripts/testStudioArtifactMigrations.mjs','utf8');
 const required=[
  'studio_artifact_aggregates','studio_artifact_versions','studio_system_template_versions','studio_artifact_generation_attempts',
  'studio_artifact_review_assignments','studio_artifact_review_resolutions','studio_artifact_approval_resolutions','studio_artifact_command_receipts',
@@ -27,6 +28,9 @@ for(const name of ['studio_artifact_projection','studio_artifact_command_claim',
 }
 if(sql.includes('studio_artifact_generation_complete(uuid,jsonb,text,text)')||/studio_artifact_generation_complete\(p_attempt_id uuid,p_content jsonb,p_content_hash/.test(sql)){
  console.error('Generation completion must not accept a caller-authored content hash');process.exit(1)
+}
+if(!postgresHarness.includes("SELECT public.studio_artifact_projection($1,$2,$3) projection")||postgresHarness.includes("select jsonb_build_object('id'")){
+ console.error('PostgreSQL decoder evidence must consume the production projection of a real function-created artifact');process.exit(1)
 }
 const eligibleReviewer=(sql.match(/CREATE OR REPLACE FUNCTION public\.studio_artifact_eligible_reviewers[\s\S]*?\$\$;/)??[])[0]??'';
 if(!eligibleReviewer.includes("NULLIF(btrim(p.email),'')")||!eligibleReviewer.includes('p.id::text')||

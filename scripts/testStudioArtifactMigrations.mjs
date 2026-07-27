@@ -4,6 +4,7 @@ import {mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import pg from 'pg';
+import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioArtifactMigrationContract.mjs'],{stdio:'inherit'});
 const adminUrl=process.env.STUDIO_ARTIFACT_MIGRATION_DATABASE_URL;
@@ -80,10 +81,14 @@ try{
  });
  await scenario('actor authority is not browser executable',async()=>assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_artifact_authority(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false));
  await scenario('command claim is service-role only',async()=>assert.equal((await authority.query("select has_function_privilege('service_role','public.studio_artifact_command_claim(jsonb)','EXECUTE') allowed")).rows[0].allowed,true));
- await scenario('projection decoder consumes real committed database projection',async()=>{
-   // A projection produced by PostgreSQL itself (rather than a JavaScript DTO) is mandatory.
-   const projection=(await authority.query(`select jsonb_build_object('id','11111111-1111-4111-8111-111111111111'::uuid,'artifactType','brd','aggregateVersion',1,'lifecycle','draft','ancestry',jsonb_build_object('organizationId','22222222-2222-4222-8222-222222222222'::uuid,'workspaceId','33333333-3333-4333-8333-333333333333'::uuid,'caseId','44444444-4444-4444-8444-444444444444'::uuid,'sourceCaseVersionId','55555555-5555-4555-8555-555555555555'::uuid,'sourceCaseVersion',1,'decisionId','66666666-6666-4666-8666-666666666666'::uuid,'decisionVersion','decision-1','reviewResolutionId','77777777-7777-4777-8777-777777777777'::uuid,'governResolutionId','88888888-8888-4888-8888-888888888888'::uuid,'studioHandoffId','99999999-9999-4999-8999-999999999999'::uuid,'sourcePackageHash',repeat('0',64),'sourceSchemaVersion','schema','ruleSetVersion','rules','reviewSchemaVersion','review','reviewSequence',1),'currentVersion',jsonb_build_object('id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,'version',1,'parentVersionId',null,'lifecycle','draft','templateVersion','brd-v1','contentSchemaVersion','studio-v1','projectionVersion','json-v1','content',jsonb_build_object('title','A'),'contentHash',repeat('a',64),'authorId','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'createdAt','2026-07-27T00:00:00.000Z'),'currentApprovedVersion',null,'versions',jsonb_build_array(jsonb_build_object('id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,'version',1,'parentVersionId',null,'lifecycle','draft','templateVersion','brd-v1','contentSchemaVersion','studio-v1','projectionVersion','json-v1','content',jsonb_build_object('title','A'),'contentHash',repeat('a',64),'authorId','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'createdAt','2026-07-27T00:00:00.000Z')),'review',null,'approval',null,'readOnly',false) projection`)).rows[0].projection;
-   const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,'22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333'],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}
+ await scenario('production Studio projection decodes a real function-created artifact',async()=>{
+   const fixture=await createCommittedStudioFixture(authority);
+   const projection=(await authority.query('SELECT public.studio_artifact_projection($1,$2,$3) projection',[fixture.org,fixture.workspace,fixture.artifactId])).rows[0].projection;
+   assert.ok(projection,'production projection returned null');
+   assert.deepEqual(Object.keys(projection).sort(),['aggregateVersion','ancestry','approval','artifactType','currentApprovedVersion','currentVersion','id','lifecycle','readOnly','review','versions'].sort());
+   assert.equal(projection.id,fixture.artifactId);assert.equal(projection.artifactType,'brd');assert.equal(projection.currentVersion.id,fixture.version.id);assert.equal(projection.currentVersion.contentHash,fixture.version.content_hash);assert.equal(projection.versions.length,fixture.versionCount);
+   const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,fixture.org,fixture.workspace],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}
+   console.log(`REAL ARTIFACT ${fixture.artifactId} aggregate=${projection.aggregateVersion} content=${fixture.version.version} versions=${fixture.versionCount} replayAttempts=${fixture.attemptCount} replayVersions=${fixture.versionCount} decoder=passed`);
  });
  console.log(`Studio PostgreSQL executable scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length)process.exitCode=1;
 }finally{
