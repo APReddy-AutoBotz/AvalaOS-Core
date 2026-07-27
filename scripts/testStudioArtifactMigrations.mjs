@@ -62,6 +62,11 @@ try{
  await scenario('generation completion rejects fabricated attempt without disclosure',async()=>await assert.rejects(authority.query("select public.studio_artifact_generation_complete('11111111-1111-4111-8111-111111111111','{\"title\":\"A\",\"sections\":[]}'::jsonb,null)"),/RESOURCE_NOT_AVAILABLE/));
  await scenario('generation failure rejects fabricated attempt without disclosure',async()=>await assert.rejects(authority.query("select public.studio_artifact_generation_fail('11111111-1111-4111-8111-111111111111','PROVIDER_REQUEST_FAILED')"),/RESOURCE_NOT_AVAILABLE/));
  await scenario('authenticated scoped projection is executable',async()=>assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_read_artifact(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,true));
+ await scenario('eligible reviewer projection is created and executable on the full chain',async()=>{
+   const empty=await authority.query("select public.studio_artifact_eligible_reviewers('11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444')");
+   assert.equal(empty.rowCount,0);
+   assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_artifact_eligible_reviewers(uuid,uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,true);
+ });
  await scenario('actor authority is not browser executable',async()=>assert.equal((await authority.query("select has_function_privilege('authenticated','public.studio_artifact_authority(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false));
  await scenario('command claim is service-role only',async()=>assert.equal((await authority.query("select has_function_privilege('service_role','public.studio_artifact_command_claim(jsonb)','EXECUTE') allowed")).rows[0].allowed,true));
  await scenario('projection decoder consumes real committed database projection',async()=>{

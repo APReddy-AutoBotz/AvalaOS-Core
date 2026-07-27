@@ -262,15 +262,16 @@ END$$;
 
 CREATE OR REPLACE FUNCTION public.studio_artifact_eligible_reviewers(p_org_id uuid,p_workspace_id uuid,p_artifact_id uuid,p_artifact_version_id uuid)
 RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT jsonb_build_object('actorId',p.id,'displayName',COALESCE(NULLIF(btrim(p.full_name),''),p.email))
+ SELECT jsonb_build_object('actorId',p.id,'displayName',COALESCE(NULLIF(btrim(p.email),''),p.id::text))
  FROM public.studio_artifact_aggregates a
  JOIN public.studio_artifact_versions v ON v.id=p_artifact_version_id AND v.artifact_id=a.id AND v.org_id=a.org_id AND v.workspace_id=a.workspace_id
  JOIN public.profiles p ON p.id<>a.created_by AND p.id<>v.author_id
  WHERE a.id=p_artifact_id AND a.org_id=p_org_id AND a.workspace_id=p_workspace_id
   AND a.current_version_id=v.id AND v.lifecycle='reviewer_ready'
   AND public.has_workspace_capability(p_workspace_id,p_org_id,'studio.artifacts.review')
+  AND p.status='active' AND p.deleted_at IS NULL
   AND public.pr1e_actor_has_workspace_capability(p.id,p_org_id,p_workspace_id,'studio.artifacts.review')
- ORDER BY COALESCE(NULLIF(btrim(p.full_name),''),p.email),p.id
+ ORDER BY COALESCE(NULLIF(btrim(p.email),''),p.id::text),p.id
 $$;
 CREATE OR REPLACE FUNCTION public.studio_artifact_command_claim(p_command jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$

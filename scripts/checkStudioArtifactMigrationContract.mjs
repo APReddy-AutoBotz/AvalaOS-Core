@@ -28,6 +28,12 @@ for(const name of ['studio_artifact_projection','studio_artifact_command_claim',
 if(sql.includes('studio_artifact_generation_complete(uuid,jsonb,text,text)')||/studio_artifact_generation_complete\(p_attempt_id uuid,p_content jsonb,p_content_hash/.test(sql)){
  console.error('Generation completion must not accept a caller-authored content hash');process.exit(1)
 }
+const eligibleReviewer=(sql.match(/CREATE OR REPLACE FUNCTION public\.studio_artifact_eligible_reviewers[\s\S]*?\$\$;/)??[])[0]??'';
+if(!eligibleReviewer.includes("NULLIF(btrim(p.email),'')")||!eligibleReviewer.includes('p.id::text')||
+ eligibleReviewer.includes('p.full_name')||!eligibleReviewer.includes("p.status='active'")||
+ !eligibleReviewer.includes('p.deleted_at IS NULL')){
+ console.error('Eligible-reviewer projection must use accepted active-profile email authority with a UUID fallback');process.exit(1)
+}
 const acl=sql.slice(sql.indexOf('-- Final ACL authority.'));
 if(!acl.includes('public.studio_artifact_authority(uuid,uuid,uuid),public.studio_artifact_command_claim(jsonb)')||
  !acl.includes('TO service_role;')||acl.includes('studio_artifact_authority(uuid,uuid,uuid) TO authenticated')){
