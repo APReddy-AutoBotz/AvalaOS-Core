@@ -19,8 +19,10 @@ await client.connect();
 
 const executed = [];
 const scenario = async (name, fn) => {
+  console.log(`PR 1G PostgreSQL scenario started: ${name}`);
   const result = await fn();
   executed.push(name);
+  console.log(`PR 1G PostgreSQL scenario passed: ${name}`);
   return result;
 };
 const assert = (condition, message) => {
@@ -39,6 +41,7 @@ let uuidSequence = 1;
 const nextUuid = () => `00000000-0000-4000-8000-${String(uuidSequence++).padStart(12, '0')}`;
 const ORG = '22222222-2222-4222-8222-222222222222';
 const WS = '33333333-3333-4333-8333-333333333333';
+const WS_B = '33333333-3333-4333-8333-333333333335';
 const ACTOR = '44444444-4444-4444-8444-444444444444';
 const REVIEWER_A = '44444444-4444-4444-8444-444444444445';
 const REVIEWER_B = '44444444-4444-4444-8444-444444444446';
@@ -209,7 +212,7 @@ try {
     await client.query('GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role');
     await client.query('GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated,service_role');
     const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-    const throughPr1g=migrations.slice(0,migrations.indexOf('20260722120000_pr1g_application_portfolio.sql')+1);
+    const throughPr1g=migrations.slice(0,migrations.indexOf('20260726120000_pr1g_authority_concurrency_correction.sql')+1);
     for(const migration of throughPr1g)await client.query(await readFile(`supabase/migrations/${migration}`,'utf8'));
   });
   await scenario('accepted PR1F schema fixture compatibility', async () => {
@@ -230,6 +233,47 @@ try {
     const row = result.rows[0];
     assert(!row.public_execute && !row.anon_execute && !row.authenticated_execute && row.service_execute && row.authenticated_read, 'RPC_PRIVILEGE_BOUNDARY_FAILED');
   });
+  await scenario('internal PR 1G function ACL matrix', async () => {
+    const signatures = [
+      'pr1g_reject_immutable()',
+      'pr1g_reject_finalized_metadata_update()',
+      'pr1g_error_envelope(text)',
+      'pr1g_assert_application_authority(uuid,uuid,uuid,text,bigint)',
+      'pr1g_command_capability(text)',
+      'pr1g_evidence_valid(jsonb)',
+      'pr1g_metadata_valid(jsonb)',
+      'pr1g_evidence_confidence(uuid,text)',
+      'pr1g_copy_application_decisions(uuid,uuid)',
+      'pr1g_dimension_missing_evidence(jsonb,text)',
+      'pr1g_derive_process_link_authority()',
+      'pr1g_verified_process_links(uuid,uuid)',
+    ];
+    for (const signature of signatures) {
+      const result = await client.query(
+        `SELECT has_function_privilege('public',$1,'EXECUTE') public_execute,
+          has_function_privilege('anon',$1,'EXECUTE') anon_execute,
+          has_function_privilege('authenticated',$1,'EXECUTE') authenticated_execute,
+          has_function_privilege('service_role',$1,'EXECUTE') service_execute`,
+        [`public.${signature}`],
+      );
+      assert(Object.values(result.rows[0]).every((value) => value === false), `INTERNAL_FUNCTION_ACL_EXPOSED_${signature}`);
+    }
+  });
+  const expectRoleHelperDenial = async (name, role, sql, parameters = []) => expectSqlFailure(name, 'permission denied for function', async () => {
+    await client.query('BEGIN');
+    try {
+      await client.query(`SET LOCAL ROLE ${role}`);
+      await client.query(sql, parameters);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+  await expectRoleHelperDenial('anon internal helper direct invocation denial','anon',"SELECT public.pr1g_evidence_confidence($1,'security_and_control')",[nextUuid()]);
+  await expectRoleHelperDenial('authenticated detailed helper direct invocation denial','authenticated',"SELECT public.pr1g_evidence_confidence($1,'security_and_control')",[nextUuid()]);
+  await expectRoleHelperDenial('authenticated snapshot helper direct invocation denial','authenticated','SELECT * FROM public.pr1g_verified_process_links($1,$2)',[ORG,WS]);
+  await expectRoleHelperDenial('cross-tenant internal helper direct invocation denial','authenticated','SELECT * FROM public.pr1g_verified_process_links($1,$2)',[OTHER_ORG,OTHER_WS]);
   await scenario('forced RLS on every PR 1G tenant table', async () => {
     const result = await client.query("SELECT count(*)::int n FROM pg_class WHERE relname LIKE 'assess_application_%' AND relforcerowsecurity");
     assert(result.rows[0].n === 11, 'RLS_NOT_FORCED_ON_ALL_TABLES');
@@ -239,7 +283,7 @@ try {
     await client.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4),($5)', [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.profiles(id,email) VALUES($1,'actor@example.invalid'),($2,'reviewer-a@example.invalid'),($3,'reviewer-b@example.invalid'),($4,'other@example.invalid'),($5,'org-only@example.invalid')", [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'Tenant A','tenant-a'),($2,'Tenant B','tenant-b')", [ORG, OTHER_ORG]);
-    await client.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Workspace A','workspace-a'),($3,$4,'Workspace B','workspace-b')", [WS, ORG, OTHER_WS, OTHER_ORG]);
+    await client.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Workspace A','workspace-a'),($3,$2,'Workspace B','workspace-b'),($4,$5,'Other tenant workspace','other-workspace')", [WS, ORG, WS_B, OTHER_WS, OTHER_ORG]);
     await client.query("INSERT INTO public.roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'PR1G authority','pr1g-authority','organization','[]'),($3,$4,'Other authority','other-authority','organization','[]')", [ORG_ROLE, ORG, OTHER_ROLE, OTHER_ORG]);
     await client.query("INSERT INTO public.roles(id,org_id,workspace_id,name,slug,scope,permissions) VALUES($1,$2,$3,'Workspace authority','workspace-authority','workspace','[]')",[WORKSPACE_ROLE,ORG,WS]);
     await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [ORG_ROLE]);
@@ -248,7 +292,7 @@ try {
     await client.query('ALTER TABLE public.organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');
     await client.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$5,'active'),($1,$3,$5,'active'),($1,$4,$5,'active'),($1,$9,$5,'active'),($6,$7,$8,'active')", [ORG, ACTOR, REVIEWER_A, REVIEWER_B, ORG_ROLE, OTHER_ORG, OTHER_ACTOR, OTHER_ROLE, ORG_ONLY_ACTOR]);
     await client.query('ALTER TABLE public.organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope');
-    await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$2,$4,NULL,'active'),($1,$2,$5,$9,'active'),($6,$7,$8,NULL,'active')", [ORG, WS, ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
+    await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$4,$3,NULL,'active'),($1,$2,$5,NULL,'active'),($1,$2,$6,$10,'active'),($7,$8,$9,NULL,'active')", [ORG, WS, ACTOR, WS_B, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
     await client.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,$5),($1,$3,$5),($1,$4,$5),($1,$8,$5),($6,$7,$5) ON CONFLICT(org_id,user_id) DO UPDATE SET version=excluded.version', [ORG, ACTOR, REVIEWER_A, REVIEWER_B, AUTH_VERSION, OTHER_ORG, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query('INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,description,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)', [OTHER_APP, OTHER_ORG, OTHER_WS, 'Other tenant app', 'other tenant app', 'Tenant B', ACTOR]);
   });
@@ -308,6 +352,58 @@ try {
   await expectSqlFailure('feature-disabled governed denial','PR1G_FEATURE_DISABLED',async()=>{await client.query("SELECT set_config('app.pr1g_enabled','off',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Disabled',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_enabled','on',false)")}});
   await expectSqlFailure('read-only governed denial','PR1G_READ_ONLY',async()=>{await client.query("SELECT set_config('app.pr1g_read_only','on',false)");try{return await rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Read only',description:'Denied'}})}finally{await client.query("SELECT set_config('app.pr1g_read_only','off',false)")}});
   await scenario('service-role mutation accepts valid actor with null auth uid',async()=>{const id=await createApplication('Null caller uid authority');assert(Boolean(id),'VALID_ACTOR_SERVICE_ROLE_FAILED')});
+  const delegatedWorkspaceGuardId=nextUuid();
+  const delegatedWorkspaceGuardKey=`delegated-workspace-${nextUuid()}`;
+  const delegatedWorkspaceGuardPayload={applicationId:delegatedWorkspaceGuardId,name:'Delegated workspace guard',description:'Workspace A authority'};
+  const delegatedWorkspaceGuardFirst=await rpc(client,{type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload});
+  await scenario('delegated command same-workspace exact replay',async()=>{
+    const replay=await rpc(client,{type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload});
+    assert(replay.resource.id===delegatedWorkspaceGuardFirst.resource.id,'DELEGATED_SAME_WORKSPACE_REPLAY_RESOURCE_FAILED');
+  });
+  await expectSqlFailure('delegated command same-workspace changed-payload conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+    type:'application.create',key:delegatedWorkspaceGuardKey,payload:{...delegatedWorkspaceGuardPayload,description:'Changed payload'},
+  }));
+  await scenario('delegated-command cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assets WHERE org_id=$1 AND workspace_id=$2) applications,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits`,[ORG,WS_B]);
+    await expectSqlFailure('delegated cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assets WHERE org_id=$1 AND workspace_id=$2) applications,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits,
+      (SELECT count(*)::int FROM assess_application_assets WHERE id=$3 AND org_id=$1 AND workspace_id=$2) disclosed_resource`,
+    [ORG,WS_B,delegatedWorkspaceGuardId]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify({
+      applications:after.rows[0].applications,receipts:after.rows[0].receipts,audits:after.rows[0].audits,
+    }),'DELEGATED_CROSS_WORKSPACE_SIDE_EFFECT');
+    assert(after.rows[0].disclosed_resource===0,'DELEGATED_CROSS_WORKSPACE_RESOURCE_DISCLOSED');
+  });
+  await scenario('authorization-before-receipt inspection',async()=>{
+    await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);
+    try {
+      await expectSqlFailure('stale actor rejected before foreign-workspace receipt inspection','PR1B_AUTHORIZATION_STALE',()=>rpc(client,{
+        workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+      }));
+    } finally {
+      await resetActorVersion();
+    }
+    await disableOrganizationWrite();
+    try {
+      await expectSqlFailure('unauthorized actor rejected before foreign-workspace receipt inspection','PR1B_NOT_FOUND',()=>rpc(client,{
+        workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+      }));
+    } finally {
+      await restoreOrganizationWrite();
+      await resetActorVersion();
+    }
+    await expectSqlFailure('cross-tenant actor rejected before receipt inspection','PR1B_NOT_FOUND',()=>rpc(client,{
+      actor:OTHER_ACTOR,workspace:WS_B,type:'application.create',key:delegatedWorkspaceGuardKey,payload:delegatedWorkspaceGuardPayload,
+    }));
+  });
   await scenario('concurrent authorization lock serializes revocation and next mutation denies',async()=>{
     const authoritySession=new pg.Client({connectionString:url}),revocationSession=new pg.Client({connectionString:url});await Promise.all([authoritySession.connect(),revocationSession.connect()]);
     try{
@@ -554,6 +650,95 @@ try {
   const insufficientAssessment = nextUuid();
   await saveAssessment(insufficientApp, insufficientAssessment);
 
+  const authorityProcess=nextUuid(),authorityCase=nextUuid(),authoritySource=nextUuid(),authorityPrimitive=nextUuid();
+  const authorityDecision=nextUuid(),authorityReviewAssignment=nextUuid(),authorityReview=nextUuid(),authorityGovern=nextUuid();
+  const economicDraft=nextUuid(),economicResolution=nextUuid(),approvedEconomics=nextUuid();
+  const fixtureReceipt=async(commandType)=>{
+    const id=nextUuid();
+    await client.query(`INSERT INTO public.assess_command_receipts(
+      id,org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status,response,completed_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'succeeded','{}',now())`,
+      [id,ORG,WS,ACTOR,commandType,`authority-${nextUuid()}`,nextUuid(),'a'.repeat(64)]);
+    return id;
+  };
+  await scenario('authoritative PR 1D, PR 1E and PR 1F linkage fixture',async()=>{
+    const decisionReceipt=await fixtureReceipt('authority.decision');
+    const assignmentReceipt=await fixtureReceipt('authority.assignment');
+    const reviewReceipt=await fixtureReceipt('authority.review');
+    const governReceipt=await fixtureReceipt('authority.govern');
+    await client.query('BEGIN');
+    try{
+      await client.query("INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status,created_by) VALUES($1,$2,$3,'Authoritative process','Draft',$4)",[authorityProcess,ORG,WS,ACTOR]);
+      await client.query("INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id,status,version,head_version_id) VALUES($1,$2,$3,$4,$5,'govern_resolved',1,$6)",[authorityCase,ORG,WS,authorityProcess,ACTOR,authoritySource]);
+      await client.query("INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,source_kind,created_by) VALUES($1,$2,$3,$4,1,'Authoritative case','create',$5)",[authoritySource,authorityCase,ORG,WS,ACTOR]);
+      await client.query("INSERT INTO public.assess_v2_primitives(id,version_id,case_id,org_id,workspace_id,payload) VALUES($1,$2,$3,$4,$5,'{}')",[authorityPrimitive,authoritySource,authorityCase,ORG,WS]);
+      await client.query(`INSERT INTO public.assess_v2_decision_versions(
+        id,case_id,source_version_id,org_id,workspace_id,schema_version,rule_set_version,decision_version,
+        validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,
+        receipt_id,created_by,created_at)
+        VALUES($1,$2,$3,$4,$5,'schema','rules','decision-1','reviewer-ready','{}','[]','{}',$6,$6,$6,$7,$8,now())`,
+        [authorityDecision,authorityCase,authoritySource,ORG,WS,'b'.repeat(64),decisionReceipt,ACTOR]);
+      await client.query(`INSERT INTO public.assess_v2_review_assignments(
+        id,org_id,workspace_id,case_id,source_version_id,source_case_version,decision_id,decision_version,
+        review_schema_version,review_sequence,material_claims,reviewer_id,assigned_by,
+        assigned_reviewer_authorization_version,assigned_by_authorization_version,request_id,receipt_id,audit_event_id)
+        VALUES($1,$2,$3,$4,$5,1,$6,'decision-1','assess-v2-review-2026-07',1,'[]',$7,$7,$8,$8,$9,$10,$11)`,
+        [authorityReviewAssignment,ORG,WS,authorityCase,authoritySource,authorityDecision,REVIEWER_A,AUTH_VERSION,nextUuid(),assignmentReceipt,nextUuid()]);
+      await client.query(`INSERT INTO public.assess_v2_review_resolutions(
+        id,org_id,workspace_id,case_id,source_version_id,source_case_version,decision_id,decision_version,
+        review_id,review_schema_version,review_sequence,resolution,reviewed_confidence,rationale,reviewer_id,
+        reviewer_authorization_version,request_id,receipt_id,audit_event_id)
+        VALUES($1,$2,$3,$4,$5,1,$6,'decision-1',$7,'assess-v2-review-2026-07',1,'approved','Verified','approved',$8,$9,$10,$11,$12)`,
+        [authorityReview,ORG,WS,authorityCase,authoritySource,authorityDecision,authorityReviewAssignment,REVIEWER_A,AUTH_VERSION,nextUuid(),reviewReceipt,nextUuid()]);
+      await client.query(`INSERT INTO public.assess_v2_govern_resolutions(
+        id,org_id,workspace_id,case_id,source_version_id,source_case_version,decision_id,decision_version,
+        review_resolution_id,review_schema_version,review_sequence,actions,required_controls,review_frequency,
+        accountable_owner,rationale,resolver_id,resolver_authorization_version,request_id,receipt_id,audit_event_id)
+        VALUES($1,$2,$3,$4,$5,1,$6,'decision-1',$7,'assess-v2-review-2026-07',1,'[]','[]','annual','owner','resolved',$8,$9,$10,$11,$12)`,
+        [authorityGovern,ORG,WS,authorityCase,authoritySource,authorityDecision,authorityReview,REVIEWER_A,AUTH_VERSION,nextUuid(),governReceipt,nextUuid()]);
+      await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error}
+    await client.query(`INSERT INTO public.assess_v2_economic_versions(
+      id,org_id,workspace_id,case_id,source_version_id,decision_id,approved_review_id,model_version,formula_version,
+      lifecycle,version,currency,baseline_period,analysis_horizon_years,implementation_horizon_months,author_id,
+      assumptions,scenario_results,confidence)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'assess-v2-economics-model-2026-07','assess-v2-economics-formulas-2026-07',
+      'reviewer_ready',1,'USD','FY26',1,12,$8,'{}','[]','Verified')`,
+      [economicDraft,ORG,WS,authorityCase,authoritySource,authorityDecision,authorityReview,ACTOR]);
+    await client.query(`INSERT INTO public.assess_v2_economic_review_resolutions(
+      id,org_id,workspace_id,case_id,decision_id,economic_version_id,approved_review_id,reviewer_id,
+      reviewer_authorization_version,resolution,rationale)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved','approved')`,
+      [economicResolution,ORG,WS,authorityCase,authorityDecision,economicDraft,authorityReview,REVIEWER_A,AUTH_VERSION]);
+    await client.query(`INSERT INTO public.assess_v2_economic_versions(
+      id,org_id,workspace_id,case_id,source_version_id,decision_id,approved_review_id,model_version,formula_version,
+      lifecycle,version,currency,baseline_period,analysis_horizon_years,implementation_horizon_months,author_id,
+      reviewer_id,assumptions,scenario_results,confidence,prior_economic_version_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'assess-v2-economics-model-2026-07','assess-v2-economics-formulas-2026-07',
+      'approved',2,'USD','FY26',1,12,$8,$9,'{}','[]','Verified',$10)`,
+      [approvedEconomics,ORG,WS,authorityCase,authoritySource,authorityDecision,authorityReview,ACTOR,REVIEWER_A,economicDraft]);
+  });
+  const linkedApp=await createApplication('Authoritatively linked application');
+  await createMetadata(linkedApp,canonicalMetadata('Authoritatively linked application'),evidenceFor());
+  const linkedAssessment=nextUuid();
+  const authoritativeLink={
+    processId:authorityProcess,primitiveId:authorityPrimitive,applicationId:linkedApp,metadataVersion:1,
+    assessmentVersionId:linkedAssessment,interactionType:'read',economicsRef:approvedEconomics,
+  };
+  await scenario('server derives exact Govern state and approved economics currency',async()=>{
+    await saveAssessment(linkedApp,linkedAssessment,{processLinks:[authoritativeLink]});
+    const row=(await client.query('SELECT * FROM public.pr1g_verified_process_links($1,$2) WHERE application_id=$3',[ORG,WS,linkedApp])).rows[0];
+    assert(row?.case_id===authorityCase&&row.decision_id===authorityDecision&&row.govern_resolution_id===authorityGovern,'GOVERN_ANCESTRY_NOT_DERIVED');
+    assert(row.economics_ref===approvedEconomics&&row.economics_currency.trim()==='USD'&&row.economic_review_resolution_id===economicResolution,'ECONOMICS_AUTHORITY_NOT_DERIVED');
+  });
+  await expectSqlFailure('forged economics reference rejection','PR1G_NOT_FOUND',()=>saveAssessment(linkedApp,nextUuid(),{processLinks:[{...authoritativeLink,assessmentVersionId:nextUuid(),economicsRef:nextUuid()}]},1,2));
+  await expectSqlFailure('cross-tenant process reference rejection','PR1G_NOT_FOUND',()=>saveAssessment(linkedApp,nextUuid(),{processLinks:[{...authoritativeLink,processId:nextUuid(),assessmentVersionId:nextUuid(),economicsRef:null}]},1,2));
+  await scenario('stale Govern ancestry rejects before link authority',async()=>{
+    await client.query("UPDATE public.assess_v2_cases SET status='draft' WHERE id=$1",[authorityCase]);
+    try{await expectSqlFailure('stale Govern reference rejection','PR1G_NOT_FOUND',()=>saveAssessment(linkedApp,nextUuid(),{processLinks:[{...authoritativeLink,assessmentVersionId:nextUuid(),economicsRef:null}]},1,2))}
+    finally{await client.query("UPDATE public.assess_v2_cases SET status='govern_resolved' WHERE id=$1",[authorityCase])}
+  });
+
   await scenario('multi-node dependency-cycle rejection', async () => {
     await client.query(
       `INSERT INTO public.assess_application_dependencies(org_id,workspace_id,upstream_application_id,downstream_application_id,dependency_type,metadata_version_id,created_by)
@@ -568,19 +753,20 @@ try {
     }
     await client.query('DELETE FROM public.assess_application_dependencies');
   });
-  await scenario('mixed-currency snapshot rejection', async () => {
-    await client.query(
-      `INSERT INTO public.assess_process_application_links(org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id,assessment_version_id,interaction_type,govern_state,economics_ref,economics_currency,created_by)
-       VALUES($1,$2,$3,'p-usd',$4,$5,$6,'read','approved',$7,'USD',$8),($1,$2,$9,'p-eur',$10,$11,$12,'read','approved',$13,'EUR',$8)`,
-      [ORG, WS, nextUuid(), readyApp, readyMeta, readyAssessment, nextUuid(), ACTOR, nextUuid(), gatedApp, gatedMeta, gatedAssessment, nextUuid()],
-    );
+  await scenario('legacy unverifiable Govern and economics links remain durable but non-authoritative', async () => {
+    const legacyLink=nextUuid();
+    await client.query('ALTER TABLE public.assess_process_application_links DISABLE TRIGGER trg_pr1g_process_link_authority');
     try {
-      await createSnapshot(0);
-      throw new Error('MIXED_CURRENCY_SNAPSHOT_ACCEPTED');
-    } catch (error) {
-      assert(String(error.message).includes('PR1G_INCOMPATIBLE_CURRENCIES'), 'MIXED_CURRENCY_WRONG_ERROR');
+      await client.query(
+        `INSERT INTO public.assess_process_application_links(id,org_id,workspace_id,process_id,primitive_id,application_id,application_metadata_version_id,assessment_version_id,interaction_type,govern_state,economics_ref,economics_currency,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'read','approved',$9,'USD',$10)`,
+        [legacyLink,ORG, WS, nextUuid(), nextUuid(), readyApp, readyMeta, readyAssessment, nextUuid(), ACTOR],
+      );
+    } finally {
+      await client.query('ALTER TABLE public.assess_process_application_links ENABLE TRIGGER trg_pr1g_process_link_authority');
     }
-    await client.query('DELETE FROM public.assess_process_application_links WHERE economics_ref IS NOT NULL');
+    const verified=await client.query('SELECT count(*)::int n FROM public.pr1g_verified_process_links($1,$2) WHERE id=$3',[ORG,WS,legacyLink]);
+    assert(verified.rows[0].n===0,'UNVERIFIABLE_LINK_BLESSED');
   });
   await scenario('deterministic dependency-ordered waves', async () => {
     await client.query(
@@ -599,6 +785,41 @@ try {
     assert(qualified[readyApp] === true, 'VERIFIED_UNGATED_APP_NOT_QUALIFIED');
     assert(qualified[gatedApp] === false, 'HARD_GATED_APP_QUALIFIED');
     assert(qualified[insufficientApp] === false, 'INSUFFICIENT_EVIDENCE_APP_QUALIFIED');
+  });
+  await scenario('capability isolation across direct tables and projection RPC',async()=>{
+    const readAs=async(actor)=>{
+      await client.query('BEGIN');
+      try{
+        await client.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[actor]);
+        await client.query('SET LOCAL ROLE authenticated');
+        const direct=await client.query(`SELECT
+          (SELECT count(*)::int FROM public.assess_application_assets) applications,
+          (SELECT count(*)::int FROM public.assess_application_source_evidence) evidence,
+          (SELECT count(*)::int FROM public.assess_application_portfolio_snapshots) snapshots`);
+        const projected=await client.query('SELECT public.pr1g_read_application_portfolio_projection($1,$2) projection',[ORG,WS]);
+        await client.query('COMMIT');
+        return{...direct.rows[0],projection:projected.rows[0].projection};
+      }catch(error){await client.query('ROLLBACK');throw error}
+    };
+    await replaceOrganizationApplicationCapabilities(['assess.applications.read']);
+    const applicationsOnly=await readAs(ACTOR);
+    assert(applicationsOnly.applications>0&&applicationsOnly.evidence>0&&applicationsOnly.snapshots===0,'APPLICATIONS_READ_DIRECT_ISOLATION_FAILED');
+    assert(applicationsOnly.projection.inventory.length>0&&applicationsOnly.projection.portfolioSnapshot===null,'APPLICATIONS_READ_PROJECTION_ISOLATION_FAILED');
+    await replaceOrganizationApplicationCapabilities(['assess.applications.portfolio.read']);
+    const portfolioOnly=await readAs(ACTOR);
+    assert(portfolioOnly.applications===0&&portfolioOnly.evidence===0&&portfolioOnly.snapshots>0,'PORTFOLIO_READ_DIRECT_ISOLATION_FAILED');
+    assert(portfolioOnly.projection.inventory.length===0&&portfolioOnly.projection.processLinks.length===0&&portfolioOnly.projection.portfolioSnapshot.version===1,'PORTFOLIO_READ_PROJECTION_ISOLATION_FAILED');
+    await replaceOrganizationApplicationCapabilities(['assess.applications.read','assess.applications.portfolio.read']);
+    const both=await readAs(ACTOR);
+    assert(both.applications>0&&both.snapshots>0&&both.projection.inventory.length>0&&both.projection.portfolioSnapshot.version===1,'COMBINED_READ_AUTHORITY_FAILED');
+    await replaceOrganizationApplicationCapabilities([]);
+    await expectSqlFailure('neither read capability projection denial','PR1G_NOT_FOUND',()=>readAs(ACTOR));
+    await restoreOrganizationApplicationCapabilities();
+    await client.query("UPDATE workspace_memberships SET status='disabled' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);
+    await expectSqlFailure('inactive authorization projection denial','PR1G_NOT_FOUND',()=>readAs(ACTOR));
+    await client.query("UPDATE workspace_memberships SET status='active' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);
+    await expectSqlFailure('cross-tenant projection denial','PR1G_NOT_FOUND',()=>readAs(OTHER_ACTOR));
+    await resetActorVersion();
   });
   await expectSqlFailure('stale snapshot expected-version rejection', 'PR1G_VERSION_CONFLICT', () => createSnapshot(0));
 
@@ -626,11 +847,42 @@ try {
   const incompleteMeta=await createMetadata(incompleteApp,canonicalMetadata('Incomplete latest decisions'),evidenceFor());
   await client.query(`INSERT INTO assess_application_assessment_versions(id,org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version)
     VALUES($1,$2,$3,$4,$5,1,'assess-v2-application-portfolio-2026-07','draft',$6,$7)`,[nextUuid(),ORG,WS,incompleteApp,incompleteMeta,ACTOR,AUTH_VERSION]);
+  const snapshotWorkspaceGuardId=nextUuid();
+  const snapshotWorkspaceGuardKey=`snapshot-workspace-${nextUuid()}`;
+  let snapshotWorkspaceGuardFirst;
   await scenario('snapshot independently fails closed on incomplete latest decisions',async()=>{
-    const snapshot=await createSnapshot(1);
-    const persisted=await client.query('SELECT snapshot FROM assess_application_portfolio_snapshots WHERE id=$1',[snapshot.resource.id]);
+    snapshotWorkspaceGuardFirst=await createSnapshot(1,snapshotWorkspaceGuardId,snapshotWorkspaceGuardKey);
+    const persisted=await client.query('SELECT snapshot FROM assess_application_portfolio_snapshots WHERE id=$1',[snapshotWorkspaceGuardFirst.resource.id]);
     const wave=persisted.rows[0].snapshot.waves.find(row=>row.applicationId===incompleteApp);
     assert(wave?.qualified===false,'INCOMPLETE_DECISION_SET_QUALIFIED');
+  });
+  await scenario('snapshot same-workspace exact replay',async()=>{
+    const replay=await createSnapshot(1,snapshotWorkspaceGuardId,snapshotWorkspaceGuardKey);
+    assert(replay.resource.id===snapshotWorkspaceGuardFirst.resource.id&&replay.resource.version===snapshotWorkspaceGuardFirst.resource.version,'SNAPSHOT_SAME_WORKSPACE_REPLAY_FAILED');
+  });
+  await expectSqlFailure('snapshot same-workspace changed-payload conflict','PR1G_IDEMPOTENCY_CONFLICT',()=>createSnapshot(1,nextUuid(),snapshotWorkspaceGuardKey));
+  await scenario('snapshot cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$2) source_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type='application.portfolio.snapshot.create' AND idempotency_key=$4) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND action='application.portfolio.snapshot.create' AND resource_id=$5) source_audits,
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$6) target_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$6) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$6) target_audits`,
+    [ORG,WS,ACTOR,snapshotWorkspaceGuardKey,snapshotWorkspaceGuardId,WS_B]);
+    await expectSqlFailure('snapshot cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.portfolio.snapshot.create',expected:0,key:snapshotWorkspaceGuardKey,
+      payload:{portfolioSnapshotId:snapshotWorkspaceGuardId},
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$2) source_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type='application.portfolio.snapshot.create' AND idempotency_key=$4) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND action='application.portfolio.snapshot.create' AND resource_id=$5) source_audits,
+      (SELECT count(*)::int FROM assess_application_portfolio_snapshots WHERE org_id=$1 AND workspace_id=$6) target_snapshots,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$6) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$6) target_audits`,
+    [ORG,WS,ACTOR,snapshotWorkspaceGuardKey,snapshotWorkspaceGuardId,WS_B]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'SNAPSHOT_CROSS_WORKSPACE_SIDE_EFFECT_OR_DISCLOSURE');
   });
 
   const lifecycleApp = await createApplication('Lifecycle authority');
@@ -703,6 +955,67 @@ try {
   await saveAssessment(ancestryApp, ancestryV2, {}, 1, 2);
   await expectSqlFailure('superseded ancestry rejection', 'PR1G_VERSION_CONFLICT', () => finalizeAssessment(ancestryApp, ancestryV1, 1));
 
+  const replayApp=await createApplication('Assessment replay authority');
+  await createMetadata(replayApp,canonicalMetadata('Assessment replay authority'),evidenceFor());
+  const replayAssessmentId=nextUuid();
+  const replayKey=`assessment-replay-${nextUuid()}`;
+  const replayPayload={assessmentVersionId:replayAssessmentId,applicationId:replayApp,metadataVersion:1,assessmentVersion:1,processLinks:[],dependencies:[]};
+  const replayFirst=await rpc(client,{type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload});
+  await finalizeAssessment(replayApp,replayAssessmentId,1);
+  await scenario('assessment save exact replay precedes advanced-version validation',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE application_id=$1) assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND actor_id=$3 AND command_type='application.assessment.save' AND idempotency_key=$4) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND actor_id=$3 AND action='application.assessment.save' AND resource_id=$5) audits`,
+    [replayApp,ORG,ACTOR,replayKey,replayAssessmentId]);
+    const replay=await rpc(client,{type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload});
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE application_id=$1) assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND actor_id=$3 AND command_type='application.assessment.save' AND idempotency_key=$4) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND actor_id=$3 AND action='application.assessment.save' AND resource_id=$5) audits`,
+    [replayApp,ORG,ACTOR,replayKey,replayAssessmentId]);
+    assert(replay.resource.id===replayFirst.resource.id&&replay.resource.version===replayFirst.resource.version,'ASSESSMENT_EXACT_REPLAY_RESPONSE_FAILED');
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'ASSESSMENT_EXACT_REPLAY_SIDE_EFFECT');
+  });
+  await scenario('assessment-save cross-workspace receipt denial',async()=>{
+    const before=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$2 AND application_id=$3) source_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$6) source_audits,
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$7) target_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$7) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$7) target_audits`,
+    [ORG,WS,replayApp,ACTOR,replayKey,replayAssessmentId,WS_B]);
+    await expectSqlFailure('assessment save cross-workspace stable idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+      workspace:WS_B,type:'application.assessment.save',expected:0,key:replayKey,payload:replayPayload,
+    }));
+    const after=await client.query(`SELECT
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$2 AND application_id=$3) source_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) source_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$6) source_audits,
+      (SELECT count(*)::int FROM assess_application_assessment_versions WHERE org_id=$1 AND workspace_id=$7) target_assessments,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$1 AND workspace_id=$7) target_receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$7) target_audits`,
+    [ORG,WS,replayApp,ACTOR,replayKey,replayAssessmentId,WS_B]);
+    assert(JSON.stringify(before.rows[0])===JSON.stringify(after.rows[0]),'ASSESSMENT_CROSS_WORKSPACE_SIDE_EFFECT_OR_DISCLOSURE');
+  });
+  await expectSqlFailure('assessment save changed-payload idempotency conflict','PR1B_IDEMPOTENCY_CONFLICT',()=>rpc(client,{
+    type:'application.assessment.save',expected:0,key:replayKey,payload:{...replayPayload,dependencies:[{upstreamApplicationId:gatedApp,downstreamApplicationId:replayApp,dependencyType:'runtime'}]},
+  }));
+  await expectSqlFailure('assessment save stale actor rejected before version evaluation','PR1B_AUTHORIZATION_STALE',async()=>{
+    await client.query('UPDATE authorization_versions SET version=$1 WHERE org_id=$2 AND user_id=$3',[AUTH_VERSION+1,ORG,ACTOR]);
+    try{return await rpc(client,{type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000}})}
+    finally{await resetActorVersion()}
+  });
+  await expectSqlFailure('assessment save unauthorized actor rejected before version evaluation','PR1B_NOT_FOUND',async()=>{
+    await disableOrganizationWrite();
+    try{return await rpc(client,{type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000}})}
+    finally{await restoreOrganizationWrite();await resetActorVersion()}
+  });
+  await expectSqlFailure('assessment save cross-tenant actor non-disclosure before version evaluation','PR1B_NOT_FOUND',()=>rpc(client,{
+    actor:OTHER_ACTOR,type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000},
+  }));
+
   const concurrentApp = await createApplication('Concurrent review');
   await createMetadata(concurrentApp, canonicalMetadata('Concurrent review'), evidenceFor());
   const concurrentDraft = nextUuid();
@@ -728,8 +1041,75 @@ try {
       await Promise.all([reviewerOne.end(), reviewerTwo.end()]);
     }
   });
+  const concurrentAssessmentApp=await createApplication('Concurrent assessment');
+  await createMetadata(concurrentAssessmentApp,canonicalMetadata('Concurrent assessment'),evidenceFor());
+  await scenario('concurrent assessment saves advance from committed application version',async()=>{
+    const writerOne=new pg.Client({connectionString:url});
+    const writerTwo=new pg.Client({connectionString:url});
+    await Promise.all([writerOne.connect(),writerTwo.connect()]);
+    const save=(connection,id,key)=>rpc(connection,{
+      type:'application.assessment.save',expected:0,key,
+      payload:{assessmentVersionId:id,applicationId:concurrentAssessmentApp,metadataVersion:1,
+        assessmentVersion:1,processLinks:[],dependencies:[]},
+    });
+    try{
+      const outcomes=await Promise.allSettled([
+        save(writerOne,nextUuid(),`concurrent-assessment-a-${nextUuid()}`),
+        save(writerTwo,nextUuid(),`concurrent-assessment-b-${nextUuid()}`),
+      ]);
+      const successes=outcomes.filter(outcome=>outcome.status==='fulfilled');
+      const failures=outcomes.filter(outcome=>outcome.status==='rejected');
+      assert(successes.length===1&&failures.length===1,'CONCURRENT_ASSESSMENT_SINGLE_COMMIT_REQUIRED');
+      assert(String(failures[0].reason?.message).includes('PR1G_VERSION_CONFLICT'),'CONCURRENT_ASSESSMENT_WRONG_FAILURE');
+      const persisted=await client.query('SELECT count(*)::int n,max(version)::int version FROM public.assess_application_assessment_versions WHERE application_id=$1',[concurrentAssessmentApp]);
+      assert(persisted.rows[0].n===1&&persisted.rows[0].version===1,'CONCURRENT_ASSESSMENT_VERSION_AUTHORITY_FAILED');
+    }finally{await Promise.all([writerOne.end(),writerTwo.end()])}
+  });
+  await scenario('concurrent snapshot allocation commits exactly one version under independent sessions', async () => {
+    const snapshotOne = new pg.Client({ connectionString: url });
+    const snapshotTwo = new pg.Client({ connectionString: url });
+    await Promise.all([snapshotOne.connect(), snapshotTwo.connect()]);
+    const snapshotRpc=(connection,id,key)=>rpc(connection,{
+      type:'application.portfolio.snapshot.create',
+      expected:2,
+      key,
+      payload:{portfolioSnapshotId:id},
+    });
+    try {
+      const ids=[nextUuid(),nextUuid()];
+      const outcomes=await Promise.allSettled([
+        snapshotRpc(snapshotOne,ids[0],`concurrent-snapshot-a-${nextUuid()}`),
+        snapshotRpc(snapshotTwo,ids[1],`concurrent-snapshot-b-${nextUuid()}`),
+      ]);
+      const successes=outcomes.filter(outcome=>outcome.status==='fulfilled');
+      const failures=outcomes.filter(outcome=>outcome.status==='rejected');
+      assert(successes.length===1&&failures.length===1,'CONCURRENT_SNAPSHOT_SINGLE_COMMIT_REQUIRED');
+      assert(String(failures[0].reason?.message).includes('PR1G_VERSION_CONFLICT'),'CONCURRENT_SNAPSHOT_WRONG_FAILURE');
+      const persisted=await client.query(
+        'SELECT count(*)::int n,min(version)::bigint min_version,max(version)::bigint max_version FROM public.assess_application_portfolio_snapshots WHERE id=ANY($1::uuid[])',
+        [ids],
+      );
+      assert(persisted.rows[0].n===1&&Number(persisted.rows[0].min_version)===3&&Number(persisted.rows[0].max_version)===3,'CONCURRENT_SNAPSHOT_VERSION_AUTHORITY_FAILED');
+    } finally {
+      await Promise.all([snapshotOne.end(),snapshotTwo.end()]);
+    }
+  });
 
-  console.log(`PR 1G PostgreSQL 16 executable behavioral scenarios passed: ${executed.length} scenarios: ${executed.join('; ')}.`);
+  console.log(`PR 1G PostgreSQL 16 executable behavioral scenarios passed: ${executed.length} passed, 0 failed.`);
+  console.log('Internal function ACL scenarios: all PR 1G helpers deny PUBLIC, anon, authenticated and service-role direct execution; authenticated projection and service-role command remain executable.');
+  console.log('Direct helper denial scenarios: anon, authenticated, capability-limited and cross-tenant invocations are permission denied without rows or mutations.');
+  console.log('Capability-isolation scenarios: direct table and projection/RPC access for applications.read, portfolio.read, both, neither, revoked/inactive and cross-tenant authority.');
+  console.log('Authoritative Process × Application linkage scenarios: verified ancestry plus forged, cross-tenant, stale Govern and economics fail-closed rejection.');
+  console.log('Delegated-command cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT with no resource, Workspace B application, receipt or audit event.');
+  console.log('Assessment-save cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT before replay or application-version inspection with no resource or Workspace B mutation.');
+  console.log('Snapshot cross-workspace receipt denial: stable PR1B_IDEMPOTENCY_CONFLICT without a unique violation, resource disclosure or Workspace B mutation.');
+  console.log('Same-workspace exact replay: delegated command, assessment save and snapshot creation returned their original committed resources without duplicate effects.');
+  console.log('Same-workspace changed-payload conflict: delegated command, assessment save and snapshot creation returned stable idempotency conflicts.');
+  console.log('Authorization-before-receipt inspection: stale, unauthorized and cross-tenant actors were denied before the canonical receipt guard.');
+  console.log('Assessment version progression scenarios: first, successor, exact replay after advancement, changed-payload conflict, authorization-before-version, stale conflict and application-scoped lifecycle authority.');
+  console.log('Concurrent assessment allocation: exactly one committed version 1 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
+  console.log('Concurrent snapshot allocation: one committed version 3 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
+  console.log(`Scenario detail: ${executed.join('; ')}.`);
 } finally {
   await client.end();
 }

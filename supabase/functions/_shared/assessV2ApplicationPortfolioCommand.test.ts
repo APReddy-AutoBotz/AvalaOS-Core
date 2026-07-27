@@ -10,13 +10,14 @@ const meta={name:'ERP',description:'d',businessOwner:'b',technicalOwner:'t',vend
 for(const [commandType,payload] of [
  ['application.import',{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[meta]}],
  ['application.metadata.upsert',{applicationId:ids.app,metadataVersionId:uuid('7'),metadataVersion:1,metadata:meta,evidence:[]}],
- ['application.assessment.save',{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,assessmentVersion:1,processLinks:[{processId:uuid('9'),primitiveId:'primitive',applicationId:ids.app,metadataVersion:1,assessmentVersionId:uuid('8'),interactionType:'read',governState:'approved',allowedAction:'allowed',economicsRef:null,economicsCurrency:null,approvedEconomics:true}],dependencies:[]}],
+ ['application.assessment.save',{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,assessmentVersion:1,processLinks:[{processId:uuid('9'),primitiveId:uuid('b'),applicationId:ids.app,metadataVersion:1,assessmentVersionId:uuid('8'),interactionType:'read',economicsRef:null}],dependencies:[]}],
  ['application.assessment.finalize',{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,rationale:'ready'}],
  ['application.assessment.review.resolve',{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,resolution:'approved',rationale:'ok',conditions:['condition']}],
  ['application.assessment.revision.start',{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,rationale:'revise'}],
  ['application.portfolio.snapshot.create',{portfolioSnapshotId:uuid('a')}],
 ] as any[]) assert.equal(parseApplicationEnvelope(body({commandType,payload})).commandType,commandType);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.assessment.save',payload:{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,assessmentVersion:1,dimensions:[],recommendations:[],processLinks:[],dependencies:[]}})),/INVALID_COMMAND/);
+assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.assessment.save',payload:{assessmentVersionId:uuid('8'),applicationId:ids.app,metadataVersion:1,assessmentVersion:1,processLinks:[{processId:uuid('9'),primitiveId:uuid('b'),applicationId:ids.app,metadataVersion:1,assessmentVersionId:uuid('8'),interactionType:'read',governState:'approved',economicsRef:null}],dependencies:[]}})),/INVALID_COMMAND/);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.portfolio.snapshot.create',payload:{portfolioSnapshotId:uuid('a'),economicsReferences:[]}})),/INVALID_COMMAND/);
 for(const invalid of [{...meta,interfaces:'REST'},{...meta,regulatedData:'yes'},{...meta,sourceCode:'maybe'},{...meta,synthetic:'false'},{...meta,ageYears:-1},{...meta,extra:true}])assert.deepEqual((parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[invalid]}})).payload.rows as unknown[])[0],invalid);
 assert.throws(()=>parseApplicationEnvelope(body({commandType:'application.import',payload:{importReceiptId:uuid('6'),payloadHash:'hash-hash',rows:[null]}})),/INVALID_COMMAND/);
