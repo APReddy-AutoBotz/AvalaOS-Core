@@ -1,5 +1,10 @@
 # Avala Govern Framework
 
+## Studio PR A relationship
+
+An accepted PR 1E Govern resolution and Studio handoff are immutable source ancestry for Studio PR A. Studio artifact approval does not change or recreate Govern authority, and three-person Studio separation of duty is enforced independently. PR B storage/export authority remains future work.
+
+
 ## Avala Govern
 
 Avala Govern is the governance and control-plane layer added to the post-assessment flow. It gives reviewers a compact card for the agent or automation being considered before any downstream execution or delivery handoff.

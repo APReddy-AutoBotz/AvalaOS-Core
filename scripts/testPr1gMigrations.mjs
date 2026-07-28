@@ -214,6 +214,9 @@ try {
     const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
     const throughPr1g=migrations.slice(0,migrations.indexOf('20260726120000_pr1g_authority_concurrency_correction.sql')+1);
     for(const migration of throughPr1g)await client.query(await readFile(`supabase/migrations/${migration}`,'utf8'));
+    // PR #216 carries the additive correction that makes ordinary organization
+    // membership fixture writes exercise, rather than bypass, PR 1B authority.
+    await client.query(await readFile('supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql','utf8'));
   });
   await scenario('accepted PR1F schema fixture compatibility', async () => {
     const result = await client.query("SELECT to_regclass('public.assess_v2_review_resolutions') reviews,to_regclass('public.assess_v2_economic_versions') economics");
@@ -280,6 +283,8 @@ try {
   });
 
   await scenario('tenant and actor authority fixtures', async () => {
+    const beforeMembershipTriggers=await client.query("SELECT tgname,tgenabled FROM pg_trigger WHERE tgname IN ('trg_pr1b_org_membership_role_scope','trg_pr1b_workspace_membership_role_scope') ORDER BY tgname");
+    assert(beforeMembershipTriggers.rows.length===2&&beforeMembershipTriggers.rows.every(row=>row.tgenabled==='O'),'MEMBERSHIP_SCOPE_TRIGGERS_NOT_ENABLED_BEFORE_FIXTURE');
     await client.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4),($5)', [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.profiles(id,email) VALUES($1,'actor@example.invalid'),($2,'reviewer-a@example.invalid'),($3,'reviewer-b@example.invalid'),($4,'other@example.invalid'),($5,'org-only@example.invalid')", [ACTOR, REVIEWER_A, REVIEWER_B, OTHER_ACTOR, ORG_ONLY_ACTOR]);
     await client.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'Tenant A','tenant-a'),($2,'Tenant B','tenant-b')", [ORG, OTHER_ORG]);
@@ -289,11 +294,11 @@ try {
     await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [ORG_ROLE]);
     await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [OTHER_ROLE]);
     await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM public.capabilities WHERE capability_key LIKE 'assess.applications.%'", [WORKSPACE_ROLE]);
-    await client.query('ALTER TABLE public.organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');
     await client.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$5,'active'),($1,$3,$5,'active'),($1,$4,$5,'active'),($1,$9,$5,'active'),($6,$7,$8,'active')", [ORG, ACTOR, REVIEWER_A, REVIEWER_B, ORG_ROLE, OTHER_ORG, OTHER_ACTOR, OTHER_ROLE, ORG_ONLY_ACTOR]);
-    await client.query('ALTER TABLE public.organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope');
     await client.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,NULL,'active'),($1,$4,$3,NULL,'active'),($1,$2,$5,NULL,'active'),($1,$2,$6,$10,'active'),($7,$8,$9,NULL,'active')", [ORG, WS, ACTOR, WS_B, REVIEWER_A, REVIEWER_B, OTHER_ORG, OTHER_WS, OTHER_ACTOR, WORKSPACE_ROLE]);
     await client.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,$5),($1,$3,$5),($1,$4,$5),($1,$8,$5),($6,$7,$5) ON CONFLICT(org_id,user_id) DO UPDATE SET version=excluded.version', [ORG, ACTOR, REVIEWER_A, REVIEWER_B, AUTH_VERSION, OTHER_ORG, OTHER_ACTOR, ORG_ONLY_ACTOR]);
+    const afterMembershipTriggers=await client.query("SELECT tgname,tgenabled FROM pg_trigger WHERE tgname IN ('trg_pr1b_org_membership_role_scope','trg_pr1b_workspace_membership_role_scope') ORDER BY tgname");
+    assert(afterMembershipTriggers.rows.length===2&&afterMembershipTriggers.rows.every(row=>row.tgenabled==='O'),'MEMBERSHIP_SCOPE_TRIGGERS_NOT_ENABLED_AFTER_FIXTURE');
     await client.query('INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,description,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)', [OTHER_APP, OTHER_ORG, OTHER_WS, 'Other tenant app', 'other tenant app', 'Tenant B', ACTOR]);
   });
 
@@ -307,7 +312,7 @@ try {
     'assess.applications.read','assess.applications.write','assess.applications.import','assess.applications.finalize',
     'assess.applications.review','assess.applications.portfolio.read','assess.applications.portfolio.write',
   ]);
-  const restoreOrganizationMembership=async()=>{await client.query('ALTER TABLE organization_members DISABLE TRIGGER trg_pr1b_org_membership_role_scope');try{await client.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[ORG,ACTOR,ORG_ROLE])}finally{await client.query('ALTER TABLE organization_members ENABLE TRIGGER trg_pr1b_org_membership_role_scope')}};
+  const restoreOrganizationMembership=()=>client.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[ORG,ACTOR,ORG_ROLE]);
   const deniedAuthority=async(name,actor,change,restore,expected='PR1B_NOT_FOUND')=>{
     await change();
     await expectSqlFailure(name,expected,()=>rpc(client,{actor,type:'application.create',payload:{applicationId:nextUuid(),name:'Denied actor',description:'Denied'}}));

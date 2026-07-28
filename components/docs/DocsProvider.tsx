@@ -3,6 +3,7 @@ import { DocumentGeneration } from '../../types';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { docsAdapter } from '../../services/adapters/docsAdapter';
 import { useAuth } from '../auth/AuthProvider';
+import { getRuntimeModeResolution } from '../../services/supabaseClient';
 
 const DOCUMENT_PERSISTENCE_AUTHORITY_ERROR =
   'Document persistence authority is unavailable. The generated draft was not opened as a saved document.';
@@ -17,13 +18,15 @@ interface DocsContextType {
 const DocsContext = createContext<DocsContextType | undefined>(undefined);
 
 export const DocsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const runtime = getRuntimeModeResolution();
+  const legacyLocalOnly = runtime.status === 'resolved' && runtime.allowLocalAuthority;
   const { currentOrganization } = useOrganizationContext();
   const { user } = useAuth();
   const [documentGenerations, setDocumentGenerations] = useState<DocumentGeneration[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchDocsData = async () => {
-    if (!currentOrganization) return;
+    if (!currentOrganization || !legacyLocalOnly) return;
     setLoading(true);
     try {
       const data = await docsAdapter.getGenerations(currentOrganization.id);
@@ -40,7 +43,7 @@ export const DocsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentOrganization]);
 
   const saveGeneration = async (gen: Partial<DocumentGeneration>): Promise<DocumentGeneration> => {
-    if (!currentOrganization || !user) {
+    if (!legacyLocalOnly || !currentOrganization || !user) {
       throw new Error(DOCUMENT_PERSISTENCE_AUTHORITY_ERROR);
     }
     const newGen = {

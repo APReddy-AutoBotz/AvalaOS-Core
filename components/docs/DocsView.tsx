@@ -1,6 +1,8 @@
 import React from 'react';
 import { DocumentGeneration, DocTemplate } from '../../types';
 import { DocumentTextIcon, PlusCircleIcon, SparklesIcon } from '../shared/icons';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
+import StudioArtifactWorkspace from './StudioArtifactWorkspace';
 
 interface DocsViewProps {
     generations: DocumentGeneration[];
@@ -20,11 +22,14 @@ const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTempla
 
 const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic }) => {
 
+    const { tenantContext } = useOrganizationContext();
+
     const sortedGenerations = [...generations].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
     const artifactCount = generations.reduce((sum, generation) => sum + Object.keys(generation.artifacts || {}).length, 0);
 
     return (
-        <div>
+        <div data-testid="studio-application-route">
+            {tenantContext && <StudioArtifactWorkspace context={tenantContext} />}
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Governed document vault</p>

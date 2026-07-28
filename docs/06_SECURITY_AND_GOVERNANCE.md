@@ -1,5 +1,10 @@
 # AvalaOS Core Security And Governance
 
+## Studio PR A human authority
+
+Studio PR A permits AI only to propose strictly validated draft material. Three different freshly authorized humans author/request, review, and finally approve; AI/provider/service identities cannot review, approve, supersede, export, store, or deliver. Provider execution is not cross-system atomic. PR B private storage/export remains excluded, and legacy `document_generations` is unverified.
+
+
 ## Security Position
 
 AvalaOS Core is appropriate for controlled demonstration and source-level development validation. It is not accepted as tenant-safe pilot or production software.

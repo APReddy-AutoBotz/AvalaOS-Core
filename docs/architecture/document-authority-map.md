@@ -1,5 +1,10 @@
 # AvalaOS Core Document Authority Map
 
+## Studio PR A authority
+
+The canonical PR A Studio governed-artifact data, command, lifecycle, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. Private storage, rendition, export/download, retention, hold, and deletion remain outside that authority and are deferred to PR B.
+
+
 ## Default Reading Route
 
 Read only this sequence unless the active task requires more:

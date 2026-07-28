@@ -1,5 +1,10 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Studio PR A authority
+
+PR 1G remains accepted. Studio PR A adds a server-authoritative aggregate and append-only structured-JSON version boundary over exact accepted PR 1E ancestry, with durable staged provider attempts, human revision, independent review, separate approval, and atomic supersession. Provider execution is an external effect, not cross-system atomic. Legacy `document_generations` is unverified and excluded. PR B private storage, rendition, export/download, retention, legal hold, and deletion remains future work. Safe rollback disables mutations and provider generation while preserving read-only committed records for additive forward repair.
+
+
 Baseline: accepted `main` at `de87c86`
 Status: PR #208 / PR 1C accepted; PR 1D target and implementation contract
 
