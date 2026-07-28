@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
+import {testMembershipRoleScopeForwardFix} from './testMembershipRoleScopeForwardFix.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioArtifactMigrationContract.mjs'],{stdio:'inherit'});
 const adminUrl=process.env.STUDIO_ARTIFACT_MIGRATION_DATABASE_URL;
@@ -16,8 +17,11 @@ const names={fresh:`studio_fresh_${suffix}`,upgrade:`studio_upgrade_${suffix}`,p
 const createdDatabases=[];const createdRoles=[];const clients=[];
 const migrations=(await readdir('supabase/migrations')).filter(n=>n.endsWith('.sql')).sort();
 const studio='20260727120000_studio_governed_artifact_authority.sql';
+const membershipFix='20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql';
 assert.equal(migrations.at(-1),studio,'Studio migration must be the chronological tip');
-const baseline=migrations.filter(n=>n!==studio);
+assert.ok(migrations.indexOf(membershipFix)===migrations.indexOf(studio)-1,'membership trigger correction must immediately precede Studio authority');
+const baseline=migrations.filter(n=>n!==membershipFix&&n!==studio);
+const featureMigrations=[membershipFix,studio];
 const urlFor=name=>{const u=new URL(adminUrl);u.pathname=`/${name}`;return u.toString()};
 const connect=async url=>{const c=new Client({connectionString:url});await c.connect();clients.push(c);return c};
 const transaction=async(c,label,sql)=>{await c.query('BEGIN');try{await c.query(sql);await c.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await c.query('ROLLBACK');throw Error(`${label}: ${error instanceof Error?error.message:String(error)}`)}};
@@ -42,7 +46,7 @@ try{
  // Mandatory foundations are intentionally fail-fast: dependent evidence is meaningless otherwise.
  const fresh=await createDatabase(admin,names.fresh);await apply(fresh,migrations);
  console.log('FOUNDATION PASS fresh full ordered migration chain');
- const upgrade=await createDatabase(admin,names.upgrade);await apply(upgrade,baseline);await apply(upgrade,[studio]);
+ const upgrade=await createDatabase(admin,names.upgrade);await apply(upgrade,baseline);await apply(upgrade,featureMigrations);
  console.log('FOUNDATION PASS accepted-main upgrade');
  const populated=await createDatabase(admin,names.populated);await apply(populated,baseline);
  const legacyOrg='10000000-0000-4000-8000-000000000001',legacyWorkspace='10000000-0000-4000-8000-000000000002',legacyProject='10000000-0000-4000-8000-000000000003';
@@ -50,15 +54,18 @@ try{
  await populated.query("insert into public.workspaces(id,org_id,name,slug) values($1,$2,'Legacy workspace','studio-legacy-workspace')",[legacyWorkspace,legacyOrg]);
  await populated.query("insert into public.projects(id,org_id,workspace_id,name) values($1,$2,$3,'Legacy project')",[legacyProject,legacyOrg,legacyWorkspace]);
  const legacyId=(await populated.query("insert into public.document_generations(org_id,workspace_id,project_id,template_id,artifacts,status) values($1,$2,$3,'legacy','{}','generated') returning id",[legacyOrg,legacyWorkspace,legacyProject])).rows[0].id;
- await apply(populated,[studio]);assert.equal((await populated.query('select status from public.document_generations where id=$1',[legacyId])).rows[0].status,'generated');
+ await apply(populated,featureMigrations);assert.equal((await populated.query('select status from public.document_generations where id=$1',[legacyId])).rows[0].status,'generated');
  console.log('FOUNDATION PASS populated upgrade and legacy preservation');
 
  const dirty=await createDatabase(admin,names.dirty);await apply(dirty,baseline);await dirty.query('create table public.studio_artifact_runtime_control(blocker integer)');
+ await apply(dirty,[membershipFix]);
  await assert.rejects(transaction(dirty,studio,await readFile(join('supabase/migrations',studio),'utf8')),/studio_artifact_runtime_control/);
  assert.equal((await dirty.query("select to_regclass('public.studio_artifact_aggregates') relation")).rows[0].relation,null,'failed migration left partial authority');
  console.log('FOUNDATION PASS dirty upgrade rejection is atomic');
 
  const authority=await createDatabase(admin,names.authority);await apply(authority,migrations);
+ const membershipScenarios=await testMembershipRoleScopeForwardFix(authority);
+ console.log(`Membership trigger executable scenarios: ${membershipScenarios.length} passed, 0 failed.`);
  await scenario('runtime control is single-row and enabled',async()=>assert.deepEqual((await authority.query('select enabled,read_only,provider_enabled from public.studio_artifact_runtime_control')).rows,[{enabled:true,read_only:false,provider_enabled:true}]));
  await scenario('legacy document_generations remains non-canonical',async()=>assert.match((await authority.query("select obj_description('public.document_generations'::regclass) comment")).rows[0].comment,/Legacy\/unverified/));
  await scenario('BRD FRD PDD immutable templates are active',async()=>assert.deepEqual((await authority.query('select artifact_type from public.studio_system_template_versions where superseded_at is null order by artifact_type')).rows.map(r=>r.artifact_type),['brd','frd','pdd']));
@@ -88,7 +95,7 @@ try{
    assert.deepEqual(Object.keys(projection).sort(),['aggregateVersion','ancestry','approval','artifactType','currentApprovedVersion','currentVersion','id','lifecycle','readOnly','review','versions'].sort());
    assert.equal(projection.id,fixture.artifactId);assert.equal(projection.artifactType,'brd');assert.equal(projection.currentVersion.id,fixture.version.id);assert.equal(projection.currentVersion.contentHash,fixture.version.content_hash);assert.equal(projection.versions.length,fixture.versionCount);
    const dir=await mkdtemp(join(tmpdir(),'studio-projection-'));try{const file=join(dir,'projection.json');await writeFile(file,JSON.stringify(projection));execFileSync(process.execPath,['scripts/decodeStudioArtifactProjection.mjs',file,fixture.org,fixture.workspace],{stdio:'inherit'})}finally{await rm(dir,{recursive:true,force:true})}
-   console.log(`REAL ARTIFACT ${fixture.artifactId} aggregate=${projection.aggregateVersion} content=${fixture.version.version} versions=${fixture.versionCount} replayAttempts=${fixture.attemptCount} replayVersions=${fixture.versionCount} decoder=passed`);
+   console.log(`REAL ARTIFACT ${fixture.artifactId} aggregate=${projection.aggregateVersion} content=${fixture.version.version} versions=${fixture.versionCount} replayAttempts=${fixture.attemptCount} replayVersions=${fixture.versionCount} requesterAuth=${fixture.authorizationVersions[fixture.requester]} reviewerAuth=${fixture.authorizationVersions[fixture.reviewer]} approverAuth=${fixture.authorizationVersions[fixture.approver]} decoder=passed`);
  });
  console.log(`Studio PostgreSQL executable scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length)process.exitCode=1;
 }finally{

@@ -31,6 +31,16 @@ for (const token of ['set -o pipefail', 'tee studio-postgresql-16.log', 'actions
   if (!workflow.includes(token)) throw new Error(`STUDIO_POSTGRESQL_FAILURE_EVIDENCE_MISSING: ${token}`);
 }
 console.log('Studio PostgreSQL CI evidence contract passed (pipefail, retained log and always-upload).');
+const migrationHarnesses = fs.readdirSync('scripts')
+  .filter(name => /^test.*Migrations\.mjs$/.test(name))
+  .map(name => path.join('scripts', name));
+const ordinaryTriggerBypasses = migrationHarnesses.filter(file => {
+  const source = fs.readFileSync(file, 'utf8');
+  return /organization_members\s+DISABLE\s+TRIGGER\s+trg_pr1b_org_membership_role_scope/i.test(source)
+    || /workspace_memberships\s+DISABLE\s+TRIGGER\s+trg_pr1b_workspace_membership_role_scope/i.test(source);
+});
+if (ordinaryTriggerBypasses.length) throw new Error(`PR1B_MEMBERSHIP_TRIGGER_BYPASS_FORBIDDEN: ${ordinaryTriggerBypasses.join(', ')}`);
+console.log(`PR 1B membership trigger bypass guard passed (${migrationHarnesses.length} migration harnesses inspected).`);
 const defaultPlaywright = fs.readFileSync('playwright.config.ts', 'utf8');
 const studioPlaywright = fs.readFileSync('playwright.studio-artifacts.config.ts', 'utf8');
 if (!/testIgnore:[^\n]*studioArtifacts\.spec\.ts/.test(defaultPlaywright)) {

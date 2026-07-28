@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 const path='supabase/migrations/20260727120000_studio_governed_artifact_authority.sql';
 const sql=fs.readFileSync(path,'utf8');
+const membershipFix=fs.readFileSync('supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql','utf8');
 const postgresHarness=fs.readFileSync('scripts/testStudioArtifactMigrations.mjs','utf8');
 const required=[
  'studio_artifact_aggregates','studio_artifact_versions','studio_system_template_versions','studio_artifact_generation_attempts',
@@ -32,6 +33,7 @@ if(sql.includes('studio_artifact_generation_complete(uuid,jsonb,text,text)')||/s
 if(!postgresHarness.includes("SELECT public.studio_artifact_projection($1,$2,$3) projection")||postgresHarness.includes("select jsonb_build_object('id'")){
  console.error('PostgreSQL decoder evidence must consume the production projection of a real function-created artifact');process.exit(1)
 }
+for(const token of ['pr1b_enforce_organization_membership_role_scope','pr1b_enforce_workspace_membership_role_scope','FOR SHARE','v_role.workspace_id IS NOT NULL','v_role.workspace_id IS DISTINCT FROM NEW.workspace_id','PR1B_LEGACY_MEMBERSHIP_TRIGGER_STILL_ATTACHED','FROM PUBLIC, anon, authenticated, service_role'])if(!membershipFix.includes(token)){console.error(`Membership trigger forward correction missing: ${token}`);process.exit(1)}
 const eligibleReviewer=(sql.match(/CREATE OR REPLACE FUNCTION public\.studio_artifact_eligible_reviewers[\s\S]*?\$\$;/)??[])[0]??'';
 if(!eligibleReviewer.includes("NULLIF(btrim(p.email),'')")||!eligibleReviewer.includes('p.id::text')||
  eligibleReviewer.includes('p.full_name')||!eligibleReviewer.includes("p.status='active'")||

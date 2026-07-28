@@ -39,3 +39,5 @@ PR B remains future work. PR A creates no Storage bucket, object path, signed UR
 ## Rollback and non-claims
 
 Rollback is feature disablement: disable mutations and provider generation, retain a read-only projection of every committed aggregate, version, attempt, review, approval, receipt, and audit record, and apply additive forward fixes. Never restore browser authority or legacy enterprise writes. PR A makes no deployment, hosted/live Supabase, private-storage, export correctness, pilot, production, security-certification, or compliance claim and does not alter Assess scoring or decision law.
+
+PR #216 also carries an additive forward correction for the accepted PR 1B shared membership trigger's row-type defect. Table-specific organization and workspace trigger functions preserve strict role scope, tenant, workspace, active-state, and soft-deletion checks without any normal-execution trigger bypass. This is source remediation only: no deployment or live migration has occurred.
