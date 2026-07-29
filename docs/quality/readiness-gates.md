@@ -11,11 +11,16 @@ No gate passes without evidence, verification, and AP acceptance where required.
 | 0 | `P0-001` service-role Storage URL escape | **AP classified NOT DEPLOYED; source remediation accepted through PR #206** | AP-provided bounded deployment disposition, source fix, negative tests, and sanitized PR 1A evidence. This is not deployment/readiness proof. |
 | 1A | Platform safety and fail-closed runtime | **Accepted through PR #206** | Runtime-mode, P0/P1 security, audit, minimum migration-chain, source/coverage, deterministic Chromium/axe/viewport, CI, and rollback evidence in PR 1A. |
 | 1B | Server identity/RBAC/RLS/Assess | **Accepted on `main` at `de87c86`** | Server-only mutation privileges, fresh authorization/revocation, two-tenant non-disclosure, server scoring parity, migration, concurrency, idempotency, audit, and rollback evidence. No hosted, pilot, production, or security readiness claim. |
-| 1C | Enterprise Assess/Govern/Studio journey | **Implementation candidate; local gates passed; GitHub CI/review/merge pending** | Server-issued context, no Govern bypass, explicit failure states, atomic handoff/audit, disposable PostgreSQL ACL/adversarial/rollback, Chromium desktop/mobile/axe/viewport/performance, and rollback evidence. No live-system or readiness claim. |
+| 1C | Enterprise Assess/Govern/Studio journey | **Accepted through PR #208** | Server-issued context, no Govern bypass, explicit failure states, atomic handoff/audit, disposable PostgreSQL ACL/adversarial/rollback, Chromium desktop/mobile/axe/viewport/performance, and rollback evidence. No live-system or readiness claim. |
+| 1D-1G | Assess V2 decision intelligence through application portfolio | **Accepted through PR #214/#215** | Immutable decisions, evidence attestation, independent review/approval, Govern handoff, economics/calibration, application portfolio authority, PostgreSQL/TypeScript parity, browser gates, and rollback evidence. No deployment/readiness claim. |
+| 2A | Studio governed artifact generation/review/approval | **Accepted through PR #216** | Exact-head CI, 20 membership-trigger scenarios, 16 Studio scenarios, real function-created generation, PostgreSQL-owned hash, exact replay, production projection/decoder, browser route, forced RLS/ACLs, and zero unresolved review threads. |
+| 2B | Studio private storage, renditions, and governed access | **Not started; next active slice** | Requires private storage authority, scoped export/download, retention, legal hold, deletion, negative tests, browser evidence, rollback, and separate acceptance. |
 | Pilot | Controlled pilot | Blocked | Workstreams 1–4 accepted plus deployment/operations evidence and AP acceptance. |
 | Production | Production readiness | Blocked | Pilot evidence, production controls, open-risk disposition, and explicit acceptance. |
 
 Source inspection is not deployment proof. Planned verification is not executed evidence. Unavailable or unauthorized checks are `blocked` or `not run`, never passed.
+
+PR #216 closure evidence is recorded in `docs/quality/pr216-studio-governed-artifact-generation-post-merge-verification.md`. It accepts the structured-artifact authority boundary only. Private storage, renditions, export/download, retention, legal hold, deletion, hosted execution, pilot readiness, production readiness, security certification, and compliance remain unproven.
 
 ## Core Gates
 
