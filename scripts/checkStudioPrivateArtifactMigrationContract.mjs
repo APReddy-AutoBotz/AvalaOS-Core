@@ -9,7 +9,7 @@ const capabilities=['studio.artifacts.rendition.generate','studio.artifacts.down
 for(const capability of capabilities)assert.match(sql,new RegExp(capability.replaceAll('.','\\.')));
 const tables=['studio_private_artifact_runtime_control','studio_retention_policies','studio_private_artifact_command_receipts','studio_rendition_attempts','studio_renditions','studio_rendition_retention_extensions','studio_rendition_legal_hold_events','studio_rendition_deletion_requests','studio_rendition_deletion_resolutions','studio_rendition_deletion_attempts','studio_artifact_download_receipts'];
 for(const table of tables){assert.match(sql,new RegExp(`CREATE TABLE public\\.${table}\\b`));assert.match(sql,new RegExp(`'${table}'`))}
-const serviceFunctions=['studio_private_artifact_authority(uuid,uuid,uuid)','studio_private_artifact_command_claim(jsonb)','studio_rendition_attempt_start(uuid)','studio_rendition_attempt_rendered(uuid,text,text,bigint,text,text,text,text,text)','studio_rendition_attempt_complete(uuid)','studio_rendition_attempt_fail(uuid,text)','studio_rendition_deletion_complete(uuid)','studio_rendition_deletion_fail(uuid,text)','studio_artifact_download_claim(jsonb)','studio_artifact_download_complete(uuid)','studio_artifact_download_fail(uuid,text)'];
+const serviceFunctions=['studio_private_artifact_authority(uuid,uuid,uuid)','studio_private_artifact_command_claim(jsonb)','studio_rendition_attempt_start(uuid)','studio_rendition_attempt_rendered(uuid,text,text,bigint,text,text,text,text,text)','studio_rendition_attempt_complete(uuid)','studio_rendition_attempt_fail(uuid,text)','studio_rendition_reconciliation_claim(uuid)','studio_deletion_reconciliation_claim(uuid)','studio_rendition_deletion_complete(uuid)','studio_rendition_deletion_fail(uuid,text)','studio_artifact_download_claim(jsonb)','studio_artifact_download_complete(uuid)','studio_artifact_download_fail(uuid,text)'];
 for(const signature of serviceFunctions){assert.ok(sql.includes(`public.${signature}`),`missing private RPC ${signature}`)}
 assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.studio_private_artifact_projection\(uuid,uuid,uuid\) TO authenticated/);
 assert.match(sql,/REVOKE ALL ON FUNCTION[\s\S]+FROM PUBLIC,anon,authenticated,service_role/);
@@ -18,6 +18,10 @@ assert.match(sql,/ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
 assert.match(sql,/REVOKE ALL ON TABLE public\.%I FROM PUBLIC,anon,authenticated/);
 assert.match(sql,/to_regclass\('storage\.buckets'\)[\s\S]+to_regclass\('storage\.objects'\)/);
 assert.match(sql,/studio-private-artifacts','studio-private-artifacts',false/);
+assert.match(sql,/bucket_id text NOT NULL CHECK\(bucket_id='studio-private-artifacts'\)/);
+assert.doesNotMatch(sql,/studio-private-archive/);
+assert.match(sql,/REVOKE ALL ON FUNCTION[^\n]+studio_rendition_reconciliation_claim\(uuid\)[^\n]+studio_deletion_reconciliation_claim\(uuid\)[^\n]+FROM PUBLIC,anon,authenticated,service_role/);
+assert.match(sql,/GRANT EXECUTE ON FUNCTION[^\n]+studio_rendition_reconciliation_claim\(uuid\)[^\n]+studio_deletion_reconciliation_claim\(uuid\)[^\n]+TO service_role/);
 assert.match(sql,/AS RESTRICTIVE FOR ALL TO anon,authenticated/);
 assert.doesNotMatch(sql,/CREATE SCHEMA\s+storage/i);
 assert.doesNotMatch(sql,/CREATE TABLE\s+storage\./i);

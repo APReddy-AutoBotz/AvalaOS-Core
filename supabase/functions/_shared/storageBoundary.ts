@@ -1,4 +1,5 @@
 export const DEFAULT_SOURCE_UPLOADS_BUCKET = 'source-uploads';
+export const STUDIO_PRIVATE_ARTIFACTS_BUCKET = 'studio-private-artifacts';
 
 export const STORAGE_CONFIGURATION_ERROR = 'Storage configuration is invalid.';
 export const STORAGE_PATH_INVALID_ERROR = 'Invalid storage path.';
@@ -64,7 +65,13 @@ export const selectStudioPrivateArtifactsBucket = (
   configuredAllowlist?: string,
 ) => {
   if (configuredBucket === undefined || configuredAllowlist === undefined) configurationError();
-  return selectAllowlistedBucket(configuredBucket, configuredAllowlist);
+  assertStorageBucketName(configuredBucket);
+  assertStorageBucketName(configuredAllowlist);
+  if (
+    configuredBucket !== STUDIO_PRIVATE_ARTIFACTS_BUCKET ||
+    configuredAllowlist !== STUDIO_PRIVATE_ARTIFACTS_BUCKET
+  ) configurationError();
+  return STUDIO_PRIVATE_ARTIFACTS_BUCKET;
 };
 
 export const assertCanonicalStoragePath = (storagePath: string) => {

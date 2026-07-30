@@ -67,7 +67,7 @@ const main = () => {
   assert.equal(
     selectStudioPrivateArtifactsBucket(
       'studio-private-artifacts',
-      'studio-private-artifacts,studio-private-archive',
+      'studio-private-artifacts',
     ),
     'studio-private-artifacts',
   );
@@ -76,6 +76,8 @@ const main = () => {
     ['studio-private-artifacts', undefined],
     [undefined, 'studio-private-artifacts'],
     ['public-artifacts', 'studio-private-artifacts'],
+    ['studio-private-archive', 'studio-private-archive'],
+    ['studio-private-artifacts', 'studio-private-artifacts,studio-private-archive'],
   ] as const) {
     assertErrorMessage(
       () => selectStudioPrivateArtifactsBucket(bucket, allowlist),

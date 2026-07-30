@@ -74,6 +74,20 @@ void test('storage adapter fails closed without explicit private allowlisted buc
   assert.throws(() => createStudioPrivateArtifactStorage({ supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only' }), /Storage configuration is invalid/u);
   assert.throws(() => createStudioPrivateArtifactStorage({ supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'public', configuredBucketAllowlist: 'studio-private' }), /Storage configuration is invalid/u);
 });
+void test('alternate Studio bucket and allowlist fail before any provider request', () => {
+  let providerRequests = 0;
+  assert.throws(() => createStudioPrivateArtifactStorage({
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only',
+    configuredBucket: 'studio-private-archive', configuredBucketAllowlist: 'studio-private-archive',
+    fetch: (async () => { providerRequests += 1; return new Response(); }) as typeof fetch,
+  }), /Storage configuration is invalid/u);
+  assert.throws(() => createStudioPrivateArtifactStorage({
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only',
+    configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts,studio-private-archive',
+    fetch: (async () => { providerRequests += 1; return new Response(); }) as typeof fetch,
+  }), /Storage configuration is invalid/u);
+  assert.equal(providerRequests, 0);
+});
 void test('HTTP storage upload is create-only, redirect-safe, and readback verified', async () => {
   const expected = await makeExpectation();
   const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
@@ -83,7 +97,7 @@ void test('HTTP storage upload is create-only, redirect-safe, and readback verif
   ];
   const storage = createStudioPrivateArtifactStorage({
     supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only',
-    configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private,studio-archive',
+    configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async (url, init) => { calls.push([url, init]); return responses.shift()!; }) as typeof fetch,
   });
   await storage.uploadCreateOnly({ ...expected, bytes });
@@ -98,7 +112,7 @@ void test('HTTP storage upload is create-only, redirect-safe, and readback verif
 void test('HTTP storage maps provider conflict to duplicate without details', async () => {
   const expected = await makeExpectation();
   const storage = createStudioPrivateArtifactStorage({
-    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async () => new Response('provider path detail', { status: 409 })) as typeof fetch,
   });
   await assert.rejects(() => storage.uploadCreateOnly({ ...expected, bytes }), (error: unknown) => error instanceof Error && error.message === 'DUPLICATE_OBJECT' && !error.message.includes(objectKey));
@@ -106,7 +120,7 @@ void test('HTTP storage maps provider conflict to duplicate without details', as
 void test('HTTP storage bounds readback by exact expected byte length', async () => {
   const expected = await makeExpectation();
   const storage = createStudioPrivateArtifactStorage({
-    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async () => new Response(new Uint8Array(bytes.byteLength + 1), { status: 200, headers: { 'content-type': expected.mimeType, 'content-length': String(bytes.byteLength + 1) } })) as typeof fetch,
   });
   await assert.rejects(() => storage.probeExact(expected), storageError('READBACK_OVERSIZED'));
@@ -114,7 +128,7 @@ void test('HTTP storage bounds readback by exact expected byte length', async ()
 void test('HTTP storage verifies MIME as well as exact size and hash', async () => {
   const expected = await makeExpectation();
   const storage = createStudioPrivateArtifactStorage({
-    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async () => new Response(bytes, { status: 200, headers: { 'content-type': 'text/plain', 'content-length': String(bytes.byteLength) } })) as typeof fetch,
   });
   await assert.rejects(() => storage.probeExact(expected), storageError('OBJECT_MISMATCH'));
@@ -122,9 +136,9 @@ void test('HTTP storage verifies MIME as well as exact size and hash', async () 
 void test('HTTP deletion uses exact prefix and distinguishes deleted from missing', async () => {
   const expected = await makeExpectation();
   const calls: RequestInit[] = [];
-  const responses = [new Response(JSON.stringify([{ name: objectKey, bucket_id: 'studio-private' }]), { status: 200 }), new Response('[]', { status: 200 })];
+  const responses = [new Response(JSON.stringify([{ name: objectKey, bucket_id: 'studio-private-artifacts' }]), { status: 200 }), new Response('[]', { status: 200 })];
   const storage = createStudioPrivateArtifactStorage({
-    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async (_url, init) => { calls.push(init!); return responses.shift()!; }) as typeof fetch,
   });
   assert.deepEqual(await storage.deleteExact(expected), { status: 'deleted' });
@@ -137,7 +151,7 @@ void test('HTTP deletion rejects ambiguous or malformed provider responses', asy
   const expected = await makeExpectation();
   for (const response of [new Response('{}', { status: 200 }), new Response(JSON.stringify([{ name: 'other' }]), { status: 200 }), new Response('detail', { status: 500 })]) {
     const storage = createStudioPrivateArtifactStorage({
-      supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+      supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
       fetch: (async () => response) as typeof fetch,
     });
     await assert.rejects(() => storage.deleteExact(expected), storageError('DELETE_FAILED'));
@@ -157,7 +171,7 @@ void test('HTTP broker download uses one bounded verified GET and returns no URL
   const expected = await makeExpectation();
   let calls = 0;
   const storage = createStudioPrivateArtifactStorage({
-    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private', configuredBucketAllowlist: 'studio-private',
+    supabaseUrl: 'https://example.supabase.co', serviceRoleKey: 'server-only', configuredBucket: 'studio-private-artifacts', configuredBucketAllowlist: 'studio-private-artifacts',
     fetch: (async () => { calls += 1; return new Response(bytes, { status: 200, headers: { 'content-type': expected.mimeType, 'content-length': String(bytes.byteLength) } }); }) as typeof fetch,
   });
   assert.deepEqual(await storage.downloadExact(expected), bytes);

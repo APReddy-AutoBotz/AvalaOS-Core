@@ -35,7 +35,7 @@ type ExecuteClaim = StudioRenditionExecuteClaim;
 type ReplayClaim = Readonly<{ disposition: 'replay'; receipt: StudioSagaPublicReceipt }>;
 export type StudioRenditionClaim = ExecuteClaim | ReplayClaim;
 
-type CommittedRenditionWork = Readonly<{
+export type StudioCommittedRenditionWork = Readonly<{
   attemptId: string;
   renditionId: string;
   organizationId: string;
@@ -61,11 +61,11 @@ type CommittedRenditionWork = Readonly<{
 export interface StudioRenditionSagaDatabase {
   claim(requestId: string): Promise<StudioRenditionClaim>;
   startAttempt(input: { attemptId: string }): Promise<void>;
-  persistRendered(input: Omit<CommittedRenditionWork, 'state' | 'reconciliationCount'>): Promise<void>;
+  persistRendered(input: Omit<StudioCommittedRenditionWork, 'state' | 'reconciliationCount'>): Promise<void>;
   markAvailable(input: { attemptId: string }): Promise<StudioSagaPublicReceipt>;
   markFailed(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
   markReconciliationRequired(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
-  loadReconciliation(attemptId: string): Promise<CommittedRenditionWork | null>;
+  loadReconciliation(attemptId: string): Promise<StudioCommittedRenditionWork | null>;
 }
 
 export type StudioRenditionSagaResult =
@@ -74,7 +74,7 @@ export type StudioRenditionSagaResult =
   | Readonly<{ outcome: 'failed'; receipt: StudioSagaPublicReceipt; failureCode: StudioSagaFailureCode }>
   | Readonly<{ outcome: 'reconciliation_required'; receipt: StudioSagaPublicReceipt; failureCode: StudioSagaFailureCode }>;
 
-const expectation = (work: Pick<CommittedRenditionWork, 'organizationId' | 'workspaceId' | 'objectKey' | 'byteLength' | 'sha256' | 'mimeType'>): StudioStoredObjectExpectation => ({
+const expectation = (work: Pick<StudioCommittedRenditionWork, 'organizationId' | 'workspaceId' | 'objectKey' | 'byteLength' | 'sha256' | 'mimeType'>): StudioStoredObjectExpectation => ({
   organizationId: work.organizationId,
   workspaceId: work.workspaceId,
   objectKey: work.objectKey,
@@ -249,15 +249,15 @@ export type StudioDeletionClaim = ExecuteDeletionClaim | ReplayDeletionClaim;
 export interface StudioDeletionSagaDatabase {
   claimDeletion(requestId: string): Promise<ExecuteDeletionClaim | ReplayDeletionClaim>;
   markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }): Promise<StudioDeletionReceipt>;
-  markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'PROVIDER_DELETE_FAILED' | 'DELETION_RECONCILIATION_EXHAUSTED' }): Promise<StudioDeletionReceipt>;
-  markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'TOMBSTONE_COMPLETION_FAILED' }): Promise<StudioDeletionReceipt>;
+  markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }): Promise<StudioDeletionReceipt>;
+  markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' }): Promise<StudioDeletionReceipt>;
   loadDeletionReconciliation(deletionAttemptId: string): Promise<ExecuteDeletionClaim | null>;
 }
 export type StudioDeletionSagaResult =
   | { outcome: 'deleted'; receipt: StudioDeletionReceipt; providerOutcome: 'deleted' | 'missing' }
   | { outcome: 'replay'; receipt: StudioDeletionReceipt }
-  | { outcome: 'failed'; receipt: StudioDeletionReceipt; failureCode: 'PROVIDER_DELETE_FAILED' | 'DELETION_RECONCILIATION_EXHAUSTED' }
-  | { outcome: 'reconciliation_required'; receipt: StudioDeletionReceipt; failureCode: 'TOMBSTONE_COMPLETION_FAILED' };
+  | { outcome: 'failed'; receipt: StudioDeletionReceipt; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }
+  | { outcome: 'reconciliation_required'; receipt: StudioDeletionReceipt; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' };
 
 const runCommittedDeletion = async (
   claim: ExecuteDeletionClaim,
@@ -267,8 +267,8 @@ const runCommittedDeletion = async (
   try {
     providerOutcome = (await deps.storage.deleteExact(claim)).status;
   } catch {
-    const receipt = await deps.database.markDeletionFailure({ deletionAttemptId: claim.deletionAttemptId, failureCode: 'PROVIDER_DELETE_FAILED' });
-    return { outcome: 'failed', receipt, failureCode: 'PROVIDER_DELETE_FAILED' };
+    const receipt = await deps.database.markDeletionReconciliationRequired({ deletionAttemptId: claim.deletionAttemptId, failureCode: 'DELETE_OUTCOME_UNKNOWN' });
+    return { outcome: 'reconciliation_required', receipt, failureCode: 'DELETE_OUTCOME_UNKNOWN' };
   }
   try {
     const receipt = await deps.database.markTombstone({ deletionAttemptId: claim.deletionAttemptId, providerOutcome });
@@ -298,6 +298,20 @@ export const reconcileStudioDeletion = async (
   if (claim.reconciliationCount >= MAX_RECONCILIATION_ATTEMPTS) {
     const receipt = await deps.database.markDeletionFailure({ deletionAttemptId, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' });
     return { outcome: 'failed', receipt, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' };
+  }
+  let presence;
+  try { presence = await deps.storage.probePresence(claim); } catch {
+    const receipt = await deps.database.markDeletionReconciliationRequired({ deletionAttemptId, failureCode: 'DELETE_OUTCOME_UNKNOWN' });
+    return { outcome: 'reconciliation_required', receipt, failureCode: 'DELETE_OUTCOME_UNKNOWN' };
+  }
+  if (presence.status === 'missing') {
+    try {
+      const receipt = await deps.database.markTombstone({ deletionAttemptId, providerOutcome: 'missing' });
+      return { outcome: 'deleted', receipt, providerOutcome: 'missing' };
+    } catch {
+      const receipt = await deps.database.markDeletionReconciliationRequired({ deletionAttemptId, failureCode: 'TOMBSTONE_COMPLETION_FAILED' });
+      return { outcome: 'reconciliation_required', receipt, failureCode: 'TOMBSTONE_COMPLETION_FAILED' };
+    }
   }
   return runCommittedDeletion(claim, deps);
 };

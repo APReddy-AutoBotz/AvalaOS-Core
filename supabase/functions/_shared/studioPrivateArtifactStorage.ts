@@ -22,11 +22,13 @@ export type StudioStorageVerification = Readonly<{
 }>;
 export type StudioStorageProbe = { status: 'missing' } | StudioStorageVerification;
 export type StudioStorageDeleteResult = Readonly<{ status: 'deleted' | 'missing' }>;
+export type StudioStoragePresence = Readonly<{ status: 'exists' | 'missing' }>;
 
 export interface StudioPrivateArtifactStorage {
   uploadCreateOnly(input: StudioStoredObjectExpectation & { bytes: Uint8Array }): Promise<StudioStorageVerification>;
   probeExact(input: StudioStoredObjectExpectation): Promise<StudioStorageProbe>;
   downloadExact(input: StudioStoredObjectExpectation): Promise<Uint8Array>;
+  probePresence(input: Pick<StudioStoredObjectExpectation, 'organizationId' | 'workspaceId' | 'objectKey'>): Promise<StudioStoragePresence>;
   deleteExact(input: Pick<StudioStoredObjectExpectation, 'organizationId' | 'workspaceId' | 'objectKey'>): Promise<StudioStorageDeleteResult>;
 }
 
@@ -184,6 +186,26 @@ export const createStudioPrivateArtifactStorage = (config: Readonly<{
     },
     probeExact,
     downloadExact,
+    async probePresence(input) {
+      try {
+        assertWorkspaceStoragePath(input.organizationId, input.workspaceId, input.objectKey);
+      } catch {
+        throw new StudioStorageError('INVALID_OBJECT_KEY');
+      }
+      let response: Response;
+      try {
+        response = await request(buildStorageObjectUrl(config.supabaseUrl, bucket, input.objectKey), {
+          method: 'HEAD',
+          redirect: 'error',
+          headers: authHeaders(config.serviceRoleKey),
+        });
+      } catch {
+        throw new StudioStorageError('READBACK_FAILED');
+      }
+      if (response.status === 404) return { status: 'missing' };
+      if (!response.ok) throw new StudioStorageError('READBACK_FAILED');
+      return { status: 'exists' };
+    },
     async deleteExact(input) {
       try {
         assertWorkspaceStoragePath(input.organizationId, input.workspaceId, input.objectKey);
@@ -219,7 +241,7 @@ export const createStudioPrivateArtifactStorage = (config: Readonly<{
 
 type FakeObject = { bytes: Uint8Array; sha256: string; mimeType: string };
 export class DeterministicFakeStudioPrivateArtifactStorage implements StudioPrivateArtifactStorage {
-  readonly operationCounts = { upload: 0, probe: 0, download: 0, delete: 0 };
+  readonly operationCounts = { upload: 0, probe: 0, presence: 0, download: 0, delete: 0 };
   private readonly objects = new Map<string, FakeObject>();
   private nextUploadFailure = false;
   private nextProbeFailure = false;
@@ -256,6 +278,12 @@ export class DeterministicFakeStudioPrivateArtifactStorage implements StudioPriv
     return { status: 'verified', byteLength: object.bytes.byteLength, sha256: actualHash, mimeType: object.mimeType };
   }
 
+
+  async probePresence(input: Pick<StudioStoredObjectExpectation, 'organizationId' | 'workspaceId' | 'objectKey'>) {
+    this.operationCounts.presence += 1;
+    try { assertWorkspaceStoragePath(input.organizationId, input.workspaceId, input.objectKey); } catch { throw new StudioStorageError('INVALID_OBJECT_KEY'); }
+    return { status: this.objects.has(input.objectKey) ? 'exists' as const : 'missing' as const };
+  }
 
   async downloadExact(input: StudioStoredObjectExpectation) {
     this.operationCounts.download += 1;

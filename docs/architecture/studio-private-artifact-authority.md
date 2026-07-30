@@ -24,7 +24,7 @@ Approved Studio artifact version
   -> authenticated brokered download
 ```
 
-Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact mutation-command replay returns the original receipt and never emits another render, upload, or deletion claim. Exact successful download replay reuses its original receipt and returns the same strictly decoded private claim only inside the service boundary so the broker can return the verified file again. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions.
+Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact mutation-command replay returns the original receipt and never emits another render, upload, or deletion claim. Exact successful download replay reuses its original receipt and returns the same strictly decoded private claim only inside the service boundary so the broker can return the verified file again. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions. The service-only `studio-private-artifact-reconcile` worker exposes POST-only `/rendition` and `/deletion` routes protected by a dedicated minimum-32-character worker secret. It rejects browser origins and user authorization headers, accepts only an exact `{attemptId}` body, and returns sanitized state without identifiers or Storage bindings. No scheduler or deployed worker is claimed by this PR.
 
 ## Canonical model
 
@@ -68,7 +68,7 @@ available -> deletion_requested -> deleting -> deleted
 
 ## Private Storage and download
 
-The canonical bucket is non-public. Object keys are generated only by server code, are opaque, include organization and workspace scope, contain no email, title, process name, or customer-controlled path fragment, and pass the accepted canonical origin/path/encoding guards. Browser roles cannot upload, overwrite, list, read, or delete canonical objects.
+The only canonical bucket name is exactly `studio-private-artifacts`. Both the configured bucket and allowlist value must equal that single name; aliases, archive buckets, and comma-delimited alternatives fail before a provider request. The canonical bucket is non-public. Object keys are generated only by server code, are opaque, include organization and workspace scope, contain no email, title, process name, or customer-controlled path fragment, and pass the accepted canonical origin/path/encoding guards. Browser roles cannot upload, overwrite, list, read, or delete canonical objects.
 
 Downloads use `studio-artifact-download`, not a raw Storage URL. The broker authenticates the JWT, loads fresh authority, verifies `studio.artifacts.download`, binds exact tenant/workspace/artifact/rendition ancestry, claims a durable receipt, downloads and verifies the exact private bytes under service authority, and returns:
 
@@ -94,7 +94,7 @@ Deletion requires:
 5. service-role physical deletion;
 6. a verified provider result before committing `deleted`.
 
-Retention, hold placement/release, deletion resolution, and execution serialize on the rendition so a concurrent hold cannot be bypassed. Provider failure commits `deletion_failed`, not `deleted`. A physical delete followed by database completion failure remains nonterminal until reconciliation verifies provider absence and writes the tombstone.
+Retention, hold placement/release, deletion resolution, and execution serialize on the rendition so a concurrent hold cannot be bypassed. Provider failure commits `deletion_failed`, not `deleted`. A physical delete followed by database completion failure remains nonterminal until reconciliation probes the exact canonical object. Confirmed absence writes the tombstone without another delete; confirmed presence permits one exact delete before the tombstone; an uncertain probe or delete outcome remains durable reconciliation work.
 
 ## Capabilities
 
@@ -109,7 +109,7 @@ Existing `studio.artifacts.read` continues to authorize the safe artifact/rendit
 
 ## Failure, reconciliation, and rollback
 
-Stable public failures distinguish unavailable authority, stale authorization, permission denial, version/idempotency conflict, separation of duty, invalid command, rendering/storage failure, retention or hold blocking, download unavailability, read-only mode, and command unavailability without disclosing resource existence or internal provider details.
+Stable public failures distinguish unavailable authority, stale authorization, permission denial, version/idempotency conflict, separation of duty, invalid command, rendering/storage failure, retention or hold blocking, download unavailability, read-only mode, and command unavailability without disclosing resource existence or internal provider details. Service-only reconciliation claims lock the exact attempt, recheck current human authority, runtime controls, approved ancestry, canonical Storage metadata, retention, holds, and lifecycle, then transition it to `reconciling`. Concurrent claims receive no executable work. A stale claim may be reclaimed after five minutes; the durable reconciliation counter reaching three exhausts the bounded retry and persist a terminal failure. Completion and failure RPCs accept `reconciling`, making a worker crash before completion recoverable without browser involvement. Operational invocation and safe stop guidance are in `docs/runbooks/studio-private-artifact-reconciliation.md`.
 
 Rollback is fail-closed feature disablement: disable PR B mutation and provider execution, retain read-only committed projections and private objects, and apply an additive forward fix. Never make the bucket public, restore browser Storage authority, issue permanent links, hard-delete canonical metadata, shorten retention, release holds as rollback, or edit an accepted migration.
 

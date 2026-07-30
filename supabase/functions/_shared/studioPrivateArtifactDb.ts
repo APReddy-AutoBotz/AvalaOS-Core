@@ -24,13 +24,18 @@ import {
   type StudioPrivateArtifactRpcKey,
   type StudioPrivateArtifactRpcResults,
   type StudioRenditionExecuteClaim,
+  type StudioRenditionReconciliationClaim,
+  type StudioDeletionReconciliationClaim,
 } from './studioPrivateArtifactRpcContract.ts';
 import {
   executeStudioDeletionSaga,
   executeStudioRenditionSaga,
+  reconcileStudioDeletion,
+  reconcileStudioRendition,
   type StudioDeletionReceipt,
   type StudioDeletionSagaDatabase,
   type StudioRenditionSagaDatabase,
+  type StudioCommittedRenditionWork,
   type StudioSagaFailureCode,
   type StudioSagaPublicReceipt,
 } from './studioPrivateArtifactSaga.ts';
@@ -191,7 +196,7 @@ const renditionDatabase = (
     });
     return renditionReceipt(claim, 'reconciliation_required');
   },
-  loadReconciliation: async () => null,
+  loadReconciliation: attemptId => loadRenditionReconciliation(attemptId),
 });
 
 const deletionReceipt = (
@@ -237,8 +242,34 @@ const deletionDatabase = (
     });
     return deletionReceipt(claim, 'reconciliation_required');
   },
-  loadDeletionReconciliation: async () => null,
+  loadDeletionReconciliation: deletionAttemptId =>
+    loadDeletionReconciliation(deletionAttemptId),
 });
+
+const renditionReconciliationWork = (
+  claim: StudioRenditionReconciliationClaim,
+): StudioCommittedRenditionWork => ({
+  ...claim,
+  state: 'completion_pending',
+});
+
+const loadRenditionReconciliation = async (attemptId: string) => {
+  const claim = await rpc('renditionReconciliationClaim', { p_attempt: attemptId });
+  return claim ? renditionReconciliationWork(claim) : null;
+};
+
+const loadDeletionReconciliation = async (deletionAttemptId: string) => {
+  const claim = await rpc('deletionReconciliationClaim', {
+    p_attempt: deletionAttemptId,
+  });
+  return claim
+    ? ({
+        ...claim,
+        disposition: 'execute' as const,
+        requestId: claim.deletionAttemptId,
+      } satisfies StudioDeletionExecuteClaim)
+    : null;
+};
 
 const executeClaimedRendition = async (privateClaim: StudioPrivateArtifactJson) => {
   const claim = decodeStudioRenditionClaim(privateClaim);
@@ -270,8 +301,101 @@ const executeClaimedDeletion = async (privateClaim: StudioPrivateArtifactJson) =
   return {
     state: 'failed' as const,
     failureCode:
-      'failureCode' in result ? result.failureCode : 'PROVIDER_DELETE_FAILED',
+      'failureCode' in result ? result.failureCode : 'DELETE_OUTCOME_UNKNOWN',
   };
+};
+
+export type StudioPrivateArtifactReconciliationOperationResult = Readonly<{
+  status: 'available' | 'deleted' | 'replay' | 'failed' | 'reconciliation_required' | 'not_executable';
+  failureCode?: string;
+}>;
+
+export const reconcileStudioPrivateRendition = async (
+  attemptId: string,
+): Promise<StudioPrivateArtifactReconciliationOperationResult> => {
+  let boundClaim: StudioRenditionReconciliationClaim | null = null;
+  const database: StudioRenditionSagaDatabase = {
+    claim: async () => { throw new Error('RECONCILIATION_ONLY'); },
+    startAttempt: async () => { throw new Error('RECONCILIATION_ONLY'); },
+    persistRendered: async () => { throw new Error('RECONCILIATION_ONLY'); },
+    markAvailable: async input => {
+      const receipt = await rpc('renditionComplete', { p_attempt: input.attemptId });
+      if (!boundClaim || receipt.renditionId !== boundClaim.renditionId || receipt.state !== 'available') {
+        throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      }
+      return renditionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.attemptId }, 'available');
+    },
+    markFailed: async input => {
+      await rpc('renditionFail', { p_attempt: input.attemptId, p_failure: input.failureCode });
+      if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      return renditionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.attemptId }, 'failed');
+    },
+    markReconciliationRequired: async input => {
+      await rpc('renditionFail', { p_attempt: input.attemptId, p_failure: input.failureCode });
+      if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      return renditionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.attemptId }, 'reconciliation_required');
+    },
+    loadReconciliation: async id => {
+      boundClaim = await rpc('renditionReconciliationClaim', { p_attempt: id });
+      return boundClaim ? renditionReconciliationWork(boundClaim) : null;
+    },
+  };
+  try {
+    const result = await reconcileStudioRendition(attemptId, { database, storage: storage() });
+    return {
+      status: result.outcome === 'replay' ? 'replay' : result.outcome,
+      ...('failureCode' in result ? { failureCode: result.failureCode } : {}),
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'RENDITION_RECONCILIATION_NOT_FOUND') {
+      return { status: 'not_executable' };
+    }
+    throw error;
+  }
+};
+
+export const reconcileStudioPrivateDeletion = async (
+  deletionAttemptId: string,
+): Promise<StudioPrivateArtifactReconciliationOperationResult> => {
+  let boundClaim: StudioDeletionReconciliationClaim | null = null;
+  const database: StudioDeletionSagaDatabase = {
+    claimDeletion: async () => { throw new Error('RECONCILIATION_ONLY'); },
+    markTombstone: async input => {
+      const receipt = await rpc('deletionComplete', { p_attempt: input.deletionAttemptId });
+      if (!boundClaim || receipt.attemptId !== boundClaim.deletionAttemptId || receipt.state !== 'deleted') {
+        throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      }
+      return deletionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }, 'deleted');
+    },
+    markDeletionFailure: async input => {
+      await rpc('deletionFail', { p_attempt: input.deletionAttemptId, p_failure: input.failureCode });
+      if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      return deletionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }, 'deletion_failed');
+    },
+    markDeletionReconciliationRequired: async input => {
+      await rpc('deletionFail', { p_attempt: input.deletionAttemptId, p_failure: input.failureCode });
+      if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+      return deletionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }, 'reconciliation_required');
+    },
+    loadDeletionReconciliation: async id => {
+      boundClaim = await rpc('deletionReconciliationClaim', { p_attempt: id });
+      return boundClaim
+        ? { ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }
+        : null;
+    },
+  };
+  try {
+    const result = await reconcileStudioDeletion(deletionAttemptId, { database, storage: storage() });
+    return {
+      status: result.outcome === 'replay' ? 'replay' : result.outcome,
+      ...('failureCode' in result ? { failureCode: result.failureCode } : {}),
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'DELETION_RECONCILIATION_NOT_FOUND') {
+      return { status: 'not_executable' };
+    }
+    throw error;
+  }
 };
 
 export const studioPrivateArtifactDependencies: StudioPrivateArtifactCommandDependencies =

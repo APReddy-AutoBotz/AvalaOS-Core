@@ -11,9 +11,12 @@ const canonicalFiles = [
   'supabase/functions/_shared/studioPrivateArtifactDb.ts',
   'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.ts',
   'supabase/functions/_shared/studioPrivateArtifactRenderer.ts',
+  'supabase/functions/_shared/storageBoundary.ts',
   'supabase/functions/_shared/studioPrivateArtifactStorage.ts',
   'supabase/functions/_shared/studioPrivateArtifactSaga.ts',
+  'supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.ts',
   'supabase/functions/studio-private-artifact-command/index.ts',
+  'supabase/functions/studio-private-artifact-reconcile/index.ts',
   'supabase/functions/studio-artifact-download/index.ts',
   'components/docs/StudioArtifactWorkspace.tsx',
 ];
@@ -157,6 +160,19 @@ const storage = sources.get(
 for (const token of ["'x-upsert': 'false'", 'uploadCreateOnly', 'probeExact', 'deleteExact']) {
   assert(storage.includes(token), `private storage contract missing: ${token}`);
 }
+const storageBoundary = sources.get('supabase/functions/_shared/storageBoundary.ts');
+assert(storageBoundary.includes("STUDIO_PRIVATE_ARTIFACTS_BUCKET = 'studio-private-artifacts'"), 'canonical Studio bucket constant missing');
+assert(storageBoundary.includes('configuredAllowlist !== STUDIO_PRIVATE_ARTIFACTS_BUCKET'), 'Studio allowlist must be exactly canonical');
+assert(!storageBoundary.includes('studio-private-archive'), 'alternate Studio bucket leaked into production authority');
+const database = sources.get('supabase/functions/_shared/studioPrivateArtifactDb.ts');
+assert(database.includes('reconcileStudioPrivateRendition') && database.includes('reconcileStudioPrivateDeletion'), 'production reconciliation operations missing');
+assert(!/load(?:Deletion)?Reconciliation:\s*async\s*\(\)\s*=>\s*null/u.test(database), 'production reconciliation loader remains unwired');
+const worker = sources.get('supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.ts');
+for (const token of ['x-avala-studio-worker-secret', "request.method !== 'POST'", "request.headers.has('authorization')", "request.headers.has('origin')", "status: 'unavailable'"]) assert(worker.includes(token), 'worker boundary missing: ' + token);
+const workerEndpoint = sources.get('supabase/functions/studio-private-artifact-reconcile/index.ts');
+assert(workerEndpoint.includes('STUDIO_PRIVATE_ARTIFACT_RECONCILIATION_WORKER_SECRET'), 'worker secret config missing');
+const supabaseConfig = await readFile('supabase/config.toml', 'utf8');
+assert(/\[functions\.studio-private-artifact-reconcile\][\s\S]*verify_jwt = false/u.test(supabaseConfig), 'custom-auth worker function config missing');
 const saga = sources.get('supabase/functions/_shared/studioPrivateArtifactSaga.ts');
 for (const token of [
   'executeStudioRenditionSaga',
@@ -192,6 +208,7 @@ if (migration.trim()) {
     ),
     'canonical rendition metadata may not be hard deleted',
   );
+  assert(!migration.includes('studio-private-archive'), 'alternate Studio bucket may not enter migration authority');
   assert(
     !/\bpublic\s*=\s*true\b/iu.test(migration),
     'Studio private artifact bucket may not be public',

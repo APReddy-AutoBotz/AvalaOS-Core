@@ -59,6 +59,37 @@ export type StudioDeletionExecuteClaim = Readonly<{
   reconciliationCount: number;
 }>;
 
+export type StudioRenditionReconciliationClaim = Readonly<{
+  attemptId: string;
+  renditionId: string;
+  organizationId: string;
+  workspaceId: string;
+  objectKey: string;
+  format: StudioPrivateArtifactFormat;
+  artifactType: StudioPrivateArtifactType;
+  artifactId: string;
+  artifactVersionId: string;
+  opaqueObjectId: string;
+  approvedContent: StudioApprovedContent;
+  contentSchemaVersion: string;
+  byteLength: number;
+  sha256: string;
+  mimeType: StudioPrivateArtifactMimeType;
+  filename: string;
+  rendererVersion: StudioPrivateArtifactRendererVersion;
+  templateVersion: string;
+  reconciliationCount: number;
+}>;
+
+export type StudioDeletionReconciliationClaim = Readonly<{
+  deletionAttemptId: string;
+  renditionId: string;
+  organizationId: string;
+  workspaceId: string;
+  objectKey: string;
+  reconciliationCount: number;
+}>;
+
 export type StudioDownloadExecuteClaim = Readonly<{
   organizationId: string;
   workspaceId: string;
@@ -156,6 +187,15 @@ const mimeType = (value: unknown): StudioPrivateArtifactMimeType =>
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ? value
     : downloadUnavailable();
+const internalMimeType = (value: unknown): StudioPrivateArtifactMimeType => {
+  if (
+    value === 'text/markdown; charset=utf-8' ||
+    value === 'application/pdf' ||
+    value === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) return value;
+  return unavailable();
+};
+
 const rendererVersion = (
   value: unknown,
   expectedFormat?: StudioPrivateArtifactFormat,
@@ -295,6 +335,63 @@ export const decodeStudioDeletionClaim = (
   return {
     disposition: 'execute',
     requestId: uuid(claim.requestId),
+    deletionAttemptId: uuid(claim.deletionAttemptId),
+    renditionId: uuid(claim.renditionId),
+    organizationId: uuid(claim.organizationId),
+    workspaceId: uuid(claim.workspaceId),
+    objectKey,
+    reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
+  };
+};
+
+export const decodeStudioRenditionReconciliationClaim = (
+  value: unknown,
+): StudioRenditionReconciliationClaim | null => {
+  if (value === null) return null;
+  const claim = record(value);
+  exact(claim, [
+    'attemptId', 'renditionId', 'organizationId', 'workspaceId', 'objectKey',
+    'format', 'artifactType', 'artifactId', 'artifactVersionId', 'opaqueObjectId',
+    'approvedContent', 'contentSchemaVersion', 'byteLength', 'sha256', 'mimeType',
+    'filename', 'rendererVersion', 'templateVersion', 'reconciliationCount',
+  ]);
+  const decodedFormat = format(claim.format);
+  const objectKey = boundedText(claim.objectKey, 500);
+  const sha256 = boundedText(claim.sha256, 64);
+  const filename = boundedText(claim.filename, 120);
+  if (!OBJECT_KEY.test(objectKey) || !HASH.test(sha256) || !SAFE_FILENAME.test(filename)) unavailable();
+  return {
+    attemptId: uuid(claim.attemptId),
+    renditionId: uuid(claim.renditionId),
+    organizationId: uuid(claim.organizationId),
+    workspaceId: uuid(claim.workspaceId),
+    objectKey,
+    format: decodedFormat,
+    artifactType: artifactType(claim.artifactType),
+    artifactId: uuid(claim.artifactId),
+    artifactVersionId: uuid(claim.artifactVersionId),
+    opaqueObjectId: uuid(claim.opaqueObjectId),
+    approvedContent: decodeStudioApprovedContent(claim.approvedContent),
+    contentSchemaVersion: boundedText(claim.contentSchemaVersion),
+    byteLength: positiveInteger(claim.byteLength),
+    sha256,
+    mimeType: internalMimeType(claim.mimeType),
+    filename,
+    rendererVersion: rendererVersion(claim.rendererVersion, decodedFormat),
+    templateVersion: boundedText(claim.templateVersion),
+    reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
+  };
+};
+
+export const decodeStudioDeletionReconciliationClaim = (
+  value: unknown,
+): StudioDeletionReconciliationClaim | null => {
+  if (value === null) return null;
+  const claim = record(value);
+  exact(claim, ['deletionAttemptId', 'renditionId', 'organizationId', 'workspaceId', 'objectKey', 'reconciliationCount']);
+  const objectKey = boundedText(claim.objectKey, 500);
+  if (!OBJECT_KEY.test(objectKey)) unavailable();
+  return {
     deletionAttemptId: uuid(claim.deletionAttemptId),
     renditionId: uuid(claim.renditionId),
     organizationId: uuid(claim.organizationId),
@@ -553,6 +650,16 @@ export const STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST = {
     parameterNames: ['p_attempt', 'p_failure'],
     decode: decodeAttemptReceipt,
   },
+  renditionReconciliationClaim: {
+    functionName: 'studio_rendition_reconciliation_claim',
+    parameterNames: ['p_attempt'],
+    decode: decodeStudioRenditionReconciliationClaim,
+  },
+  deletionReconciliationClaim: {
+    functionName: 'studio_deletion_reconciliation_claim',
+    parameterNames: ['p_attempt'],
+    decode: decodeStudioDeletionReconciliationClaim,
+  },
   deletionComplete: {
     functionName: 'studio_rendition_deletion_complete',
     parameterNames: ['p_attempt'],
@@ -609,6 +716,8 @@ export interface StudioPrivateArtifactRpcArgs {
   };
   renditionComplete: { p_attempt: string };
   renditionFail: { p_attempt: string; p_failure: string };
+  renditionReconciliationClaim: { p_attempt: string };
+  deletionReconciliationClaim: { p_attempt: string };
   deletionComplete: { p_attempt: string };
   deletionFail: { p_attempt: string; p_failure: string };
   downloadClaim: { p_command: unknown };
@@ -628,6 +737,8 @@ export interface StudioPrivateArtifactRpcResults {
   renditionRendered: StudioRenditionLifecycleReceipt;
   renditionComplete: StudioRenditionLifecycleReceipt;
   renditionFail: StudioRenditionLifecycleReceipt;
+  renditionReconciliationClaim: StudioRenditionReconciliationClaim | null;
+  deletionReconciliationClaim: StudioDeletionReconciliationClaim | null;
   deletionComplete: StudioRenditionLifecycleReceipt;
   deletionFail: StudioRenditionLifecycleReceipt;
   downloadClaim: StudioDownloadRpcClaimResult;

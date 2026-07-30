@@ -1,5 +1,7 @@
 import {
   decodeStudioPrivateArtifactRpcError,
+  reconcileStudioPrivateDeletion,
+  reconcileStudioPrivateRendition,
   studioPrivateArtifactDependencies,
   studioPrivateArtifactDownloadDependencies,
 } from './studioPrivateArtifactDb.ts';
@@ -51,6 +53,9 @@ void (async () => {
           ? 'https://db.invalid'
           : key === 'SUPABASE_SERVICE_ROLE_KEY'
             ? 'service-key'
+            : key === 'STUDIO_PRIVATE_ARTIFACTS_BUCKET' ||
+                key === 'STUDIO_PRIVATE_ARTIFACTS_BUCKET_ALLOWLIST'
+              ? 'studio-private-artifacts'
             : key === 'SUPABASE_ANON_KEY'
               ? 'anon-key'
               : undefined,
@@ -81,6 +86,10 @@ void (async () => {
         resourceId: ids[2],
         resource: {},
       });
+    }
+    if (url.includes('studio_rendition_reconciliation_claim') ||
+        url.includes('studio_deletion_reconciliation_claim')) {
+      return Response.json(null);
     }
     if (url.includes('studio_artifact_download_claim')) {
       return Response.json({
@@ -133,6 +142,8 @@ void (async () => {
       ids[1],
       'DOWNLOAD_FAILED',
     );
+    assert((await reconcileStudioPrivateRendition(ids[0])).status === 'not_executable', 'rendition reconciliation loader calls production RPC');
+    assert((await reconcileStudioPrivateDeletion(ids[0])).status === 'not_executable', 'deletion reconciliation loader calls production RPC');
     const command = calls.find(call =>
       call.url.includes('studio_private_artifact_command_claim'),
     );
@@ -147,12 +158,14 @@ void (async () => {
       downloadClaim && Object.keys(downloadClaim.body).join(',') === 'p_command',
       'download claim receives no browser storage coordinates',
     );
-    assert(calls.length === 5, 'private RPC adapters exercised');
+    assert(calls.length === 7, 'private RPC adapters exercised');
+    assert(calls.some(call => call.url.includes('studio_rendition_reconciliation_claim')), 'rendition loader is not null');
+    assert(calls.some(call => call.url.includes('studio_deletion_reconciliation_claim')), 'deletion loader is not null');
   } finally {
     globalThis.fetch = priorFetch;
   }
   console.log(
-    'studio private artifact DB adapter: 24 safe-error and private RPC assertions passed',
+    'studio private artifact DB adapter: 28 safe-error, private RPC, and reconciliation loader assertions passed',
   );
 })().catch(error => {
   console.error(error);

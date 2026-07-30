@@ -175,19 +175,19 @@ class FakeDeletionDb implements StudioDeletionSagaDatabase {
   failTombstone = false;
   tombstones: Array<'deleted' | 'missing'> = [];
   failures: string[] = [];
-  reconciliation = 0;
+  reconciliationCodes: string[] = [];
   async claimDeletion(_requestId: string) { return this.claimValue; }
   async markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }) {
     if (this.failTombstone) { this.failTombstone = false; throw new Error('db'); }
     this.tombstones.push(input.providerOutcome);
     return { deletionAttemptId: 'delete-1', renditionId: 'rendition-1', state: 'deleted' as const };
   }
-  async markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'PROVIDER_DELETE_FAILED' | 'DELETION_RECONCILIATION_EXHAUSTED' }) {
+  async markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }) {
     this.failures.push(input.failureCode);
     return { deletionAttemptId: 'delete-1', renditionId: 'rendition-1', state: 'deletion_failed' as const };
   }
-  async markDeletionReconciliationRequired(_input: { deletionAttemptId: string; failureCode: 'TOMBSTONE_COMPLETION_FAILED' }) {
-    this.reconciliation += 1;
+  async markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' }) {
+    this.reconciliationCodes.push(input.failureCode);
     return { deletionAttemptId: 'delete-1', renditionId: 'rendition-1', state: 'reconciliation_required' as const };
   }
   async loadDeletionReconciliation(_deletionAttemptId: string) { return this.loadValue; }
@@ -210,11 +210,11 @@ void test('deletion saga treats provider-confirmed missing as an unambiguous tom
   assert.equal(result.outcome, 'deleted');
   assert.deepEqual(database.tombstones, ['missing']);
 });
-void test('deletion provider failure invokes failure callback and never tombstones', async () => {
+void test('deletion provider outcome uncertainty becomes durable reconciliation work', async () => {
   const database = new FakeDeletionDb(); const storage = new DeterministicFakeStudioPrivateArtifactStorage(); storage.failNextDelete();
   const result = await executeStudioDeletionSaga('delete-request', { database, storage });
-  assert.equal(result.outcome, 'failed');
-  assert.deepEqual(database.failures, ['PROVIDER_DELETE_FAILED']);
+  assert.equal(result.outcome, 'reconciliation_required');
+  assert.deepEqual(database.reconciliationCodes, ['DELETE_OUTCOME_UNKNOWN']);
   assert.deepEqual(database.tombstones, []);
 });
 void test('deletion exact replay makes no provider call', async () => {
@@ -231,7 +231,7 @@ void test('delete success plus tombstone completion failure stays reconcilable',
   const storage = new DeterministicFakeStudioPrivateArtifactStorage(); await seedDeletionObject(storage);
   const result = await executeStudioDeletionSaga('delete-request', { database, storage });
   assert.equal(result.outcome, 'reconciliation_required');
-  assert.equal(database.reconciliation, 1);
+  assert.deepEqual(database.reconciliationCodes, ['TOMBSTONE_COMPLETION_FAILED']);
   assert.equal(storage.hasObjectForTest(deletionClaim.objectKey), false);
 });
 void test('deletion reconciliation confirms missing object and completes tombstone', async () => {
@@ -241,6 +241,16 @@ void test('deletion reconciliation confirms missing object and completes tombsto
   const result = await reconcileStudioDeletion('delete-1', { database, storage });
   assert.equal(result.outcome, 'deleted');
   assert.deepEqual(database.tombstones, ['missing']);
+  assert.equal(storage.operationCounts.presence, 1);
+  assert.equal(storage.operationCounts.delete, 1);
+});
+void test('deletion reconciliation probes an existing exact object and deletes it once', async () => {
+  const database = new FakeDeletionDb(); const storage = new DeterministicFakeStudioPrivateArtifactStorage(); await seedDeletionObject(storage);
+  const result = await reconcileStudioDeletion('delete-1', { database, storage });
+  assert.equal(result.outcome, 'deleted');
+  assert.deepEqual(database.tombstones, ['deleted']);
+  assert.equal(storage.operationCounts.presence, 1);
+  assert.equal(storage.operationCounts.delete, 1);
 });
 void test('deletion reconciliation is bounded after three committed attempts', async () => {
   const database = new FakeDeletionDb(); database.loadValue = { ...deletionClaim, reconciliationCount: 3 };
@@ -249,4 +259,5 @@ void test('deletion reconciliation is bounded after three committed attempts', a
   assert.equal(result.outcome, 'failed');
   assert.deepEqual(database.failures, ['DELETION_RECONCILIATION_EXHAUSTED']);
   assert.equal(storage.operationCounts.delete, 0);
+  assert.equal(storage.operationCounts.presence, 0);
 });
