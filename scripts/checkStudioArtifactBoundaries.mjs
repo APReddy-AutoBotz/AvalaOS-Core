@@ -12,7 +12,7 @@ for (const token of ['brd', 'frd', 'pdd', 'studio.artifact.generation.request', 
 }
 const roots = ['components', 'services', 'supabase/functions'];
 const files = [];
-const walk = dir => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const item = path.join(dir, entry.name); if (entry.isDirectory()) walk(item); else if (/\.(ts|tsx)$/.test(item)) files.push(item); } };
+const walk = dir => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const item = path.join(dir, entry.name); if (entry.isDirectory()) walk(item); else if (/\.(ts|tsx)$/.test(item)) files.push(item.replaceAll('\\', '/')); } };
 roots.forEach(walk);
 const legacyLocalFiles = new Set(['components/docs/DocsProvider.tsx', 'services/docsService.ts', 'services/adapters/docsAdapter.ts']);
 const offenders = files.filter(file => !legacyLocalFiles.has(file) && /docsAdapter\.saveGeneration|\.from\(['"]document_generations['"]\)\.(?:insert|upsert)/s.test(fs.readFileSync(file, 'utf8')));
@@ -25,9 +25,9 @@ console.log(`Studio artifact source boundaries passed (${files.length} source fi
 const workflow = fs.readFileSync('.github/workflows/studio-governed-artifacts.yml', 'utf8');
 const checkoutCount = [...workflow.matchAll(/uses: actions\/checkout@v4/g)].length;
 const fullHistoryCount = [...workflow.matchAll(/fetch-depth:\s*0/g)].length;
-if (checkoutCount !== 3 || fullHistoryCount !== checkoutCount) throw new Error('STUDIO_CI_FULL_HISTORY_REQUIRED_FOR_RETAINED_GATES');
+if (checkoutCount !== 4 || fullHistoryCount !== checkoutCount) throw new Error('STUDIO_CI_FULL_HISTORY_REQUIRED_FOR_RETAINED_GATES');
 console.log(`Studio CI checkout contract passed (${fullHistoryCount} full-history jobs).`);
-for (const token of ['set -o pipefail', 'tee studio-postgresql-16.log', 'actions/upload-artifact@v4', 'if: always()', 'studio-postgresql-16.log']) {
+for (const token of ['set -o pipefail', 'tee studio-private-postgresql-16.log', 'actions/upload-artifact@v4', 'if: always()', 'studio-private-postgresql-16.log']) {
   if (!workflow.includes(token)) throw new Error(`STUDIO_POSTGRESQL_FAILURE_EVIDENCE_MISSING: ${token}`);
 }
 console.log('Studio PostgreSQL CI evidence contract passed (pipefail, retained log and always-upload).');

@@ -19,7 +19,7 @@ PR 1A is accepted through PR #206. PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / P
 | 1F | V2 Economics and Calibration | Accepted and post-merge verified in PR #212 | Versioned economics, realized outcomes, Insufficient Data calibration reporting, and tenant/workspace portfolio dispositions. |
 | 1G | Application Portfolio & AI-Assisted Modernization Assessment | Accepted through PR #214/#215 | Tenant/workspace inventory, deterministic modernization dimensions, process/application matrix, portfolio waves, and governed review lifecycle. |
 | 2A | Studio governed artifact generation, review, and approval | Accepted through PR #216 | Canonical BRD/FRD/PDD structured artifacts, immutable versions, exact replay, independent review/final approval, and production projection/decoder parity. |
-| 2B | Studio private storage and governed export/download | PR #216 closure accepted | Private object storage, governed renditions, scoped download/export, retention, legal hold, and governed deletion. |
+| 2B | Studio private storage and governed export/download | **Implementation candidate; acceptance pending** over accepted PR #216 | Private object storage, governed Markdown/PDF/DOCX renditions, brokered download, retention snapshots, legal hold, governed deletion, reconciliation, and rollback evidence. |
 | 3 | Delivery and lineage | Workstream 2 contracts stable | Canonical import, lineage, idempotent handoff, workflow controls, audit, soft delete. |
 | 4 | Monitor, Admin, Trust | Tenant-safe source domains exist | Server read models, administrative controls, entitlements, claim-safe evidence. |
 | 5 | Shared quality infrastructure, if needed | Shared need affects at least two slices | Only shared CI/tooling that cannot live in a feature PR. |

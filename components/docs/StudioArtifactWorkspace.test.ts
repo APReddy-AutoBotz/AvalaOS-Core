@@ -8,8 +8,9 @@ for(const token of [
   "outcome:'reject'",
   'rationale,conditions',
   'readStudioEligibleReviewers',
-  'Private export and governed download are not available in this release.',
+  'StudioArtifactRenditions',
+  'currentApprovedVersion',
   "state==='committed_reload_failed'",
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
-console.log('studio artifact workspace: 9 lifecycle, payload, reviewer and false-success assertions passed');
+console.log('studio artifact workspace: 10 lifecycle, payload, reviewer, rendition and false-success assertions passed');

@@ -5,14 +5,19 @@ import {
   STORAGE_CONFIGURATION_ERROR,
   STORAGE_PATH_INVALID_ERROR,
   STORAGE_PATH_SCOPE_ERROR,
+  STORAGE_WORKSPACE_PATH_SCOPE_ERROR,
   assertTenantStoragePath,
+  assertWorkspaceStoragePath,
   buildStorageObjectUrl,
   selectExportsBucket,
   selectSourceUploadsBucket,
+  selectStudioPrivateArtifactsBucket,
 } from './storageBoundary';
 
 const orgId = '11111111-1111-4111-8111-111111111111';
 const otherOrgId = '22222222-2222-4222-8222-222222222222';
+const workspaceId = '33333333-3333-4333-8333-333333333333';
+const otherWorkspaceId = '44444444-4444-4444-8444-444444444444';
 
 const assertErrorMessage = (operation: () => unknown, expectedMessage: string) => {
   assert.throws(operation, (error: unknown) => (
@@ -58,6 +63,25 @@ const main = () => {
     );
   }
 
+
+  assert.equal(
+    selectStudioPrivateArtifactsBucket(
+      'studio-private-artifacts',
+      'studio-private-artifacts,studio-private-archive',
+    ),
+    'studio-private-artifacts',
+  );
+  for (const [bucket, allowlist] of [
+    [undefined, undefined],
+    ['studio-private-artifacts', undefined],
+    [undefined, 'studio-private-artifacts'],
+    ['public-artifacts', 'studio-private-artifacts'],
+  ] as const) {
+    assertErrorMessage(
+      () => selectStudioPrivateArtifactsBucket(bucket, allowlist),
+      STORAGE_CONFIGURATION_ERROR,
+    );
+  }
   const validPath = `${orgId}/incoming/Quarterly report.md`;
   assert.doesNotThrow(() => assertTenantStoragePath(orgId, validPath));
 
@@ -96,6 +120,16 @@ const main = () => {
   assertErrorMessage(
     () => assertTenantStoragePath(orgId, `${orgId}-other/document.txt`),
     STORAGE_PATH_SCOPE_ERROR,
+  );
+  const workspacePath = `${orgId}/${workspaceId}/studio-artifacts/55555555-5555-4555-8555-555555555555.pdf`;
+  assert.doesNotThrow(() => assertWorkspaceStoragePath(orgId, workspaceId, workspacePath));
+  assertErrorMessage(
+    () => assertWorkspaceStoragePath(orgId, workspaceId, `${orgId}/${otherWorkspaceId}/studio-artifacts/file.pdf`),
+    STORAGE_WORKSPACE_PATH_SCOPE_ERROR,
+  );
+  assertErrorMessage(
+    () => assertWorkspaceStoragePath(orgId, 'not-a-uuid', workspacePath),
+    STORAGE_PATH_INVALID_ERROR,
   );
 
   assert.equal(

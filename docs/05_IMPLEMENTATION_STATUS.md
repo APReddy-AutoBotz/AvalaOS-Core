@@ -1,8 +1,12 @@
 # AvalaOS Core Implementation Status
 
+## Studio PR B implementation candidate
+
+Implemented on the candidate branch: deterministic Markdown/PDF/DOCX rendition authority, private create-only storage, brokered downloads, retention-policy snapshots, legal-hold events, governed deletion with independent approval, strict projection/client/UI states, reconciliation, and feature-owned tests/CI. Acceptance remains pending exact-head CI and review. No hosted/live, deployment, readiness, security-certification, or compliance proof is claimed.
+
 ## Studio PR A implementation boundary
 
-Studio PR A owns exact accepted PR 1E ancestry, immutable structured-JSON versions, durable staged provider attempts, independent review, and separate approval. Provider calls are not cross-system atomic. PR B private storage/export remains future work; legacy `document_generations` is unverified. Rollback is mutation/provider disablement with read-only committed projection and additive forward fixes.
+Studio PR A owns exact accepted PR 1E ancestry, immutable structured-JSON versions, durable staged provider attempts, independent review, and separate approval. Provider calls are not cross-system atomic. Studio PR B private storage and governed rendition/download are a separate implementation candidate; legacy `document_generations` remains unverified. Rollback is mutation/provider disablement with read-only committed projection and additive forward fixes.
 
 
 Baseline: PR #212 / PR 1F accepted and post-merge verified on `main` at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.

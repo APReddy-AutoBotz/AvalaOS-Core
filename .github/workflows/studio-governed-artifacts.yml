@@ -4,7 +4,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 jobs:
-  studio-artifacts:
+  studio-private-artifacts-source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,25 +15,62 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run typecheck:edge
+      - run: npm run lint:pr1a
+      - run: npm run lint:pr1b
+      - run: npm run lint:pr1c
+      - run: npm run lint:pr1d
+      - run: npm run lint:pr1e
       - run: npm run lint:studio-artifacts
-      - run: npm run test:studio-artifacts
-      - run: npm run test:studio-artifacts-coverage
+      - run: npm run lint:studio-private-artifacts
+      - run: npm run test:studio-private-artifacts-lifecycle
+      - run: npm run test:studio-private-artifacts-client
+      - run: npm run test:pr1b
+      - run: npm run test:pr1c
       - run: npm run test:pr1d
       - run: npm run test:pr1e
       - run: npm run test:pr1f
       - run: npm run test:pr1g
+      - run: npm run test:studio-artifacts
+      - run: npm run test:studio-artifacts-coverage
       - run: npm run test:ai-boundary-static
       - run: npm run test:secret-hygiene
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=moderate
       - run: git diff --check
-  studio-artifacts-postgresql-16:
+
+  studio-private-artifacts-renderers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - name: Run deterministic renderer and private storage evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            npm run test:studio-private-artifacts-renderers
+            npm run test:studio-private-artifacts-storage
+            npm run test:studio-private-artifacts-coverage
+          } 2>&1 | tee studio-private-renderers.log
+      - name: Upload sanitized renderer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-private-renderers-evidence
+          path: studio-private-renderers.log
+          if-no-files-found: error
+
+  studio-private-artifacts-postgresql-16:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
-        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_studio_artifacts }
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_studio_private_artifacts }
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
@@ -43,21 +80,26 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: npm }
       - run: npm ci
-      - name: Run Studio PostgreSQL 16 authority harness
+      - name: Run retained and Studio PR B PostgreSQL 16 authority harnesses
         shell: bash
         run: |
           set -o pipefail
-          npm run test:migrations:studio-artifacts 2>&1 | tee studio-postgresql-16.log
+          {
+            npm run test:migrations:studio-artifacts
+            npm run test:migrations:studio-private-artifacts
+          } 2>&1 | tee studio-private-postgresql-16.log
         env:
           STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      - name: Upload Studio PostgreSQL 16 evidence
+          STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      - name: Upload sanitized PostgreSQL 16 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: studio-postgresql-16-evidence
-          path: studio-postgresql-16.log
+          name: studio-private-postgresql-16-evidence
+          path: studio-private-postgresql-16.log
           if-no-files-found: error
-  studio-artifacts-browser:
+
+  studio-private-artifacts-browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +109,7 @@ jobs:
         with: { node-version: '22', cache: npm }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser:studio-private-artifacts
       - run: npm run test:browser:studio-artifacts
       - run: npm run test:browser:pr1d
       - run: npm run test:browser:pr1e

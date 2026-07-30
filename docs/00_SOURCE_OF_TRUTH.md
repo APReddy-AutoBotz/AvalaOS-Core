@@ -1,8 +1,12 @@
 # AvalaOS Core Source Of Truth
 
+## Studio PR B implementation candidate
+
+Studio PR B is an implementation candidate over accepted PR #216 authority. It adds deterministic Markdown/PDF/DOCX renditions, private server-controlled storage, brokered downloads, snapshotted retention, legal holds, and separation-of-duty deletion. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and exact-head CI evidence are acceptance inputs, not hosted, deployment, pilot, production, security-certification, or compliance proof.
+
 ## Studio PR A active authority
 
-PR 1G remains accepted at the required `4ac6ca16b1513561779c53bbfb71cfb5a9160061` starting authority. PR A establishes governed structured-JSON artifact generation, immutable revision/review, and three-person approval authority. Private storage, file renditions, export/download, retention, legal hold, and deletion remain future PR B work. Legacy `document_generations` rows remain unverified and non-canonical.
+PR 1G remains accepted at the required `4ac6ca16b1513561779c53bbfb71cfb5a9160061` starting authority. PR A establishes governed structured-JSON artifact generation, immutable revision/review, and three-person approval authority. Private storage, file renditions, brokered download, retention, legal hold, and deletion remain outside PR A authority and are addressed only by the Studio PR B implementation candidate above. Legacy `document_generations` rows remain unverified and non-canonical.
 
 
 AvalaOS Core is the governed AI and automation delivery platform.

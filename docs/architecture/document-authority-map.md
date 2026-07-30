@@ -2,7 +2,7 @@
 
 ## Studio PR A authority
 
-The canonical PR A Studio governed-artifact data, command, lifecycle, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. Private storage, rendition, export/download, retention, hold, and deletion remain outside that authority and are deferred to PR B.
+The canonical PR A Studio governed-artifact data, command, lifecycle, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. PR A remains authoritative for structured artifact generation and approval. Studio PR B private rendition, storage, brokered download, retention, legal-hold, deletion, reconciliation, and rollback authority is routed separately to `docs/architecture/studio-private-artifact-authority.md`.
 
 
 ## Default Reading Route
@@ -45,6 +45,7 @@ Read only this sequence unless the active task requires more:
 | Active task and accepted milestone ledger | `docs/task-ledger.md` |
 | Readiness definitions | `docs/quality/readiness-gates.md` |
 | Verification commands | `docs/quality/verification-command-matrix.md` |
+| Studio PR B private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
 
 ## PR Governance Boundary
