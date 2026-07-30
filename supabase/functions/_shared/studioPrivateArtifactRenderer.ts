@@ -1,10 +1,29 @@
+import {
+  decodeStudioApprovedContent,
+  STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
+  type StudioApprovedContent,
+  type StudioApprovedJson,
+  type StudioPrivateArtifactRendererVersion,
+  type StudioPrivateArtifactType,
+} from './studioPrivateArtifactRpcContract.ts';
+
+export { type StudioApprovedContent } from './studioPrivateArtifactRpcContract.ts';
+
 export const STUDIO_RENDITION_FORMATS = ['markdown', 'pdf', 'docx'] as const;
 export type StudioRenditionFormat = typeof STUDIO_RENDITION_FORMATS[number];
+export const STUDIO_CONTENT_NORMALIZER_VERSION = 'studio-artifact-normalizer-1' as const;
 
-export type StudioApprovedContent = Readonly<{
+export type StudioNormalizedContent = Readonly<{
   title: string;
   summary: string;
   sections: ReadonlyArray<Readonly<{ title: string; content: string }>>;
+}>;
+
+export type StudioRenderingAuthority = Readonly<{
+  artifactType: StudioPrivateArtifactType;
+  contentSchemaVersion: string;
+  templateVersion: string;
+  rendererVersion: StudioPrivateArtifactRendererVersion;
 }>;
 
 export type StudioRenderedArtifact = Readonly<{
@@ -14,14 +33,17 @@ export type StudioRenderedArtifact = Readonly<{
   mimeType: string;
   filename: string;
   format: StudioRenditionFormat;
-  rendererVersion: 'markdown-v1' | 'pdf-v1' | 'docx-v1';
-  templateVersion: 'standard_business_brief-v1';
+  rendererVersion: StudioPrivateArtifactRendererVersion;
+  templateVersion: string;
+  contentSchemaVersion: string;
+  normalizerVersion: typeof STUDIO_CONTENT_NORMALIZER_VERSION;
 }>;
 
 export type StudioRenditionErrorCode =
   | 'INVALID_CONTENT'
   | 'CONTENT_OVERSIZED'
   | 'UNSUPPORTED_FORMAT'
+  | 'VERSION_MISMATCH'
   | 'OUTPUT_OVERSIZED'
   | 'OUTPUT_INVALID';
 
@@ -36,10 +58,10 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const MAX_SOURCE_BYTES = 500_000;
 const MAX_OUTPUT_BYTES = 5_000_000;
-const MAX_SECTIONS = 100;
+const MAX_SECTIONS = 500;
 const MAX_TITLE = 300;
-const MAX_SUMMARY = 5_000;
-const MAX_SECTION_CONTENT = 20_000;
+const MAX_SUMMARY = 100_000;
+const MAX_SECTION_CONTENT = 100_000;
 const MIME = {
   markdown: 'text/markdown; charset=utf-8',
   pdf: 'application/pdf',
@@ -50,58 +72,225 @@ const FILENAMES = {
   pdf: 'studio-artifact-rendition.pdf',
   docx: 'studio-artifact-rendition.docx',
 } as const;
-const VERSIONS = { markdown: 'markdown-v1', pdf: 'pdf-v1', docx: 'docx-v1' } as const;
-const TEMPLATE_VERSION = 'standard_business_brief-v1' as const;
 const invalidText = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
-const loneSurrogate = /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/u;
+const loneSurrogate =
+  /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/u;
+const TEMPLATE_SECTION_INVENTORY: Readonly<
+  Record<StudioPrivateArtifactType, readonly string[]>
+> = {
+  brd: ['summary', 'objectives', 'scope', 'requirements', 'risks'],
+  frd: [
+    'summary',
+    'functionalRequirements',
+    'rules',
+    'interfaces',
+    'acceptanceCriteria',
+  ],
+  pdd: ['summary', 'process', 'roles', 'controls', 'exceptions'],
+};
 
-const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+const own = (value: object, key: string) =>
+  Object.prototype.hasOwnProperty.call(value, key);
 const exactKeys = (value: object, expected: readonly string[]) => {
   const keys = Object.keys(value);
-  return keys.length === expected.length && expected.every((key) => own(value, key));
+  return (
+    keys.length === expected.length && expected.every(key => own(value, key))
+  );
 };
-const validString = (value: unknown, max: number, required = false): value is string => (
+const validString = (
+  value: unknown,
+  max: number,
+  required = false,
+): value is string =>
   typeof value === 'string' &&
   value.length <= max &&
   (!required || value.trim().length > 0) &&
   value === value.normalize('NFC') &&
   !invalidText.test(value) &&
-  !loneSurrogate.test(value)
-);
+  !loneSurrogate.test(value);
 
-export const validateStudioApprovedContent = (value: unknown): StudioApprovedContent => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value) ||
-      !exactKeys(value, ['title', 'summary', 'sections'])) {
-    throw new StudioRenditionError('INVALID_CONTENT');
-  }
-  const candidate = value as Record<string, unknown>;
-  if (!validString(candidate.title, MAX_TITLE, true) ||
-      !validString(candidate.summary, MAX_SUMMARY) ||
-      !Array.isArray(candidate.sections) ||
-      candidate.sections.length < 1 || candidate.sections.length > MAX_SECTIONS) {
-    throw new StudioRenditionError('INVALID_CONTENT');
-  }
-  for (const section of candidate.sections) {
-    if (typeof section !== 'object' || section === null || Array.isArray(section) ||
-        !exactKeys(section, ['title', 'content'])) {
+const assertSafeStrings = (value: StudioApprovedJson): void => {
+  if (typeof value === 'string') {
+    if (!validString(value, MAX_SOURCE_BYTES)) {
       throw new StudioRenditionError('INVALID_CONTENT');
     }
-    const record = section as Record<string, unknown>;
-    if (!validString(record.title, MAX_TITLE, true) ||
-        !validString(record.content, MAX_SECTION_CONTENT)) {
-      throw new StudioRenditionError('INVALID_CONTENT');
-    }
+    return;
   }
-  let serialized: string;
+  if (Array.isArray(value)) {
+    value.forEach(assertSafeStrings);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(assertSafeStrings);
+  }
+};
+
+export const validateStudioApprovedContent = (
+  value: unknown,
+): StudioApprovedContent => {
+  let raw: string;
   try {
-    serialized = JSON.stringify(value);
+    raw = JSON.stringify(value);
   } catch {
     throw new StudioRenditionError('INVALID_CONTENT');
   }
+  if (encoder.encode(raw).byteLength > MAX_SOURCE_BYTES) {
+    throw new StudioRenditionError('CONTENT_OVERSIZED');
+  }
+  let decoded: StudioApprovedContent;
+  try {
+    decoded = decodeStudioApprovedContent(value);
+  } catch {
+    throw new StudioRenditionError('INVALID_CONTENT');
+  }
+  assertSafeStrings(decoded);
+  const serialized = JSON.stringify(decoded);
   if (encoder.encode(serialized).byteLength > MAX_SOURCE_BYTES) {
     throw new StudioRenditionError('CONTENT_OVERSIZED');
   }
-  return value as StudioApprovedContent;
+  return decoded;
+};
+
+const stableJsonValue = (value: StudioApprovedJson): StudioApprovedJson => {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (value && typeof value === 'object') {
+    const sorted: Record<string, StudioApprovedJson> = {};
+    for (const key of Object.keys(value).sort((left, right) =>
+      left.localeCompare(right),
+    )) {
+      sorted[key] = stableJsonValue(value[key]);
+    }
+    return sorted;
+  }
+  return value;
+};
+export const stableCanonicalStudioJson = (value: StudioApprovedJson) =>
+  JSON.stringify(stableJsonValue(value), null, 2);
+const displayValue = (value: StudioApprovedJson) =>
+  typeof value === 'string' ? value : stableCanonicalStudioJson(value);
+const humanize = (key: string) => {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replace(/[_-]+/gu, ' ')
+    .trim();
+  return spaced.length
+    ? spaced[0].toUpperCase() + spaced.slice(1)
+    : 'Canonical field';
+};
+
+export const normalizeStudioApprovedContent = (
+  value: unknown,
+  authority: Pick<
+    StudioRenderingAuthority,
+    'artifactType' | 'contentSchemaVersion' | 'templateVersion'
+  >,
+): StudioNormalizedContent => {
+  if (authority.contentSchemaVersion !== 'studio-artifact-1') {
+    throw new StudioRenditionError('VERSION_MISMATCH');
+  }
+  const expectedTemplate = `studio-${authority.artifactType}-1`;
+  if (authority.templateVersion !== expectedTemplate) {
+    throw new StudioRenditionError('VERSION_MISMATCH');
+  }
+  const source = validateStudioApprovedContent(value);
+  const titleValue = source.title;
+  const title = validString(titleValue, MAX_TITLE, true)
+    ? titleValue
+    : `${authority.artifactType.toUpperCase()} governed artifact`;
+
+  if (
+    exactKeys(source, ['title', 'summary', 'sections']) &&
+    validString(source.title, MAX_TITLE, true) &&
+    validString(source.summary, MAX_SUMMARY) &&
+    Array.isArray(source.sections) &&
+    source.sections.length >= 1 &&
+    source.sections.length <= MAX_SECTIONS &&
+    source.sections.every(
+      section =>
+        section !== null &&
+        typeof section === 'object' &&
+        !Array.isArray(section) &&
+        exactKeys(section, ['title', 'content']) &&
+        validString(section.title, MAX_TITLE, true) &&
+        validString(section.content, MAX_SECTION_CONTENT),
+    )
+  ) {
+    return {
+      title: source.title,
+      summary: source.summary,
+      sections: source.sections.map(section => {
+        const mapped = section as Readonly<Record<string, StudioApprovedJson>>;
+        return {
+          title: mapped.title as string,
+          content: mapped.content as string,
+        };
+      }),
+    };
+  }
+
+  if (
+    exactKeys(source, ['title', 'sections']) &&
+    validString(source.title, MAX_TITLE, true) &&
+    Array.isArray(source.sections) &&
+    source.sections.length >= 1 &&
+    source.sections.length <= MAX_SECTIONS &&
+    source.sections.every(
+      section =>
+        section !== null &&
+        typeof section === 'object' &&
+        !Array.isArray(section) &&
+        exactKeys(section, ['heading', 'body']) &&
+        validString(section.heading, MAX_TITLE, true) &&
+        validString(section.body, MAX_SECTION_CONTENT),
+    )
+  ) {
+    return {
+      title: source.title,
+      summary: '',
+      sections: source.sections.map(section => {
+        const mapped = section as Readonly<Record<string, StudioApprovedJson>>;
+        return {
+          title: mapped.heading as string,
+          content: mapped.body as string,
+        };
+      }),
+    };
+  }
+
+  const consumed = new Set<string>();
+  if (validString(titleValue, MAX_TITLE, true)) consumed.add('title');
+  let summary = '';
+  const sections: Array<{ title: string; content: string }> = [];
+  for (const key of TEMPLATE_SECTION_INVENTORY[authority.artifactType]) {
+    if (!own(source, key)) continue;
+    consumed.add(key);
+    const text = displayValue(source[key]);
+    if (key === 'summary') summary = text;
+    else sections.push({ title: humanize(key), content: text });
+  }
+  for (const key of Object.keys(source)
+    .filter(key => !consumed.has(key))
+    .sort((left, right) => left.localeCompare(right))) {
+    sections.push({ title: humanize(key), content: displayValue(source[key]) });
+  }
+  if (sections.length === 0) {
+    sections.push({
+      title: 'Canonical content',
+      content: stableCanonicalStudioJson(source),
+    });
+  }
+  if (
+    sections.length > MAX_SECTIONS ||
+    summary.length > MAX_SUMMARY ||
+    sections.some(
+      section =>
+        section.title.length > MAX_TITLE ||
+        section.content.length > MAX_SECTION_CONTENT,
+    )
+  ) {
+    throw new StudioRenditionError('CONTENT_OVERSIZED');
+  }
+  return { title, summary, sections };
 };
 
 const escapeMarkdownText = (value: string) => value
@@ -111,7 +300,7 @@ const escapeMarkdownText = (value: string) => value
   .replace(/>/gu, '&gt;')
   .replace(/([`*_{}\[\]()#+!|])/gu, '\\$1');
 
-export const renderStudioMarkdown = (content: StudioApprovedContent): Uint8Array => {
+export const renderStudioMarkdown = (content: StudioNormalizedContent): Uint8Array => {
   const output: string[] = [
     `# ${escapeMarkdownText(content.title)}`,
     '',
@@ -173,7 +362,7 @@ const wrapLine = (value: string, width: number) => {
   return lines;
 };
 type PdfLine = { text: string; bold: boolean; size: number; advance: number };
-const pdfLines = (content: StudioApprovedContent): PdfLine[] => {
+const pdfLines = (content: StudioNormalizedContent): PdfLine[] => {
   const lines: PdfLine[] = [];
   const add = (value: string, bold: boolean, size: number, width: number, advance = size + 3) => {
     for (const text of wrapLine(value, width)) lines.push({ text, bold, size, advance });
@@ -190,7 +379,7 @@ const pdfLines = (content: StudioApprovedContent): PdfLine[] => {
   return lines;
 };
 
-export const renderStudioPdf = (content: StudioApprovedContent): Uint8Array => {
+export const renderStudioPdf = (content: StudioNormalizedContent): Uint8Array => {
   const pages: PdfLine[][] = [[]];
   let y = 720;
   for (const line of pdfLines(content)) {
@@ -222,7 +411,7 @@ export const renderStudioPdf = (content: StudioApprovedContent): Uint8Array => {
     const stream = `${commands.join('\n')}\n`;
     objects.set(streamId, `<< /Length ${asciiBytes(stream).byteLength} >>\nstream\n${stream}endstream`);
   });
-  objects.set(infoId, '<< /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic pdf-v1) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>');
+  objects.set(infoId, '<< /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic studio-pdf-1) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>');
 
   let pdf = '%PDF-1.7\n%\xE2\xE3\xCF\xD3\n';
   const offsets = new Array<number>(infoId + 1).fill(0);
@@ -333,10 +522,10 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><T
 const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`;
 const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
 const CORE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Governed Studio Artifact</dc:title><dc:creator>AvalaOS Studio</dc:creator><cp:lastModifiedBy>AvalaOS Studio</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>`;
-const APP = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>AvalaOS deterministic docx-v1</Application><AppVersion>1.0</AppVersion></Properties>`;
+const APP = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>AvalaOS deterministic studio-docx-1</Application><AppVersion>1.0</AppVersion></Properties>`;
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="BodyText"><w:name w:val="Body Text"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:after="240"/><w:keepNext/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/><w:pPr><w:spacing w:before="240" w:after="120"/><w:keepNext/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="26"/></w:rPr></w:style></w:styles>`;
 
-export const renderStudioDocx = (content: StudioApprovedContent): Uint8Array => {
+export const renderStudioDocx = (content: StudioNormalizedContent): Uint8Array => {
   const body = [paragraph(content.title, 'Title'), paragraph('Executive Summary', 'Heading1'), paragraph(content.summary, 'BodyText')];
   for (const section of content.sections) body.push(paragraph(section.title, 'Heading1'), paragraph(section.content, 'BodyText'));
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body.join('')}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;
@@ -403,12 +592,28 @@ export const sha256Hex = async (bytes: Uint8Array) => {
 export const renderStudioPrivateArtifact = async (
   value: unknown,
   format: string,
+  authority: StudioRenderingAuthority,
 ): Promise<StudioRenderedArtifact> => {
-  if (!(STUDIO_RENDITION_FORMATS as readonly string[]).includes(format)) throw new StudioRenditionError('UNSUPPORTED_FORMAT');
-  const content = validateStudioApprovedContent(value);
+  if (!(STUDIO_RENDITION_FORMATS as readonly string[]).includes(format)) {
+    throw new StudioRenditionError('UNSUPPORTED_FORMAT');
+  }
   const typedFormat = format as StudioRenditionFormat;
-  const bytes = typedFormat === 'markdown' ? renderStudioMarkdown(content) : typedFormat === 'pdf' ? renderStudioPdf(content) : renderStudioDocx(content);
-  if (!bytes.byteLength || bytes.byteLength > MAX_OUTPUT_BYTES) throw new StudioRenditionError('OUTPUT_OVERSIZED');
+  if (
+    authority.rendererVersion !==
+    STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[typedFormat]
+  ) {
+    throw new StudioRenditionError('VERSION_MISMATCH');
+  }
+  const content = normalizeStudioApprovedContent(value, authority);
+  const bytes =
+    typedFormat === 'markdown'
+      ? renderStudioMarkdown(content)
+      : typedFormat === 'pdf'
+        ? renderStudioPdf(content)
+        : renderStudioDocx(content);
+  if (!bytes.byteLength || bytes.byteLength > MAX_OUTPUT_BYTES) {
+    throw new StudioRenditionError('OUTPUT_OVERSIZED');
+  }
   if (typedFormat === 'pdf') assertValidStudioPdf(bytes);
   if (typedFormat === 'docx') inspectStudioDocxEntries(bytes);
   return Object.freeze({
@@ -418,7 +623,9 @@ export const renderStudioPrivateArtifact = async (
     mimeType: MIME[typedFormat],
     filename: FILENAMES[typedFormat],
     format: typedFormat,
-    rendererVersion: VERSIONS[typedFormat],
-    templateVersion: TEMPLATE_VERSION,
+    rendererVersion: authority.rendererVersion,
+    templateVersion: authority.templateVersion,
+    contentSchemaVersion: authority.contentSchemaVersion,
+    normalizerVersion: STUDIO_CONTENT_NORMALIZER_VERSION,
   });
 };

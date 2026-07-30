@@ -1,9 +1,14 @@
 import {
   renderStudioPrivateArtifact,
-  type StudioApprovedContent,
   type StudioRenderedArtifact,
   type StudioRenditionFormat,
 } from './studioPrivateArtifactRenderer.ts';
+import type {
+  StudioApprovedContent,
+  StudioDeletionExecuteClaim,
+  StudioPrivateArtifactType,
+  StudioRenditionExecuteClaim,
+} from './studioPrivateArtifactRpcContract.ts';
 import {
   buildStudioPrivateArtifactObjectKey,
   StudioStorageError,
@@ -26,16 +31,7 @@ export type StudioSagaFailureCode =
   | 'AVAILABLE_COMPLETION_FAILED'
   | 'RECONCILIATION_EXHAUSTED';
 
-type ExecuteClaim = Readonly<{
-  disposition: 'execute';
-  attemptId: string;
-  renditionId: string;
-  organizationId: string;
-  workspaceId: string;
-  opaqueObjectId: string;
-  format: StudioRenditionFormat;
-  approvedContent: StudioApprovedContent;
-}>;
+type ExecuteClaim = StudioRenditionExecuteClaim;
 type ReplayClaim = Readonly<{ disposition: 'replay'; receipt: StudioSagaPublicReceipt }>;
 export type StudioRenditionClaim = ExecuteClaim | ReplayClaim;
 
@@ -46,7 +42,12 @@ type CommittedRenditionWork = Readonly<{
   workspaceId: string;
   objectKey: string;
   format: StudioRenditionFormat;
+  artifactType: StudioPrivateArtifactType;
+  artifactId: string;
+  artifactVersionId: string;
+  opaqueObjectId: string;
   approvedContent: StudioApprovedContent;
+  contentSchemaVersion: string;
   byteLength: number;
   sha256: string;
   mimeType: string;
@@ -59,8 +60,9 @@ type CommittedRenditionWork = Readonly<{
 
 export interface StudioRenditionSagaDatabase {
   claim(requestId: string): Promise<StudioRenditionClaim>;
+  startAttempt(input: { attemptId: string }): Promise<void>;
   persistRendered(input: Omit<CommittedRenditionWork, 'state' | 'reconciliationCount'>): Promise<void>;
-  markAvailable(input: { attemptId: string; renditionId: string; byteLength: number; sha256: string; mimeType: string }): Promise<StudioSagaPublicReceipt>;
+  markAvailable(input: { attemptId: string }): Promise<StudioSagaPublicReceipt>;
   markFailed(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
   markReconciliationRequired(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
   loadReconciliation(attemptId: string): Promise<CommittedRenditionWork | null>;
@@ -97,9 +99,24 @@ export const executeStudioRenditionSaga = async (
 ): Promise<StudioRenditionSagaResult> => {
   const claim = await deps.database.claim(requestId);
   if (claim.disposition === 'replay') return { outcome: 'replay', receipt: claim.receipt };
+  if (claim.requestId !== requestId) throw new Error('RENDITION_REQUEST_MISMATCH');
+  try {
+    await deps.database.startAttempt({ attemptId: claim.attemptId });
+  } catch {
+    return failed(deps.database, claim.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+  }
   let rendered: StudioRenderedArtifact;
   try {
-    rendered = await (deps.render ?? renderStudioPrivateArtifact)(claim.approvedContent, claim.format);
+    rendered = await (deps.render ?? renderStudioPrivateArtifact)(
+      claim.approvedContent,
+      claim.format,
+      {
+        artifactType: claim.artifactType,
+        contentSchemaVersion: claim.contentSchemaVersion,
+        templateVersion: claim.templateVersion,
+        rendererVersion: claim.rendererVersion,
+      },
+    );
   } catch {
     return failed(deps.database, claim.attemptId, 'RENDER_FAILED');
   }
@@ -116,7 +133,12 @@ export const executeStudioRenditionSaga = async (
     workspaceId: claim.workspaceId,
     objectKey,
     format: claim.format,
+    artifactType: claim.artifactType,
+    artifactId: claim.artifactId,
+    artifactVersionId: claim.artifactVersionId,
+    opaqueObjectId: claim.opaqueObjectId,
     approvedContent: claim.approvedContent,
+    contentSchemaVersion: claim.contentSchemaVersion,
     byteLength: rendered.byteLength,
     sha256: rendered.sha256,
     mimeType: rendered.mimeType,
@@ -140,10 +162,6 @@ export const executeStudioRenditionSaga = async (
   try {
     const receipt = await deps.database.markAvailable({
       attemptId: claim.attemptId,
-      renditionId: claim.renditionId,
-      byteLength: rendered.byteLength,
-      sha256: rendered.sha256,
-      mimeType: rendered.mimeType,
     });
     return { outcome: 'available', receipt };
   } catch {
@@ -181,13 +199,24 @@ export const reconcileStudioRendition = async (
   if (probe.status === 'missing') {
     let rendered: StudioRenderedArtifact;
     try {
-      rendered = await (deps.render ?? renderStudioPrivateArtifact)(work.approvedContent, work.format);
+      rendered = await (deps.render ?? renderStudioPrivateArtifact)(
+        work.approvedContent,
+        work.format,
+        {
+          artifactType: work.artifactType,
+          contentSchemaVersion: work.contentSchemaVersion,
+          templateVersion: work.templateVersion,
+          rendererVersion: work.rendererVersion,
+        },
+      );
     } catch {
       return failed(deps.database, work.attemptId, 'RENDER_FAILED');
     }
     if (rendered.byteLength !== work.byteLength || rendered.sha256 !== work.sha256 ||
         rendered.mimeType !== work.mimeType || rendered.rendererVersion !== work.rendererVersion ||
-        rendered.templateVersion !== work.templateVersion || rendered.filename !== work.filename) {
+        rendered.templateVersion !== work.templateVersion ||
+        rendered.contentSchemaVersion !== work.contentSchemaVersion ||
+        rendered.filename !== work.filename) {
       return failed(deps.database, work.attemptId, 'STORAGE_OBJECT_MISMATCH');
     }
     try {
@@ -202,10 +231,6 @@ export const reconcileStudioRendition = async (
   try {
     const receipt = await deps.database.markAvailable({
       attemptId: work.attemptId,
-      renditionId: work.renditionId,
-      byteLength: work.byteLength,
-      sha256: work.sha256,
-      mimeType: work.mimeType,
     });
     return { outcome: 'available', receipt };
   } catch {
@@ -218,16 +243,9 @@ export type StudioDeletionReceipt = Readonly<{
   renditionId: string;
   state: 'deleting' | 'deleted' | 'deletion_failed' | 'reconciliation_required';
 }>;
-type ExecuteDeletionClaim = Readonly<{
-  disposition: 'execute';
-  deletionAttemptId: string;
-  renditionId: string;
-  organizationId: string;
-  workspaceId: string;
-  objectKey: string;
-  reconciliationCount: number;
-}>;
+type ExecuteDeletionClaim = StudioDeletionExecuteClaim;
 type ReplayDeletionClaim = Readonly<{ disposition: 'replay'; receipt: StudioDeletionReceipt }>;
+export type StudioDeletionClaim = ExecuteDeletionClaim | ReplayDeletionClaim;
 export interface StudioDeletionSagaDatabase {
   claimDeletion(requestId: string): Promise<ExecuteDeletionClaim | ReplayDeletionClaim>;
   markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }): Promise<StudioDeletionReceipt>;
@@ -267,6 +285,7 @@ export const executeStudioDeletionSaga = async (
 ): Promise<StudioDeletionSagaResult> => {
   const claim = await deps.database.claimDeletion(requestId);
   if (claim.disposition === 'replay') return { outcome: 'replay', receipt: claim.receipt };
+  if (claim.requestId !== requestId) throw new Error('DELETION_REQUEST_MISMATCH');
   return runCommittedDeletion(claim, deps);
 };
 

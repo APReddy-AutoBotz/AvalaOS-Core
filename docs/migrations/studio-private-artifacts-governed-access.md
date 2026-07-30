@@ -12,11 +12,11 @@ Six capabilities are independent: rendition generation, download, retention mana
 
 `studio_private_artifact_command_claim(jsonb)` accepts `studio.rendition.generate` only for the aggregate's exact current `approved` version. A new committed command returns one `renditionClaim`; exact replay returns the committed safe response without another claim. The service starts the attempt, deterministically renders, uploads create-only to the exact server-derived object key, and reports verified hash, byte length, MIME, safe filename, and fixed renderer version. Completion creates one canonical rendition and snapshots the active retention policy atomically with audit. Failure creates a durable failed attempt and no available rendition.
 
-The supported source contracts are `studio-markdown-1`, `studio-pdf-1`, and `studio-docx-1`. PostgreSQL does not render or move bytes. It authorizes and records the external side-effect saga.
+The canonical renderer versions are `studio-markdown-1`, `studio-pdf-1`, and `studio-docx-1`. The claim also carries the exact immutable Studio template version and `studio-artifact-1` schema version. The production normalizer consumes the accepted PR A heading/body fixture, title/summary/section content, template-keyed BRD/FRD/PDD inventories, and bounded nested JSON without silent field loss. PostgreSQL does not render or move bytes; it authorizes and records the external side-effect saga.
 
 ## Private Storage contract
 
-The migration never creates or alters provider-owned Storage schemas or tables. If both `storage.buckets` and `storage.objects` already exist, it upserts `studio-private-artifacts` as non-public and adds a restrictive anon/authenticated denial policy for that bucket. Service code uses the provider API; direct SQL metadata deletion is prohibited. Object keys are exact opaque attempt bindings under tenant/workspace prefixes and never appear in the browser projection, command receipt response, or audit metadata.
+The migration never creates or alters provider-owned Storage schemas or tables. If both `storage.buckets` and `storage.objects` already exist, it upserts `studio-private-artifacts` as non-public and adds a restrictive anon/authenticated denial policy for that bucket. Service code uses the provider API; direct SQL metadata deletion is prohibited. Object keys are exact opaque rendition bindings under tenant/workspace `studio-artifacts` prefixes and never appear in the browser projection, command receipt response, or audit metadata.
 
 ## Retention and legal hold
 
@@ -30,13 +30,16 @@ An authorized requester creates an immutable request and evaluation snapshot. A 
 
 ## Download
 
-`studio_artifact_download_claim(jsonb)` performs fresh authorization before receipt or rendition inspection and requires `available`. A new claim returns the internal binding only to the service-held caller; exact replay returns no executable claim. `studio_artifact_download_complete(receipt)` and `studio_artifact_download_fail(receipt, failure_code)` make completion or failure durable and auditable. Edge must return attachment headers and bytes; no signed URL is persisted or audited. If a provider-signed URL is ever required, the Edge boundary must cap it at 60 seconds; this migration does not issue one.
+`studio_artifact_download_claim(jsonb)` performs fresh authorization before receipt or rendition inspection and requires `available`. A new claim returns the internal binding only to the service-held caller; exact successful replay returns the same strictly decoded private binding with the original receipt so the broker can verify and return the exact file again. Failed receipts require a new idempotency key. `studio_artifact_download_complete(receipt)` and `studio_artifact_download_fail(receipt, failure_code)` make completion or failure durable and auditable. Edge must return attachment headers and bytes; no signed URL is persisted or audited. If a provider-signed URL is ever required, the Edge boundary must cap it at 60 seconds; this migration does not issue one.
 
 ## Verification
 
+- `studioPrivateArtifactRpcContract.test.ts` parses the candidate migration and proves every production RPC function name and exact argument-key set, strict claim vocabulary, and replay rule against the authoritative typed manifest.
 - `node scripts/checkStudioPrivateArtifactMigrationContract.mjs` checks the capabilities, exact functions, forced-RLS inventory source, ACLs, safe projection, current-approved ancestry, no-shortening/hold/deletion guards, conditional private bucket, and absence of provider schema creation.
-- `node scripts/testStudioPrivateArtifactMigrations.mjs` declares and executes 40 PostgreSQL 16 scenarios: 9 authority/isolation, 11 rendition, 7 retention/hold, 7 deletion, and 6 download. It also runs fresh full-chain, accepted-main upgrade, dirty atomic rejection, and conditional Storage-stub paths. Without `STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL`, PostgreSQL execution is reported as not run.
+- `node scripts/testStudioPrivateArtifactMigrations.mjs` declares and executes 46 PostgreSQL 16 scenarios: 9 authority/isolation, 11 rendition, 7 retention/hold, 7 deletion, 6 download, and 6 real cross-layer RPC/claim/saga/replay scenarios. It also runs fresh full-chain, accepted-main upgrade, dirty atomic rejection, and conditional Storage-stub paths. Without `STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL`, PostgreSQL execution is reported as not run.
 - The retained PR A migration harness now accepts this additive chronological tip while preserving its membership-forward-fix and PR A checks.
+
+Executed local evidence for the corrective candidate: the complete Studio private-artifact source suite passed; deterministic renderer tests passed 27/27; focused coverage passed 67/67 at 100% lines/functions and 93.67% branches; disposable PostgreSQL 16 passed 46/46 with one attempt, one upload, one available rendition, two verified download retrievals on exact replay, one provider deletion, and zero objects after tombstoning; desktop and Pixel 7 browser evidence passed 30/30; repository and Edge typechecks, production build, diff check, and dependency audit passed with zero reported vulnerabilities. Exact-head GitHub workflow conclusions remain planned verification until the corrective commit is published.
 
 ## Rollback and recovery
 

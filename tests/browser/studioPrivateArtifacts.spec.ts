@@ -67,7 +67,7 @@ function rendition(
     filename: `governed-brief.${format === 'markdown' ? 'md' : format}`,
     byteLength: 2048,
     sha256: hashCharacter[format].repeat(64),
-    rendererVersion: `${format}-v1`,
+    rendererVersion: `studio-${format}-1`,
     retentionMode: 'until',
     retentionUntil: '2027-07-29T00:00:00.000Z',
     legalHoldActive: false,
@@ -126,8 +126,8 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       version: 4,
       parentVersionId: null,
       lifecycle: 'approved',
-      templateVersion: 'brd-v1',
-      contentSchemaVersion: 'studio-v1',
+      templateVersion: 'studio-brd-1',
+      contentSchemaVersion: 'studio-artifact-1',
       projectionVersion: 'json-v1',
       content: { title: 'Approved governed brief' },
       contentHash: 'b'.repeat(64),
@@ -139,8 +139,8 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       version: 4,
       parentVersionId: null,
       lifecycle: 'approved',
-      templateVersion: 'brd-v1',
-      contentSchemaVersion: 'studio-v1',
+      templateVersion: 'studio-brd-1',
+      contentSchemaVersion: 'studio-artifact-1',
       projectionVersion: 'json-v1',
       content: { title: 'Approved governed brief' },
       contentHash: 'b'.repeat(64),
@@ -153,8 +153,8 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
         version: 4,
         parentVersionId: null,
         lifecycle: 'approved',
-        templateVersion: 'brd-v1',
-        contentSchemaVersion: 'studio-v1',
+        templateVersion: 'studio-brd-1',
+        contentSchemaVersion: 'studio-artifact-1',
         projectionVersion: 'json-v1',
         content: { title: 'Approved governed brief' },
         contentHash: 'b'.repeat(64),
@@ -361,7 +361,7 @@ test('Markdown PDF and DOCX show verified available metadata', async ({ page }) 
   for (const format of ['markdown', 'pdf', 'docx'] as const) {
     const card = panel.getByTestId(`rendition-${format}`);
     await expect(card).toContainText('Available');
-    await expect(card).toContainText(`${format}-v1`);
+    await expect(card).toContainText(`studio-${format}-1`);
     await expect(card).toContainText(hashCharacter[format].repeat(64));
     await expect(card).toContainText('2,048');
   }

@@ -24,7 +24,7 @@ Approved Studio artifact version
   -> authenticated brokered download
 ```
 
-Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact command replay returns the original receipt and never emits another render, upload, deletion, or download claim. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions.
+Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact mutation-command replay returns the original receipt and never emits another render, upload, or deletion claim. Exact successful download replay reuses its original receipt and returns the same strictly decoded private claim only inside the service boundary so the broker can return the verified file again. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions.
 
 ## Canonical model
 
@@ -47,9 +47,11 @@ Supported formats and renderer versions are:
 
 | Format | Renderer | Contract |
 | --- | --- | --- |
-| Markdown | `markdown-v1` | UTF-8, fixed title/summary/section order, deterministic LF newlines, executable HTML and unsafe Markdown escaped. |
-| PDF | `pdf-v1` | Valid PDF with deterministic objects/metadata, wrapped semantic text, a standard safe font, and no JavaScript, actions, forms, attachments, embedded files, or external references. |
-| DOCX | `docx-v1` | Valid deterministic OOXML ZIP, explicit business-brief styles and page geometry, no macros, OLE/ActiveX, external relationships, remote images, or active content. |
+| Markdown | `studio-markdown-1` | UTF-8, fixed title/summary/section order, deterministic LF newlines, executable HTML and unsafe Markdown escaped. |
+| PDF | `studio-pdf-1` | Valid PDF with deterministic objects/metadata, wrapped semantic text, a standard safe font, and no JavaScript, actions, forms, attachments, embedded files, or external references. |
+| DOCX | `studio-docx-1` | Valid deterministic OOXML ZIP, explicit business-brief styles and page geometry, no macros, OLE/ActiveX, external relationships, remote images, or active content. |
+
+The versioned `studio-artifact-1` normalizer consumes the immutable approved content and template version. It supports title/summary/section content, the accepted PR A heading/body fixture, the immutable BRD/FRD/PDD template section inventories, and arbitrary bounded nested JSON through stable key-sorted canonical JSON. Unconsumed fields are rendered rather than silently dropped; unsupported, oversized, or executable input fails before upload. The renderer result, attempt, rendition, projection, and reconciliation all preserve the approved artifact's actual `studio-brd-1`, `studio-frd-1`, or `studio-pdd-1` template version.
 
 The rendition lifecycle is:
 

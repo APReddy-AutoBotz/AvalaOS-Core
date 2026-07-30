@@ -9,6 +9,8 @@ import type {
 export type StudioPrivateArtifactJson = Record<string, unknown>;
 export type StudioPrivateArtifactAuthority = Readonly<{
   actorId: string;
+  organizationId: string;
+  workspaceId: string;
   authorizationVersion: number;
   capabilities: readonly string[];
 }>;

@@ -19,8 +19,11 @@ const organizationId = '11111111-1111-4111-8111-111111111111';
 const workspaceId = '22222222-2222-4222-8222-222222222222';
 const opaqueObjectId = '33333333-3333-4333-8333-333333333333';
 const content: StudioApprovedContent = { title: 'Brief', summary: 'Summary', sections: [{ title: 'Decision', content: 'Governed.' }] };
+const renderingAuthority = { artifactType: 'brd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-brd-1', rendererVersion: 'studio-markdown-1' as const };
 const executeClaim: StudioRenditionClaim = {
-  disposition: 'execute', attemptId: 'attempt-1', renditionId: 'rendition-1', organizationId, workspaceId, opaqueObjectId, format: 'markdown', approvedContent: content,
+  disposition: 'execute', requestId: 'request-1', attemptId: 'attempt-1', renditionId: 'rendition-1', organizationId, workspaceId, opaqueObjectId,
+  artifactId: 'artifact-1', artifactVersionId: 'artifact-version-1', artifactType: 'brd', format: 'markdown', approvedContent: content,
+  contentSchemaVersion: 'studio-artifact-1', rendererVersion: 'studio-markdown-1', templateVersion: 'studio-brd-1', reconciliationCount: 0,
 };
 const receipt = (state: StudioSagaPublicReceipt['state']): StudioSagaPublicReceipt => ({ attemptId: 'attempt-1', renditionId: 'rendition-1', format: 'markdown', state });
 
@@ -33,6 +36,7 @@ class FakeRenditionDb implements StudioRenditionSagaDatabase {
   failedCodes: StudioSagaFailureCode[] = [];
   reconciliationCodes: StudioSagaFailureCode[] = [];
   async claim(_requestId: string) { return this.claimValue; }
+  async startAttempt(_input: { attemptId: string }) {}
   async persistRendered(input: any) {
     if (this.failPersist) throw new Error('db');
     this.work = { ...input, state: 'rendered', reconciliationCount: 0 };
@@ -118,7 +122,7 @@ void test('reconciliation verifies an existing object and completes without a se
 });
 void test('reconciliation recreates a missing object only from committed server content', async () => {
   const database = new FakeRenditionDb();
-  const rendered = await renderStudioPrivateArtifact(content, 'markdown');
+  const rendered = await renderStudioPrivateArtifact(content, 'markdown', renderingAuthority);
   const objectKey = `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`;
   database.work = { ...executeClaim, objectKey, byteLength: rendered.byteLength, sha256: rendered.sha256, mimeType: rendered.mimeType, filename: rendered.filename, rendererVersion: rendered.rendererVersion, templateVersion: rendered.templateVersion, state: 'completion_pending', reconciliationCount: 1 };
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
@@ -129,7 +133,7 @@ void test('reconciliation recreates a missing object only from committed server 
 });
 void test('reconciliation rejects deterministic render metadata drift', async () => {
   const database = new FakeRenditionDb();
-  const rendered = await renderStudioPrivateArtifact(content, 'markdown');
+  const rendered = await renderStudioPrivateArtifact(content, 'markdown', renderingAuthority);
   database.work = { ...executeClaim, objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`, byteLength: rendered.byteLength, sha256: '0'.repeat(64), mimeType: rendered.mimeType, filename: rendered.filename, rendererVersion: rendered.rendererVersion, templateVersion: rendered.templateVersion, state: 'completion_pending', reconciliationCount: 1 };
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
   const result = await reconcileStudioRendition('attempt-1', { database, storage });
@@ -148,7 +152,7 @@ void test('reconciliation fails closed on corrupt existing object', async () => 
 });
 void test('rendition reconciliation is bounded after three committed attempts', async () => {
   const database = new FakeRenditionDb();
-  database.work = { ...executeClaim, objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`, byteLength: 1, sha256: '0'.repeat(64), mimeType: 'text/markdown; charset=utf-8', filename: 'studio-artifact-rendition.md', rendererVersion: 'markdown-v1', templateVersion: 'standard_business_brief-v1', state: 'completion_pending', reconciliationCount: 3 };
+  database.work = { ...executeClaim, objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`, byteLength: 1, sha256: '0'.repeat(64), mimeType: 'text/markdown; charset=utf-8', filename: 'studio-artifact-rendition.md', rendererVersion: 'studio-markdown-1', templateVersion: 'studio-brd-1', contentSchemaVersion: 'studio-artifact-1', state: 'completion_pending', reconciliationCount: 3 };
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
   const result = await reconcileStudioRendition('attempt-1', { database, storage });
   assert.equal(result.outcome, 'failed');
@@ -164,7 +168,7 @@ void test('available rendition reconciliation is a read-only replay', async () =
   assert.equal(storage.operationCounts.probe, 0);
 });
 
-const deletionClaim = { disposition: 'execute' as const, deletionAttemptId: 'delete-1', renditionId: 'rendition-1', organizationId, workspaceId, objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`, reconciliationCount: 0 };
+const deletionClaim = { disposition: 'execute' as const, requestId: 'delete-request', deletionAttemptId: 'delete-1', renditionId: 'rendition-1', organizationId, workspaceId, objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`, reconciliationCount: 0 };
 class FakeDeletionDb implements StudioDeletionSagaDatabase {
   claimValue: any = deletionClaim;
   loadValue: any = deletionClaim;
@@ -189,7 +193,7 @@ class FakeDeletionDb implements StudioDeletionSagaDatabase {
   async loadDeletionReconciliation(_deletionAttemptId: string) { return this.loadValue; }
 }
 const seedDeletionObject = async (storage: DeterministicFakeStudioPrivateArtifactStorage) => {
-  const rendered = await renderStudioPrivateArtifact(content, 'markdown');
+  const rendered = await renderStudioPrivateArtifact(content, 'markdown', renderingAuthority);
   await storage.uploadCreateOnly({ organizationId, workspaceId, objectKey: deletionClaim.objectKey, byteLength: rendered.byteLength, sha256: rendered.sha256, mimeType: rendered.mimeType, bytes: rendered.bytes });
 };
 

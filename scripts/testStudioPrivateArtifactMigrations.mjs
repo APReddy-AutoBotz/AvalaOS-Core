@@ -4,17 +4,21 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createAvailablePrivateArtifactFixture,privateCommand,downloadCommand} from './studioPrivateArtifactPostgresFixture.mjs';
+import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifactCrossLayerPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
+execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
+const contractParityPassed=true;
 export const scenarioNames={
  authority:['authority valid same tenant rendition request','authority foreign organization denied','authority foreign workspace denied','authority stale authorization denied','authority inactive or deleted membership denied','authority missing capability denied','authority browser roles cannot execute mutations','authority forced RLS inventory exact','authority cross tenant projection does not disclose'],
  rendition:['rendition approved current artifact creates attempt','rendition draft rejected and non-current target denied','rendition one active attempt per version format renderer','rendition exact replay returns one attempt','rendition concurrent duplicate resolves deterministically','rendition content hash size and MIME immutable','rendition browser storage metadata rejected','rendition immutable metadata cannot be rewritten','rendition failed attempt creates no available rendition','rendition completion snapshots active policy','rendition replay omits executable claim'],
  retention:['retention active duration blocks deletion','retention indefinite blocks deletion','retention active legal hold blocks deletion','retention released hold stops blocking','retention snapshot cannot be shortened','retention foreign tenant hold denied','retention replay does not duplicate hold events'],
  deletion:['deletion requester cannot self approve','deletion rejection leaves rendition available','deletion approval rechecks retention and hold','deletion provider failure cannot mark deleted','deletion success preserves tombstone metadata','deletion deleted rendition cannot download','deletion metadata cannot be physically deleted'],
- download:['download available rendition authorized','download unavailable or deleted denied','download foreign tenant denied','download stale authorization denied','download receipt and audit recorded','download projection excludes storage binding and signed URL']
+ download:['download available rendition authorized','download unavailable or deleted denied','download foreign tenant denied','download stale authorization denied','download receipt and audit recorded','download projection excludes storage binding and signed URL'],
+ crossLayer:['cross-layer RPC signature parity','cross-layer real rendition claim and production saga','cross-layer renderer template schema version parity','cross-layer real download claim exact replay','cross-layer real deletion claim and tombstone','cross-layer external-effect replay counts']
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,40);assert.equal(new Set(allScenarios).size,40);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,46);assert.equal(new Set(allScenarios).size,46);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
 const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
@@ -30,6 +34,7 @@ try{
  const upgrade=await createDb(databaseNames[1]);await apply(upgrade,baseline);await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade');
  const dirty=await createDb(databaseNames[2]);await apply(dirty,baseline);await dirty.query('CREATE TABLE public.studio_private_artifact_runtime_control(blocker integer)');await assert.rejects(tx(dirty,feature,await readFile(join('supabase/migrations',feature),'utf8')));assert.equal((await dirty.query("SELECT to_regclass('public.studio_renditions') relation")).rows[0].relation,null);console.log('FOUNDATION PASS dirty rejection atomic');
  const storage=await createDb(databaseNames[3]);await apply(storage,baseline);await storage.query('CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY');await apply(storage,[feature]);assert.deepEqual((await storage.query("SELECT public FROM storage.buckets WHERE id='studio-private-artifacts'")).rows,[{public:false}]);assert.equal((await storage.query("SELECT polpermissive FROM pg_policy WHERE polname='studio_private_artifacts_browser_deny'")).rows[0].polpermissive,false);console.log('FOUNDATION PASS conditional Storage stub');
+ await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const fixture=await createAvailablePrivateArtifactFixture(fresh,'markdown',200);const org=fixture.org,workspace=fixture.workspace,actor=fixture.requester,auth=fixture.authorizationVersions[actor],rendition=fixture.rendition;
  await scenario(scenarioNames.authority[0],async()=>assert.equal(rendition.lifecycle,'available'));
  await scenario(scenarioNames.authority[1],async()=>await assert.rejects(privateCommand(fresh,{commandType:'studio.legal_hold.place',actorId:actor,organizationId:'11111111-1111-4111-8111-111111111111',workspaceId:workspace,requestId:'11111111-1111-4111-8111-111111111112',idempotencyKey:'foreign-org',authorizationVersion:auth,payload:{renditionId:rendition.id,rationale:'test'}})));

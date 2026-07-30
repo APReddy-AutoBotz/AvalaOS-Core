@@ -1,4 +1,5 @@
 import { corsHeaders } from './http.ts';
+import type { StudioDownloadExecuteClaim } from './studioPrivateArtifactRpcContract.ts';
 import {
   asStudioPrivateArtifactError,
   StudioPrivateArtifactError,
@@ -17,8 +18,10 @@ export interface StudioPrivateArtifactDownloadEnvelope {
 }
 export interface StudioPrivateArtifactDownloadClaim {
   receiptId: string;
-  outcome: 'claimed' | 'replayed';
-  downloadClaim: StudioPrivateArtifactJson;
+  outcome: 'committed' | 'replayed';
+  resourceId: string;
+  resource: StudioPrivateArtifactJson;
+  downloadClaim: StudioDownloadExecuteClaim;
 }
 export interface StudioPrivateArtifactVerifiedDownload {
   bytes: Uint8Array;
@@ -40,7 +43,7 @@ export interface StudioPrivateArtifactDownloadDependencies {
     command: StudioPrivateArtifactDownloadEnvelope & { actorId: string },
   ): Promise<StudioPrivateArtifactDownloadClaim>;
   retrieveAndVerify(
-    claim: StudioPrivateArtifactJson,
+    claim: StudioDownloadExecuteClaim,
   ): Promise<StudioPrivateArtifactVerifiedDownload>;
   completeDownload(receiptId: string): Promise<void>;
   failDownload(receiptId: string, failureCode: string): Promise<void>;
@@ -147,7 +150,12 @@ export const handleStudioPrivateArtifactDownload = async (
       organizationId: envelope.organizationId,
       workspaceId: envelope.workspaceId,
     });
-    if (!authority || authority.actorId !== actor.id) {
+    if (
+      !authority ||
+      authority.actorId !== actor.id ||
+      authority.organizationId !== envelope.organizationId ||
+      authority.workspaceId !== envelope.workspaceId
+    ) {
       throw new StudioPrivateArtifactError('RESOURCE_NOT_AVAILABLE');
     }
     if (authority.authorizationVersion !== envelope.authorizationVersion) {

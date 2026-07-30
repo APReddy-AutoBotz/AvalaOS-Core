@@ -3,23 +3,33 @@ import {
   STUDIO_PRIVATE_ARTIFACT_DOMAIN_ERROR_CODES,
   StudioPrivateArtifactError,
   type StudioPrivateArtifactAtomicCommand,
-  type StudioPrivateArtifactAtomicResult,
-  type StudioPrivateArtifactAuthority,
   type StudioPrivateArtifactDomainErrorCode,
   type StudioPrivateArtifactJson,
 } from './studioPrivateArtifactCommand.ts';
 import type { StudioPrivateArtifactCommandDependencies } from './studioPrivateArtifactHandler.ts';
 import type {
-  StudioPrivateArtifactDownloadClaim,
   StudioPrivateArtifactDownloadDependencies,
   StudioPrivateArtifactVerifiedDownload,
 } from './studioPrivateArtifactDownloadHandler.ts';
+import {
+  assertStudioPrivateArtifactRpcArgs,
+  decodeStudioDeletionClaim,
+  decodeStudioDownloadClaim,
+  decodeStudioPrivateArtifactRpcResult,
+  decodeStudioRenditionClaim,
+  STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
+  type StudioDeletionExecuteClaim,
+  type StudioDownloadExecuteClaim,
+  type StudioPrivateArtifactRpcArgs,
+  type StudioPrivateArtifactRpcKey,
+  type StudioPrivateArtifactRpcResults,
+  type StudioRenditionExecuteClaim,
+} from './studioPrivateArtifactRpcContract.ts';
 import {
   executeStudioDeletionSaga,
   executeStudioRenditionSaga,
   type StudioDeletionReceipt,
   type StudioDeletionSagaDatabase,
-  type StudioRenditionClaim,
   type StudioRenditionSagaDatabase,
   type StudioSagaFailureCode,
   type StudioSagaPublicReceipt,
@@ -40,7 +50,8 @@ type RpcError = {
 export const decodeStudioPrivateArtifactRpcError = (
   error: unknown,
 ): StudioPrivateArtifactError => {
-  const candidate = error && typeof error === 'object' ? (error as RpcError) : {};
+  const candidate: RpcError =
+    error && typeof error === 'object' ? error : {};
   for (const field of [
     candidate.code,
     candidate.message,
@@ -61,11 +72,16 @@ export const decodeStudioPrivateArtifactRpcError = (
   return new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
 };
 
-const rpc = async <T>(name: string, args: StudioPrivateArtifactJson): Promise<T> => {
+const rpc = async <Key extends StudioPrivateArtifactRpcKey>(
+  key: Key,
+  args: StudioPrivateArtifactRpcArgs[Key],
+): Promise<StudioPrivateArtifactRpcResults[Key]> => {
+  assertStudioPrivateArtifactRpcArgs(key, args);
+  const contract = STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST[key];
   const { url, serviceRoleKey } = supabaseEnv();
   let response: Response;
   try {
-    response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+    response = await fetch(`${url}/rest/v1/rpc/${contract.functionName}`, {
       method: 'POST',
       redirect: 'error',
       headers: {
@@ -87,87 +103,147 @@ const rpc = async <T>(name: string, args: StudioPrivateArtifactJson): Promise<T>
     }
     throw decodeStudioPrivateArtifactRpcError(body);
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+  }
+  return decodeStudioPrivateArtifactRpcResult(key, body);
 };
 
 const storage = () => {
   const { url, serviceRoleKey } = supabaseEnv();
-  const get = (globalThis as typeof globalThis & {
-    Deno?: { env?: { get?: (key: string) => string | undefined } };
-  }).Deno?.env?.get;
+  const get = (
+    globalThis as typeof globalThis & {
+      Deno?: { env?: { get?: (key: string) => string | undefined } };
+    }
+  ).Deno?.env?.get;
   return createStudioPrivateArtifactStorage({
     supabaseUrl: url,
     serviceRoleKey,
     configuredBucket: get?.('STUDIO_PRIVATE_ARTIFACTS_BUCKET'),
-    configuredBucketAllowlist: get?.('STUDIO_PRIVATE_ARTIFACTS_BUCKET_ALLOWLIST'),
+    configuredBucketAllowlist: get?.(
+      'STUDIO_PRIVATE_ARTIFACTS_BUCKET_ALLOWLIST',
+    ),
   });
 };
 
-const renditionDatabase = (claim: StudioRenditionClaim): StudioRenditionSagaDatabase => ({
+const renditionReceipt = (
+  claim: StudioRenditionExecuteClaim,
+  state:
+    | 'requested'
+    | 'rendering'
+    | 'uploading'
+    | 'available'
+    | 'failed'
+    | 'reconciliation_required',
+): StudioSagaPublicReceipt => ({
+  attemptId: claim.attemptId,
+  renditionId: claim.renditionId,
+  format: claim.format,
+  state,
+});
+
+const renditionDatabase = (
+  claim: StudioRenditionExecuteClaim,
+): StudioRenditionSagaDatabase => ({
   claim: async () => claim,
-  persistRendered: input =>
-    rpc<void>('studio_private_artifact_rendition_rendered', {
-      p_attempt_id: input.attemptId,
+  startAttempt: async input => {
+    await rpc('renditionStart', { p_attempt: input.attemptId });
+  },
+  persistRendered: async input => {
+    await rpc('renditionRendered', {
+      p_attempt: input.attemptId,
       p_object_key: input.objectKey,
+      p_hash: input.sha256,
       p_byte_length: input.byteLength,
-      p_sha256: input.sha256,
-      p_mime_type: input.mimeType,
-      p_filename: input.filename,
+      p_mime: input.mimeType,
+      p_safe_filename: input.filename,
       p_renderer_version: input.rendererVersion,
       p_template_version: input.templateVersion,
-    }),
-  markAvailable: input =>
-    rpc<StudioSagaPublicReceipt>('studio_private_artifact_rendition_complete', {
-      p_attempt_id: input.attemptId,
-      p_rendition_id: input.renditionId,
-      p_byte_length: input.byteLength,
-      p_sha256: input.sha256,
-      p_mime_type: input.mimeType,
-    }),
-  markFailed: input =>
-    rpc<StudioSagaPublicReceipt>('studio_private_artifact_rendition_fail', {
-      p_attempt_id: input.attemptId,
-      p_failure_code: input.failureCode,
-    }),
-  markReconciliationRequired: input =>
-    rpc<StudioSagaPublicReceipt>('studio_private_artifact_rendition_fail', {
-      p_attempt_id: input.attemptId,
-      p_failure_code: input.failureCode,
-    }),
+      p_content_schema_version: input.contentSchemaVersion,
+    });
+  },
+  markAvailable: async input => {
+    const receipt = await rpc('renditionComplete', {
+      p_attempt: input.attemptId,
+    });
+    if (
+      receipt.renditionId !== claim.renditionId ||
+      receipt.state !== 'available'
+    ) {
+      throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+    }
+    return renditionReceipt(claim, 'available');
+  },
+  markFailed: async input => {
+    await rpc('renditionFail', {
+      p_attempt: input.attemptId,
+      p_failure: input.failureCode,
+    });
+    return renditionReceipt(claim, 'failed');
+  },
+  markReconciliationRequired: async input => {
+    await rpc('renditionFail', {
+      p_attempt: input.attemptId,
+      p_failure: input.failureCode,
+    });
+    return renditionReceipt(claim, 'reconciliation_required');
+  },
   loadReconciliation: async () => null,
 });
 
+const deletionReceipt = (
+  claim: StudioDeletionExecuteClaim,
+  state:
+    | 'deleting'
+    | 'deleted'
+    | 'deletion_failed'
+    | 'reconciliation_required',
+): StudioDeletionReceipt => ({
+  deletionAttemptId: claim.deletionAttemptId,
+  renditionId: claim.renditionId,
+  state,
+});
+
 const deletionDatabase = (
-  claim: Awaited<ReturnType<StudioDeletionSagaDatabase['claimDeletion']>>,
+  claim: StudioDeletionExecuteClaim,
 ): StudioDeletionSagaDatabase => ({
   claimDeletion: async () => claim,
-  markTombstone: input =>
-    rpc<StudioDeletionReceipt>('studio_private_artifact_deletion_complete', {
-      p_deletion_attempt_id: input.deletionAttemptId,
-      p_provider_outcome: input.providerOutcome,
-    }),
-  markDeletionFailure: input =>
-    rpc<StudioDeletionReceipt>('studio_private_artifact_deletion_fail', {
-      p_deletion_attempt_id: input.deletionAttemptId,
-      p_failure_code: input.failureCode,
-    }),
-  markDeletionReconciliationRequired: input =>
-    rpc<StudioDeletionReceipt>('studio_private_artifact_deletion_fail', {
-      p_deletion_attempt_id: input.deletionAttemptId,
-      p_failure_code: input.failureCode,
-    }),
+  markTombstone: async input => {
+    const receipt = await rpc('deletionComplete', {
+      p_attempt: input.deletionAttemptId,
+    });
+    if (
+      receipt.attemptId !== claim.deletionAttemptId ||
+      receipt.state !== 'deleted'
+    ) {
+      throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+    }
+    return deletionReceipt(claim, 'deleted');
+  },
+  markDeletionFailure: async input => {
+    await rpc('deletionFail', {
+      p_attempt: input.deletionAttemptId,
+      p_failure: input.failureCode,
+    });
+    return deletionReceipt(claim, 'deletion_failed');
+  },
+  markDeletionReconciliationRequired: async input => {
+    await rpc('deletionFail', {
+      p_attempt: input.deletionAttemptId,
+      p_failure: input.failureCode,
+    });
+    return deletionReceipt(claim, 'reconciliation_required');
+  },
   loadDeletionReconciliation: async () => null,
 });
 
-const executeClaimedRendition = async (claim: StudioPrivateArtifactJson) => {
-  const requestId = typeof claim.requestId === 'string' ? claim.requestId : null;
-  const sagaClaim = claim.claim as StudioRenditionClaim | undefined;
-  if (!requestId || !sagaClaim) {
-    throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
-  }
-  const result = await executeStudioRenditionSaga(requestId, {
-    database: renditionDatabase(sagaClaim),
+const executeClaimedRendition = async (privateClaim: StudioPrivateArtifactJson) => {
+  const claim = decodeStudioRenditionClaim(privateClaim);
+  const result = await executeStudioRenditionSaga(claim.requestId, {
+    database: renditionDatabase(claim),
     storage: storage(),
   });
   if (result.outcome === 'available') {
@@ -176,20 +252,16 @@ const executeClaimedRendition = async (claim: StudioPrivateArtifactJson) => {
   return {
     state: 'failed' as const,
     failureCode:
-      'failureCode' in result ? result.failureCode : ('RENDER_FAILED' satisfies StudioSagaFailureCode),
+      'failureCode' in result
+        ? result.failureCode
+        : ('RENDER_FAILED' satisfies StudioSagaFailureCode),
   };
 };
 
-const executeClaimedDeletion = async (claim: StudioPrivateArtifactJson) => {
-  const requestId = typeof claim.requestId === 'string' ? claim.requestId : null;
-  const sagaClaim = claim.claim as
-    | Awaited<ReturnType<StudioDeletionSagaDatabase['claimDeletion']>>
-    | undefined;
-  if (!requestId || !sagaClaim) {
-    throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
-  }
-  const result = await executeStudioDeletionSaga(requestId, {
-    database: deletionDatabase(sagaClaim),
+const executeClaimedDeletion = async (privateClaim: StudioPrivateArtifactJson) => {
+  const claim = decodeStudioDeletionClaim(privateClaim);
+  const result = await executeStudioDeletionSaga(claim.requestId, {
+    database: deletionDatabase(claim),
     storage: storage(),
   });
   if (result.outcome === 'deleted') {
@@ -197,53 +269,30 @@ const executeClaimedDeletion = async (claim: StudioPrivateArtifactJson) => {
   }
   return {
     state: 'failed' as const,
-    failureCode: 'failureCode' in result ? result.failureCode : 'PROVIDER_DELETE_FAILED',
+    failureCode:
+      'failureCode' in result ? result.failureCode : 'PROVIDER_DELETE_FAILED',
   };
 };
 
-export const studioPrivateArtifactDependencies: StudioPrivateArtifactCommandDependencies = {
-  authenticate: request => getAuthUser(request),
-  loadFreshAuthority: async ({ actorId, organizationId, workspaceId }) => {
-    const rows = await rpc<StudioPrivateArtifactAuthority[]>(
-      'studio_private_artifact_authority',
-      {
-        p_actor_id: actorId,
-        p_organization_id: organizationId,
-        p_workspace_id: workspaceId,
-      },
-    );
-    return rows[0] ?? null;
-  },
-  executeAtomicCommand: (command: StudioPrivateArtifactAtomicCommand) =>
-    rpc<StudioPrivateArtifactAtomicResult>('studio_private_artifact_command_claim', {
-      p_command: command,
-    }),
-  executeClaimedRendition,
-  executeClaimedDeletion,
-};
+export const studioPrivateArtifactDependencies: StudioPrivateArtifactCommandDependencies =
+  {
+    authenticate: request => getAuthUser(request),
+    loadFreshAuthority: ({ actorId, organizationId, workspaceId }) =>
+      rpc('authority', {
+        p_actor: actorId,
+        p_org: organizationId,
+        p_workspace: workspaceId,
+      }),
+    executeAtomicCommand: (command: StudioPrivateArtifactAtomicCommand) =>
+      rpc('commandClaim', {
+        p_command: command,
+      }),
+    executeClaimedRendition,
+    executeClaimedDeletion,
+  };
 
-type DownloadClaimInternal = StudioStoredObjectExpectation & {
-  filename: string;
-};
 type DownloadCapableStorage = StudioPrivateArtifactStorage & {
   downloadExact(input: StudioStoredObjectExpectation): Promise<Uint8Array>;
-};
-const decodeDownloadClaim = (
-  claim: StudioPrivateArtifactJson,
-): DownloadClaimInternal => {
-  const value = claim as Partial<DownloadClaimInternal>;
-  if (
-    typeof value.organizationId !== 'string' ||
-    typeof value.workspaceId !== 'string' ||
-    typeof value.objectKey !== 'string' ||
-    typeof value.byteLength !== 'number' ||
-    typeof value.sha256 !== 'string' ||
-    typeof value.mimeType !== 'string' ||
-    typeof value.filename !== 'string'
-  ) {
-    throw new StudioPrivateArtifactError('DOWNLOAD_UNAVAILABLE');
-  }
-  return value as DownloadClaimInternal;
 };
 
 export const studioPrivateArtifactDownloadDependencies: StudioPrivateArtifactDownloadDependencies =
@@ -251,30 +300,27 @@ export const studioPrivateArtifactDownloadDependencies: StudioPrivateArtifactDow
     authenticate: request => getAuthUser(request),
     loadFreshAuthority: studioPrivateArtifactDependencies.loadFreshAuthority,
     claimDownload: command =>
-      rpc<StudioPrivateArtifactDownloadClaim>(
-        'studio_private_artifact_download_claim',
-        { p_command: command },
-      ),
-    retrieveAndVerify: async claim => {
-      const expected = decodeDownloadClaim(claim);
-      const provider = storage() as DownloadCapableStorage;
-      if (typeof provider.downloadExact !== 'function') {
-        throw new StudioPrivateArtifactError('DOWNLOAD_UNAVAILABLE');
-      }
+      rpc('downloadClaim', {
+        p_command: command,
+      }),
+    retrieveAndVerify: async privateClaim => {
+      const expected: StudioDownloadExecuteClaim =
+        decodeStudioDownloadClaim(privateClaim);
+      const provider: DownloadCapableStorage = storage();
       const bytes = await provider.downloadExact(expected);
       return {
         bytes,
         mimeType: expected.mimeType,
         filename: expected.filename,
-      } as StudioPrivateArtifactVerifiedDownload;
+      } satisfies StudioPrivateArtifactVerifiedDownload;
     },
-    completeDownload: receiptId =>
-      rpc<void>('studio_private_artifact_download_complete', {
-        p_receipt_id: receiptId,
-      }),
-    failDownload: (receiptId, failureCode) =>
-      rpc<void>('studio_private_artifact_download_fail', {
-        p_receipt_id: receiptId,
-        p_failure_code: failureCode,
-      }),
+    completeDownload: async receiptId => {
+      await rpc('downloadComplete', { p_receipt: receiptId });
+    },
+    failDownload: async (receiptId, failureCode) => {
+      await rpc('downloadFail', {
+        p_receipt: receiptId,
+        p_failure: failureCode,
+      });
+    },
   };

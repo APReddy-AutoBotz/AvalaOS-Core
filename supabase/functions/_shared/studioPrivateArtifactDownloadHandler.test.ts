@@ -56,6 +56,8 @@ const deps = {
     calls.push('authorize');
     return {
       actorId: ids[0],
+      organizationId: ids[1],
+      workspaceId: ids[2],
       authorizationVersion: 7,
       capabilities: ['studio.artifacts.download'],
     };
@@ -63,9 +65,20 @@ const deps = {
   claimDownload: async () => {
     calls.push('claim');
     return {
-      receiptId: ids[3],
-      outcome: 'claimed' as const,
-      downloadClaim: { internal: true },
+      outcome: 'committed' as const,
+      receiptId: ids[0],
+      resourceId: ids[3],
+      resource: { state: 'authorized' },
+      downloadClaim: {
+        organizationId: ids[1],
+        workspaceId: ids[2],
+        renditionId: ids[3],
+        objectKey: `${ids[1]}/${ids[2]}/studio-artifacts/30000000-0000-4000-8000-000000000003.pdf`,
+        byteLength: 13,
+        sha256: 'a'.repeat(64),
+        mimeType: 'application/pdf' as const,
+        filename: 'governed-brief.pdf',
+      },
     };
   },
   retrieveAndVerify: async () => {
@@ -117,6 +130,8 @@ void (async () => {
       calls.push('authorize');
       return {
         actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
         authorizationVersion: 8,
         capabilities: ['studio.artifacts.download'],
       };

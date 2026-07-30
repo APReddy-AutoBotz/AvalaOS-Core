@@ -9,6 +9,12 @@ import {
   type StudioPrivateArtifactAuthority,
   type StudioPrivateArtifactJson,
 } from './studioPrivateArtifactCommand.ts';
+import {
+  decodeStudioDeletionClaim,
+  decodeStudioRenditionClaim,
+  type StudioDeletionExecuteClaim,
+  type StudioRenditionExecuteClaim,
+} from './studioPrivateArtifactRpcContract.ts';
 
 export interface StudioPrivateArtifactCommandDependencies {
   authenticate(request: Request): Promise<{ id: string }>;
@@ -22,13 +28,13 @@ export interface StudioPrivateArtifactCommandDependencies {
     command: StudioPrivateArtifactAtomicCommand,
   ): Promise<StudioPrivateArtifactAtomicResult>;
   executeClaimedRendition?(
-    claim: StudioPrivateArtifactJson,
+    claim: StudioRenditionExecuteClaim,
   ): Promise<
     | { state: 'available'; resource: StudioPrivateArtifactJson }
     | { state: 'failed'; failureCode: string }
   >;
   executeClaimedDeletion?(
-    claim: StudioPrivateArtifactJson,
+    claim: StudioDeletionExecuteClaim,
   ): Promise<
     | { state: 'deleted'; resource: StudioPrivateArtifactJson }
     | { state: 'failed'; failureCode: string }
@@ -111,7 +117,12 @@ export const handleStudioPrivateArtifactCommand = async (
       organizationId: envelope.organizationId,
       workspaceId: envelope.workspaceId,
     });
-    if (!authority || authority.actorId !== actor.id) {
+    if (
+      !authority ||
+      authority.actorId !== actor.id ||
+      authority.organizationId !== envelope.organizationId ||
+      authority.workspaceId !== envelope.workspaceId
+    ) {
       throw new StudioPrivateArtifactError('RESOURCE_NOT_AVAILABLE');
     }
     if (authority.authorizationVersion !== envelope.authorizationVersion) {
@@ -142,7 +153,7 @@ export const handleStudioPrivateArtifactCommand = async (
       if (!result.renditionClaim || !deps.executeClaimedRendition) {
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
       }
-      const external = await deps.executeClaimedRendition(result.renditionClaim);
+      const external = await deps.executeClaimedRendition(decodeStudioRenditionClaim(result.renditionClaim));
       if (external.state === 'failed') {
         return Response.json(
           {
@@ -170,7 +181,7 @@ export const handleStudioPrivateArtifactCommand = async (
       if (!result.deletionClaim || !deps.executeClaimedDeletion) {
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
       }
-      const external = await deps.executeClaimedDeletion(result.deletionClaim);
+      const external = await deps.executeClaimedDeletion(decodeStudioDeletionClaim(result.deletionClaim));
       if (external.state === 'failed') {
         return Response.json(
           {

@@ -66,13 +66,13 @@ void (async () => {
         : {};
     calls.push({ url, body });
     if (url.includes('studio_private_artifact_authority')) {
-      return Response.json([
-        {
-          actorId: ids[0],
-          authorizationVersion: 5,
-          capabilities: ['studio.artifacts.download'],
-        },
-      ]);
+      return Response.json({
+        actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
+        authorizationVersion: 5,
+        capabilities: ['studio.artifacts.download'],
+      });
     }
     if (url.includes('studio_private_artifact_command_claim')) {
       return Response.json({
@@ -82,12 +82,29 @@ void (async () => {
         resource: {},
       });
     }
-    if (url.includes('studio_private_artifact_download_claim')) {
+    if (url.includes('studio_artifact_download_claim')) {
       return Response.json({
+        outcome: 'committed',
         receiptId: ids[1],
-        outcome: 'claimed',
-        downloadClaim: { internal: true },
+        resourceId: ids[2],
+        resource: { state: 'authorized' },
+        downloadClaim: {
+          organizationId: ids[1],
+          workspaceId: ids[2],
+          renditionId: ids[2],
+          objectKey: `${ids[1]}/${ids[2]}/studio-artifacts/40000000-0000-4000-8000-000000000004.pdf`,
+          byteLength: 128,
+          sha256: 'a'.repeat(64),
+          mimeType: 'application/pdf',
+          filename: 'studio-artifact-rendition.pdf',
+        },
       });
+    }
+    if (url.includes('studio_artifact_download_complete')) {
+      return Response.json({ outcome: 'committed', receiptId: ids[1], status: 'completed' });
+    }
+    if (url.includes('studio_artifact_download_fail')) {
+      return Response.json({ outcome: 'committed', receiptId: ids[1], status: 'failed' });
     }
     return new Response(null, { status: 204 });
   };
@@ -124,7 +141,7 @@ void (async () => {
       'command RPC receives only strict command envelope',
     );
     const downloadClaim = calls.find(call =>
-      call.url.includes('studio_private_artifact_download_claim'),
+      call.url.includes('studio_artifact_download_claim'),
     );
     assert(
       downloadClaim && Object.keys(downloadClaim.body).join(',') === 'p_command',

@@ -203,7 +203,24 @@ const committed = {
   receiptId: ids[4],
   resourceId: ids[3],
   resource: { state: 'requested' },
-  renditionClaim: { requestId: ids[0], claim: { disposition: 'execute' } },
+  renditionClaim: {
+    disposition: 'execute' as const,
+    requestId: ids[0],
+    attemptId: ids[4],
+    renditionId: ids[3],
+    organizationId: ids[1],
+    workspaceId: ids[2],
+    opaqueObjectId: ids[4],
+    artifactId: ids[3],
+    artifactVersionId: ids[4],
+    artifactType: 'brd' as const,
+    format: 'pdf' as const,
+    approvedContent: { title: 'Approved BRD' },
+    contentSchemaVersion: 'studio-artifact-1',
+    rendererVersion: 'studio-pdf-1' as const,
+    templateVersion: 'studio-brd-1',
+    reconciliationCount: 0,
+  },
 };
 const dependencies = {
   authenticate: async () => {
@@ -214,6 +231,8 @@ const dependencies = {
     calls.push('authorize');
     return {
       actorId: ids[0],
+      organizationId: ids[1],
+      workspaceId: ids[2],
       authorizationVersion: 9,
       capabilities: ['studio.artifacts.rendition.generate'],
     };
@@ -240,7 +259,8 @@ void (async () => {
     ...dependencies,
     executeAtomicCommand: async () => {
       calls.push('claim');
-      return { ...committed, outcome: 'replayed' as const };
+      const { renditionClaim: _privateClaim, ...safeReplay } = committed;
+      return { ...safeReplay, outcome: 'replayed' as const };
     },
   });
   assert(replay.status === 200, 'exact replay returns committed receipt');
@@ -255,6 +275,8 @@ void (async () => {
       calls.push('authorize');
       return {
         actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
         authorizationVersion: 10,
         capabilities: ['studio.artifacts.rendition.generate'],
       };
@@ -270,6 +292,8 @@ void (async () => {
     ...dependencies,
     loadFreshAuthority: async () => ({
       actorId: ids[0],
+      organizationId: ids[1],
+      workspaceId: ids[2],
       authorizationVersion: 9,
       capabilities: ['studio.artifacts.read'],
     }),
