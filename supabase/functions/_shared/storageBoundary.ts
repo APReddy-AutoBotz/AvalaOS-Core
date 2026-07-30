@@ -1,8 +1,10 @@
 export const DEFAULT_SOURCE_UPLOADS_BUCKET = 'source-uploads';
+export const STUDIO_PRIVATE_ARTIFACTS_BUCKET = 'studio-private-artifacts';
 
 export const STORAGE_CONFIGURATION_ERROR = 'Storage configuration is invalid.';
 export const STORAGE_PATH_INVALID_ERROR = 'Invalid storage path.';
 export const STORAGE_PATH_SCOPE_ERROR = 'Storage path is not scoped to the organization.';
+export const STORAGE_WORKSPACE_PATH_SCOPE_ERROR = 'Storage path is not scoped to the workspace.';
 
 const bucketNamePattern = /^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$/;
 const organizationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -54,6 +56,24 @@ export const selectExportsBucket = (
   return selectAllowlistedBucket(configuredBucket, configuredAllowlist);
 };
 
+/**
+ * Studio renditions have no implicit bucket. Both values must come from
+ * server-only configuration so a missing deployment setting fails closed.
+ */
+export const selectStudioPrivateArtifactsBucket = (
+  configuredBucket?: string,
+  configuredAllowlist?: string,
+) => {
+  if (configuredBucket === undefined || configuredAllowlist === undefined) configurationError();
+  assertStorageBucketName(configuredBucket);
+  assertStorageBucketName(configuredAllowlist);
+  if (
+    configuredBucket !== STUDIO_PRIVATE_ARTIFACTS_BUCKET ||
+    configuredAllowlist !== STUDIO_PRIVATE_ARTIFACTS_BUCKET
+  ) configurationError();
+  return STUDIO_PRIVATE_ARTIFACTS_BUCKET;
+};
+
 export const assertCanonicalStoragePath = (storagePath: string) => {
   if (
     !storagePath ||
@@ -81,6 +101,19 @@ export const assertTenantStoragePath = (orgId: string, storagePath: string) => {
   const [tenantSegment] = storagePath.split('/');
   if (tenantSegment !== orgId) {
     throw new Error(STORAGE_PATH_SCOPE_ERROR);
+  }
+};
+
+export const assertWorkspaceStoragePath = (
+  orgId: string,
+  workspaceId: string,
+  storagePath: string,
+) => {
+  if (!organizationIdPattern.test(workspaceId)) pathError();
+  assertTenantStoragePath(orgId, storagePath);
+  const [, workspaceSegment] = storagePath.split('/');
+  if (workspaceSegment !== workspaceId) {
+    throw new Error(STORAGE_WORKSPACE_PATH_SCOPE_ERROR);
   }
 };
 

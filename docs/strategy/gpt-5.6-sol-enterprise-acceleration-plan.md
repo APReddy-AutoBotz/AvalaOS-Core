@@ -1,8 +1,12 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Studio PR B candidate boundary
+
+The active 2B candidate is one substantial vertical: approved PR #216 versions only, deterministic rendition bytes, create-only private storage, brokered no-store downloads, retention snapshots, legal holds, governed deletion, reconciliation, and feature-owned CI. No live infrastructure access or deployment is authorized. Safe rollback disables mutation, rendition, download, and deletion execution while retaining committed metadata and read-only projections for additive repair.
+
 ## Studio PR A acceleration boundary
 
-Studio PR A now owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. PR B remains the future private-storage, rendition, scoped-download, retention, hold, and deletion boundary. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
+Studio PR A now owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The separate Studio PR B candidate above now owns the private-storage, rendition, brokered-download, retention, hold, and deletion boundary pending acceptance. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
 
 
 Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are accepted; PR 1F is post-merge verified at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`

@@ -81,3 +81,6 @@ inspector_port = 8083
 enabled = false
 port = 54327
 backend = "postgres"
+
+[functions.studio-private-artifact-reconcile]
+verify_jwt = false

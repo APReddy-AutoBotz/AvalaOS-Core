@@ -1,8 +1,12 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Studio PR B candidate risk boundary
+
+The 2B candidate addresses private-rendition source risks with forced RLS, service-only RPCs, opaque paths, deterministic render validation, exact replay, bounded reconciliation, retention/hold rechecks, and deletion separation of duty. Local source, renderer, and browser evidence plus exact-head PostgreSQL 16 CI are required before acceptance. Hosted Storage, deployment, pilot, production, security-certification, compliance, and legal-retention sufficiency remain unproven.
+
 ## Studio PR A active boundary
 
-PR 1G remains accepted; Studio PR A addresses governed artifact authority in source and CI without claiming hosted/live, deployment, private-storage, export, pilot, or production proof. Provider calls remain non-atomic external effects surrounded by durable request/completion/failure transactions. Legacy `document_generations` remains unverified and non-canonical. Residual private storage, rendition, scoped download, retention, legal hold, and deletion risks are deferred to PR B. Rollback is mutation/provider disablement, read-only projection, and additive forward fixes.
+PR 1G remains accepted; Studio PR A addresses governed artifact authority in source and CI without claiming hosted/live, deployment, private-storage, export, pilot, or production proof. Provider calls remain non-atomic external effects surrounded by durable request/completion/failure transactions. Legacy `document_generations` remains unverified and non-canonical. Residual private storage, rendition, scoped download, retention, legal hold, and deletion risks are addressed in source by the Studio PR B candidate above, pending its exact-head evidence and review. Rollback is mutation/provider disablement, read-only projection, and additive forward fixes.
 
 
 Baseline: PR #212 / PR 1F accepted and post-merge verified on main `480cc9b943e8b51b074873c20c2a9f30dc6521c2`; hosted/live readiness remains unproven

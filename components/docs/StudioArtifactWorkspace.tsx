@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TenantContextProjection } from '../../types';
 import { STUDIO_ARTIFACT_TYPES, type StudioArtifactProjectionDto, type StudioArtifactType, type StudioCommandResponse, type StudioCommandType } from '../../services/studioArtifacts/contracts';
 import { executeStudioArtifactCommand, readStudioArtifact, readStudioEligibleReviewers, readStudioHandoffs, StudioArtifactBoundaryError, type StudioArtifactTransport, type StudioEligibleReviewer, type StudioHandoffOption } from '../../services/studioArtifacts/client';
+import StudioArtifactRenditions from './StudioArtifactRenditions';
 
 interface Props { context: TenantContextProjection; capabilities?: readonly string[]; online?: boolean; transport?: StudioArtifactTransport }
 type ViewState='loading'|'empty'|'generating'|'generation_failed'|'draft'|'reviewer_ready'|'in_review'|'changes_requested'|'review_rejected'|'approval_ready'|'approved'|'approval_rejected'|'superseded'|'offline'|'stale'|'version_conflict'|'authorization_revoked'|'read_only'|'command_failed'|'committed_reload_failed';
@@ -72,6 +73,6 @@ export default function StudioArtifactWorkspace({context,capabilities=context.ca
       <button disabled={!can('studio.artifact.approval.resolve')||!exact('approval_ready')||!rationale} onClick={()=>void run('studio.artifact.approval.resolve',{artifactId:artifact!.id,artifactVersionId:artifact!.currentVersion.id,outcome:'approve',rationale,conditions})} className="btn-ghost disabled:opacity-50">Final approve</button>
       <button disabled={!can('studio.artifact.approval.resolve')||!exact('approval_ready')||!rationale} onClick={()=>void run('studio.artifact.approval.resolve',{artifactId:artifact!.id,artifactVersionId:artifact!.currentVersion.id,outcome:'reject',rationale,conditions})} className="btn-ghost disabled:opacity-50">Final reject</button>
     </div></div>
-    <p className="mt-5 rounded-xl border p-3 font-bold">Private export and governed download are not available in this release.</p>{receipt&&<p className="sr-only">Last committed receipt {receipt.receiptId}; resource {receipt.resourceId}</p>}
+    {artifact?.currentApprovedVersion?<StudioArtifactRenditions context={context} artifact={artifact} capabilities={capabilities} online={online}/>:<p className="mt-5 rounded-xl border p-3 font-bold">Private export and governed download are not available in this release. This restriction applies only to this non-approved artifact version; approved canonical Studio versions use the governed private-rendition controls.</p>}{receipt&&<p className="sr-only">Last committed receipt {receipt.receiptId}; resource {receipt.resourceId}</p>}
   </section>;
 }

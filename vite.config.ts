@@ -5,7 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(() => {
     const browserTestInput = process.env.PR1A_BROWSER_TEST_BUILD === 'true'
       ? { input: { main: path.resolve(__dirname, 'index.html'), browserHarness: path.resolve(__dirname, 'browser-harness.html') } }
-      : {};
+      : process.env.STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD === 'true'
+        ? { input: { main: path.resolve(__dirname, 'index.html'), studioPrivateArtifactsHarness: path.resolve(__dirname, 'tests/browser/studioPrivateArtifactsHarness.html') } }
+        : {};
     return {
       server: {
         port: 3000,
