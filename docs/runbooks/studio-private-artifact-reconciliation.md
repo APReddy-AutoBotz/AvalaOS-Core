@@ -6,7 +6,7 @@ Status: source and disposable-test operating contract for Studio PR B. No worker
 
 This worker recovers durable rendition or deletion attempts after an external Storage outcome or database completion became uncertain. It is service-to-service only. A browser, user JWT, command receipt, email match, route, or UI state cannot invoke or authorize reconciliation.
 
-The canonical Storage bucket is exactly `studio-private-artifacts`. Set both `STUDIO_PRIVATE_ARTIFACTS_BUCKET` and `STORAGE_PRIVATE_BUCKET_ALLOWLIST` to that single value. Do not configure aliases, archive buckets, or comma-delimited alternatives.
+The canonical Storage bucket is exactly `studio-private-artifacts`. Both `STUDIO_PRIVATE_ARTIFACTS_BUCKET` and `STUDIO_PRIVATE_ARTIFACTS_BUCKET_ALLOWLIST` must equal exactly `studio-private-artifacts`. Do not configure aliases, archive buckets, or comma-delimited alternatives.
 
 ## Required configuration
 

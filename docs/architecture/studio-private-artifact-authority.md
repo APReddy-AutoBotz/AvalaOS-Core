@@ -24,7 +24,13 @@ Approved Studio artifact version
   -> authenticated brokered download
 ```
 
-Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact mutation-command replay returns the original receipt and never emits another render, upload, or deletion claim. Exact successful download replay reuses its original receipt and returns the same strictly decoded private claim only inside the service boundary so the broker can return the verified file again. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions. The service-only `studio-private-artifact-reconcile` worker exposes POST-only `/rendition` and `/deletion` routes protected by a dedicated minimum-32-character worker secret. It rejects browser origins and user authorization headers, accepts only an exact `{attemptId}` body, and returns sanitized state without identifiers or Storage bindings. No scheduler or deployed worker is claimed by this PR.
+Database and Storage are not one transaction. Every external effect is surrounded by durable attempt state. Exact mutation-command replay returns the original receipt and never emits another render, upload, or deletion claim. Exact successful download replay reuses its original receipt and returns the same strictly decoded private claim only inside the service boundary so the broker can return the verified file again. Bounded service reconciliation uses committed attempt state and provider verification; it never trusts browser assertions. The service-only `studio-private-artifact-reconcile` worker exposes three routes protected by a dedicated minimum-32-character worker secret:
+
+- `POST /functions/v1/studio-private-artifact-reconcile/rendition`, with exactly `{"attemptId":"<uuid>"}`;
+- `POST /functions/v1/studio-private-artifact-reconcile/deletion`, with exactly `{"attemptId":"<uuid>"}`;
+- `POST /functions/v1/studio-private-artifact-reconcile/due`, with exactly `{"limit":<integer>}` where the limit is from 1 through 50.
+
+The worker rejects browser origins and user authorization headers. Due-work selection returns only work kind and internal attempt ID inside the service boundary, and the HTTP due response contains only aggregate sanitized counts. No scheduler or hosted worker deployment is claimed by this PR.
 
 ## Canonical model
 
