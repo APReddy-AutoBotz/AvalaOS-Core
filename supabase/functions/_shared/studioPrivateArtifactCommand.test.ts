@@ -1,6 +1,8 @@
 import {
   parseStudioPrivateArtifactEnvelope,
+  parseStudioPrivateArtifactSqlCommand,
   StudioPrivateArtifactError,
+  toStudioPrivateArtifactSqlCommand,
 } from './studioPrivateArtifactCommand.ts';
 import { handleStudioPrivateArtifactCommand } from './studioPrivateArtifactHandler.ts';
 
@@ -60,7 +62,7 @@ const validCommands = [
     2,
   ],
   ['studio.legal_hold.place', { renditionId: ids[3], reason: 'Matter open' }, 4, 2],
-  ['studio.legal_hold.release', { renditionId: ids[3], reason: 'Matter closed' }, 4, 2],
+  ['studio.legal_hold.release', { renditionId: ids[3], holdId: ids[4], reason: 'Matter closed' }, 4, 2],
   [
     'studio.rendition.deletion.request',
     { renditionId: ids[3], reason: 'Approved disposal request' },
@@ -90,6 +92,65 @@ for (const [commandType, payload, expectedArtifactVersion, expectedRenditionVers
     }).commandType === commandType,
     `${commandType} parses`,
   );
+}
+
+const serverActorId = '10000000-0000-4000-8000-000000000006';
+const translationCases = [
+  [base, base.payload],
+  [
+    { ...base, commandType: 'studio.retention.policy.publish', payload: { artifactType: 'brd', retentionDays: null, reason: 'Policy' }, expectedArtifactVersion: null },
+    { artifactType: 'brd', retentionDays: null, indefinite: true, rationale: 'Policy' },
+  ],
+  [
+    { ...base, commandType: 'studio.rendition.retention.extend', payload: { renditionId: ids[3], retentionUntil: '2028-07-29T00:00:00.000Z', reason: 'Extend' }, expectedRenditionVersion: 2 },
+    { renditionId: ids[3], extendUntil: '2028-07-29T00:00:00.000Z', indefinite: false, rationale: 'Extend' },
+  ],
+  [
+    { ...base, commandType: 'studio.legal_hold.place', payload: { renditionId: ids[3], reason: 'Place' }, expectedRenditionVersion: 2 },
+    { renditionId: ids[3], rationale: 'Place' },
+  ],
+  [
+    { ...base, commandType: 'studio.legal_hold.release', payload: { renditionId: ids[3], holdId: ids[4], reason: 'Release' }, expectedRenditionVersion: 2 },
+    { renditionId: ids[3], holdId: ids[4], rationale: 'Release' },
+  ],
+  [
+    { ...base, commandType: 'studio.rendition.deletion.request', payload: { renditionId: ids[3], reason: 'Dispose' }, expectedRenditionVersion: 2 },
+    { renditionId: ids[3], rationale: 'Dispose' },
+  ],
+  [
+    { ...base, commandType: 'studio.rendition.deletion.resolve', payload: { renditionId: ids[3], deletionRequestId: ids[4], outcome: 'approve', reason: 'Approve' }, expectedRenditionVersion: 2 },
+    { renditionId: ids[3], deletionRequestId: ids[4], outcome: 'approve', rationale: 'Approve' },
+  ],
+] as const;
+for (const [publicCommand, expectedPayload] of translationCases) {
+  const translated = toStudioPrivateArtifactSqlCommand(publicCommand, serverActorId);
+  assert(translated.actorId === serverActorId, 'server actor is authoritative');
+  assert(
+    JSON.stringify(translated.payload) === JSON.stringify(expectedPayload),
+    `${publicCommand.commandType} uses exact SQL vocabulary`,
+  );
+  assert(
+    translated.expectedArtifactVersion === publicCommand.expectedArtifactVersion &&
+      translated.expectedRenditionVersion === publicCommand.expectedRenditionVersion,
+    `${publicCommand.commandType} preserves expected versions`,
+  );
+  assert(Boolean(parseStudioPrivateArtifactSqlCommand(translated)), 'translated SQL command reparses');
+}
+assert(
+  rejects({ ...base, actorId: serverActorId }),
+  'browser-supplied actor is rejected before translation',
+);
+try {
+  parseStudioPrivateArtifactSqlCommand({
+    ...toStudioPrivateArtifactSqlCommand(translationCases[1][0], serverActorId),
+    payload: {
+      ...translationCases[1][1],
+      indefinite: false,
+    },
+  });
+  assert(false, 'inconsistent indefinite policy rejected');
+} catch (error) {
+  assert(error instanceof StudioPrivateArtifactError, 'private parser rejects inconsistency');
 }
 
 for (const valid of [

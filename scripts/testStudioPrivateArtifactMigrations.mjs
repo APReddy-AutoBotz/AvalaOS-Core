@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {readFile,readdir} from 'node:fs/promises';
+import {mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import pg from 'pg';
-import {createAvailablePrivateArtifactFixture,privateCommand,downloadCommand} from './studioPrivateArtifactPostgresFixture.mjs';
+import {createApprovedStudioFixture,createAvailablePrivateArtifactFixture,privateCommand,downloadCommand} from './studioPrivateArtifactPostgresFixture.mjs';
 import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifactCrossLayerPostgres.mjs';
 import {runStudioPrivateArtifactReconciliationEvidence} from './studioPrivateArtifactReconciliationPostgres.mjs';
 
@@ -18,26 +19,47 @@ export const scenarioNames={
  download:['download available rendition authorized','download unavailable or deleted denied','download foreign tenant denied','download stale authorization denied','download receipt and audit recorded','download projection excludes storage binding and signed URL'],
  crossLayer:['cross-layer RPC signature parity','cross-layer real rendition claim and production saga','cross-layer renderer template schema version parity','cross-layer real download claim exact replay','cross-layer real deletion claim and tombstone','cross-layer external-effect replay counts'],
  reconciliation:['reconciliation real rendition claim missing object one upload','reconciliation existing rendition object no upload','reconciliation rendition mismatch terminal no overwrite','reconciliation completion retry probes without reupload','reconciliation rendition bound durable exhaustion','reconciliation racing rendition workers one executable claim','reconciliation deleted object tombstones without second delete','reconciliation existing deletion object one exact delete','reconciliation missing deletion object no destructive call','reconciliation completed deletion replay has no executable claim','reconciliation active hold blocks before provider','reconciliation active retention blocks before provider','reconciliation deletion bound durable exhaustion','bucket authority SQL checks exactly canonical','bucket authority conditional Storage row exactly canonical private','bucket authority alternate configurations rejected before provider']
+ ,forwardFix:[
+ 'forward projection production RPC argument names match SQL','forward projection no rendition','forward projection requested attempt','forward projection rendering attempt','forward projection uploaded attempt','forward projection reconciliation required','forward projection reconciling','forward projection available rendition','forward projection finite retention','forward projection indefinite retention','forward projection multiple active holds safe IDs','forward projection deletion pending requester identity','forward projection deleting','forward projection deletion recovery','forward projection deletion failed','forward projection deleted tombstone','forward projection excludes private fields','forward projection raw SQL passes production strict decoder',
+ 'forward command finite retention policy','forward command indefinite retention policy','forward command finite retention extension','forward command indefinite retention extension','forward command legal hold placement','forward command exact hold release by holdId','forward command deletion request','forward command independent deletion approval','forward command deletion rejection','forward command stale artifact version denied','forward command stale rendition version denied','forward command all public payloads translate to SQL',
+ 'forward recovery stale requested rendition','forward recovery stale rendering rendition','forward recovery uploaded existing object zero upload','forward recovery uploaded missing object one upload','forward recovery object mismatch no overwrite','forward recovery completion crash no duplicate upload','forward recovery stale requested deletion','forward recovery missing object tombstone','forward recovery existing object one exact delete','forward recovery tombstone completion no duplicate effect','forward recovery fresh execution lease not stolen','forward recovery two workers one execution claim','forward recovery rendition exhaustion','forward recovery deletion exhaustion','forward due work finds stale work','forward due work excludes fresh work',
+ 'forward race hold wins zero provider deletes','forward race deletion execution wins hold rejected','forward race hold before approval blocks approval','forward race hold before execution blocks guard','forward race no active hold with physical delete','forward race separate PostgreSQL connections'
+ ]
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,62);assert.equal(new Set(allScenarios).size,62);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:52});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,114);assert.equal(new Set(allScenarios).size,114);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
-const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const feature='20260729163251_studio_private_artifact_authority.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==feature);
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
 const apply=async(db,list)=>{for(const name of list)await tx(db,name,await readFile(join('supabase/migrations',name),'utf8'))};
 const createDb=async name=>{await admin.query(`CREATE DATABASE ${name}`);created.push(name);const db=await connect(urlFor(name));await tx(db,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);return db};
-const passed=[];const failed=[];const scenario=async(name,fn)=>{try{await fn();passed.push(name);console.log(`PASS ${name}`)}catch(error){failed.push(name);console.error(`FAIL ${name}: ${error instanceof Error?error.message:String(error)}`)}};
+const passed=[];const failed=[];const scenario=async(name,fn)=>{try{await fn();passed.push(name);console.log(`PASS ${name}`)}catch(error){const message=(error instanceof Error?error.message:String(error)).replace(/\s+/g,' ').slice(0,600);failed.push({name,message});console.error(`FAIL ${name}: ${message}`)}};
 try{
  admin=await connect(adminUrl);for(const [role,attrs] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']])if(!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1::text',[role])).rowCount)await admin.query(`CREATE ROLE ${role} ${attrs}`);
  const fresh=await createDb(databaseNames[0]);await apply(fresh,migrations);console.log('FOUNDATION PASS fresh full ordered chain');
- const upgrade=await createDb(databaseNames[1]);await apply(upgrade,baseline);await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade');
- const dirty=await createDb(databaseNames[2]);await apply(dirty,baseline);await dirty.query('CREATE TABLE public.studio_private_artifact_runtime_control(blocker integer)');await assert.rejects(tx(dirty,feature,await readFile(join('supabase/migrations',feature),'utf8')));assert.equal((await dirty.query("SELECT to_regclass('public.studio_renditions') relation")).rows[0].relation,null);console.log('FOUNDATION PASS dirty rejection atomic');
- const storage=await createDb(databaseNames[3]);await apply(storage,baseline);await storage.query('CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY');await apply(storage,[feature]);assert.deepEqual((await storage.query("SELECT public FROM storage.buckets WHERE id='studio-private-artifacts'")).rows,[{public:false}]);assert.equal((await storage.query("SELECT polpermissive FROM pg_policy WHERE polname='studio_private_artifacts_browser_deny'")).rows[0].polpermissive,false);console.log('FOUNDATION PASS conditional Storage stub');
- await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
- const reconciliationPeer=await connect(urlFor(databaseNames[3]));await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
+ const upgrade=await createDb(databaseNames[1]);await apply(upgrade,baseline);await apply(upgrade,[accepted]);await apply(upgrade,[feature]);await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade and additive reapply');
+ const dirty=await createDb(databaseNames[2]);await apply(dirty,baseline);await apply(dirty,[accepted]);await dirty.query('ALTER TABLE public.studio_rendition_deletion_attempts ADD COLUMN execution_fence text');await assert.rejects(tx(dirty,feature,await readFile(join('supabase/migrations',feature),'utf8')));assert.equal((await dirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_deletion_attempts' AND column_name='state_changed_at'")).rowCount,0);assert.equal((await dirty.query("SELECT to_regprocedure('public.studio_private_artifact_reconciliation_due(integer)') procedure")).rows[0].procedure,null);console.log('FOUNDATION PASS dirty rejection atomic');
+ const storage=await createDb(databaseNames[3]);await apply(storage,baseline);await storage.query('CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY');await apply(storage,[accepted]);await apply(storage,[feature]);assert.deepEqual((await storage.query("SELECT public FROM storage.buckets WHERE id='studio-private-artifacts'")).rows,[{public:false}]);assert.equal((await storage.query("SELECT polpermissive FROM pg_policy WHERE polname='studio_private_artifacts_browser_deny'")).rows[0].polpermissive,false);console.log('FOUNDATION PASS conditional Storage stub');
+ const forward=await createDb(databaseNames[4]);await apply(forward,migrations);const forwardPeer=await connect(urlFor(databaseNames[4]));
+ const race=await createDb(databaseNames[5]);await apply(race,migrations);const racePeer=await connect(urlFor(databaseNames[5]));
+ const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
+ const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
+ const raceBase=await createApprovedStudioFixture(race);
+ await privateCommand(race,{commandType:'studio.retention.policy.publish',actorId:raceBase.requester,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000001',idempotencyKey:'race-retention-zero',authorizationVersion:raceBase.authorizationVersions[raceBase.requester],payload:{artifactType:'brd',retentionDays:0,indefinite:false,rationale:'disposable race evidence'}});
+ const raceGeneration=await privateCommand(race,{commandType:'studio.rendition.generate',actorId:raceBase.requester,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000002',idempotencyKey:'race-rendition',authorizationVersion:raceBase.authorizationVersions[raceBase.requester],payload:{artifactVersionId:raceBase.artifactVersionId,format:'markdown'}});
+ const raceAttempt=raceGeneration.renditionClaim;const raceKey=`${raceBase.org}/${raceBase.workspace}/studio-artifacts/${raceAttempt.opaqueObjectId}.md`;
+ await race.query('SELECT public.studio_rendition_attempt_start($1::uuid)',[raceAttempt.attemptId]);
+ await race.query('SELECT public.studio_rendition_attempt_rendered($1::uuid,$2::text,$3::text,$4::bigint,$5::text,$6::text,$7::text,$8::text,$9::text)',[raceAttempt.attemptId,raceKey,'d'.repeat(64),128,'text/markdown; charset=utf-8','race.md',raceAttempt.rendererVersion,raceAttempt.templateVersion,raceAttempt.contentSchemaVersion]);
+ const raceRendition=(await race.query('SELECT public.studio_rendition_attempt_complete($1::uuid) result',[raceAttempt.attemptId])).rows[0].result;
+ const raceDeletion=await privateCommand(race,{commandType:'studio.rendition.deletion.request',actorId:raceBase.requester,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000003',idempotencyKey:'race-delete-request',authorizationVersion:raceBase.authorizationVersions[raceBase.requester],payload:{renditionId:raceRendition.renditionId,rationale:'two-connection race evidence'}});
+ const raceOutcomes=await Promise.allSettled([
+  privateCommand(race,{commandType:'studio.legal_hold.place',actorId:raceBase.requester,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000004',idempotencyKey:'race-hold',authorizationVersion:raceBase.authorizationVersions[raceBase.requester],payload:{renditionId:raceRendition.renditionId,rationale:'concurrent hold'}}),
+  privateCommand(racePeer,{commandType:'studio.rendition.deletion.resolve',actorId:raceBase.approver,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000005',idempotencyKey:'race-approval',authorizationVersion:raceBase.authorizationVersions[raceBase.approver],payload:{renditionId:raceRendition.renditionId,deletionRequestId:raceDeletion.resource.deletionRequestId,outcome:'approve',rationale:'concurrent independent approval'}})
+ ]);
+ const raceEvidence={holdWon:raceOutcomes[0].status==='fulfilled',deletionWon:raceOutcomes[1].status==='fulfilled',activeHolds:Number((await race.query('SELECT public.studio_active_hold_count($1::uuid) value',[raceRendition.renditionId])).rows[0].value),deletionAttempts:Number((await race.query('SELECT count(*)::int value FROM public.studio_rendition_deletion_attempts WHERE rendition_id=$1::uuid',[raceRendition.renditionId])).rows[0].value),lifecycle:(await race.query('SELECT lifecycle FROM public.studio_renditions WHERE id=$1::uuid',[raceRendition.renditionId])).rows[0].lifecycle};
  const fixture=await createAvailablePrivateArtifactFixture(fresh,'markdown',200);const org=fixture.org,workspace=fixture.workspace,actor=fixture.requester,auth=fixture.authorizationVersions[actor],rendition=fixture.rendition;
  await scenario(scenarioNames.authority[0],async()=>assert.equal(rendition.lifecycle,'available'));
  await scenario(scenarioNames.authority[1],async()=>await assert.rejects(privateCommand(fresh,{commandType:'studio.legal_hold.place',actorId:actor,organizationId:'11111111-1111-4111-8111-111111111111',workspaceId:workspace,requestId:'11111111-1111-4111-8111-111111111112',idempotencyKey:'foreign-org',authorizationVersion:auth,payload:{renditionId:rendition.id,rationale:'test'}})));
@@ -58,5 +80,81 @@ try{
  for(const name of scenarioNames.deletion.slice(2))await scenario(name,async()=>assert.equal((await fresh.query('SELECT count(*)::int n FROM studio_rendition_deletion_requests WHERE id=$1::uuid',[deletionRequest.resource.deletionRequestId])).rows[0].n,1));
  const download=await downloadCommand(fresh,{actorId:actor,organizationId:org,workspaceId:workspace,renditionId:rendition.id,requestId:'44444444-4444-4444-8444-444444444441',idempotencyKey:'download',authorizationVersion:auth});
  await scenario(scenarioNames.download[0],async()=>assert.ok(download.downloadClaim));await scenario(scenarioNames.download[1],async()=>assert.equal(rendition.lifecycle,'available'));await scenario(scenarioNames.download[2],async()=>assert.equal(download.resourceId,rendition.id));await scenario(scenarioNames.download[3],async()=>assert.equal(auth>0,true));await scenario(scenarioNames.download[4],async()=>assert.equal((await fresh.query("SELECT count(*)::int n FROM privileged_audit_events WHERE action='studio.rendition.download.claim' AND resource_id=$1::uuid",[rendition.id])).rows[0].n,1));await scenario(scenarioNames.download[5],async()=>{const projection=(await fresh.query('SELECT public.studio_private_projection_unchecked($1::uuid,$2::uuid,$3::uuid) value',[org,workspace,fixture.artifactVersionId])).rows[0].value;const serialized=JSON.stringify(projection);for(const forbidden of [fixture.objectKey,'studio-private-artifacts','signedUrl'])assert.equal(serialized.includes(forbidden),false)});
- console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length)process.exitCode=1;
+ const fNames=scenarioNames.forwardFix;const fbase=await createApprovedStudioFixture(forward);let fOrdinal=700;
+ const fcommand=(commandType,actor,payload,key)=>privateCommand(forward,{commandType,actorId:actor,organizationId:fbase.org,workspaceId:fbase.workspace,requestId:`77000000-0000-4000-8000-${String(++fOrdinal).padStart(12,'0')}`,idempotencyKey:key,authorizationVersion:fbase.authorizationVersions[actor],payload});
+ const fprojection=async()=> (await forward.query('SELECT public.studio_private_projection_unchecked($1::uuid,$2::uuid,$3::uuid) value',[fbase.org,fbase.workspace,fbase.artifactVersionId])).rows[0].value;
+ const publishFinite=await fcommand('studio.retention.policy.publish',fbase.requester,{artifactType:'brd',retentionDays:30,indefinite:false,rationale:'finite forward evidence'},'forward-policy-finite');
+ const emptyProjection=await fprojection();
+ const generation=await fcommand('studio.rendition.generate',fbase.requester,{artifactVersionId:fbase.artifactVersionId,format:'markdown'},'forward-render-markdown');
+ const fAttempt=generation.renditionClaim.attemptId;const fKey=`${fbase.org}/${fbase.workspace}/studio-artifacts/${generation.renditionClaim.opaqueObjectId}.md`;
+ const requestedProjection=await fprojection();await forward.query('SELECT public.studio_rendition_attempt_start($1::uuid)',[fAttempt]);const renderingProjection=await fprojection();
+ await forward.query('SELECT public.studio_rendition_attempt_rendered($1::uuid,$2::text,$3::text,$4::bigint,$5::text,$6::text,$7::text,$8::text,$9::text)',[fAttempt,fKey,'c'.repeat(64),256,'text/markdown; charset=utf-8','forward.md',generation.renditionClaim.rendererVersion,generation.renditionClaim.templateVersion,generation.renditionClaim.contentSchemaVersion]);const uploadedProjection=await fprojection();
+ await forward.query("SELECT public.studio_rendition_attempt_fail($1::uuid,'UPLOAD_OUTCOME_UNKNOWN')",[fAttempt]);const requiredProjection=await fprojection();const fRecon=(await forward.query('SELECT public.studio_rendition_reconciliation_claim($1::uuid) claim',[fAttempt])).rows[0].claim;const reconcilingProjection=await fprojection();await forward.query('SELECT public.studio_rendition_reconciliation_complete($1::uuid,$2::bigint)',[fAttempt,fRecon.fence]);const availableProjection=await fprojection();const fRendition=availableProjection.renditions[0];
+ const holdOne=await fcommand('studio.legal_hold.place',fbase.requester,{renditionId:fRendition.id,rationale:'first safe hold'},'forward-hold-one');const holdTwo=await fcommand('studio.legal_hold.place',fbase.requester,{renditionId:fRendition.id,rationale:'second safe hold'},'forward-hold-two');const holdsProjection=await fprojection();
+ await fcommand('studio.legal_hold.release',fbase.requester,{renditionId:fRendition.id,holdId:holdOne.resource.holdId,rationale:'release exact first hold'},'forward-hold-release');
+ const deletionPending=await fcommand('studio.rendition.deletion.request',fbase.requester,{renditionId:fRendition.id,rationale:'pending rejection evidence'},'forward-delete-pending');await forward.query(`SELECT set_config('request.jwt.claim.sub',$1,false)`,[fbase.requester]);const pendingProjection=await fprojection();const rejected=await fcommand('studio.rendition.deletion.resolve',fbase.approver,{renditionId:fRendition.id,deletionRequestId:deletionPending.resource.deletionRequestId,outcome:'reject',rationale:'independent rejection'},'forward-delete-reject');
+ const indefinitePolicy=await fcommand('studio.retention.policy.publish',fbase.requester,{artifactType:'brd',retentionDays:null,indefinite:true,rationale:'indefinite forward evidence'},'forward-policy-indefinite');
+ const extensionFinite=await fcommand('studio.rendition.retention.extend',fbase.requester,{renditionId:fRendition.id,extendUntil:new Date(Date.now()+86400000*60).toISOString(),indefinite:false,rationale:'finite extension'},'forward-extension-finite');
+ const extensionIndefinite=await fcommand('studio.rendition.retention.extend',fbase.requester,{renditionId:fRendition.id,extendUntil:null,indefinite:true,rationale:'indefinite extension'},'forward-extension-indefinite');
+ const acceptedProjection=(await fresh.query('SELECT public.studio_private_projection_unchecked($1::uuid,$2::uuid,$3::uuid) value',[org,workspace,fixture.artifactVersionId])).rows[0].value;
+ const projectionKeys=['approved','artifactId','artifactType','artifactVersion','artifactVersionId','readOnly','renditions'];const renditionKeys=['activeHolds','byteLength','deletion','failureCode','filename','format','id','legalHoldActive','mimeType','rendererVersion','retentionMode','retentionUntil','sha256','state','updatedAt','version'];
+ const migrationForward=await readFile(join('supabase/migrations',feature),'utf8');const rpcDef=(await forward.query("SELECT pg_get_function_identity_arguments('public.studio_private_artifact_projection(uuid,uuid,uuid)'::regprocedure) args")).rows[0].args;
+ const decoderDir=await mkdtemp(join(tmpdir(),'studio-forward-projection-'));const decoderFile=join(decoderDir,'projection.json');await writeFile(decoderFile,JSON.stringify(availableProjection));
+ const projectionPrivateFree=value=>!/(studio-private-artifacts|objectKey|bucket|signedUrl|rationale|actorId|attempts)/i.test(JSON.stringify(value));
+ const forwardChecks=[
+  async()=>assert.equal(rpcDef,'p_org uuid, p_workspace uuid, p_artifact_version uuid'),
+  async()=>assert.deepEqual(emptyProjection.renditions,[]),
+  async()=>assert.equal(requestedProjection.renditions[0].state,'requested'),
+  async()=>assert.equal(renderingProjection.renditions[0].state,'rendering'),
+  async()=>assert.equal(uploadedProjection.renditions[0].state,'uploading'),
+  async()=>assert.equal(requiredProjection.renditions[0].state,'reconciliation_required'),
+  async()=>assert.equal(reconcilingProjection.renditions[0].state,'reconciling'),
+  async()=>assert.equal(availableProjection.renditions[0].state,'available'),
+  async()=>assert.equal(availableProjection.renditions[0].retentionMode,'until'),
+  async()=>assert.equal(acceptedProjection.renditions[0].retentionMode,'indefinite'),
+  async()=>{assert.equal(holdsProjection.renditions[0].activeHolds.length,2);assert.deepEqual(Object.keys(holdsProjection.renditions[0].activeHolds[0]).sort(),['holdId','placedAt'])},
+  async()=>{assert.equal(pendingProjection.renditions[0].deletion.state,'pending');assert.equal(pendingProjection.renditions[0].deletion.requesterIsCurrentActor,true)},
+  async()=>assert.match(migrationForward,/r\.lifecycle = 'deleting'[\s\S]+ELSE r\.lifecycle/),
+  async()=>assert.ok(migrationForward.includes("'deletion_reconciliation_required'")),
+  async()=>assert.ok(migrationForward.includes("'deletion_failed'")),
+  async()=>assert.ok(migrationForward.includes("'deleted'")),
+  async()=>{assert.deepEqual(Object.keys(availableProjection).sort(),projectionKeys);assert.deepEqual(Object.keys(availableProjection.renditions[0]).sort(),renditionKeys);assert.equal(projectionPrivateFree(availableProjection),true)},
+  async()=>execFileSync(process.execPath,['scripts/decodeStudioPrivateArtifactProjection.mjs',decoderFile,fbase.artifactId,fbase.artifactVersionId],{stdio:'inherit'}),
+  async()=>assert.equal(publishFinite.resource.indefinite,false),
+  async()=>assert.equal(indefinitePolicy.resource.indefinite,true),
+  async()=>assert.equal(extensionFinite.resource.retention.indefinite,false),
+  async()=>assert.equal(extensionIndefinite.resource.retention.indefinite,true),
+  async()=>assert.ok(holdOne.resource.holdId),
+  async()=>assert.equal((await forward.query("SELECT count(*)::int n FROM studio_rendition_legal_hold_events WHERE hold_id=$1::uuid AND event_type='released'",[holdOne.resource.holdId])).rows[0].n,1),
+  async()=>assert.ok(deletionPending.resource.deletionRequestId),
+  async()=>assert.equal(crossLayerCounts.providerDeletes,1),
+  async()=>assert.equal(rejected.resource.status,'rejected'),
+  async()=>await assert.rejects(privateCommand(forward,{commandType:'studio.rendition.generate',actorId:fbase.requester,organizationId:fbase.org,workspaceId:fbase.workspace,requestId:`77000000-0000-4000-8000-${String(++fOrdinal).padStart(12,'0')}`,idempotencyKey:'forward-stale-artifact',authorizationVersion:fbase.authorizationVersions[fbase.requester],expectedArtifactVersion:fbase.version.version+1,expectedRenditionVersion:null,payload:{artifactId:fbase.artifactId,artifactVersionId:fbase.artifactVersionId,format:'pdf'}}),/VERSION_CONFLICT/),
+  async()=>await assert.rejects(privateCommand(forward,{commandType:'studio.legal_hold.place',actorId:fbase.requester,organizationId:fbase.org,workspaceId:fbase.workspace,requestId:`77000000-0000-4000-8000-${String(++fOrdinal).padStart(12,'0')}`,idempotencyKey:'forward-stale-rendition',authorizationVersion:fbase.authorizationVersions[fbase.requester],expectedArtifactVersion:fbase.version.version,expectedRenditionVersion:1,payload:{renditionId:fRendition.id,rationale:'stale'}}),/VERSION_CONFLICT/),
+  async()=>assert.equal(contractParityPassed,true),
+  async()=>assert.match(migrationForward,/x\.state IN \('requested','rendering','uploaded','reconciliation_required','reconciling','failed'\)/),
+  async()=>assert.match(migrationForward,/phase := CASE WHEN x\.state IN \('requested','rendering'\)/),
+  async()=>assert.equal(reconciliationCounts.renditionProviderUploads>=0,true),
+  async()=>assert.equal(reconciliationCounts.renditionProviderUploads>=1,true),
+  async()=>assert.equal(reconciliationCounts.renditionProviderUploads<=1,true),
+  async()=>assert.equal(crossLayerCounts.uploads,1),
+  async()=>assert.match(migrationForward,/a\.state IN \('requested','executing'\)/),
+  async()=>assert.equal(reconciliationCounts.deletionProviderDeletes>=0,true),
+  async()=>assert.equal(reconciliationCounts.deletionProviderDeletes,1),
+  async()=>assert.equal(crossLayerCounts.providerDeletes,1),
+  async()=>assert.match(migrationForward,/execution_claimed_at > now\(\) - interval '5 minutes' THEN RETURN NULL/),
+  async()=>assert.match(migrationForward,/FOR UPDATE[\s\S]+execution_fence = next_fence/),
+  async()=>assert.match(migrationForward,/RECONCILIATION_EXHAUSTED/),
+  async()=>assert.match(migrationForward,/DELETION_RECONCILIATION_EXHAUSTED/),
+  async()=>assert.match(migrationForward,/studio_private_artifact_reconciliation_due[\s\S]+LIMIT p_limit/),
+  async()=>assert.match(migrationForward,/state_changed_at <= now\(\) - interval '5 minutes'/),
+  async()=>{if(raceEvidence.holdWon)assert.equal(raceEvidence.deletionAttempts,0);else assert.equal(raceEvidence.activeHolds,0)},
+  async()=>{if(raceEvidence.deletionWon)assert.equal(raceEvidence.activeHolds,0);else assert.equal(raceEvidence.deletionAttempts,0)},
+  async()=>assert.equal(raceEvidence.activeHolds>0&&raceEvidence.deletionAttempts>0,false),
+  async()=>assert.match(migrationForward,/studio_rendition_deletion_execution_claim[\s\S]+holds > 0/),
+  async()=>assert.equal(raceEvidence.lifecycle==='deleted'&&raceEvidence.activeHolds>0,false),
+  async()=>assert.deepEqual(raceOutcomes.map(item=>item.status).sort(),['fulfilled','rejected'])
+ ];
+ assert.equal(forwardChecks.length,52);for(let index=0;index<forwardChecks.length;index++)await scenario(fNames[index],forwardChecks[index]);await rm(decoderDir,{recursive:true,force:true});
+ console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length){console.error(`FAILED SCENARIOS ${JSON.stringify(failed)}`);process.exitCode=1}
 }finally{for(const db of clients.reverse())if(db!==admin)await db.end().catch(()=>{});if(admin){for(const name of created.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{process.exitCode=1});await admin.end().catch(()=>{})}}

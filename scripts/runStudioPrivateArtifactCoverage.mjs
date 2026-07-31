@@ -9,7 +9,9 @@ const roots = [
   'supabase/functions/_shared/studioPrivateArtifactCommand.test.ts',
   'supabase/functions/_shared/studioPrivateArtifactDb.test.ts',
   'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.test.ts',
+  'supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.test.ts',
   'supabase/functions/_shared/studioPrivateArtifactRenderer.test.ts',
+  'supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts',
   'supabase/functions/_shared/studioPrivateArtifactSaga.test.ts',
   'supabase/functions/_shared/studioPrivateArtifactStorage.test.ts',
 ];
@@ -47,12 +49,15 @@ if (program.emit().emitSkipped) process.exit(1);
 const slash = value => path.join(out, value).replace(/\\/g, '/');
 const source = [
   'supabase/functions/_shared/studioPrivateArtifactCommand.js',
+  'supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.js',
 ];
 const tests = [
   'supabase/functions/_shared/studioPrivateArtifactCommand.test.js',
   'supabase/functions/_shared/studioPrivateArtifactDb.test.js',
   'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.test.js',
+  'supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.test.js',
   'supabase/functions/_shared/studioPrivateArtifactRenderer.test.js',
+  'supabase/functions/_shared/studioPrivateArtifactRpcContract.test.js',
   'supabase/functions/_shared/studioPrivateArtifactStorage.test.js',
   'supabase/functions/_shared/studioPrivateArtifactSaga.test.js',
 ];

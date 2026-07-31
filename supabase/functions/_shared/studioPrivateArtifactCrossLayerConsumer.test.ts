@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import { readFileSync, writeFileSync } from 'node:fs';
 import {
   decodeStudioDeletionClaim,
-  decodeStudioDeletionReconciliationClaim,
+  decodeStudioDeletionExecutionBinding,
   decodeStudioDownloadClaim,
   decodeStudioRenditionReconciliationClaim,
   decodeStudioRenditionClaim,
@@ -110,7 +110,10 @@ if (mode === 'rendition') {
     sha256: await sha256Hex(firstBytes),
   });
 } else if (mode === 'deletion') {
-  const claim = decodeStudioDeletionClaim(input.claim);
+  const pending = decodeStudioDeletionClaim(input.claim);
+  const execution = decodeStudioDeletionExecutionBinding(input.execution);
+  assert.ok(execution);
+  const claim = { ...execution, disposition: 'execute' as const, requestId: pending.requestId };
   const expectation = input.expectation as StudioStoredObjectExpectation;
   const bytes = new Uint8Array(Buffer.from(String(input.bytesBase64), 'base64'));
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
@@ -154,6 +157,8 @@ if (mode === 'rendition') {
 } else if (mode === 'renditionReconciliation') {
   const claim = decodeStudioRenditionReconciliationClaim(input.claim);
   assert.ok(claim);
+  assert.equal(claim.phase, 'verify_or_upload');
+  if (claim.phase !== 'verify_or_upload') throw new Error('expected post-render reconciliation claim');
   const rendered = await renderStudioPrivateArtifact(claim.approvedContent, claim.format, { artifactType: claim.artifactType, contentSchemaVersion: claim.contentSchemaVersion, templateVersion: claim.templateVersion, rendererVersion: claim.rendererVersion });
   assert.deepEqual({ byteLength: rendered.byteLength, sha256: rendered.sha256, mimeType: rendered.mimeType, filename: rendered.filename }, { byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType, filename: claim.filename });
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
@@ -171,7 +176,7 @@ if (mode === 'rendition') {
   const result = await reconcileStudioRendition(claim.attemptId, { database, storage });
   write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, completionCount, failures, reconciliations, provider: { probes: storage.operationCounts.probe, uploads: storage.operationCounts.upload } });
 } else if (mode === 'deletionReconciliation') {
-  const claim = decodeStudioDeletionReconciliationClaim(input.claim);
+  const claim = decodeStudioDeletionExecutionBinding(input.claim);
   assert.ok(claim);
   let exists = input.objectStatus === 'exists'; let presence = 0; let deletes = 0;
   const storage = {

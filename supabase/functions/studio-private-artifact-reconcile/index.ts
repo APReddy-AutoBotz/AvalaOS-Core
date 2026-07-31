@@ -1,5 +1,9 @@
 import { handleStudioPrivateArtifactReconciliation, type StudioPrivateArtifactReconciliationKind } from '../_shared/studioPrivateArtifactReconciliationHandler.ts';
-import { reconcileStudioPrivateDeletion, reconcileStudioPrivateRendition } from '../_shared/studioPrivateArtifactDb.ts';
+import {
+  loadStudioPrivateArtifactReconciliationDue,
+  reconcileStudioPrivateDeletion,
+  reconcileStudioPrivateRendition,
+} from '../_shared/studioPrivateArtifactDb.ts';
 
 const get = (key: string) => Deno.env.get(key);
 Deno.serve(request => {
@@ -8,10 +12,13 @@ Deno.serve(request => {
     ? 'rendition'
     : pathname.endsWith('/deletion')
       ? 'deletion'
+      : pathname.endsWith('/due')
+        ? 'due'
       : null;
   if (!kind) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } });
   return handleStudioPrivateArtifactReconciliation(request, kind, {
     configuredWorkerSecret: get('STUDIO_PRIVATE_ARTIFACT_RECONCILIATION_WORKER_SECRET'),
+    loadDue: loadStudioPrivateArtifactReconciliationDue,
     reconcileRendition: reconcileStudioPrivateRendition,
     reconcileDeletion: reconcileStudioPrivateDeletion,
   });

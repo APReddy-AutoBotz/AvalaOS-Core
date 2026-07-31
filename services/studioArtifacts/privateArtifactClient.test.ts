@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import type { TenantContextProjection } from '../../types';
 import {
+  buildStudioPrivateArtifactProjectionRpcArguments,
   decodeStudioPrivateArtifactCommandResponse,
   decodeStudioPrivateArtifactDownload,
   decodeStudioPrivateArtifactProjection,
@@ -41,6 +42,7 @@ const rendition = {
   retentionMode: 'until',
   retentionUntil: '2027-07-29T00:00:00.000Z',
   legalHoldActive: false,
+  activeHolds: [],
   deletion: null,
   failureCode: null,
   updatedAt: '2026-07-29T00:00:00.000Z',
@@ -69,6 +71,10 @@ assert.equal(
   }).renditions[0].sha256,
   'a'.repeat(64),
 );
+assert.deepEqual(
+  buildStudioPrivateArtifactProjectionRpcArguments(context, U[3]),
+  { p_org: U[0], p_workspace: U[1], p_artifact_version: U[3] },
+);
 for (const forbidden of [
   'bucket',
   'objectKey',
@@ -78,6 +84,7 @@ for (const forbidden of [
   'contentSchemaVersion',
   'artifactAncestry',
   'serviceRole',
+  'attempts',
 ]) {
   assert.throws(
     () =>
@@ -96,6 +103,68 @@ assert.throws(
     ),
   StudioPrivateArtifactBoundaryError,
 );
+for (const state of [
+  'requested',
+  'rendering',
+  'uploading',
+  'reconciliation_required',
+  'reconciling',
+  'failed',
+] as const) {
+  const decoded = decodeStudioPrivateArtifactProjection(
+    {
+      ...projection,
+      renditions: [{
+        ...rendition,
+        state,
+        mimeType: null,
+        filename: null,
+        byteLength: null,
+        sha256: null,
+        retentionMode: null,
+        retentionUntil: null,
+      }],
+    },
+    { artifactId: U[2], artifactVersionId: U[3] },
+  );
+  assert.equal(decoded.renditions[0].state, state);
+}
+for (const state of [
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
+] as const) {
+  assert.equal(
+    decodeStudioPrivateArtifactProjection(
+      { ...projection, renditions: [{ ...rendition, state }] },
+      { artifactId: U[2], artifactVersionId: U[3] },
+    ).renditions[0].state,
+    state,
+  );
+}
+const activeHolds = [
+  { holdId: U[4], placedAt: '2026-07-29T01:00:00.000Z' },
+  { holdId: U[0], placedAt: '2026-07-29T02:00:00.000Z' },
+];
+assert.equal(
+  decodeStudioPrivateArtifactProjection(
+    { ...projection, renditions: [{ ...rendition, legalHoldActive: true, activeHolds }] },
+    { artifactId: U[2], artifactVersionId: U[3] },
+  ).renditions[0].activeHolds.length,
+  2,
+);
+for (const invalid of [
+  { ...rendition, legalHoldActive: true, activeHolds: [] },
+  { ...rendition, activeHolds: [activeHolds[0], activeHolds[0]] },
+  { ...rendition, legalHoldActive: true, activeHolds: [{ ...activeHolds[0], rationale: 'private' }] },
+]) {
+  assert.throws(
+    () => decodeStudioPrivateArtifactProjection(
+      { ...projection, renditions: [invalid] },
+      { artifactId: U[2], artifactVersionId: U[3] },
+    ),
+    StudioPrivateArtifactBoundaryError,
+  );
+}
 assert.throws(
   () =>
     decodeStudioPrivateArtifactProjection(
@@ -175,6 +244,24 @@ void (async () => {
     'artifactVersionId',
     'format',
   ]);
+  await executeStudioPrivateArtifactCommand(
+    context,
+    'studio.legal_hold.release',
+    projection,
+    rendition,
+    {
+      renditionId: U[3],
+      holdId: U[4],
+      reason: 'Matter closed',
+    },
+    'release-hold-0001',
+    transport,
+  );
+  assert.deepEqual(envelope.payload, {
+    renditionId: U[3],
+    holdId: U[4],
+    reason: 'Matter closed',
+  });
   await executeStudioPrivateArtifactCommand(
     context,
     'studio.rendition.deletion.resolve',

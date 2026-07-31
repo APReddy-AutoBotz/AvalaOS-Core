@@ -4,7 +4,20 @@ import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs'
 const uuid=n=>`98000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 export const stableJson=value=>JSON.stringify(value,Object.keys(value).sort());
 async function stage(label,operation){try{const result=await operation();console.log(`PRIVATE FIXTURE PASS ${label}`);return result}catch(error){throw new Error(`PRIVATE FIXTURE FAILED ${label}: ${error instanceof Error?error.message:String(error)}`)}}
-export async function privateCommand(db,command){const serialized=JSON.stringify(command);assert.equal(typeof serialized,'string');return (await stage(command.commandType,()=>db.query('SELECT public.studio_private_artifact_command_claim($1::jsonb) result',[serialized]))).rows[0].result}
+export async function privateCommand(db,command){
+ const normalized=structuredClone(command);
+ if(normalized.commandType==='studio.retention.policy.publish'){
+  normalized.expectedArtifactVersion??=null;normalized.expectedRenditionVersion??=null;
+ }else if(normalized.commandType==='studio.rendition.generate'){
+  const version=(await db.query('SELECT artifact_id,version FROM public.studio_artifact_versions WHERE id=$1::uuid',[normalized.payload.artifactVersionId])).rows[0];
+  normalized.payload.artifactId??=version.artifact_id;normalized.expectedArtifactVersion??=Number(version.version);normalized.expectedRenditionVersion??=null;
+ }else{
+  if(!normalized.payload.renditionId&&normalized.payload.deletionRequestId)normalized.payload.renditionId=(await db.query('SELECT rendition_id FROM public.studio_rendition_deletion_requests WHERE id=$1::uuid',[normalized.payload.deletionRequestId])).rows[0]?.rendition_id;
+  const rendition=(await db.query('SELECT artifact_version,lifecycle_version FROM public.studio_renditions WHERE id=$1::uuid',[normalized.payload.renditionId])).rows[0];
+  normalized.expectedArtifactVersion??=Number(rendition.artifact_version);normalized.expectedRenditionVersion??=Number(rendition.lifecycle_version);
+ }
+ const serialized=JSON.stringify(normalized);assert.equal(typeof serialized,'string');return (await stage(normalized.commandType,()=>db.query('SELECT public.studio_private_artifact_command_claim($1::jsonb) result',[serialized]))).rows[0].result
+}
 export async function downloadCommand(db,command){const serialized=JSON.stringify(command);return (await stage('download claim',()=>db.query('SELECT public.studio_artifact_download_claim($1::jsonb) result',[serialized]))).rows[0].result}
 export async function createApprovedStudioFixture(db){
  const base=await createCommittedStudioFixture(db);let aggregate=Number(base.aggregate.aggregate_version);const version=Number(base.version.version);

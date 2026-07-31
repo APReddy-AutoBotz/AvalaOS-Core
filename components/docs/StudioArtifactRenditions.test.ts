@@ -5,14 +5,20 @@ const source = readFileSync('components/docs/StudioArtifactRenditions.tsx', 'utf
 for (const token of [
   'Private governed renditions',
   'Not generated',
-  'Generating',
+  'Generation requested',
+  'Rendering',
+  'Uploading',
+  'Generation reconciliation required',
+  'Reconciling generation',
   'Generation failed',
   'Available',
   'Download unavailable',
   'Indefinite retention',
   'Legal hold',
-  'Deletion requested · approval pending',
+  'Deletion requested — approval pending',
   'Deleting',
+  'Deletion reconciliation required',
+  'Reconciling deletion',
   'Deleted',
   'Deletion failed',
   'Authorization is stale or revoked',
@@ -30,6 +36,10 @@ for (const token of [
   'downloadStudioPrivateArtifact',
   'Current committed private rendition state loaded.',
   'Legacy document cards remain non-canonical.',
+  'Pending availability snapshot',
+  'activeHolds',
+  'holdId: hold.holdId',
+  'Place another legal hold',
 ]) {
   assert.ok(source.includes(token), `private rendition UI contract missing: ${token}`);
 }

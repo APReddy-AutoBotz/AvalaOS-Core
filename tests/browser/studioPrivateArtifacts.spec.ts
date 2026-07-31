@@ -15,6 +15,8 @@ const ARTIFACT = '44444444-4444-4444-8444-444444444444';
 const VERSION = '45555555-5555-4555-8555-555555555555';
 const ACTOR = '46666666-6666-4666-8666-666666666666';
 const RECEIPT = '47777777-7777-4777-8777-777777777777';
+const HOLD_ONE = '47777777-7777-4777-8777-777777777771';
+const HOLD_TWO = '47777777-7777-4777-8777-777777777772';
 const RENDITION_IDS: Record<StudioPrivateArtifactFormat, string> = {
   markdown: '48888888-8888-4888-8888-888888888881',
   pdf: '48888888-8888-4888-8888-888888888882',
@@ -71,6 +73,7 @@ function rendition(
     retentionMode: 'until',
     retentionUntil: '2027-07-29T00:00:00.000Z',
     legalHoldActive: false,
+    activeHolds: [],
     deletion: null,
     failureCode: null,
     updatedAt: '2026-07-29T00:00:00.000Z',
@@ -90,7 +93,7 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
   const capabilities = options.capabilities ?? allCapabilities;
   let renditions = options.renditions ?? [];
   let failReload = false;
-  const requests: { path: string; body: any }[] = [];
+  const requests: { path: string; queryKeys: string[]; body: any }[] = [];
   const user = {
     id: ACTOR,
     email: 'studio-private@example.test',
@@ -191,7 +194,7 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       return route.fulfill({ status: 204, headers, body: '' });
     }
     const body = request.postData() ? request.postDataJSON() : null;
-    requests.push({ path: url.pathname, body });
+    requests.push({ path: url.pathname, queryKeys: [...url.searchParams.keys()].sort(), body });
     if (url.pathname === '/auth/v1/user' || url.pathname === '/auth/v1/token') {
       return ok(route, user);
     }
@@ -255,7 +258,16 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       if (body.commandType === 'studio.legal_hold.release') {
         renditions = renditions.map((item: Rendition) =>
           item.id === body.payload.renditionId
-            ? rendition(item.format, { ...item, legalHoldActive: false, version: item.version + 1 })
+            ? rendition(item.format, {
+                ...item,
+                activeHolds: item.activeHolds.filter(
+                  (hold: { holdId: string }) => hold.holdId !== body.payload.holdId,
+                ),
+                legalHoldActive: item.activeHolds.some(
+                  (hold: { holdId: string }) => hold.holdId !== body.payload.holdId,
+                ),
+                version: item.version + 1,
+              })
             : item,
         );
       }
@@ -382,13 +394,101 @@ test('download invokes authenticated broker and never a Storage URL', async ({ p
 
 test('legal hold remains separate and blocks deletion request', async ({ page }) => {
   await installFixture(page, {
-    renditions: [rendition('pdf', { legalHoldActive: true })],
+    renditions: [
+      rendition('pdf', {
+        legalHoldActive: true,
+        activeHolds: [{ holdId: HOLD_ONE, placedAt: '2026-07-29T00:00:00.000Z' }],
+      }),
+    ],
   });
   const panel = await openDocs(page);
   await panel.getByLabel('Governed reason').fill('Matter remains open');
   await expect(panel.getByTestId('rendition-pdf').getByText('Legal hold', { exact: true }).locator('..')).toContainText('Active');
   await expect(panel.getByRole('button', { name: 'Request deletion' })).toBeDisabled();
-  await expect(panel.getByRole('button', { name: 'Release legal hold' })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: /Release legal hold placed/ })).toBeEnabled();
+});
+
+test('private projection request uses only the exact production RPC arguments', async ({ page }) => {
+  const fixture = await installFixture(page);
+  await openDocs(page);
+  const projectionRequest = fixture.requests.find(request =>
+    request.path.includes('studio_private_artifact_projection'),
+  );
+  expect(Object.keys(projectionRequest?.body ?? {}).sort()).toEqual([
+    'p_artifact_version',
+    'p_org',
+    'p_workspace',
+  ]);
+});
+
+test('multiple active holds are disclosed safely and released by exact hold id', async ({ page }) => {
+  const fixture = await installFixture(page, {
+    renditions: [
+      rendition('pdf', {
+        legalHoldActive: true,
+        activeHolds: [
+          { holdId: HOLD_ONE, placedAt: '2026-07-28T00:00:00.000Z' },
+          { holdId: HOLD_TWO, placedAt: '2026-07-29T00:00:00.000Z' },
+        ],
+      }),
+    ],
+  });
+  const panel = await openDocs(page);
+  await panel.getByLabel('Governed reason').fill('Release the selected completed matter');
+  const releaseButtons = panel.getByRole('button', { name: /Release legal hold placed/ });
+  await expect(releaseButtons).toHaveCount(2);
+  await releaseButtons.first().click();
+  await expect
+    .poll(
+      () =>
+        fixture.requests.find(
+          request => request.body?.commandType === 'studio.legal_hold.release',
+        )?.body?.payload?.holdId,
+    )
+    .toBe(HOLD_ONE);
+  await expect(panel.getByRole('button', { name: /Release legal hold placed/ })).toHaveCount(1);
+  await expect(panel.getByRole('button', { name: 'Request deletion' })).toBeDisabled();
+});
+
+test('recovery states remain explicit and never imply availability', async ({ page }) => {
+  await installFixture(page, {
+    renditions: [
+      rendition('pdf', {
+        state: 'reconciliation_required',
+        mimeType: null,
+        filename: null,
+        byteLength: null,
+        sha256: null,
+        retentionMode: null,
+        retentionUntil: null,
+      }),
+    ],
+  });
+  const panel = await openDocs(page);
+  const card = panel.getByTestId('rendition-pdf');
+  await expect(card).toContainText('Generation reconciliation required');
+  await expect(card).not.toContainText(/^Available$/);
+  await expect(card).toContainText('Pending availability snapshot');
+});
+
+test('deletion recovery is distinct from physical deletion completion', async ({ page }) => {
+  await installFixture(page, {
+    renditions: [
+      rendition('docx', {
+        state: 'deletion_reconciling',
+        deletion: {
+          requestId: RECEIPT,
+          state: 'approved',
+          requesterIsCurrentActor: false,
+        },
+      }),
+    ],
+  });
+  const panel = await openDocs(page);
+  const card = panel.getByTestId('rendition-docx');
+  await expect(card).toContainText('Reconciling deletion');
+  await expect(card).not.toContainText(/^Deleted$/);
+  await expect(card.getByRole('button', { name: 'Download DOCX' })).toHaveCount(0);
 });
 
 test('deletion requester cannot approve own request', async ({ page }) => {

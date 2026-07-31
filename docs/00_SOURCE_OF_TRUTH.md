@@ -1,8 +1,8 @@
 # AvalaOS Core Source Of Truth
 
-## Studio PR B implementation candidate
+## Studio PR B post-merge corrective candidate
 
-Studio PR B is an implementation candidate over accepted PR #216 authority. It adds deterministic Markdown/PDF/DOCX renditions, private server-controlled storage, brokered downloads, snapshotted retention, legal holds, and separation-of-duty deletion. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and exact-head CI evidence are acceptance inputs, not hosted, deployment, pilot, production, security-certification, or compliance proof.
+PR #217 merged over accepted PR #216 authority, but its closure remains blocked by five post-merge P1 runtime-contract findings. One additive forward-fix candidate corrects projection/RPC parity, public-to-private command translation, crash recovery, and hold/deletion serialization without rewriting accepted history. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and exact-head CI evidence are acceptance inputs, not hosted, deployment, pilot, production, readiness, security-certification, or compliance proof.
 
 ## Studio PR A active authority
 

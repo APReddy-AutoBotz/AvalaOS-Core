@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 
 const file='supabase/migrations/20260729163251_studio_private_artifact_authority.sql';
 const sql=await readFile(file,'utf8');
+const forwardFile='supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
+const forward=await readFile(forwardFile,'utf8');
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1),'20260729163251_studio_private_artifact_authority.sql','PR B migration must be the chronological tip');
+assert.equal(migrations.at(-1),'20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql','PR #217 forward fix must be the chronological tip');
+const acceptedBlob=createHash('sha1').update(`blob ${Buffer.byteLength(sql)}\0`).update(sql).digest('hex');
+assert.equal(acceptedBlob,'3383268eab95d1b2f12f4bb8a77246e63c3e30a3','accepted PR #217 migration blob drift');
 const capabilities=['studio.artifacts.rendition.generate','studio.artifacts.download','studio.artifacts.retention.manage','studio.artifacts.legal_hold.manage','studio.artifacts.delete.request','studio.artifacts.delete.approve'];
 for(const capability of capabilities)assert.match(sql,new RegExp(capability.replaceAll('.','\\.')));
 const tables=['studio_private_artifact_runtime_control','studio_retention_policies','studio_private_artifact_command_receipts','studio_rendition_attempts','studio_renditions','studio_rendition_retention_extensions','studio_rendition_legal_hold_events','studio_rendition_deletion_requests','studio_rendition_deletion_resolutions','studio_rendition_deletion_attempts','studio_artifact_download_receipts'];
@@ -42,4 +47,17 @@ const projection=/CREATE OR REPLACE FUNCTION public\.studio_private_artifact_pro
 for(const forbidden of ['bucket_id','object_key','signedUrl','rationale','storage_provider'])assert.ok(!projection.includes(forbidden),`safe projection exposes ${forbidden}`);
 const auditMetadata=[...sql.matchAll(/jsonb_build_object\(([^;]+)\)/g)].map(match=>match[1]).join('\n');
 for(const forbidden of ["'objectKey'","'bucketId'","'signedUrl'","'rationale'"])assert.ok(!auditMetadata.includes(forbidden)||sql.includes(`claim:=jsonb_build_object`),`audit may contain ${forbidden}`);
-console.log(`Studio private artifact migration contract passed: ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, ${serviceFunctions.length} private service RPCs, one safe projection.`);
+for(const signature of [
+  'studio_private_artifact_reconciliation_due(integer)',
+  'studio_rendition_reconciliation_rendered(uuid,bigint,text,text,bigint,text,text,text,text,text)',
+  'studio_rendition_reconciliation_complete(uuid,bigint)',
+  'studio_rendition_reconciliation_fail(uuid,bigint,text)',
+  'studio_rendition_deletion_execution_claim(uuid)',
+  'studio_rendition_deletion_complete(uuid,bigint)',
+  'studio_rendition_deletion_fail(uuid,bigint,text)',
+]) assert.ok(forward.includes(`public.${signature}`),`missing forward-fix RPC ${signature}`);
+assert.match(forward,/CREATE OR REPLACE FUNCTION public\.studio_private_artifact_projection\(\s*p_org uuid,\s*p_workspace uuid,\s*p_artifact_version uuid/s);
+assert.match(forward,/REVOKE ALL ON FUNCTION public\.studio_rendition_deletion_complete\(uuid\),\s*public\.studio_rendition_deletion_fail\(uuid,text\)\s*FROM PUBLIC, anon, authenticated, service_role/s);
+assert.match(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO service_role/);
+assert.doesNotMatch(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO (?:anon|authenticated)/);
+console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);

@@ -8,11 +8,12 @@ import {
   type StudioPrivateArtifactAtomicResult,
   type StudioPrivateArtifactAuthority,
   type StudioPrivateArtifactJson,
+  toStudioPrivateArtifactSqlCommand,
 } from './studioPrivateArtifactCommand.ts';
 import {
   decodeStudioDeletionClaim,
   decodeStudioRenditionClaim,
-  type StudioDeletionExecuteClaim,
+  type StudioDeletionPendingClaim,
   type StudioRenditionExecuteClaim,
 } from './studioPrivateArtifactRpcContract.ts';
 
@@ -34,7 +35,7 @@ export interface StudioPrivateArtifactCommandDependencies {
     | { state: 'failed'; failureCode: string }
   >;
   executeClaimedDeletion?(
-    claim: StudioDeletionExecuteClaim,
+    claim: StudioDeletionPendingClaim,
   ): Promise<
     | { state: 'deleted'; resource: StudioPrivateArtifactJson }
     | { state: 'failed'; failureCode: string }
@@ -136,7 +137,9 @@ export const handleStudioPrivateArtifactCommand = async (
       throw new StudioPrivateArtifactError('PERMISSION_DENIED');
     }
 
-    const result = await deps.executeAtomicCommand({ ...envelope, actorId: actor.id });
+    const result = await deps.executeAtomicCommand(
+      toStudioPrivateArtifactSqlCommand(envelope, actor.id),
+    );
     // Fail closed before any external effect if the private command boundary leaks
     // storage coordinates into its public resource projection.
     assertPublicResource(result.resource);

@@ -1,6 +1,6 @@
 # Studio Private Artifact Authority
 
-Status: Studio PR B implementation candidate. This document defines source architecture and verification obligations; it is not deployment, hosted Storage, pilot, production, security-certification, or compliance evidence.
+Status: PR #217 is merged and its closure remains blocked pending the post-merge runtime-contract forward-fix candidate. This document defines source architecture and verification obligations; it is not deployment, hosted Storage, pilot, production, security-certification, or compliance evidence.
 
 ## Objective and boundary
 
@@ -53,15 +53,18 @@ Supported formats and renderer versions are:
 
 The versioned `studio-artifact-1` normalizer consumes the immutable approved content and template version. It supports title/summary/section content, the accepted PR A heading/body fixture, the immutable BRD/FRD/PDD template section inventories, and arbitrary bounded nested JSON through stable key-sorted canonical JSON. Unconsumed fields are rendered rather than silently dropped; unsupported, oversized, or executable input fails before upload. The renderer result, attempt, rendition, projection, and reconciliation all preserve the approved artifact's actual `studio-brd-1`, `studio-frd-1`, or `studio-pdd-1` template version.
 
-The rendition lifecycle is:
+The effective forward-fixed rendition lifecycle is:
 
 ```text
 requested -> rendering -> uploading -> available
      \           \            \
-      +-----------+-------------> failed
+      +-----------+-------------> reconciliation_required -> reconciling
+                                  \---------------------------> failed
 
 available -> deletion_requested -> deleting -> deleted
-                                   \-------> deletion_failed
+                    \                \-> deletion_reconciliation_required
+                     \-------------------------------> deletion_reconciling
+                                                       \-> deletion_failed
 ```
 
 `available` is committed only after create-only upload and exact-byte verification. A provider or database failure cannot create a false available rendition. A deleted rendition retains immutable ancestry, format, hash, byte length, receipt, resolution, execution, and audit references.
@@ -109,7 +112,7 @@ Existing `studio.artifacts.read` continues to authorize the safe artifact/rendit
 
 ## Failure, reconciliation, and rollback
 
-Stable public failures distinguish unavailable authority, stale authorization, permission denial, version/idempotency conflict, separation of duty, invalid command, rendering/storage failure, retention or hold blocking, download unavailability, read-only mode, and command unavailability without disclosing resource existence or internal provider details. Service-only reconciliation claims lock the exact attempt, recheck current human authority, runtime controls, approved ancestry, canonical Storage metadata, retention, holds, and lifecycle, then transition it to `reconciling`. Concurrent claims receive no executable work. A stale claim may be reclaimed after five minutes; the durable reconciliation counter reaching three exhausts the bounded retry and persist a terminal failure. Completion and failure RPCs accept `reconciling`, making a worker crash before completion recoverable without browser involvement. Operational invocation and safe stop guidance are in `docs/runbooks/studio-private-artifact-reconciliation.md`.
+Stable public failures distinguish unavailable authority, stale authorization, permission denial, version/idempotency conflict, separation of duty, invalid command, rendering/storage failure, retention or hold blocking, download unavailability, read-only mode, and command unavailability without disclosing resource existence or internal provider details. Service-only reconciliation claims lock the exact attempt, recheck current human authority, runtime controls, approved ancestry, canonical Storage metadata, retention, holds, and lifecycle, then transition it to `reconciling`. Stale pre-render, uploaded, and provider-execution states are eligible; fresh work remains protected by the active lease. Bounded due-work discovery returns only work kind and internal attempt ID. Deletion uses a second execution-time guard and fence immediately before the provider effect. Concurrent claims receive no executable work. A stale claim may be reclaimed after five minutes; the durable reconciliation counter reaching three exhausts the bounded retry and persists a terminal failure. Completion and failure RPCs require the current execution fence, making a worker crash before completion recoverable without browser involvement. Operational invocation and safe stop guidance are in `docs/runbooks/studio-private-artifact-reconciliation.md`.
 
 Rollback is fail-closed feature disablement: disable PR B mutation and provider execution, retain read-only committed projections and private objects, and apply an additive forward fix. Never make the bucket public, restore browser Storage authority, issue permanent links, hard-delete canonical metadata, shorten retention, release holds as rollback, or edit an accepted migration.
 

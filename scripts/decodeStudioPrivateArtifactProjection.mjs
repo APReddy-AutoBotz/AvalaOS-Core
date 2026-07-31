@@ -16,10 +16,7 @@ const source = (await readFile(
 ))
   .replace(/import type \{ TenantContextProjection \} from '[^']+';/u, '')
   .replace("import { supabase } from '../supabaseClient';", 'const supabase = undefined;')
-  .replace(
-    /import \{[\s\S]*?\} from '\.\/privateArtifactContracts';/u,
-    "const STUDIO_PRIVATE_ARTIFACT_COMMAND_TYPES=['studio.rendition.generate','studio.retention.policy.publish','studio.rendition.retention.extend','studio.legal_hold.place','studio.legal_hold.release','studio.rendition.deletion.request','studio.rendition.deletion.resolve']; const STUDIO_PRIVATE_ARTIFACT_FORMATS=['markdown','pdf','docx']; const STUDIO_RENDITION_STATES=['requested','rendering','uploading','available','failed','deletion_requested','deleting','deleted','deletion_failed'];",
-  );
+  .replace("from './privateArtifactContracts';", "from './privateArtifactContracts.mjs';");
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     target: ts.ScriptTarget.ES2022,
@@ -29,6 +26,20 @@ const compiled = ts.transpileModule(source, {
 const directory = await mkdtemp(join(tmpdir(), 'studio-private-decoder-'));
 try {
   const moduleFile = join(directory, 'private-client.mjs');
+  const contractsFile = join(directory, 'privateArtifactContracts.mjs');
+  const contractsSource = await readFile(
+    'services/studioArtifacts/privateArtifactContracts.ts',
+    'utf8',
+  );
+  await writeFile(
+    contractsFile,
+    ts.transpileModule(contractsSource, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ES2022,
+      },
+    }).outputText,
+  );
   await writeFile(moduleFile, compiled);
   const { decodeStudioPrivateArtifactProjection } = await import(
     `file://${moduleFile}`

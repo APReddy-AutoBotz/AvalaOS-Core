@@ -58,6 +58,16 @@ for (const file of canonicalFiles) {
 }
 
 const contracts = sources.get('services/studioArtifacts/privateArtifactContracts.ts');
+for (const token of [
+  "name: 'studio_private_artifact_projection'",
+  "argumentKeys: ['p_org', 'p_workspace', 'p_artifact_version']",
+  "'reconciliation_required'",
+  "'reconciling'",
+  "'deletion_reconciliation_required'",
+  "'deletion_reconciling'",
+  'activeHolds',
+  'holdId: string',
+]) assert(contracts.includes(token), `public projection contract missing: ${token}`);
 const commandPayloadSection = contracts.slice(
   contracts.indexOf('export interface StudioPrivateArtifactCommandPayloads'),
   contracts.indexOf('export interface StudioPrivateArtifactCommandEnvelope'),
@@ -126,6 +136,19 @@ assert(
   handler.includes("throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE')"),
   'missing executable side-effect claim must fail closed',
 );
+assert(
+  handler.includes('toStudioPrivateArtifactSqlCommand(envelope, actor.id)') &&
+    !handler.includes('{ ...envelope, actorId: actor.id }'),
+  'public payload must pass through the exact public-to-SQL translator',
+);
+for (const token of [
+  'parseStudioPrivateArtifactSqlCommand',
+  'toStudioPrivateArtifactSqlCommand',
+  'extendUntil',
+  'retentionUntil',
+  'rationale',
+  'holdId',
+]) assert(command.includes(token), `command translator contract missing: ${token}`);
 
 const download = sources.get(
   'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.ts',
@@ -167,10 +190,22 @@ assert(!storageBoundary.includes('studio-private-archive'), 'alternate Studio bu
 const database = sources.get('supabase/functions/_shared/studioPrivateArtifactDb.ts');
 assert(database.includes('reconcileStudioPrivateRendition') && database.includes('reconcileStudioPrivateDeletion'), 'production reconciliation operations missing');
 assert(!/load(?:Deletion)?Reconciliation:\s*async\s*\(\)\s*=>\s*null/u.test(database), 'production reconciliation loader remains unwired');
+assert(
+  database.indexOf("rpc('deletionExecutionClaim'") <
+    database.indexOf('const result = await executeStudioDeletionSaga'),
+  'deletion execution claim must be wired before provider-effect saga execution',
+);
+for (const token of [
+  "rpc('renditionReconciliationRendered'",
+  "rpc('renditionReconciliationComplete'",
+  "rpc('renditionReconciliationFail'",
+  "rpc('reconciliationDue'",
+]) assert(database.includes(token), `fenced recovery adapter missing: ${token}`);
 const worker = sources.get('supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.ts');
 for (const token of ['x-avala-studio-worker-secret', "request.method !== 'POST'", "request.headers.has('authorization')", "request.headers.has('origin')", "status: 'unavailable'"]) assert(worker.includes(token), 'worker boundary missing: ' + token);
 const workerEndpoint = sources.get('supabase/functions/studio-private-artifact-reconcile/index.ts');
 assert(workerEndpoint.includes('STUDIO_PRIVATE_ARTIFACT_RECONCILIATION_WORKER_SECRET'), 'worker secret config missing');
+assert(workerEndpoint.includes("pathname.endsWith('/due')"), 'bounded due-work endpoint missing');
 const supabaseConfig = await readFile('supabase/config.toml', 'utf8');
 assert(/\[functions\.studio-private-artifact-reconcile\][\s\S]*verify_jwt = false/u.test(supabaseConfig), 'custom-auth worker function config missing');
 const saga = sources.get('supabase/functions/_shared/studioPrivateArtifactSaga.ts');

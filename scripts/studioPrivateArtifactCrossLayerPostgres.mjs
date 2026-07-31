@@ -158,6 +158,12 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
         rationale: 'cross-layer eligible deletion',
       },
     });
+    const deletionVersion = (
+      await db.query(
+        'SELECT artifact_version,lifecycle_version FROM studio_renditions WHERE id=$1::uuid',
+        [rendition.id],
+      )
+    ).rows[0];
     const deletionApprovalCommand = {
       commandType: 'studio.rendition.deletion.resolve',
       actorId: approver,
@@ -166,7 +172,10 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       requestId: '51000000-0000-4000-8000-000000000005',
       idempotencyKey: 'cross-delete-approve',
       authorizationVersion: fixture.authorizationVersions[approver],
+      expectedArtifactVersion: Number(deletionVersion.artifact_version),
+      expectedRenditionVersion: Number(deletionVersion.lifecycle_version),
       payload: {
+        renditionId: rendition.id,
         deletionRequestId: deletionRequest.resource.deletionRequestId,
         outcome: 'approve',
         rationale: 'independent cross-layer approval',
@@ -174,8 +183,16 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
     };
     const deletion = await privateCommand(db, deletionApprovalCommand);
     assert.ok(deletion.deletionClaim);
+    const deletionExecution = (
+      await db.query(
+        'SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',
+        [deletion.deletionClaim.deletionAttemptId],
+      )
+    ).rows[0].claim;
+    assert.ok(deletionExecution);
     const deletionEvidence = await consume('deletion', {
       claim: deletion.deletionClaim,
+      execution: deletionExecution,
       expectation: {
         organizationId: work.organizationId,
         workspaceId: work.workspaceId,
@@ -187,8 +204,8 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       bytesBase64: renderEvidence.bytesBase64,
     });
     await db.query(
-      'SELECT public.studio_rendition_deletion_complete($1::uuid)',
-      [deletion.deletionClaim.deletionAttemptId],
+      'SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint)',
+      [deletion.deletionClaim.deletionAttemptId, deletionExecution.fence],
     );
     const deletionReplay = await privateCommand(db, deletionApprovalCommand);
     assert.equal(deletionReplay.outcome, 'replayed');

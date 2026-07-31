@@ -14,8 +14,11 @@ export type StudioPrivateArtifactAuthority = Readonly<{
   authorizationVersion: number;
   capabilities: readonly string[];
 }>;
-export type StudioPrivateArtifactAtomicCommand =
+export type StudioPrivateArtifactPublicCommand =
+  StudioPrivateArtifactCommandEnvelope<StudioPrivateArtifactJson>;
+export type StudioPrivateArtifactSqlCommand =
   StudioPrivateArtifactCommandEnvelope<StudioPrivateArtifactJson> & { actorId: string };
+export type StudioPrivateArtifactAtomicCommand = StudioPrivateArtifactSqlCommand;
 export type StudioPrivateArtifactAtomicResult = Pick<
   StudioPrivateArtifactCommandResponse,
   'outcome' | 'receiptId' | 'resourceId' | 'resource'
@@ -183,12 +186,20 @@ const parsePayload = (
       reason: text(payload.reason, 4000),
     } satisfies StudioPrivateArtifactCommandPayloads[typeof command];
   }
-  if (command === 'studio.legal_hold.place' || command === 'studio.legal_hold.release') {
+  if (command === 'studio.legal_hold.place') {
     exact(payload, ['renditionId', 'reason']);
     return {
       renditionId: uuid(payload.renditionId),
       reason: text(payload.reason, 4000),
-    };
+    } satisfies StudioPrivateArtifactCommandPayloads[typeof command];
+  }
+  if (command === 'studio.legal_hold.release') {
+    exact(payload, ['renditionId', 'holdId', 'reason']);
+    return {
+      renditionId: uuid(payload.renditionId),
+      holdId: uuid(payload.holdId),
+      reason: text(payload.reason, 4000),
+    } satisfies StudioPrivateArtifactCommandPayloads[typeof command];
   }
   if (command === 'studio.rendition.deletion.request') {
     exact(payload, ['renditionId', 'reason']);
@@ -256,6 +267,177 @@ export const parseStudioPrivateArtifactEnvelope = (
         : bad(),
     payload: parsePayload(commandType, envelope.payload),
   };
+};
+
+const parseSqlPayload = (
+  command: StudioPrivateArtifactCommandType,
+  raw: unknown,
+): StudioPrivateArtifactJson => {
+  const payload = object(raw);
+  if (command === 'studio.rendition.generate') {
+    exact(payload, ['artifactId', 'artifactVersionId', 'format']);
+    return {
+      artifactId: uuid(payload.artifactId),
+      artifactVersionId: uuid(payload.artifactVersionId),
+      format: format(payload.format),
+    };
+  }
+  if (command === 'studio.retention.policy.publish') {
+    exact(payload, ['artifactType', 'retentionDays', 'indefinite', 'rationale']);
+    const retentionDays =
+      payload.retentionDays === null
+        ? null
+        : typeof payload.retentionDays === 'number' &&
+            Number.isSafeInteger(payload.retentionDays) &&
+            payload.retentionDays >= 1 &&
+            payload.retentionDays <= 36_500
+          ? payload.retentionDays
+          : bad();
+    const indefinite =
+      typeof payload.indefinite === 'boolean' ? payload.indefinite : bad();
+    if (indefinite !== (retentionDays === null)) bad();
+    return {
+      artifactType: artifactType(payload.artifactType),
+      retentionDays,
+      indefinite,
+      rationale: text(payload.rationale, 4000),
+    };
+  }
+  if (command === 'studio.rendition.retention.extend') {
+    exact(payload, ['renditionId', 'extendUntil', 'indefinite', 'rationale']);
+    const extendUntil =
+      payload.extendUntil === null ? null : date(payload.extendUntil);
+    const indefinite =
+      typeof payload.indefinite === 'boolean' ? payload.indefinite : bad();
+    if (indefinite !== (extendUntil === null)) bad();
+    return {
+      renditionId: uuid(payload.renditionId),
+      extendUntil,
+      indefinite,
+      rationale: text(payload.rationale, 4000),
+    };
+  }
+  if (command === 'studio.legal_hold.place') {
+    exact(payload, ['renditionId', 'rationale']);
+    return {
+      renditionId: uuid(payload.renditionId),
+      rationale: text(payload.rationale, 4000),
+    };
+  }
+  if (command === 'studio.legal_hold.release') {
+    exact(payload, ['renditionId', 'holdId', 'rationale']);
+    return {
+      renditionId: uuid(payload.renditionId),
+      holdId: uuid(payload.holdId),
+      rationale: text(payload.rationale, 4000),
+    };
+  }
+  if (command === 'studio.rendition.deletion.request') {
+    exact(payload, ['renditionId', 'rationale']);
+    return {
+      renditionId: uuid(payload.renditionId),
+      rationale: text(payload.rationale, 4000),
+    };
+  }
+  exact(payload, ['renditionId', 'deletionRequestId', 'outcome', 'rationale']);
+  if (payload.outcome !== 'approve' && payload.outcome !== 'reject') bad();
+  return {
+    renditionId: uuid(payload.renditionId),
+    deletionRequestId: uuid(payload.deletionRequestId),
+    outcome: payload.outcome,
+    rationale: text(payload.rationale, 4000),
+  };
+};
+
+export const parseStudioPrivateArtifactSqlCommand = (
+  value: unknown,
+): StudioPrivateArtifactSqlCommand => {
+  const command = object(value);
+  exact(command, [
+    'requestId',
+    'idempotencyKey',
+    'commandType',
+    'organizationId',
+    'workspaceId',
+    'authorizationVersion',
+    'expectedArtifactVersion',
+    'expectedRenditionVersion',
+    'actorId',
+    'payload',
+  ]);
+  if (
+    typeof command.commandType !== 'string' ||
+    !commands.includes(command.commandType as StudioPrivateArtifactCommandType)
+  ) bad();
+  const commandType = command.commandType as StudioPrivateArtifactCommandType;
+  const expectsArtifact = commandType !== 'studio.retention.policy.publish';
+  const expectsRendition =
+    commandType !== 'studio.rendition.generate' &&
+    commandType !== 'studio.retention.policy.publish';
+  return {
+    requestId: uuid(command.requestId),
+    idempotencyKey: idempotencyKey(command.idempotencyKey),
+    commandType,
+    organizationId: uuid(command.organizationId),
+    workspaceId: uuid(command.workspaceId),
+    authorizationVersion: positiveInteger(command.authorizationVersion),
+    expectedArtifactVersion: expectsArtifact
+      ? positiveInteger(command.expectedArtifactVersion)
+      : command.expectedArtifactVersion === null
+        ? null
+        : bad(),
+    expectedRenditionVersion: expectsRendition
+      ? positiveInteger(command.expectedRenditionVersion)
+      : command.expectedRenditionVersion === null
+        ? null
+        : bad(),
+    actorId: uuid(command.actorId),
+    payload: parseSqlPayload(commandType, command.payload),
+  };
+};
+
+export const toStudioPrivateArtifactSqlCommand = (
+  value: unknown,
+  serverActorId: string,
+): StudioPrivateArtifactSqlCommand => {
+  const command = parseStudioPrivateArtifactEnvelope(value);
+  const actorId = uuid(serverActorId);
+  const publicPayload = command.payload;
+  const payload: StudioPrivateArtifactJson =
+    command.commandType === 'studio.rendition.generate'
+      ? publicPayload
+      : command.commandType === 'studio.retention.policy.publish'
+        ? {
+            artifactType: publicPayload.artifactType,
+            retentionDays: publicPayload.retentionDays,
+            indefinite: publicPayload.retentionDays === null,
+            rationale: publicPayload.reason,
+          }
+        : command.commandType === 'studio.rendition.retention.extend'
+          ? {
+              renditionId: publicPayload.renditionId,
+              extendUntil: publicPayload.retentionUntil,
+              indefinite: publicPayload.retentionUntil === null,
+              rationale: publicPayload.reason,
+            }
+          : command.commandType === 'studio.legal_hold.release'
+            ? {
+                renditionId: publicPayload.renditionId,
+                holdId: publicPayload.holdId,
+                rationale: publicPayload.reason,
+              }
+            : command.commandType === 'studio.rendition.deletion.resolve'
+              ? {
+                  renditionId: publicPayload.renditionId,
+                  deletionRequestId: publicPayload.deletionRequestId,
+                  outcome: publicPayload.outcome,
+                  rationale: publicPayload.reason,
+                }
+              : {
+                  renditionId: publicPayload.renditionId,
+                  rationale: publicPayload.reason,
+                };
+  return parseStudioPrivateArtifactSqlCommand({ ...command, actorId, payload });
 };
 
 export const studioPrivateArtifactErrorBody = (error: StudioPrivateArtifactError) => ({

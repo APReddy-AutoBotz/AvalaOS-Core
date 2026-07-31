@@ -1,0 +1,79 @@
+# PR #217 post-merge runtime-contract forward fix
+
+Status: corrective draft-PR candidate over merged PR #217. PR #217 closure remains blocked. This document records source architecture and disposable-test evidence only; it is not hosted, deployment, pilot, production, readiness, certification, or compliance evidence.
+
+## Scope and confirmed defects
+
+The additive forward fix addresses the five unresolved PR #217 P1 findings without changing the accepted migration:
+
+1. The production browser projection now calls `studio_private_artifact_projection` with exactly `p_org`, `p_workspace`, and `p_artifact_version`.
+2. The effective PostgreSQL projection and production strict decoder share one exact public DTO.
+3. The Edge handler validates a public command and deterministically translates it to the private SQL vocabulary instead of forwarding browser payloads.
+4. Stale pre-render, post-render, completion, and deletion crash windows are discoverable and recoverable under bounded leases.
+5. Hold placement, deletion approval, and the immediate provider-execution guard serialize on the same rendition authority.
+
+The accepted `20260729163251_studio_private_artifact_authority.sql` remains immutable. The effective definitions are supplied only by `20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql`.
+
+## Exact public projection
+
+The top-level projection has exactly:
+
+`artifactId`, `artifactVersionId`, `artifactVersion`, `artifactType`, `approved`, `readOnly`, and `renditions`.
+
+Each rendition has exactly:
+
+`id`, `version`, `format`, `state`, `mimeType`, `filename`, `byteLength`, `sha256`, `rendererVersion`, `retentionMode`, `retentionUntil`, `legalHoldActive`, `activeHolds`, `deletion`, `failureCode`, and `updatedAt`.
+
+`activeHolds` contains only `{holdId, placedAt}`. `deletion`, when present, contains only `{requestId,state,requesterIsCurrentActor}`. Bucket, object key, provider data, private claims, signed URLs, hold rationale, actor identity, and internal audit identifiers are excluded.
+
+Before availability, verified file metadata and retention mode may be null. Availability requires exact MIME, filename, byte length, SHA-256, renderer version, and a retention snapshot. Recovery states remain explicit:
+
+- rendition: `requested`, `rendering`, `uploading`, `reconciliation_required`, `reconciling`, `available`, `failed`;
+- deletion: `deletion_requested`, `deleting`, `deletion_reconciliation_required`, `deletion_reconciling`, `deleted`, `deletion_failed`.
+
+No recovery state is projected as available or deleted.
+
+## Public-to-private command boundary
+
+The server supplies the authenticated actor. Exact public payloads map as follows:
+
+| Public command | Private SQL mapping |
+| --- | --- |
+| retention policy `{artifactType,retentionDays,reason}` | `{artifactType,retentionDays,indefinite: retentionDays === null,rationale: reason}` |
+| retention extension `{renditionId,retentionUntil,reason}` | `{renditionId,extendUntil: retentionUntil,indefinite: retentionUntil === null,rationale: reason}` |
+| hold placement `{renditionId,reason}` | `{renditionId,rationale: reason}` |
+| hold release `{renditionId,holdId,reason}` | `{renditionId,holdId,rationale: reason}` |
+| deletion request `{renditionId,reason}` | `{renditionId,rationale: reason}` |
+| deletion resolution `{renditionId,deletionRequestId,outcome,reason}` | `{renditionId,deletionRequestId,outcome,rationale: reason}` |
+
+Generation preserves its exact artifact/version/format binding. SQL enforces the current approved artifact version for generation and the current rendition/deletion version for every rendition mutation. A stale caller receives `VERSION_CONFLICT`; browser values never replace database authority.
+
+## Recovery, due work, and provider-effect fencing
+
+The service-only due-work RPC accepts one bounded `p_limit` and returns only work kind plus internal attempt ID. The worker accepts either an exact one-attempt request or exact `{limit}` batch request, rejects browser origins and user authorization headers, processes at most 50 items sequentially, and returns only aggregate sanitized counts.
+
+Rendition claims cover stale `requested`, `rendering`, and `uploaded` work plus reconciliation states. Pre-render recovery reloads immutable approved content and deterministic renderer authority. Post-render recovery probes the exact binding: matching bytes complete without upload, absence permits one create-only upload after deterministic rerender, and mismatch fails without overwrite. Completion and failure are fenced to the current claim.
+
+Deletion discovery first produces safe internal work. A separate execution guard reauthorizes the independent approver, takes the rendition serialization lock, rechecks lifecycle, retention, and holds, and establishes a short execution fence before returning the private binding inside the service boundary. Completion and failure accept only that fence. A provider-confirmed missing object completes the tombstone without another destructive effect.
+
+The database fence prevents stale workers from committing outcomes after lease supersession and tests prove one claim/effect in the exercised races. As with any non-transactional provider lacking a conditional idempotency primitive, the source boundary does not claim a universal exactly-once API invocation across an indefinitely paused process; the canonical object can undergo at most one present-to-absent transition, and ambiguous outcomes remain reconciliation work.
+
+## Hold/deletion invariant
+
+Hold placement and deletion execution use the same rendition advisory and row locks. If a hold commits first, approval/execution fails before the provider call. If execution commits first, the rendition is `deleting`/`executing` and later hold placement fails. Hold release requires the exact safe projected `holdId` and SQL verifies active hold ownership within organization, workspace, and rendition scope.
+
+## Evidence boundary
+
+Acceptance requires the focused unit/coverage suites, production decoder against real PostgreSQL output, fresh-chain and main-upgrade PostgreSQL 16 runs, dirty atomic rejection, two-connection races, desktop/mobile Chromium with axe/keyboard/responsive checks, repository build/audit/static guards, and exact-head GitHub workflows. Exact results belong to the draft PR body and workflow records.
+
+Executed local evidence on the corrective branch:
+
+- the PostgreSQL 16 migration harness passed `114/114` scenarios across a fresh ordered chain, accepted-main upgrade plus additive reapply, dirty-state atomic rejection, conditional Storage behavior, the production-decoder bridge, and the real two-connection hold-versus-deletion race;
+- provider-effect assertions observed one rendition upload and one deletion provider call, with three deletion presence probes;
+- the focused private-artifact suite and its `84/84` coverage run passed at `98.42%` lines, `85.00%` branches, and `100%` functions;
+- desktop Chromium and Pixel 7 projects passed `38/38` browser checks, including exact RPC arguments, recovery-state truthfulness, multiple holds, keyboard behavior, responsive presentation, and axe scans;
+- TypeScript, Edge TypeScript, Studio lint/static boundaries, AI boundary, secret hygiene, unchanged PR 1G scoring, repository build, and dependency audit passed.
+
+Exact-head GitHub workflow evidence remains pending until the draft PR branch is published. Local and workflow evidence does not alter the non-claims below.
+
+Hosted/live Supabase or Storage, deployment, scheduler configuration, release, pilot, production, backup/restore, incident response, readiness, security certification, and compliance validation were not performed.

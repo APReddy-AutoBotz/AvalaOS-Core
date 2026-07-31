@@ -51,13 +51,17 @@ const formatLabel: Record<StudioPrivateArtifactFormat, string> = {
   docx: 'DOCX',
 };
 const stateLabel: Record<StudioRenditionProjectionDto['state'], string> = {
-  requested: 'Generating',
-  rendering: 'Generating',
-  uploading: 'Generating',
+  requested: 'Generation requested',
+  rendering: 'Rendering',
+  uploading: 'Uploading',
+  reconciliation_required: 'Generation reconciliation required',
+  reconciling: 'Reconciling generation',
   available: 'Available',
   failed: 'Generation failed',
-  deletion_requested: 'Deletion requested · approval pending',
+  deletion_requested: 'Deletion requested — approval pending',
   deleting: 'Deleting',
+  deletion_reconciliation_required: 'Deletion reconciliation required',
+  deletion_reconciling: 'Reconciling deletion',
   deleted: 'Deleted',
   deletion_failed: 'Deletion failed',
 };
@@ -343,13 +347,44 @@ export default function StudioArtifactRenditions({
                   <dd>{rendition.byteLength?.toLocaleString() ?? 'Pending verification'}</dd>
                   <dt className="font-bold">Retention</dt>
                   <dd className="min-w-0 break-words">
-                    {rendition.retentionMode === 'indefinite'
+                    {rendition.retentionMode === null
+                      ? 'Pending availability snapshot'
+                      : rendition.retentionMode === 'indefinite'
                       ? 'Indefinite retention'
                       : `Active through ${new Date(rendition.retentionUntil!).toLocaleDateString()}`}
                   </dd>
                   <dt className="font-bold">Legal hold</dt>
                   <dd>{rendition.legalHoldActive ? 'Active' : 'Not active'}</dd>
                 </dl>
+              )}
+              {rendition && rendition.activeHolds.length > 0 && (
+                <ul
+                  aria-label={`${formatLabel[format]} active legal holds`}
+                  className="mt-2 space-y-2"
+                >
+                  {rendition.activeHolds.map(hold => (
+                    <li key={hold.holdId} className="rounded-lg bg-amber-50 p-2 text-sm">
+                      <span>
+                        Hold placed {new Date(hold.placedAt).toLocaleDateString()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!can('studio.legal_hold.release') || !reason}
+                        onClick={() =>
+                          void run('studio.legal_hold.release', rendition, {
+                            renditionId: rendition.id,
+                            holdId: hold.holdId,
+                            reason,
+                          })
+                        }
+                        className="btn-ghost ml-2 disabled:opacity-50"
+                        aria-label={`Release legal hold placed ${new Date(hold.placedAt).toLocaleDateString()}`}
+                      >
+                        Release hold
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
               {rendition?.failureCode && (
                 <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm">
@@ -387,7 +422,7 @@ export default function StudioArtifactRenditions({
                 >
                   {downloadable ? `Download ${formatLabel[format]}` : 'Download unavailable'}
                 </button>
-                {rendition && !rendition.legalHoldActive && (
+                {rendition && !['deleting', 'deleted'].includes(rendition.state) && (
                   <button
                     type="button"
                     disabled={!can('studio.legal_hold.place') || !reason}
@@ -399,22 +434,7 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    Place legal hold
-                  </button>
-                )}
-                {rendition?.legalHoldActive && (
-                  <button
-                    type="button"
-                    disabled={!can('studio.legal_hold.release') || !reason}
-                    onClick={() =>
-                      void run('studio.legal_hold.release', rendition, {
-                        renditionId: rendition.id,
-                        reason,
-                      })
-                    }
-                    className="btn-ghost disabled:opacity-50"
-                  >
-                    Release legal hold
+                    {rendition.legalHoldActive ? 'Place another legal hold' : 'Place legal hold'}
                   </button>
                 )}
                 {rendition && rendition.state === 'available' && (
