@@ -593,18 +593,23 @@ test('deletion execution and reconciliation states expose no retention mutation'
 });
 
 test('deletion failed exposes one governed retry with current expected versions', async ({ page }) => {
-  const fixture = await installFixture(page, {
+  await installFixture(page, {
     renditions: [rendition('pdf', { state: 'deletion_failed', version: 7 })],
   });
   const panel = await openDocs(page);
   await panel.getByLabel('Governed reason').fill('Retry after reviewed provider failure');
+  const retryRequest = page.waitForRequest(request => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === '/functions/v1/studio-private-artifact-command' &&
+      request.postDataJSON()?.commandType === 'studio.rendition.deletion.request'
+    );
+  });
   await panel.getByRole('button', { name: 'Request deletion again' }).click();
-  const retry = fixture.requests.find(
-    request => request.body?.commandType === 'studio.rendition.deletion.request',
-  )?.body;
-  expect(retry?.expectedArtifactVersion).toBe(4);
-  expect(retry?.expectedRenditionVersion).toBe(7);
-  expect(retry?.payload).toEqual({
+  const retry = (await retryRequest).postDataJSON();
+  expect(retry.expectedArtifactVersion).toBe(4);
+  expect(retry.expectedRenditionVersion).toBe(7);
+  expect(retry.payload).toEqual({
     renditionId: RENDITION_IDS.pdf,
     reason: 'Retry after reviewed provider failure',
   });
