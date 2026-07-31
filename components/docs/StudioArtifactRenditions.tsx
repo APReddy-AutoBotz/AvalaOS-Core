@@ -73,6 +73,12 @@ const mutationBlockingStates = new Set([
   'read_only',
   'committed_reload_failed',
 ]);
+const legalHoldPlacementBlockedStates = new Set<StudioRenditionProjectionDto['state']>([
+  'deleting',
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
+  'deleted',
+]);
 
 const stateForError = (error: unknown): { state: PanelState; message: string } => {
   if (!navigator.onLine) {
@@ -443,7 +449,7 @@ export default function StudioArtifactRenditions({
                 >
                   {downloadable ? `Download ${formatLabel[format]}` : 'Download unavailable'}
                 </button>
-                {rendition && !['deleting', 'deleted'].includes(rendition.state) && (
+                {rendition && !legalHoldPlacementBlockedStates.has(rendition.state) && (
                   <button
                     type="button"
                     disabled={!can('studio.legal_hold.place') || !reason}

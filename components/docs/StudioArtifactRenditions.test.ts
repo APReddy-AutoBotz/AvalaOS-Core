@@ -71,6 +71,11 @@ assert.ok(
     source.includes("result.outcome === 'deletion_failed'"),
   'external-side-effect failure must remain truthful',
 );
+assert.match(
+  source,
+  /legalHoldPlacementBlockedStates[\s\S]+?'deleting'[\s\S]+?'deletion_reconciliation_required'[\s\S]+?'deletion_reconciling'[\s\S]+?'deleted'[\s\S]+?!legalHoldPlacementBlockedStates\.has\(rendition\.state\)/u,
+  'legal-hold placement must be hidden during deletion execution and recovery',
+);
 console.log(
-  'studio artifact renditions UI: 44 state, capability, recovery, broker, and false-success assertions passed',
+  'studio artifact renditions UI: 45 state, capability, recovery, broker, and false-success assertions passed',
 );

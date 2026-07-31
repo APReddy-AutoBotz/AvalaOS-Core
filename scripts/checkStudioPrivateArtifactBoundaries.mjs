@@ -285,6 +285,10 @@ for (const token of [
   'new approved artifact version',
 ]) assert(ui.includes(token), `UI lifecycle guard missing: ${token}`);
 assert(
+  /legalHoldPlacementBlockedStates[\s\S]+?'deleting'[\s\S]+?'deletion_reconciliation_required'[\s\S]+?'deletion_reconciling'[\s\S]+?'deleted'[\s\S]+?!legalHoldPlacementBlockedStates\.has\(rendition\.state\)/u.test(ui),
+  'legal-hold placement must be absent throughout deletion execution and recovery',
+);
+assert(
   !ui.includes("!['failed', 'deleted'].includes(rendition.state)"),
   'deleted tombstones must never expose generation',
 );

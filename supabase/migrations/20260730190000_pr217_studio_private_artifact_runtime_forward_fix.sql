@@ -331,6 +331,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
+#variable_conflict use_variable
 DECLARE
   command_type text := p_command ->> 'commandType';
   actor uuid;
@@ -398,11 +399,11 @@ BEGIN
   FROM public.studio_private_artifact_command_receipts receipt
   WHERE receipt.org_id = org
     AND receipt.actor_id = actor
+    AND receipt.command_type = command_type
     AND receipt.idempotency_key = command_idempotency_key
   FOR UPDATE;
   IF prior_receipt.id IS NOT NULL THEN
     IF prior_receipt.workspace_id IS DISTINCT FROM workspace
-       OR prior_receipt.command_type IS DISTINCT FROM command_type
        OR prior_receipt.request_hash IS DISTINCT FROM request_hash
     THEN
       RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT';

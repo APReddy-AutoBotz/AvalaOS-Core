@@ -66,6 +66,11 @@ assert.match(forward,/r\.lifecycle NOT IN \('available','deletion_requested','de
 assert.match(forward,/active_attempt\.state IN \(\s*'requested','executing','reconciliation_required','reconciling'/s);
 assert.match(forward,/command_type = 'studio\.rendition\.retention\.extend'[\s\S]+STUDIO_DELETION_BLOCKED/);
 assert.match(forward,/command_type = 'studio\.rendition\.deletion\.request'[\s\S]+NOT EXISTS \(\s*SELECT 1[\s\S]+studio_rendition_deletion_resolutions/s);
+assert.match(
+  forward,
+  /studio_private_artifact_command_claim\(p_command jsonb\)[\s\S]+?#variable_conflict use_variable[\s\S]+?receipt\.org_id = org\s+AND receipt\.actor_id = actor\s+AND receipt\.command_type = command_type\s+AND receipt\.idempotency_key = command_idempotency_key/s,
+  'effective receipt lookup must use the canonical org, actor, command type, and key tuple',
+);
 assert.match(forward,/canonical\.artifact_version_id = v\.id[\s\S]+canonical\.format = format_name[\s\S]+canonical\.renderer_version = renderer/s);
 assert.ok(
   forward.indexOf('prior_receipt.id IS NOT NULL') <

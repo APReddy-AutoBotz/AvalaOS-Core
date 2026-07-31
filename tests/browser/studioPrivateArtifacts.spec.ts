@@ -594,6 +594,56 @@ test('deletion execution and reconciliation states expose no retention mutation'
   await expect(panel.getByRole('button', { name: 'Extend retention' })).toHaveCount(0);
 });
 
+test('legal-hold placement follows the deletion lifecycle matrix without blocked requests', async ({ page }) => {
+  const cases = [
+    { state: 'available', offered: true },
+    {
+      state: 'deletion_requested',
+      offered: true,
+      deletion: {
+        requestId: RECEIPT,
+        state: 'pending',
+        requesterIsCurrentActor: false,
+      },
+    },
+    { state: 'deletion_failed', offered: true },
+    { state: 'deleting', offered: false },
+    { state: 'deletion_reconciliation_required', offered: false },
+    { state: 'deletion_reconciling', offered: false },
+    { state: 'deleted', offered: false },
+  ] as const;
+  let blockedCommandRequests = 0;
+
+  for (const lifecycle of cases) {
+    await page.unrouteAll({ behavior: 'wait' });
+    const fixture = await installFixture(page, {
+      renditions: [
+        rendition('pdf', {
+          state: lifecycle.state,
+          deletion: 'deletion' in lifecycle ? lifecycle.deletion : null,
+        }),
+      ],
+    });
+    const panel = await openDocs(page);
+    await panel.getByLabel('Governed reason').fill('Lifecycle-matrix hold evidence');
+    const holdAction = panel
+      .getByTestId('rendition-pdf')
+      .getByRole('button', { name: 'Place legal hold' });
+
+    if (lifecycle.offered) await expect(holdAction).toBeEnabled();
+    else await expect(holdAction).toHaveCount(0);
+
+    const emitted = fixture.requests.filter(
+      request =>
+        request.path === '/functions/v1/studio-private-artifact-command' &&
+        request.body?.commandType === 'studio.legal_hold.place',
+    ).length;
+    if (!lifecycle.offered) blockedCommandRequests += emitted;
+  }
+
+  expect(blockedCommandRequests).toBe(0);
+});
+
 test('deletion failed exposes one governed retry with current expected versions', async ({ page }) => {
   await installFixture(page, {
     renditions: [rendition('pdf', { state: 'deletion_failed', version: 7 })],

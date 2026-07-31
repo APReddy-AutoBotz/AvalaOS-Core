@@ -15,6 +15,8 @@ The additive forward fix addresses the five unresolved PR #217 P1 findings witho
 7. A canonical deleted rendition is terminal for the same artifact version, format, and governed renderer version.
 8. Production rendition and deletion adapters preserve `reconciliation_required` without collapsing provider or completion uncertainty into terminal failure. The command boundary reports that durable state as reconciliation-pending with the original receipt, never as a pre-commit failure.
 9. `deletion_failed` retains an append-only governed retry route without erasing prior request, resolution, attempt, or failure evidence.
+10. Command-receipt replay is scoped by the canonical `(org_id, actor_id, command_type, idempotency_key)` tuple, so different command types may safely reuse one key while same-command payload or scope drift remains a conflict.
+11. Hold placement remains available only before deletion execution or after governed deletion failure; the browser suppresses it throughout deletion execution, reconciliation, and the terminal tombstone state without emitting a blocked command request.
 
 The accepted `20260729163251_studio_private_artifact_authority.sql` remains immutable. The effective definitions are supplied only by `20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql`.
 
@@ -82,10 +84,11 @@ Acceptance requires the focused unit/coverage suites, production decoder against
 
 Executed local evidence on the corrective branch:
 
-- the PostgreSQL 16 migration harness passed `128/128` scenarios across a fresh ordered chain, accepted-main upgrade plus additive reapply, dirty-state atomic rejection, conditional Storage behavior, the production-decoder bridge, real two-connection retention-versus-deletion races, terminal tombstone enforcement, append-only deletion retry, and committed-pending recovery;
+- the PostgreSQL 16 migration harness passed `134/134` scenarios across a fresh ordered chain, accepted-main upgrade plus additive reapply, dirty-state atomic rejection, conditional Storage behavior, the production-decoder bridge, real two-connection retention-versus-deletion races, terminal tombstone enforcement, append-only deletion retry, committed-pending recovery, and independent exact replay for two command types sharing one idempotency key;
 - deterministic lifecycle assertions observed zero provider deletes when retention won, exactly one when deletion execution won, and zero new receipts, attempts, uploads, or objects for rejected tombstone regeneration; reconciliation assertions observed one rendition upload and one deletion provider call with three deletion presence probes;
+- same-command replay with changed payload remained an idempotency conflict, while the same key used for retention-policy and hold-placement commands produced two correctly bound receipts and no arbitrary prior-receipt selection;
 - the focused private-artifact suite and its `84/84` coverage run passed at `98.42%` lines, `85.71%` branches, and `100%` functions;
-- desktop Chromium and Pixel 7 projects passed `46/46` browser checks, including committed-pending truthfulness, terminal tombstones, deletion-failed retry, retention-control suppression, exact RPC arguments, recovery states, multiple holds, keyboard behavior, responsive presentation, and axe scans;
+- desktop Chromium and Pixel 7 projects passed `48/48` browser checks, including committed-pending truthfulness, terminal tombstones, deletion-failed retry, retention-control suppression, the hold-placement lifecycle matrix with zero blocked command requests, exact RPC arguments, recovery states, multiple holds, keyboard behavior, responsive presentation, and axe scans;
 - TypeScript, Edge TypeScript, Studio lint/static boundaries, AI boundary, secret hygiene, unchanged PR 1G scoring, repository build, and dependency audit passed.
 
 Exact-head GitHub workflow evidence remains pending until the draft PR branch is published. Local and workflow evidence does not alter the non-claims below.
