@@ -774,7 +774,7 @@ export const STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST = {
   },
   deletionComplete: {
     functionName: 'studio_rendition_deletion_complete',
-    parameterNames: ['p_attempt', 'p_fence'],
+    parameterNames: ['p_attempt', 'p_fence', 'p_provider_outcome'],
     decode: decodeAttemptReceipt,
   },
   deletionFail: {
@@ -850,7 +850,11 @@ export interface StudioPrivateArtifactRpcArgs {
   };
   deletionReconciliationClaim: { p_attempt: string };
   deletionExecutionClaim: { p_attempt: string };
-  deletionComplete: { p_attempt: string; p_fence: number };
+  deletionComplete: {
+    p_attempt: string;
+    p_fence: number;
+    p_provider_outcome: 'deleted' | 'missing';
+  };
   deletionFail: { p_attempt: string; p_fence: number; p_failure: string };
   downloadClaim: { p_command: unknown };
   downloadComplete: { p_receipt: string };

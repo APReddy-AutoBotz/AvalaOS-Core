@@ -41,13 +41,30 @@ export const scenarioNames={
  'lifecycle due work recovers committed pending attempt',
  'lifecycle newer pending deletion request blocks duplicate',
  'lifecycle deletion retry preserves historical evidence'
+ ],
+ auditEvidence:[
+ 'audit completed physical deletion exactly one event',
+ 'audit provider outcome deleted captured safely',
+ 'audit provider outcome missing captured safely',
+ 'audit uncertain deletion records reconciliation required',
+ 'audit tombstone completion uncertainty records transition',
+ 'audit terminal deletion failure records terminal outcome',
+ 'audit deletion reconciliation exhaustion records terminal outcome',
+ 'audit stale fence mutates nothing and records nothing',
+ 'audit duplicate completion records no second event',
+ 'audit duplicate failure records no second event',
+ 'audit actor is independent resolver',
+ 'audit request traces to accepted resolution receipt',
+ 'audit resource version equals committed rendition version',
+ 'audit metadata excludes private storage authority',
+ 'audit insertion failure rolls back deletion state transition'
  ]
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,134);assert.equal(new Set(allScenarios).size,134);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,149);assert.equal(new Set(allScenarios).size,149);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -66,6 +83,8 @@ try{
  const deletionRace=await createDb(databaseNames[7]);await apply(deletionRace,migrations);const deletionRacePeer=await connect(urlFor(databaseNames[7]));
  const deletionRetry=await createDb(databaseNames[8]);await apply(deletionRetry,migrations);
  const pendingRecovery=await createDb(databaseNames[9]);await apply(pendingRecovery,migrations);
+ const auditCompletionDb=await createDb(databaseNames[10]);await apply(auditCompletionDb,migrations);
+ const auditFailureDb=await createDb(databaseNames[11]);await apply(auditFailureDb,migrations);
  const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);
@@ -202,6 +221,14 @@ try{
   const completion=(await db.query('SELECT public.studio_rendition_attempt_complete($1::uuid) result',[claim.attemptId])).rows[0].result;
   return{base,generationCommand,generation,claim,objectKey,renditionId:completion.renditionId};
  };
+ const prepareDeletionExecution=async(db,label)=>{
+  const fixture=await prepareDisposable(db,label);
+  const request=await privateCommand(db,{commandType:'studio.rendition.deletion.request',actorId:fixture.base.requester,organizationId:fixture.base.org,workspaceId:fixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:`${label}-delete-request`,authorizationVersion:fixture.base.authorizationVersions[fixture.base.requester],payload:{renditionId:fixture.renditionId,rationale:`${label} deletion evidence`}});
+  const approval=await privateCommand(db,{commandType:'studio.rendition.deletion.resolve',actorId:fixture.base.approver,organizationId:fixture.base.org,workspaceId:fixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:`${label}-delete-approval`,authorizationVersion:fixture.base.authorizationVersions[fixture.base.approver],payload:{renditionId:fixture.renditionId,deletionRequestId:request.resource.deletionRequestId,outcome:'approve',rationale:`${label} independent approval`}});
+  const execution=(await db.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[approval.deletionClaim.deletionAttemptId])).rows[0].claim;
+  assert.ok(execution);
+  return{fixture,request,approval,execution};
+ };
  const extensionWinner=await prepareDisposable(retentionRace,'retention-winner');
  const extensionDeleteRequest=await privateCommand(retentionRace,{commandType:'studio.rendition.deletion.request',actorId:extensionWinner.base.requester,organizationId:extensionWinner.base.org,workspaceId:extensionWinner.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retention-winner-delete-request',authorizationVersion:extensionWinner.base.authorizationVersions[extensionWinner.base.requester],payload:{renditionId:extensionWinner.renditionId,rationale:'race request'}});
  await retentionRace.query('BEGIN');await retentionRace.query('SELECT id FROM studio_renditions WHERE id=$1::uuid FOR UPDATE',[extensionWinner.renditionId]);
@@ -214,8 +241,9 @@ try{
  const deletionWinnerApproval=await privateCommand(deletionRace,{commandType:'studio.rendition.deletion.resolve',actorId:deletionWinner.base.approver,organizationId:deletionWinner.base.org,workspaceId:deletionWinner.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'deletion-winner-approval',authorizationVersion:deletionWinner.base.authorizationVersions[deletionWinner.base.approver],payload:{renditionId:deletionWinner.renditionId,deletionRequestId:deletionWinnerRequest.resource.deletionRequestId,outcome:'approve',rationale:'execution winner approval'}});
  const executionClaim=(await deletionRacePeer.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[deletionWinnerApproval.deletionClaim.deletionAttemptId])).rows[0].claim;
  const lateExtension=await Promise.allSettled([privateCommand(deletionRace,{commandType:'studio.rendition.retention.extend',actorId:deletionWinner.base.requester,organizationId:deletionWinner.base.org,workspaceId:deletionWinner.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'deletion-winner-late-extension',authorizationVersion:deletionWinner.base.authorizationVersions[deletionWinner.base.requester],payload:{renditionId:deletionWinner.renditionId,extendUntil:new Date(Date.now()+86400000).toISOString(),indefinite:false,rationale:'must lose after execution'}})]);
- let deletionWinnerProviderDeletes=0;if(executionClaim){deletionWinnerProviderDeletes+=1;await deletionRace.query('SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint)',[executionClaim.deletionAttemptId,executionClaim.fence])}
+ let deletionWinnerProviderDeletes=0;if(executionClaim){deletionWinnerProviderDeletes+=1;await deletionRace.query("SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'deleted')",[executionClaim.deletionAttemptId,executionClaim.fence])}
  const deletionWinnerState=(await deletionRace.query('SELECT lifecycle FROM studio_renditions WHERE id=$1::uuid',[deletionWinner.renditionId])).rows[0].lifecycle;
+ const deletionWinnerAudit=(await deletionRace.query("SELECT actor_id,request_id,resource_version,metadata FROM privileged_audit_events WHERE action='studio.rendition.deletion.complete' AND resource_id=$1::uuid",[deletionWinner.renditionId])).rows;
  const beforeTombstoneCounts=(await deletionRace.query('SELECT (SELECT count(*)::int FROM studio_private_artifact_command_receipts) receipts,(SELECT count(*)::int FROM studio_rendition_attempts) attempts,(SELECT count(*)::int FROM studio_renditions) renditions')).rows[0];
  const tombstoneRegeneration=await Promise.allSettled([privateCommand(deletionRace,{commandType:'studio.rendition.generate',actorId:deletionWinner.base.requester,organizationId:deletionWinner.base.org,workspaceId:deletionWinner.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'deleted-tombstone-new-generation',authorizationVersion:deletionWinner.base.authorizationVersions[deletionWinner.base.requester],payload:{artifactVersionId:deletionWinner.base.artifactVersionId,format:'markdown'}})]);
  const afterTombstoneCounts=(await deletionRace.query('SELECT (SELECT count(*)::int FROM studio_private_artifact_command_receipts) receipts,(SELECT count(*)::int FROM studio_rendition_attempts) attempts,(SELECT count(*)::int FROM studio_renditions) renditions')).rows[0];
@@ -225,12 +253,43 @@ try{
  const retryFixture=await prepareDisposable(deletionRetry,'deletion-retry');
  const retryFirstRequest=await privateCommand(deletionRetry,{commandType:'studio.rendition.deletion.request',actorId:retryFixture.base.requester,organizationId:retryFixture.base.org,workspaceId:retryFixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retry-first-request',authorizationVersion:retryFixture.base.authorizationVersions[retryFixture.base.requester],payload:{renditionId:retryFixture.renditionId,rationale:'first request'}});
  const retryApproval=await privateCommand(deletionRetry,{commandType:'studio.rendition.deletion.resolve',actorId:retryFixture.base.approver,organizationId:retryFixture.base.org,workspaceId:retryFixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retry-first-approval',authorizationVersion:retryFixture.base.authorizationVersions[retryFixture.base.approver],payload:{renditionId:retryFixture.renditionId,deletionRequestId:retryFirstRequest.resource.deletionRequestId,outcome:'approve',rationale:'first approval'}});
- const retryExecution=(await deletionRetry.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[retryApproval.deletionClaim.deletionAttemptId])).rows[0].claim;await deletionRetry.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'STORAGE_DELETE_FAILED')",[retryExecution.deletionAttemptId,retryExecution.fence]);
+ const retryExecution=(await deletionRetry.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[retryApproval.deletionClaim.deletionAttemptId])).rows[0].claim;
+ const retryStaleBefore=(await deletionRetry.query("SELECT a.state,r.lifecycle,r.lifecycle_version,(SELECT count(*)::int FROM privileged_audit_events e WHERE e.action='studio.rendition.deletion.fail' AND e.metadata->>'deletionAttemptId'=$1::text) audit_count FROM studio_rendition_deletion_attempts a JOIN studio_renditions r ON r.id=a.rendition_id WHERE a.id=$1::uuid",[retryExecution.deletionAttemptId])).rows[0];
+ const retryStaleFence=await Promise.allSettled([deletionRetry.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'STORAGE_DELETE_FAILED')",[retryExecution.deletionAttemptId,retryExecution.fence+1])]);
+ const retryStaleAfter=(await deletionRetry.query("SELECT a.state,r.lifecycle,r.lifecycle_version,(SELECT count(*)::int FROM privileged_audit_events e WHERE e.action='studio.rendition.deletion.fail' AND e.metadata->>'deletionAttemptId'=$1::text) audit_count FROM studio_rendition_deletion_attempts a JOIN studio_renditions r ON r.id=a.rendition_id WHERE a.id=$1::uuid",[retryExecution.deletionAttemptId])).rows[0];
+ await deletionRetry.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'STORAGE_DELETE_FAILED')",[retryExecution.deletionAttemptId,retryExecution.fence]);
+ const retryTerminalAudit=(await deletionRetry.query("SELECT actor_id,request_id,outcome,resource_version,metadata FROM privileged_audit_events WHERE action='studio.rendition.deletion.fail' AND metadata->>'deletionAttemptId'=$1::text",[retryExecution.deletionAttemptId])).rows;
+ const retryDuplicateFailure=await Promise.allSettled([deletionRetry.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'STORAGE_DELETE_FAILED')",[retryExecution.deletionAttemptId,retryExecution.fence])]);
+ const retryTerminalAuditCount=Number((await deletionRetry.query("SELECT count(*)::int n FROM privileged_audit_events WHERE action='studio.rendition.deletion.fail' AND metadata->>'deletionAttemptId'=$1::text",[retryExecution.deletionAttemptId])).rows[0].n);
  const failedVersion=Number((await deletionRetry.query('SELECT lifecycle_version FROM studio_renditions WHERE id=$1::uuid',[retryFixture.renditionId])).rows[0].lifecycle_version);const staleReceiptsBefore=Number((await deletionRetry.query('SELECT count(*)::int n FROM studio_private_artifact_command_receipts')).rows[0].n);
  const staleRetry=await Promise.allSettled([privateCommand(deletionRetry,{commandType:'studio.rendition.deletion.request',actorId:retryFixture.base.requester,organizationId:retryFixture.base.org,workspaceId:retryFixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retry-stale-request',authorizationVersion:retryFixture.base.authorizationVersions[retryFixture.base.requester],expectedArtifactVersion:retryFixture.base.version.version,expectedRenditionVersion:failedVersion-1,payload:{renditionId:retryFixture.renditionId,rationale:'stale retry'}})]);
  const retrySecondRequest=await privateCommand(deletionRetry,{commandType:'studio.rendition.deletion.request',actorId:retryFixture.base.requester,organizationId:retryFixture.base.org,workspaceId:retryFixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retry-second-request',authorizationVersion:retryFixture.base.authorizationVersions[retryFixture.base.requester],payload:{renditionId:retryFixture.renditionId,rationale:'governed retry'}});
  const duplicateReceiptsBefore=Number((await deletionRetry.query('SELECT count(*)::int n FROM studio_private_artifact_command_receipts')).rows[0].n);const duplicateRetry=await Promise.allSettled([privateCommand(deletionRetry,{commandType:'studio.rendition.deletion.request',actorId:retryFixture.base.requester,organizationId:retryFixture.base.org,workspaceId:retryFixture.base.workspace,requestId:lifecycleUuid(),idempotencyKey:'retry-duplicate-pending',authorizationVersion:retryFixture.base.authorizationVersions[retryFixture.base.requester],payload:{renditionId:retryFixture.renditionId,rationale:'duplicate pending'}})]);
  const retryCounts=(await deletionRetry.query('SELECT (SELECT count(*)::int FROM studio_rendition_deletion_requests WHERE rendition_id=$1::uuid) requests,(SELECT count(*)::int FROM studio_rendition_deletion_resolutions WHERE rendition_id=$1::uuid) resolutions,(SELECT count(*)::int FROM studio_rendition_deletion_attempts WHERE rendition_id=$1::uuid) attempts,(SELECT count(*)::int FROM studio_private_artifact_command_receipts) receipts',[retryFixture.renditionId])).rows[0];
+
+ const missingCompletion=await prepareDeletionExecution(auditCompletionDb,'audit-missing-completion');
+ await auditCompletionDb.query(`CREATE FUNCTION public.reject_studio_deletion_completion_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='studio.rendition.deletion.complete' THEN RAISE EXCEPTION 'forced audit insertion failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_studio_deletion_completion_audit BEFORE INSERT ON public.privileged_audit_events FOR EACH ROW EXECUTE FUNCTION public.reject_studio_deletion_completion_audit()`);
+ const atomicBefore=(await auditCompletionDb.query("SELECT a.state,r.lifecycle,r.lifecycle_version,(SELECT count(*)::int FROM privileged_audit_events e WHERE e.action='studio.rendition.deletion.complete' AND e.metadata->>'deletionAttemptId'=$1::text) audit_count FROM studio_rendition_deletion_attempts a JOIN studio_renditions r ON r.id=a.rendition_id WHERE a.id=$1::uuid",[missingCompletion.execution.deletionAttemptId])).rows[0];
+ const forcedAuditFailure=await Promise.allSettled([auditCompletionDb.query("SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'missing')",[missingCompletion.execution.deletionAttemptId,missingCompletion.execution.fence])]);
+ const atomicAfter=(await auditCompletionDb.query("SELECT a.state,r.lifecycle,r.lifecycle_version,(SELECT count(*)::int FROM privileged_audit_events e WHERE e.action='studio.rendition.deletion.complete' AND e.metadata->>'deletionAttemptId'=$1::text) audit_count FROM studio_rendition_deletion_attempts a JOIN studio_renditions r ON r.id=a.rendition_id WHERE a.id=$1::uuid",[missingCompletion.execution.deletionAttemptId])).rows[0];
+ await auditCompletionDb.query('DROP TRIGGER reject_studio_deletion_completion_audit ON public.privileged_audit_events; DROP FUNCTION public.reject_studio_deletion_completion_audit()');
+ await auditCompletionDb.query("SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'missing')",[missingCompletion.execution.deletionAttemptId,missingCompletion.execution.fence]);
+ const missingCompletionAudit=(await auditCompletionDb.query("SELECT e.actor_id,e.request_id,e.outcome,e.resource_version,e.metadata,d.resolved_by,cr.request_id accepted_request_id,r.lifecycle_version FROM privileged_audit_events e JOIN studio_rendition_deletion_attempts a ON a.id=(e.metadata->>'deletionAttemptId')::uuid JOIN studio_rendition_deletion_resolutions d ON d.id=a.resolution_id JOIN studio_private_artifact_command_receipts cr ON cr.id=d.receipt_id JOIN studio_renditions r ON r.id=e.resource_id WHERE e.action='studio.rendition.deletion.complete' AND e.metadata->>'deletionAttemptId'=$1::text",[missingCompletion.execution.deletionAttemptId])).rows;
+ const duplicateCompletion=await Promise.allSettled([auditCompletionDb.query("SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'missing')",[missingCompletion.execution.deletionAttemptId,missingCompletion.execution.fence])]);
+ const missingCompletionAuditCount=Number((await auditCompletionDb.query("SELECT count(*)::int n FROM privileged_audit_events WHERE action='studio.rendition.deletion.complete' AND metadata->>'deletionAttemptId'=$1::text",[missingCompletion.execution.deletionAttemptId])).rows[0].n);
+
+ const uncertainDeletion=await prepareDeletionExecution(auditFailureDb,'audit-uncertain-failure');
+ await auditFailureDb.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'DELETE_OUTCOME_UNKNOWN')",[uncertainDeletion.execution.deletionAttemptId,uncertainDeletion.execution.fence]);
+ await auditFailureDb.query('SELECT public.studio_deletion_reconciliation_claim($1::uuid)',[uncertainDeletion.execution.deletionAttemptId]);
+ const tombstoneExecution=(await auditFailureDb.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[uncertainDeletion.execution.deletionAttemptId])).rows[0].claim;
+ await auditFailureDb.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'TOMBSTONE_COMPLETION_FAILED')",[tombstoneExecution.deletionAttemptId,tombstoneExecution.fence]);
+ await auditFailureDb.query('SELECT public.studio_deletion_reconciliation_claim($1::uuid)',[uncertainDeletion.execution.deletionAttemptId]);
+ const finalUncertainExecution=(await auditFailureDb.query('SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[uncertainDeletion.execution.deletionAttemptId])).rows[0].claim;
+ await auditFailureDb.query("SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'DELETE_OUTCOME_UNKNOWN')",[finalUncertainExecution.deletionAttemptId,finalUncertainExecution.fence]);
+ const exhaustionResult=(await auditFailureDb.query('SELECT public.studio_deletion_reconciliation_claim($1::uuid) claim',[uncertainDeletion.execution.deletionAttemptId])).rows[0].claim;
+ const uncertainAudits=(await auditFailureDb.query("SELECT actor_id,request_id,outcome,resource_version,metadata FROM privileged_audit_events WHERE action='studio.rendition.deletion.fail' AND metadata->>'deletionAttemptId'=$1::text ORDER BY created_at,id",[uncertainDeletion.execution.deletionAttemptId])).rows;
+ const exhaustionAudits=(await auditFailureDb.query("SELECT actor_id,request_id,outcome,resource_version,metadata FROM privileged_audit_events WHERE action='studio.rendition.deletion.reconciliation.exhausted' AND metadata->>'deletionAttemptId'=$1::text",[uncertainDeletion.execution.deletionAttemptId])).rows;
+ const exhaustedState=(await auditFailureDb.query('SELECT a.state,a.failure_code,a.reconciliation_count,r.lifecycle,r.lifecycle_version FROM studio_rendition_deletion_attempts a JOIN studio_renditions r ON r.id=a.rendition_id WHERE a.id=$1::uuid',[uncertainDeletion.execution.deletionAttemptId])).rows[0];
 
  const pendingBase=await createApprovedStudioFixture(pendingRecovery);const pendingGeneration=await privateCommand(pendingRecovery,{commandType:'studio.rendition.generate',actorId:pendingBase.requester,organizationId:pendingBase.org,workspaceId:pendingBase.workspace,requestId:lifecycleUuid(),idempotencyKey:'pending-generation',authorizationVersion:pendingBase.authorizationVersions[pendingBase.requester],payload:{artifactVersionId:pendingBase.artifactVersionId,format:'pdf'}});
  const pendingAttemptBefore=(await pendingRecovery.query('SELECT state,receipt_id FROM studio_rendition_attempts WHERE id=$1::uuid',[pendingGeneration.renditionClaim.attemptId])).rows[0];await pendingRecovery.query("UPDATE studio_rendition_attempts SET state_changed_at=now()-interval '6 minutes' WHERE id=$1::uuid",[pendingGeneration.renditionClaim.attemptId]);
@@ -254,6 +313,27 @@ try{
   async()=>assert.deepEqual(retryCounts,{requests:2,resolutions:1,attempts:1,receipts:duplicateReceiptsBefore})
  ];
  assert.equal(lifecycleChecks.length,14);for(let index=0;index<lifecycleChecks.length;index++)await scenario(lifecycleNames[index],lifecycleChecks[index]);
+ const auditNames=scenarioNames.auditEvidence;
+ const allDeletionAuditMetadata=[...deletionWinnerAudit,...missingCompletionAudit,...retryTerminalAudit,...uncertainAudits,...exhaustionAudits].map(row=>row.metadata);
+ const auditChecks=[
+  async()=>assert.equal(deletionWinnerAudit.length,1),
+  async()=>assert.equal(deletionWinnerAudit[0].metadata.providerOutcome,'deleted'),
+  async()=>assert.deepEqual({count:missingCompletionAudit.length,providerOutcome:missingCompletionAudit[0].metadata.providerOutcome},{count:1,providerOutcome:'missing'}),
+  async()=>{const rows=uncertainAudits.filter(row=>row.metadata.failureCode==='DELETE_OUTCOME_UNKNOWN'&&String(row.metadata.executionFence)===String(uncertainDeletion.execution.fence));assert.deepEqual(rows.map(row=>({outcome:row.outcome,targetState:row.metadata.targetState})),[{outcome:'succeeded',targetState:'reconciliation_required'}])},
+  async()=>{const rows=uncertainAudits.filter(row=>row.metadata.failureCode==='TOMBSTONE_COMPLETION_FAILED');assert.deepEqual(rows.map(row=>({outcome:row.outcome,targetState:row.metadata.targetState})),[{outcome:'succeeded',targetState:'reconciliation_required'}])},
+  async()=>assert.deepEqual(retryTerminalAudit.map(row=>({outcome:row.outcome,failureCode:row.metadata.failureCode,targetState:row.metadata.targetState})),[{outcome:'failed',failureCode:'STORAGE_DELETE_FAILED',targetState:'failed'}]),
+  async()=>assert.deepEqual({claim:exhaustionResult,count:exhaustionAudits.length,state:exhaustedState.state,lifecycle:exhaustedState.lifecycle,failureCode:exhaustedState.failure_code,reconciliationCount:Number(exhaustedState.reconciliation_count)},{claim:null,count:1,state:'failed',lifecycle:'deletion_failed',failureCode:'DELETION_RECONCILIATION_EXHAUSTED',reconciliationCount:3}),
+  async()=>assert.deepEqual({rejected:retryStaleFence[0].status==='rejected',before:retryStaleBefore,after:retryStaleAfter},{rejected:true,before:retryStaleBefore,after:retryStaleBefore}),
+  async()=>assert.deepEqual({rejected:duplicateCompletion[0].status==='rejected',auditCount:missingCompletionAuditCount},{rejected:true,auditCount:1}),
+  async()=>assert.deepEqual({rejected:retryDuplicateFailure[0].status==='rejected',auditCount:retryTerminalAuditCount},{rejected:true,auditCount:1}),
+  async()=>assert.equal(missingCompletionAudit[0].actor_id,missingCompletionAudit[0].resolved_by),
+  async()=>assert.equal(missingCompletionAudit[0].request_id,missingCompletionAudit[0].accepted_request_id),
+  async()=>assert.equal(Number(missingCompletionAudit[0].resource_version),Number(missingCompletionAudit[0].lifecycle_version)),
+  async()=>{for(const metadata of allDeletionAuditMetadata){const serialized=JSON.stringify(metadata);assert.doesNotMatch(serialized,/(objectKey|bucket|credential|signedUrl|privateClaim|serviceRole)/iu)}},
+  async()=>assert.deepEqual({rejected:forcedAuditFailure[0].status==='rejected',before:atomicBefore,after:atomicAfter},{rejected:true,before:atomicBefore,after:atomicBefore})
+ ];
+ assert.equal(auditChecks.length,15);for(let index=0;index<auditChecks.length;index++)await scenario(auditNames[index],auditChecks[index]);
  console.log('LIFECYCLE TRUTH COUNTS '+JSON.stringify({retentionWins:{providerDeletes:extensionRaceEvidence.providerDeletes},deletionWins:{providerDeletes:deletionWinnerProviderDeletes},tombstoneRegeneration:{receiptDelta:tombstoneEvidence.after.receipts-tombstoneEvidence.before.receipts,attemptDelta:tombstoneEvidence.after.attempts-tombstoneEvidence.before.attempts,providerUploads:tombstoneEvidence.providerUploads,objects:tombstoneEvidence.objectCount},deletionRetry:{requests:retryCounts.requests,resolutions:retryCounts.resolutions,attempts:retryCounts.attempts},pendingRecovery:{initialState:pendingAttemptBefore.state,finalState:pendingRecoveredState}}));
+ console.log('DELETION AUDIT COUNTS '+JSON.stringify({completedDeleted:deletionWinnerAudit.length,completedMissing:missingCompletionAudit.length,uncertainFailures:uncertainAudits.length,terminalFailures:retryTerminalAudit.length,exhaustion:exhaustionAudits.length,staleFence:retryStaleAfter.audit_count,completionReplay:missingCompletionAuditCount,failureReplay:retryTerminalAuditCount}));
  console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length){console.error(`FAILED SCENARIOS ${JSON.stringify(failed)}`);process.exitCode=1}
 }finally{for(const db of clients.reverse())if(db!==admin)await db.end().catch(()=>{});if(admin){for(const name of created.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{process.exitCode=1});await admin.end().catch(()=>{})}}

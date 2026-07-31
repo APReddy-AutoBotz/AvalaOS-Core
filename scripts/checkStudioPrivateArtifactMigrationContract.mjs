@@ -53,11 +53,12 @@ for(const signature of [
   'studio_rendition_reconciliation_complete(uuid,bigint)',
   'studio_rendition_reconciliation_fail(uuid,bigint,text)',
   'studio_rendition_deletion_execution_claim(uuid)',
-  'studio_rendition_deletion_complete(uuid,bigint)',
+  'studio_rendition_deletion_complete(uuid,bigint,text)',
   'studio_rendition_deletion_fail(uuid,bigint,text)',
 ]) assert.ok(forward.includes(`public.${signature}`),`missing forward-fix RPC ${signature}`);
 assert.match(forward,/CREATE OR REPLACE FUNCTION public\.studio_private_artifact_projection\(\s*p_org uuid,\s*p_workspace uuid,\s*p_artifact_version uuid/s);
 assert.match(forward,/REVOKE ALL ON FUNCTION public\.studio_rendition_deletion_complete\(uuid\),\s*public\.studio_rendition_deletion_fail\(uuid,text\)\s*FROM PUBLIC, anon, authenticated, service_role/s);
+assert.match(forward,/DROP FUNCTION IF EXISTS public\.studio_rendition_deletion_complete\(uuid,bigint\)/);
 assert.match(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO service_role/);
 assert.doesNotMatch(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO (?:anon|authenticated)/);
 assert.match(forward,/DROP INDEX IF EXISTS public\.studio_one_unresolved_deletion_request/);
@@ -72,6 +73,17 @@ assert.match(
   'effective receipt lookup must use the canonical org, actor, command type, and key tuple',
 );
 assert.match(forward,/canonical\.artifact_version_id = v\.id[\s\S]+canonical\.format = format_name[\s\S]+canonical\.renderer_version = renderer/s);
+const forwardFunction = name =>
+  new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]+?\\n\\$\\$;`, 'u').exec(forward)?.[0] ?? '';
+const deletionComplete = forwardFunction('studio_rendition_deletion_complete');
+const deletionFail = forwardFunction('studio_rendition_deletion_fail');
+const deletionReconciliationClaim = forwardFunction('studio_deletion_reconciliation_claim');
+assert.match(deletionComplete,/p_provider_outcome text[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.complete/);
+assert.match(deletionFail,/studio_assert_actor[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.fail/);
+assert.match(deletionReconciliationClaim,/privileged_audit_events[\s\S]+studio\.rendition\.deletion\.reconciliation\.exhausted/);
+for (const body of [deletionComplete,deletionFail,deletionReconciliationClaim]) {
+  assert.doesNotMatch(body,/'(?:bucket|bucketId|objectKey|credentials|signedUrl)'/u);
+}
 assert.ok(
   forward.indexOf('prior_receipt.id IS NOT NULL') <
     forward.indexOf('canonical.artifact_version_id = v.id'),

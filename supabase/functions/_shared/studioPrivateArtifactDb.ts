@@ -236,6 +236,7 @@ const deletionDatabase = (
     const receipt = await rpc('deletionComplete', {
       p_attempt: input.deletionAttemptId,
       p_fence: execution.fence,
+      p_provider_outcome: input.providerOutcome,
     });
     if (
       receipt.attemptId !== execution.deletionAttemptId ||
@@ -426,6 +427,7 @@ export const reconcileStudioPrivateDeletion = async (
       const receipt = await rpc('deletionComplete', {
         p_attempt: input.deletionAttemptId,
         p_fence: boundClaim.fence,
+        p_provider_outcome: input.providerOutcome,
       });
       if (!boundClaim || receipt.attemptId !== boundClaim.deletionAttemptId || receipt.state !== 'deleted') {
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');

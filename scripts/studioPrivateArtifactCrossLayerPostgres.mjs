@@ -204,7 +204,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       bytesBase64: renderEvidence.bytesBase64,
     });
     await db.query(
-      'SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint)',
+      "SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'deleted')",
       [deletion.deletionClaim.deletionAttemptId, deletionExecution.fence],
     );
     const deletionReplay = await privateCommand(db, deletionApprovalCommand);

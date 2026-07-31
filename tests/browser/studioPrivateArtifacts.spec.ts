@@ -594,8 +594,14 @@ test('deletion execution and reconciliation states expose no retention mutation'
   await expect(panel.getByRole('button', { name: 'Extend retention' })).toHaveCount(0);
 });
 
-test('legal-hold placement follows the deletion lifecycle matrix without blocked requests', async ({ page }) => {
+test('canonical rendition mutations follow every public lifecycle without blocked requests', async ({ page }) => {
   const cases = [
+    { state: 'requested', offered: false },
+    { state: 'rendering', offered: false },
+    { state: 'uploading', offered: false },
+    { state: 'reconciliation_required', offered: false },
+    { state: 'reconciling', offered: false },
+    { state: 'failed', offered: false },
     { state: 'available', offered: true },
     {
       state: 'deletion_requested',
@@ -606,13 +612,14 @@ test('legal-hold placement follows the deletion lifecycle matrix without blocked
         requesterIsCurrentActor: false,
       },
     },
-    { state: 'deletion_failed', offered: true },
     { state: 'deleting', offered: false },
     { state: 'deletion_reconciliation_required', offered: false },
     { state: 'deletion_reconciling', offered: false },
     { state: 'deleted', offered: false },
+    { state: 'deletion_failed', offered: true },
   ] as const;
-  let blockedCommandRequests = 0;
+  let blockedHoldRequests = 0;
+  let blockedRetentionRequests = 0;
 
   for (const lifecycle of cases) {
     await page.unrouteAll({ behavior: 'wait' });
@@ -629,19 +636,45 @@ test('legal-hold placement follows the deletion lifecycle matrix without blocked
     const holdAction = panel
       .getByTestId('rendition-pdf')
       .getByRole('button', { name: 'Place legal hold' });
+    const retentionInput = panel.getByLabel('Extend retention until');
+    const retentionAction = panel.getByRole('button', { name: 'Extend retention' });
 
-    if (lifecycle.offered) await expect(holdAction).toBeEnabled();
-    else await expect(holdAction).toHaveCount(0);
+    if (lifecycle.offered) {
+      await expect(holdAction).toBeEnabled();
+      await expect(retentionInput).toBeVisible();
+      await holdAction.click();
+      await expect(panel).toContainText('Committed state reloaded');
+      await retentionInput.fill('2028-07-31');
+      await expect(retentionAction).toBeEnabled();
+      await retentionAction.click();
+      await expect(panel).toContainText('Committed state reloaded');
+    } else {
+      await expect(holdAction).toHaveCount(0);
+      await expect(retentionInput).toHaveCount(0);
+      await expect(retentionAction).toHaveCount(0);
+    }
 
-    const emitted = fixture.requests.filter(
+    const holdRequests = fixture.requests.filter(
       request =>
         request.path === '/functions/v1/studio-private-artifact-command' &&
         request.body?.commandType === 'studio.legal_hold.place',
     ).length;
-    if (!lifecycle.offered) blockedCommandRequests += emitted;
+    const retentionRequests = fixture.requests.filter(
+      request =>
+        request.path === '/functions/v1/studio-private-artifact-command' &&
+        request.body?.commandType === 'studio.rendition.retention.extend',
+    ).length;
+    if (lifecycle.offered) {
+      expect(holdRequests).toBe(1);
+      expect(retentionRequests).toBe(1);
+    } else {
+      blockedHoldRequests += holdRequests;
+      blockedRetentionRequests += retentionRequests;
+    }
   }
 
-  expect(blockedCommandRequests).toBe(0);
+  expect(blockedHoldRequests).toBe(0);
+  expect(blockedRetentionRequests).toBe(0);
 });
 
 test('deletion failed exposes one governed retry with current expected versions', async ({ page }) => {

@@ -63,8 +63,8 @@ for (const token of [
   "argumentKeys: ['p_org', 'p_workspace', 'p_artifact_version']",
   "'reconciliation_required'",
   "'reconciling'",
-  "'deletion_reconciliation_required'",
-  "'deletion_reconciling'",
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
   'activeHolds',
   'holdId: string',
 ]) assert(contracts.includes(token), `public projection contract missing: ${token}`);
@@ -278,16 +278,21 @@ assert(
   'UI must gate downloads and mutations on committed state',
 );
 for (const token of [
-  "'deletion_reconciliation_required'",
-  "'deletion_reconciling'",
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
   "'Request deletion again'",
   'immutable deleted tombstone',
   'new approved artifact version',
 ]) assert(ui.includes(token), `UI lifecycle guard missing: ${token}`);
 assert(
-  /legalHoldPlacementBlockedStates[\s\S]+?'deleting'[\s\S]+?'deletion_reconciliation_required'[\s\S]+?'deletion_reconciling'[\s\S]+?'deleted'[\s\S]+?!legalHoldPlacementBlockedStates\.has\(rendition\.state\)/u.test(ui),
-  'legal-hold placement must be absent throughout deletion execution and recovery',
+  /canonicalRenditionMutationStates[\s\S]+?'available'[\s\S]+?'deletion_requested'[\s\S]+?'deletion_failed'[\s\S]+?canonicalRenditionMutationStates\.has\(rendition\.state\)/u.test(ui),
+  'canonical rendition mutations must use the exact server-supported state allowlist',
 );
+assert(
+  ui.match(/\{rendition && canonicalMutationAllowed && \(/gu)?.length === 2,
+  'legal-hold placement and retention extension must share the canonical allowlist',
+);
+assert(!ui.includes('retentionBlocked') && !ui.includes('legalHoldPlacementBlockedStates'));
 assert(
   !ui.includes("!['failed', 'deleted'].includes(rendition.state)"),
   'deleted tombstones must never expose generation',

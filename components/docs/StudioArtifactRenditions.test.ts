@@ -45,8 +45,8 @@ for (const token of [
   'Request deletion again',
   'immutable deleted tombstone',
   'new approved artifact version',
-  "'deletion_reconciliation_required'",
-  "'deletion_reconciling'",
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
 ]) {
   assert.ok(source.includes(token), `private rendition UI contract missing: ${token}`);
 }
@@ -73,9 +73,14 @@ assert.ok(
 );
 assert.match(
   source,
-  /legalHoldPlacementBlockedStates[\s\S]+?'deleting'[\s\S]+?'deletion_reconciliation_required'[\s\S]+?'deletion_reconciling'[\s\S]+?'deleted'[\s\S]+?!legalHoldPlacementBlockedStates\.has\(rendition\.state\)/u,
-  'legal-hold placement must be hidden during deletion execution and recovery',
+  /canonicalRenditionMutationStates[\s\S]+?'available'[\s\S]+?'deletion_requested'[\s\S]+?'deletion_failed'[\s\S]+?canonicalRenditionMutationStates\.has\(rendition\.state\)/u,
+  'canonical rendition mutations must use the exact server-supported state allowlist',
+);
+assert.equal(
+  source.match(/\{rendition && canonicalMutationAllowed && \(/gu)?.length,
+  2,
+  'legal-hold placement and retention extension must share the canonical allowlist',
 );
 console.log(
-  'studio artifact renditions UI: 45 state, capability, recovery, broker, and false-success assertions passed',
+  'studio artifact renditions UI: 46 state, capability, recovery, broker, and false-success assertions passed',
 );

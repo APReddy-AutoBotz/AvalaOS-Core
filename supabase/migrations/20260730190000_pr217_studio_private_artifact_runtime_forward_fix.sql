@@ -874,7 +874,10 @@ DECLARE
   a public.studio_rendition_deletion_attempts;
   d public.studio_rendition_deletion_resolutions;
   r public.studio_renditions;
+  audit_id uuid := gen_random_uuid();
+  command_request_id uuid;
   next_count integer;
+  resulting_version bigint;
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
@@ -902,6 +905,12 @@ BEGIN
   IF a.state NOT IN ('requested','executing','reconciliation_required','reconciling') THEN RETURN NULL; END IF;
   next_count := a.reconciliation_count + 1;
   IF next_count > 3 THEN
+    SELECT cr.request_id INTO command_request_id
+    FROM public.studio_private_artifact_command_receipts cr
+    WHERE cr.id = d.receipt_id;
+    IF command_request_id IS NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+    END IF;
     UPDATE public.studio_rendition_deletion_attempts
     SET state = 'failed', failure_code = 'DELETION_RECONCILIATION_EXHAUSTED',
         reconciliation_count = 3, reconciliation_claimed_at = NULL,
@@ -909,7 +918,22 @@ BEGIN
     WHERE id = a.id;
     UPDATE public.studio_renditions
     SET lifecycle = 'deletion_failed', lifecycle_version = lifecycle_version + 1, updated_at = now()
-    WHERE id = r.id;
+    WHERE id = r.id
+    RETURNING lifecycle_version INTO resulting_version;
+    INSERT INTO public.privileged_audit_events(
+      id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+      outcome,resource_version,metadata
+    ) VALUES (
+      audit_id,r.org_id,r.workspace_id,d.resolved_by,command_request_id,
+      'studio.rendition.deletion.reconciliation.exhausted','studio_rendition',r.id,
+      'failed',resulting_version,
+      jsonb_build_object(
+        'deletionAttemptId',a.id,'deletionRequestId',a.request_id,
+        'resolutionId',d.id,'executionFence',a.execution_fence,
+        'failureCode','DELETION_RECONCILIATION_EXHAUSTED',
+        'reconciliationCount',3,'resultingLifecycleVersion',resulting_version
+      )
+    );
     RETURN NULL;
   END IF;
   UPDATE public.studio_rendition_deletion_attempts
@@ -995,9 +1019,12 @@ BEGIN
 END
 $$;
 
+DROP FUNCTION IF EXISTS public.studio_rendition_deletion_complete(uuid,bigint);
+
 CREATE OR REPLACE FUNCTION public.studio_rendition_deletion_complete(
   p_attempt uuid,
-  p_fence bigint
+  p_fence bigint,
+  p_provider_outcome text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1010,16 +1037,29 @@ DECLARE
   r public.studio_renditions;
   retention jsonb;
   holds integer;
+  audit_id uuid := gen_random_uuid();
+  command_request_id uuid;
+  resulting_version bigint;
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL OR a.state <> 'executing' OR a.execution_fence <> p_fence THEN
     RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
   END IF;
   SELECT * INTO d FROM public.studio_rendition_deletion_resolutions WHERE id = a.resolution_id;
+  IF d.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
   PERFORM public.studio_assert_actor(
     d.resolved_by, d.org_id, d.workspace_id,
     'studio.artifacts.delete.approve', d.resolver_authorization_version
   );
+  IF p_provider_outcome NOT IN ('deleted','missing') THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_PROVIDER_OUTCOME';
+  END IF;
+  SELECT cr.request_id INTO command_request_id
+  FROM public.studio_private_artifact_command_receipts cr
+  WHERE cr.id = d.receipt_id;
+  IF command_request_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+  END IF;
   SELECT * INTO r FROM public.studio_renditions WHERE id = a.rendition_id FOR UPDATE;
   PERFORM pg_advisory_xact_lock(hashtextextended(r.id::text, 0));
   retention := public.studio_effective_retention(r.id);
@@ -1038,7 +1078,24 @@ BEGIN
   UPDATE public.studio_renditions
   SET lifecycle = 'deleted', lifecycle_version = lifecycle_version + 1,
       updated_at = now(), deleted_at = now()
-  WHERE id = r.id;
+  WHERE id = r.id
+  RETURNING lifecycle_version INTO resulting_version;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,r.org_id,r.workspace_id,d.resolved_by,command_request_id,
+    'studio.rendition.deletion.complete','studio_rendition',r.id,
+    'succeeded',resulting_version,
+    jsonb_build_object(
+      'deletionAttemptId',a.id,'deletionRequestId',a.request_id,
+      'resolutionId',d.id,'executionFence',p_fence,
+      'reconciliationCount',a.reconciliation_count,
+      'providerOutcome',p_provider_outcome,'format',r.format,
+      'contentHash',r.content_hash,'byteLength',r.byte_length,
+      'resultingLifecycleVersion',resulting_version
+    )
+  );
   RETURN jsonb_build_object('outcome','committed','attemptId',a.id,'state','deleted');
 END
 $$;
@@ -1055,8 +1112,12 @@ SET search_path = pg_catalog
 AS $$
 DECLARE
   a public.studio_rendition_deletion_attempts;
+  d public.studio_rendition_deletion_resolutions;
   r public.studio_renditions;
+  audit_id uuid := gen_random_uuid();
+  command_request_id uuid;
   target_state text;
+  resulting_version bigint;
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL OR a.state <> 'executing' OR a.execution_fence <> p_fence THEN
@@ -1064,6 +1125,18 @@ BEGIN
   END IF;
   IF p_failure !~ '^[A-Z0-9_]{1,64}$' THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_FAILURE';
+  END IF;
+  SELECT * INTO d FROM public.studio_rendition_deletion_resolutions WHERE id = a.resolution_id;
+  IF d.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+  PERFORM public.studio_assert_actor(
+    d.resolved_by, d.org_id, d.workspace_id,
+    'studio.artifacts.delete.approve', d.resolver_authorization_version
+  );
+  SELECT cr.request_id INTO command_request_id
+  FROM public.studio_private_artifact_command_receipts cr
+  WHERE cr.id = d.receipt_id;
+  IF command_request_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
   END IF;
   SELECT * INTO r FROM public.studio_renditions WHERE id = a.rendition_id FOR UPDATE;
   target_state := CASE
@@ -1079,8 +1152,27 @@ BEGIN
   IF target_state = 'failed' THEN
     UPDATE public.studio_renditions
     SET lifecycle = 'deletion_failed', lifecycle_version = lifecycle_version + 1, updated_at = now()
-    WHERE id = r.id;
+    WHERE id = r.id
+    RETURNING lifecycle_version INTO resulting_version;
+  ELSE
+    resulting_version := r.lifecycle_version;
   END IF;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,r.org_id,r.workspace_id,d.resolved_by,command_request_id,
+    'studio.rendition.deletion.fail','studio_rendition',r.id,
+    CASE WHEN target_state = 'failed' THEN 'failed' ELSE 'succeeded' END,
+    resulting_version,
+    jsonb_build_object(
+      'deletionAttemptId',a.id,'deletionRequestId',a.request_id,
+      'resolutionId',d.id,'executionFence',p_fence,
+      'failureCode',p_failure,'targetState',target_state,
+      'reconciliationCount',a.reconciliation_count,
+      'resultingLifecycleVersion',resulting_version
+    )
+  );
   RETURN jsonb_build_object(
     'outcome','committed','attemptId',a.id,
     'state', CASE WHEN target_state = 'failed' THEN 'deletion_failed' ELSE target_state END
@@ -1100,7 +1192,7 @@ REVOKE ALL ON FUNCTION public.studio_private_state_timestamp(),
   public.studio_rendition_reconciliation_complete(uuid,bigint),
   public.studio_rendition_reconciliation_fail(uuid,bigint,text),
   public.studio_rendition_deletion_execution_claim(uuid),
-  public.studio_rendition_deletion_complete(uuid,bigint),
+  public.studio_rendition_deletion_complete(uuid,bigint,text),
   public.studio_rendition_deletion_fail(uuid,bigint,text)
   FROM PUBLIC, anon, authenticated, service_role;
 
@@ -1120,7 +1212,7 @@ GRANT EXECUTE ON FUNCTION public.studio_private_artifact_command_claim(jsonb),
   public.studio_rendition_reconciliation_fail(uuid,bigint,text),
   public.studio_deletion_reconciliation_claim(uuid),
   public.studio_rendition_deletion_execution_claim(uuid),
-  public.studio_rendition_deletion_complete(uuid,bigint),
+  public.studio_rendition_deletion_complete(uuid,bigint,text),
   public.studio_rendition_deletion_fail(uuid,bigint,text)
   TO service_role;
 

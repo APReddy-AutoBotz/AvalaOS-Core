@@ -73,11 +73,10 @@ const mutationBlockingStates = new Set([
   'read_only',
   'committed_reload_failed',
 ]);
-const legalHoldPlacementBlockedStates = new Set<StudioRenditionProjectionDto['state']>([
-  'deleting',
-  'deletion_reconciliation_required',
-  'deletion_reconciling',
-  'deleted',
+const canonicalRenditionMutationStates = new Set<StudioRenditionProjectionDto['state']>([
+  'available',
+  'deletion_requested',
+  'deletion_failed',
 ]);
 
 const stateForError = (error: unknown): { state: PanelState; message: string } => {
@@ -339,14 +338,9 @@ export default function StudioArtifactRenditions({
           const pendingDeletion =
             rendition?.deletion?.state === 'pending' ||
             rendition?.state === 'deletion_requested';
-          const retentionBlocked =
-            rendition &&
-            [
-              'deleting',
-              'deletion_reconciliation_required',
-              'deletion_reconciling',
-              'deleted',
-            ].includes(rendition.state);
+          const canonicalMutationAllowed = Boolean(
+            rendition && canonicalRenditionMutationStates.has(rendition.state),
+          );
           return (
             <article
               key={format}
@@ -449,7 +443,7 @@ export default function StudioArtifactRenditions({
                 >
                   {downloadable ? `Download ${formatLabel[format]}` : 'Download unavailable'}
                 </button>
-                {rendition && !legalHoldPlacementBlockedStates.has(rendition.state) && (
+                {rendition && canonicalMutationAllowed && (
                   <button
                     type="button"
                     disabled={!can('studio.legal_hold.place') || !reason}
@@ -530,7 +524,7 @@ export default function StudioArtifactRenditions({
                   </>
                 )}
               </div>
-              {rendition && !retentionBlocked && (
+              {rendition && canonicalMutationAllowed && (
                 <div className="mt-3">
                   <label className="text-sm font-bold">
                     Extend retention until
