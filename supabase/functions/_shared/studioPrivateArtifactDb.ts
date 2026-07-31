@@ -4,19 +4,20 @@ import {
   StudioPrivateArtifactError,
   type StudioPrivateArtifactAtomicCommand,
   type StudioPrivateArtifactDomainErrorCode,
-  type StudioPrivateArtifactJson,
 } from './studioPrivateArtifactCommand.ts';
-import type { StudioPrivateArtifactCommandDependencies } from './studioPrivateArtifactHandler.ts';
+import type {
+  StudioClaimedDeletionExecutionResult,
+  StudioClaimedRenditionExecutionResult,
+  StudioPrivateArtifactCommandDependencies,
+} from './studioPrivateArtifactHandler.ts';
 import type {
   StudioPrivateArtifactDownloadDependencies,
   StudioPrivateArtifactVerifiedDownload,
 } from './studioPrivateArtifactDownloadHandler.ts';
 import {
   assertStudioPrivateArtifactRpcArgs,
-  decodeStudioDeletionClaim,
   decodeStudioDownloadClaim,
   decodeStudioPrivateArtifactRpcResult,
-  decodeStudioRenditionClaim,
   STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
   type StudioDeletionExecuteClaim,
   type StudioDeletionPendingClaim,
@@ -33,9 +34,10 @@ import {
   reconcileStudioDeletion,
   reconcileStudioRendition,
   type StudioDeletionReceipt,
+  type StudioDeletionSagaResult,
   type StudioDeletionSagaDatabase,
+  type StudioRenditionSagaResult,
   type StudioRenditionSagaDatabase,
-  type StudioSagaFailureCode,
   type StudioSagaPublicReceipt,
 } from './studioPrivateArtifactSaga.ts';
 import {
@@ -283,38 +285,56 @@ const loadDeletionReconciliation = async (deletionAttemptId: string) => {
     : null;
 };
 
-const executeClaimedRendition = async (privateClaim: StudioPrivateArtifactJson) => {
-  const claim = decodeStudioRenditionClaim(privateClaim);
+export const mapStudioClaimedRenditionResult = (
+  result: StudioRenditionSagaResult,
+): StudioClaimedRenditionExecutionResult => {
+  switch (result.outcome) {
+    case 'available':
+      return { state: 'available', resource: result.receipt };
+    case 'failed':
+      return { state: 'failed', failureCode: result.failureCode };
+    case 'reconciliation_required':
+      return {
+        state: 'reconciliation_required',
+        failureCode: result.failureCode,
+      };
+    case 'replay':
+      throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+  }
+};
+
+export const mapStudioClaimedDeletionResult = (
+  result: StudioDeletionSagaResult,
+): StudioClaimedDeletionExecutionResult => {
+  switch (result.outcome) {
+    case 'deleted':
+      return { state: 'deleted', resource: result.receipt };
+    case 'failed':
+      return { state: 'failed', failureCode: result.failureCode };
+    case 'reconciliation_required':
+      return {
+        state: 'reconciliation_required',
+        failureCode: result.failureCode,
+      };
+    case 'replay':
+      throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
+  }
+};
+
+const executeClaimedRendition = async (claim: StudioRenditionExecuteClaim) => {
   const result = await executeStudioRenditionSaga(claim.requestId, {
     database: renditionDatabase(claim),
     storage: storage(),
   });
-  if (result.outcome === 'available') {
-    return { state: 'available' as const, resource: result.receipt };
-  }
-  return {
-    state: 'failed' as const,
-    failureCode:
-      'failureCode' in result
-        ? result.failureCode
-        : ('RENDER_FAILED' satisfies StudioSagaFailureCode),
-  };
+  return mapStudioClaimedRenditionResult(result);
 };
 
-const executeClaimedDeletion = async (privateClaim: StudioPrivateArtifactJson) => {
-  const pending = decodeStudioDeletionClaim(privateClaim);
+const executeClaimedDeletion = async (pending: StudioDeletionPendingClaim) => {
   const result = await executeStudioDeletionSaga(pending.requestId, {
     database: deletionDatabase(pending),
     storage: storage(),
   });
-  if (result.outcome === 'deleted') {
-    return { state: 'deleted' as const, resource: result.receipt };
-  }
-  return {
-    state: 'failed' as const,
-    failureCode:
-      'failureCode' in result ? result.failureCode : 'DELETE_OUTCOME_UNKNOWN',
-  };
+  return mapStudioClaimedDeletionResult(result);
 };
 
 export type StudioPrivateArtifactReconciliationOperationResult = Readonly<{

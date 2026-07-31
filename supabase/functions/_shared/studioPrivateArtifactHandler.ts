@@ -30,17 +30,21 @@ export interface StudioPrivateArtifactCommandDependencies {
   ): Promise<StudioPrivateArtifactAtomicResult>;
   executeClaimedRendition?(
     claim: StudioRenditionExecuteClaim,
-  ): Promise<
-    | { state: 'available'; resource: StudioPrivateArtifactJson }
-    | { state: 'failed'; failureCode: string }
-  >;
+  ): Promise<StudioClaimedRenditionExecutionResult>;
   executeClaimedDeletion?(
     claim: StudioDeletionPendingClaim,
-  ): Promise<
-    | { state: 'deleted'; resource: StudioPrivateArtifactJson }
-    | { state: 'failed'; failureCode: string }
-  >;
+  ): Promise<StudioClaimedDeletionExecutionResult>;
 }
+
+export type StudioClaimedRenditionExecutionResult =
+  | { state: 'available'; resource: StudioPrivateArtifactJson }
+  | { state: 'failed'; failureCode: string }
+  | { state: 'reconciliation_required'; failureCode: string };
+
+export type StudioClaimedDeletionExecutionResult =
+  | { state: 'deleted'; resource: StudioPrivateArtifactJson }
+  | { state: 'failed'; failureCode: string }
+  | { state: 'reconciliation_required'; failureCode: string };
 
 const FORBIDDEN_PUBLIC_KEYS = new Set([
   'bucket',
@@ -187,6 +191,9 @@ export const handleStudioPrivateArtifactCommand = async (
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
       }
       const external = await deps.executeClaimedRendition(decodeStudioRenditionClaim(result.renditionClaim));
+      if (external.state === 'reconciliation_required') {
+        return committedPending(result, committedPublicResource);
+      }
       if (external.state === 'failed') {
         return Response.json(
           {
@@ -215,6 +222,9 @@ export const handleStudioPrivateArtifactCommand = async (
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
       }
       const external = await deps.executeClaimedDeletion(decodeStudioDeletionClaim(result.deletionClaim));
+      if (external.state === 'reconciliation_required') {
+        return committedPending(result, committedPublicResource);
+      }
       if (external.state === 'failed') {
         return Response.json(
           {

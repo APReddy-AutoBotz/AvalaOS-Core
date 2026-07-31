@@ -149,6 +149,18 @@ for (const token of [
   'committedPublicResource',
 ]) assert(handler.includes(token), `truthful post-commit boundary missing: ${token}`);
 assert(
+  (handler.match(/external\.state === 'reconciliation_required'/gu) ?? []).length === 2 &&
+    handler.includes("| { state: 'reconciliation_required'; failureCode: string }"),
+  'rendition and deletion handlers must preserve reconciliation-required outcomes',
+);
+const pendingBoundary = handler.slice(
+  handler.indexOf('const committedPending'),
+  handler.indexOf('export const handleStudioPrivateArtifactCommand'),
+);
+for (const forbidden of ['renditionClaim', 'deletionClaim', 'objectKey', 'bucket', 'provider']) {
+  assert(!pendingBoundary.includes(forbidden), `committed-pending response leaks ${forbidden}`);
+}
+assert(
   handler.indexOf('if (committed)') < handler.indexOf('studioPrivateArtifactErrorBody(safe)'),
   'post-commit exceptions must not map to failed_before_commit',
 );
@@ -200,6 +212,28 @@ assert(storageBoundary.includes('configuredAllowlist !== STUDIO_PRIVATE_ARTIFACT
 assert(!storageBoundary.includes('studio-private-archive'), 'alternate Studio bucket leaked into production authority');
 const database = sources.get('supabase/functions/_shared/studioPrivateArtifactDb.ts');
 assert(database.includes('reconcileStudioPrivateRendition') && database.includes('reconcileStudioPrivateDeletion'), 'production reconciliation operations missing');
+for (const token of [
+  'mapStudioClaimedRenditionResult',
+  'mapStudioClaimedDeletionResult',
+  "case 'reconciliation_required':",
+  "state: 'reconciliation_required'",
+  "case 'replay':",
+]) assert(database.includes(token), `production outcome-preservation mapping missing: ${token}`);
+const renditionExecutor = database.slice(
+  database.indexOf('const executeClaimedRendition'),
+  database.indexOf('const executeClaimedDeletion'),
+);
+const deletionExecutor = database.slice(
+  database.indexOf('const executeClaimedDeletion'),
+  database.indexOf('export type StudioPrivateArtifactReconciliationOperationResult'),
+);
+assert(
+  renditionExecutor.includes('return mapStudioClaimedRenditionResult(result)') &&
+    deletionExecutor.includes('return mapStudioClaimedDeletionResult(result)') &&
+    !renditionExecutor.includes("state: 'failed'") &&
+    !deletionExecutor.includes("state: 'failed'"),
+  'production adapters collapse a non-success saga outcome into failed',
+);
 assert(!/load(?:Deletion)?Reconciliation:\s*async\s*\(\)\s*=>\s*null/u.test(database), 'production reconciliation loader remains unwired');
 assert(
   database.indexOf("rpc('deletionExecutionClaim'") <

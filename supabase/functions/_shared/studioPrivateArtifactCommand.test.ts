@@ -414,6 +414,51 @@ void (async () => {
       `${label} preserves truthful receipt-only pending response`,
     );
   }
+  for (const failureCode of [
+    'UPLOAD_OUTCOME_UNKNOWN',
+    'AVAILABLE_COMPLETION_FAILED',
+  ]) {
+    const pending = await handleStudioPrivateArtifactCommand(request(), {
+      ...dependencies,
+      executeClaimedRendition: async () => ({
+        state: 'reconciliation_required' as const,
+        failureCode,
+      }),
+    });
+    const body = await pending.json() as Record<string, unknown>;
+    const serialized = JSON.stringify(body);
+    assert(
+      pending.status === 202 &&
+        body.ok === false &&
+        body.outcome === 'committed_reconciliation_pending' &&
+        body.receiptId === ids[4] &&
+        body.resourceId === ids[3] &&
+        JSON.stringify(body.resource) === JSON.stringify({ state: 'requested' }) &&
+        !serialized.includes(failureCode) &&
+        !serialized.includes('rendition_failed') &&
+        !serialized.includes('failed_before_commit') &&
+        !serialized.includes('renditionClaim') &&
+        !serialized.includes('deletionClaim') &&
+        !serialized.includes('objectKey') &&
+        !serialized.includes('bucket') &&
+        !serialized.includes('provider'),
+      `${failureCode} returns the original safe receipt as HTTP 202 pending`,
+    );
+  }
+  for (const failureCode of ['RENDER_FAILED', 'RECONCILIATION_EXHAUSTED']) {
+    const failed = await handleStudioPrivateArtifactCommand(request(), {
+      ...dependencies,
+      executeClaimedRendition: async () => ({
+        state: 'failed' as const,
+        failureCode,
+      }),
+    });
+    const body = await failed.json() as Record<string, unknown>;
+    assert(
+      failed.status === 200 && body.outcome === 'rendition_failed',
+      `${failureCode} remains a terminal rendition failure`,
+    );
+  }
   let transportClaims = 0;
   const recoveredTransport = await handleStudioPrivateArtifactCommand(request(), {
     ...dependencies,
@@ -444,32 +489,86 @@ void (async () => {
       reason: 'Independent approval',
     },
   };
+  const committedDeletion = {
+    outcome: 'committed' as const,
+    receiptId: ids[4],
+    resourceId: ids[3],
+    resource: { state: 'deleting' },
+    deletionClaim: {
+      disposition: 'execute' as const,
+      requestId: ids[0],
+      deletionAttemptId: ids[4],
+      renditionId: ids[3],
+      organizationId: ids[1],
+      workspaceId: ids[2],
+      reconciliationCount: 0,
+    },
+  };
+  const deletionDependencies = {
+    ...dependencies,
+    loadFreshAuthority: async () => ({
+      actorId: ids[0],
+      organizationId: ids[1],
+      workspaceId: ids[2],
+      authorizationVersion: 9,
+      capabilities: ['studio.artifacts.delete.approve'],
+    }),
+    executeAtomicCommand: async () => committedDeletion,
+  };
+  for (const failureCode of [
+    'DELETE_OUTCOME_UNKNOWN',
+    'TOMBSTONE_COMPLETION_FAILED',
+  ]) {
+    const pending = await handleStudioPrivateArtifactCommand(
+      request(deletionBody),
+      {
+        ...deletionDependencies,
+        executeClaimedDeletion: async () => ({
+          state: 'reconciliation_required' as const,
+          failureCode,
+        }),
+      },
+    );
+    const body = await pending.json() as Record<string, unknown>;
+    const serialized = JSON.stringify(body);
+    assert(
+      pending.status === 202 &&
+        body.ok === false &&
+        body.outcome === 'committed_reconciliation_pending' &&
+        body.receiptId === ids[4] &&
+        body.resourceId === ids[3] &&
+        JSON.stringify(body.resource) === JSON.stringify({ state: 'deleting' }) &&
+        !serialized.includes(failureCode) &&
+        !serialized.includes('deletion_failed') &&
+        !serialized.includes('failed_before_commit') &&
+        !serialized.includes('renditionClaim') &&
+        !serialized.includes('deletionClaim') &&
+        !serialized.includes('objectKey') &&
+        !serialized.includes('bucket') &&
+        !serialized.includes('provider'),
+      `${failureCode} returns the original safe receipt as HTTP 202 pending`,
+    );
+  }
+  const deletionExhausted = await handleStudioPrivateArtifactCommand(
+    request(deletionBody),
+    {
+      ...deletionDependencies,
+      executeClaimedDeletion: async () => ({
+        state: 'failed' as const,
+        failureCode: 'DELETION_RECONCILIATION_EXHAUSTED',
+      }),
+    },
+  );
+  assert(
+    deletionExhausted.status === 200 &&
+      (await deletionExhausted.json() as Record<string, unknown>).outcome ===
+        'deletion_failed',
+    'bounded deletion exhaustion remains a terminal deletion failure',
+  );
   const deletionPending = await handleStudioPrivateArtifactCommand(
     request(deletionBody),
     {
-      ...dependencies,
-      loadFreshAuthority: async () => ({
-        actorId: ids[0],
-        organizationId: ids[1],
-        workspaceId: ids[2],
-        authorizationVersion: 9,
-        capabilities: ['studio.artifacts.delete.approve'],
-      }),
-      executeAtomicCommand: async () => ({
-        outcome: 'committed',
-        receiptId: ids[4],
-        resourceId: ids[3],
-        resource: { state: 'deleting' },
-        deletionClaim: {
-          disposition: 'execute',
-          requestId: ids[0],
-          deletionAttemptId: ids[4],
-          renditionId: ids[3],
-          organizationId: ids[1],
-          workspaceId: ids[2],
-          reconciliationCount: 0,
-        },
-      }),
+      ...deletionDependencies,
       executeClaimedDeletion: async () => {
         throw new Error('deletion execution guard rejected after resolution commit');
       },
@@ -501,7 +600,7 @@ void (async () => {
     'failure before any authoritative commit remains failed_before_commit',
   );
   console.log(
-    'studio private artifact command: 54 schema, authority, phase, replay, side-effect, and non-disclosure scenarios passed',
+    'studio private artifact command: 61 schema, authority, outcome-preservation, replay, side-effect, and non-disclosure scenarios passed',
   );
 })().catch(error => {
   console.error(error);

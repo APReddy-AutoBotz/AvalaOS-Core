@@ -13,7 +13,7 @@ The additive forward fix addresses the five unresolved PR #217 P1 findings witho
 5. Hold placement, deletion approval, and the immediate provider-execution guard serialize on the same rendition authority.
 6. Retention extension now shares that serialization boundary and cannot commit after deletion execution wins.
 7. A canonical deleted rendition is terminal for the same artifact version, format, and governed renderer version.
-8. Post-commit external-effect uncertainty is reported as reconciliation-pending with the original receipt, never as a pre-commit failure.
+8. Production rendition and deletion adapters preserve `reconciliation_required` without collapsing provider or completion uncertainty into terminal failure. The command boundary reports that durable state as reconciliation-pending with the original receipt, never as a pre-commit failure.
 9. `deletion_failed` retains an append-only governed retry route without erasing prior request, resolution, attempt, or failure evidence.
 
 The accepted `20260729163251_studio_private_artifact_authority.sql` remains immutable. The effective definitions are supplied only by `20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql`.
@@ -55,6 +55,8 @@ Generation preserves its exact artifact/version/format binding. SQL enforces the
 Exact generation replay is evaluated before canonical-tombstone rejection. A new command derives the governed renderer and rejects an existing canonical `(artifact version, format, renderer version)` row before creating a receipt or attempt. The browser never offers generation for a deleted tombstone; a new approved artifact version, or a later separately governed renderer version, is required.
 
 Once the atomic command RPC returns a committed receipt, missing private claims, adapter construction/configuration failures, provider exceptions, and downstream RPC failures return HTTP 202 with `committed_reconciliation_pending`. That response contains only `receiptId`, `resourceId`, and safe public `resource`. It is non-final and never includes a rendition/deletion claim or Storage binding. The client reloads committed projection state and blocks duplicate mutation until that reload succeeds.
+
+The production saga adapters map `available`, `deleted`, terminal `failed`, and `reconciliation_required` outcomes one-for-one. `UPLOAD_OUTCOME_UNKNOWN`, `AVAILABLE_COMPLETION_FAILED`, `DELETE_OUTCOME_UNKNOWN`, and `TOMBSTONE_COMPLETION_FAILED` therefore remain HTTP 202 committed recovery work. Only terminal rendition failure or bounded reconciliation exhaustion may produce `rendition_failed` or `deletion_failed`. A replay result in a newly committed side-effect path is rejected explicitly and falls back to the same receipt-preserving pending boundary.
 
 ## Recovery, due work, and provider-effect fencing
 

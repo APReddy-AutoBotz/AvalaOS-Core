@@ -556,7 +556,7 @@ test('physical deletion failure is never rendered as deleted', async ({ page }) 
   await expect(panel.getByRole('status')).toContainText('No success state was recorded');
 });
 
-test('committed pending generation reloads requested state and blocks duplicate generation', async ({ page }) => {
+test('provider-uncertain generation stays pending, reloads requested state, and blocks duplicate generation', async ({ page }) => {
   await installFixture(page, { committedPending: true });
   const panel = await openDocs(page);
   await panel.getByRole('button', { name: 'Generate PDF' }).click();
@@ -566,6 +566,8 @@ test('committed pending generation reloads requested state and blocks duplicate 
   await expect(panel.getByTestId('rendition-pdf')).toContainText('Generation requested');
   await expect(panel.getByRole('button', { name: 'Generate PDF' })).toBeDisabled();
   await expect(panel.getByTestId('rendition-pdf')).not.toContainText(/^Available$/);
+  await expect(panel.getByRole('status')).not.toContainText('operation failed');
+  await expect(panel.getByRole('status')).not.toContainText('No success state was recorded');
 });
 
 test('deleted canonical tombstone cannot generate and explains governed version recovery', async ({ page }) => {

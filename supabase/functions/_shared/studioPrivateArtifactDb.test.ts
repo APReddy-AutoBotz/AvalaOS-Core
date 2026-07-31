@@ -1,5 +1,7 @@
 import {
   decodeStudioPrivateArtifactRpcError,
+  mapStudioClaimedDeletionResult,
+  mapStudioClaimedRenditionResult,
   reconcileStudioPrivateDeletion,
   reconcileStudioPrivateRendition,
   studioPrivateArtifactDependencies,
@@ -36,6 +38,98 @@ assert(
   }).code === 'COMMAND_UNAVAILABLE',
   'raw database and private object detail sanitized',
 );
+
+const renditionReceipt = {
+  attemptId: 'attempt-1',
+  renditionId: 'rendition-1',
+  format: 'pdf' as const,
+  state: 'reconciliation_required' as const,
+};
+for (const failureCode of [
+  'UPLOAD_OUTCOME_UNKNOWN',
+  'AVAILABLE_COMPLETION_FAILED',
+] as const) {
+  assert(
+    JSON.stringify(
+      mapStudioClaimedRenditionResult({
+        outcome: 'reconciliation_required',
+        receipt: renditionReceipt,
+        failureCode,
+      }),
+    ) === JSON.stringify({ state: 'reconciliation_required', failureCode }),
+    `${failureCode} remains reconciliation required in the production adapter`,
+  );
+}
+const deletionReceipt = {
+  deletionAttemptId: 'delete-1',
+  renditionId: 'rendition-1',
+  state: 'reconciliation_required' as const,
+};
+for (const failureCode of [
+  'DELETE_OUTCOME_UNKNOWN',
+  'TOMBSTONE_COMPLETION_FAILED',
+] as const) {
+  assert(
+    JSON.stringify(
+      mapStudioClaimedDeletionResult({
+        outcome: 'reconciliation_required',
+        receipt: deletionReceipt,
+        failureCode,
+      }),
+    ) === JSON.stringify({ state: 'reconciliation_required', failureCode }),
+    `${failureCode} remains reconciliation required in the production adapter`,
+  );
+}
+assert(
+  mapStudioClaimedRenditionResult({
+    outcome: 'failed',
+    receipt: { ...renditionReceipt, state: 'failed' },
+    failureCode: 'RENDER_FAILED',
+  }).state === 'failed',
+  'terminal rendition failure remains failed',
+);
+assert(
+  mapStudioClaimedDeletionResult({
+    outcome: 'failed',
+    receipt: { ...deletionReceipt, state: 'deletion_failed' },
+    failureCode: 'DELETION_RECONCILIATION_EXHAUSTED',
+  }).state === 'failed',
+  'terminal deletion exhaustion remains failed',
+);
+assert(
+  mapStudioClaimedRenditionResult({
+    outcome: 'available',
+    receipt: { ...renditionReceipt, state: 'available' },
+  }).state === 'available',
+  'available rendition remains available',
+);
+assert(
+  mapStudioClaimedDeletionResult({
+    outcome: 'deleted',
+    receipt: { ...deletionReceipt, state: 'deleted' },
+    providerOutcome: 'deleted',
+  }).state === 'deleted',
+  'completed deletion remains deleted',
+);
+for (const replay of [
+  () => mapStudioClaimedRenditionResult({
+    outcome: 'replay',
+    receipt: { ...renditionReceipt, state: 'available' },
+  }),
+  () => mapStudioClaimedDeletionResult({
+    outcome: 'replay',
+    receipt: { ...deletionReceipt, state: 'deleted' },
+  }),
+]) {
+  let rejected = false;
+  try {
+    replay();
+  } catch (error) {
+    rejected =
+      error instanceof Error && error.message === 'COMMAND_UNAVAILABLE';
+  }
+  assert(rejected, 'unexpected newly committed replay fails closed');
+}
 
 void (async () => {
   const ids = [
@@ -165,7 +259,7 @@ void (async () => {
     globalThis.fetch = priorFetch;
   }
   console.log(
-    'studio private artifact DB adapter: 28 safe-error, private RPC, and reconciliation loader assertions passed',
+    'studio private artifact DB adapter: 38 mapping, safe-error, private RPC, and reconciliation loader assertions passed',
   );
 })().catch(error => {
   console.error(error);
