@@ -7,6 +7,7 @@ import pg from 'pg';
 import {createApprovedStudioFixture,createAvailablePrivateArtifactFixture,privateCommand,downloadCommand} from './studioPrivateArtifactPostgresFixture.mjs';
 import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifactCrossLayerPostgres.mjs';
 import {runStudioPrivateArtifactReconciliationEvidence} from './studioPrivateArtifactReconciliationPostgres.mjs';
+import {runStudioPrivateArtifactConcurrencyEvidence} from './studioPrivateArtifactConcurrencyPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
 execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
@@ -58,13 +59,43 @@ export const scenarioNames={
  'audit resource version equals committed rendition version',
  'audit metadata excludes private storage authority',
  'audit insertion failure rolls back deletion state transition'
+ ],
+ concurrencyP1:[
+ 'concurrency completion lock blocks later generation claim',
+ 'concurrency completion commits one canonical rendition',
+ 'concurrency later generation claim rejects before receipt',
+ 'concurrency rejected command receipt attempt upload object deltas zero',
+ 'concurrency completion winner canonical count one',
+ 'concurrency provider object bindings remain unique',
+ 'concurrency exact generation replay returns original receipt',
+ 'concurrency simultaneous new commands create at most one attempt',
+ 'concurrency active attempt lock blocks completion until check ends',
+ 'concurrency active attempt rejects new command before provider effect',
+ 'concurrency active rejection receipt and attempt deltas zero',
+ 'concurrency generation lock ordering has no deadlock',
+ 'concurrency no orphan provider object remains',
+ 'stale worker original owns uploaded attempt before recovery',
+ 'stale worker recovery claim advances execution fence',
+ 'stale worker normal start rejected after recovery claim',
+ 'stale worker normal rendered rejected after recovery claim',
+ 'stale worker normal completion rejected after recovery claim',
+ 'stale worker normal failure rejected after recovery claim',
+ 'stale worker rejected mutations produce zero durable changes',
+ 'stale worker recovery rendered accepts current fence',
+ 'stale worker recovery completion accepts current fence',
+ 'stale worker final canonical rendition count one',
+ 'stale worker completion audit count one',
+ 'stale worker late completion is harmless replay',
+ 'stale worker late completion adds no audit event',
+ 'stale worker exact object remains single binding',
+ 'stale worker final availability retains recovery fence'
  ]
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,149);assert.equal(new Set(allScenarios).size,149);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,177);assert.equal(new Set(allScenarios).size,177);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -85,6 +116,9 @@ try{
  const pendingRecovery=await createDb(databaseNames[9]);await apply(pendingRecovery,migrations);
  const auditCompletionDb=await createDb(databaseNames[10]);await apply(auditCompletionDb,migrations);
  const auditFailureDb=await createDb(databaseNames[11]);await apply(auditFailureDb,migrations);
+ const generationConcurrencyDb=await createDb(databaseNames[12]);await apply(generationConcurrencyDb,migrations);const generationCompletionPeer=await connect(urlFor(databaseNames[12]));const generationCommandPeer=await connect(urlFor(databaseNames[12]));
+ const staleWorkerDb=await createDb(databaseNames[13]);await apply(staleWorkerDb,migrations);const staleOriginalPeer=await connect(urlFor(databaseNames[13]));
+ await runStudioPrivateArtifactConcurrencyEvidence({observer:generationConcurrencyDb,completionDb:generationCompletionPeer,commandDb:generationCommandPeer,staleRecoveryDb:staleWorkerDb,staleOriginalDb:staleOriginalPeer,scenario,names:scenarioNames.concurrencyP1});
  const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);

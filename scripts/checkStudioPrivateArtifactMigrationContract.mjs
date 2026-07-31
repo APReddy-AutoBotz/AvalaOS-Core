@@ -75,6 +75,8 @@ assert.match(
 assert.match(forward,/canonical\.artifact_version_id = v\.id[\s\S]+canonical\.format = format_name[\s\S]+canonical\.renderer_version = renderer/s);
 const forwardFunction = name =>
   new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]+?\\n\\$\\$;`, 'u').exec(forward)?.[0] ?? '';
+const effectiveForwardFunction = name =>
+  [...forward.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]+?\\n\\$\\$;`, 'gu'))].at(-1)?.[0] ?? '';
 const deletionComplete = forwardFunction('studio_rendition_deletion_complete');
 const deletionFail = forwardFunction('studio_rendition_deletion_fail');
 const deletionReconciliationClaim = forwardFunction('studio_deletion_reconciliation_claim');
@@ -89,4 +91,40 @@ assert.ok(
     forward.indexOf('canonical.artifact_version_id = v.id'),
   'exact generation replay must precede canonical tombstone rejection',
 );
+const commandClaim = effectiveForwardFunction('studio_private_artifact_command_claim');
+const generationLock = effectiveForwardFunction('studio_rendition_generation_lock');
+const completionInternal = effectiveForwardFunction('studio_rendition_attempt_complete_internal');
+const normalComplete = effectiveForwardFunction('studio_rendition_attempt_complete');
+const normalFail = effectiveForwardFunction('studio_rendition_attempt_fail');
+const recoveryAuthority = effectiveForwardFunction('studio_rendition_recovery_authority');
+const recoveryRendered = effectiveForwardFunction('studio_rendition_reconciliation_rendered');
+const recoveryComplete = effectiveForwardFunction('studio_rendition_reconciliation_complete');
+const recoveryFail = effectiveForwardFunction('studio_rendition_reconciliation_fail');
+for (const field of ['p_org','p_workspace','p_artifact_version','p_format','p_renderer_version']) {
+  assert.match(generationLock,new RegExp(`\\b${field}\\b`),`generation lock identity missing ${field}`);
+}
+assert.match(generationLock,/pg_advisory_xact_lock[\s\S]+studio-rendition-generation-v1/);
+assert.ok(
+  commandClaim.indexOf('studio_rendition_generation_lock') < commandClaim.indexOf('canonical.artifact_version_id = v.id'),
+  'generation claim must lock before canonical inspection',
+);
+assert.ok(
+  commandClaim.indexOf('active_attempt.state IN') > commandClaim.indexOf('studio_rendition_generation_lock'),
+  'generation claim must recheck active attempts under the shared lock',
+);
+assert.match(commandClaim,/active_attempt\.state IN \(\s*'requested','rendering','uploaded','reconciliation_required','reconciling'/s);
+assert.ok(
+  completionInternal.indexOf('studio_rendition_generation_lock') < completionInternal.indexOf('FROM public.studio_renditions canonical'),
+  'completion must take the shared generation lock before canonical inspection',
+);
+assert.match(normalComplete,/studio_rendition_attempt_complete_internal\(p_attempt,NULL::bigint\)/);
+assert.doesNotMatch(normalComplete,/'reconciling'/);
+assert.match(normalFail,/x\.state NOT IN \('requested','rendering','uploaded'\)/);
+assert.doesNotMatch(normalFail,/x\.state NOT IN \([^\n]*'reconciling'/);
+assert.match(recoveryAuthority,/x\.state <> 'reconciling'[\s\S]+x\.execution_fence <> p_fence[\s\S]+reconciliation_claimed_at IS NULL[\s\S]+studio_assert_actor[\s\S]+current_approved_version_id = version\.id/s);
+assert.match(recoveryRendered,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
+assert.match(recoveryComplete,/studio_rendition_attempt_complete_internal\(p_attempt,p_fence\)/);
+assert.doesNotMatch(recoveryComplete,/studio_rendition_attempt_complete\(p_attempt\)/);
+assert.match(recoveryFail,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
+assert.match(forward,/REVOKE ALL ON FUNCTION[\s\S]+studio_rendition_generation_lock\(uuid,uuid,uuid,text,text\)[\s\S]+studio_rendition_recovery_authority\(uuid,bigint\)[\s\S]+studio_rendition_attempt_complete_internal\(uuid,bigint\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
 console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);

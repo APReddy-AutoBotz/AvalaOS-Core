@@ -325,6 +325,37 @@ BEGIN
 END
 $legacy$;
 
+-- One transaction-scoped authority for the complete canonical generation
+-- tuple. Generation claims and both completion paths must take this exact
+-- lock before inspecting canonical or active work.
+CREATE OR REPLACE FUNCTION public.studio_rendition_generation_lock(
+  p_org uuid,
+  p_workspace uuid,
+  p_artifact_version uuid,
+  p_format text,
+  p_renderer_version text
+)
+RETURNS void
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+SELECT pg_advisory_xact_lock(
+  hashtextextended(
+    jsonb_build_array(
+      'studio-rendition-generation-v1',
+      p_org,
+      p_workspace,
+      p_artifact_version,
+      p_format,
+      p_renderer_version
+    )::text,
+    0
+  )
+)
+$$;
+
 CREATE OR REPLACE FUNCTION public.studio_private_artifact_command_claim(p_command jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -468,6 +499,9 @@ BEGIN
     THEN
       RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
     END IF;
+    PERFORM public.studio_rendition_generation_lock(
+      org, workspace, v.id, format_name, renderer
+    );
     -- Exact receipt replay has already returned above. A new command for a
     -- canonical version/format/renderer tombstone must stop before receipt,
     -- attempt, rendering, upload, or any provider effect.
@@ -479,6 +513,23 @@ BEGIN
         AND canonical.workspace_id = workspace
         AND canonical.format = format_name
         AND canonical.renderer_version = renderer
+    ) THEN
+      RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
+    END IF;
+    -- The partial unique index remains a backstop. Explicit detection while
+    -- holding the shared tuple lock prevents waiting on that index after a
+    -- concurrent completion removes the old attempt from its predicate.
+    IF EXISTS (
+      SELECT 1
+      FROM public.studio_rendition_attempts active_attempt
+      WHERE active_attempt.artifact_version_id = v.id
+        AND active_attempt.org_id = org
+        AND active_attempt.workspace_id = workspace
+        AND active_attempt.format = format_name
+        AND active_attempt.renderer_version = renderer
+        AND active_attempt.state IN (
+          'requested','rendering','uploaded','reconciliation_required','reconciling'
+        )
     ) THEN
       RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
     END IF;
@@ -1180,6 +1231,458 @@ BEGIN
 END
 $$;
 
+-- Effective rendition mutation contract. Normal workers may mutate only
+-- pre-recovery states. Recovery workers use a separate exact-fence authority.
+CREATE OR REPLACE FUNCTION public.studio_rendition_recovery_authority(
+  p_attempt uuid,
+  p_fence bigint
+)
+RETURNS public.studio_rendition_attempts
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  v public.studio_artifact_versions;
+BEGIN
+  SELECT * INTO x
+  FROM public.studio_rendition_attempts
+  WHERE id = p_attempt
+  FOR UPDATE;
+  IF x.id IS NULL
+     OR x.state <> 'reconciling'
+     OR x.execution_fence <> p_fence
+     OR x.reconciliation_claimed_at IS NULL
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
+  END IF;
+  PERFORM public.studio_assert_actor(
+    x.requested_by, x.org_id, x.workspace_id,
+    'studio.artifacts.rendition.generate', x.requester_authorization_version
+  );
+  SELECT version.* INTO v
+  FROM public.studio_artifact_versions version
+  JOIN public.studio_artifact_aggregates aggregate
+    ON aggregate.id = version.artifact_id
+   AND aggregate.org_id = version.org_id
+   AND aggregate.workspace_id = version.workspace_id
+  WHERE version.id = x.artifact_version_id
+    AND version.artifact_id = x.artifact_id
+    AND version.org_id = x.org_id
+    AND version.workspace_id = x.workspace_id
+    AND aggregate.current_approved_version_id = version.id
+    AND aggregate.lifecycle = 'approved'
+    AND version.lifecycle = 'approved'
+  FOR SHARE OF version, aggregate;
+  IF v.id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
+  END IF;
+  RETURN x;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_attempt_start(p_attempt uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  audit_id uuid := gen_random_uuid();
+BEGIN
+  SELECT * INTO x FROM public.studio_rendition_attempts WHERE id = p_attempt FOR UPDATE;
+  IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+  IF x.state = 'reconciling' THEN RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE'; END IF;
+  IF x.state <> 'requested' THEN RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT'; END IF;
+  PERFORM public.studio_assert_actor(
+    x.requested_by, x.org_id, x.workspace_id,
+    'studio.artifacts.rendition.generate', x.requester_authorization_version
+  );
+  UPDATE public.studio_rendition_attempts
+  SET state = 'rendering', started_at = now()
+  WHERE id = x.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.attempt.start','studio_rendition_attempt',x.id,
+    'succeeded',2,jsonb_build_object('attemptId',x.id,'format',x.format)
+  );
+  RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','rendering');
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_attempt_rendered(
+  p_attempt uuid,
+  p_object_key text,
+  p_hash text,
+  p_byte_length bigint,
+  p_mime text,
+  p_safe_filename text,
+  p_renderer_version text,
+  p_template_version text,
+  p_content_schema_version text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  expected_key text;
+  expected_mime text;
+  extension text;
+  audit_id uuid := gen_random_uuid();
+BEGIN
+  SELECT * INTO x FROM public.studio_rendition_attempts WHERE id = p_attempt FOR UPDATE;
+  IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+  IF x.state = 'reconciling' THEN RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE'; END IF;
+  IF x.state <> 'rendering' THEN RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT'; END IF;
+  PERFORM public.studio_assert_actor(
+    x.requested_by, x.org_id, x.workspace_id,
+    'studio.artifacts.rendition.generate', x.requester_authorization_version
+  );
+  extension := CASE x.format WHEN 'markdown' THEN 'md' ELSE x.format END;
+  expected_mime := CASE x.format
+    WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+    WHEN 'pdf' THEN 'application/pdf'
+    ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  END;
+  expected_key := format(
+    '%s/%s/studio-artifacts/%s.%s',
+    x.org_id,x.workspace_id,x.opaque_object_id,extension
+  );
+  IF p_object_key IS DISTINCT FROM expected_key
+     OR p_hash !~ '^[0-9a-f]{64}$'
+     OR p_byte_length <= 0
+     OR p_mime IS DISTINCT FROM expected_mime
+     OR p_renderer_version IS DISTINCT FROM x.renderer_version
+     OR p_template_version IS DISTINCT FROM x.template_version
+     OR p_content_schema_version IS DISTINCT FROM x.content_schema_version
+     OR p_safe_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+     OR lower(right(p_safe_filename,length(extension)+1)) <> '.' || extension
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_RENDITION_METADATA';
+  END IF;
+  UPDATE public.studio_rendition_attempts
+  SET state = 'uploaded', storage_provider = 'supabase',
+      bucket_id = 'studio-private-artifacts', object_key = p_object_key,
+      content_hash = p_hash, byte_length = p_byte_length, mime_type = p_mime,
+      safe_filename = p_safe_filename, rendered_at = now()
+  WHERE id = x.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.attempt.rendered','studio_rendition_attempt',x.id,
+    'succeeded',3,jsonb_build_object(
+      'attemptId',x.id,'format',x.format,'contentHash',p_hash,
+      'byteLength',p_byte_length,'mimeType',p_mime,
+      'rendererVersion',p_renderer_version,'templateVersion',p_template_version,
+      'contentSchemaVersion',p_content_schema_version
+    )
+  );
+  RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','uploaded');
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_attempt_complete_internal(
+  p_attempt uuid,
+  p_recovery_fence bigint
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  r public.studio_renditions;
+  p public.studio_retention_policies;
+  audit_id uuid := gen_random_uuid();
+BEGIN
+  IF p_recovery_fence IS NULL THEN
+    SELECT * INTO x FROM public.studio_rendition_attempts WHERE id = p_attempt FOR UPDATE;
+    IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+    IF x.state = 'reconciling' THEN RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE'; END IF;
+    PERFORM public.studio_assert_actor(
+      x.requested_by, x.org_id, x.workspace_id,
+      'studio.artifacts.rendition.generate', x.requester_authorization_version
+    );
+  ELSE
+    SELECT authority.* INTO x
+    FROM public.studio_rendition_recovery_authority(p_attempt,p_recovery_fence) authority;
+  END IF;
+
+  PERFORM public.studio_rendition_generation_lock(
+    x.org_id, x.workspace_id, x.artifact_version_id, x.format, x.renderer_version
+  );
+
+  SELECT * INTO r FROM public.studio_renditions WHERE attempt_id = x.id;
+  IF x.state = 'available' AND r.id IS NOT NULL AND p_recovery_fence IS NULL THEN
+    RETURN jsonb_build_object('outcome','replayed','renditionId',r.id,'state','available');
+  END IF;
+  IF (p_recovery_fence IS NULL AND x.state <> 'uploaded')
+     OR (p_recovery_fence IS NOT NULL AND x.state <> 'reconciling')
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.studio_renditions canonical
+    WHERE canonical.artifact_version_id = x.artifact_version_id
+      AND canonical.org_id = x.org_id
+      AND canonical.workspace_id = x.workspace_id
+      AND canonical.format = x.format
+      AND canonical.renderer_version = x.renderer_version
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
+  END IF;
+  SELECT * INTO p
+  FROM public.studio_retention_policies
+  WHERE (
+    system_default
+    OR (org_id = x.org_id AND workspace_id = x.workspace_id AND artifact_type = x.artifact_type)
+  )
+    AND effective_at <= now()
+  ORDER BY system_default ASC, effective_at DESC, policy_version DESC
+  LIMIT 1
+  FOR SHARE;
+  IF p.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RETENTION_POLICY_UNAVAILABLE'; END IF;
+  INSERT INTO public.studio_renditions(
+    id,attempt_id,org_id,workspace_id,artifact_id,artifact_version_id,
+    artifact_version,artifact_type,format,mime_type,safe_filename,
+    storage_provider,bucket_id,object_key,byte_length,content_hash,
+    renderer_version,template_version,content_schema_version,
+    retention_policy_id,retention_policy_version,retention_indefinite,
+    retention_until,lifecycle
+  ) VALUES (
+    x.rendition_id,x.id,x.org_id,x.workspace_id,x.artifact_id,x.artifact_version_id,
+    x.artifact_version,x.artifact_type,x.format,x.mime_type,x.safe_filename,
+    x.storage_provider,x.bucket_id,x.object_key,x.byte_length,x.content_hash,
+    x.renderer_version,x.template_version,x.content_schema_version,
+    p.id,p.policy_version,p.indefinite,
+    CASE WHEN p.indefinite THEN NULL ELSE now()+make_interval(days=>p.retention_days) END,
+    'available'
+  ) RETURNING * INTO r;
+  UPDATE public.studio_rendition_attempts
+  SET state = 'available', failure_code = NULL,
+      reconciliation_claimed_at = NULL, completed_at = now()
+  WHERE id = x.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.attempt.complete','studio_rendition',r.id,
+    'succeeded',1,jsonb_build_object(
+      'attemptId',x.id,'artifactVersionId',x.artifact_version_id,
+      'format',x.format,'contentHash',x.content_hash,'byteLength',x.byte_length,
+      'retentionPolicyId',p.id,'retentionPolicyVersion',p.policy_version
+    )
+  );
+  RETURN jsonb_build_object('outcome','committed','renditionId',r.id,'state','available');
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_attempt_complete(p_attempt uuid)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+SELECT public.studio_rendition_attempt_complete_internal(p_attempt,NULL::bigint)
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_attempt_fail(
+  p_attempt uuid,
+  p_failure text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  audit_id uuid := gen_random_uuid();
+  target_state text;
+  next_count integer;
+BEGIN
+  SELECT * INTO x FROM public.studio_rendition_attempts WHERE id = p_attempt FOR UPDATE;
+  IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+  IF x.state = 'reconciling' THEN RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE'; END IF;
+  PERFORM public.studio_assert_actor(
+    x.requested_by, x.org_id, x.workspace_id,
+    'studio.artifacts.rendition.generate', x.requester_authorization_version
+  );
+  IF p_failure !~ '^[A-Z0-9_]{1,64}$' THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_FAILURE';
+  END IF;
+  target_state := CASE
+    WHEN p_failure IN ('UPLOAD_OUTCOME_UNKNOWN','AVAILABLE_COMPLETION_FAILED')
+      THEN 'reconciliation_required'
+    ELSE 'failed'
+  END;
+  next_count := CASE
+    WHEN target_state = 'reconciliation_required' THEN x.reconciliation_count + 1
+    ELSE x.reconciliation_count
+  END;
+  IF x.state = target_state THEN
+    IF x.failure_code IS DISTINCT FROM p_failure THEN
+      RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('outcome','replayed','attemptId',x.id,'state',x.state);
+  END IF;
+  IF x.state NOT IN ('requested','rendering','uploaded') OR next_count > 3 THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_FAILURE';
+  END IF;
+  UPDATE public.studio_rendition_attempts
+  SET state = target_state, failure_code = p_failure,
+      reconciliation_count = next_count, reconciliation_claimed_at = NULL,
+      completed_at = CASE WHEN target_state = 'failed' THEN now() ELSE NULL END
+  WHERE id = x.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.attempt.fail','studio_rendition_attempt',x.id,
+    CASE WHEN target_state = 'failed' THEN 'failed' ELSE 'succeeded' END,
+    4,jsonb_build_object(
+      'attemptId',x.id,'failureCode',p_failure,'state',target_state,
+      'reconciliationCount',next_count
+    )
+  );
+  RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state',target_state);
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_reconciliation_rendered(
+  p_attempt uuid,
+  p_fence bigint,
+  p_object_key text,
+  p_hash text,
+  p_byte_length bigint,
+  p_mime text,
+  p_safe_filename text,
+  p_renderer_version text,
+  p_template_version text,
+  p_content_schema_version text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  extension text;
+  expected_key text;
+  expected_mime text;
+BEGIN
+  SELECT authority.* INTO x
+  FROM public.studio_rendition_recovery_authority(p_attempt,p_fence) authority;
+  extension := CASE x.format WHEN 'markdown' THEN 'md' ELSE x.format END;
+  expected_key := format(
+    '%s/%s/studio-artifacts/%s.%s',
+    x.org_id,x.workspace_id,x.opaque_object_id,extension
+  );
+  expected_mime := CASE x.format
+    WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+    WHEN 'pdf' THEN 'application/pdf'
+    ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  END;
+  IF p_object_key IS DISTINCT FROM expected_key
+     OR p_hash !~ '^[0-9a-f]{64}$'
+     OR p_byte_length <= 0
+     OR p_mime IS DISTINCT FROM expected_mime
+     OR p_safe_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+     OR p_renderer_version IS DISTINCT FROM x.renderer_version
+     OR p_template_version IS DISTINCT FROM x.template_version
+     OR p_content_schema_version IS DISTINCT FROM x.content_schema_version
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_RENDITION_METADATA';
+  END IF;
+  UPDATE public.studio_rendition_attempts
+  SET storage_provider = 'supabase', bucket_id = 'studio-private-artifacts',
+      object_key = p_object_key, content_hash = p_hash, byte_length = p_byte_length,
+      mime_type = p_mime, safe_filename = p_safe_filename, rendered_at = now()
+  WHERE id = x.id;
+  RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','reconciling');
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_reconciliation_complete(
+  p_attempt uuid,
+  p_fence bigint
+)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+SELECT public.studio_rendition_attempt_complete_internal(p_attempt,p_fence)
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_rendition_reconciliation_fail(
+  p_attempt uuid,
+  p_fence bigint,
+  p_failure text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  x public.studio_rendition_attempts;
+  audit_id uuid := gen_random_uuid();
+  target_state text;
+  next_count integer;
+BEGIN
+  SELECT authority.* INTO x
+  FROM public.studio_rendition_recovery_authority(p_attempt,p_fence) authority;
+  IF p_failure !~ '^[A-Z0-9_]{1,64}$' THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_FAILURE';
+  END IF;
+  target_state := CASE
+    WHEN p_failure IN ('UPLOAD_OUTCOME_UNKNOWN','AVAILABLE_COMPLETION_FAILED')
+      THEN 'reconciliation_required'
+    ELSE 'failed'
+  END;
+  next_count := CASE
+    WHEN target_state = 'reconciliation_required'
+      THEN LEAST(x.reconciliation_count + 1, 3)
+    ELSE x.reconciliation_count
+  END;
+  UPDATE public.studio_rendition_attempts
+  SET state = target_state, failure_code = p_failure,
+      reconciliation_count = next_count, reconciliation_claimed_at = NULL,
+      completed_at = CASE WHEN target_state = 'failed' THEN now() ELSE NULL END,
+      state_changed_at = now()
+  WHERE id = x.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.reconciliation.fail','studio_rendition_attempt',x.id,
+    CASE WHEN target_state = 'failed' THEN 'failed' ELSE 'succeeded' END,
+    6,jsonb_build_object(
+      'attemptId',x.id,'failureCode',p_failure,'state',target_state,
+      'reconciliationCount',next_count,'fence',p_fence
+    )
+  );
+  RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state',target_state);
+END
+$$;
+
 REVOKE ALL ON FUNCTION public.studio_private_artifact_command_claim_pr217_accepted(jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.studio_rendition_deletion_complete(uuid),
@@ -1187,6 +1690,9 @@ REVOKE ALL ON FUNCTION public.studio_rendition_deletion_complete(uuid),
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.studio_private_state_timestamp(),
   public.studio_deletion_attempt_guard(),
+  public.studio_rendition_generation_lock(uuid,uuid,uuid,text,text),
+  public.studio_rendition_recovery_authority(uuid,bigint),
+  public.studio_rendition_attempt_complete_internal(uuid,bigint),
   public.studio_private_artifact_reconciliation_due(integer),
   public.studio_rendition_reconciliation_rendered(uuid,bigint,text,text,bigint,text,text,text,text,text),
   public.studio_rendition_reconciliation_complete(uuid,bigint),
