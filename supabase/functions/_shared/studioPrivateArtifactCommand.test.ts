@@ -252,7 +252,7 @@ for (const invalid of [
   assert(rejects(invalid), 'adversarial command rejected');
 }
 
-const request = (body = base) =>
+const request = (body: unknown = base) =>
   new Request('https://local/studio-private-artifact-command', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -367,7 +367,14 @@ void (async () => {
       resource: { bucket: 'private' },
     }),
   });
-  assert(leak.status === 503, 'private storage coordinates fail closed');
+  const leakBody = await leak.json() as Record<string, unknown>;
+  assert(
+    leak.status === 202 &&
+      leakBody.outcome === 'committed_reconciliation_pending' &&
+      leakBody.receiptId === ids[4] &&
+      !JSON.stringify(leakBody).includes('bucket'),
+    'post-commit private storage coordinates fail closed with the original receipt',
+  );
   const missingClaim = await handleStudioPrivateArtifactCommand(request(), {
     ...dependencies,
     executeAtomicCommand: async () => {
@@ -375,12 +382,126 @@ void (async () => {
       return withoutClaim;
     },
   });
+  const missingClaimBody = await missingClaim.json() as Record<string, unknown>;
   assert(
-    missingClaim.status === 503,
-    'external-effect command cannot report committed without executable claim',
+    missingClaim.status === 202 &&
+      missingClaimBody.outcome === 'committed_reconciliation_pending' &&
+      missingClaimBody.receiptId === ids[4],
+    'missing executable claim remains committed and reconciliation pending',
+  );
+  for (const label of [
+    'missing Storage configuration',
+    'provider adapter construction failure',
+    'RPC failure after command claim',
+  ]) {
+    const pending = await handleStudioPrivateArtifactCommand(request(), {
+      ...dependencies,
+      executeClaimedRendition: async () => {
+        throw new Error(label);
+      },
+    });
+    const body = await pending.json() as Record<string, unknown>;
+    assert(
+      pending.status === 202 &&
+        body.ok === false &&
+        body.outcome === 'committed_reconciliation_pending' &&
+        body.receiptId === ids[4] &&
+        body.resourceId === ids[3] &&
+        !('renditionClaim' in body) &&
+        !('deletionClaim' in body) &&
+        !JSON.stringify(body).includes('objectKey') &&
+        !JSON.stringify(body).includes('failed_before_commit'),
+      `${label} preserves truthful receipt-only pending response`,
+    );
+  }
+  let transportClaims = 0;
+  const recoveredTransport = await handleStudioPrivateArtifactCommand(request(), {
+    ...dependencies,
+    executeAtomicCommand: async () => {
+      transportClaims += 1;
+      if (transportClaims === 1) throw new Error('response lost after commit');
+      const { renditionClaim: _claim, ...safeReplay } = committed;
+      return { ...safeReplay, outcome: 'replayed' as const };
+    },
+  });
+  const recoveredTransportBody =
+    await recoveredTransport.json() as Record<string, unknown>;
+  assert(
+    transportClaims === 2 &&
+      recoveredTransport.status === 202 &&
+      recoveredTransportBody.receiptId === ids[4] &&
+      recoveredTransportBody.outcome === 'committed_reconciliation_pending',
+    'lost command response recovers the original committed receipt by exact replay',
+  );
+  const deletionBody = {
+    ...base,
+    commandType: 'studio.rendition.deletion.resolve',
+    expectedRenditionVersion: 3,
+    payload: {
+      renditionId: ids[3],
+      deletionRequestId: ids[4],
+      outcome: 'approve',
+      reason: 'Independent approval',
+    },
+  };
+  const deletionPending = await handleStudioPrivateArtifactCommand(
+    request(deletionBody),
+    {
+      ...dependencies,
+      loadFreshAuthority: async () => ({
+        actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
+        authorizationVersion: 9,
+        capabilities: ['studio.artifacts.delete.approve'],
+      }),
+      executeAtomicCommand: async () => ({
+        outcome: 'committed',
+        receiptId: ids[4],
+        resourceId: ids[3],
+        resource: { state: 'deleting' },
+        deletionClaim: {
+          disposition: 'execute',
+          requestId: ids[0],
+          deletionAttemptId: ids[4],
+          renditionId: ids[3],
+          organizationId: ids[1],
+          workspaceId: ids[2],
+          reconciliationCount: 0,
+        },
+      }),
+      executeClaimedDeletion: async () => {
+        throw new Error('deletion execution guard rejected after resolution commit');
+      },
+    },
+  );
+  const deletionPendingBody =
+    await deletionPending.json() as Record<string, unknown>;
+  assert(
+    deletionPending.status === 202 &&
+      deletionPendingBody.receiptId === ids[4] &&
+      deletionPendingBody.outcome === 'committed_reconciliation_pending' &&
+      !('deletionClaim' in deletionPendingBody),
+    'deletion guard rejection after resolution commit is receipt-preserving pending work',
+  );
+  let preCommitCalls = 0;
+  const beforeCommit = await handleStudioPrivateArtifactCommand(request(), {
+    ...dependencies,
+    executeAtomicCommand: async () => {
+      preCommitCalls += 1;
+      throw new Error('no authoritative commit');
+    },
+  });
+  const beforeCommitBody = await beforeCommit.json() as Record<string, unknown>;
+  assert(
+    preCommitCalls === 2 &&
+      beforeCommit.status === 503 &&
+      beforeCommitBody.outcome === 'failed_before_commit' &&
+      !('receiptId' in beforeCommitBody),
+    'failure before any authoritative commit remains failed_before_commit',
   );
   console.log(
-    'studio private artifact command: 45 schema, authority, replay, side-effect, and non-disclosure scenarios passed',
+    'studio private artifact command: 54 schema, authority, phase, replay, side-effect, and non-disclosure scenarios passed',
   );
 })().catch(error => {
   console.error(error);

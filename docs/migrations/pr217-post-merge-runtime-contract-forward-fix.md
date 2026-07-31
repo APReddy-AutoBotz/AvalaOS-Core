@@ -6,7 +6,7 @@ Status: additive corrective candidate. PR #217 closure remains blocked. No hoste
 
 Apply `20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql` only after the accepted `20260729163251_studio_private_artifact_authority.sql`. The accepted migration must retain Git blob `3383268eab95d1b2f12f4bb8a77246e63c3e30a3`.
 
-The forward migration fails atomically when required PR #217 relations or functions are absent, when lifecycle rows contain incompatible values, or when pre-existing forward-fix columns have incompatible types. It then adds execution timestamps/fences, replaces effective projection and command functions, extends lifecycle guards, and adds service-only discovery, claim, guard, completion, and failure RPCs. Reapplication is idempotent in the disposable upgrade harness.
+The forward migration fails atomically when required PR #217 relations or functions are absent, when lifecycle rows contain incompatible values, or when pre-existing forward-fix columns have incompatible types. It then adds execution timestamps/fences, replaces effective projection and command functions, extends lifecycle guards, and adds service-only discovery, claim, guard, completion, and failure RPCs. It replaces the accepted unconditional deletion-request uniqueness index with a history index plus a lock-protected unresolved-request check, allowing append-only `deletion_failed` recovery without rewriting accepted history. Reapplication is idempotent in the disposable upgrade harness.
 
 ## Access control
 
@@ -26,7 +26,8 @@ Before any separately approved environment change:
 5. prove dirty-upgrade rejection leaves no partial columns, constraints, indexes, or function changes;
 6. run the retained PR #217 scenarios, the forward-fix projection/command/recovery matrix, and two-connection hold/deletion races;
 7. decode raw SQL projection output through the production TypeScript decoder;
-8. verify all new internal RPCs remain service-only.
+8. prove both retention/deletion lock orderings, terminal tombstone rejection before receipt/attempt, and governed `deletion_failed` retry with historical rows preserved;
+9. verify all new internal RPCs remain service-only.
 
 These checks are source acceptance inputs, not evidence that a hosted database was migrated.
 

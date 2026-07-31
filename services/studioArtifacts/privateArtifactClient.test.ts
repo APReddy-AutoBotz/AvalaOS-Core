@@ -195,7 +195,33 @@ assert.equal(
   }).code,
   'COMMAND_UNAVAILABLE',
 );
+assert.equal(
+  decodeStudioPrivateArtifactSafeError({
+    code: 'STUDIO_DELETION_BLOCKED',
+    details: 'private deletion lease',
+  }).code,
+  'STUDIO_DELETION_BLOCKED',
+);
 assert.deepEqual(decodeStudioPrivateArtifactCommandResponse(response), response);
+const pendingResponse = {
+  ok: false,
+  outcome: 'committed_reconciliation_pending',
+  receiptId: U[4],
+  resourceId: U[3],
+  resource: { state: 'reconciliation_required' },
+} as const;
+assert.deepEqual(
+  decodeStudioPrivateArtifactCommandResponse(pendingResponse),
+  pendingResponse,
+);
+assert.throws(
+  () =>
+    decodeStudioPrivateArtifactCommandResponse({
+      ...pendingResponse,
+      receiptId: undefined,
+    }),
+  StudioPrivateArtifactBoundaryError,
+);
 assert.throws(
   () => decodeStudioPrivateArtifactCommandResponse({ ...response, executableClaim: {} }),
   StudioPrivateArtifactBoundaryError,
@@ -324,7 +350,7 @@ void (async () => {
     StudioPrivateArtifactBoundaryError,
   );
   console.log(
-    'studio private artifact client: 27 strict DTO, command, download, and non-disclosure assertions passed',
+    'studio private artifact client: 30 strict DTO, pending, command, download, and non-disclosure assertions passed',
   );
 })().catch(error => {
   console.error(error);

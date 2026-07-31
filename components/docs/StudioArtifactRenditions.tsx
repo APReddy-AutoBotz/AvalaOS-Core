@@ -109,6 +109,12 @@ const stateForError = (error: unknown): { state: PanelState; message: string } =
         message: 'Deletion is blocked by committed retention or legal-hold authority.',
       };
     }
+    if (error.code === 'STUDIO_DELETION_BLOCKED') {
+      return {
+        state: 'command_failed',
+        message: 'The lifecycle change is blocked because deletion authority has already advanced.',
+      };
+    }
   }
   return {
     state: 'command_failed',
@@ -244,7 +250,9 @@ export default function StudioArtifactRenditions({
         const failed =
           result.outcome === 'rendition_failed' || result.outcome === 'deletion_failed';
         setMessage(
-          failed
+          result.outcome === 'committed_reconciliation_pending'
+            ? `Command committed (receipt ${result.receiptId}), but the external effect is unconfirmed. Recovery is pending; committed state was reloaded.`
+            : failed
             ? 'The committed operation failed. No success state was recorded.'
             : `Committed state reloaded (receipt ${result.receiptId}).`,
         );
@@ -325,6 +333,14 @@ export default function StudioArtifactRenditions({
           const pendingDeletion =
             rendition?.deletion?.state === 'pending' ||
             rendition?.state === 'deletion_requested';
+          const retentionBlocked =
+            rendition &&
+            [
+              'deleting',
+              'deletion_reconciliation_required',
+              'deletion_reconciling',
+              'deleted',
+            ].includes(rendition.state);
           return (
             <article
               key={format}
@@ -396,7 +412,7 @@ export default function StudioArtifactRenditions({
                   type="button"
                   disabled={
                     !can('studio.rendition.generate') ||
-                    Boolean(rendition && !['failed', 'deleted'].includes(rendition.state)) ||
+                    Boolean(rendition && rendition.state !== 'failed') ||
                     Boolean(generating)
                   }
                   onClick={() =>
@@ -410,6 +426,11 @@ export default function StudioArtifactRenditions({
                 >
                   {rendition?.state === 'failed' ? `Retry ${formatLabel[format]}` : `Generate ${formatLabel[format]}`}
                 </button>
+                {rendition?.state === 'deleted' && (
+                  <p className="w-full rounded-lg bg-slate-100 p-2 text-sm">
+                    This rendition is an immutable deleted tombstone. Generate from a new approved artifact version.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={
@@ -437,7 +458,9 @@ export default function StudioArtifactRenditions({
                     {rendition.legalHoldActive ? 'Place another legal hold' : 'Place legal hold'}
                   </button>
                 )}
-                {rendition && rendition.state === 'available' && (
+                {rendition &&
+                  ['available', 'deletion_failed'].includes(rendition.state) &&
+                  !pendingDeletion && (
                   <button
                     type="button"
                     disabled={
@@ -453,7 +476,9 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    Request deletion
+                    {rendition.state === 'deletion_failed'
+                      ? 'Request deletion again'
+                      : 'Request deletion'}
                   </button>
                 )}
                 {rendition && pendingDeletion && rendition.deletion && (
@@ -499,7 +524,7 @@ export default function StudioArtifactRenditions({
                   </>
                 )}
               </div>
-              {rendition && (
+              {rendition && !retentionBlocked && (
                 <div className="mt-3">
                   <label className="text-sm font-bold">
                     Extend retention until

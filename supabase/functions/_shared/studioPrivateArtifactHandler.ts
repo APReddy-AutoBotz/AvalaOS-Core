@@ -87,10 +87,27 @@ const publicResult = (
   resource: assertPublicResource(resource),
 });
 
+const committedPending = (
+  result: StudioPrivateArtifactAtomicResult,
+  resource: StudioPrivateArtifactJson,
+) =>
+  Response.json(
+    {
+      ok: false,
+      outcome: 'committed_reconciliation_pending',
+      receiptId: result.receiptId,
+      resourceId: result.resourceId,
+      resource,
+    },
+    { status: 202 },
+  );
+
 export const handleStudioPrivateArtifactCommand = async (
   request: Request,
   deps: StudioPrivateArtifactCommandDependencies,
 ): Promise<Response> => {
+  let committed: StudioPrivateArtifactAtomicResult | null = null;
+  let committedPublicResource: StudioPrivateArtifactJson | null = null;
   try {
     if (request.method !== 'POST') {
       throw new StudioPrivateArtifactError('METHOD_NOT_ALLOWED');
@@ -137,12 +154,25 @@ export const handleStudioPrivateArtifactCommand = async (
       throw new StudioPrivateArtifactError('PERMISSION_DENIED');
     }
 
-    const result = await deps.executeAtomicCommand(
-      toStudioPrivateArtifactSqlCommand(envelope, actor.id),
-    );
+    const atomicCommand = toStudioPrivateArtifactSqlCommand(envelope, actor.id);
+    let recoveredAfterTransportFailure = false;
+    let result: StudioPrivateArtifactAtomicResult;
+    try {
+      result = await deps.executeAtomicCommand(atomicCommand);
+    } catch {
+      // The command RPC is idempotent. One exact retry distinguishes a response
+      // lost after commit from a request that never committed, without repeating
+      // rendering, upload, or physical deletion.
+      result = await deps.executeAtomicCommand(atomicCommand);
+      recoveredAfterTransportFailure = true;
+    }
+    committed = result;
     // Fail closed before any external effect if the private command boundary leaks
     // storage coordinates into its public resource projection.
-    assertPublicResource(result.resource);
+    committedPublicResource = assertPublicResource(result.resource);
+    if (recoveredAfterTransportFailure && result.outcome === 'replayed') {
+      return committedPending(result, committedPublicResource);
+    }
     // An exact replay returns committed state only and can never repeat render,
     // upload, or physical deletion.
     if (result.outcome === 'replayed') {
@@ -210,6 +240,12 @@ export const handleStudioPrivateArtifactCommand = async (
       { status: 201 },
     );
   } catch (error) {
+    if (committed) {
+      return committedPending(
+        committed,
+        committedPublicResource ?? { state: 'reconciliation_required' },
+      );
+    }
     const safe = asStudioPrivateArtifactError(error);
     return Response.json(studioPrivateArtifactErrorBody(safe), { status: safe.status });
   }

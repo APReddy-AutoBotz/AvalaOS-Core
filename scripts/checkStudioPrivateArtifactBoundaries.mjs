@@ -128,8 +128,8 @@ assert(
   'fresh command authority must precede receipt/resource inspection',
 );
 assert(
-  handler.indexOf("result.outcome === 'replayed'", handler.indexOf('const result')) <
-    handler.indexOf('const external = await deps.executeClaimedRendition', handler.indexOf('const result')),
+  handler.indexOf("result.outcome === 'replayed'") <
+    handler.indexOf('const external = await deps.executeClaimedRendition'),
   'exact command replay must precede every external effect',
 );
 assert(
@@ -140,6 +140,17 @@ assert(
   handler.includes('toStudioPrivateArtifactSqlCommand(envelope, actor.id)') &&
     !handler.includes('{ ...envelope, actorId: actor.id }'),
   'public payload must pass through the exact public-to-SQL translator',
+);
+for (const token of [
+  "'committed_reconciliation_pending'",
+  'receiptId: result.receiptId',
+  'resourceId: result.resourceId',
+  'recoveredAfterTransportFailure',
+  'committedPublicResource',
+]) assert(handler.includes(token), `truthful post-commit boundary missing: ${token}`);
+assert(
+  handler.indexOf('if (committed)') < handler.indexOf('studioPrivateArtifactErrorBody(safe)'),
+  'post-commit exceptions must not map to failed_before_commit',
 );
 for (const token of [
   'parseStudioPrivateArtifactSqlCommand',
@@ -231,6 +242,17 @@ assert(
   ui.includes("rendition.state !== 'available'") &&
     ui.includes("panelState === 'committed_reload_failed'"),
   'UI must gate downloads and mutations on committed state',
+);
+for (const token of [
+  "'deletion_reconciliation_required'",
+  "'deletion_reconciling'",
+  "'Request deletion again'",
+  'immutable deleted tombstone',
+  'new approved artifact version',
+]) assert(ui.includes(token), `UI lifecycle guard missing: ${token}`);
+assert(
+  !ui.includes("!['failed', 'deleted'].includes(rendition.state)"),
+  'deleted tombstones must never expose generation',
 );
 
 const migrationPath =

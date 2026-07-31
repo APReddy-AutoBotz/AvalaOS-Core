@@ -25,6 +25,14 @@ BEGIN
 END
 $preflight$;
 
+-- Historical deletion requests are immutable evidence. The accepted migration's
+-- unconditional rendition uniqueness prevented a governed retry after a failed
+-- deletion, so the effective command function now serializes the one-unresolved
+-- request invariant under the rendition row/advisory lock instead.
+DROP INDEX IF EXISTS public.studio_one_unresolved_deletion_request;
+CREATE INDEX IF NOT EXISTS studio_deletion_requests_rendition_history
+  ON public.studio_rendition_deletion_requests(rendition_id, created_at, id);
+
 ALTER TABLE public.studio_rendition_attempts
   ADD COLUMN IF NOT EXISTS state_changed_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS execution_fence bigint NOT NULL DEFAULT 0 CHECK (execution_fence >= 0);
@@ -337,6 +345,8 @@ DECLARE
   artifact_version_id uuid;
   rendition_id uuid;
   command_hold_id uuid;
+  format_name text;
+  renderer text;
   v public.studio_artifact_versions;
   r public.studio_renditions;
   result jsonb;
@@ -424,6 +434,16 @@ BEGIN
   ELSIF command_type = 'studio.rendition.generate' THEN
     BEGIN
       artifact_version_id := (p_command #>> '{payload,artifactVersionId}')::uuid;
+      format_name := p_command #>> '{payload,format}';
+      renderer := CASE format_name
+        WHEN 'markdown' THEN 'studio-markdown-1'
+        WHEN 'pdf' THEN 'studio-pdf-1'
+        WHEN 'docx' THEN 'studio-docx-1'
+        ELSE NULL
+      END;
+      IF renderer IS NULL THEN
+        RAISE EXCEPTION USING MESSAGE = 'INVALID_COMMAND';
+      END IF;
       SELECT version.* INTO v
       FROM public.studio_artifact_versions version
       JOIN public.studio_artifact_aggregates aggregate
@@ -447,6 +467,20 @@ BEGIN
     THEN
       RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
     END IF;
+    -- Exact receipt replay has already returned above. A new command for a
+    -- canonical version/format/renderer tombstone must stop before receipt,
+    -- attempt, rendering, upload, or any provider effect.
+    IF EXISTS (
+      SELECT 1
+      FROM public.studio_renditions canonical
+      WHERE canonical.artifact_version_id = v.id
+        AND canonical.org_id = org
+        AND canonical.workspace_id = workspace
+        AND canonical.format = format_name
+        AND canonical.renderer_version = renderer
+    ) THEN
+      RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
+    END IF;
   ELSE
     BEGIN
       rendition_id := (p_command #>> '{payload,renditionId}')::uuid;
@@ -467,6 +501,35 @@ BEGIN
     END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended(r.id::text, 0));
 
+    IF command_type = 'studio.rendition.retention.extend'
+       AND (
+         r.lifecycle NOT IN ('available','deletion_requested','deletion_failed')
+         OR EXISTS (
+           SELECT 1
+           FROM public.studio_rendition_deletion_attempts active_attempt
+           WHERE active_attempt.rendition_id = r.id
+             AND active_attempt.state IN (
+               'requested','executing','reconciliation_required','reconciling'
+             )
+         )
+       )
+    THEN
+      RAISE EXCEPTION USING MESSAGE = 'STUDIO_DELETION_BLOCKED';
+    END IF;
+    IF command_type = 'studio.rendition.deletion.request'
+       AND EXISTS (
+         SELECT 1
+         FROM public.studio_rendition_deletion_requests unresolved
+         WHERE unresolved.rendition_id = r.id
+           AND NOT EXISTS (
+             SELECT 1
+             FROM public.studio_rendition_deletion_resolutions resolution
+             WHERE resolution.request_id = unresolved.id
+           )
+       )
+    THEN
+      RAISE EXCEPTION USING MESSAGE = 'VERSION_CONFLICT';
+    END IF;
     IF command_type = 'studio.legal_hold.place' AND r.lifecycle IN ('deleting','deleted') THEN
       RAISE EXCEPTION USING MESSAGE = 'STUDIO_DELETION_BLOCKED';
     END IF;

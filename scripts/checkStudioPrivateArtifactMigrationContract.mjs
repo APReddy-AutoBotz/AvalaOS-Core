@@ -60,4 +60,16 @@ assert.match(forward,/CREATE OR REPLACE FUNCTION public\.studio_private_artifact
 assert.match(forward,/REVOKE ALL ON FUNCTION public\.studio_rendition_deletion_complete\(uuid\),\s*public\.studio_rendition_deletion_fail\(uuid,text\)\s*FROM PUBLIC, anon, authenticated, service_role/s);
 assert.match(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO service_role/);
 assert.doesNotMatch(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_artifact_reconciliation_due\(integer\)[\s\S]+TO (?:anon|authenticated)/);
+assert.match(forward,/DROP INDEX IF EXISTS public\.studio_one_unresolved_deletion_request/);
+assert.match(forward,/studio_deletion_requests_rendition_history/);
+assert.match(forward,/r\.lifecycle NOT IN \('available','deletion_requested','deletion_failed'\)/);
+assert.match(forward,/active_attempt\.state IN \(\s*'requested','executing','reconciliation_required','reconciling'/s);
+assert.match(forward,/command_type = 'studio\.rendition\.retention\.extend'[\s\S]+STUDIO_DELETION_BLOCKED/);
+assert.match(forward,/command_type = 'studio\.rendition\.deletion\.request'[\s\S]+NOT EXISTS \(\s*SELECT 1[\s\S]+studio_rendition_deletion_resolutions/s);
+assert.match(forward,/canonical\.artifact_version_id = v\.id[\s\S]+canonical\.format = format_name[\s\S]+canonical\.renderer_version = renderer/s);
+assert.ok(
+  forward.indexOf('prior_receipt.id IS NOT NULL') <
+    forward.indexOf('canonical.artifact_version_id = v.id'),
+  'exact generation replay must precede canonical tombstone rejection',
+);
 console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);

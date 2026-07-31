@@ -40,6 +40,13 @@ for (const token of [
   'activeHolds',
   'holdId: hold.holdId',
   'Place another legal hold',
+  'committed_reconciliation_pending',
+  'external effect is unconfirmed',
+  'Request deletion again',
+  'immutable deleted tombstone',
+  'new approved artifact version',
+  "'deletion_reconciliation_required'",
+  "'deletion_reconciling'",
 ]) {
   assert.ok(source.includes(token), `private rendition UI contract missing: ${token}`);
 }
@@ -59,10 +66,11 @@ assert.ok(
   'download must require committed available state',
 );
 assert.ok(
-  source.includes("result.outcome === 'rendition_failed'") &&
+  source.includes("result.outcome === 'committed_reconciliation_pending'") &&
+    source.includes("result.outcome === 'rendition_failed'") &&
     source.includes("result.outcome === 'deletion_failed'"),
   'external-side-effect failure must remain truthful',
 );
 console.log(
-  'studio artifact renditions UI: 37 state, capability, broker, and false-success assertions passed',
+  'studio artifact renditions UI: 44 state, capability, recovery, broker, and false-success assertions passed',
 );

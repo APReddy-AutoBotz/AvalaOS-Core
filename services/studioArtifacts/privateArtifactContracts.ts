@@ -159,15 +159,31 @@ export type StudioPrivateArtifactCommandOutcome =
   | 'rendition_available'
   | 'rendition_failed'
   | 'deletion_completed'
-  | 'deletion_failed';
+  | 'deletion_failed'
+  | 'committed_reconciliation_pending';
 
-export interface StudioPrivateArtifactCommandResponse {
+export interface StudioPrivateArtifactCompletedCommandResponse {
   ok: true;
-  outcome: StudioPrivateArtifactCommandOutcome;
+  outcome: Exclude<
+    StudioPrivateArtifactCommandOutcome,
+    'committed_reconciliation_pending'
+  >;
   receiptId: string;
   resourceId: string;
   resource: Record<string, unknown>;
 }
+
+export interface StudioPrivateArtifactPendingCommandResponse {
+  ok: false;
+  outcome: 'committed_reconciliation_pending';
+  receiptId: string;
+  resourceId: string;
+  resource: Record<string, unknown>;
+}
+
+export type StudioPrivateArtifactCommandResponse =
+  | StudioPrivateArtifactCompletedCommandResponse
+  | StudioPrivateArtifactPendingCommandResponse;
 
 export interface StudioPrivateArtifactDownloadRequest {
   requestId: string;

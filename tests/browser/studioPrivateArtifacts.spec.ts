@@ -87,6 +87,7 @@ interface FixtureOptions {
   commandFailure?: 'AUTHORITY_STALE' | 'VERSION_CONFLICT';
   deletionFailure?: boolean;
   reloadFailure?: boolean;
+  committedPending?: boolean;
 }
 
 async function installFixture(page: Page, options: FixtureOptions = {}) {
@@ -252,7 +253,17 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       if (body.commandType === 'studio.rendition.generate') {
         renditions = [
           ...renditions.filter((item: Rendition) => item.format !== body.payload.format),
-          rendition(body.payload.format),
+          options.committedPending
+            ? rendition(body.payload.format, {
+                state: 'requested',
+                mimeType: null,
+                filename: null,
+                byteLength: null,
+                sha256: null,
+                retentionMode: null,
+                retentionUntil: null,
+              })
+            : rendition(body.payload.format),
         ];
       }
       if (body.commandType === 'studio.legal_hold.release') {
@@ -284,6 +295,19 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
         );
       }
       if (options.reloadFailure) failReload = true;
+      if (options.committedPending) {
+        return route.fulfill({
+          status: 202,
+          headers,
+          body: JSON.stringify({
+            ok: false,
+            outcome: 'committed_reconciliation_pending',
+            receiptId: RECEIPT,
+            resourceId: body.payload.renditionId ?? RENDITION_IDS[body.payload.format],
+            resource: { state: 'requested' },
+          }),
+        });
+      }
       return ok(route, {
         ok: true,
         outcome:
@@ -530,6 +554,60 @@ test('physical deletion failure is never rendered as deleted', async ({ page }) 
   await expect(panel.getByTestId('rendition-pdf')).toContainText('Deletion failed');
   await expect(panel.getByTestId('rendition-pdf')).not.toContainText(/^Deleted$/);
   await expect(panel.getByRole('status')).toContainText('No success state was recorded');
+});
+
+test('committed pending generation reloads requested state and blocks duplicate generation', async ({ page }) => {
+  await installFixture(page, { committedPending: true });
+  const panel = await openDocs(page);
+  await panel.getByRole('button', { name: 'Generate PDF' }).click();
+  await expect(panel.getByRole('status')).toContainText(
+    'external effect is unconfirmed. Recovery is pending',
+  );
+  await expect(panel.getByTestId('rendition-pdf')).toContainText('Generation requested');
+  await expect(panel.getByRole('button', { name: 'Generate PDF' })).toBeDisabled();
+  await expect(panel.getByTestId('rendition-pdf')).not.toContainText(/^Available$/);
+});
+
+test('deleted canonical tombstone cannot generate and explains governed version recovery', async ({ page }) => {
+  await installFixture(page, {
+    renditions: [rendition('markdown', { state: 'deleted' })],
+  });
+  const panel = await openDocs(page);
+  const card = panel.getByTestId('rendition-markdown');
+  await expect(card.getByRole('button', { name: 'Generate Markdown' })).toBeDisabled();
+  await expect(card).toContainText('immutable deleted tombstone');
+  await expect(card).toContainText('new approved artifact version');
+});
+
+test('deletion execution and reconciliation states expose no retention mutation', async ({ page }) => {
+  await installFixture(page, {
+    renditions: [
+      rendition('markdown', { state: 'deleting' }),
+      rendition('pdf', { state: 'deletion_reconciliation_required' }),
+      rendition('docx', { state: 'deletion_reconciling' }),
+    ],
+  });
+  const panel = await openDocs(page);
+  await expect(panel.getByLabel('Extend retention until')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Extend retention' })).toHaveCount(0);
+});
+
+test('deletion failed exposes one governed retry with current expected versions', async ({ page }) => {
+  const fixture = await installFixture(page, {
+    renditions: [rendition('pdf', { state: 'deletion_failed', version: 7 })],
+  });
+  const panel = await openDocs(page);
+  await panel.getByLabel('Governed reason').fill('Retry after reviewed provider failure');
+  await panel.getByRole('button', { name: 'Request deletion again' }).click();
+  const retry = fixture.requests.find(
+    request => request.body?.commandType === 'studio.rendition.deletion.request',
+  )?.body;
+  expect(retry?.expectedArtifactVersion).toBe(4);
+  expect(retry?.expectedRenditionVersion).toBe(7);
+  expect(retry?.payload).toEqual({
+    renditionId: RENDITION_IDS.pdf,
+    reason: 'Retry after reviewed provider failure',
+  });
 });
 
 test('committed but reload failed blocks every further mutation', async ({ page }) => {

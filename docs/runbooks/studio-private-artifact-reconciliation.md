@@ -30,11 +30,16 @@ Queue only attempt IDs selected from server-side durable reconciliation state. D
 ## Safe retry and crash recovery
 
 1. The claim RPC serializes on the attempt and rechecks current human authority, runtime controls, approved ancestry, and exact Storage metadata. Deletion discovery returns no provider binding. Immediately before deletion, the execution-guard RPC reauthorizes the independent approver, locks the rendition and attempt, rechecks retention, holds, and lifecycle, establishes the provider-effect fence, and only then returns the exact private binding.
+   Retention extension uses the same rendition serialization. It is rejected after the deletion lifecycle/lease wins, so retention and physical deletion cannot both commit as authoritative outcomes.
 2. One active claim transitions the attempt to `reconciling`; a racing worker receives no executable work.
 3. A claim left incomplete for five minutes is eligible for recovery. Fresh `requested`, `rendering`, `uploaded`, or provider-execution work remains ineligible until its lease is stale. Never bypass the lease with direct table mutation.
 4. Rendition recovery probes the exact expected object. A verified existing object is completed without another upload; a missing object is recreated only from committed approved server content; mismatched bytes fail closed.
 5. Deletion recovery probes the exact expected object first. Confirmed absence permits tombstoning without a second delete. Confirmed presence permits one exact delete. Unknown outcomes remain reconcilable.
 6. When the durable reconciliation counter reaches three, the claim RPC persists `RECONCILIATION_EXHAUSTED` or `DELETION_RECONCILIATION_EXHAUSTED`. Stop automatic retries and escalate for source/data review; do not reset counters or edit rows.
+
+A command response of `committed_reconciliation_pending` means the receipt and attempt or resolution committed, but the external effect is unconfirmed. It is not a failure-before-commit and not completion evidence. Reload the safe projection, leave duplicate mutation blocked until reload succeeds, and let the service-only due-work path recover the committed attempt.
+
+After a terminal `deletion_failed`, an authorized requester may create a new governed request using the current artifact and rendition lifecycle versions. A stale version or newer unresolved request is denied. Prior requests, resolutions, attempts, failures, and receipts remain immutable evidence.
 
 ## Monitoring and evidence hygiene
 

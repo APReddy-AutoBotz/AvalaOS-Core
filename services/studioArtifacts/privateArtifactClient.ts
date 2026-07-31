@@ -29,6 +29,7 @@ export const STUDIO_PRIVATE_ARTIFACT_SAFE_ERROR_CODES = [
   'RENDERING_FAILED',
   'STORAGE_FAILED',
   'DELETION_FAILED',
+  'STUDIO_DELETION_BLOCKED',
   'FEATURE_DISABLED',
   'READ_ONLY',
   'INVALID_COMMAND',
@@ -302,7 +303,11 @@ export const decodeStudioPrivateArtifactCommandResponse = (
   if (
     !object(value) ||
     !exact(value, keys) ||
-    value.ok !== true ||
+    !(
+      value.ok === true ||
+      (value.ok === false &&
+        value.outcome === 'committed_reconciliation_pending')
+    ) ||
     ![
       'committed',
       'replayed',
@@ -310,7 +315,11 @@ export const decodeStudioPrivateArtifactCommandResponse = (
       'rendition_failed',
       'deletion_completed',
       'deletion_failed',
+      'committed_reconciliation_pending',
     ].includes(value.outcome as string) ||
+    (value.outcome === 'committed_reconciliation_pending'
+      ? value.ok !== false
+      : value.ok !== true) ||
     !uuid(value.receiptId) ||
     !uuid(value.resourceId) ||
     !object(value.resource)

@@ -11,6 +11,10 @@ The additive forward fix addresses the five unresolved PR #217 P1 findings witho
 3. The Edge handler validates a public command and deterministically translates it to the private SQL vocabulary instead of forwarding browser payloads.
 4. Stale pre-render, post-render, completion, and deletion crash windows are discoverable and recoverable under bounded leases.
 5. Hold placement, deletion approval, and the immediate provider-execution guard serialize on the same rendition authority.
+6. Retention extension now shares that serialization boundary and cannot commit after deletion execution wins.
+7. A canonical deleted rendition is terminal for the same artifact version, format, and governed renderer version.
+8. Post-commit external-effect uncertainty is reported as reconciliation-pending with the original receipt, never as a pre-commit failure.
+9. `deletion_failed` retains an append-only governed retry route without erasing prior request, resolution, attempt, or failure evidence.
 
 The accepted `20260729163251_studio_private_artifact_authority.sql` remains immutable. The effective definitions are supplied only by `20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql`.
 
@@ -48,6 +52,10 @@ The server supplies the authenticated actor. Exact public payloads map as follow
 
 Generation preserves its exact artifact/version/format binding. SQL enforces the current approved artifact version for generation and the current rendition/deletion version for every rendition mutation. A stale caller receives `VERSION_CONFLICT`; browser values never replace database authority.
 
+Exact generation replay is evaluated before canonical-tombstone rejection. A new command derives the governed renderer and rejects an existing canonical `(artifact version, format, renderer version)` row before creating a receipt or attempt. The browser never offers generation for a deleted tombstone; a new approved artifact version, or a later separately governed renderer version, is required.
+
+Once the atomic command RPC returns a committed receipt, missing private claims, adapter construction/configuration failures, provider exceptions, and downstream RPC failures return HTTP 202 with `committed_reconciliation_pending`. That response contains only `receiptId`, `resourceId`, and safe public `resource`. It is non-final and never includes a rendition/deletion claim or Storage binding. The client reloads committed projection state and blocks duplicate mutation until that reload succeeds.
+
 ## Recovery, due work, and provider-effect fencing
 
 The service-only due-work RPC accepts one bounded `p_limit` and returns only work kind plus internal attempt ID. The worker accepts either an exact one-attempt request or exact `{limit}` batch request, rejects browser origins and user authorization headers, processes at most 50 items sequentially, and returns only aggregate sanitized counts.
@@ -62,16 +70,20 @@ The database fence prevents stale workers from committing outcomes after lease s
 
 Hold placement and deletion execution use the same rendition advisory and row locks. If a hold commits first, approval/execution fails before the provider call. If execution commits first, the rendition is `deleting`/`executing` and later hold placement fails. Hold release requires the exact safe projected `holdId` and SQL verifies active hold ownership within organization, workspace, and rendition scope.
 
+Retention extension uses the same rendition row and advisory lock. It remains allowed for `available`, for `deletion_requested` before approval/execution wins, and for governed `deletion_failed` recovery. It is rejected with the stable non-disclosing `STUDIO_DELETION_BLOCKED` once lifecycle is `deleting` or `deleted`, or while an execution/reconciliation attempt is active. If extension commits first, approval/execution rechecks effective retention and performs no provider delete. If execution commits first, the later extension is rejected and the fenced delete/tombstone path may finish.
+
+Deletion requests are append-only. The effective command function enforces at most one unresolved request under the rendition serialization lock instead of using unconditional rendition uniqueness. This permits one current-version retry from `deletion_failed`, preserves all earlier evidence, and rejects stale versions or a second pending request before receipt creation.
+
 ## Evidence boundary
 
 Acceptance requires the focused unit/coverage suites, production decoder against real PostgreSQL output, fresh-chain and main-upgrade PostgreSQL 16 runs, dirty atomic rejection, two-connection races, desktop/mobile Chromium with axe/keyboard/responsive checks, repository build/audit/static guards, and exact-head GitHub workflows. Exact results belong to the draft PR body and workflow records.
 
 Executed local evidence on the corrective branch:
 
-- the PostgreSQL 16 migration harness passed `114/114` scenarios across a fresh ordered chain, accepted-main upgrade plus additive reapply, dirty-state atomic rejection, conditional Storage behavior, the production-decoder bridge, and the real two-connection hold-versus-deletion race;
-- provider-effect assertions observed one rendition upload and one deletion provider call, with three deletion presence probes;
-- the focused private-artifact suite and its `84/84` coverage run passed at `98.42%` lines, `85.00%` branches, and `100%` functions;
-- desktop Chromium and Pixel 7 projects passed `38/38` browser checks, including exact RPC arguments, recovery-state truthfulness, multiple holds, keyboard behavior, responsive presentation, and axe scans;
+- the PostgreSQL 16 migration harness passed `128/128` scenarios across a fresh ordered chain, accepted-main upgrade plus additive reapply, dirty-state atomic rejection, conditional Storage behavior, the production-decoder bridge, real two-connection retention-versus-deletion races, terminal tombstone enforcement, append-only deletion retry, and committed-pending recovery;
+- deterministic lifecycle assertions observed zero provider deletes when retention won, exactly one when deletion execution won, and zero new receipts, attempts, uploads, or objects for rejected tombstone regeneration; reconciliation assertions observed one rendition upload and one deletion provider call with three deletion presence probes;
+- the focused private-artifact suite and its `84/84` coverage run passed at `98.42%` lines, `85.71%` branches, and `100%` functions;
+- desktop Chromium and Pixel 7 projects passed `46/46` browser checks, including committed-pending truthfulness, terminal tombstones, deletion-failed retry, retention-control suppression, exact RPC arguments, recovery states, multiple holds, keyboard behavior, responsive presentation, and axe scans;
 - TypeScript, Edge TypeScript, Studio lint/static boundaries, AI boundary, secret hygiene, unchanged PR 1G scoring, repository build, and dependency audit passed.
 
 Exact-head GitHub workflow evidence remains pending until the draft PR branch is published. Local and workflow evidence does not alter the non-claims below.
