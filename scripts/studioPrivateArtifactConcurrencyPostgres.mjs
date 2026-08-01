@@ -197,7 +197,11 @@ export async function runStudioPrivateArtifactConcurrencyEvidence({
     [staleAttempt.claim.attemptId],
   )).rows[0].claim;
   const claimedState = (await staleRecoveryDb.query(
-    'SELECT state,execution_fence,reconciliation_count FROM public.studio_rendition_attempts WHERE id=$1::uuid',
+    `SELECT state,execution_fence,reconciliation_count,
+       (SELECT count(*)::int FROM public.studio_private_artifact_command_receipts) receipts,
+       (SELECT count(*)::int FROM public.privileged_audit_events
+         WHERE resource_id=$1::uuid) audits
+     FROM public.studio_rendition_attempts WHERE id=$1::uuid`,
     [staleAttempt.claim.attemptId],
   )).rows[0];
   const staleOperations = [
@@ -335,7 +339,7 @@ export async function runStudioPrivateArtifactConcurrencyEvidence({
     async()=>assert.notEqual(staleCalls[3].status,'fulfilled'),
     async()=>assert.deepEqual(afterStaleCalls,{
       state:'reconciling',execution_fence:'1',reconciliation_count:1,
-      receipts:beforeClaim.receipts,audits:beforeClaim.audits,
+      receipts:claimedState.receipts,audits:claimedState.audits,
     }),
     async()=>assert.equal(recoveryRendered.state,'reconciling'),
     async()=>assert.equal(recoveryCompleted.state,'available'),

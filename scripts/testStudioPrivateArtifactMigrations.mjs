@@ -8,6 +8,7 @@ import {createApprovedStudioFixture,createAvailablePrivateArtifactFixture,privat
 import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifactCrossLayerPostgres.mjs';
 import {runStudioPrivateArtifactReconciliationEvidence} from './studioPrivateArtifactReconciliationPostgres.mjs';
 import {runStudioPrivateArtifactConcurrencyEvidence} from './studioPrivateArtifactConcurrencyPostgres.mjs';
+import {runStudioRenditionReconciliationAuditEvidence} from './studioRenditionReconciliationAuditPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
 execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
@@ -89,13 +90,41 @@ export const scenarioNames={
  'stale worker late completion adds no audit event',
  'stale worker exact object remains single binding',
  'stale worker final availability retains recovery fence'
+ ],
+ renditionReconciliationAudit:[
+ 'rendition audit fresh requested work creates no claim or event',
+ 'rendition audit stale requested claim recorded',
+ 'rendition audit stale rendering claim recorded',
+ 'rendition audit stale uploaded claim recorded',
+ 'rendition audit reconciliation required claim recorded',
+ 'rendition audit expired lease reclaim advances fence and count',
+ 'rendition audit recovery phase matches prior state',
+ 'rendition audit event fence matches executable fence',
+ 'rendition audit event count matches persisted reconciliation count',
+ 'rendition audit actor is original requester',
+ 'rendition audit request is durable generation request',
+ 'rendition audit claim metadata excludes private authority',
+ 'rendition audit concurrent workers return one executable claim',
+ 'rendition audit concurrent workers insert one event',
+ 'rendition audit active lease replay inserts no event',
+ 'rendition audit claim insertion failure rolls back ownership',
+ 'rendition audit authority rejection inserts no event',
+ 'rendition audit third recovery transition commits failed',
+ 'rendition audit exhaustion inserts exactly one event',
+ 'rendition audit exhaustion outcome is failed',
+ 'rendition audit exhaustion failure code is exact',
+ 'rendition audit exhaustion reconciliation count is three',
+ 'rendition audit exhaustion actor and request are original',
+ 'rendition audit exhaustion replay inserts no event',
+ 'rendition audit exhaustion insertion failure rolls back terminal state',
+ 'rendition audit exhaustion metadata excludes private authority'
  ]
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,177);assert.equal(new Set(allScenarios).size,177);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,203);assert.equal(new Set(allScenarios).size,203);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -118,7 +147,9 @@ try{
  const auditFailureDb=await createDb(databaseNames[11]);await apply(auditFailureDb,migrations);
  const generationConcurrencyDb=await createDb(databaseNames[12]);await apply(generationConcurrencyDb,migrations);const generationCompletionPeer=await connect(urlFor(databaseNames[12]));const generationCommandPeer=await connect(urlFor(databaseNames[12]));
  const staleWorkerDb=await createDb(databaseNames[13]);await apply(staleWorkerDb,migrations);const staleOriginalPeer=await connect(urlFor(databaseNames[13]));
+ const renditionAuditDb=await createDb(databaseNames[14]);await apply(renditionAuditDb,migrations);const renditionAuditPeer=await connect(urlFor(databaseNames[14]));
  await runStudioPrivateArtifactConcurrencyEvidence({observer:generationConcurrencyDb,completionDb:generationCompletionPeer,commandDb:generationCommandPeer,staleRecoveryDb:staleWorkerDb,staleOriginalDb:staleOriginalPeer,scenario,names:scenarioNames.concurrencyP1});
+ await runStudioRenditionReconciliationAuditEvidence({db:renditionAuditDb,peer:renditionAuditPeer,scenario,names:scenarioNames.renditionReconciliationAudit});
  const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);

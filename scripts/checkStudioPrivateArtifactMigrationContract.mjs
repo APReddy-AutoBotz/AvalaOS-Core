@@ -97,6 +97,7 @@ const completionInternal = effectiveForwardFunction('studio_rendition_attempt_co
 const normalComplete = effectiveForwardFunction('studio_rendition_attempt_complete');
 const normalFail = effectiveForwardFunction('studio_rendition_attempt_fail');
 const recoveryAuthority = effectiveForwardFunction('studio_rendition_recovery_authority');
+const renditionReconciliationClaim = effectiveForwardFunction('studio_rendition_reconciliation_claim');
 const recoveryRendered = effectiveForwardFunction('studio_rendition_reconciliation_rendered');
 const recoveryComplete = effectiveForwardFunction('studio_rendition_reconciliation_complete');
 const recoveryFail = effectiveForwardFunction('studio_rendition_reconciliation_fail');
@@ -126,5 +127,41 @@ assert.match(recoveryRendered,/studio_rendition_recovery_authority\(p_attempt,p_
 assert.match(recoveryComplete,/studio_rendition_attempt_complete_internal\(p_attempt,p_fence\)/);
 assert.doesNotMatch(recoveryComplete,/studio_rendition_attempt_complete\(p_attempt\)/);
 assert.match(recoveryFail,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
+assert.match(
+  renditionReconciliationClaim,
+  /studio\.rendition\.reconciliation\.claim/,
+  'rendition recovery ownership must be audited',
+);
+assert.match(
+  renditionReconciliationClaim,
+  /studio\.rendition\.reconciliation\.exhausted/,
+  'terminal rendition exhaustion must be audited',
+);
+assert.ok(
+  renditionReconciliationClaim.indexOf("SET state = 'reconciling'") <
+    renditionReconciliationClaim.indexOf("'studio.rendition.reconciliation.claim'"),
+  'the recovery-ownership transition must precede its atomic audit insert',
+);
+assert.ok(
+  renditionReconciliationClaim.indexOf("'studio.rendition.reconciliation.claim'") <
+    renditionReconciliationClaim.indexOf("RETURN jsonb_strip_nulls"),
+  'no executable recovery claim may be returned before its audit insert',
+);
+assert.match(
+  renditionReconciliationClaim,
+  /SET state = 'failed',[\s\S]+?'studio\.rendition\.reconciliation\.exhausted'[\s\S]+?RETURN NULL/,
+  'terminal rendition exhaustion and its audit must share the function transaction',
+);
+for (const token of [
+  "'attemptId'", "'artifactVersionId'", "'format'", "'previousState'",
+  "'recoveryPhase'", "'previousReconciliationCount'", "'reconciliationCount'",
+  "'previousExecutionFence'", "'executionFence'", "'terminalState'",
+]) assert.match(renditionReconciliationClaim,new RegExp(token.replaceAll("'","\\'")));
+const renditionClaimAudit = /'studio\.rendition\.reconciliation\.claim'[\s\S]+?\n\s*\);/u.exec(renditionReconciliationClaim)?.[0] ?? '';
+const renditionExhaustionAudit = /'studio\.rendition\.reconciliation\.exhausted'[\s\S]+?\n\s*\);/u.exec(renditionReconciliationClaim)?.[0] ?? '';
+for (const body of [renditionClaimAudit,renditionExhaustionAudit]) {
+  assert.ok(body.includes('privileged_audit_events') || body.length > 0);
+  assert.doesNotMatch(body,/'(?:bucket|bucketId|objectKey|signedUrl|approvedContent|credentials|serviceRole)'/u);
+}
 assert.match(forward,/REVOKE ALL ON FUNCTION[\s\S]+studio_rendition_generation_lock\(uuid,uuid,uuid,text,text\)[\s\S]+studio_rendition_recovery_authority\(uuid,bigint\)[\s\S]+studio_rendition_attempt_complete_internal\(uuid,bigint\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
 console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);

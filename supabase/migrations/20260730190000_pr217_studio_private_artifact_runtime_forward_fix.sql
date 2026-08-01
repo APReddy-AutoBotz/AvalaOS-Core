@@ -675,6 +675,7 @@ DECLARE
   phase text;
   next_count integer;
   next_fence bigint;
+  audit_id uuid := gen_random_uuid();
   extension text;
   expected_key text;
   expected_mime text;
@@ -712,6 +713,7 @@ BEGIN
   IF x.state NOT IN ('requested','rendering','uploaded','reconciliation_required','reconciling') THEN
     RETURN NULL;
   END IF;
+  phase := CASE WHEN x.state IN ('requested','rendering') THEN 'pre_render' ELSE 'verify_or_upload' END;
   next_count := CASE
     WHEN x.state = 'reconciliation_required' THEN GREATEST(x.reconciliation_count, 1)
     WHEN x.state = 'reconciling' THEN x.reconciliation_count + 1
@@ -722,15 +724,53 @@ BEGIN
     SET state = 'failed', failure_code = 'RECONCILIATION_EXHAUSTED',
         reconciliation_count = 3, reconciliation_claimed_at = NULL, completed_at = now()
     WHERE id = x.id;
+    INSERT INTO public.privileged_audit_events(
+      id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+      outcome,resource_version,metadata
+    ) VALUES (
+      audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+      'studio.rendition.reconciliation.exhausted','studio_rendition_attempt',x.id,
+      'failed',x.execution_fence,
+      jsonb_build_object(
+        'attemptId',x.id,
+        'artifactVersionId',x.artifact_version_id,
+        'format',x.format,
+        'previousState',x.state,
+        'recoveryPhase',phase,
+        'failureCode','RECONCILIATION_EXHAUSTED',
+        'reconciliationCount',3,
+        'executionFence',x.execution_fence,
+        'terminalState','failed'
+      )
+    );
     RETURN NULL;
   END IF;
-  phase := CASE WHEN x.state IN ('requested','rendering') THEN 'pre_render' ELSE 'verify_or_upload' END;
   next_fence := x.execution_fence + 1;
   UPDATE public.studio_rendition_attempts
   SET state = 'reconciling', failure_code = NULL,
       reconciliation_count = next_count, reconciliation_claimed_at = now(),
       execution_fence = next_fence, completed_at = NULL
   WHERE id = x.id;
+
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,x.org_id,x.workspace_id,x.requested_by,x.request_id,
+    'studio.rendition.reconciliation.claim','studio_rendition_attempt',x.id,
+    'succeeded',next_fence,
+    jsonb_build_object(
+      'attemptId',x.id,
+      'artifactVersionId',x.artifact_version_id,
+      'format',x.format,
+      'previousState',x.state,
+      'recoveryPhase',phase,
+      'previousReconciliationCount',x.reconciliation_count,
+      'reconciliationCount',next_count,
+      'previousExecutionFence',x.execution_fence,
+      'executionFence',next_fence
+    )
+  );
 
   IF phase = 'verify_or_upload' THEN
     extension := CASE x.format WHEN 'markdown' THEN 'md' ELSE x.format END;
