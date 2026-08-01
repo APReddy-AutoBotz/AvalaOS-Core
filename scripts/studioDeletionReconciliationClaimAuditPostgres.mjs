@@ -4,11 +4,11 @@ import {createApprovedStudioFixture,privateCommand} from './studioPrivateArtifac
 
 const claimAction='studio.rendition.deletion.reconciliation.claim';
 const exhaustionAction='studio.rendition.deletion.reconciliation.exhausted';
-const forbidden=/(bucket|objectKey|object_key|signedUrl|signed_url|storageBinding|storage_provider|provider|credential|approvedContent|privateClaim|serviceRole|workerSecret|secret)/iu;
+const forbidden=/(bucket|objectKey|object_key|signedUrl|signed_url|storageBinding|storage_provider|storageProvider|credential|approvedContent|privateClaim|serviceRole|workerSecret|secret)/iu;
 const claimMetadataKeys=[
-  'deletionAttemptId','deletionRequestId','executionFence','previousReconciliationCount',
-  'previousState','reconciliationCount','recoveryKind','resolutionId',
-  'resultingLifecycleVersion',
+  'currentExecutionFence','deletionAttemptId','deletionRequestId','previousReconciliationCount',
+  'previousState','providerAuthorityIssued','reconciliationCount','recoveryKind',
+  'resolutionId','resultingLifecycleVersion',
 ].sort();
 
 export const studioDeletionReconciliationClaimAuditScenarioNames=[
@@ -39,6 +39,39 @@ export const studioDeletionReconciliationClaimAuditScenarioNames=[
   'deletion reconciliation exhausted replay records no event',
   'deletion reconciliation exhaustion traces independent resolver and accepted request',
   'deletion reconciliation exhaustion evidence excludes private authority',
+];
+
+export const studioDeletionExecutionAuthorityScenarioNames=[
+  'deletion runtime disabled pauses requested recovery',
+  'deletion runtime read only pauses requested recovery',
+  'deletion runtime provider disabled pauses requested recovery',
+  'deletion runtime execution disabled pauses requested recovery',
+  'deletion runtime paused calls return studio read only',
+  'deletion runtime paused calls preserve every durable field and audit count',
+  'deletion runtime repeated pause never reaches exhaustion',
+  'deletion runtime restore permits claim from original count',
+  'deletion runtime execution disable does not pause rendition recovery',
+  'deletion execution initial authority emits one audit',
+  'deletion execution returned fence equals audited fence',
+  'deletion execution audit request traces accepted resolution receipt',
+  'deletion execution audit actor is independent resolver',
+  'deletion execution audit resource is canonical rendition',
+  'deletion execution audit metadata excludes private storage authority',
+  'deletion execution concurrent workers return one binding and one audit',
+  'deletion execution active lease replay returns no binding or audit',
+  'deletion execution expired lease reclaim advances and audits fence',
+  'deletion execution forced audit failure rolls back authority',
+  'deletion execution forced audit failure returns no provider binding',
+  'deletion execution deleted completion traces exact audited fence',
+  'deletion execution missing completion traces exact audited fence',
+  'deletion execution uncertain failure traces exact audited fence',
+  'deletion execution terminal failure traces exact audited fence',
+  'deletion execution old fence completion is stale and audit neutral',
+  'deletion execution old fence failure is stale and audit neutral',
+  'deletion execution current fence completion records one final event',
+  'deletion execution current fence failure records one final event',
+  'deletion execution completion and failure replay add no final event',
+  'deletion ownership audit states provider authority was not issued',
 ];
 
 const countAction=async(db,action,attemptId)=>Number((await db.query(
@@ -76,6 +109,10 @@ const makeStateStale=async(db,attemptId)=>db.query(
 
 const claim=async(db,attemptId)=>(await db.query(
   'SELECT public.studio_deletion_reconciliation_claim($1::uuid) claim',[attemptId],
+)).rows[0].claim;
+
+const executionClaim=async(db,attemptId)=>(await db.query(
+  'SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[attemptId],
 )).rows[0].claim;
 
 const actionRows=async(db,action,attemptId)=>(await db.query(
@@ -278,9 +315,12 @@ export async function runStudioDeletionReconciliationClaimAuditEvidence({db,peer
     async()=>{for(const row of exactClaimRows)assert.deepEqual({type:row.resource_type,id:row.resource_id},{type:'studio_rendition',id:renditionId})},
     async()=>{for(const row of exactClaimRows)assert.equal(Number(row.metadata.resultingLifecycleVersion),Number(row.resource_version))},
     async()=>{for(const row of exactClaimRows)assert.equal(Number(row.metadata.reconciliationCount),Number(row.metadata.previousReconciliationCount)+1)},
-    async()=>{for(const row of exactClaimRows)assert.equal(row.metadata.recoveryKind,'deletion')},
+    async()=>{for(const row of exactClaimRows)assert.deepEqual(
+      {recoveryKind:row.metadata.recoveryKind,providerAuthorityIssued:row.metadata.providerAuthorityIssued},
+      {recoveryKind:'deletion',providerAuthorityIssued:false},
+    )},
     async()=>assert.deepEqual(
-      exactClaimRows.map(row=>Number(row.metadata.executionFence)).sort((left,right)=>left-right),
+      exactClaimRows.map(row=>Number(row.metadata.currentExecutionFence)).sort((left,right)=>left-right),
       [initialFence,initialFence+1,initialFence+2,initialFence+3,initialFence+4],
     ),
     async()=>assert.equal(concurrentResults.filter(Boolean).length,1),
@@ -329,5 +369,248 @@ export async function runStudioDeletionReconciliationClaimAuditEvidence({db,peer
     exhaustedReplayAuditDelta:replayExhaustionAfter-replayExhaustionBefore,
   };
   console.log(`DELETION RECONCILIATION CLAIM AUDIT COUNTS ${JSON.stringify(evidence)}`);
+  return evidence;
+}
+
+export async function runStudioDeletionExecutionAuthorityEvidence({db,peer,scenario,names=studioDeletionExecutionAuthorityScenarioNames}){
+  const fixture=await createDeletionFixture(db);
+  const {base,attemptId,renditionId,authority}=fixture;
+  const executionAction='studio.rendition.deletion.execution.claim';
+  const completionAction='studio.rendition.deletion.complete';
+  const failureAction='studio.rendition.deletion.fail';
+  const executionMetadataKeys=[
+    'deletionAttemptId','deletionRequestId','executionFence','executionKind',
+    'previousExecutionFence','previousReconciliationCount','previousState',
+    'reconciliationCount','resolutionId','resultingLifecycleVersion',
+  ].sort();
+  const runtimeDefaults={enabled:true,read_only:false,provider_enabled:true,deletion_enabled:true};
+  const setRuntime=async values=>{
+    const next={...runtimeDefaults,...values};
+    await db.query(
+      `UPDATE public.studio_private_artifact_runtime_control
+       SET enabled=$1::boolean,read_only=$2::boolean,
+           provider_enabled=$3::boolean,deletion_enabled=$4::boolean
+       WHERE singleton`,
+      [next.enabled,next.read_only,next.provider_enabled,next.deletion_enabled],
+    );
+  };
+  const rejected=async operation=>{
+    try{await operation();return null}catch(error){return error instanceof Error?error.message:String(error)}
+  };
+  const auditCounts=async()=>({
+    ownership:await countAction(db,claimAction,attemptId),
+    exhaustion:await countAction(db,exhaustionAction,attemptId),
+    execution:await countAction(db,executionAction,attemptId),
+  });
+  const pauseRecords=[];
+  for(const disabled of [
+    {enabled:false},{read_only:true},{provider_enabled:false},{deletion_enabled:false},
+  ]){
+    await setRuntime(disabled);
+    await setAttempt(db,attemptId,{
+      state:'requested',failure_code:null,reconciliation_count:0,
+      reconciliation_claimed_at:null,execution_fence:0,execution_claimed_at:null,completed_at:null,
+    });
+    await makeStateStale(db,attemptId);
+    const before={attempt:await attemptSnapshot(db,attemptId),audits:await auditCounts()};
+    const error=await rejected(()=>claim(db,attemptId));
+    const after={attempt:await attemptSnapshot(db,attemptId),audits:await auditCounts()};
+    pauseRecords.push({disabled,error,before,after});
+  }
+
+  await setRuntime({deletion_enabled:false});
+  await setAttempt(db,attemptId,{
+    state:'reconciliation_required',failure_code:'DELETE_OUTCOME_UNKNOWN',reconciliation_count:2,
+    reconciliation_claimed_at:null,execution_fence:0,execution_claimed_at:null,completed_at:null,
+  });
+  const repeatedBefore={attempt:await attemptSnapshot(db,attemptId),audits:await auditCounts()};
+  const repeatedErrors=[];
+  for(let index=0;index<4;index++)repeatedErrors.push(await rejected(()=>claim(db,attemptId)));
+  const repeatedAfter={attempt:await attemptSnapshot(db,attemptId),audits:await auditCounts()};
+  await setRuntime({});
+  const restoredClaim=await claim(db,attemptId);
+  const restoredState=await attemptSnapshot(db,attemptId);
+  const restoredOwnershipRows=await actionRows(db,claimAction,attemptId);
+
+  await setRuntime({deletion_enabled:false});
+  const rendition=await privateCommand(db,{
+    commandType:'studio.rendition.generate',actorId:base.requester,
+    organizationId:base.org,workspaceId:base.workspace,requestId:randomUUID(),
+    idempotencyKey:`deletion-disabled-rendition-${randomUUID()}`,
+    authorizationVersion:base.authorizationVersions[base.requester],
+    payload:{artifactVersionId:base.artifactVersionId,format:'pdf'},
+  });
+  await db.query(
+    "UPDATE public.studio_rendition_attempts SET state_changed_at=now()-interval '6 minutes' WHERE id=$1::uuid",
+    [rendition.renditionClaim.attemptId],
+  );
+  const renditionRecovery=(await db.query(
+    'SELECT public.studio_rendition_reconciliation_claim($1::uuid) claim',
+    [rendition.renditionClaim.attemptId],
+  )).rows[0].claim;
+  await setRuntime({});
+
+  await setAttempt(db,attemptId,{
+    state:'requested',failure_code:null,reconciliation_count:0,
+    reconciliation_claimed_at:null,execution_fence:0,execution_claimed_at:null,completed_at:null,
+  });
+  const initialExecutionBefore=await countAction(db,executionAction,attemptId);
+  const initialBinding=await executionClaim(db,attemptId);
+  const initialExecutionAfter=await countAction(db,executionAction,attemptId);
+  const initialExecutionRows=await actionRows(db,executionAction,attemptId);
+  const initialExecutionAudit=initialExecutionRows.find(
+    row=>Number(row.metadata.executionFence)===Number(initialBinding.fence),
+  );
+
+  await setAttempt(db,attemptId,{
+    state:'requested',failure_code:null,reconciliation_count:0,
+    reconciliation_claimed_at:null,execution_fence:10,execution_claimed_at:null,completed_at:null,
+  });
+  const concurrentBefore=await countAction(db,executionAction,attemptId);
+  const concurrentResults=await Promise.all([executionClaim(db,attemptId),executionClaim(peer,attemptId)]);
+  const concurrentAfter=await countAction(db,executionAction,attemptId);
+  const concurrentBinding=concurrentResults.find(Boolean);
+  const concurrentState=await attemptSnapshot(db,attemptId);
+  const replayBefore=await countAction(db,executionAction,attemptId);
+  const replayBinding=await executionClaim(peer,attemptId);
+  const replayAfter=await countAction(db,executionAction,attemptId);
+  const replayState=await attemptSnapshot(db,attemptId);
+  await db.query(
+    "UPDATE public.studio_rendition_deletion_attempts SET execution_claimed_at=now()-interval '6 minutes' WHERE id=$1::uuid",
+    [attemptId],
+  );
+  const reclaimBefore=await countAction(db,executionAction,attemptId);
+  const reclaimedBinding=await executionClaim(peer,attemptId);
+  const reclaimAfter=await countAction(db,executionAction,attemptId);
+  const reclaimedState=await attemptSnapshot(db,attemptId);
+
+  const staleCompletionBefore=await countAction(db,completionAction,attemptId);
+  const staleCompletionError=await rejected(()=>db.query(
+    "SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'deleted')",
+    [attemptId,concurrentBinding.fence],
+  ));
+  const staleCompletionAfter=await countAction(db,completionAction,attemptId);
+  const staleCompletionState=await attemptSnapshot(db,attemptId);
+  const staleFailureBefore=await countAction(db,failureAction,attemptId);
+  const staleFailureError=await rejected(()=>db.query(
+    "SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'DELETE_OUTCOME_UNKNOWN')",
+    [attemptId,concurrentBinding.fence],
+  ));
+  const staleFailureAfter=await countAction(db,failureAction,attemptId);
+  const staleFailureState=await attemptSnapshot(db,attemptId);
+
+  await setAttempt(db,attemptId,{
+    state:'reconciliation_required',failure_code:'DELETE_OUTCOME_UNKNOWN',reconciliation_count:1,
+    reconciliation_claimed_at:null,execution_fence:30,execution_claimed_at:null,completed_at:null,
+  });
+  const forcedBefore={attempt:await attemptSnapshot(db,attemptId),audit:await countAction(db,executionAction,attemptId)};
+  await installAuditFailure(db,executionAction);
+  let forcedError;
+  try{forcedError=await rejected(()=>executionClaim(db,attemptId))}finally{await removeAuditFailure(db)}
+  const forcedAfter={attempt:await attemptSnapshot(db,attemptId),audit:await countAction(db,executionAction,attemptId)};
+
+  const traceOutcome=async({fenceBase,providerOutcome,failure})=>{
+    await db.query('BEGIN');
+    try{
+      await setAttempt(db,attemptId,{
+        state:'requested',failure_code:null,reconciliation_count:0,
+        reconciliation_claimed_at:null,execution_fence:fenceBase,execution_claimed_at:null,completed_at:null,
+      });
+      const binding=await executionClaim(db,attemptId);
+      const executionRows=await actionRows(db,executionAction,attemptId);
+      const executionAudit=executionRows.find(row=>Number(row.metadata.executionFence)===Number(binding.fence));
+      const finalAction=providerOutcome?completionAction:failureAction;
+      const finalBefore=await countAction(db,finalAction,attemptId);
+      const result=providerOutcome
+        ?(await db.query(
+          'SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,$3::text) result',
+          [attemptId,binding.fence,providerOutcome],
+        )).rows[0].result
+        :(await db.query(
+          'SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,$3::text) result',
+          [attemptId,binding.fence,failure],
+        )).rows[0].result;
+      const finalAfter=await countAction(db,finalAction,attemptId);
+      const finalRows=await actionRows(db,finalAction,attemptId);
+      const finalAudit=finalRows.find(row=>Number(row.metadata.executionFence)===Number(binding.fence));
+      const state=await attemptSnapshot(db,attemptId);
+      await db.query('SAVEPOINT deletion_execution_replay');
+      let replayError;
+      try{
+        if(providerOutcome){
+          await db.query(
+            'SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,$3::text)',
+            [attemptId,binding.fence,providerOutcome],
+          );
+        }else{
+          await db.query(
+            'SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,$3::text)',
+            [attemptId,binding.fence,failure],
+          );
+        }
+      }catch(error){
+        replayError=error instanceof Error?error.message:String(error);
+        await db.query('ROLLBACK TO SAVEPOINT deletion_execution_replay');
+      }
+      const replayAfter=await countAction(db,finalAction,attemptId);
+      return{binding,executionAudit,finalAudit,result,state,replayError,finalDelta:finalAfter-finalBefore,replayDelta:replayAfter-finalAfter};
+    }finally{await db.query('ROLLBACK')}
+  };
+  const deletedTrace=await traceOutcome({fenceBase:40,providerOutcome:'deleted'});
+  const missingTrace=await traceOutcome({fenceBase:50,providerOutcome:'missing'});
+  const uncertainTrace=await traceOutcome({fenceBase:60,failure:'DELETE_OUTCOME_UNKNOWN'});
+  const terminalTrace=await traceOutcome({fenceBase:70,failure:'DELETE_PROVIDER_FAILED'});
+
+  const checks=[
+    async()=>assert.match(pauseRecords[0].error,/STUDIO_READ_ONLY/),
+    async()=>assert.match(pauseRecords[1].error,/STUDIO_READ_ONLY/),
+    async()=>assert.match(pauseRecords[2].error,/STUDIO_READ_ONLY/),
+    async()=>assert.match(pauseRecords[3].error,/STUDIO_READ_ONLY/),
+    async()=>{for(const row of [...pauseRecords.map(item=>item.error),...repeatedErrors])assert.match(row,/STUDIO_READ_ONLY/)},
+    async()=>{for(const row of pauseRecords)assert.deepEqual(row.after,row.before)},
+    async()=>assert.deepEqual(repeatedAfter,repeatedBefore),
+    async()=>assert.deepEqual(
+      {claimCount:Number(restoredClaim.reconciliationCount),persistedCount:Number(restoredState.reconciliation_count),state:restoredState.state,lifecycle:restoredState.lifecycle},
+      {claimCount:3,persistedCount:3,state:'reconciling',lifecycle:'deleting'},
+    ),
+    async()=>assert.deepEqual({phase:renditionRecovery.phase,count:Number(renditionRecovery.reconciliationCount)},{phase:'pre_render',count:1}),
+    async()=>assert.equal(initialExecutionAfter-initialExecutionBefore,1),
+    async()=>assert.equal(Number(initialExecutionAudit.metadata.executionFence),Number(initialBinding.fence)),
+    async()=>assert.equal(initialExecutionAudit.request_id,authority.command_request_id),
+    async()=>assert.equal(initialExecutionAudit.actor_id,authority.resolved_by),
+    async()=>assert.deepEqual({type:initialExecutionAudit.resource_type,id:initialExecutionAudit.resource_id},{type:'studio_rendition',id:renditionId}),
+    async()=>{
+      assert.deepEqual(Object.keys(initialExecutionAudit.metadata).sort(),executionMetadataKeys);
+      assert.doesNotMatch(JSON.stringify(initialExecutionAudit.metadata),forbidden);
+    },
+    async()=>assert.deepEqual({bindings:concurrentResults.filter(Boolean).length,audits:concurrentAfter-concurrentBefore},{bindings:1,audits:1}),
+    async()=>assert.deepEqual({binding:replayBinding,audits:replayAfter-replayBefore,fence:Number(replayState.execution_fence)},{binding:null,audits:0,fence:Number(concurrentState.execution_fence)}),
+    async()=>assert.deepEqual({audits:reclaimAfter-reclaimBefore,fence:Number(reclaimedBinding.fence),persisted:Number(reclaimedState.execution_fence)},{audits:1,fence:Number(concurrentBinding.fence)+1,persisted:Number(concurrentBinding.fence)+1}),
+    async()=>{assert.match(forcedError,/forced deletion reconciliation audit insertion failure/);assert.deepEqual(forcedAfter,forcedBefore)},
+    async()=>assert.deepEqual({bindingReturned:false,auditDelta:forcedAfter.audit-forcedBefore.audit},{bindingReturned:false,auditDelta:0}),
+    async()=>assert.equal(Number(deletedTrace.executionAudit.metadata.executionFence),Number(deletedTrace.finalAudit.metadata.executionFence)),
+    async()=>assert.equal(Number(missingTrace.executionAudit.metadata.executionFence),Number(missingTrace.finalAudit.metadata.executionFence)),
+    async()=>assert.equal(Number(uncertainTrace.executionAudit.metadata.executionFence),Number(uncertainTrace.finalAudit.metadata.executionFence)),
+    async()=>assert.equal(Number(terminalTrace.executionAudit.metadata.executionFence),Number(terminalTrace.finalAudit.metadata.executionFence)),
+    async()=>{assert.match(staleCompletionError,/AUTHORITY_STALE/);assert.equal(staleCompletionAfter-staleCompletionBefore,0);assert.deepEqual(staleCompletionState,reclaimedState)},
+    async()=>{assert.match(staleFailureError,/AUTHORITY_STALE/);assert.equal(staleFailureAfter-staleFailureBefore,0);assert.deepEqual(staleFailureState,reclaimedState)},
+    async()=>assert.deepEqual({delta:deletedTrace.finalDelta,state:deletedTrace.state.state,lifecycle:deletedTrace.state.lifecycle},{delta:1,state:'completed',lifecycle:'deleted'}),
+    async()=>assert.deepEqual({delta:terminalTrace.finalDelta,state:terminalTrace.state.state,lifecycle:terminalTrace.state.lifecycle},{delta:1,state:'failed',lifecycle:'deletion_failed'}),
+    async()=>{for(const trace of [deletedTrace,missingTrace,uncertainTrace,terminalTrace]){assert.match(trace.replayError,/AUTHORITY_STALE/);assert.equal(trace.replayDelta,0)}},
+    async()=>assert.equal(restoredOwnershipRows.at(-1).metadata.providerAuthorityIssued,false),
+  ];
+  assert.equal(names.length,studioDeletionExecutionAuthorityScenarioNames.length);
+  assert.equal(checks.length,names.length);
+  for(let index=0;index<checks.length;index++)await scenario(names[index],checks[index]);
+  const evidence={
+    paused:pauseRecords.map(row=>({field:Object.keys(row.disabled)[0],stateDelta:row.before.attempt.state===row.after.attempt.state?0:1,countDelta:Number(row.after.attempt.reconciliation_count)-Number(row.before.attempt.reconciliation_count),fenceDelta:Number(row.after.attempt.execution_fence)-Number(row.before.attempt.execution_fence),auditDelta:row.after.audits.execution+row.after.audits.ownership+row.after.audits.exhaustion-row.before.audits.execution-row.before.audits.ownership-row.before.audits.exhaustion})),
+    restored:{count:Number(restoredState.reconciliation_count),state:restoredState.state},
+    initial:{returnedFence:Number(initialBinding.fence),auditedFence:Number(initialExecutionAudit.metadata.executionFence)},
+    concurrent:{bindings:concurrentResults.filter(Boolean).length,auditDelta:concurrentAfter-concurrentBefore},
+    reclaim:{previousFence:Number(concurrentBinding.fence),returnedFence:Number(reclaimedBinding.fence),auditDelta:reclaimAfter-reclaimBefore},
+    forcedAudit:{stateDelta:forcedBefore.attempt.state===forcedAfter.attempt.state?0:1,fenceDelta:Number(forcedAfter.attempt.execution_fence)-Number(forcedBefore.attempt.execution_fence),auditDelta:forcedAfter.audit-forcedBefore.audit,bindingReturned:false},
+    traces:{deleted:Number(deletedTrace.finalAudit.metadata.executionFence),missing:Number(missingTrace.finalAudit.metadata.executionFence),uncertain:Number(uncertainTrace.finalAudit.metadata.executionFence),terminal:Number(terminalTrace.finalAudit.metadata.executionFence)},
+  };
+  console.log(`DELETION EXECUTION AUTHORITY COUNTS ${JSON.stringify(evidence)}`);
   return evidence;
 }

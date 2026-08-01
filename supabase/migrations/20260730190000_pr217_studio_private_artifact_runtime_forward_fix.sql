@@ -1096,6 +1096,7 @@ DECLARE
   a public.studio_rendition_deletion_attempts;
   d public.studio_rendition_deletion_resolutions;
   r public.studio_renditions;
+  control public.studio_private_artifact_runtime_control;
   audit_id uuid := gen_random_uuid();
   command_request_id uuid;
   next_count integer;
@@ -1125,6 +1126,18 @@ BEGIN
   IF a.state = 'reconciling'
      AND a.reconciliation_claimed_at > now() - interval '5 minutes' THEN RETURN NULL; END IF;
   IF a.state NOT IN ('requested','executing','reconciliation_required','reconciling') THEN RETURN NULL; END IF;
+  SELECT * INTO control
+  FROM public.studio_private_artifact_runtime_control
+  WHERE singleton
+  FOR SHARE;
+  IF control.singleton IS NULL
+     OR NOT control.enabled
+     OR control.read_only
+     OR NOT control.provider_enabled
+     OR NOT control.deletion_enabled
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'STUDIO_READ_ONLY';
+  END IF;
   SELECT cr.request_id INTO command_request_id
   FROM public.studio_private_artifact_command_receipts cr
   WHERE cr.id = d.receipt_id
@@ -1181,9 +1194,10 @@ BEGIN
       'previousState',a.state,
       'previousReconciliationCount',a.reconciliation_count,
       'reconciliationCount',next_count,
-      'executionFence',a.execution_fence,
+      'currentExecutionFence',a.execution_fence,
       'resultingLifecycleVersion',r.lifecycle_version,
-      'recoveryKind','deletion'
+      'recoveryKind','deletion',
+      'providerAuthorityIssued',false
     )
   );
   RETURN jsonb_build_object(
@@ -1209,7 +1223,11 @@ DECLARE
   control public.studio_private_artifact_runtime_control;
   retention jsonb;
   holds integer;
+  audit_id uuid := gen_random_uuid();
+  command_request_id uuid;
   next_fence bigint;
+  next_count integer;
+  execution_kind text;
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
@@ -1239,26 +1257,58 @@ BEGIN
   IF a.state = 'executing'
      AND a.execution_claimed_at > now() - interval '5 minutes' THEN RETURN NULL; END IF;
   IF a.state NOT IN ('requested','reconciling','reconciliation_required','executing') THEN RETURN NULL; END IF;
+  SELECT cr.request_id INTO command_request_id
+  FROM public.studio_private_artifact_command_receipts cr
+  WHERE cr.id = d.receipt_id
+    AND cr.org_id = d.org_id
+    AND cr.workspace_id = d.workspace_id
+    AND cr.actor_id = d.resolved_by
+    AND cr.command_type = 'studio.rendition.deletion.resolve';
+  IF command_request_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+  END IF;
   next_fence := a.execution_fence + 1;
+  next_count := CASE
+    WHEN a.state = 'requested' AND a.reconciliation_count = 0 THEN 1
+    ELSE a.reconciliation_count
+  END;
+  execution_kind := CASE
+    WHEN a.state = 'requested' AND a.reconciliation_count = 0 THEN 'initial'
+    ELSE 'recovery'
+  END;
   UPDATE public.studio_rendition_deletion_attempts
   SET state = 'executing', execution_fence = next_fence,
       execution_claimed_at = now(), reconciliation_claimed_at = NULL,
       failure_code = NULL,
-      reconciliation_count = CASE
-        WHEN a.state = 'requested' AND a.reconciliation_count = 0 THEN 1
-        ELSE a.reconciliation_count
-      END
+      reconciliation_count = next_count
   WHERE id = a.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,r.org_id,r.workspace_id,d.resolved_by,command_request_id,
+    'studio.rendition.deletion.execution.claim','studio_rendition',r.id,
+    'succeeded',r.lifecycle_version,
+    jsonb_build_object(
+      'deletionAttemptId',a.id,
+      'deletionRequestId',a.request_id,
+      'resolutionId',d.id,
+      'previousState',a.state,
+      'previousExecutionFence',a.execution_fence,
+      'executionFence',next_fence,
+      'previousReconciliationCount',a.reconciliation_count,
+      'reconciliationCount',next_count,
+      'resultingLifecycleVersion',r.lifecycle_version,
+      'executionKind',execution_kind
+    )
+  );
   RETURN jsonb_build_object(
     'deletionAttemptId', a.id,
     'renditionId', r.id,
     'organizationId', r.org_id,
     'workspaceId', r.workspace_id,
     'objectKey', r.object_key,
-    'reconciliationCount', CASE
-      WHEN a.state = 'requested' AND a.reconciliation_count = 0 THEN 1
-      ELSE a.reconciliation_count
-    END,
+    'reconciliationCount', next_count,
     'fence', next_fence
   );
 END

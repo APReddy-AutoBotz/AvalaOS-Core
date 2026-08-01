@@ -80,12 +80,16 @@ const effectiveForwardFunction = name =>
 const deletionComplete = forwardFunction('studio_rendition_deletion_complete');
 const deletionFail = forwardFunction('studio_rendition_deletion_fail');
 const deletionReconciliationClaim = forwardFunction('studio_deletion_reconciliation_claim');
+const deletionExecutionClaim = forwardFunction('studio_rendition_deletion_execution_claim');
 assert.match(deletionComplete,/p_provider_outcome text[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.complete/);
 assert.match(deletionFail,/studio_assert_actor[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.fail/);
 assert.match(deletionReconciliationClaim,/privileged_audit_events[\s\S]+studio\.rendition\.deletion\.reconciliation\.exhausted/);
 for (const body of [deletionComplete,deletionFail,deletionReconciliationClaim]) {
   assert.doesNotMatch(body,/'(?:bucket|bucketId|objectKey|credentials|signedUrl)'/u);
 }
+const deletionExecutionAuditMetadata = /'studio\.rendition\.deletion\.execution\.claim'[\s\S]+?jsonb_build_object\(([\s\S]+?)\n\s*\)\n\s*\);/u.exec(deletionExecutionClaim)?.[1] ?? '';
+assert.ok(deletionExecutionAuditMetadata,'deletion execution claim audit metadata must be present');
+assert.doesNotMatch(deletionExecutionAuditMetadata,/'(?:bucket|bucketId|objectKey|credentials|signedUrl)'/u);
 assert.ok(
   forward.indexOf('prior_receipt.id IS NOT NULL') <
     forward.indexOf('canonical.artifact_version_id = v.id'),
@@ -189,6 +193,21 @@ assert.match(
   /studio\.rendition\.deletion\.reconciliation\.claim/,
   'deletion recovery ownership must be audited',
 );
+assert.match(
+  deletionReconciliationClaim,
+  /SELECT \* INTO control[\s\S]+studio_private_artifact_runtime_control[\s\S]+FOR SHARE[\s\S]+control\.singleton IS NULL[\s\S]+NOT control\.enabled[\s\S]+control\.read_only[\s\S]+NOT control\.provider_enabled[\s\S]+NOT control\.deletion_enabled[\s\S]+STUDIO_READ_ONLY/,
+  'deletion recovery must fail closed under locked runtime controls',
+);
+assert.ok(
+  deletionReconciliationClaim.indexOf('SELECT * INTO control') <
+    deletionReconciliationClaim.indexOf('next_count := a.reconciliation_count + 1'),
+  'runtime control validation must precede deletion retry consumption',
+);
+assert.ok(
+  deletionReconciliationClaim.indexOf('SELECT * INTO control') <
+    deletionReconciliationClaim.indexOf("SET state = 'failed'"),
+  'runtime control validation must precede deletion exhaustion',
+);
 assert.ok(
   deletionReconciliationClaim.indexOf("SET state = 'reconciling'") <
     deletionReconciliationClaim.indexOf("'studio.rendition.deletion.reconciliation.claim'"),
@@ -201,11 +220,48 @@ assert.ok(
 );
 for (const token of [
   "'deletionAttemptId'", "'deletionRequestId'", "'resolutionId'", "'previousState'",
-  "'previousReconciliationCount'", "'reconciliationCount'", "'executionFence'",
-  "'resultingLifecycleVersion'", "'recoveryKind'",
+  "'previousReconciliationCount'", "'reconciliationCount'", "'currentExecutionFence'",
+  "'resultingLifecycleVersion'", "'recoveryKind'", "'providerAuthorityIssued'",
 ]) assert.match(deletionReconciliationClaim,new RegExp(token.replaceAll("'","\\'")));
 const deletionClaimAudit = /'studio\.rendition\.deletion\.reconciliation\.claim'[\s\S]+?\n\s*\);/u.exec(deletionReconciliationClaim)?.[0] ?? '';
 assert.doesNotMatch(deletionClaimAudit,/'(?:bucket|bucketId|objectKey|signedUrl|storageProvider|credentials|privateClaim|workerSecret)'/u);
+assert.match(deletionClaimAudit,/'providerAuthorityIssued',false/);
+assert.match(
+  deletionExecutionClaim,
+  /studio\.rendition\.deletion\.execution\.claim/,
+  'provider deletion authority must be audited at its exact fence',
+);
+assert.ok(
+  deletionExecutionClaim.indexOf("SET state = 'executing'") <
+    deletionExecutionClaim.indexOf("'studio.rendition.deletion.execution.claim'"),
+  'the execution attempt update must precede its atomic audit',
+);
+assert.ok(
+  deletionExecutionClaim.indexOf("'studio.rendition.deletion.execution.claim'") <
+    deletionExecutionClaim.indexOf('RETURN jsonb_build_object'),
+  'no private deletion binding may return before its execution audit',
+);
+assert.match(deletionExecutionClaim,/'executionFence',next_fence/);
+assert.match(deletionExecutionClaim,/'fence', next_fence/);
+assert.match(deletionComplete,/'executionFence',p_fence/);
+assert.match(deletionFail,/'executionFence',p_fence/);
+for (const token of [
+  "'deletionAttemptId'", "'deletionRequestId'", "'resolutionId'", "'previousState'",
+  "'previousExecutionFence'", "'executionFence'", "'previousReconciliationCount'",
+  "'reconciliationCount'", "'resultingLifecycleVersion'", "'executionKind'",
+]) assert.match(deletionExecutionClaim,new RegExp(token.replaceAll("'","\\'")));
+const deletionExecutionAudit = /'studio\.rendition\.deletion\.execution\.claim'[\s\S]+?\n\s*\);/u.exec(deletionExecutionClaim)?.[0] ?? '';
+assert.doesNotMatch(deletionExecutionAudit,/'(?:bucket|bucketId|objectKey|signedUrl|storageProvider|provider|credential|privateClaim|workerSecret|secret)'/u);
+assert.match(
+  forward,
+  /REVOKE ALL ON FUNCTION[\s\S]+studio_rendition_deletion_execution_claim\(uuid\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role;[\s\S]+GRANT EXECUTE ON FUNCTION[\s\S]+studio_deletion_reconciliation_claim\(uuid\),[\s\S]+studio_rendition_deletion_execution_claim\(uuid\)[\s\S]+TO service_role;/,
+  'deletion ownership and execution claims must remain service-only',
+);
+assert.doesNotMatch(
+  forward,
+  /GRANT EXECUTE ON FUNCTION[\s\S]+(?:studio_deletion_reconciliation_claim|studio_rendition_deletion_execution_claim)\(uuid\)[\s\S]+TO (?:anon|authenticated);/,
+  'deletion ownership or execution authority must never be granted to browser roles',
+);
 assert.match(
   commandClaim,
   /request\.id = command_deletion_request_id[\s\S]+request\.rendition_id = r\.id[\s\S]+request\.org_id = org[\s\S]+request\.workspace_id = workspace[\s\S]+FOR UPDATE OF request/,
