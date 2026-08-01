@@ -9,6 +9,9 @@ import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifac
 import {runStudioPrivateArtifactReconciliationEvidence} from './studioPrivateArtifactReconciliationPostgres.mjs';
 import {runStudioPrivateArtifactConcurrencyEvidence} from './studioPrivateArtifactConcurrencyPostgres.mjs';
 import {runStudioRenditionReconciliationAuditEvidence} from './studioRenditionReconciliationAuditPostgres.mjs';
+import {runStudioRenditionRecoveryPhaseEvidence} from './studioRenditionRecoveryPhasePostgres.mjs';
+import {runStudioDeletionReconciliationClaimAuditEvidence,studioDeletionReconciliationClaimAuditScenarioNames} from './studioDeletionReconciliationClaimAuditPostgres.mjs';
+import {runStudioDeletionResolutionBindingEvidence} from './studioDeletionResolutionBindingPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
 execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
@@ -118,13 +121,41 @@ export const scenarioNames={
  'rendition audit exhaustion replay inserts no event',
  'rendition audit exhaustion insertion failure rolls back terminal state',
  'rendition audit exhaustion metadata excludes private authority'
+ ],
+ renditionRecoveryPhase:[
+ 'recovery phase new attempt starts unowned',
+ 'recovery phase stale requested claim persists pre render',
+ 'recovery phase pre render claim omits rendered binding',
+ 'recovery phase expired lease retains pre render',
+ 'recovery phase claim audits retain persisted phase',
+ 'recovery phase repeated crashes reach bounded exhaustion',
+ 'recovery phase exhaustion audit retains pre render',
+ 'recovery phase rendered persistence advances phase',
+ 'recovery phase post render reclaim remains verify or upload',
+ 'recovery phase post render reclaim returns exact metadata',
+ 'recovery phase audit records pre and post render transitions',
+ 'recovery phase claim audit failure rolls back ownership'
+ ],
+ deletionReconciliationClaimAudit:studioDeletionReconciliationClaimAuditScenarioNames,
+ deletionResolutionBinding:[
+ 'deletion binding reverse rendition request approve denied',
+ 'deletion binding cross rendition request reject denied',
+ 'deletion binding foreign organization request denied',
+ 'deletion binding foreign workspace request denied',
+ 'deletion binding stale artifact version denied',
+ 'deletion binding stale rendition version denied',
+ 'deletion binding requester separation of duty enforced',
+ 'deletion binding valid exact approval succeeds',
+ 'deletion binding exact approval replay is effect free',
+ 'deletion binding valid exact rejection succeeds',
+ 'deletion binding resolved request new key denied'
  ]
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,203);assert.equal(new Set(allScenarios).size,203);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26,renditionRecoveryPhase:12,deletionReconciliationClaimAudit:27,deletionResolutionBinding:11});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,253);assert.equal(new Set(allScenarios).size,253);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit','rendition_phase','deletion_claim_audit','deletion_binding','phase_dirty','cross_layer'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -134,8 +165,18 @@ const passed=[];const failed=[];const scenario=async(name,fn)=>{try{await fn();p
 try{
  admin=await connect(adminUrl);for(const [role,attrs] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']])if(!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1::text',[role])).rowCount)await admin.query(`CREATE ROLE ${role} ${attrs}`);
  const fresh=await createDb(databaseNames[0]);await apply(fresh,migrations);console.log('FOUNDATION PASS fresh full ordered chain');
- const upgrade=await createDb(databaseNames[1]);await apply(upgrade,baseline);await apply(upgrade,[accepted]);await apply(upgrade,[feature]);await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade and additive reapply');
+ const upgrade=await createDb(databaseNames[1]);await apply(upgrade,baseline);await apply(upgrade,[accepted]);
+ const upgradeBase=await createApprovedStudioFixture(upgrade);
+ const upgradePre=await privateCommand(upgrade,{commandType:'studio.rendition.generate',actorId:upgradeBase.requester,organizationId:upgradeBase.org,workspaceId:upgradeBase.workspace,requestId:'76000000-0000-4000-8000-000000000001',idempotencyKey:'upgrade-pre-render-phase',authorizationVersion:upgradeBase.authorizationVersions[upgradeBase.requester],payload:{artifactVersionId:upgradeBase.artifactVersionId,format:'markdown'}});
+ await upgrade.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',reconciliation_count=1 WHERE id=$1::uuid",[upgradePre.renditionClaim.attemptId]);
+ const upgradePost=await privateCommand(upgrade,{commandType:'studio.rendition.generate',actorId:upgradeBase.requester,organizationId:upgradeBase.org,workspaceId:upgradeBase.workspace,requestId:'76000000-0000-4000-8000-000000000002',idempotencyKey:'upgrade-post-render-phase',authorizationVersion:upgradeBase.authorizationVersions[upgradeBase.requester],payload:{artifactVersionId:upgradeBase.artifactVersionId,format:'pdf'}});
+ const upgradePostKey=`${upgradeBase.org}/${upgradeBase.workspace}/studio-artifacts/${upgradePost.renditionClaim.opaqueObjectId}.pdf`;
+ await upgrade.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',storage_provider='supabase',bucket_id='studio-private-artifacts',object_key=$2::text,content_hash=$3::text,byte_length=256,mime_type='application/pdf',safe_filename='upgrade.pdf',reconciliation_count=1 WHERE id=$1::uuid",[upgradePost.renditionClaim.attemptId,upgradePostKey,'a'.repeat(64)]);
+ await apply(upgrade,[feature]);
+ assert.deepEqual((await upgrade.query('SELECT id,reconciliation_phase FROM public.studio_rendition_attempts WHERE id=ANY($1::uuid[]) ORDER BY id',[ [upgradePre.renditionClaim.attemptId,upgradePost.renditionClaim.attemptId] ])).rows.map(row=>row.reconciliation_phase).sort(),['pre_render','verify_or_upload']);
+ await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade phase backfill and additive reapply');
  const dirty=await createDb(databaseNames[2]);await apply(dirty,baseline);await apply(dirty,[accepted]);await dirty.query('ALTER TABLE public.studio_rendition_deletion_attempts ADD COLUMN execution_fence text');await assert.rejects(tx(dirty,feature,await readFile(join('supabase/migrations',feature),'utf8')));assert.equal((await dirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_deletion_attempts' AND column_name='state_changed_at'")).rowCount,0);assert.equal((await dirty.query("SELECT to_regprocedure('public.studio_private_artifact_reconciliation_due(integer)') procedure")).rows[0].procedure,null);console.log('FOUNDATION PASS dirty rejection atomic');
+ const phaseDirty=await createDb(databaseNames[18]);await apply(phaseDirty,baseline);await apply(phaseDirty,[accepted]);const phaseDirtyBase=await createApprovedStudioFixture(phaseDirty);const phaseDirtyAttempt=await privateCommand(phaseDirty,{commandType:'studio.rendition.generate',actorId:phaseDirtyBase.requester,organizationId:phaseDirtyBase.org,workspaceId:phaseDirtyBase.workspace,requestId:'76000000-0000-4000-8000-000000000003',idempotencyKey:'dirty-partial-phase',authorizationVersion:phaseDirtyBase.authorizationVersions[phaseDirtyBase.requester],payload:{artifactVersionId:phaseDirtyBase.artifactVersionId,format:'docx'}});await phaseDirty.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',storage_provider='supabase',reconciliation_count=1 WHERE id=$1::uuid",[phaseDirtyAttempt.renditionClaim.attemptId]);await assert.rejects(tx(phaseDirty,feature,await readFile(join('supabase/migrations',feature),'utf8')),/PR217_FORWARD_FIX_DIRTY_UPGRADE/);assert.equal((await phaseDirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_attempts' AND column_name='reconciliation_phase'")).rowCount,0);console.log('FOUNDATION PASS partial rendition metadata dirty-upgrade rejection atomic');
  const storage=await createDb(databaseNames[3]);await apply(storage,baseline);await storage.query('CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY');await apply(storage,[accepted]);await apply(storage,[feature]);assert.deepEqual((await storage.query("SELECT public FROM storage.buckets WHERE id='studio-private-artifacts'")).rows,[{public:false}]);assert.equal((await storage.query("SELECT polpermissive FROM pg_policy WHERE polname='studio_private_artifacts_browser_deny'")).rows[0].polpermissive,false);console.log('FOUNDATION PASS conditional Storage stub');
  const forward=await createDb(databaseNames[4]);await apply(forward,migrations);const forwardPeer=await connect(urlFor(databaseNames[4]));
  const race=await createDb(databaseNames[5]);await apply(race,migrations);const racePeer=await connect(urlFor(databaseNames[5]));
@@ -148,9 +189,16 @@ try{
  const generationConcurrencyDb=await createDb(databaseNames[12]);await apply(generationConcurrencyDb,migrations);const generationCompletionPeer=await connect(urlFor(databaseNames[12]));const generationCommandPeer=await connect(urlFor(databaseNames[12]));
  const staleWorkerDb=await createDb(databaseNames[13]);await apply(staleWorkerDb,migrations);const staleOriginalPeer=await connect(urlFor(databaseNames[13]));
  const renditionAuditDb=await createDb(databaseNames[14]);await apply(renditionAuditDb,migrations);const renditionAuditPeer=await connect(urlFor(databaseNames[14]));
+ const renditionPhaseDb=await createDb(databaseNames[15]);await apply(renditionPhaseDb,migrations);
+ const deletionClaimAuditDb=await createDb(databaseNames[16]);await apply(deletionClaimAuditDb,migrations);const deletionClaimAuditPeer=await connect(urlFor(databaseNames[16]));
+ const deletionBindingDb=await createDb(databaseNames[17]);await apply(deletionBindingDb,migrations);
+ const crossLayerDb=await createDb(databaseNames[19]);await apply(crossLayerDb,migrations);
  await runStudioPrivateArtifactConcurrencyEvidence({observer:generationConcurrencyDb,completionDb:generationCompletionPeer,commandDb:generationCommandPeer,staleRecoveryDb:staleWorkerDb,staleOriginalDb:staleOriginalPeer,scenario,names:scenarioNames.concurrencyP1});
  await runStudioRenditionReconciliationAuditEvidence({db:renditionAuditDb,peer:renditionAuditPeer,scenario,names:scenarioNames.renditionReconciliationAudit});
- const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(upgrade,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
+ const renditionPhaseCounts=await runStudioRenditionRecoveryPhaseEvidence({db:renditionPhaseDb,scenario,names:scenarioNames.renditionRecoveryPhase});
+ const deletionClaimAuditCounts=await runStudioDeletionReconciliationClaimAuditEvidence({db:deletionClaimAuditDb,peer:deletionClaimAuditPeer,scenario,names:scenarioNames.deletionReconciliationClaimAudit});
+ const deletionBindingCounts=await runStudioDeletionResolutionBindingEvidence({db:deletionBindingDb,scenario,names:scenarioNames.deletionResolutionBinding});
+ const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(crossLayerDb,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);
  await privateCommand(race,{commandType:'studio.retention.policy.publish',actorId:raceBase.requester,organizationId:raceBase.org,workspaceId:raceBase.workspace,requestId:'79000000-0000-4000-8000-000000000001',idempotencyKey:'race-retention-zero',authorizationVersion:raceBase.authorizationVersions[raceBase.requester],payload:{artifactType:'brd',retentionDays:0,indefinite:false,rationale:'disposable race evidence'}});
@@ -245,7 +293,7 @@ try{
   async()=>await assert.rejects(privateCommand(forward,{commandType:'studio.legal_hold.place',actorId:fbase.requester,organizationId:fbase.org,workspaceId:fbase.workspace,requestId:`77000000-0000-4000-8000-${String(++fOrdinal).padStart(12,'0')}`,idempotencyKey:'forward-stale-rendition',authorizationVersion:fbase.authorizationVersions[fbase.requester],expectedArtifactVersion:fbase.version.version,expectedRenditionVersion:1,payload:{renditionId:fRendition.id,rationale:'stale'}}),/VERSION_CONFLICT/),
   async()=>assert.equal(contractParityPassed,true),
   async()=>assert.match(migrationForward,/x\.state IN \('requested','rendering','uploaded','reconciliation_required','reconciling','failed'\)/),
-  async()=>assert.match(migrationForward,/phase := CASE WHEN x\.state IN \('requested','rendering'\)/),
+  async()=>assert.match(migrationForward,/WHEN x\.state IN \('requested','rendering'\) THEN 'pre_render'[\s\S]+WHEN x\.state = 'reconciling' THEN x\.reconciliation_phase/),
   async()=>assert.equal(reconciliationCounts.renditionProviderUploads>=0,true),
   async()=>assert.equal(reconciliationCounts.renditionProviderUploads>=1,true),
   async()=>assert.equal(reconciliationCounts.renditionProviderUploads<=1,true),
@@ -400,5 +448,6 @@ try{
  assert.equal(auditChecks.length,15);for(let index=0;index<auditChecks.length;index++)await scenario(auditNames[index],auditChecks[index]);
  console.log('LIFECYCLE TRUTH COUNTS '+JSON.stringify({retentionWins:{providerDeletes:extensionRaceEvidence.providerDeletes},deletionWins:{providerDeletes:deletionWinnerProviderDeletes},tombstoneRegeneration:{receiptDelta:tombstoneEvidence.after.receipts-tombstoneEvidence.before.receipts,attemptDelta:tombstoneEvidence.after.attempts-tombstoneEvidence.before.attempts,providerUploads:tombstoneEvidence.providerUploads,objects:tombstoneEvidence.objectCount},deletionRetry:{requests:retryCounts.requests,resolutions:retryCounts.resolutions,attempts:retryCounts.attempts},pendingRecovery:{initialState:pendingAttemptBefore.state,finalState:pendingRecoveredState}}));
  console.log('DELETION AUDIT COUNTS '+JSON.stringify({completedDeleted:deletionWinnerAudit.length,completedMissing:missingCompletionAudit.length,uncertainFailures:uncertainAudits.length,terminalFailures:retryTerminalAudit.length,exhaustion:exhaustionAudits.length,staleFence:retryStaleAfter.audit_count,completionReplay:missingCompletionAuditCount,failureReplay:retryTerminalAuditCount}));
+ console.log('P1 CORRECTIVE COUNTS '+JSON.stringify({renditionPhase:renditionPhaseCounts,deletionClaimAudit:deletionClaimAuditCounts,deletionBinding:deletionBindingCounts}));
  console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length){console.error(`FAILED SCENARIOS ${JSON.stringify(failed)}`);process.exitCode=1}
 }finally{for(const db of clients.reverse())if(db!==admin)await db.end().catch(()=>{});if(admin){for(const name of created.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{process.exitCode=1});await admin.end().catch(()=>{})}}

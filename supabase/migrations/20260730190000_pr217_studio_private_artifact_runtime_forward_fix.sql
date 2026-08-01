@@ -15,6 +15,16 @@ BEGIN
   END IF;
   IF EXISTS (
     SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'studio_rendition_attempts'
+      AND column_name = 'reconciliation_phase'
+      AND data_type <> 'text'
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PR217_FORWARD_FIX_DIRTY_UPGRADE';
+  END IF;
+  IF EXISTS (
+    SELECT 1
     FROM public.studio_rendition_deletion_attempts a
     JOIN public.studio_renditions r ON r.id = a.rendition_id
     WHERE a.state IN ('requested', 'reconciliation_required', 'reconciling')
@@ -35,7 +45,75 @@ CREATE INDEX IF NOT EXISTS studio_deletion_requests_rendition_history
 
 ALTER TABLE public.studio_rendition_attempts
   ADD COLUMN IF NOT EXISTS state_changed_at timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN IF NOT EXISTS execution_fence bigint NOT NULL DEFAULT 0 CHECK (execution_fence >= 0);
+  ADD COLUMN IF NOT EXISTS execution_fence bigint NOT NULL DEFAULT 0 CHECK (execution_fence >= 0),
+  ADD COLUMN IF NOT EXISTS reconciliation_phase text;
+
+DO $rendition_phase_upgrade$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.studio_rendition_attempts attempt
+    WHERE attempt.state IN ('reconciliation_required','reconciling')
+      AND attempt.reconciliation_phase IS NULL
+      AND NOT COALESCE((
+        (
+          attempt.storage_provider IS NULL
+          AND attempt.bucket_id IS NULL
+          AND attempt.object_key IS NULL
+          AND attempt.content_hash IS NULL
+          AND attempt.byte_length IS NULL
+          AND attempt.mime_type IS NULL
+          AND attempt.safe_filename IS NULL
+        )
+        OR (
+          attempt.storage_provider = 'supabase'
+          AND attempt.bucket_id = 'studio-private-artifacts'
+          AND attempt.object_key IS NOT NULL
+          AND attempt.content_hash ~ '^[0-9a-f]{64}$'
+          AND attempt.byte_length > 0
+          AND attempt.mime_type = CASE attempt.format
+            WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+            WHEN 'pdf' THEN 'application/pdf'
+            ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          END
+          AND attempt.safe_filename ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+        )
+      ), false)
+  ) THEN
+    RAISE EXCEPTION USING MESSAGE = 'PR217_FORWARD_FIX_DIRTY_UPGRADE';
+  END IF;
+
+  -- The accepted immutable-attempt trigger predates this private column. Suspend
+  -- it only for this transaction-owned backfill; PostgreSQL rolls the trigger
+  -- state back together with the migration if either statement fails.
+  ALTER TABLE public.studio_rendition_attempts
+    DISABLE TRIGGER trg_studio_rendition_attempt_guard;
+
+  UPDATE public.studio_rendition_attempts attempt
+  SET reconciliation_phase = CASE
+    WHEN attempt.storage_provider IS NULL
+      AND attempt.bucket_id IS NULL
+      AND attempt.object_key IS NULL
+      AND attempt.content_hash IS NULL
+      AND attempt.byte_length IS NULL
+      AND attempt.mime_type IS NULL
+      AND attempt.safe_filename IS NULL
+      THEN 'pre_render'
+    ELSE 'verify_or_upload'
+  END
+  WHERE attempt.state IN ('reconciliation_required','reconciling')
+    AND attempt.reconciliation_phase IS NULL;
+
+  ALTER TABLE public.studio_rendition_attempts
+    ENABLE TRIGGER trg_studio_rendition_attempt_guard;
+END
+$rendition_phase_upgrade$;
+
+ALTER TABLE public.studio_rendition_attempts
+  DROP CONSTRAINT IF EXISTS studio_rendition_attempts_reconciliation_phase_check;
+ALTER TABLE public.studio_rendition_attempts
+  ADD CONSTRAINT studio_rendition_attempts_reconciliation_phase_check
+  CHECK (reconciliation_phase IS NULL OR reconciliation_phase IN ('pre_render','verify_or_upload'));
 
 ALTER TABLE public.studio_rendition_deletion_attempts
   ADD COLUMN IF NOT EXISTS state_changed_at timestamptz NOT NULL DEFAULT now(),
@@ -81,13 +159,13 @@ BEGIN
      OR (to_jsonb(NEW) - ARRAY[
        'state','storage_provider','bucket_id','object_key','content_hash','byte_length',
        'mime_type','safe_filename','failure_code','reconciliation_count',
-       'reconciliation_claimed_at','execution_fence','state_changed_at',
+       'reconciliation_claimed_at','reconciliation_phase','execution_fence','state_changed_at',
        'started_at','rendered_at','completed_at'
      ]) IS DISTINCT FROM
         (to_jsonb(OLD) - ARRAY[
           'state','storage_provider','bucket_id','object_key','content_hash','byte_length',
           'mime_type','safe_filename','failure_code','reconciliation_count',
-          'reconciliation_claimed_at','execution_fence','state_changed_at',
+          'reconciliation_claimed_at','reconciliation_phase','execution_fence','state_changed_at',
           'started_at','rendered_at','completed_at'
         ])
   THEN
@@ -377,10 +455,13 @@ DECLARE
   artifact_version_id uuid;
   rendition_id uuid;
   command_hold_id uuid;
+  command_deletion_request_id uuid;
+  command_deletion_outcome text;
   format_name text;
   renderer text;
   v public.studio_artifact_versions;
   r public.studio_renditions;
+  bound_deletion_request public.studio_rendition_deletion_requests;
   result jsonb;
   prior_receipt public.studio_private_artifact_command_receipts;
   expected_payload_keys text[];
@@ -553,6 +634,33 @@ BEGIN
     END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended(r.id::text, 0));
 
+    IF command_type = 'studio.rendition.deletion.resolve' THEN
+      BEGIN
+        command_deletion_request_id := (p_command #>> '{payload,deletionRequestId}')::uuid;
+        command_deletion_outcome := p_command #>> '{payload,outcome}';
+      EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION USING MESSAGE = 'INVALID_COMMAND';
+      END;
+      IF command_deletion_outcome NOT IN ('approve','reject') THEN
+        RAISE EXCEPTION USING MESSAGE = 'INVALID_COMMAND';
+      END IF;
+      SELECT request.* INTO bound_deletion_request
+      FROM public.studio_rendition_deletion_requests request
+      WHERE request.id = command_deletion_request_id
+        AND request.rendition_id = r.id
+        AND request.org_id = org
+        AND request.workspace_id = workspace
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.studio_rendition_deletion_resolutions existing_resolution
+          WHERE existing_resolution.request_id = request.id
+        )
+      FOR UPDATE OF request;
+      IF bound_deletion_request.id IS NULL THEN
+        RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+      END IF;
+    END IF;
+
     IF command_type = 'studio.rendition.retention.extend'
        AND (
          r.lifecycle NOT IN ('available','deletion_requested','deletion_failed')
@@ -679,6 +787,8 @@ DECLARE
   extension text;
   expected_key text;
   expected_mime text;
+  metadata_empty boolean;
+  metadata_complete boolean;
 BEGIN
   SELECT * INTO x FROM public.studio_rendition_attempts WHERE id = p_attempt FOR UPDATE;
   IF x.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
@@ -713,7 +823,46 @@ BEGIN
   IF x.state NOT IN ('requested','rendering','uploaded','reconciliation_required','reconciling') THEN
     RETURN NULL;
   END IF;
-  phase := CASE WHEN x.state IN ('requested','rendering') THEN 'pre_render' ELSE 'verify_or_upload' END;
+  extension := CASE x.format WHEN 'markdown' THEN 'md' ELSE x.format END;
+  expected_key := format('%s/%s/studio-artifacts/%s.%s', x.org_id, x.workspace_id, x.opaque_object_id, extension);
+  expected_mime := CASE x.format
+    WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+    WHEN 'pdf' THEN 'application/pdf'
+    ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  END;
+  metadata_empty := x.storage_provider IS NULL
+    AND x.bucket_id IS NULL
+    AND x.object_key IS NULL
+    AND x.content_hash IS NULL
+    AND x.byte_length IS NULL
+    AND x.mime_type IS NULL
+    AND x.safe_filename IS NULL;
+  metadata_complete := COALESCE(x.storage_provider = 'supabase'
+    AND x.bucket_id = 'studio-private-artifacts'
+    AND x.object_key = expected_key
+    AND x.content_hash ~ '^[0-9a-f]{64}$'
+    AND x.byte_length > 0
+    AND x.mime_type = expected_mime
+    AND x.safe_filename ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$', false);
+
+  IF NOT metadata_empty AND NOT metadata_complete THEN
+    RAISE EXCEPTION USING MESSAGE = 'COMMAND_UNAVAILABLE';
+  END IF;
+  phase := CASE
+    WHEN x.state IN ('requested','rendering') THEN 'pre_render'
+    WHEN x.state = 'uploaded' THEN 'verify_or_upload'
+    WHEN x.state = 'reconciliation_required' THEN
+      COALESCE(x.reconciliation_phase, CASE WHEN metadata_empty THEN 'pre_render' ELSE 'verify_or_upload' END)
+    WHEN x.state = 'reconciling' THEN x.reconciliation_phase
+  END;
+  IF phase IS NULL
+     OR (x.state IN ('requested','rendering') AND (NOT metadata_empty OR x.reconciliation_phase = 'verify_or_upload'))
+     OR (x.state = 'uploaded' AND (NOT metadata_complete OR x.reconciliation_phase = 'pre_render'))
+     OR (phase = 'pre_render' AND NOT metadata_empty)
+     OR (phase = 'verify_or_upload' AND NOT metadata_complete)
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'COMMAND_UNAVAILABLE';
+  END IF;
   next_count := CASE
     WHEN x.state = 'reconciliation_required' THEN GREATEST(x.reconciliation_count, 1)
     WHEN x.state = 'reconciling' THEN x.reconciliation_count + 1
@@ -722,7 +871,8 @@ BEGIN
   IF next_count >= 3 THEN
     UPDATE public.studio_rendition_attempts
     SET state = 'failed', failure_code = 'RECONCILIATION_EXHAUSTED',
-        reconciliation_count = 3, reconciliation_claimed_at = NULL, completed_at = now()
+        reconciliation_count = 3, reconciliation_claimed_at = NULL,
+        reconciliation_phase = phase, completed_at = now()
     WHERE id = x.id;
     INSERT INTO public.privileged_audit_events(
       id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
@@ -749,7 +899,7 @@ BEGIN
   UPDATE public.studio_rendition_attempts
   SET state = 'reconciling', failure_code = NULL,
       reconciliation_count = next_count, reconciliation_claimed_at = now(),
-      execution_fence = next_fence, completed_at = NULL
+      reconciliation_phase = phase, execution_fence = next_fence, completed_at = NULL
   WHERE id = x.id;
 
   INSERT INTO public.privileged_audit_events(
@@ -771,26 +921,6 @@ BEGIN
       'executionFence',next_fence
     )
   );
-
-  IF phase = 'verify_or_upload' THEN
-    extension := CASE x.format WHEN 'markdown' THEN 'md' ELSE x.format END;
-    expected_key := format('%s/%s/studio-artifacts/%s.%s', x.org_id, x.workspace_id, x.opaque_object_id, extension);
-    expected_mime := CASE x.format
-      WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
-      WHEN 'pdf' THEN 'application/pdf'
-      ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    END;
-    IF x.storage_provider IS DISTINCT FROM 'supabase'
-       OR x.bucket_id IS DISTINCT FROM 'studio-private-artifacts'
-       OR x.object_key IS DISTINCT FROM expected_key
-       OR x.content_hash !~ '^[0-9a-f]{64}$'
-       OR x.byte_length <= 0
-       OR x.mime_type IS DISTINCT FROM expected_mime
-       OR x.safe_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
-    THEN
-      RAISE EXCEPTION USING MESSAGE = 'COMMAND_UNAVAILABLE';
-    END IF;
-  END IF;
 
   RETURN jsonb_strip_nulls(jsonb_build_object(
     'phase', phase,
@@ -871,7 +1001,8 @@ BEGIN
   UPDATE public.studio_rendition_attempts
   SET storage_provider = 'supabase', bucket_id = 'studio-private-artifacts',
       object_key = p_object_key, content_hash = p_hash, byte_length = p_byte_length,
-      mime_type = p_mime, safe_filename = p_safe_filename, rendered_at = now()
+      mime_type = p_mime, safe_filename = p_safe_filename,
+      reconciliation_phase = 'verify_or_upload', rendered_at = now()
   WHERE id = x.id;
   RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','reconciling');
 END
@@ -994,14 +1125,18 @@ BEGIN
   IF a.state = 'reconciling'
      AND a.reconciliation_claimed_at > now() - interval '5 minutes' THEN RETURN NULL; END IF;
   IF a.state NOT IN ('requested','executing','reconciliation_required','reconciling') THEN RETURN NULL; END IF;
+  SELECT cr.request_id INTO command_request_id
+  FROM public.studio_private_artifact_command_receipts cr
+  WHERE cr.id = d.receipt_id
+    AND cr.org_id = d.org_id
+    AND cr.workspace_id = d.workspace_id
+    AND cr.actor_id = d.resolved_by
+    AND cr.command_type = 'studio.rendition.deletion.resolve';
+  IF command_request_id IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+  END IF;
   next_count := a.reconciliation_count + 1;
   IF next_count > 3 THEN
-    SELECT cr.request_id INTO command_request_id
-    FROM public.studio_private_artifact_command_receipts cr
-    WHERE cr.id = d.receipt_id;
-    IF command_request_id IS NULL THEN
-      RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
-    END IF;
     UPDATE public.studio_rendition_deletion_attempts
     SET state = 'failed', failure_code = 'DELETION_RECONCILIATION_EXHAUSTED',
         reconciliation_count = 3, reconciliation_claimed_at = NULL,
@@ -1032,6 +1167,25 @@ BEGIN
       reconciliation_count = next_count, reconciliation_claimed_at = now(),
       execution_claimed_at = NULL, completed_at = NULL
   WHERE id = a.id;
+  INSERT INTO public.privileged_audit_events(
+    id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,
+    outcome,resource_version,metadata
+  ) VALUES (
+    audit_id,r.org_id,r.workspace_id,d.resolved_by,command_request_id,
+    'studio.rendition.deletion.reconciliation.claim','studio_rendition',r.id,
+    'succeeded',r.lifecycle_version,
+    jsonb_build_object(
+      'deletionAttemptId',a.id,
+      'deletionRequestId',a.request_id,
+      'resolutionId',d.id,
+      'previousState',a.state,
+      'previousReconciliationCount',a.reconciliation_count,
+      'reconciliationCount',next_count,
+      'executionFence',a.execution_fence,
+      'resultingLifecycleVersion',r.lifecycle_version,
+      'recoveryKind','deletion'
+    )
+  );
   RETURN jsonb_build_object(
     'deletionAttemptId', a.id,
     'renditionId', r.id,
@@ -1585,6 +1739,13 @@ BEGIN
   UPDATE public.studio_rendition_attempts
   SET state = target_state, failure_code = p_failure,
       reconciliation_count = next_count, reconciliation_claimed_at = NULL,
+      reconciliation_phase = CASE
+        WHEN target_state = 'reconciliation_required' AND x.state IN ('requested','rendering')
+          THEN 'pre_render'
+        WHEN target_state = 'reconciliation_required' AND x.state = 'uploaded'
+          THEN 'verify_or_upload'
+        ELSE x.reconciliation_phase
+      END,
       completed_at = CASE WHEN target_state = 'failed' THEN now() ELSE NULL END
   WHERE id = x.id;
   INSERT INTO public.privileged_audit_events(
@@ -1652,7 +1813,8 @@ BEGIN
   UPDATE public.studio_rendition_attempts
   SET storage_provider = 'supabase', bucket_id = 'studio-private-artifacts',
       object_key = p_object_key, content_hash = p_hash, byte_length = p_byte_length,
-      mime_type = p_mime, safe_filename = p_safe_filename, rendered_at = now()
+      mime_type = p_mime, safe_filename = p_safe_filename,
+      reconciliation_phase = 'verify_or_upload', rendered_at = now()
   WHERE id = x.id;
   RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','reconciling');
 END

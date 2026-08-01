@@ -92,7 +92,7 @@ export async function runStudioRenditionReconciliationAuditEvidence({db,peer,sce
   await setAttempt(db,attemptId,{
     state:'uploaded',storage_provider:'supabase',bucket_id:'studio-private-artifacts',object_key:objectKey,
     content_hash:'a'.repeat(64),byte_length:128,mime_type:'text/markdown; charset=utf-8',
-    safe_filename:'recovery.md',reconciliation_count:0,reconciliation_claimed_at:null,
+    safe_filename:'recovery.md',reconciliation_phase:'verify_or_upload',reconciliation_count:0,reconciliation_claimed_at:null,
     execution_fence:renderingClaim.fence,completed_at:null,
   });
   await makeStale(db,attemptId);
@@ -112,7 +112,12 @@ export async function runStudioRenditionReconciliationAuditEvidence({db,peer,sce
   )).rows;
   const persistedAfterReclaim=await snapshot(db,attemptId);
 
-  await setAttempt(db,attemptId,{state:'requested',reconciliation_count:0,reconciliation_claimed_at:null,execution_fence:reclaim.fence,completed_at:null,failure_code:null});
+  await setAttempt(db,attemptId,{
+    state:'requested',storage_provider:null,bucket_id:null,object_key:null,content_hash:null,
+    byte_length:null,mime_type:null,safe_filename:null,reconciliation_phase:null,
+    reconciliation_count:0,reconciliation_claimed_at:null,execution_fence:reclaim.fence,
+    completed_at:null,failure_code:null,
+  });
   await makeStale(db,attemptId);
   const concurrentBefore=await countAction(db,claimAction,attemptId);
   const concurrentResults=await Promise.all([claim(db,attemptId),claim(peer,attemptId)]);

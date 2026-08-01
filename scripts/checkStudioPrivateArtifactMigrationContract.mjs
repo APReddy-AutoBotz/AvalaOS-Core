@@ -97,6 +97,7 @@ const completionInternal = effectiveForwardFunction('studio_rendition_attempt_co
 const normalComplete = effectiveForwardFunction('studio_rendition_attempt_complete');
 const normalFail = effectiveForwardFunction('studio_rendition_attempt_fail');
 const recoveryAuthority = effectiveForwardFunction('studio_rendition_recovery_authority');
+const renditionAttemptGuard = effectiveForwardFunction('studio_rendition_attempt_guard');
 const renditionReconciliationClaim = effectiveForwardFunction('studio_rendition_reconciliation_claim');
 const recoveryRendered = effectiveForwardFunction('studio_rendition_reconciliation_rendered');
 const recoveryComplete = effectiveForwardFunction('studio_rendition_reconciliation_complete');
@@ -127,6 +128,26 @@ assert.match(recoveryRendered,/studio_rendition_recovery_authority\(p_attempt,p_
 assert.match(recoveryComplete,/studio_rendition_attempt_complete_internal\(p_attempt,p_fence\)/);
 assert.doesNotMatch(recoveryComplete,/studio_rendition_attempt_complete\(p_attempt\)/);
 assert.match(recoveryFail,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
+assert.match(forward,/ADD COLUMN IF NOT EXISTS reconciliation_phase text/);
+assert.match(forward,/studio_rendition_attempts_reconciliation_phase_check[\s\S]+pre_render[\s\S]+verify_or_upload/);
+assert.match(renditionAttemptGuard,/'reconciliation_phase'/);
+assert.match(
+  renditionReconciliationClaim,
+  /WHEN x\.state = 'reconciling' THEN x\.reconciliation_phase/,
+  'expired reconciling work must retain its persisted recovery phase',
+);
+assert.doesNotMatch(
+  renditionReconciliationClaim,
+  /CASE WHEN x\.state IN \('requested','rendering'\) THEN 'pre_render' ELSE 'verify_or_upload' END/,
+  'reconciling phase must not be reclassified from state alone',
+);
+assert.match(renditionReconciliationClaim,/reconciliation_phase = phase/);
+assert.match(recoveryRendered,/reconciliation_phase = 'verify_or_upload'/);
+assert.ok(
+  renditionReconciliationClaim.indexOf('reconciliation_phase = phase') <
+    renditionReconciliationClaim.indexOf("'studio.rendition.reconciliation.claim'"),
+  'the persisted phase must commit with ownership before its audit',
+);
 assert.match(
   renditionReconciliationClaim,
   /studio\.rendition\.reconciliation\.claim/,
@@ -163,5 +184,38 @@ for (const body of [renditionClaimAudit,renditionExhaustionAudit]) {
   assert.ok(body.includes('privileged_audit_events') || body.length > 0);
   assert.doesNotMatch(body,/'(?:bucket|bucketId|objectKey|signedUrl|approvedContent|credentials|serviceRole)'/u);
 }
+assert.match(
+  deletionReconciliationClaim,
+  /studio\.rendition\.deletion\.reconciliation\.claim/,
+  'deletion recovery ownership must be audited',
+);
+assert.ok(
+  deletionReconciliationClaim.indexOf("SET state = 'reconciling'") <
+    deletionReconciliationClaim.indexOf("'studio.rendition.deletion.reconciliation.claim'"),
+  'deletion ownership must update before its atomic audit insert',
+);
+assert.ok(
+  deletionReconciliationClaim.indexOf("'studio.rendition.deletion.reconciliation.claim'") <
+    deletionReconciliationClaim.indexOf("RETURN jsonb_build_object"),
+  'deletion recovery authority must not return before its audit insert',
+);
+for (const token of [
+  "'deletionAttemptId'", "'deletionRequestId'", "'resolutionId'", "'previousState'",
+  "'previousReconciliationCount'", "'reconciliationCount'", "'executionFence'",
+  "'resultingLifecycleVersion'", "'recoveryKind'",
+]) assert.match(deletionReconciliationClaim,new RegExp(token.replaceAll("'","\\'")));
+const deletionClaimAudit = /'studio\.rendition\.deletion\.reconciliation\.claim'[\s\S]+?\n\s*\);/u.exec(deletionReconciliationClaim)?.[0] ?? '';
+assert.doesNotMatch(deletionClaimAudit,/'(?:bucket|bucketId|objectKey|signedUrl|storageProvider|credentials|privateClaim|workerSecret)'/u);
+assert.match(
+  commandClaim,
+  /request\.id = command_deletion_request_id[\s\S]+request\.rendition_id = r\.id[\s\S]+request\.org_id = org[\s\S]+request\.workspace_id = workspace[\s\S]+FOR UPDATE OF request/,
+  'new deletion resolutions must bind the request to the locked rendition and tenant scope',
+);
+assert.match(commandClaim,/NOT EXISTS \([\s\S]+studio_rendition_deletion_resolutions existing_resolution[\s\S]+existing_resolution\.request_id = request\.id/);
+assert.ok(
+  commandClaim.indexOf('request.rendition_id = r.id') <
+    commandClaim.lastIndexOf('studio_private_artifact_command_claim_pr217_accepted'),
+  'deletion request binding must precede delegation for a new command',
+);
 assert.match(forward,/REVOKE ALL ON FUNCTION[\s\S]+studio_rendition_generation_lock\(uuid,uuid,uuid,text,text\)[\s\S]+studio_rendition_recovery_authority\(uuid,bigint\)[\s\S]+studio_rendition_attempt_complete_internal\(uuid,bigint\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
 console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);
