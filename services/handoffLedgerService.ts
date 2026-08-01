@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { HandoffLedgerEntry } from '../types';
 import { useOrganizationContext } from '../components/auth/OrganizationProvider';
 import { useAuth } from '../components/auth/AuthProvider';
@@ -11,22 +11,26 @@ type NewHandoffLedgerEntry = Omit<HandoffLedgerEntry, 'id' | 'orgId' | 'createdA
 };
 
 export function useHandoffLedger() {
-    const { currentOrganization } = useOrganizationContext();
+    const { currentOrganization, currentWorkspace } = useOrganizationContext();
     const { user } = useAuth();
     const [entries, setEntries] = useState<HandoffLedgerEntry[]>([]);
+    const refreshSequence = useRef(0);
 
     const refresh = useCallback(async () => {
-        if (!currentOrganization) {
+        const sequence = ++refreshSequence.current;
+        if (!currentOrganization || !currentWorkspace) {
             setEntries([]);
             return;
         }
+        setEntries([]);
         try {
-            setEntries(await handoffLedgerAdapter.list(currentOrganization.id));
+            const nextEntries = await handoffLedgerAdapter.list(currentOrganization.id);
+            if (sequence === refreshSequence.current) setEntries(nextEntries);
         } catch (error) {
             console.error('Failed to load handoff ledger:', error);
-            setEntries([]);
+            if (sequence === refreshSequence.current) setEntries([]);
         }
-    }, [currentOrganization]);
+    }, [currentOrganization, currentWorkspace]);
 
     useEffect(() => {
         void refresh();

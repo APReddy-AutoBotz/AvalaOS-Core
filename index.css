@@ -11,6 +11,32 @@
 :root {
   color-scheme: light;
 
+  /* Semantic AvalaOS tokens. Legacy --kp/--abz aliases remain below for incremental compatibility. */
+  --av-color-brand-primary: #002c4b;
+  --av-color-brand-primary-hover: #073b60;
+  --av-color-brand-accent: #ffbc03;
+  --av-color-accent: #d99d00;
+  --av-color-bg: #f6f8fb;
+  --av-color-bg-subtle: #f1f5f9;
+  --av-color-surface: #ffffff;
+  --av-color-surface-elevated: #ffffff;
+  --av-color-border: rgba(15, 23, 42, 0.1);
+  --av-color-border-strong: rgba(15, 23, 42, 0.18);
+  --av-color-text: #0f172a;
+  --av-color-text-muted: #475569;
+  --av-color-text-subtle: #64748b;
+  --av-color-success: #047857;
+  --av-color-warning: #b45309;
+  --av-color-danger: #b91c1c;
+  --av-color-info: #0369a1;
+  --av-radius-control: 10px;
+  --av-radius-panel: 18px;
+  --av-radius-modal: 22px;
+  --av-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --av-shadow-sm: 0 8px 22px rgba(15, 23, 42, 0.07);
+  --av-shadow-md: 0 18px 40px rgba(15, 23, 42, 0.11);
+  --av-focus-ring: #0b5f8a;
+
   --kp-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --kp-font-display: Outfit, Inter, ui-sans-serif, system-ui, sans-serif;
 
@@ -90,6 +116,24 @@
 
 .dark {
   color-scheme: dark;
+  --av-color-brand-primary: #e9b95d;
+  --av-color-brand-primary-hover: #ffcf45;
+  --av-color-brand-accent: #ffcf45;
+  --av-color-accent: #ffcf45;
+  --av-color-bg: #050a13;
+  --av-color-bg-subtle: #0d2238;
+  --av-color-surface: #001b2f;
+  --av-color-surface-elevated: #073b60;
+  --av-color-border: rgba(148, 163, 184, 0.2);
+  --av-color-border-strong: rgba(148, 163, 184, 0.32);
+  --av-color-text: #f8fafc;
+  --av-color-text-muted: #cbd5e1;
+  --av-color-text-subtle: #94a3b8;
+  --av-color-success: #6ee7b7;
+  --av-color-warning: #fcd34d;
+  --av-color-danger: #fca5a5;
+  --av-color-info: #7dd3fc;
+  --av-focus-ring: #7dd3fc;
   --kp-bg: #050a13;
   --kp-bg-elevated: rgba(0, 27, 47, 0.86);
   --kp-surface: #001b2f;
@@ -116,7 +160,8 @@ body,
 
 body {
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--kp-bg);
   color: var(--kp-text);
   font-family: var(--kp-font-ui);
@@ -911,4 +956,195 @@ input:checked + .toggle-slider::before {
   stroke: #ffbc03;
   stroke-linecap: round;
   transition: stroke-dashoffset 1s ease-in-out;
+}
+
+/* Shared enterprise UI primitives and public-site composition. */
+.av-skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  transform: translateY(-180%);
+  border-radius: var(--av-radius-control);
+  background: var(--av-color-brand-primary);
+  color: #fff;
+  padding: 0.7rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: var(--av-shadow-md);
+  transition: transform 160ms ease;
+}
+
+.av-skip-link:focus {
+  transform: translateY(0);
+}
+
+.av-eyebrow {
+  color: var(--av-color-text-subtle);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.av-page-header {
+  max-width: 100%;
+}
+
+.av-surface,
+.av-public-panel,
+.av-stat-strip {
+  border: 1px solid var(--av-color-border);
+  border-radius: var(--av-radius-panel);
+  background: var(--av-color-surface);
+  box-shadow: var(--av-shadow-xs);
+}
+
+.av-stat-strip {
+  padding: 1rem;
+}
+
+.av-icon-button {
+  display: inline-grid;
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--av-color-border);
+  border-radius: var(--av-radius-control);
+  color: var(--av-color-text-muted);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.av-icon-button:hover {
+  border-color: var(--av-color-border-strong);
+  background: var(--av-color-bg-subtle);
+  color: var(--av-color-text);
+}
+
+.av-icon-button:focus-visible,
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible,
+.nav-item:focus-visible,
+.public-site a:focus-visible,
+.public-site button:focus-visible,
+.access-page button:focus-visible,
+.access-page input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--av-focus-ring) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.av-form-label {
+  display: block;
+  color: var(--av-color-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.av-input {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--av-color-border-strong);
+  border-radius: var(--av-radius-control);
+  background: var(--av-color-surface);
+  color: var(--av-color-text);
+  padding: 0.7rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.av-input:focus {
+  border-color: var(--av-focus-ring);
+  outline: 3px solid color-mix(in srgb, var(--av-focus-ring) 16%, transparent);
+}
+
+.public-site,
+.access-page {
+  overflow-y: auto;
+  background: var(--av-color-bg);
+}
+
+.public-site {
+  color: var(--av-color-text);
+}
+
+.av-public-hero {
+  background:
+    radial-gradient(600px 340px at 92% 8%, rgba(255, 188, 3, 0.14), transparent 70%),
+    radial-gradient(720px 380px at 5% 0%, rgba(11, 95, 138, 0.12), transparent 68%),
+    var(--av-color-bg);
+}
+
+.av-display-title {
+  color: var(--av-color-text);
+  font-family: var(--kp-font-display);
+  font-size: clamp(2.7rem, 6vw, 5.2rem);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.av-display-title span {
+  color: var(--av-color-brand-primary-hover);
+}
+
+.av-public-heading {
+  color: var(--av-color-text);
+  font-family: var(--kp-font-display);
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
+}
+
+.av-trust-band {
+  background: #07182a;
+}
+
+.dark .av-trust-band {
+  background: #030b15;
+}
+
+.av-product-shot img {
+  display: block;
+}
+
+.public-header {
+  color: var(--av-color-text);
+}
+
+@media (max-width: 1023px) {
+  .premium-sidebar[class~="-translate-x-full"] {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .premium-sidebar[class~="translate-x-0"] {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  body.av-mobile-nav-open {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 640px) {
+  .av-display-title {
+    font-size: clamp(2.5rem, 13vw, 3.7rem);
+  }
+
+  .av-public-heading {
+    font-size: 2.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

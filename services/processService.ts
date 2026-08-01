@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { AssessProcess } from '../types';
 import { useOrganizationContext } from '../components/auth/OrganizationProvider';
 import { ALL_TEMPLATE_PACKS } from '../constants/starterPacks';
@@ -10,17 +10,24 @@ export function useProcessService() {
     const { user } = useAuth();
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
+    const requestSequence = useRef(0);
 
     const fetchProcesses = useCallback(async () => {
-        if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) return;
+        const sequence = ++requestSequence.current;
+        if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) {
+            setProcesses([]);
+            setLoading(false);
+            return;
+        }
+        setProcesses([]);
         setLoading(true);
         try {
             const data = await assessAdapter.getProcesses(currentOrganization.id, currentWorkspace.id);
-            setProcesses(data);
+            if (sequence === requestSequence.current) setProcesses(data);
         } catch (err) {
             console.error('Failed to fetch processes:', err);
         } finally {
-            setLoading(false);
+            if (sequence === requestSequence.current) setLoading(false);
         }
     }, [currentOrganization, currentWorkspace, sessionState]);
 

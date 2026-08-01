@@ -1,6 +1,7 @@
-import React from 'react';
-import { DocumentGeneration, DocTemplate } from '../../types';
+import React, { useMemo } from 'react';
+import { DocumentGeneration, DocTemplate, TenantContextProjection } from '../../types';
 import { DocumentTextIcon, PlusCircleIcon, SparklesIcon } from '../shared/icons';
+import { useAuth } from '../auth/AuthProvider';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
 
@@ -22,19 +23,34 @@ const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTempla
 
 const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic }) => {
 
-    const { tenantContext } = useOrganizationContext();
+    const { tenantContext, currentOrganization, currentWorkspace } = useOrganizationContext();
+    const { user } = useAuth();
+
+    const studioContext = useMemo<TenantContextProjection | null>(() => {
+        if (tenantContext) return tenantContext;
+        if (!currentOrganization || !currentWorkspace) return null;
+        return {
+            userId: user?.id || 'local-demo-user',
+            organizationId: currentOrganization.id,
+            organizationName: currentOrganization.name,
+            workspaceId: currentWorkspace.id,
+            workspaceName: currentWorkspace.name,
+            authorizationVersion: 0,
+            capabilities: [],
+        };
+    }, [currentOrganization, currentWorkspace, tenantContext, user?.id]);
 
     const sortedGenerations = [...generations].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
     const artifactCount = generations.reduce((sum, generation) => sum + Object.keys(generation.artifacts || {}).length, 0);
 
     return (
         <div data-testid="studio-application-route">
-            {tenantContext && <StudioArtifactWorkspace context={tenantContext} />}
+            {studioContext && <StudioArtifactWorkspace key={`${studioContext.organizationId}:${studioContext.workspaceId}`} context={studioContext} capabilities={studioContext.capabilities} />}
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Governed document vault</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Legacy generated archive · unverified projection</p>
                     <h2 className="mt-1 text-3xl font-black text-slate-950 dark:text-white">Document Repository</h2>
-                    <p className="mt-2 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">Review generated BRD, PRD, PDD, and delivery artifacts with template traceability.</p>
+                    <p className="mt-2 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">Historical generated records remain available for reference. They are not canonical private artifacts; use the Artifact workspace above when the governed source is available.</p>
                 </div>
                 <div className="flex gap-2">
                     <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">{generations.length} runs</span>

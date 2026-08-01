@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { User, Task, Project, Sprint, Filters, WidgetType, WidgetDefinition, WidgetConfigs, WidgetConfig, HandoffLedgerEntry } from '../../types';
-import { CogIcon } from './icons';
 import HandoffLedgerPanel from './HandoffLedgerPanel';
 
 import WelcomeWidget from './widgets/WelcomeWidget';
@@ -11,6 +10,8 @@ import BurndownChartWidget from './widgets/BurndownChartWidget';
 import TasksByStatusWidget from './widgets/TasksByStatusWidget';
 import AiInsightsWidget from './widgets/AiInsightsWidget';
 import CustomizeDashboardModal from './CustomizeDashboardModal';
+import PageHeader from './ui/PageHeader';
+import StatusBadge from './ui/StatusBadge';
 
 interface CustomDashboardViewProps {
     currentUser: User;
@@ -115,18 +116,24 @@ const CustomDashboardView: React.FC<CustomDashboardViewProps> = (props) => {
         );
     }
 
+    const openTaskCount = props.tasks.filter(task => task.status !== 'Done').length;
+    const blockedTaskCount = props.tasks.filter(task => task.status === 'Blocked').length;
+    const reviewTaskCount = props.tasks.filter(task => ['In Review', 'Testing', 'Ready for Release'].includes(task.status)).length;
+
     return (
-        <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-text-light dark:text-text-dark">Dashboard</h2>
-                <button
-                    onClick={() => setCustomizeModalOpen(true)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-2xl btn-ghost"
-                >
-                    <CogIcon className="w-5 h-5" />
-                    <span>Customize</span>
-                </button>
-            </div>
+        <div className="mx-auto max-w-7xl space-y-6">
+            <PageHeader
+                eyebrow="Home · role-based command center"
+                title="Home"
+                description="See what requires attention, what changed, what is blocked, and which governed action comes next."
+                secondaryActions={[{ label: 'Customize Home', onClick: () => setCustomizeModalOpen(true) }]}
+                meta={<StatusBadge tone={blockedTaskCount ? 'warning' : 'success'}>{blockedTaskCount ? `${blockedTaskCount} blocked` : 'No blockers recorded'}</StatusBadge>}
+            />
+            <section className="grid gap-3 sm:grid-cols-3" aria-label="Home attention summary">
+                <div className="av-stat-strip"><p className="av-eyebrow">Open work</p><p className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">{openTaskCount}</p><p className="mt-1 text-xs text-[var(--av-color-text-muted)]">Authorized delivery records</p></div>
+                <div className="av-stat-strip"><p className="av-eyebrow">Needs review</p><p className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">{reviewTaskCount}</p><p className="mt-1 text-xs text-[var(--av-color-text-muted)]">Review or test states</p></div>
+                <div className="av-stat-strip"><p className="av-eyebrow">Handoffs</p><p className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">{props.handoffEntries?.length || 0}</p><p className="mt-1 text-xs text-[var(--av-color-text-muted)]">Recorded lifecycle transfers</p></div>
+            </section>
             <div className="dashboard-grid">
                 {visibleWidgets.map(widgetId => renderWidget(widgetId))}
             </div>

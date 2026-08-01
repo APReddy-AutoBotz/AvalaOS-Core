@@ -4,6 +4,8 @@ import { useOrganization } from '../../services/organizationService';
 import ProcessCreationModal from './ProcessCreationModal';
 import { ChartBarIcon, CheckCircleIcon, ExclamationTriangleIcon, SparklesIcon } from '../shared/icons';
 import type { ProductActionDecision } from '../../services/productActionPolicy';
+import PageHeader from '../shared/ui/PageHeader';
+import StatusBadge from '../shared/ui/StatusBadge';
 
 interface ProcessCatalogViewProps {
     onViewDetail: (processId: string) => void;
@@ -45,21 +47,15 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
 
     return (
         <div className="mx-auto max-w-6xl space-y-6 p-6 pb-20">
-            <div className="premium-surface overflow-hidden rounded-3xl">
-                <div className="flex flex-wrap items-end justify-between gap-4 p-7">
-                    <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Assessment control room</p>
-                        <h1 className="mt-1 text-3xl font-bold text-[#002C4B] dark:text-white">Process Catalog</h1>
-                        <p className="mt-2 max-w-2xl text-sm font-normal leading-6 text-slate-600 dark:text-slate-300">Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.</p>
-                    </div>
-                    <button
-                        onClick={() => canCreateProcess ? setIsCreateModalOpen(true) : alert(createProcessBlockedReason)}
-                        disabled={!canCreateProcess}
-                        title={!canCreateProcess ? createProcessBlockedReason : undefined}
-                        className="rounded-xl bg-gradient-to-r from-[#002C4B] to-[#ffbc03] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#002C4B]/20 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        New Process
-                    </button>
+            <div className="premium-surface overflow-hidden rounded-[var(--av-radius-panel)]">
+                <div className="p-6">
+                    <PageHeader
+                        eyebrow="Avala Assess · process inventory"
+                        title="Process Catalog"
+                        description="Review process candidates, criticality, readiness, and the recommended role for automation, AI, workflow, or human review."
+                        primaryAction={{ label: 'New process', onClick: () => setIsCreateModalOpen(true), disabled: !canCreateProcess, title: !canCreateProcess ? createProcessBlockedReason : undefined }}
+                        meta={<StatusBadge tone={canCreateProcess ? 'info' : 'warning'}>{canCreateProcess ? 'Creation available' : 'Creation restricted'}</StatusBadge>}
+                    />
                 </div>
                 <div className="grid grid-cols-1 gap-0 border-t border-slate-200/80 bg-slate-50/70 dark:border-slate-800/80 dark:bg-slate-950/30 md:grid-cols-4">
                     {assessmentStats.map(({ label, value, detail, icon: Icon }) => (
@@ -79,22 +75,23 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                 </div>
             </div>
 
-            <div className="premium-surface overflow-hidden rounded-2xl">
+            <div className="premium-surface overflow-hidden rounded-[var(--av-radius-panel)]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
                     <div>
-                        <h2 className="text-lg font-bold text-slate-950 dark:text-white">Assessment inventory</h2>
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{processes.length} active process records in {currentOrganization.name}</p>
+                        <h2 className="text-lg font-bold text-slate-950 dark:text-white">Process records</h2>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{processes.length} process records in {currentOrganization.name}</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Enterprise scope</span>
+                    <StatusBadge tone="neutral">Enterprise scope</StatusBadge>
                 </div>
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
                     <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-500">
                         <tr>
-                            <th className="px-6 py-4">Process Name</th>
-                            <th className="px-6 py-4">Department</th>
-                            <th className="px-6 py-4">Criticality</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                            <th scope="col" className="px-6 py-4">Process Name</th>
+                            <th scope="col" className="px-6 py-4">Department</th>
+                            <th scope="col" className="px-6 py-4">Criticality</th>
+                            <th scope="col" className="px-6 py-4">Status</th>
+                            <th scope="col" className="px-6 py-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -145,6 +142,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <ProcessCreationModal

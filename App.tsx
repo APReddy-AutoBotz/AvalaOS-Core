@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { persistBeforeCommit } from './services/persistenceTransition';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
-import ModuleJourney from './components/shared/ModuleJourney';
+import GovernView from './components/govern/GovernView';
+import PublicWebsite from './components/public/PublicWebsite';
 import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, Team, DocTemplate, Automation, TimesheetEntry, GeneratedArtifacts, ApprovalStatus, Filters, ProjectLifecycleStage, DocumentGeneration, ProjectDetails, WorkItem, TaskType, DocumentArtifactKeys, DocumentSection, AiProviderType, AssessToStudioHandoffPayload } from './types';
 import { MOCK_USERS, MOCK_TEAMS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES } from './data/mockData';
 import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
-import EnterpriseAccessView from './components/auth/EnterpriseAccessView';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
 import OnboardingWizard from './components/auth/OnboardingWizard';
@@ -73,6 +73,7 @@ function App() {
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [isGovernViewOpen, setGovernViewOpen] = useState(false);
 
   // App State
   const { user: currentUser, loading: authLoading } = useAuth();
@@ -144,6 +145,11 @@ function App() {
   // Assess Detail State
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const enabledModules = currentOrganization?.enabledModules;
+  const hasAdminAccess = Boolean(currentUser && (
+    currentUser.orgRole === 'Admin' ||
+    currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission)) ||
+    tenantContext?.capabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))
+  ));
   const explicitNavigationIntent = useMemo(
     () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
     [],
@@ -194,10 +200,16 @@ function App() {
     });
   }, [currentOrganization, currentScope, enabledModules, guardLoading, viewAuthorityUser]);
 
+  useEffect(() => {
+    if (!isGovernViewOpen || guardLoading) return;
+    const access = resolveAppViewAccess(View.PROCESS_CATALOG, currentScope);
+    if (!access.allowed) setGovernViewOpen(false);
+  }, [currentScope, guardLoading, isGovernViewOpen, resolveAppViewAccess]);
+
   const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
     if (guardLoading) return false;
 
-    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && currentUser?.orgRole === 'Admin') {
+    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && hasAdminAccess) {
       setScopeIfChanged(requestedScope);
       setCurrentView(view);
       return true;
@@ -213,7 +225,7 @@ function App() {
     setCurrentView(nextView);
 
     return access.allowed;
-  }, [currentScope, currentUser, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+  }, [currentScope, currentUser, guardLoading, hasAdminAccess, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
 
   const replaceProductNavigationSearch = useCallback((nextSearch: string) => {
     if (typeof window === 'undefined') return;
@@ -256,9 +268,10 @@ function App() {
   };
 
   const handleScopeChange = (scope: Scope) => {
+    setGovernViewOpen(false);
     if (scope.type === ScopeType.ORGANIZATION) {
       organizationScopeTransition.current = true;
-      if (currentUser?.orgRole === 'Admin') {
+      if (hasAdminAccess) {
         setScopeIfChanged(scope);
         setCurrentView(View.WORKSPACE);
       } else {
@@ -274,6 +287,7 @@ function App() {
   };
 
   const handleViewChange = (view: View) => {
+    setGovernViewOpen(false);
     if (view === View.DOCS_FORGE) {
       setAssessToStudioSourceContext(null);
     }
@@ -286,18 +300,6 @@ function App() {
   const handleDashboardStatClick = (filter: Filters) => {
     setQuickFilter(filter);
     applyGuardedView(View.LIST, { type: ScopeType.MY_WORK });
-  };
-
-  const handlePrimaryAction = () => {
-    const primaryCandidates = [View.PROCESS_CATALOG, View.DOCS_FORGE, View.BOARDS, View.DASHBOARD];
-    const allowedCandidate = primaryCandidates.find(view => resolveAppViewAccess(view, currentScope).allowed);
-    const targetView = allowedCandidate ?? primaryCandidates[0];
-
-    if (targetView === View.DOCS_FORGE) {
-      setAssessToStudioSourceContext(null);
-    }
-
-    applyGuardedView(targetView);
   };
 
   const handleProjectSelectedForDocForge = (project: Project) => {
@@ -958,6 +960,15 @@ function App() {
   const renderCurrentView = () => {
     const currentAccess = resolveAppViewAccess(currentView, currentScope);
 
+    if (isGovernViewOpen) {
+      const governAccess = resolveAppViewAccess(View.PROCESS_CATALOG, currentScope);
+      if (governAccess.guardSeverity === 'wait') return <ViewLoadingFallback />;
+      if (!governAccess.allowed) {
+        return <div className="mx-auto max-w-3xl p-8"><div className="premium-surface rounded-3xl p-8 text-center"><p className="av-eyebrow">Governance overview unavailable</p><h1 className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">Open an authorized source context to review governance signals.</h1><p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-[var(--av-color-text-muted)]">This read-only overview is scoped by the existing Assess access boundary and does not create a new entitlement.</p><button type="button" onClick={() => { setGovernViewOpen(false); applyGuardedView(governAccess.fallbackView, governAccess.fallbackScope ?? currentScope); }} className="btn-primary mt-6 inline-flex min-h-10 items-center justify-center px-4 text-sm font-bold">Open available workspace</button></div></div>;
+      }
+      return <GovernView processes={processes} handoffEntries={handoffEntries} onNavigate={handleViewChange} />;
+    }
+
     if (currentScope.type !== ScopeType.ORGANIZATION && !currentAccess.allowed && currentAccess.guardSeverity !== 'wait') {
       return (
         <div className="mx-auto max-w-3xl p-8">
@@ -1257,7 +1268,7 @@ function App() {
   }
 
   if (!currentUser) {
-    return <EnterpriseAccessView />;
+    return <PublicWebsite />;
   }
 
   if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {
@@ -1272,12 +1283,17 @@ function App() {
 
   return (
     <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans">
+      <a href="#app-main" className="av-skip-link">Skip to main content</a>
       <Sidebar
         currentScope={currentScope}
         currentView={currentView}
         onViewChange={handleViewChange}
         onScopeChange={handleScopeChange}
         collapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(collapsed => !collapsed)}
+        canAccessAdmin={hasAdminAccess}
+        governOpen={isGovernViewOpen}
+        onOpenGovern={() => setGovernViewOpen(true)}
         mobileOpen={isMobileNavigationOpen}
         onMobileClose={() => setMobileNavigationOpen(false)}
       />
@@ -1285,8 +1301,9 @@ function App() {
         <Header
           theme={theme}
           toggleTheme={toggleTheme}
-          onStartNew={handlePrimaryAction}
           currentScope={currentScope}
+          currentView={isGovernViewOpen ? View.PROCESS_CATALOG : currentView}
+          currentContextLabel={isGovernViewOpen ? 'Avala Govern' : undefined}
           onScopeChange={handleScopeChange}
           currentUser={currentUser}
           teams={teams}
@@ -1295,15 +1312,7 @@ function App() {
           onToggleNavigation={() => setMobileNavigationOpen(open => !open)}
         />
         {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
-        {currentScope.type !== ScopeType.ORGANIZATION && (
-          <ModuleJourney
-            enabledModules={enabledModules}
-            currentScope={currentScope}
-            currentView={currentView}
-            onNavigate={handleViewChange}
-          />
-        )}
-        <main className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+        <main id="app-main" className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           <React.Suspense fallback={<ViewLoadingFallback />}>
             {renderCurrentView()}
           </React.Suspense>

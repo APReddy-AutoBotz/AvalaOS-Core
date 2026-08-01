@@ -14,9 +14,10 @@ const WelcomeWidget: React.FC<WelcomeWidgetProps> = ({ currentUser }) => {
     };
 
     return (
-        <div className="p-6 rounded-2xl bg-gradient-to-r from-abz-indigo-600 to-abz-violet-500 text-white shadow-lg">
-            <h2 className="text-2xl font-bold">{getGreeting()}, {currentUser.name.split(' ')[0]}!</h2>
-            <p className="mt-1 opacity-80">Here's your personalized dashboard for today. Let's make things happen.</p>
+        <div className="rounded-[var(--av-radius-panel)] bg-[var(--av-color-brand-primary)] p-6 text-white shadow-[var(--av-shadow-sm)]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">Role-based command center</p>
+            <h2 className="mt-2 text-2xl font-bold">{getGreeting()}, {currentUser.name.split(' ')[0]}.</h2>
+            <p className="mt-1 text-sm text-slate-200">Review the decisions, handoffs, and delivery signals that need your attention.</p>
         </div>
     );
 };
