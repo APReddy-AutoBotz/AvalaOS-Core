@@ -1,0 +1,21 @@
+{
+  "name": "@avalaos/decks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/run-build.mjs",
+    "build:marketing": "node src/build-marketing.mjs",
+    "build:client": "node src/build-client.mjs",
+    "build:investor": "node src/build-investor.mjs",
+    "build:brand": "node src/build-brand-board.mjs",
+    "verify": "node scripts/verify-decks.mjs",
+    "render": "node scripts/render-decks.mjs",
+    "contact-sheets": "node scripts/create-contact-sheets.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "sharp": "^0.35.3",
+    "yaml": "^2.8.1"
+  }
+}

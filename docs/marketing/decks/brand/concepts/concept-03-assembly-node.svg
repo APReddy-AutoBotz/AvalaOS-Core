@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
+  <title id="title">Avala Assemble concept 3 — Assembly Node</title>
+  <desc id="desc">The current Avala A silhouette with a subtle amber joining node at the point of assembly.</desc>
+  <defs>
+    <linearGradient id="gold" x1="96" y1="532" x2="318" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9A5F00"/><stop offset="0.48" stop-color="#E4B04B"/><stop offset="1" stop-color="#FFF0BD"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="352" y1="88" x2="552" y2="532" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/><stop offset="0.48" stop-color="#DCE3EA"/><stop offset="1" stop-color="#7D8FA3"/>
+    </linearGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="12" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M88 532L298 88H382L181 532H88Z" fill="url(#gold)"/>
+  <path d="M365 88L566 532H472L320 200L365 88Z" fill="url(#silver)"/>
+  <path d="M320 340C328 374 351 397 385 405C351 413 328 436 320 470C312 436 289 413 255 405C289 397 312 374 320 340Z" fill="#FFBC03" filter="url(#glow)"/>
+  <circle cx="320" cy="405" r="13" fill="#001B30" stroke="#FFF0BD" stroke-width="5"/>
+</svg>

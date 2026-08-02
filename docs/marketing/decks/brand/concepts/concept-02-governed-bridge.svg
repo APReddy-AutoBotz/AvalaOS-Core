@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
+  <title id="title">Avala Assemble concept 2 — Governed Bridge</title>
+  <desc id="desc">An Avala A containing a controlled amber path that bridges evidence to execution.</desc>
+  <defs>
+    <linearGradient id="gold" x1="95" y1="530" x2="310" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9A5F00"/><stop offset="0.5" stop-color="#E4B04B"/><stop offset="1" stop-color="#FFF0BD"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="350" y1="90" x2="548" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/><stop offset="0.48" stop-color="#DCE3EA"/><stop offset="1" stop-color="#7D8FA3"/>
+    </linearGradient>
+  </defs>
+  <path d="M88 530L298 88H382L181 530H88Z" fill="url(#gold)"/>
+  <path d="M365 88L566 530H472L320 200L365 88Z" fill="url(#silver)"/>
+  <path d="M205 432C248 432 252 342 320 342C388 342 392 432 435 432" fill="none" stroke="#001B30" stroke-width="66" stroke-linecap="round"/>
+  <path d="M205 432C248 432 252 342 320 342C388 342 392 432 435 432" fill="none" stroke="#FFBC03" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="205" cy="432" r="18" fill="#FFBC03" stroke="#001B30" stroke-width="8"/>
+  <circle cx="435" cy="432" r="18" fill="#FFBC03" stroke="#001B30" stroke-width="8"/>
+</svg>
