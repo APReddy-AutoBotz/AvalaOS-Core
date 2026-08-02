@@ -144,6 +144,34 @@ assert.equal(missingPermissionResult.reason, 'missing_permission');
 assert.equal(missingPermissionResult.guardSeverity, 'hide');
 assert.equal(missingPermissionResult.fallbackView, View.DASHBOARD);
 
+const capabilityOnlyUser = makeUser([]);
+const assessReadPresentationResult = resolveViewAccess({
+  user: capabilityOnlyUser,
+  authLoading: false,
+  organization: makeOrganization(['assess']),
+  enabledModules: ['assess'],
+  authoritativeCapabilities: ['assess.read'],
+  view: View.PROCESS_CATALOG,
+  scope: myWorkScope,
+});
+
+assert.equal(assessReadPresentationResult.allowed, true);
+assert.equal(assessReadPresentationResult.reason, 'allowed');
+assert.deepEqual(capabilityOnlyUser.permissions, []);
+
+const unrelatedCapabilityResult = resolveViewAccess({
+  user: capabilityOnlyUser,
+  authLoading: false,
+  organization: makeOrganization(['assess']),
+  enabledModules: ['assess'],
+  authoritativeCapabilities: ['assess.v2.mutate'],
+  view: View.PROCESS_CATALOG,
+  scope: myWorkScope,
+});
+
+assert.equal(unrelatedCapabilityResult.allowed, false);
+assert.equal(unrelatedCapabilityResult.reason, 'missing_permission');
+
 const anyPermissionResult = resolveViewAccess({
   user: contributor,
   authLoading: false,

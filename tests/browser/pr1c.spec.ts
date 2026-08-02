@@ -224,7 +224,7 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
 
 const openAssessment = async (page: Page) => {
   await page.goto('/');
-  await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible({ timeout:15_000 });
+  await expect(page.getByRole('heading',{ name:'Process Catalog' })).toBeVisible({ timeout:15_000 });
   await page.getByRole('button',{ name:'View' }).first().click();
   await expect(page.getByRole('heading',{ name:'Invoice exception handling' })).toBeVisible();
   await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
@@ -327,12 +327,12 @@ test('actor-scoped idempotent retry returns one committed create result',async (
 test('production route meets accessibility, focus, overflow, and measured navigation budgets',async ({ page }) => {
   await installEnterpriseFixture(page);
   await page.goto('/');
-  await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible();
+  await expect(page.getByRole('heading',{ name:'Process Catalog' })).toBeVisible();
   const catalogTypography = await page.getByRole('heading',{ name:'Process Catalog' }).evaluate(element => ({
     family:getComputedStyle(element).fontFamily,
     weight:getComputedStyle(element).fontWeight,
   }));
-  const descriptionWeight = await page.getByText('Track process candidates, criticality, readiness, and where RPA, workflow, AI, agentic AI, or human review should sit.').evaluate(element => getComputedStyle(element).fontWeight);
+  const descriptionWeight = await page.getByText('Review process candidates, criticality, readiness, and the recommended role for automation, AI, workflow, or human review.').evaluate(element => getComputedStyle(element).fontWeight);
   const processWeight = await page.getByRole('button',{ name:'Invoice exception handling' }).evaluate(element => getComputedStyle(element).fontWeight);
   const actionWeight = await page.getByRole('button',{ name:'View' }).first().evaluate(element => getComputedStyle(element).fontWeight);
   const maximumMainWeight = await page.locator('main *').evaluateAll(elements => Math.max(...elements

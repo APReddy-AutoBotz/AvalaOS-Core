@@ -1,144 +1,55 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Project, Task, User, ProjectLifecycleStage, Scope, ScopeType, View } from '../../types';
-import ProjectCard from '../delivery/ProjectCard';
-import { ChartPieIcon } from './icons';
+import { ChartPieIcon, ChevronRightIcon, ExclamationTriangleIcon } from './icons';
+import PageHeader from './ui/PageHeader';
+import StatusBadge, { type StatusBadgeTone } from './ui/StatusBadge';
 
 interface PortfolioViewProps {
-    projects: Project[];
-    tasks: Task[];
-    users: User[];
-    onUpdateProjectStage: (projectId: string, newStage: ProjectLifecycleStage) => void;
-    onScopeChange: (scope: Scope) => void;
-    onViewChange: (view: View) => void;
+  projects: Project[];
+  tasks: Task[];
+  users: User[];
+  // Retained for compatibility with the operational portfolio handler. Monitor itself is read-only.
+  onUpdateProjectStage: (projectId: string, newStage: ProjectLifecycleStage) => void;
+  onScopeChange: (scope: Scope) => void;
+  onViewChange: (view: View) => void;
+  captureMode?: boolean;
+  outcomeSignal?: {
+    label: string;
+    detail: string;
+    status: string;
+    lineageGapCount: number;
+  };
 }
 
-const DEFAULT_LIFECYCLE_STAGES: ProjectLifecycleStage[] = [
-    'Planning',
-    'Analysis & Design',
-    'Development',
-    'Testing',
-    'Deployment',
-    'Maintenance',
-];
-
-const dataColMap: Record<ProjectLifecycleStage, string> = {
-    'Planning': 'todo',
-    'Analysis & Design': 'doing',
-    'Development': 'review',
-    'Testing': 'test',
-    'Deployment': 'ready',
-    'Maintenance': 'done',
+const healthTone: Record<Project['healthStatus'], StatusBadgeTone> = {
+  'On Track': 'success',
+  'At Risk': 'warning',
+  'Off Track': 'danger',
 };
 
-const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, onUpdateProjectStage, onScopeChange, onViewChange }) => {
-    const [draggedOverColumn, setDraggedOverColumn] = useState<ProjectLifecycleStage | null>(null);
+const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, onScopeChange, onViewChange, captureMode = false, outcomeSignal }) => {
+  const blockedTasks = useMemo(() => tasks.filter(task => task.status === 'Blocked'), [tasks]);
+  const openTasks = useMemo(() => tasks.filter(task => task.status !== 'Done'), [tasks]);
+  const atRiskProjects = projects.filter(project => project.healthStatus !== 'On Track');
 
-    const tasksByProject = useMemo(() => {
-        return tasks.reduce((acc, task) => {
-            if (!acc[task.projectId]) {
-                acc[task.projectId] = [];
-            }
-            acc[task.projectId].push(task);
-            return acc;
-        }, {} as Record<string, Task[]>);
-    }, [tasks]);
+  const openProject = (project: Project) => {
+    onScopeChange({ type: ScopeType.PROJECT, id: project.id, name: project.name });
+    onViewChange(View.BOARDS);
+  };
 
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, projectId: string) => {
-        e.dataTransfer.setData("projectId", projectId);
-    };
+  return <div data-testid="monitor-overview" data-capture-state={captureMode ? 'synthetic-read-only' : undefined} className="mx-auto max-w-7xl space-y-6">
+    <PageHeader eyebrow="Avala Monitor · portfolio intelligence" title="Monitor" description="A read-only view of disposition, readiness, risk, blockers, and delivery lineage from the records available in this workspace." primaryAction={{ label: 'Open Delivery', onClick: () => onViewChange(View.BOARDS) }} meta={<StatusBadge tone="info">{captureMode ? 'Synthetic · read-only' : 'Recorded data only'}</StatusBadge>} />
 
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-    };
-    
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStage: ProjectLifecycleStage) => {
-        const projectId = e.dataTransfer.getData("projectId");
-        onUpdateProjectStage(projectId, newStage);
-        setDraggedOverColumn(null);
-    };
-    
-    const handleDragEnter = (stage: ProjectLifecycleStage) => {
-        setDraggedOverColumn(stage);
-    };
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Monitor summary">
+      {[['Initiatives', projects.length, 'active project records', 'neutral'], ['At risk', atRiskProjects.length, 'records requiring attention', atRiskProjects.length ? 'warning' : 'success'], ['Open work', openTasks.length, 'authorized delivery records', 'info'], ['Blocked work', blockedTasks.length, 'delivery blockers recorded', blockedTasks.length ? 'danger' : 'success']].map(([label, value, detail, tone]) => <div key={String(label)} className="av-stat-strip"><div className="flex items-start justify-between gap-3"><div><p className="av-eyebrow">{label}</p><p className="mt-2 text-3xl font-bold tabular-nums text-[var(--av-color-text)]">{value as number}</p><p className="mt-1 text-xs text-[var(--av-color-text-muted)]">{detail}</p></div>{label === 'Blocked work' ? <ExclamationTriangleIcon className={`h-5 w-5 ${tone === 'danger' ? 'text-red-600' : 'text-emerald-600'}`} /> : <ChartPieIcon className="h-5 w-5 text-[var(--av-color-accent)]" />}</div></div>)}
+    </section>
 
-    const handleNavigate = (projectId: string, projectName: string, view: View) => {
-        onScopeChange({ type: ScopeType.PROJECT, id: projectId, name: projectName });
-        onViewChange(view);
-    };
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
+      <section className="av-surface overflow-hidden" aria-labelledby="monitor-projects-title"><div className="flex items-center justify-between gap-3 border-b border-[var(--av-color-border)] px-5 py-4"><div><h2 id="monitor-projects-title" className="text-lg font-bold text-[var(--av-color-text)]">Initiative disposition</h2><p className="mt-1 text-sm text-[var(--av-color-text-muted)]">Open a project to continue in its authorized Delivery workspace.</p></div><span className="text-xs font-bold text-[var(--av-color-text-subtle)]">{projects.length} records</span></div>{projects.length ? <div className="divide-y divide-[var(--av-color-border)]">{projects.map(project => { const projectTasks = tasks.filter(task => task.projectId === project.id); const owner = users.find(user => user.id === project.ownerId); const blocked = projectTasks.filter(task => task.status === 'Blocked').length; return <button type="button" key={project.id} onClick={() => openProject(project)} className="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-[var(--av-color-bg-subtle)] sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-bold text-[var(--av-color-text)]">{project.name}</p><StatusBadge tone={healthTone[project.healthStatus]}>{project.healthStatus}</StatusBadge></div><p className="mt-1 truncate text-xs text-[var(--av-color-text-muted)]">{project.lifecycleStage} · Owner: {owner?.name || 'Unassigned'}</p></div><div className="flex items-center gap-4 text-xs font-semibold text-[var(--av-color-text-muted)]"><span>{projectTasks.length} work items</span>{blocked > 0 && <StatusBadge tone="danger">{blocked} blocked</StatusBadge>}<ChevronRightIcon className="h-4 w-4 text-[var(--av-color-text-subtle)]" /></div></button>; })}</div> : <div className="px-5 py-12 text-center"><p className="font-bold text-[var(--av-color-text)]">No initiative records are available.</p><p className="mt-1 text-sm text-[var(--av-color-text-muted)]">Monitor does not create or invent portfolio values.</p></div>}</section>
 
-    return (
-        <div style={{height: 'calc(100vh - 120px)'}} className="flex flex-col">
-            <div className="flex-shrink-0 mb-6 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#ffbc03]/30 bg-[#ffbc03]/15 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#002C4B] dark:border-[#ffbc03]/20 dark:bg-[#ffbc03]/10 dark:text-[#ffcf45]">
-                        <ChartPieIcon className="h-4 w-4" />
-                        Executive portfolio
-                    </div>
-                    <h2 className="text-3xl font-black text-text-light dark:text-text-dark">Portfolio Board</h2>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">Portfolio value, risk, blockers, and evidence-backed handoff status across active programs.</p>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-2 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                        <div className="text-lg font-black">{projects.length}</div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Projects</div>
-                    </div>
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2 text-center shadow-sm dark:border-amber-500/20 dark:bg-amber-500/10">
-                        <div className="text-lg font-black text-amber-600 dark:text-amber-200">{projects.filter(p => p.healthStatus === 'At Risk').length}</div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">At risk</div>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-center shadow-sm dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                        <div className="text-lg font-black text-emerald-600 dark:text-emerald-200">{projects.filter(p => p.healthStatus === 'On Track').length}</div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">On track</div>
-                    </div>
-                </div>
-            </div>
-            <div className="flex-1 overflow-x-auto">
-                 <div className="grid grid-cols-6 gap-4 min-w-max pb-4">
-                    {DEFAULT_LIFECYCLE_STAGES.map(stage => {
-                        const stageProjects = projects.filter(p => p.lifecycleStage === stage);
-                        return (
-                            <div 
-                                key={stage} 
-                                data-col={dataColMap[stage]}
-                                className={`flex flex-col transition-colors duration-200 relative rounded-2xl border border-slate-200/80 bg-slate-50/70 w-[340px] shadow-sm dark:border-slate-700/60 dark:bg-slate-900/45 ${draggedOverColumn === stage ? 'ring-2 ring-[#ffbc03]/70 dark:ring-[#ffbc03]/50' : ''}`}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, stage)}
-                                onDragEnter={() => handleDragEnter(stage)}
-                                onDragLeave={() => setDraggedOverColumn(null)}
-                            >
-                                <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-full ${dataColMap[stage] === 'todo' ? 'bg-slate-400' : dataColMap[stage] === 'doing' ? 'bg-blue-500' : dataColMap[stage] === 'review' ? 'bg-violet-500' : dataColMap[stage] === 'test' ? 'bg-indigo-500' : dataColMap[stage] === 'ready' ? 'bg-teal-500' : 'bg-emerald-500'}`}></div>
-                                <div className="px-4 py-3 flex-shrink-0">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-black text-sm text-slate-900 dark:text-white">{stage}</h3>
-                                        <span className="text-xs font-black rounded-full px-2.5 py-1 text-slate-500 bg-white dark:bg-slate-800 dark:text-slate-300">
-                                            {stageProjects.length}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 space-y-3 px-4 pb-4 min-h-[96px] max-h-[calc(100vh-260px)] overflow-y-auto">
-                                    {stageProjects.map(project => (
-                                        <ProjectCard
-                                            key={project.id}
-                                            project={project}
-                                            tasks={tasksByProject[project.id] || []}
-                                            owner={users.find(u => u.id === project.ownerId)}
-                                            onDragStart={(e) => handleDragStart(e, project.id)}
-                                            onNavigate={handleNavigate}
-                                        />
-                                    ))}
-                                    {stageProjects.length === 0 && (
-                                        <div className="rounded-xl border border-dashed border-slate-200 bg-white/45 px-3 py-5 text-center text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-950/20">
-                                            No projects in this stage
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            </div>
-        </div>
-    );
+      <section className="av-surface p-5" aria-labelledby="monitor-readiness-title"><div className="flex items-center justify-between gap-3"><div><h2 id="monitor-readiness-title" className="text-lg font-bold text-[var(--av-color-text)]">Readiness signals</h2><p className="mt-1 text-sm text-[var(--av-color-text-muted)]">Only signals backed by loaded records appear.</p></div><ChartPieIcon className="h-5 w-5 text-[var(--av-color-accent)]" /></div><div className="mt-6 space-y-4"><div className="flex items-start justify-between gap-4 border-b border-[var(--av-color-border)] pb-4"><div><p className="text-sm font-bold text-[var(--av-color-text)]">Delivery blockers</p><p className="mt-1 text-xs leading-5 text-[var(--av-color-text-muted)]">{blockedTasks.length ? 'Open the relevant Delivery workspace to resolve the recorded blocker.' : 'No blocked delivery record is present in this view.'}</p></div><StatusBadge tone={blockedTasks.length ? 'danger' : 'success'}>{blockedTasks.length ? `${blockedTasks.length} open` : 'Clear'}</StatusBadge></div><div className="flex items-start justify-between gap-4 border-b border-[var(--av-color-border)] pb-4"><div><p className="text-sm font-bold text-[var(--av-color-text)]">{outcomeSignal?.label ?? 'Recorded outcome'}</p><p className="mt-1 text-xs leading-5 text-[var(--av-color-text-muted)]">{outcomeSignal?.detail ?? 'No realized outcome field is available in the current Monitor projection.'}</p></div><StatusBadge tone={outcomeSignal ? 'success' : 'neutral'}>{outcomeSignal?.status ?? 'Not recorded'}</StatusBadge></div><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-[var(--av-color-text)]">Handoff lineage</p><p className="mt-1 text-xs leading-5 text-[var(--av-color-text-muted)]">{outcomeSignal?.lineageGapCount ? `${outcomeSignal.lineageGapCount} synthetic initiative still requires a source handoff reference.` : 'Follow approved source context from Assess and Studio into Delivery.'}</p></div><StatusBadge tone={outcomeSignal?.lineageGapCount ? 'warning' : 'info'}>{outcomeSignal?.lineageGapCount ? `${outcomeSignal.lineageGapCount} gap` : 'Use source records'}</StatusBadge></div></div></section>
+    </div>
+  </div>;
 };
 
 export default PortfolioView;

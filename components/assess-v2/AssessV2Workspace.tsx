@@ -21,7 +21,7 @@ import AssessV2ReviewWorkspace from './AssessV2ReviewWorkspace';
 import AssessV2EconomicsWorkspace from './AssessV2EconomicsWorkspace';
 import AssessApplicationPortfolioWorkspace from './AssessApplicationPortfolioWorkspace';
 
-interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null }
+interface Props { processId: string; processName: string; processDescription: string; v1Assessment: Assessment | null; captureMode?: boolean }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
 
 const primitiveTypes: PrimitiveType[] = ['Capture', 'Extract', 'Classify', 'Validate', 'Calculate', 'Reconcile', 'Retrieve', 'Investigate', 'Decide', 'Approve', 'Route', 'Execute', 'Communicate', 'Monitor', 'Audit'];
@@ -82,7 +82,7 @@ const sectionClass = 'rounded-2xl border border-slate-200 p-2 sm:p-4 dark:border
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold dark:border-slate-700 dark:bg-slate-950';
 const list = (items: string[]) => items.length ? <ul className="mt-2 list-disc space-y-1 pl-2 text-sm font-semibold sm:pl-5">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="mt-2 text-sm text-slate-500">None recorded.</p>;
 
-export default function AssessV2Workspace({ processId, processName, processDescription, v1Assessment }: Props) {
+export default function AssessV2Workspace({ processId, processName, processDescription, v1Assessment, captureMode = false }: Props) {
   const {
     tenantContext,
     sessionState,
@@ -238,6 +238,6 @@ export default function AssessV2Workspace({ processId, processName, processDescr
       <AssessV2ReviewWorkspace initialCaseId={result?.case.id} />
       {tenantContext && result?.case.id && result?.decision.id && <AssessV2EconomicsWorkspace tenantContext={tenantContext} caseId={result.case.id} decisionId={result.decision.id} />}
     </div>}
-    <AssessApplicationPortfolioWorkspace tenantContext={tenantContext} readOnly={isReadOnly} offline={sessionState === 'offline'} />
+    <AssessApplicationPortfolioWorkspace tenantContext={tenantContext} readOnly={isReadOnly} offline={sessionState === 'offline'} captureMode={captureMode} />
   </section>;
 }

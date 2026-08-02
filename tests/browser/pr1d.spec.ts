@@ -343,9 +343,16 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
   };
 };
 
+const expectProcessCatalog = async (page: Page) => {
+  const catalog = page.getByTestId('process-catalog-view');
+  await expect(catalog).toBeVisible();
+  await expect(catalog.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+  await expect(catalog.getByRole('heading', { name: 'Process records', exact: true })).toBeVisible();
+};
+
 const openAssessment = async (page: Page) => {
   await page.goto('/');
-  await expect(page.getByRole('heading',{ name:'Assessment inventory' })).toBeVisible();
+  await expectProcessCatalog(page);
   await page.getByRole('button',{ name:'View' }).first().click();
   await expect(page.getByRole('heading',{ name:'Invoice exception handling' }).first()).toBeVisible();
   await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
@@ -394,7 +401,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   page.on('console',message=>{if(message.type()==='error') errors.push(message.text());});
   const fixture=await installEnterpriseFixture(page,{ initialStatus:'Ready for Review' });
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible({ timeout:15_000 });
+  await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
   await page.getByRole('button',{name:'Create V2 case'}).click();
@@ -482,7 +489,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   expect(violations.violations.filter(item=>['serious','critical'].includes(item.impact || ''))).toEqual([]);
   expect(errors.filter(item=>!item.includes('Failed to load resource: net::ERR_FAILED'))).toEqual([]);
   await page.reload();
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
@@ -604,7 +611,7 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   await page.getByRole('button',{name:'Save V2 draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Persisted restore primitive');
   await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
@@ -637,7 +644,7 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
 
   await fixture.seedReviewerReadyV2Decision();
   await page.getByRole('button',{name:'Back to Catalog'}).click();
-  await expect(page.getByRole('heading',{name:'Assessment inventory'})).toBeVisible();
+  await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
