@@ -1,0 +1,45 @@
+company:
+  brand_name: AvalaOS
+  legal_name: ""
+  website: ""
+  contact_email: ""
+  confidentiality_label: "Discussion draft"
+
+founder:
+  name: ""
+  title: ""
+  experience: ""
+  awards: ""
+  biography: ""
+
+commercial:
+  initial_model: white_label_license_plus_implementation
+  license_range: ""
+  implementation_range: ""
+  support_model: ""
+  hosted_model: ""
+  target_gross_margin: ""
+  current_revenue: ""
+  current_customers: ""
+  design_partners: ""
+
+fundraise:
+  round: ""
+  amount: ""
+  runway_months: ""
+  use_of_funds: ""
+  target_close: ""
+
+product_claims:
+  byok_status: ready_architecture
+  deployment_status: not_deployed
+  pilot_status: not_proven
+  production_status: not_proven
+  assemble_status: roadmap
+
+client:
+  client_name: ""
+  client_industry: ""
+  selected_process: "AP Invoice Exception Handling"
+  client_logo_path: ""
+  engagement_owner: ""
