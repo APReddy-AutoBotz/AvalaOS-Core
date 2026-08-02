@@ -147,7 +147,43 @@ for (const token of [
   'resourceId: result.resourceId',
   'recoveredAfterTransportFailure',
   'committedPublicResource',
+  'committedCommandHasExternalEffect',
+  'committedDatabaseResult',
 ]) assert(handler.includes(token), `truthful post-commit boundary missing: ${token}`);
+const effectClassifier = handler.slice(
+  handler.indexOf('const POST_COMMIT_EFFECT_KIND'),
+  handler.indexOf('const FORBIDDEN_PUBLIC_KEYS'),
+);
+for (const token of [
+  "'studio.rendition.generate': 'external'",
+  "'studio.retention.policy.publish': 'database_only'",
+  "'studio.rendition.retention.extend': 'database_only'",
+  "'studio.legal_hold.place': 'database_only'",
+  "'studio.legal_hold.release': 'database_only'",
+  "'studio.rendition.deletion.request': 'database_only'",
+  "'studio.rendition.deletion.resolve': 'deletion_outcome'",
+  "command.payload.outcome === 'approve'",
+  "command.payload.outcome === 'reject'",
+  "throw new StudioPrivateArtifactError('INVALID_COMMAND')",
+]) assert(effectClassifier.includes(token), `post-commit effect classifier missing: ${token}`);
+assert(
+  effectClassifier.includes("Record<\n  StudioPrivateArtifactAtomicCommand['commandType']"),
+  'post-commit effect classification must be exhaustive over the typed command union',
+);
+const recoveredReplayBoundary = handler.slice(
+  handler.indexOf('recoveredAfterTransportFailure &&'),
+  handler.indexOf('// An exact replay returns committed state only'),
+);
+assert(
+  recoveredReplayBoundary.includes("result.outcome === 'replayed'") &&
+    recoveredReplayBoundary.includes('committedCommandHasExternalEffect') &&
+    recoveredReplayBoundary.includes('return committedPending'),
+  'transport-recovered replay may map to pending only after external-effect classification',
+);
+assert(
+  !/recoveredAfterTransportFailure\s*&&\s*result\.outcome === 'replayed'\s*\)\s*\{\s*return committedPending/u.test(handler),
+  'transport-recovered replay may not map unconditionally to committed pending',
+);
 assert(
   (handler.match(/external\.state === 'reconciliation_required'/gu) ?? []).length === 2 &&
     handler.includes("| { state: 'reconciliation_required'; failureCode: string }"),
@@ -160,6 +196,27 @@ const pendingBoundary = handler.slice(
 for (const forbidden of ['renditionClaim', 'deletionClaim', 'objectKey', 'bucket', 'provider']) {
   assert(!pendingBoundary.includes(forbidden), `committed-pending response leaks ${forbidden}`);
 }
+const databaseReplayBoundary = handler.slice(
+  handler.indexOf('const committedDatabaseResult'),
+  handler.indexOf('export const handleStudioPrivateArtifactCommand'),
+);
+for (const forbidden of ['renditionClaim', 'deletionClaim', 'objectKey', 'bucket', 'provider']) {
+  assert(!databaseReplayBoundary.includes(forbidden), `committed database response leaks ${forbidden}`);
+}
+const postCommitCatch = handler.slice(
+  handler.lastIndexOf('} catch (error) {'),
+  handler.indexOf('const safe = asStudioPrivateArtifactError(error)'),
+);
+assert(
+  postCommitCatch.indexOf('if (committedCommandHasExternalEffect === false)') <
+    postCommitCatch.indexOf('return committedPending') &&
+    postCommitCatch.includes('return committedDatabaseResult'),
+  'post-commit catch must classify database-only completion before pending recovery',
+);
+assert(
+  !handler.includes("committedPublicResource ?? { state: 'reconciliation_required' }"),
+  'post-commit catch may not fabricate reconciliation state for a completed database command',
+);
 assert(
   handler.indexOf('if (committed)') < handler.indexOf('studioPrivateArtifactErrorBody(safe)'),
   'post-commit exceptions must not map to failed_before_commit',

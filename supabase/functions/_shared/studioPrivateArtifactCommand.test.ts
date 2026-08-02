@@ -4,7 +4,10 @@ import {
   StudioPrivateArtifactError,
   toStudioPrivateArtifactSqlCommand,
 } from './studioPrivateArtifactCommand.ts';
-import { handleStudioPrivateArtifactCommand } from './studioPrivateArtifactHandler.ts';
+import {
+  handleStudioPrivateArtifactCommand,
+  studioPrivateArtifactCommandHasPostCommitExternalEffect,
+} from './studioPrivateArtifactHandler.ts';
 
 const ids = [
   '10000000-0000-4000-8000-000000000001',
@@ -135,6 +138,34 @@ for (const [publicCommand, expectedPayload] of translationCases) {
     `${publicCommand.commandType} preserves expected versions`,
   );
   assert(Boolean(parseStudioPrivateArtifactSqlCommand(translated)), 'translated SQL command reparses');
+}
+const deletionRejectionCommand = {
+  ...base,
+  commandType: 'studio.rendition.deletion.resolve',
+  payload: {
+    renditionId: ids[3],
+    deletionRequestId: ids[4],
+    outcome: 'reject',
+    reason: 'Reject deletion',
+  },
+  expectedRenditionVersion: 2,
+};
+for (const [publicCommand, expectedExternalEffect] of [
+  [translationCases[0][0], true],
+  [translationCases[1][0], false],
+  [translationCases[2][0], false],
+  [translationCases[3][0], false],
+  [translationCases[4][0], false],
+  [translationCases[5][0], false],
+  [translationCases[6][0], true],
+  [deletionRejectionCommand, false],
+] as const) {
+  assert(
+    studioPrivateArtifactCommandHasPostCommitExternalEffect(
+      toStudioPrivateArtifactSqlCommand(publicCommand, serverActorId),
+    ) === expectedExternalEffect,
+    `${publicCommand.commandType} has the exact post-commit effect classification`,
+  );
 }
 assert(
   rejects({ ...base, actorId: serverActorId }),
@@ -330,6 +361,169 @@ void (async () => {
     'exact replay performs no render, upload, or delete',
   );
   calls.length = 0;
+  const databaseOnlyReplayCases = [
+    {
+      label: 'retention policy publish',
+      body: translationCases[1][0],
+      capability: 'studio.artifacts.retention.manage',
+    },
+    {
+      label: 'retention extension',
+      body: translationCases[2][0],
+      capability: 'studio.artifacts.retention.manage',
+    },
+    {
+      label: 'legal-hold placement',
+      body: translationCases[3][0],
+      capability: 'studio.artifacts.legal_hold.manage',
+    },
+    {
+      label: 'legal-hold release',
+      body: translationCases[4][0],
+      capability: 'studio.artifacts.legal_hold.manage',
+    },
+    {
+      label: 'deletion request',
+      body: translationCases[5][0],
+      capability: 'studio.artifacts.delete.request',
+    },
+    {
+      label: 'rejected deletion resolution',
+      body: deletionRejectionCommand,
+      capability: 'studio.artifacts.delete.approve',
+    },
+  ] as const;
+  for (const replayCase of databaseOnlyReplayCases) {
+    let atomicCalls = 0;
+    let externalCalls = 0;
+    const recovered = await handleStudioPrivateArtifactCommand(
+      request(replayCase.body),
+      {
+        authenticate: async () => ({ id: ids[0] }),
+        loadFreshAuthority: async () => ({
+          actorId: ids[0],
+          organizationId: ids[1],
+          workspaceId: ids[2],
+          authorizationVersion: 9,
+          capabilities: [replayCase.capability],
+        }),
+        executeAtomicCommand: async () => {
+          atomicCalls += 1;
+          if (atomicCalls === 1) throw new Error('response lost after commit');
+          return {
+            outcome: 'replayed' as const,
+            receiptId: ids[4],
+            resourceId: ids[3],
+            resource: { state: 'committed', version: 3 },
+          };
+        },
+        executeClaimedRendition: async () => {
+          externalCalls += 1;
+          return { state: 'available' as const, resource: { state: 'available' } };
+        },
+        executeClaimedDeletion: async () => {
+          externalCalls += 1;
+          return { state: 'deleted' as const, resource: { state: 'deleted' } };
+        },
+      },
+    );
+    const body = await recovered.json() as Record<string, unknown>;
+    const serialized = JSON.stringify(body);
+    assert(
+      atomicCalls === 2 &&
+        externalCalls === 0 &&
+        recovered.status === 200 &&
+        body.ok === true &&
+        body.outcome === 'replayed' &&
+        body.receiptId === ids[4] &&
+        body.resourceId === ids[3] &&
+        JSON.stringify(body.resource) === JSON.stringify({ state: 'committed', version: 3 }) &&
+        !serialized.includes('committed_reconciliation_pending') &&
+        !serialized.includes('failed_before_commit') &&
+        !serialized.includes('renditionClaim') &&
+        !serialized.includes('deletionClaim') &&
+        !serialized.includes('objectKey') &&
+        !serialized.includes('bucket') &&
+        !serialized.includes('provider') &&
+        !serialized.includes('credential') &&
+        !serialized.includes('signedUrl'),
+      `${replayCase.label} returns the committed replay with zero external calls`,
+    );
+  }
+  let freshDatabaseExternalCalls = 0;
+  const freshDatabaseCommit = await handleStudioPrivateArtifactCommand(
+    request(translationCases[1][0]),
+    {
+      ...dependencies,
+      loadFreshAuthority: async () => ({
+        actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
+        authorizationVersion: 9,
+        capabilities: ['studio.artifacts.retention.manage'],
+      }),
+      executeAtomicCommand: async () => ({
+        outcome: 'committed' as const,
+        receiptId: ids[4],
+        resourceId: ids[3],
+        resource: { state: 'committed' },
+      }),
+      executeClaimedRendition: async () => {
+        freshDatabaseExternalCalls += 1;
+        return { state: 'available' as const, resource: { state: 'available' } };
+      },
+      executeClaimedDeletion: async () => {
+        freshDatabaseExternalCalls += 1;
+        return { state: 'deleted' as const, resource: { state: 'deleted' } };
+      },
+    },
+  );
+  assert(
+    freshDatabaseCommit.status === 201 &&
+      (await freshDatabaseCommit.json() as Record<string, unknown>).outcome === 'committed' &&
+      freshDatabaseExternalCalls === 0,
+    'fresh database-only commit remains HTTP 201 with zero external calls',
+  );
+  let unsafeDatabaseExternalCalls = 0;
+  const unsafeDatabaseProjection = await handleStudioPrivateArtifactCommand(
+    request(translationCases[1][0]),
+    {
+      ...dependencies,
+      loadFreshAuthority: async () => ({
+        actorId: ids[0],
+        organizationId: ids[1],
+        workspaceId: ids[2],
+        authorizationVersion: 9,
+        capabilities: ['studio.artifacts.retention.manage'],
+      }),
+      executeAtomicCommand: async () => ({
+        outcome: 'committed' as const,
+        receiptId: ids[4],
+        resourceId: ids[3],
+        resource: { bucket: 'private' },
+      }),
+      executeClaimedRendition: async () => {
+        unsafeDatabaseExternalCalls += 1;
+        return { state: 'available' as const, resource: { state: 'available' } };
+      },
+      executeClaimedDeletion: async () => {
+        unsafeDatabaseExternalCalls += 1;
+        return { state: 'deleted' as const, resource: { state: 'deleted' } };
+      },
+    },
+  );
+  const unsafeDatabaseProjectionBody =
+    await unsafeDatabaseProjection.json() as Record<string, unknown>;
+  assert(
+    unsafeDatabaseProjection.status === 201 &&
+      unsafeDatabaseProjectionBody.ok === true &&
+      unsafeDatabaseProjectionBody.outcome === 'committed' &&
+      JSON.stringify(unsafeDatabaseProjectionBody.resource) === '{}' &&
+      !JSON.stringify(unsafeDatabaseProjectionBody).includes('bucket') &&
+      !JSON.stringify(unsafeDatabaseProjectionBody).includes('reconciliation') &&
+      unsafeDatabaseExternalCalls === 0,
+    'database-only post-commit projection rejection returns a non-disclosing committed result',
+  );
   const stale = await handleStudioPrivateArtifactCommand(request(), {
     ...dependencies,
     loadFreshAuthority: async () => {
@@ -460,6 +654,7 @@ void (async () => {
     );
   }
   let transportClaims = 0;
+  let recoveredRenditionExternalCalls = 0;
   const recoveredTransport = await handleStudioPrivateArtifactCommand(request(), {
     ...dependencies,
     executeAtomicCommand: async () => {
@@ -468,15 +663,28 @@ void (async () => {
       const { renditionClaim: _claim, ...safeReplay } = committed;
       return { ...safeReplay, outcome: 'replayed' as const };
     },
+    executeClaimedRendition: async () => {
+      recoveredRenditionExternalCalls += 1;
+      return { state: 'available' as const, resource: { state: 'available' } };
+    },
   });
   const recoveredTransportBody =
     await recoveredTransport.json() as Record<string, unknown>;
+  const recoveredTransportSerialized = JSON.stringify(recoveredTransportBody);
   assert(
     transportClaims === 2 &&
+      recoveredRenditionExternalCalls === 0 &&
       recoveredTransport.status === 202 &&
+      recoveredTransportBody.ok === false &&
       recoveredTransportBody.receiptId === ids[4] &&
-      recoveredTransportBody.outcome === 'committed_reconciliation_pending',
-    'lost command response recovers the original committed receipt by exact replay',
+      recoveredTransportBody.resourceId === ids[3] &&
+      recoveredTransportBody.outcome === 'committed_reconciliation_pending' &&
+      !recoveredTransportSerialized.includes('renditionClaim') &&
+      !recoveredTransportSerialized.includes('deletionClaim') &&
+      !recoveredTransportSerialized.includes('objectKey') &&
+      !recoveredTransportSerialized.includes('bucket') &&
+      !recoveredTransportSerialized.includes('provider'),
+    'lost generation response preserves pending receipt without repeating the external saga',
   );
   const deletionBody = {
     ...base,
@@ -515,6 +723,61 @@ void (async () => {
     }),
     executeAtomicCommand: async () => committedDeletion,
   };
+  let deletionReplayAtomicCalls = 0;
+  let deletionReplayExternalCalls = 0;
+  const recoveredApprovedDeletion = await handleStudioPrivateArtifactCommand(
+    request(deletionBody),
+    {
+      ...deletionDependencies,
+      executeAtomicCommand: async () => {
+        deletionReplayAtomicCalls += 1;
+        if (deletionReplayAtomicCalls === 1) {
+          throw new Error('deletion resolution response lost after commit');
+        }
+        const { deletionClaim: _claim, ...safeReplay } = committedDeletion;
+        return { ...safeReplay, outcome: 'replayed' as const };
+      },
+      executeClaimedDeletion: async () => {
+        deletionReplayExternalCalls += 1;
+        return { state: 'deleted' as const, resource: { state: 'deleted' } };
+      },
+    },
+  );
+  const recoveredApprovedDeletionBody =
+    await recoveredApprovedDeletion.json() as Record<string, unknown>;
+  const recoveredApprovedDeletionSerialized =
+    JSON.stringify(recoveredApprovedDeletionBody);
+  assert(
+    deletionReplayAtomicCalls === 2 &&
+      deletionReplayExternalCalls === 0 &&
+      recoveredApprovedDeletion.status === 202 &&
+      recoveredApprovedDeletionBody.ok === false &&
+      recoveredApprovedDeletionBody.outcome === 'committed_reconciliation_pending' &&
+      recoveredApprovedDeletionBody.receiptId === ids[4] &&
+      recoveredApprovedDeletionBody.resourceId === ids[3] &&
+      !recoveredApprovedDeletionSerialized.includes('renditionClaim') &&
+      !recoveredApprovedDeletionSerialized.includes('deletionClaim') &&
+      !recoveredApprovedDeletionSerialized.includes('objectKey') &&
+      !recoveredApprovedDeletionSerialized.includes('bucket') &&
+      !recoveredApprovedDeletionSerialized.includes('provider'),
+    'lost approved-deletion response remains pending without repeating physical deletion',
+  );
+  const freshApprovedDeletion = await handleStudioPrivateArtifactCommand(
+    request(deletionBody),
+    {
+      ...deletionDependencies,
+      executeClaimedDeletion: async () => ({
+        state: 'deleted' as const,
+        resource: { state: 'deleted' },
+      }),
+    },
+  );
+  assert(
+    freshApprovedDeletion.status === 201 &&
+      (await freshApprovedDeletion.json() as Record<string, unknown>).outcome ===
+        'deletion_completed',
+    'fresh approved deletion external success remains HTTP 201',
+  );
   for (const failureCode of [
     'DELETE_OUTCOME_UNKNOWN',
     'TOMBSTONE_COMPLETION_FAILED',
@@ -600,7 +863,7 @@ void (async () => {
     'failure before any authoritative commit remains failed_before_commit',
   );
   console.log(
-    'studio private artifact command: 61 schema, authority, outcome-preservation, replay, side-effect, and non-disclosure scenarios passed',
+    'studio private artifact command: 78 schema, authority, classification, outcome-preservation, replay, side-effect, and non-disclosure scenarios passed',
   );
 })().catch(error => {
   console.error(error);

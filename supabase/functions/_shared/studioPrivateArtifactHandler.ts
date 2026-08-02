@@ -46,6 +46,32 @@ export type StudioClaimedDeletionExecutionResult =
   | { state: 'failed'; failureCode: string }
   | { state: 'reconciliation_required'; failureCode: string };
 
+const POST_COMMIT_EFFECT_KIND = {
+  'studio.rendition.generate': 'external',
+  'studio.retention.policy.publish': 'database_only',
+  'studio.rendition.retention.extend': 'database_only',
+  'studio.legal_hold.place': 'database_only',
+  'studio.legal_hold.release': 'database_only',
+  'studio.rendition.deletion.request': 'database_only',
+  'studio.rendition.deletion.resolve': 'deletion_outcome',
+} as const satisfies Record<
+  StudioPrivateArtifactAtomicCommand['commandType'],
+  'external' | 'database_only' | 'deletion_outcome'
+>;
+
+export const studioPrivateArtifactCommandHasPostCommitExternalEffect = (
+  command: Pick<StudioPrivateArtifactAtomicCommand, 'commandType' | 'payload'>,
+): boolean => {
+  const kind = POST_COMMIT_EFFECT_KIND[command.commandType];
+  if (kind === 'external') return true;
+  if (kind === 'database_only') return false;
+  if (command.payload.outcome === 'approve') return true;
+  if (command.payload.outcome === 'reject') return false;
+  // The SQL command has already passed strict validation. Retain a fail-closed
+  // boundary if a caller ever bypasses that validated construction path.
+  throw new StudioPrivateArtifactError('INVALID_COMMAND');
+};
+
 const FORBIDDEN_PUBLIC_KEYS = new Set([
   'bucket',
   'bucketid',
@@ -106,12 +132,30 @@ const committedPending = (
     { status: 202 },
   );
 
+const committedDatabaseResult = (
+  result: StudioPrivateArtifactAtomicResult,
+  resource: StudioPrivateArtifactJson,
+) => {
+  const replayed = result.outcome === 'replayed';
+  return Response.json(
+    {
+      ok: true,
+      outcome: replayed ? 'replayed' : 'committed',
+      receiptId: result.receiptId,
+      resourceId: result.resourceId,
+      resource,
+    },
+    { status: replayed ? 200 : 201 },
+  );
+};
+
 export const handleStudioPrivateArtifactCommand = async (
   request: Request,
   deps: StudioPrivateArtifactCommandDependencies,
 ): Promise<Response> => {
   let committed: StudioPrivateArtifactAtomicResult | null = null;
   let committedPublicResource: StudioPrivateArtifactJson | null = null;
+  let committedCommandHasExternalEffect: boolean | null = null;
   try {
     if (request.method !== 'POST') {
       throw new StudioPrivateArtifactError('METHOD_NOT_ALLOWED');
@@ -159,6 +203,8 @@ export const handleStudioPrivateArtifactCommand = async (
     }
 
     const atomicCommand = toStudioPrivateArtifactSqlCommand(envelope, actor.id);
+    committedCommandHasExternalEffect =
+      studioPrivateArtifactCommandHasPostCommitExternalEffect(atomicCommand);
     let recoveredAfterTransportFailure = false;
     let result: StudioPrivateArtifactAtomicResult;
     try {
@@ -174,7 +220,11 @@ export const handleStudioPrivateArtifactCommand = async (
     // Fail closed before any external effect if the private command boundary leaks
     // storage coordinates into its public resource projection.
     committedPublicResource = assertPublicResource(result.resource);
-    if (recoveredAfterTransportFailure && result.outcome === 'replayed') {
+    if (
+      recoveredAfterTransportFailure &&
+      result.outcome === 'replayed' &&
+      committedCommandHasExternalEffect
+    ) {
       return committedPending(result, committedPublicResource);
     }
     // An exact replay returns committed state only and can never repeat render,
@@ -251,9 +301,15 @@ export const handleStudioPrivateArtifactCommand = async (
     );
   } catch (error) {
     if (committed) {
+      if (committedCommandHasExternalEffect === false) {
+        return committedDatabaseResult(
+          committed,
+          committedPublicResource ?? {},
+        );
+      }
       return committedPending(
         committed,
-        committedPublicResource ?? { state: 'reconciliation_required' },
+        committedPublicResource ?? {},
       );
     }
     const safe = asStudioPrivateArtifactError(error);

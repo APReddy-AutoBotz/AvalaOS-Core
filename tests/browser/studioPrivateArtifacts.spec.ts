@@ -88,6 +88,7 @@ interface FixtureOptions {
   deletionFailure?: boolean;
   reloadFailure?: boolean;
   committedPending?: boolean;
+  transportRecoveredReplay?: boolean;
 }
 
 async function installFixture(page: Page, options: FixtureOptions = {}) {
@@ -253,7 +254,7 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       if (body.commandType === 'studio.rendition.generate') {
         renditions = [
           ...renditions.filter((item: Rendition) => item.format !== body.payload.format),
-          options.committedPending
+          options.committedPending || options.transportRecoveredReplay
             ? rendition(body.payload.format, {
                 state: 'requested',
                 mimeType: null,
@@ -288,14 +289,33 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
             ? rendition(item.format, {
                 ...item,
                 version: item.version + 1,
-                state: options.deletionFailure ? 'deletion_failed' : 'deleted',
+                state:
+                  options.transportRecoveredReplay && body.payload.outcome === 'approve'
+                    ? 'deletion_reconciliation_required'
+                    : options.transportRecoveredReplay && body.payload.outcome === 'reject'
+                      ? 'available'
+                      : options.deletionFailure
+                        ? 'deletion_failed'
+                        : 'deleted',
+                deletion: options.transportRecoveredReplay
+                  ? {
+                      requestId: body.payload.deletionRequestId,
+                      state: body.payload.outcome === 'approve' ? 'approved' : 'rejected',
+                      requesterIsCurrentActor: false,
+                    }
+                  : item.deletion,
                 failureCode: options.deletionFailure ? 'PROVIDER_DELETE_FAILED' : null,
               })
             : item,
         );
       }
       if (options.reloadFailure) failReload = true;
-      if (options.committedPending) {
+      const replayNeedsExternalRecovery =
+        body.commandType === 'studio.rendition.generate' ||
+        (body.commandType === 'studio.rendition.deletion.resolve' &&
+          body.payload.outcome === 'approve');
+      if (options.committedPending ||
+          (options.transportRecoveredReplay && replayNeedsExternalRecovery)) {
         return route.fulfill({
           status: 202,
           headers,
@@ -306,6 +326,15 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
             resourceId: body.payload.renditionId ?? RENDITION_IDS[body.payload.format],
             resource: { state: 'requested' },
           }),
+        });
+      }
+      if (options.transportRecoveredReplay) {
+        return ok(route, {
+          ok: true,
+          outcome: 'replayed',
+          receiptId: RECEIPT,
+          resourceId: body.payload.renditionId ?? RENDITION_IDS[body.payload.format],
+          resource: { state: 'committed' },
         });
       }
       return ok(route, {
@@ -566,6 +595,64 @@ test('provider-uncertain generation stays pending, reloads requested state, and 
   await expect(panel.getByTestId('rendition-pdf')).not.toContainText(/^Available$/);
   await expect(panel.getByRole('status')).not.toContainText('operation failed');
   await expect(panel.getByRole('status')).not.toContainText('No success state was recorded');
+});
+
+test('transport-recovered deletion rejection reloads replayed state without a recovery-pending message', async ({ page }) => {
+  const { requests } = await installFixture(page, {
+    transportRecoveredReplay: true,
+    renditions: [
+      rendition('pdf', {
+        state: 'deletion_requested',
+        deletion: {
+          requestId: RECEIPT,
+          state: 'pending',
+          requesterIsCurrentActor: false,
+        },
+      }),
+    ],
+  });
+  const panel = await openDocs(page);
+  await panel.getByLabel('Governed reason').fill('Reject deletion after review');
+  await panel.getByRole('button', { name: 'Reject deletion' }).click();
+  await expect(panel.getByRole('status')).toContainText('Committed state reloaded');
+  await expect(panel.getByRole('status')).not.toContainText('Recovery is pending');
+  await expect(panel.getByRole('status')).not.toContainText('external effect is unconfirmed');
+  await expect(panel.getByTestId('rendition-pdf')).toContainText('Available');
+  const rejection = requests.find(
+    entry => entry.path === '/functions/v1/studio-private-artifact-command' &&
+      entry.body?.commandType === 'studio.rendition.deletion.resolve',
+  );
+  expect(rejection?.body?.payload?.outcome).toBe('reject');
+});
+
+test('transport-recovered approved deletion remains visibly pending without a second provider effect', async ({ page }) => {
+  const { requests } = await installFixture(page, {
+    transportRecoveredReplay: true,
+    renditions: [
+      rendition('pdf', {
+        state: 'deletion_requested',
+        deletion: {
+          requestId: RECEIPT,
+          state: 'pending',
+          requesterIsCurrentActor: false,
+        },
+      }),
+    ],
+  });
+  const panel = await openDocs(page);
+  await panel.getByLabel('Governed reason').fill('Approve deletion after review');
+  await panel.getByRole('button', { name: 'Approve deletion' }).click();
+  await expect(panel.getByRole('status')).toContainText(
+    'external effect is unconfirmed. Recovery is pending',
+  );
+  await expect(panel.getByTestId('rendition-pdf')).toContainText(
+    'Deletion reconciliation required',
+  );
+  const approval = requests.find(
+    entry => entry.path === '/functions/v1/studio-private-artifact-command' &&
+      entry.body?.commandType === 'studio.rendition.deletion.resolve',
+  );
+  expect(approval?.body?.payload?.outcome).toBe('approve');
 });
 
 test('deleted canonical tombstone cannot generate and explains governed version recovery', async ({ page }) => {
