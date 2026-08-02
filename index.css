@@ -1499,6 +1499,19 @@ body.av-public-menu-open {
   .public-site .av-public-hero {
     background: #fff !important;
   }
+
+  .public-footer .brand-lockup svg {
+    width: 112pt !important;
+    height: 24pt !important;
+  }
+
+  .public-footer p {
+    max-width: none !important;
+    margin-top: 3pt !important;
+    font-size: 8pt !important;
+    line-height: 1.25 !important;
+    white-space: nowrap;
+  }
 }
 
 /* Glassmorphism base effect for Landing Page */
