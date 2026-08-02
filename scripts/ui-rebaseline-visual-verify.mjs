@@ -71,6 +71,14 @@ try {
           continue;
         }
         await page.waitForTimeout(150);
+        const header = page.locator('header').first();
+        const lifecycleLogo = header.locator('svg[aria-label="Avala OS — Assess, Validate, Assemble, Launch, Audit"]');
+        const lifecycleLockups = await lifecycleLogo.count();
+        const standaloneHeaderMarks = await header.locator('svg[aria-label="Avala OS app icon"]').count();
+        const navyBrandPlates = await lifecycleLogo.locator('rect[fill="#00182A"]').count();
+        if (lifecycleLockups !== 1) failures.push(`${route} ${theme} ${width}x${height}: expected one lifecycle logo in the header, found ${lifecycleLockups}`);
+        if (standaloneHeaderMarks !== 0) failures.push(`${route} ${theme} ${width}x${height}: duplicate standalone Avala mark remains in the header`);
+        if (navyBrandPlates !== 1) failures.push(`${route} ${theme} ${width}x${height}: lifecycle logo is missing its navy brand field`);
         const metrics = await checkLayout(page, route, theme, width, height);
         const axe = width === 1440 || width === 390 ? await checkAxe(page, route, theme, width, height) : { violations: [] };
         if (pageErrors.length > 0) failures.push(`${route} ${theme} ${width}x${height}: page errors ${pageErrors.join(' | ')}`);

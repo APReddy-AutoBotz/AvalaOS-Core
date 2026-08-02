@@ -24,7 +24,7 @@ import {
   BoltIcon,
   ClockIcon,
 } from './icons';
-import { AvalaLogo, AvalaWordmark } from './brand';
+import { AvalaLifecycleLockup, AvalaLogo } from './brand';
 
 interface SidebarProps {
   currentScope: Scope;
@@ -193,7 +193,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     {mobileOpen && <button type="button" aria-label="Close primary navigation" onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" />}
     <aside ref={sidebarRef} id="primary-navigation" aria-label="Primary navigation" className={`premium-sidebar fixed inset-y-0 left-0 z-50 flex h-screen flex-col transition-transform duration-200 lg:static lg:z-30 lg:h-auto lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'w-20' : 'w-64'}`}>
       <div className={`flex min-h-[76px] items-center border-b border-[var(--av-color-border)] px-4 ${collapsed ? 'justify-center' : 'justify-between gap-3'}`}>
-        {collapsed ? <AvalaLogo className="h-10 w-10" /> : <div className="min-w-0"><AvalaWordmark className="h-9 w-[174px]" /><div className="brand-subline mt-0.5 pl-1">Evaluate before you automate</div></div>}
+        {collapsed ? <AvalaLogo className="h-10 w-10" /> : <div className="brand-lockup min-w-0"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div>}
         <button type="button" onClick={onToggleCollapse} className={`av-icon-button hidden lg:grid ${collapsed ? 'absolute left-[4.2rem]' : ''}`} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{collapsed ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}</button>
       </div>
 
