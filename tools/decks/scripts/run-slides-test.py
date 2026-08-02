@@ -54,4 +54,3 @@ def render_with_verified_outputs(input_path: str, out_dir: str, dpi: int):
 render_slides._render_presentation_with_artifact_tool = render_with_verified_outputs
 sys.argv = ["slides_test.py", *sys.argv[1:]]
 runpy.run_path(str(container_tools / "slides_test.py"), run_name="__main__")
-

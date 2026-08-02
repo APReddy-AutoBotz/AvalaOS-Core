@@ -30,4 +30,3 @@ try {
 if (!complete) process.exit(result.status ?? 1);
 console.warn("Normalized artifact-tool diagnostic exit after validating the complete four-deck build manifest.");
 process.exit(0);
-
