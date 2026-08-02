@@ -259,11 +259,17 @@ body.app-bg {
 .brand-lockup {
   letter-spacing: 0;
   --kp-logo-word: var(--kp-navy-900);
+  --kp-logo-accent: #9a6500;
+  --kp-logo-divider: #a9b8c5;
+  --kp-logo-subline: #52697a;
   --kp-logo-pm-bg: rgba(255, 188, 3, 0.12);
 }
 
 .dark .brand-lockup {
   --kp-logo-word: #fff7d6;
+  --kp-logo-accent: #e9b95d;
+  --kp-logo-divider: #456078;
+  --kp-logo-subline: #c6d1dc;
   --kp-logo-pm-bg: rgba(255, 188, 3, 0.08);
 }
 

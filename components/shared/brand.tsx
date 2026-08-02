@@ -78,6 +78,37 @@ export const AvalaPrimaryLogo: React.FC<BrandAssetProps> = ({ className }) => (
   </svg>
 );
 
+export const AvalaLifecycleLockup: React.FC<BrandAssetProps> = ({ className }) => (
+  <svg
+    className={className}
+    viewBox="0 0 690 148"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    role="img"
+    aria-label="Avala OS — Assess, Validate, Assemble, Launch, Audit"
+  >
+    <GradientDefs prefix="avala-lifecycle" />
+    <rect width="690" height="148" rx="22" fill="#00182A" />
+    <rect x="1" y="1" width="688" height="146" rx="21" stroke="#164F73" strokeOpacity="0.9" strokeWidth="2" />
+    <g transform="translate(10 19)">
+      <BrandMark prefix="avala-lifecycle" />
+    </g>
+    <path d="M113 19V101" stroke="#456078" strokeWidth="1.5" />
+    <Wordmark dark />
+    <text
+      x="138"
+      y="122"
+      fill="#C6D1DC"
+      fontFamily="Outfit, 'Avenir Next', Inter, sans-serif"
+      fontSize="18"
+      fontWeight="650"
+      letterSpacing="1.05"
+    >
+      ASSESS · VALIDATE · ASSEMBLE · LAUNCH · AUDIT
+    </text>
+  </svg>
+);
+
 export const AvalaAppIcon: React.FC<BrandAssetProps> = ({ className }) => (
   <svg className={className} viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Avala OS app icon">
     <GradientDefs prefix="avala-icon" />
@@ -86,15 +117,15 @@ export const AvalaAppIcon: React.FC<BrandAssetProps> = ({ className }) => (
 );
 
 export const AvalaHeroLogo: React.FC<BrandAssetProps> = ({ className }) => (
-  <svg className={className} viewBox="0 0 640 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvalaOS — Governed decision intelligence">
+  <svg className={className} viewBox="0 0 690 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Avala OS — Assess, Validate, Assemble, Launch, Audit">
     <GradientDefs prefix="avala-hero" />
     <g transform="translate(10 19)">
       <BrandMark prefix="avala-hero" />
     </g>
     <path d="M113 19V99" stroke="#456078" strokeWidth="1.5" />
     <Wordmark dark />
-    <text x="138" y="121" fill="#C6D1DC" fontFamily="Outfit, 'Avenir Next', Inter, sans-serif" fontSize="16" fontWeight="600" letterSpacing="1.6">
-      GOVERNED DECISION INTELLIGENCE
+    <text x="138" y="122" fill="#C6D1DC" fontFamily="Outfit, 'Avenir Next', Inter, sans-serif" fontSize="18" fontWeight="650" letterSpacing="1.05">
+      ASSESS · VALIDATE · ASSEMBLE · LAUNCH · AUDIT
     </text>
   </svg>
 );

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import EnterpriseAccessView from '../auth/EnterpriseAccessView';
-import { AvalaAppIcon, AvalaWordmark } from '../shared/brand';
+import { AvalaAppIcon, AvalaLifecycleLockup } from '../shared/brand';
 import {
   ChartPieIcon,
   CheckCircleIcon,
@@ -209,12 +209,8 @@ const PublicHeader: React.FC<{
   return (
     <header className="public-header sticky top-0 z-40 border-b border-[var(--av-color-border)]/80 bg-[var(--av-color-bg)]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between gap-5 px-5 sm:px-8">
-        <a href="/" onClick={event => { event.preventDefault(); go('home'); }} className="flex shrink-0 items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--av-focus-ring)]" aria-label="AvalaOS home">
-          <AvalaAppIcon className="h-9 w-9" />
-          <div className="hidden min-[520px]:block">
-            <AvalaWordmark className="h-7 w-[142px]" />
-            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--av-color-text-subtle)]">Governed decision intelligence</p>
-          </div>
+        <a href="/" onClick={event => { event.preventDefault(); go('home'); }} className="brand-lockup flex shrink-0 items-center rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--av-focus-ring)]" aria-label="AvalaOS home">
+          <AvalaLifecycleLockup className="h-12 w-[224px] md:w-[202px] lg:w-[224px] xl:w-[246px]" />
         </a>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Public site">
           {navItems.map(([value, label]) => (
@@ -249,7 +245,7 @@ const PublicFooter: React.FC<{ onNavigate: (route: PublicRoute) => void }> = ({ 
   <footer className="public-footer border-t border-[var(--av-color-border)] bg-[var(--av-color-surface)]">
     <div className="mx-auto flex max-w-7xl flex-col gap-7 px-5 py-10 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <div className="flex items-center gap-3"><AvalaAppIcon className="h-8 w-8" /><span className="font-display text-lg font-semibold tracking-[0.1em] text-[var(--av-color-text)]">AVALA<span className="text-[var(--av-color-accent)]">OS</span></span></div>
+        <div className="brand-lockup"><AvalaLifecycleLockup className="h-12 w-[224px]" /></div>
         <p className="mt-3 max-w-sm text-sm leading-6 text-[var(--av-color-text-muted)]">Evaluate before you automate. Govern before you execute.</p>
       </div>
       <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-[var(--av-color-text-muted)]" aria-label="Footer">

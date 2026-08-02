@@ -287,7 +287,7 @@ for (const sourcePath of buyerVisibleDemoSources) {
 }
 
 const loginCopy = fs.readFileSync('components/auth/LoginView.tsx', 'utf8');
-assert.ok(loginCopy.includes('AvalaOS = Assess. Validate. Align. Launch. Audit.'));
+assert.ok(loginCopy.includes('AvalaOS = Assess. Validate. Assemble. Launch. Audit.'));
 assert.ok(loginCopy.includes('Avala Govern'));
 assert.ok(loginCopy.includes('Avala Delivery'));
 assert.equal(loginCopy.includes('Avala Govern Lite'), false);

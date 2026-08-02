@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MOCK_LOGIN_PROFILES, MOCK_USERS } from '../../data/mockData';
 import { CheckCircleIcon, KeyIcon, UsersIcon } from '../shared/icons';
-import { AvalaAppIcon, AvalaWordmark } from '../shared/brand';
+import { AvalaLifecycleLockup } from '../shared/brand';
 import { useAuth } from './AuthProvider';
 import { getRuntimeBoundaryError, isLocalRuntimeEnabled } from '../../services/supabaseClient';
 
@@ -60,9 +60,8 @@ const EnterpriseAccessView: React.FC = () => {
       <a href="#access-main" className="av-skip-link">Skip to access</a>
       <header className="border-b border-[var(--av-color-border)] bg-[var(--av-color-surface)]">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-          <button type="button" onClick={returnToSite} className="flex items-center gap-3 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[var(--av-focus-ring)]" aria-label="Return to AvalaOS public site">
-            <AvalaAppIcon className="h-9 w-9" />
-            <div className="hidden min-[420px]:block"><AvalaWordmark className="h-7 w-[142px]" /><p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--av-color-text-subtle)]">Explore the platform</p></div>
+          <button type="button" onClick={returnToSite} className="brand-lockup flex items-center rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[var(--av-focus-ring)]" aria-label="Return to AvalaOS public site">
+            <AvalaLifecycleLockup className="h-12 w-[224px] sm:w-[246px]" />
           </button>
           <button type="button" onClick={returnToSite} className="btn-ghost min-h-10 px-3 text-sm font-bold">Back to public site</button>
         </div>

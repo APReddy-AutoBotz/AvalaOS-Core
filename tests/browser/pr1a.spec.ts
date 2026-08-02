@@ -17,7 +17,9 @@ test('server-configured local_demo exposes no demo authority', async ({ page }) 
 test('landing page explains the governed lifecycle with canonical branding and no external imagery', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('img', { name: 'Avala OS app icon' }).first()).toBeVisible();
+  const publicHeader = page.locator('header').first();
+  await expect(publicHeader.getByRole('img', { name: 'Avala OS — Assess, Validate, Assemble, Launch, Audit' })).toBeVisible();
+  await expect(publicHeader.getByRole('img', { name: 'Avala OS app icon' })).toHaveCount(0);
   const heading = page.getByRole('heading', {
     level: 1,
     name: 'Evaluate before you automate. Govern before you execute.',
