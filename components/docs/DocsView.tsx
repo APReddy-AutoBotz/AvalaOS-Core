@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { DocumentGeneration, DocTemplate, TenantContextProjection } from '../../types';
 import { DocumentTextIcon, PlusCircleIcon, SparklesIcon } from '../shared/icons';
 import { useAuth } from '../auth/AuthProvider';
@@ -6,12 +6,15 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
 import { createMarketingStudioCaptureContext, createMarketingStudioCaptureTransport } from '../../data/marketingStudioCapture';
 import type { StudioArtifactTransport } from '../../services/studioArtifacts/client';
+import { readMarketingCapture } from '../../services/marketingCaptureRuntime';
+import { isStudioMarketingCapture } from '../../services/marketingCapturePolicy';
 
 interface DocsViewProps {
     generations: DocumentGeneration[];
     templates: DocTemplate[];
     onViewGeneration: (generationId: string) => void;
     onCreateEpic?: (generation: DocumentGeneration) => void;
+    captureMode?: boolean;
 }
 
 const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTemplate): string => {
@@ -23,19 +26,12 @@ const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTempla
     return `Document Set (${template.title})`;
 };
 
-const readMarketingStudioCapture = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('capture') === 'studio';
-
-const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic }) => {
+const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic, captureMode = false }) => {
 
     const { tenantContext, currentOrganization, currentWorkspace } = useOrganizationContext();
     const { user } = useAuth();
-    const [marketingStudioCapture, setMarketingStudioCapture] = useState(readMarketingStudioCapture);
-
-    useEffect(() => {
-        const syncMarketingCapture = () => setMarketingStudioCapture(readMarketingStudioCapture());
-        window.addEventListener('avalaos-marketing-capture', syncMarketingCapture);
-        return () => window.removeEventListener('avalaos-marketing-capture', syncMarketingCapture);
-    }, []);
+    const captureDecision = useMemo(() => readMarketingCapture(), []);
+    const marketingStudioCapture = captureMode || isStudioMarketingCapture(captureDecision);
 
     const studioContext = useMemo<TenantContextProjection | null>(() => {
         if (tenantContext) return tenantContext;

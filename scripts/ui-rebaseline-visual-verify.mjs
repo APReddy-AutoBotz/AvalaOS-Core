@@ -9,6 +9,7 @@ const routes = ['/', '/platform', '/solutions', '/trust', '/sandbox'];
 const publicRoutes = ['/', '/platform', '/solutions', '/trust'];
 const viewports = [
   [1440, 900],
+  [1366, 768],
   [1280, 800],
   [1024, 768],
   [768, 1024],
@@ -101,17 +102,24 @@ try {
   if ((await tabs.nth(1).getAttribute('aria-selected')) !== 'true') failures.push('lifecycle tabs did not move with ArrowRight');
   await interactionContext.close();
 
-  const printContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+  const printContext = await browser.newContext({ viewport: { width: 794, height: 1123 }, colorScheme: 'light' });
   const printPage = await printContext.newPage();
-  await printPage.goto(`${baseUrl}/trust`, { waitUntil: 'domcontentloaded' });
-  await printPage.locator('.public-site').waitFor({ state: 'visible', timeout: 15_000 });
-  await printPage.emulateMedia({ media: 'print' });
-  const printStyles = await printPage.locator('.public-site').evaluate(element => {
-    const styles = getComputedStyle(element);
-    return { minHeight: styles.minHeight, overflow: styles.overflow, overflowY: styles.overflowY };
-  });
-  if (printStyles.overflow === 'hidden' || printStyles.overflowY === 'hidden') failures.push(`print media retains hidden overflow: ${JSON.stringify(printStyles)}`);
-  await printPage.pdf({ path: path.join(outputDir, 'trust-print.pdf'), printBackground: true, format: 'A4' });
+  for (const route of publicRoutes) {
+    await printPage.goto(`${baseUrl}${route}`, { waitUntil: 'domcontentloaded' });
+    await printPage.locator('.public-site').waitFor({ state: 'visible', timeout: 15_000 });
+    await printPage.emulateMedia({ media: 'print' });
+    const printStyles = await printPage.locator('.public-site').evaluate(element => {
+      const styles = getComputedStyle(element);
+      return { height: styles.height, minHeight: styles.minHeight, overflow: styles.overflow, overflowY: styles.overflowY, background: styles.backgroundColor };
+    });
+    if (printStyles.overflow === 'hidden' || printStyles.overflowY === 'hidden' || printStyles.overflowY === 'auto') failures.push(`${route} print media retains constrained overflow: ${JSON.stringify(printStyles)}`);
+    if (route === '/') {
+      if (await printPage.locator('.av-lifecycle-interactive').isVisible()) failures.push('interactive lifecycle remains visible in print');
+      const staticStages = await printPage.locator('.av-lifecycle-print li').allTextContents();
+      for (const stage of ['Assess', 'Govern', 'Studio', 'Delivery', 'Monitor']) if (!staticStages.some(text => text.includes(stage))) failures.push(`print lifecycle missing ${stage}`);
+    }
+    await printPage.pdf({ path: path.join(outputDir, `${slug(route)}-print.pdf`), printBackground: true, preferCSSPageSize: true });
+  }
   await printContext.close();
 } finally {
   await browser.close();
@@ -122,5 +130,5 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log(`UI rebaseline visual verification passed: ${results.length} route/theme/viewport captures, mobile keyboard checks, axe, overflow, and print PDF.`);
+  console.log(`UI rebaseline visual verification passed: ${results.length} route/theme/viewport captures, mobile keyboard checks, axe, overflow, and four public-route print PDFs.`);
 }

@@ -11,7 +11,13 @@ for(const token of [
   'StudioArtifactRenditions',
   'currentApprovedVersion',
   "state==='committed_reload_failed'",
+  'draftValidationError',
+  'aria-invalid={Boolean(draftValidationError)}',
+  'The last committed artifact remains visible.',
+  'load(handoffId, artifactType, true)',
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
 assert.ok(source.indexOf("if (offline)") < source.indexOf('clearProjection();'),'offline state must preserve the committed projection for read-only inspection');
-console.log('studio artifact workspace: 10 lifecycle, payload, reviewer, rendition and false-success assertions passed');
+assert.equal(source.match(/clearProjection\(\);/g)?.length, 1, 'only a genuine source/type identity load may clear the projection');
+assert.ok(!source.includes("setState('command_failed');\n      setMessage('Draft must"), 'invalid JSON must not globally block the workspace');
+console.log('studio artifact workspace: 16 lifecycle, recovery, validation, rendition and false-success assertions passed');

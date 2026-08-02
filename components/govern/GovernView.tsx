@@ -9,6 +9,7 @@ interface GovernViewProps {
   processes: AssessProcess[];
   handoffEntries: HandoffLedgerEntry[];
   onNavigate: (view: View) => void;
+  captureMode?: boolean;
 }
 
 type SummaryTone = 'violet' | 'warning' | 'success' | 'info';
@@ -36,7 +37,7 @@ const summaryIconClass: Record<SummaryTone, string> = {
   info: 'bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200',
 };
 
-const GovernView: React.FC<GovernViewProps> = ({ processes, handoffEntries, onNavigate }) => {
+const GovernView: React.FC<GovernViewProps> = ({ processes, handoffEntries, onNavigate, captureMode = false }) => {
   const reviewQueue = useMemo(
     () => processes.filter(process => ['Ready for Review', 'In Review', 'Changes Requested'].includes(process.status)),
     [processes],
@@ -50,6 +51,10 @@ const GovernView: React.FC<GovernViewProps> = ({ processes, handoffEntries, onNa
     () => handoffEntries.filter(entry => ['Submitted', 'Accepted', 'Completed'].includes(entry.status)),
     [handoffEntries],
   );
+  const controlGaps = useMemo(
+    () => handoffEntries.filter(entry => entry.metadata?.controlGap === true),
+    [handoffEntries],
+  );
   const summaryCards: SummaryCard[] = [
     { label: 'Review queue', value: reviewQueue.length, detail: 'processes requiring attention', Icon: ClipboardDocumentListIcon, tone: 'violet' },
     { label: 'Material risk', value: materialRisk.length, detail: 'high or critical records', Icon: ExclamationTriangleIcon, tone: 'warning' },
@@ -58,14 +63,14 @@ const GovernView: React.FC<GovernViewProps> = ({ processes, handoffEntries, onNa
   ];
 
   return (
-    <div data-testid="govern-overview" className="mx-auto max-w-7xl space-y-6">
+    <div data-testid="govern-overview" data-capture-state={captureMode ? 'synthetic-read-only' : undefined} className="mx-auto max-w-7xl space-y-6">
       <PageHeader
         eyebrow="Avala Govern · read-only overview"
         title="Governance workbench"
         description="Review source-linked references, assumptions, material risk, and handoff readiness before a permitted action is taken. Actions remain on their existing Assess and Studio surfaces."
         primaryAction={{ label: 'Open Process Catalog', onClick: () => onNavigate(View.PROCESS_CATALOG) }}
         secondaryActions={[{ label: 'Open Studio', onClick: () => onNavigate(View.DOCS_FORGE) }]}
-        meta={<StatusBadge tone="info">Read-only composition</StatusBadge>}
+        meta={<StatusBadge tone="info">{captureMode ? 'Synthetic · read-only' : 'Read-only composition'}</StatusBadge>}
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Governance summary">
@@ -114,6 +119,7 @@ const GovernView: React.FC<GovernViewProps> = ({ processes, handoffEntries, onNa
             {[
               ['References', evidenceRefs.size ? `${evidenceRefs.size} linked reference${evidenceRefs.size === 1 ? '' : 's'} in the current ledger` : 'No source references recorded'],
               ['Assumptions', 'Review source assumptions on the assessment record'],
+              ['Control gaps', controlGaps.length ? `${controlGaps.length} recorded gap requires source-level resolution` : 'No control gap is recorded in the current source ledger'],
               ['Handoff state', readyHandoffs.length ? `${readyHandoffs.length} submitted or accepted record${readyHandoffs.length === 1 ? '' : 's'}` : 'No submitted or accepted handoff recorded'],
               ['Authority', 'Existing source surfaces retain their access and version checks'],
             ].map(([label, detail]) => <div key={label} className="border-b border-[var(--av-color-border)] pb-3 last:border-0 last:pb-0"><dt className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--av-color-text-subtle)]">{label}</dt><dd className="mt-1 text-sm font-semibold leading-6 text-[var(--av-color-text)]">{detail}</dd></div>)}

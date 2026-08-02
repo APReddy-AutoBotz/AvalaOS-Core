@@ -71,7 +71,7 @@ const EnterpriseAccessView: React.FC = () => {
       <main id="access-main" className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(390px,0.72fr)] lg:items-center lg:gap-20 lg:py-16">
         <section aria-labelledby="access-title" className="max-w-2xl">
           <p className="av-eyebrow">{isDemoMode ? 'Controlled product sandbox' : 'Enterprise workspace'}</p>
-          <h1 id="access-title" className="av-display-title mt-4">{isDemoMode ? 'Explore the product by role.' : 'Sign in to your enterprise workspace.'}</h1>
+          <h1 id="access-title" className="av-display-title mt-4">{isDemoMode ? 'Explore with synthetic data.' : 'Sign in to an organization.'}</h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-[var(--av-color-text-muted)]">{isDemoMode ? 'Choose a synthetic persona to see how the same governed lifecycle adapts to assessment, review, delivery, executive visibility, and platform administration.' : 'Use your organization account to access the governed workspace. Your organization configuration and server-issued session determine what is available.'}</p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             {['Deterministic decisions', 'Human review', 'Traceable handoff'].map(item => <div key={item} className="av-public-panel flex items-center gap-2 p-4 text-sm font-bold"><CheckCircleIcon className="h-4 w-4 shrink-0 text-[var(--av-color-success)]" />{item}</div>)}

@@ -12,6 +12,7 @@ export interface ResolvePersistedViewScopeStateInput {
   authLoading: boolean;
   organization: Organization | null;
   enabledModules?: ProductModuleKey[];
+  authoritativeCapabilities?: readonly string[];
   preserveOrganizationWorkspace?: boolean;
 }
 
@@ -125,6 +126,7 @@ export function resolvePersistedViewScopeState({
   authLoading,
   organization,
   enabledModules,
+  authoritativeCapabilities,
   preserveOrganizationWorkspace = true,
 }: ResolvePersistedViewScopeStateInput): PersistedViewScopeStateResolution {
   const normalizedView = normalizePersistedView(view);
@@ -134,6 +136,7 @@ export function resolvePersistedViewScopeState({
     authLoading,
     organization,
     enabledModules: enabledModules ?? organization?.enabledModules ?? DEFAULT_ENABLED_MODULES,
+    authoritativeCapabilities,
     view: normalizedView,
     scope: normalizedScope,
   });

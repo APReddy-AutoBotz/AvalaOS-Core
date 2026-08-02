@@ -3,6 +3,7 @@ import { HandoffLedgerEntry } from '../types';
 import { useOrganizationContext } from '../components/auth/OrganizationProvider';
 import { useAuth } from '../components/auth/AuthProvider';
 import { handoffLedgerAdapter } from './adapters/handoffLedgerAdapter';
+import { clientRequestContextKey, createContextRequestGate } from './contextRequestGate';
 
 type NewHandoffLedgerEntry = Omit<HandoffLedgerEntry, 'id' | 'orgId' | 'createdAt' | 'createdBy'> & {
     id?: string;
@@ -11,33 +12,48 @@ type NewHandoffLedgerEntry = Omit<HandoffLedgerEntry, 'id' | 'orgId' | 'createdA
 };
 
 export function useHandoffLedger() {
-    const { currentOrganization, currentWorkspace } = useOrganizationContext();
+    const { currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
     const { user } = useAuth();
     const [entries, setEntries] = useState<HandoffLedgerEntry[]>([]);
-    const refreshSequence = useRef(0);
+    const requestGate = useRef(createContextRequestGate()).current;
+    const activeContextKey = useRef<string | null>(null);
 
     const refresh = useCallback(async () => {
-        const sequence = ++refreshSequence.current;
-        if (!currentOrganization || !currentWorkspace) {
+        if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) {
+            requestGate.invalidate();
+            activeContextKey.current = null;
             setEntries([]);
             return;
         }
+        const requestContext = {
+            actorId: user?.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+        };
+        const ticket = requestGate.start(requestContext);
+        activeContextKey.current = clientRequestContextKey(requestContext);
         setEntries([]);
         try {
             const nextEntries = await handoffLedgerAdapter.list(currentOrganization.id);
-            if (sequence === refreshSequence.current) setEntries(nextEntries);
+            if (requestGate.accepts(ticket, requestContext)) setEntries(nextEntries);
         } catch (error) {
             console.error('Failed to load handoff ledger:', error);
-            if (sequence === refreshSequence.current) setEntries([]);
+            if (requestGate.accepts(ticket, requestContext)) setEntries([]);
         }
-    }, [currentOrganization, currentWorkspace]);
+    }, [currentOrganization, currentWorkspace, requestGate, sessionState, user?.id]);
 
     useEffect(() => {
         void refresh();
     }, [refresh]);
 
     const recordHandoff = useCallback(async (entry: NewHandoffLedgerEntry) => {
-        if (!currentOrganization || !user) return null;
+        if (!currentOrganization || !currentWorkspace || !user || !['ready', 'read_only'].includes(sessionState)) return null;
+
+        const commandContextKey = clientRequestContextKey({
+            actorId: user.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+        });
 
         const now = new Date().toISOString();
         const nextEntry: HandoffLedgerEntry = {
@@ -50,13 +66,15 @@ export function useHandoffLedger() {
 
         try {
             const saved = await handoffLedgerAdapter.record(nextEntry);
-            setEntries(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
+            if (commandContextKey === activeContextKey.current) {
+                setEntries(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
+            }
             return saved;
         } catch (error) {
             console.error('Failed to record handoff ledger entry:', error);
             return null;
         }
-    }, [currentOrganization, user]);
+    }, [currentOrganization, currentWorkspace, sessionState, user]);
 
     return {
         entries,

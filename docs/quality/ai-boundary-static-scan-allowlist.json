@@ -37,7 +37,7 @@
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
       "lines": [
-        168
+        181
       ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
@@ -46,7 +46,7 @@
       "pattern": "localStorage",
       "path": "App.tsx",
       "lines": [
-        168
+        181
       ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
@@ -224,8 +224,8 @@
       "pattern": "localStorage",
       "path": "components/public/PublicWebsite.tsx",
       "lines": [
-        343,
-        353
+        403,
+        413
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep public theme preference separate from credentials, provider configuration, and runtime authority."
@@ -315,7 +315,7 @@
       "path": "scripts/ui-rebaseline-browser-capture.mjs",
       "lines": [
         27,
-        95
+        102
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep capture-only browser state reset confined to deterministic visual verification; do not treat it as runtime authority."
@@ -324,12 +324,21 @@
       "pattern": "localStorage",
       "path": "scripts/ui-rebaseline-visual-verify.mjs",
       "lines": [
-        57,
         58,
-        86
+        59,
+        87
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep theme and demo-session setup confined to deterministic visual verification; do not treat it as runtime authority."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "services/clientContextSafety.test.ts",
+      "lines": [
+        8
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep the no-persistence source assertion confined to client context-safety tests; do not treat it as runtime authority."
     }
   ]
 }

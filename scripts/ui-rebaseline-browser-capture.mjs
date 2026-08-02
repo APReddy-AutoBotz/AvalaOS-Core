@@ -18,7 +18,7 @@ const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
 
 const waitForApp = async () => {
-  await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('.app-shell[data-marketing-capture="product"]').waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(700);
 };
 
@@ -26,7 +26,7 @@ const signInAs = async (personaLabel) => {
   await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.removeItem('avalaos-core-v1-current-user'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.goto(`${baseUrl}/sandbox`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl}/sandbox?capture=product`, { waitUntil: 'domcontentloaded' });
   await page.locator('button').filter({ hasText: personaLabel }).first().click();
   const entry = page.getByRole('button', { name: new RegExp(`Enter sandbox as ${personaLabel}`, 'i') });
   await entry.waitFor({ state: 'visible', timeout: 15_000 });
@@ -35,6 +35,22 @@ const signInAs = async (personaLabel) => {
 };
 
 const capture = async (fileName) => {
+  await page.evaluate(() => {
+    document.scrollingElement?.scrollTo({ top: 0, left: 0 });
+    for (const element of document.querySelectorAll('*')) {
+      if (element.scrollHeight > element.clientHeight) element.scrollTop = 0;
+      if (element.scrollWidth > element.clientWidth) element.scrollLeft = 0;
+    }
+  });
+  await page.waitForTimeout(150);
+  const chromeFrame = await page.evaluate(() => ({
+    windowScrollY: window.scrollY,
+    headerTop: document.querySelector('.header')?.getBoundingClientRect().top ?? 0,
+    sidebarTop: document.querySelector('.premium-sidebar')?.getBoundingClientRect().top ?? 0,
+  }));
+  if (chromeFrame.windowScrollY > 0.5 || chromeFrame.headerTop < -0.5 || chromeFrame.sidebarTop < -0.5) {
+    throw new Error(`${fileName} retained a clipped shell offset: ${JSON.stringify(chromeFrame)}`);
+  }
   await page.screenshot({ path: path.join(outputDir, fileName), animations: 'disabled' });
 };
 
@@ -47,15 +63,17 @@ await signInAs('Process Analyst');
 await clickNav('Home');
 await capture('home-command-center.png');
 await clickNav('Assess');
+await page.getByTestId('process-catalog-view').waitFor({ state: 'visible' });
+if (await page.getByTestId('process-catalog-view').locator('tbody tr').count() < 8) throw new Error('Synthetic Process Catalog capture is not populated.');
 await capture('assess-process-catalog.png');
-await page.evaluate(() => window.history.replaceState({}, '', '/?capture=application-portfolio'));
 await page.getByRole('button', { name: 'View' }).first().click();
 await page.getByRole('heading', { name: 'AP Invoice Exception Handling', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
 await page.locator('[data-testid="application-portfolio-workspace"]').waitFor({ state: 'visible', timeout: 15_000 });
+await page.getByText('Synthetic capture fixture. No committed application state is changed.', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
 await capture('application-portfolio-readiness.png');
 await page.getByRole('button', { name: 'Back to Catalog' }).click();
-await page.evaluate(() => window.history.replaceState({}, '', '/'));
 await clickNav('Govern');
+await page.locator('[data-testid="govern-overview"][data-capture-state="synthetic-read-only"]').waitFor({ state: 'visible', timeout: 15_000 });
 await capture('govern-workbench.png');
 await page.getByRole('button', { name: 'Switch workspace context' }).click();
 await page.getByRole('button', { name: /^AP Invoice Exception Workflow/ }).last().click();
@@ -63,21 +81,9 @@ await page.waitForTimeout(500);
 await clickNav('Studio');
 await page.getByRole('button', { name: 'Document Vault', exact: true }).click({ noWaitAfter: true });
 await page.locator('[data-testid="studio-application-route"]').waitFor({ state: 'visible', timeout: 15_000 });
-await page.evaluate(() => {
-  const url = new URL(window.location.href);
-  url.searchParams.set('capture', 'studio');
-  window.history.replaceState({}, '', url);
-  window.dispatchEvent(new Event('avalaos-marketing-capture'));
-});
 await page.getByText('Synthetic capture fixture · AP Invoice Exception Handling control brief. No persisted artifact state is changed.', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
 await page.waitForTimeout(1_000);
 await capture('studio-artifact-workspace.png');
-await page.evaluate(() => {
-  const url = new URL(window.location.href);
-  url.searchParams.delete('capture');
-  window.history.replaceState({}, '', url);
-  window.dispatchEvent(new Event('avalaos-marketing-capture'));
-});
 await clickNav('Delivery');
 await capture('delivery-board.png');
 
@@ -86,6 +92,7 @@ await page.getByRole('button', { name: 'Switch workspace context' }).click();
 await page.getByRole('button', { name: /^My Work/ }).last().click();
 await page.waitForTimeout(500);
 await clickNav('Monitor');
+await page.locator('[data-testid="monitor-overview"][data-capture-state="synthetic-read-only"]').waitFor({ state: 'visible', timeout: 15_000 });
 await capture('monitor-overview.png');
 
 await signInAs('Platform Admin');

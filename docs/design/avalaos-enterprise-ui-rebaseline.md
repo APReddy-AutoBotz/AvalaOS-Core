@@ -2,11 +2,13 @@
 
 ## Purpose
 
-This document records the UI-only rebaseline for the AvalaOS Core public website, sandbox entry point, and authenticated product shell. The work makes the product story legible as:
+This document records the presentation-focused rebaseline for the AvalaOS Core public website, sandbox entry point, and authenticated product shell, together with the limited client context-safety work required to prevent stale tenant-scoped projections from remaining visible.
+
+The product story is:
 
 `Evidence → deterministic decision → human governance → governed artifact → delivery handoff → outcome visibility`
 
-The implementation preserves existing view identifiers, access metadata, handlers, persistence contracts, and product decision law. It does not establish pilot, production, hosted, deployment, storage, security, certification, or compliance readiness.
+The implementation preserves product decision law, scoring, server command behavior, RLS, migrations, storage/export policy, and provider boundaries. It does not establish pilot, production, hosted, deployment, storage, security, certification, or compliance readiness.
 
 ## Scope and boundaries
 
@@ -15,18 +17,19 @@ In scope:
 - Public pathname experiences for Home, Platform, Solutions, Trust & BYOK, and Sandbox/sign-in.
 - A shared semantic visual language for public and authenticated surfaces.
 - Authenticated information architecture: Home, Assess, Govern, Studio, Delivery, Monitor, and separate Admin.
-- Read-only Govern composition using existing process and handoff projections, guarded by the existing Assess access contract.
-- Home command-center and Monitor presentation improvements.
-- Studio Artifact Workspace presentation, tenant/workspace projection clearing, and fail-closed action affordances.
-- Responsive layout, keyboard navigation, focus treatment, skip links, semantic labels, reduced-motion handling, and product screenshot capture.
-- Document-level vertical scrolling for public pages while preserving the authenticated shell's internal workspace scroll region.
-- Final enterprise visual refinement across public Home, Platform, Solutions, Trust & BYOK, Sandbox/sign-in, and the authenticated shell, including balanced display wrapping, compact trust treatment, lifecycle tab behavior, explicit execution boundaries, and print-safe layout.
+- A read-only Govern presentation resolved through current user, organization, workspace, session, permission, and server-capability context.
+- Home command-center, Assess catalog, Studio, Delivery, Monitor, Application Portfolio, and Admin presentation improvements.
+- Studio recoverability for validation, provider, authorization, context, version-conflict, offline, and projection-reload failure states.
+- Immediate clearing and sequence-gated loading of client process and handoff projections when tenant context is missing or changes.
+- An isolated synthetic marketing-capture build that is unavailable in a normal production build.
+- Responsive layout, keyboard navigation, focus treatment, skip links, semantic labels, reduced-motion handling, vertical scrolling, screenshot capture, and print/PDF output.
 
 Out of scope:
 
-- New module entitlements, `View` enum values, scoring formulas, weights, thresholds, hard stops, recommendation logic, migrations, RLS, Edge functions, storage/export policy, provider execution, or server command behavior.
-- Live infrastructure inspection or mutation. Deployment status remains **NOT DEPLOYED** and deployment status unknown beyond the accepted source records.
-- Treating browser UI, local demo data, legacy document records, or handoff-ledger counts as server authorization or proof of readiness.
+- New entitlements, `View` enum values, scoring formulas, weights, thresholds, hard stops, recommendation logic, migrations, RLS, Edge functions, storage/export policy, provider execution, or server command behavior.
+- Live infrastructure inspection or mutation. The accepted deployment disposition remains **NOT DEPLOYED**; this work adds no deployment-readiness proof.
+- Treating routes, browser state, local demo data, synthetic capture data, legacy document records, cached permissions, or handoff counts as server authorization.
+- A durable routed Govern destination. Govern remains shell state in this PR; a dedicated route is a follow-up if product scope authorizes it.
 
 ## Public experience
 
@@ -35,16 +38,18 @@ The public experience is separate from the authenticated shell and is selected b
 | Path | Experience | Primary purpose |
 | --- | --- | --- |
 | `/` | Home | Explain the product law, lifecycle, differentiation, roles, and next step. |
-| `/platform` | Platform | Show Assess → Govern → Studio → Delivery → Monitor with real product screenshots. |
+| `/platform` | Platform | Show Assess → Govern → Studio → Delivery → Monitor with product captures. |
 | `/solutions` | Solutions | Connect operating problems to governed outputs without unsupported quantified claims. |
-| `/trust` | Trust & BYOK | Explain provider/configuration boundaries, human governance, evidence, and proof-safe readiness language. |
+| `/trust` | Trust & BYOK | Explain provider boundaries, human governance, evidence, and proof-safe readiness language. |
 | `/sandbox` | Sandbox/sign-in | Select synthetic local personas or authenticate through the existing server path. |
 
-Public CTAs are functional: they update the pathname, reset scroll position, open the sandbox, or return to the public site. No public CTA claims execution or production availability.
+Public CTAs update the pathname, reset scroll position, open the access experience, or return to the public site. The shared access CTA is `Access AvalaOS`. Local-demo access is identified as synthetic; enterprise access asks the user to sign in to an organization. No public CTA claims execution or production availability.
 
-## Authenticated information architecture
+The Home print layout includes a static five-stage lifecycle so the product law remains legible without interactive tabs. Public CTA bands and interactive chrome are omitted from print.
 
-The sidebar preserves existing technical view identifiers while presenting the requested enterprise hierarchy:
+## Authenticated information architecture and authority
+
+The sidebar preserves existing technical view identifiers while presenting the enterprise hierarchy:
 
 ```text
 Home
@@ -60,11 +65,18 @@ Administration
   Admin
 ```
 
-Deep destinations are grouped under their owning module. Document Vault and Studio Templates are under Studio. Board, List, Backlog, Roadmap, Calendar, Timeline, Capacity, Sprints, Delivery Pack, Timesheets, and Automations remain under Delivery.
+Deep destinations remain grouped under their owning module. Document Vault and Studio Templates are under Studio. Board, List, Backlog, Roadmap, Calendar, Timeline, Capacity, Sprints, Delivery Pack, Timesheets, and Automations remain under Delivery.
 
-Govern is a UI-level read-only overview. It does not add a product module or entitlement. App re-checks the existing Process Catalog access decision before rendering it, and context changes close or deny the view when that access boundary no longer permits it. Its cards use source-linked references and handoff states (`Submitted`, `Accepted`, `Completed`) without presenting them as approval evidence.
+Govern is a read-only presentation, not a new product entitlement. Its dedicated resolver verifies that:
 
-Admin remains the existing organization/workspace workbench. Its visibility and transition checks are aligned around the existing role/permission/capability presentation contract; no new authorization model is introduced.
+- the current user, organization, workspace, and server-issued session context agree;
+- the authority projection is current, online, and not revoked;
+- the required view capability is present without mutating the user object; and
+- a context change or denial closes the Govern presentation.
+
+For presentation only, a verified server capability of `assess.read` satisfies the existing Assess review-view requirement. This does not synthesize a permission, does not modify `user.permissions`, and does not authorize any mutation. Unrelated capabilities do not grant the view, and all command authority remains server-gated.
+
+Govern cards use source-linked references and handoff states (`Submitted`, `Accepted`, `Completed`) without presenting those states as approval evidence. Admin remains the existing organization/workspace workbench; no new authorization model is introduced.
 
 ## Shared visual language
 
@@ -76,43 +88,39 @@ Semantic CSS variables in `index.css` are the visual source for new UI work:
 - State: success, warning, danger, info, and focus ring.
 - Geometry: control/panel radii and small/medium/large shadows.
 
-Shared primitives:
+Shared primitives include `PageHeader`, `StatusBadge`, `.av-surface`, `.av-stat-strip`, `.av-input`, `.av-form-label`, `.av-icon-button`, and `.av-skip-link`. The existing `ArchitectureFlow` remains cohesive and was retained; this pass did not add an unnecessary extraction layer.
 
-- `PageHeader` for consistent page-level hierarchy, descriptions, actions, and metadata.
-- `StatusBadge` for state labels with text and a non-color status dot.
-- `.av-surface`, `.av-stat-strip`, `.av-input`, `.av-form-label`, `.av-icon-button`, and `.av-skip-link` for shared treatment.
-
-The legacy Tailwind color aliases remain for existing surfaces; the rebaseline does not rewrite unrelated product behavior. Duplicate inline HTML CSS was removed from `index.html`; the application stylesheet remains the single CSS import authority.
+The legacy Tailwind aliases remain for existing surfaces. Duplicate inline HTML CSS was removed from `index.html`; the application stylesheet remains the CSS import authority.
 
 ## Product surfaces
 
 ### Home
 
-`CustomDashboardView` is presented as a role-based command center. It separates attention signals, open work, review needs, handoffs, and Monitor availability from the personal task list.
+`CustomDashboardView` is a role-based command center separating attention signals, open work, review needs, handoffs, Monitor availability, and personal tasks.
 
 ### Govern
 
-`GovernView` composes review queue, material-risk count, current ledger references, handoff state, source assumptions, and deep links to the existing Assess/Studio action surfaces. It is intentionally read-only.
+`GovernView` composes review queue, material-risk count, ledger references, handoff state, source assumptions, and links to existing Assess/Studio surfaces. It is intentionally read-only and exposes capture-state density without creating command authority.
 
 ### Studio
 
-`StudioArtifactWorkspace` now leads with a business-readable committed artifact preview. Source context, artifact type, lifecycle, version history, review authority, structured JSON, rationale, conditions, and action controls are separated into a three-region layout with a sticky contextual action bar. Advanced JSON remains available under a disclosure control.
+`StudioArtifactWorkspace` leads with a business-readable committed artifact preview. Source context, artifact type, lifecycle, version history, review authority, structured JSON, rationale, conditions, and action controls are separated into a three-region layout with a sticky contextual action bar.
 
-The legacy generated document repository remains visible as an explicitly **unverified projection** and is not described as the canonical private artifact surface. In local demo mode, the Artifact Workspace receives a zero-capability context so its read/command actions remain blocked while the UI and failure state can be reviewed.
+Invalid structured JSON is field-scoped, marked with `aria-invalid`, and immediately clears when corrected; no command is issued for invalid input. The last committed projection remains visible when a provider request, pre-commit command, version check, authorization check, connectivity check, or committed-projection reload fails. Recoverable alerts explain the failure and expose a safe reload action where applicable. A committed projection is cleared only for a genuine identity/context change.
 
-Tenant/workspace context changes clear process, handoff, and Studio projections before loading the next context. Sequence guards prevent a late response from replacing a newer context’s data.
+The legacy generated-document repository remains an explicitly **unverified projection** and is not described as the canonical private-artifact surface. In local demo mode, Artifact Workspace receives no command capability, so mutation and private-download controls remain blocked.
 
-### Delivery
+### Client context safety
 
-Operational delivery views retain their existing destinations and handlers. The rebaseline changes grouping and page hierarchy, not delivery command semantics.
+Process and handoff services clear their current presentation immediately when organization/workspace context is absent or changes. Request sequence gates prevent a late response for tenant A from replacing tenant B's projection. Scoped responses are not persisted in browser storage. This is limited client presentation safety, not a replacement for server authorization or tenant isolation.
 
-### Monitor
+### Delivery and Monitor
 
-`PortfolioView` is a read-only Monitor overview based on loaded project/task/user records. It presents disposition, risk, open work, blockers, and explicit absence of a realized outcome field. Project links continue to open the existing authorized Delivery workspace.
+Delivery destinations and handlers are unchanged. `PortfolioView` is a read-only Monitor overview based on loaded project/task/user records and explicitly distinguishes disposition, risk, blockers, open work, and the absence of a realized-outcome field. Project links continue to use the existing authorized Delivery workspace.
 
-## Marketing screenshot inventory
+## Isolated marketing capture
 
-Screenshots were captured from the local synthetic product using Playwright at a 1440×900 desktop viewport. They contain no browser chrome, live URLs, secrets, customer data, signed URLs, or production identifiers.
+Eight synthetic product screenshots are committed at a 1440×900 viewport:
 
 - `public/marketing/screenshots/home-command-center.png`
 - `public/marketing/screenshots/assess-process-catalog.png`
@@ -123,58 +131,78 @@ Screenshots were captured from the local synthetic product using Playwright at a
 - `public/marketing/screenshots/monitor-overview.png`
 - `public/marketing/screenshots/admin-controls.png`
 
-The deterministic capture entry point is `scripts/ui-rebaseline-browser-capture.mjs`. Public pages use these files with explicit dimensions, lazy loading below the fold, descriptive alt text, and a light browser-frame treatment. The Application Portfolio capture is a populated, read-only synthetic readiness state. Studio capture uses a decoder-validated synthetic fixture with valid tenant scope, ancestry, hashes, lifecycle, and reviewer context; it does not persist artifact state or change the normal server-authoritative Studio path.
+The captures contain no browser chrome, localhost URL, secret, customer data, signed URL, or production identifier. Application Portfolio uses a populated, read-only synthetic readiness state. Studio uses decoder-validated synthetic tenant scope, ancestry, hashes, lifecycle, and reviewer context.
 
-The public copy and hierarchy are intentionally explicit: Home leads with `Governed decision intelligence` and `Evaluate before you automate. Govern before you execute.`, Platform presents the six-stage evidence-to-outcome architecture, Solutions uses four problem-to-governed-output rows, and Trust & BYOK separates provider configuration, server-side secrets, human authority, evidence, review separation, fail-closed behavior, and deployment transparency. The Home boundary visual distinguishes `AvalaOS governs` from `Execution systems execute`.
+In a production-mode build, capture fixtures are reachable only when `VITE_AVALA_MARKETING_CAPTURE=true` is injected by `npm run build:marketing-capture`; development and test modes may exercise the same policy for deterministic verification. The capture command enters `/sandbox?capture=<scenario>`, requires the build marker, verifies fixture density and read-only state, resets every relevant scroll container, and then captures the image. A normal production build ignores/removes the capture query and passes `npm run verify:marketing-capture-isolation`.
 
-The authenticated presentation keeps the existing view identifiers and authority contracts. Monitor now owns only Monitor destinations in the sidebar; Delivery destinations no longer appear as an accidental Monitor submenu. Offline Studio state preserves the last committed projection while clearly blocking mutations and showing the offline boundary.
+Commands:
 
-## Accessibility and responsive treatment
+```text
+npm run build:marketing-capture
+npm run capture:ui-rebaseline
+npm run build
+npm run verify:marketing-capture-isolation
+```
 
-- Public and access experiences have skip links and semantic landmarks.
-- Authenticated App content has a skip link to `#app-main`.
-- Sidebar buttons expose `aria-current`; mobile navigation exposes `aria-expanded`/`aria-controls`, closes on Escape/backdrop, contains focus while open, returns focus to the opener, and is hidden from pointer/focus interaction while closed.
+## Accessibility, responsive behavior, and scrolling
+
+- Public/access experiences and the authenticated App expose skip links and semantic landmarks.
+- Sidebar buttons expose `aria-current`; mobile navigation exposes `aria-expanded`/`aria-controls`, traps focus while open, closes on Escape/backdrop, restores focus, and is inert while closed.
 - Repeated rendition controls include their format in the accessible name, and retention inputs are format-associated.
-- Form labels, status announcements, table column headers, and focus-visible rings are retained or added.
+- Form labels, status announcements, table headers, and focus-visible rings are retained or added.
 - `prefers-reduced-motion` disables nonessential motion.
-- Layouts use responsive grids, overflow wrappers, and stacked public/product sections for narrow widths.
+- Responsive grids, overflow wrappers, and stacked layouts cover phone through wide-desktop widths.
+- Public pages scroll at the document level. Authenticated content scrolls within `#app-main`; the fixed header/sidebar remain stable while the complete public, product, and Admin content remains reachable.
 
-## Verification record
+The final responsive verifier covers seven viewports, including 1366×768, with 70 route/theme/viewport captures. It checks critical/serious axe findings, horizontal overflow, vertical reachability, mobile focus behavior, lifecycle keyboard operation, and skip-link focus.
 
-Executed evidence on the rebaseline branch:
+## Print/PDF treatment
 
-- `npm.cmd run typecheck` — passed.
-- `npm.cmd run test:view-access-guard` — passed.
-- `npm.cmd run test:view-state-persistence` — passed.
-- `npm.cmd run test:module-journey-lifecycle` — passed.
-- `npm.cmd run test:studio-private-artifacts-client` — passed: 27 client, 37 rendition UI, and 10 workspace contract assertions.
-- `npm.cmd run test:requirements` — passed deterministic scoring regression; no scoring sources changed.
-- `npm.cmd run test:buyer-demo-copy` — passed.
-- `node scripts/ui-rebaseline-browser-capture.mjs` — passed; 7 screenshots captured.
+Print is A4 with 12 mm margins, auto-height roots, no fixed/sticky chrome, no skipped CTA content, atomic decision/role cards, atomic Platform stage sections, a compact two-column Trust control grid, and a compact footer. Home uses an in-band AvalaOS signoff to avoid a footer-only page. Generated PDF browser headers and footers are disabled.
 
-Additional local browser scroll verification passed: the public Home reached the document bottom, and Admin Workbench reached the `#app-main` bottom without moving the outer page.
+`npm run verify:print` checks auto-height, fixed-position removal, hidden interactive content, lifecycle availability, image readiness, compact footer behavior, content gaps, and minimum PDF size. Final generated PDFs were rendered and visually inspected:
 
-Planned verification or not run in this UI-only branch:
+| Route | Pages | Result |
+| --- | ---: | --- |
+| Home | 4 | Populated; no blank or footer-only page. |
+| Platform | 7 | One coherent lifecycle stage per flow; no orphaned heading. |
+| Solutions | 4 | Populated; no clipping. |
+| Trust & BYOK | 2 | Compact control grid; no clipping. |
 
-- Live Supabase, Storage, RLS, Edge, deployed RPC, hosted, pilot, production, and incident checks — **not run** by instruction.
-- Full authenticated production-mode browser/axe/performance suite — planned verification; local screenshot capture is executed evidence for the listed local synthetic states only.
-- Real deployed private-artifact RPC compatibility — planned verification; this change does not alter the canonical migration/client contract.
+## Executed verification
 
-## Final refinement verification
+Executed on the PR branch:
 
-The final pass added focused evidence beyond the original rebaseline record. The original seven-asset capture entry is superseded by the final eight-asset inventory above, which includes the dedicated Application Portfolio readiness capture:
+- `npm ci` — passed; 201 packages audited with 0 vulnerabilities reported.
+- `npm audit --audit-level=moderate` — passed with 0 vulnerabilities.
+- `npm test` — passed, including typecheck, deterministic scoring, access/state, authority, context-safety, capture-policy, buyer, security, supplemental, Edge typecheck, and PR1A–PR1E gates.
+- `npm run test:pr1f` and `npm run test:pr1g` — passed.
+- `npm run test:studio-artifacts` — passed: 31 command, 12 generation, 13 DB, 5 RPC, 3 provider, 17 client, 6 validation, and 16 workspace assertions/scenarios.
+- `npm run test:studio-artifacts-coverage` — passed at 99.31% lines, 91.61% branches, and 97.14% functions.
+- `npm run test:studio-private-artifacts` — passed, including 27 client, 37 rendition UI, and 16 workspace assertions.
+- `npm run test:studio-private-artifacts-coverage` — passed: 69 scenarios, 100% lines/functions and 93.67% branches for the private command surface.
+- `npm run test:ai-boundary-static` — passed with zero forbidden hits and zero stale allowlist entries.
+- `npm run test:secret-hygiene` — passed with zero forbidden hits and zero tracked `.env` files.
+- Retained browser config — 34/34 passed across desktop and mobile.
+- PR1D browser config — 36/36 passed across desktop and mobile.
+- PR1E browser config — 2/2 passed across desktop and mobile.
+- PR1F browser config — 2/2 passed across desktop and mobile.
+- PR1G browser config — 4/4 passed across desktop and mobile.
+- Studio governed-artifact browser config — 14/14 passed across desktop and mobile.
+- Studio private-artifact browser config — 30/30 passed across desktop and Pixel 7.
+- `npm run verify:ui-rebaseline` — passed 70 route/theme/viewport captures.
+- `npm run verify:print` — passed for Home, Platform, Solutions, and Trust & BYOK.
+- `npm run capture:ui-rebaseline` — passed for all eight isolated synthetic screenshots.
 
-- `npm.cmd ci` passed with 0 vulnerabilities reported.
-- `npm.cmd run typecheck:edge` and `npm.cmd run build` passed.
-- `npm.cmd run test:marketing-studio-capture` passed; strict synthetic Studio IDs, ancestry, and reviewer context decode successfully.
-- `npm.cmd run test:ai-boundary-static` and `npm.cmd run test:secret-hygiene` passed; no forbidden AI-boundary hits, stale allowlist entries, or secret-hygiene findings.
-- `npm.cmd run test:pr1g-workspace` passed with five assertions and the workspace coverage gate above threshold.
-- `npm.cmd run test:studio-artifacts` and `npm.cmd run test:studio-private-artifacts-client` passed across command, generation, DB/RPC/provider, client, rendition, and workspace contracts.
-- `npx playwright test tests/browser/studioPrivateArtifacts.spec.ts --config=playwright.studio-private-artifacts.config.ts --reporter=line` passed 30 tests across desktop and Pixel 7, including offline committed-projection behavior.
-- `node scripts/ui-rebaseline-visual-verify.mjs` passed 60 route/theme/viewport captures across five public routes, critical/serious axe checks, horizontal-overflow and vertical-scroll checks, mobile focus trap/Escape/restore checks, lifecycle keyboard navigation, skip-link focus, and print PDF verification.
+The browser total is 122 passing test invocations across retained and dedicated configurations. Expected mocked network failures used to prove fail-closed behavior remain visible in console evidence but do not fail the suites.
 
-Retained PR1A/PR1C browser assertions were aligned to the canonical current copy and verified after the refinement. Live Supabase, Storage, RLS, Edge, deployed RPC, hosted, pilot, production, and incident checks remain not run by instruction.
+Not run and not implied:
+
+- Live Supabase, Storage, RLS, Edge, deployed RPC, hosted, pilot, production, deployment, or incident checks.
+- Real deployed private-artifact compatibility or readiness proof.
 
 ## Rollback and fallback
 
-The safe rollback is to revert this single UI branch/PR. A read-only fallback is to keep existing view identifiers and action handlers while removing the new public shell and presentational wrappers. No migration rollback, credential change, endpoint disablement, storage action, or live-system intervention is required.
+The safe rollback is to revert PR #219. The read-only fallback is to keep the existing view identifiers, server contracts, and action handlers while removing the public shell, capture-only fixture wiring, and presentational wrappers. Client sequence guards can be reverted independently if an integration issue is found, but doing so would restore the stale-presentation risk they close.
+
+No migration rollback, credential change, endpoint disablement, storage action, or live-system intervention is required.

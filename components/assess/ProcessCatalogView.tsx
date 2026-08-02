@@ -6,10 +6,13 @@ import { ChartBarIcon, CheckCircleIcon, ExclamationTriangleIcon, SparklesIcon } 
 import type { ProductActionDecision } from '../../services/productActionPolicy';
 import PageHeader from '../shared/ui/PageHeader';
 import StatusBadge from '../shared/ui/StatusBadge';
+import type { AssessProcess } from '../../types';
 
 interface ProcessCatalogViewProps {
     onViewDetail: (processId: string) => void;
     createProcessDecision?: ProductActionDecision;
+    presentationProcesses?: AssessProcess[];
+    captureMode?: boolean;
 }
 
 const criticalityClass = (criticality: string) => {
@@ -26,27 +29,31 @@ const statusClass = (status: string) => {
     return 'bg-[#002C4B]/10 text-[#002C4B] ring-[#002C4B]/15 dark:bg-[#ffbc03]/10 dark:text-[#ffcf45] dark:ring-[#ffbc03]/20';
 };
 
-const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision }) => {
+const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision, presentationProcesses, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
     const { processes, loading, refreshProcesses } = useProcessService();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const canCreateProcess = createProcessDecision?.allowed ?? true;
-    const createProcessBlockedReason = createProcessDecision && !createProcessDecision.allowed ? createProcessDecision.message : 'Process creation is not authorized in this workspace.';
+    const displayedProcesses = captureMode ? (presentationProcesses ?? []) : processes;
+    const displayedLoading = captureMode ? false : loading;
+    const canCreateProcess = !captureMode && (createProcessDecision?.allowed ?? true);
+    const createProcessBlockedReason = captureMode
+        ? 'Synthetic marketing capture is read-only.'
+        : createProcessDecision && !createProcessDecision.allowed ? createProcessDecision.message : 'Process creation is not authorized in this workspace.';
 
     if (!currentOrganization) return null;
 
-    const completedCount = processes.filter(process => ['Completed', 'Approved', 'Handed Off to Docs', 'Handed Off to Delivery'].includes(process.status)).length;
-    const criticalCount = processes.filter(process => process.criticality === 'Critical' || process.criticality === 'High').length;
-    const inFlightCount = processes.filter(process => !['Not Started', 'Completed', 'Approved', 'Archived'].includes(process.status)).length;
+    const completedCount = displayedProcesses.filter(process => ['Completed', 'Approved', 'Handed Off to Docs', 'Handed Off to Delivery'].includes(process.status)).length;
+    const criticalCount = displayedProcesses.filter(process => process.criticality === 'Critical' || process.criticality === 'High').length;
+    const inFlightCount = displayedProcesses.filter(process => !['Not Started', 'Completed', 'Approved', 'Archived'].includes(process.status)).length;
     const assessmentStats = [
-        { label: 'Processes', value: processes.length, detail: 'enterprise inventory', icon: ChartBarIcon },
+        { label: 'Processes', value: displayedProcesses.length, detail: captureMode ? 'synthetic inventory' : 'enterprise inventory', icon: ChartBarIcon },
         { label: 'Scored', value: completedCount, detail: 'decision packs ready', icon: CheckCircleIcon },
         { label: 'High criticality', value: criticalCount, detail: 'needs control review', icon: ExclamationTriangleIcon },
         { label: 'In motion', value: inFlightCount, detail: 'draft or review', icon: SparklesIcon },
     ];
 
     return (
-        <div className="mx-auto max-w-6xl space-y-6 p-6 pb-20">
+        <div data-testid="process-catalog-view" data-capture-state={captureMode ? 'synthetic-read-only' : undefined} className="mx-auto max-w-6xl space-y-6 p-6 pb-20">
             <div className="premium-surface overflow-hidden rounded-[var(--av-radius-panel)]">
                 <div className="p-6">
                     <PageHeader
@@ -54,7 +61,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                         title="Process Catalog"
                         description="Review process candidates, criticality, readiness, and the recommended role for automation, AI, workflow, or human review."
                         primaryAction={{ label: 'New process', onClick: () => setIsCreateModalOpen(true), disabled: !canCreateProcess, title: !canCreateProcess ? createProcessBlockedReason : undefined }}
-                        meta={<StatusBadge tone={canCreateProcess ? 'info' : 'warning'}>{canCreateProcess ? 'Creation available' : 'Creation restricted'}</StatusBadge>}
+                        meta={<StatusBadge tone={captureMode ? 'info' : canCreateProcess ? 'info' : 'warning'}>{captureMode ? 'Synthetic · read-only' : canCreateProcess ? 'Creation available' : 'Creation restricted'}</StatusBadge>}
                     />
                 </div>
                 <div className="grid grid-cols-1 gap-0 border-t border-slate-200/80 bg-slate-50/70 dark:border-slate-800/80 dark:bg-slate-950/30 md:grid-cols-4">
@@ -79,7 +86,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
                     <div>
                         <h2 className="text-lg font-bold text-slate-950 dark:text-white">Process records</h2>
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{processes.length} process records in {currentOrganization.name}</p>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{displayedProcesses.length} {captureMode ? 'synthetic ' : ''}process records in {currentOrganization.name}</p>
                     </div>
                     <StatusBadge tone="neutral">Enterprise scope</StatusBadge>
                 </div>
@@ -95,7 +102,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                         </tr>
                     </thead>
                     <tbody>
-                        {processes.map(process => (
+                        {displayedProcesses.map(process => (
                             <tr key={process.id} className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-white dark:border-slate-800 dark:hover:bg-slate-900/80">
                                 <td className="px-6 py-4">
                                     <button onClick={() => onViewDetail(process.id)} className="text-left font-semibold text-slate-950 transition-colors hover:text-[#002C4B] dark:text-white dark:hover:text-[#ffcf45]">
@@ -125,14 +132,14 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                                 </td>
                             </tr>
                         ))}
-                        {loading && (
+                        {displayedLoading && (
                             <tr>
                                 <td colSpan={5} className="px-6 py-12 text-center text-sm font-semibold text-slate-500">
                                     Loading process catalog...
                                 </td>
                             </tr>
                         )}
-                        {!loading && processes.length === 0 && (
+                        {!displayedLoading && displayedProcesses.length === 0 && (
                             <tr>
                                 <td colSpan={5} className="px-6 py-14 text-center">
                                     <p className="text-base font-black text-slate-900 dark:text-white">No processes found</p>

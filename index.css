@@ -869,6 +869,307 @@ input:checked + .toggle-slider::before {
   }
 }
 
+.av-print-home-signoff {
+  display: none;
+}
+
+/* PR #219 print closure: this block intentionally follows the legacy print rules. */
+@media print {
+  .public-site .av-public-hero > div,
+  .public-site section,
+  .public-site > div > main > div {
+    padding-top: 14pt !important;
+    padding-bottom: 14pt !important;
+  }
+
+  .public-site section,
+  .public-site > div > main > div {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .public-site .av-solution-row,
+  .public-site .av-public-panel,
+  .public-site .av-architecture-panel,
+  .public-site .av-boundary-card,
+  .public-site .av-print-atomic-section,
+  .public-site .av-platform-stage,
+  .public-site .av-lifecycle-print li,
+  .public-site figure,
+  .public-site article {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .av-lifecycle-print {
+    gap: 6pt;
+    margin-top: 12pt;
+  }
+
+  .av-lifecycle-print li {
+    min-height: 46pt;
+    padding: 7pt;
+  }
+
+  .av-trust-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10pt !important;
+  }
+
+  .av-trust-control-grid .av-architecture-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .public-site .av-trust-band > div {
+    padding-top: 10pt !important;
+    padding-bottom: 10pt !important;
+  }
+
+  .public-site--home .public-footer {
+    display: none !important;
+  }
+
+  .public-site--home .av-print-home-signoff {
+    display: flex !important;
+    align-items: center;
+    gap: 7pt;
+    max-width: 174mm;
+    margin: 0 auto;
+    padding: 0 10pt 9pt;
+    color: #fff;
+    break-inside: avoid;
+  }
+
+  .av-print-home-signoff strong {
+    color: #fff;
+    font-size: 9pt;
+    letter-spacing: 0.1em;
+  }
+
+  .av-print-home-signoff p {
+    margin: 2pt 0 0;
+    color: #cbd5e1;
+    font-size: 7.5pt;
+  }
+
+  .public-footer {
+    margin-top: 0 !important;
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+  }
+
+  .public-footer > div {
+    padding-top: 6pt !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .public-footer nav {
+    display: none !important;
+  }
+}
+
+/* PR #219 closure: restrained display tracking, connected flows, and deterministic print. */
+.av-display-title.av-home-title {
+  max-width: 15.75ch;
+  font-size: clamp(3.5rem, 5.1vw, 4.65rem);
+  letter-spacing: -0.034em;
+  line-height: 0.99;
+  word-spacing: 0.025em;
+}
+
+.av-display-title.av-public-page-title {
+  font-size: clamp(2.8rem, 4.3vw, 3.95rem);
+  letter-spacing: -0.025em;
+  line-height: 1.01;
+  word-spacing: 0.02em;
+}
+
+.av-public-heading {
+  letter-spacing: -0.028em;
+  word-spacing: 0.015em;
+}
+
+.av-lifecycle-print {
+  display: none;
+}
+
+.av-architecture-step {
+  min-height: 5rem;
+  border-radius: 0.875rem;
+}
+
+.av-architecture-step:not(:last-child)::after {
+  content: '\2192';
+}
+
+@media (max-width: 767px) {
+  .av-display-title.av-home-title {
+    max-width: 15ch;
+    font-size: clamp(2.625rem, 12vw, 3.125rem);
+    letter-spacing: -0.03em;
+  }
+
+  .av-display-title.av-public-page-title {
+    font-size: clamp(2.75rem, 11vw, 3.45rem);
+  }
+
+  .av-architecture-step:not(:last-child)::after {
+    display: block;
+    content: '\2193';
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body,
+  #root,
+  .public-site {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    background: #fff !important;
+  }
+
+  body {
+    margin: 0 !important;
+  }
+
+  .public-site {
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .av-skip-link,
+  .public-header,
+  .av-lifecycle-interactive,
+  .av-print-hide,
+  .av-architecture-panel + .mt-8,
+  .public-site button,
+  .public-site .btn-primary,
+  .public-site .btn-ghost {
+    display: none !important;
+  }
+
+  .av-lifecycle-print {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8pt;
+    margin: 18pt 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .av-lifecycle-print li {
+    display: flex;
+    min-height: 52pt;
+    gap: 8pt;
+    break-inside: avoid;
+    padding: 8pt;
+    border: 1px solid #cbd5e1;
+    border-radius: 8pt;
+  }
+
+  .av-lifecycle-print li > span {
+    color: #805800;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 8pt;
+    font-weight: 700;
+  }
+
+  .av-lifecycle-print strong {
+    color: #0f172a;
+    font-size: 10pt;
+  }
+
+  .av-lifecycle-print p {
+    margin: 3pt 0 0;
+    color: #475569;
+    font-size: 8.5pt;
+    line-height: 1.35;
+  }
+
+  .av-display-title.av-home-title,
+  .av-display-title.av-public-page-title,
+  .av-public-heading {
+    letter-spacing: -0.012em !important;
+    word-spacing: normal !important;
+  }
+
+  .av-display-title.av-home-title {
+    max-width: 18ch;
+    font-size: 34pt;
+  }
+
+  .av-display-title.av-public-page-title {
+    font-size: 30pt;
+  }
+
+  .public-site .av-public-hero > div,
+  .public-site section,
+  .public-site > div > main > div {
+    padding-top: 18pt !important;
+    padding-bottom: 18pt !important;
+  }
+
+  .public-site figure,
+  .public-site .av-product-shot,
+  .public-site .av-solution-row,
+  .public-site .av-public-panel,
+  .public-site .av-architecture-panel,
+  .public-site .av-boundary-card,
+  .public-site .av-lifecycle-print li,
+  .public-site .public-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .public-site .av-product-shot__media {
+    max-height: 340pt;
+  }
+
+  .public-site .av-public-hero {
+    background: #fff !important;
+  }
+
+  .public-site section {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .public-site .av-solution-row,
+  .public-site .av-public-panel,
+  .public-site .av-architecture-panel,
+  .public-site .av-boundary-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .public-footer {
+    margin-top: 8pt;
+    border-top-color: #cbd5e1 !important;
+    background: #fff !important;
+  }
+
+  .public-footer > div {
+    gap: 10pt !important;
+    padding: 10pt 0 0 !important;
+  }
+
+  .public-footer nav {
+    font-size: 8pt;
+  }
+}
+
 /* Final public-site refinement: stable frames, balanced display type, and print-safe composition. */
 .av-home-title,
 .av-public-page-title {

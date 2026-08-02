@@ -4,32 +4,39 @@ import { useOrganizationContext } from '../components/auth/OrganizationProvider'
 import { ALL_TEMPLATE_PACKS } from '../constants/starterPacks';
 import { assessAdapter } from './adapters/assessAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
+import { createContextRequestGate } from './contextRequestGate';
 
 export function useProcessService() {
     const { currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
     const { user } = useAuth();
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
-    const requestSequence = useRef(0);
+    const requestGate = useRef(createContextRequestGate()).current;
 
     const fetchProcesses = useCallback(async () => {
-        const sequence = ++requestSequence.current;
         if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) {
+            requestGate.invalidate();
             setProcesses([]);
             setLoading(false);
             return;
         }
+        const requestContext = {
+            actorId: user?.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+        };
+        const ticket = requestGate.start(requestContext);
         setProcesses([]);
         setLoading(true);
         try {
             const data = await assessAdapter.getProcesses(currentOrganization.id, currentWorkspace.id);
-            if (sequence === requestSequence.current) setProcesses(data);
+            if (requestGate.accepts(ticket, requestContext)) setProcesses(data);
         } catch (err) {
             console.error('Failed to fetch processes:', err);
         } finally {
-            if (sequence === requestSequence.current) setLoading(false);
+            if (requestGate.accepts(ticket, requestContext)) setLoading(false);
         }
-    }, [currentOrganization, currentWorkspace, sessionState]);
+    }, [currentOrganization, currentWorkspace, requestGate, sessionState, user?.id]);
 
     useEffect(() => {
         fetchProcesses();
@@ -70,7 +77,7 @@ export function useProcessService() {
         const saved = await assessAdapter.createProcess(newProcessData);
         setProcesses(prev => [...prev, saved]);
         return saved;
-    }, [currentOrganization, user, checkCreationLimit]);
+    }, [checkCreationLimit, currentOrganization, currentWorkspace?.id, user]);
 
     const createProcessFromTemplate = useCallback(async (orgId: string, templateId: string, ownerId: string) => {
         const template = ALL_TEMPLATE_PACKS.flatMap(pack => pack.templates).find(item => item.id === templateId);

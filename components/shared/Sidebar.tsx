@@ -34,6 +34,8 @@ interface SidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   canAccessAdmin?: boolean;
+  canAccessGovern: boolean;
+  authoritativeViewCapabilities?: readonly string[];
   governOpen?: boolean;
   onOpenGovern: () => void;
   mobileOpen?: boolean;
@@ -96,6 +98,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggleCollapse,
   canAccessAdmin: adminAccessOverride,
+  canAccessGovern,
+  authoritativeViewCapabilities = [],
   governOpen = false,
   onOpenGovern,
   mobileOpen = false,
@@ -146,9 +150,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const getItemAccess = (view: View) => resolveViewAccess({
     user,
     authLoading: guardLoading,
-    organization: currentOrganization,
-    enabledModules: currentOrganization?.enabledModules,
-    view,
+      organization: currentOrganization,
+      enabledModules: currentOrganization?.enabledModules,
+      authoritativeCapabilities: authoritativeViewCapabilities,
+      view,
     scope: currentScope,
   });
 
@@ -198,12 +203,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {collapsed && <div className="my-3 border-t border-[var(--av-color-border)]" />}
         <div className="space-y-1">
           {renderNavItem(lifecycleItems[0])}
-          {(() => {
-            const access = getItemAccess(View.PROCESS_CATALOG);
-            const isActive = governOpen;
-            if (!access.allowed && !collapsed) return null;
-            return <button type="button" onClick={() => access.allowed && (onOpenGovern(), onMobileClose?.())} disabled={!access.allowed} aria-current={isActive ? 'page' : undefined} title={collapsed ? 'Govern' : (!access.allowed ? 'Govern overview is not available in this workspace' : undefined)} className={`nav-item group flex w-full shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${isActive ? 'is-active font-bold' : access.allowed ? 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]' : 'cursor-not-allowed text-[var(--av-color-text-subtle)]'} ${collapsed ? 'justify-center' : ''}`}><ClipboardDocumentListIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Govern</span>}</button>;
-          })()}
+          {canAccessGovern && <button type="button" onClick={() => { onOpenGovern(); onMobileClose?.(); }} aria-current={governOpen ? 'page' : undefined} title={collapsed ? 'Govern' : undefined} className={`nav-item group flex w-full shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${governOpen ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><ClipboardDocumentListIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Govern</span>}</button>}
           {lifecycleItems.slice(1).map(item => renderNavItem(item))}
         </div>
 
