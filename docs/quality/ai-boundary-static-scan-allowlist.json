@@ -37,7 +37,7 @@
       "pattern": "StorageKeys.API_KEY",
       "path": "App.tsx",
       "lines": [
-        181
+        195
       ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
@@ -46,7 +46,7 @@
       "pattern": "localStorage",
       "path": "App.tsx",
       "lines": [
-        181
+        195
       ],
       "reason": "deprecated cleanup-only path",
       "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."

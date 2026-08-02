@@ -6,8 +6,6 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
 import { createMarketingStudioCaptureContext, createMarketingStudioCaptureTransport } from '../../data/marketingStudioCapture';
 import type { StudioArtifactTransport } from '../../services/studioArtifacts/client';
-import { readMarketingCapture } from '../../services/marketingCaptureRuntime';
-import { isStudioMarketingCapture } from '../../services/marketingCapturePolicy';
 
 interface DocsViewProps {
     generations: DocumentGeneration[];
@@ -30,8 +28,7 @@ const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGener
 
     const { tenantContext, currentOrganization, currentWorkspace } = useOrganizationContext();
     const { user } = useAuth();
-    const captureDecision = useMemo(() => readMarketingCapture(), []);
-    const marketingStudioCapture = captureMode || isStudioMarketingCapture(captureDecision);
+    const marketingStudioCapture = captureMode;
 
     const studioContext = useMemo<TenantContextProjection | null>(() => {
         if (tenantContext) return tenantContext;

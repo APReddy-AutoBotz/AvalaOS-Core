@@ -39,8 +39,13 @@ import { resolveProductActionPolicy, type ProductAction, type ProductActionConte
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
-import { readMarketingCapture } from './services/marketingCaptureRuntime';
-import { isProductMarketingCapture, preserveMarketingCaptureSearch } from './services/marketingCapturePolicy';
+import {
+  isApplicationPortfolioMarketingCapture,
+  isProductMarketingCapture,
+  isStudioMarketingCapture,
+  preserveMarketingCaptureSearch,
+  resolveMarketingCapture,
+} from './services/marketingCapturePolicy';
 import {
   MARKETING_CAPTURE_HANDOFFS,
   MARKETING_CAPTURE_MONITOR_SIGNAL,
@@ -167,8 +172,17 @@ function App() {
   );
   const navigationHydrated = useRef(false);
   const navigationWriteSuppressed = useRef(false);
-  const marketingCapture = useMemo(() => readMarketingCapture(), []);
+  const marketingCapture = useMemo(() => resolveMarketingCapture(
+    typeof window === 'undefined' ? '' : window.location.search,
+    {
+      development: import.meta.env.DEV,
+      test: import.meta.env.MODE === 'test',
+      dedicatedCaptureBuild: import.meta.env.VITE_AVALA_MARKETING_CAPTURE === 'true',
+    },
+  ), []);
   const productMarketingCapture = isProductMarketingCapture(marketingCapture);
+  const studioMarketingCapture = isStudioMarketingCapture(marketingCapture);
+  const applicationPortfolioMarketingCapture = isApplicationPortfolioMarketingCapture(marketingCapture);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -1026,6 +1040,7 @@ function App() {
         onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
         onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
+        captureMode={applicationPortfolioMarketingCapture}
       />;
     }
 
@@ -1225,7 +1240,7 @@ function App() {
           setActiveGenerationId(id);
           setTempArtifacts(null);
           applyGuardedView(View.WORKSPACE);
-        }} captureMode={productMarketingCapture} />;
+        }} captureMode={studioMarketingCapture} />;
       default:
         if (currentScope.type === ScopeType.MY_WORK) {
           return <MyWorkView view={currentView} allTasks={tasksForScope} allProjects={projectsForScope} allEpics={epicsForScope} currentUser={currentUser} onUpdateTaskStatus={handleUpdateTaskStatus} onSelectTask={setSelectedTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} quickFilter={quickFilter} setQuickFilter={setQuickFilter} onUpdateTask={handleUpdateTask} />;
