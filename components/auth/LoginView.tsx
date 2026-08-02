@@ -13,7 +13,7 @@ import {
   UsersIcon,
   ViewBoardsIcon,
 } from '../shared/icons';
-import { AvalaWordmark } from '../shared/brand';
+import { AvalaLifecycleLockup } from '../shared/brand';
 import { useAuth } from './AuthProvider';
 import { getRuntimeBoundaryError, isLocalRuntimeEnabled } from '../../services/supabaseClient';
 
@@ -112,14 +112,11 @@ const LoginView: React.FC = () => {
             <div className="relative z-10 flex flex-col h-full">
               <div className="mb-8 flex items-start justify-between gap-4">
                 <div className="flex flex-col items-start gap-4">
-                  <div className="glass-card bg-[#fffcf5]/80 px-4 py-2.5 rounded-2xl border border-white/80 shadow-md backdrop-blur-md flex items-center">
-                    <AvalaWordmark className="h-14 w-[230px]" />
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#021f37]/80 ml-2">
-                    Governed AI & Automation Delivery OS
+                  <div className="brand-lockup flex items-center">
+                    <AvalaLifecycleLockup className="h-[72px] w-[310px] max-w-full" />
                   </div>
                   <div className="ml-2 max-w-sm text-xs font-bold leading-5 text-[#021f37]/70">
-                    AvalaOS = Assess. Validate. Align. Launch. Audit. It governs handoff and does not execute bots, RPA jobs, agents, or external systems.
+                    AvalaOS = Assess. Validate. Assemble. Launch. Audit. It governs handoff and does not execute bots, RPA jobs, agents, or external systems.
                   </div>
                 </div>
                 <div className="hidden glass-card px-4 py-2 rounded-2xl md:flex items-center gap-3 border border-white/60 shadow-sm bg-white/50 backdrop-blur-md">
@@ -147,7 +144,7 @@ const LoginView: React.FC = () => {
                     Turn messy process input into deterministic recommendations, editable review drafts, human-reviewed work items, and evidence-backed readiness visibility.
                   </p>
                   <p className="mt-3 max-w-sm text-sm font-bold leading-6 text-[#021f37]/70">
-                    Assess. Validate. Align. Launch. Audit. AvalaOS is the governance and delivery operating model around execution systems.
+                    Assess. Validate. Assemble. Launch. Audit. AvalaOS is the governance and delivery operating model around execution systems.
                   </p>
 
                   <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">

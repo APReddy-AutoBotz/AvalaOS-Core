@@ -1,6 +1,6 @@
 import React from 'react';
 import { MoonIcon, SunIcon, UserCircleIcon } from './icons';
-import { AvalaLogo, AvalaWordmark } from './brand';
+import { AvalaLifecycleLockup, AvalaLogo } from './brand';
 import { Project, Scope, Team, User, View } from '../../types';
 import ScopeSwitcher from './ScopeSwitcher';
 import { useAuth } from '../auth/AuthProvider';
@@ -54,10 +54,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, currentView, curren
         </button>
         <div className="brand-lockup flex items-center text-left lg:hidden">
           <AvalaLogo className="h-9 w-9 flex-shrink-0 sm:hidden" />
-          <div className="hidden sm:block">
-            <AvalaWordmark className="h-8 w-[156px]" />
-            <p className="brand-subline mt-0.5">Govern before you execute</p>
-          </div>
+          <AvalaLifecycleLockup className="hidden h-11 w-[205px] sm:block" />
         </div>
         <div className="hidden h-6 w-px bg-[var(--av-color-border)] lg:block" />
         <ScopeSwitcher

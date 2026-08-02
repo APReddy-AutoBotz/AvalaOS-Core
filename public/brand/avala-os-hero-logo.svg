@@ -1,7 +1,7 @@
-<svg width="1280" height="296" viewBox="0 0 640 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="1380" height="296" viewBox="0 0 690 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Avala OS hero logo</title>
-  <desc id="desc">Avala means Assess, Validate, Align, Launch, and Audit.</desc>
-  <rect width="640" height="148" rx="22" fill="#00182A"/>
+  <desc id="desc">Avala means Assess, Validate, Assemble, Launch, and Audit.</desc>
+  <rect width="690" height="148" rx="22" fill="#00182A"/>
   <defs>
     <linearGradient id="gold" x1="10" y1="84" x2="68" y2="8" gradientUnits="userSpaceOnUse"><stop stop-color="#9A5F00"/><stop offset=".48" stop-color="#E4B04B"/><stop offset="1" stop-color="#FFF0BD"/></linearGradient>
     <linearGradient id="silver" x1="45" y1="8" x2="84" y2="88" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF"/><stop offset=".48" stop-color="#DCE3EA"/><stop offset="1" stop-color="#7D8FA3"/></linearGradient>
@@ -10,5 +10,5 @@
   <path d="M113 19V99" stroke="#456078" stroke-width="1.5"/>
   <text x="138" y="74" fill="#F7F9FC" font-family="Outfit, Avenir Next, Inter, sans-serif" font-size="48" font-weight="600" letter-spacing="7">AVALA</text>
   <text x="350" y="74" fill="#E9B95D" font-family="Outfit, Avenir Next, Inter, sans-serif" font-size="48" font-weight="600" letter-spacing="7">OS</text>
-  <text x="138" y="121" fill="#C6D1DC" font-family="Outfit, Avenir Next, Inter, sans-serif" font-size="16" font-weight="600" letter-spacing="1.6">ASSESS  •  VALIDATE  •  ALIGN  •  LAUNCH  •  AUDIT</text>
+  <text x="138" y="122" fill="#C6D1DC" font-family="Outfit, Avenir Next, Inter, sans-serif" font-size="18" font-weight="650" letter-spacing="1.05">ASSESS  ·  VALIDATE  ·  ASSEMBLE  ·  LAUNCH  ·  AUDIT</text>
 </svg>

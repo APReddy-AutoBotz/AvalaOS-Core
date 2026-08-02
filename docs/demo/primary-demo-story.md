@@ -6,7 +6,7 @@ Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 A finance operations team wants to evaluate the `AP Invoice Exception Handling` process before investing in downstream delivery work. The prepared demo shows how AvalaOS moves from deterministic assessment to Avala Govern control context, Studio review artifacts, Avala Delivery work items, a Delivery Pack, and Monitor readiness signals without relying on live generation during the walkthrough.
 
-AvalaOS = Assess. Validate. Align. Launch. Audit.
+AvalaOS = Assess. Validate. Assemble. Launch. Audit.
 
 ## Flow
 
