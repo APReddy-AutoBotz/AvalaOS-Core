@@ -3,9 +3,9 @@ import {createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 
 const file='supabase/migrations/20260729163251_studio_private_artifact_authority.sql';
-const sql=await readFile(file,'utf8');
+const sql=(await readFile(file,'utf8')).replaceAll('\r\n','\n');
 const forwardFile='supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
-const forward=await readFile(forwardFile,'utf8');
+const forward=(await readFile(forwardFile,'utf8')).replaceAll('\r\n','\n');
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
 assert.equal(migrations.at(-1),'20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql','PR #217 forward fix must be the chronological tip');
 const acceptedBlob=createHash('sha1').update(`blob ${Buffer.byteLength(sql)}\0`).update(sql).digest('hex');
@@ -128,7 +128,17 @@ assert.doesNotMatch(normalComplete,/'reconciling'/);
 assert.match(normalFail,/x\.state NOT IN \('requested','rendering','uploaded'\)/);
 assert.doesNotMatch(normalFail,/x\.state NOT IN \([^\n]*'reconciling'/);
 assert.match(recoveryAuthority,/x\.state <> 'reconciling'[\s\S]+x\.execution_fence <> p_fence[\s\S]+reconciliation_claimed_at IS NULL[\s\S]+studio_assert_actor[\s\S]+current_approved_version_id = version\.id/s);
+assert.match(
+  recoveryAuthority,
+  /reconciliation_claimed_at <= clock_timestamp\(\) - interval '5 minutes'/,
+  'rendition recovery authority must reject expired leases, not only null timestamps',
+);
 assert.match(recoveryRendered,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
+assert.match(
+  recoveryRendered,
+  /reconciliation_claimed_at = clock_timestamp\(\)/,
+  'rendered recovery persistence must atomically renew its active lease',
+);
 assert.match(recoveryComplete,/studio_rendition_attempt_complete_internal\(p_attempt,p_fence\)/);
 assert.doesNotMatch(recoveryComplete,/studio_rendition_attempt_complete\(p_attempt\)/);
 assert.match(recoveryFail,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);

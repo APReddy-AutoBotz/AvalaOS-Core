@@ -435,14 +435,12 @@ test('legal hold remains separate and blocks deletion request', async ({ page })
 test('private projection request uses only the exact production RPC arguments', async ({ page }) => {
   const fixture = await installFixture(page);
   await openDocs(page);
-  const projectionRequest = fixture.requests.find(request =>
-    request.path.includes('studio_private_artifact_projection'),
-  );
-  expect(Object.keys(projectionRequest?.body ?? {}).sort()).toEqual([
-    'p_artifact_version',
-    'p_org',
-    'p_workspace',
-  ]);
+  await expect.poll(() => {
+    const projectionRequest = fixture.requests.find(request =>
+      request.path.includes('studio_private_artifact_projection'),
+    );
+    return Object.keys(projectionRequest?.body ?? {}).sort();
+  }).toEqual(['p_artifact_version', 'p_org', 'p_workspace']);
 });
 
 test('multiple active holds are disclosed safely and released by exact hold id', async ({ page }) => {
@@ -590,7 +588,7 @@ test('deletion execution and reconciliation states expose no retention mutation'
     ],
   });
   const panel = await openDocs(page);
-  await expect(panel.getByLabel('Extend retention until')).toHaveCount(0);
+  await expect(panel.getByLabel(/Extend (Markdown|PDF|DOCX) retention until/)).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Extend retention' })).toHaveCount(0);
 });
 
@@ -636,7 +634,7 @@ test('canonical rendition mutations follow every public lifecycle without blocke
     const holdAction = panel
       .getByTestId('rendition-pdf')
       .getByRole('button', { name: 'Place legal hold' });
-    const retentionInput = panel.getByLabel('Extend retention until');
+    const retentionInput = panel.getByLabel('Extend PDF retention until');
     const retentionAction = panel.getByRole('button', { name: 'Extend retention' });
 
     if (lifecycle.offered) {

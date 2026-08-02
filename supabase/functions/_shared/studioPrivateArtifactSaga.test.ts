@@ -32,7 +32,9 @@ class FakeRenditionDb implements StudioRenditionSagaDatabase {
   work: any = null;
   failPersist = false;
   failAvailable = false;
+  failReconciledPersist = false;
   availableCalls = 0;
+  reconciledPersistCalls = 0;
   failedCodes: StudioSagaFailureCode[] = [];
   reconciliationCodes: StudioSagaFailureCode[] = [];
   async claim(_requestId: string) { return this.claimValue; }
@@ -48,6 +50,7 @@ class FakeRenditionDb implements StudioRenditionSagaDatabase {
     return receipt('available');
   }
   async markFailed(input: { attemptId: string; failureCode: StudioSagaFailureCode }) {
+    if (this.failReconciledPersist) throw new Error('AUTHORITY_STALE');
     this.failedCodes.push(input.failureCode);
     if (this.work) this.work.state = 'failed';
     return receipt('failed');
@@ -56,6 +59,11 @@ class FakeRenditionDb implements StudioRenditionSagaDatabase {
     this.reconciliationCodes.push(input.failureCode);
     if (this.work) { this.work.state = 'completion_pending'; this.work.reconciliationCount += 1; }
     return receipt('reconciliation_required');
+  }
+  async persistReconciledRendered(input: any) {
+    this.reconciledPersistCalls += 1;
+    if (this.failReconciledPersist) throw new Error('AUTHORITY_STALE');
+    this.work = { ...input, state: 'completion_pending', phase: 'verify_or_upload', reconciliationCount: this.work?.reconciliationCount ?? 1 };
   }
   async loadReconciliation(_attemptId: string) { return this.work; }
 }
@@ -130,6 +138,47 @@ void test('reconciliation recreates a missing object only from committed server 
   assert.equal(result.outcome, 'available');
   assert.equal(storage.operationCounts.probe, 1);
   assert.equal(storage.operationCounts.upload, 1);
+  assert.equal(database.reconciledPersistCalls, 1);
+});
+void test('expired pre-render recovery cannot persist metadata or reach provider storage', async () => {
+  const database = new FakeRenditionDb();
+  database.failReconciledPersist = true;
+  database.work = { ...executeClaim, phase: 'pre_render', fence: 7, reconciliationCount: 1 };
+  const storage = new DeterministicFakeStudioPrivateArtifactStorage();
+  await assert.rejects(
+    reconcileStudioRendition('attempt-1', { database, storage }),
+    /AUTHORITY_STALE/,
+  );
+  assert.equal(database.reconciledPersistCalls, 1);
+  assert.equal(storage.operationCounts.probe, 0);
+  assert.equal(storage.operationCounts.upload, 0);
+});
+void test('failed verify-or-upload lease renewal after rendering prevents create-only upload', async () => {
+  const database = new FakeRenditionDb();
+  const rendered = await renderStudioPrivateArtifact(content, 'markdown', renderingAuthority);
+  database.failReconciledPersist = true;
+  database.work = {
+    ...executeClaim,
+    phase: 'verify_or_upload',
+    fence: 11,
+    objectKey: `${organizationId}/${workspaceId}/studio-artifacts/${opaqueObjectId}.md`,
+    byteLength: rendered.byteLength,
+    sha256: rendered.sha256,
+    mimeType: rendered.mimeType,
+    filename: rendered.filename,
+    rendererVersion: rendered.rendererVersion,
+    templateVersion: rendered.templateVersion,
+    state: 'completion_pending',
+    reconciliationCount: 1,
+  };
+  const storage = new DeterministicFakeStudioPrivateArtifactStorage();
+  await assert.rejects(
+    reconcileStudioRendition('attempt-1', { database, storage }),
+    /AUTHORITY_STALE/,
+  );
+  assert.equal(database.reconciledPersistCalls, 1);
+  assert.equal(storage.operationCounts.probe, 1);
+  assert.equal(storage.operationCounts.upload, 0);
 });
 void test('reconciliation rejects deterministic render metadata drift', async () => {
   const database = new FakeRenditionDb();

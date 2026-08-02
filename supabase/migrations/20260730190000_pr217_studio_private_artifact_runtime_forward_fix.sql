@@ -1498,6 +1498,7 @@ BEGIN
      OR x.state <> 'reconciling'
      OR x.execution_fence <> p_fence
      OR x.reconciliation_claimed_at IS NULL
+     OR x.reconciliation_claimed_at <= clock_timestamp() - interval '5 minutes'
   THEN
     RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
   END IF;
@@ -1864,7 +1865,8 @@ BEGIN
   SET storage_provider = 'supabase', bucket_id = 'studio-private-artifacts',
       object_key = p_object_key, content_hash = p_hash, byte_length = p_byte_length,
       mime_type = p_mime, safe_filename = p_safe_filename,
-      reconciliation_phase = 'verify_or_upload', rendered_at = now()
+      reconciliation_phase = 'verify_or_upload',
+      reconciliation_claimed_at = clock_timestamp(), rendered_at = now()
   WHERE id = x.id;
   RETURN jsonb_build_object('outcome','committed','attemptId',x.id,'state','reconciling');
 END

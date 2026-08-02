@@ -263,6 +263,21 @@ for (const token of [
 ]) {
   assert(saga.includes(token), `side-effect saga contract missing: ${token}`);
 }
+const missingObjectRecovery = saga.slice(
+  saga.indexOf("if (probe.status === 'missing')"),
+  saga.indexOf('const receipt = await deps.database.markAvailable', saga.indexOf("if (probe.status === 'missing')")),
+);
+assert(
+  missingObjectRecovery.indexOf('await deps.database.persistReconciledRendered') <
+    missingObjectRecovery.indexOf('await deps.storage.uploadCreateOnly'),
+  'missing-object recovery must renew the exact-fence lease before create-only upload',
+);
+assert(
+  /persistReconciledRendered\([\s\S]+?catch \{[\s\S]+?return failed\([\s\S]+?RENDER_METADATA_PERSIST_FAILED[\s\S]+?uploadCreateOnly/u.test(
+    missingObjectRecovery,
+  ),
+  'failed recovery lease renewal must return before any provider upload',
+);
 
 const ui = sources.get('components/docs/StudioArtifactRenditions.tsx');
 for (const misleading of [

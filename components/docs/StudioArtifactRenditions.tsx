@@ -478,9 +478,9 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    {rendition.state === 'deletion_failed'
-                      ? `Request deletion again for ${formatLabel[format]}`
-                      : `Request deletion for ${formatLabel[format]}`}
+                    {`${rendition.state === 'deletion_failed'
+                      ? 'Request deletion again'
+                      : 'Request deletion'} for ${formatLabel[format]}`}
                   </button>
                 )}
                 {rendition && pendingDeletion && rendition.deletion && (

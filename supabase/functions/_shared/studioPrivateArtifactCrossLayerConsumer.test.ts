@@ -165,16 +165,24 @@ if (mode === 'rendition') {
   const expectation = { organizationId: claim.organizationId, workspaceId: claim.workspaceId, objectKey: claim.objectKey, byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType };
   if (input.objectStatus === 'exists' || input.objectStatus === 'mismatch') { await storage.uploadCreateOnly({ ...expectation, bytes: rendered.bytes }); if (input.objectStatus === 'mismatch') storage.corruptObjectForTest(claim.objectKey); }
   storage.operationCounts.upload = 0; storage.operationCounts.probe = 0;
-  let completionCount = 0; const failures: string[] = []; const reconciliations: string[] = [];
+  let completionCount = 0; let renewalCount = 0; const failures: string[] = []; const reconciliations: string[] = [];
   const database: StudioRenditionSagaDatabase = {
     async claim() { throw new Error('reconciliation only'); }, async startAttempt() { throw new Error('reconciliation only'); }, async persistRendered() { throw new Error('reconciliation only'); },
+    async persistReconciledRendered(value) {
+      assert.equal(value.fence, claim.fence);
+      assert.deepEqual(
+        { objectKey: value.objectKey, byteLength: value.byteLength, sha256: value.sha256, mimeType: value.mimeType, filename: value.filename },
+        { objectKey: claim.objectKey, byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType, filename: claim.filename },
+      );
+      renewalCount += 1;
+    },
     async markAvailable() { completionCount += 1; if (input.failCompletion === true) throw new Error('completion'); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'available' }; },
     async markFailed(value) { failures.push(value.failureCode); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'failed' }; },
     async markReconciliationRequired(value) { reconciliations.push(value.failureCode); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'reconciliation_required' }; },
     async loadReconciliation() { return { ...claim, state: 'completion_pending' }; },
   };
   const result = await reconcileStudioRendition(claim.attemptId, { database, storage });
-  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, completionCount, failures, reconciliations, provider: { probes: storage.operationCounts.probe, uploads: storage.operationCounts.upload } });
+  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, completionCount, renewalCount, failures, reconciliations, provider: { probes: storage.operationCounts.probe, uploads: storage.operationCounts.upload } });
 } else if (mode === 'deletionReconciliation') {
   const claim = decodeStudioDeletionExecutionBinding(input.claim);
   assert.ok(claim);

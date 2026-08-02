@@ -274,6 +274,17 @@ export const reconcileStudioRendition = async (
         rendered.filename !== committed.filename) {
       return failed(deps.database, work.attemptId, 'STORAGE_OBJECT_MISMATCH');
     }
+    if (!deps.database.persistReconciledRendered) {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+    }
+    try {
+      await deps.database.persistReconciledRendered({
+        ...committed,
+        fence: work.fence,
+      });
+    } catch {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+    }
     try {
       await deps.storage.uploadCreateOnly({ ...expected, bytes: rendered.bytes });
     } catch (error) {
