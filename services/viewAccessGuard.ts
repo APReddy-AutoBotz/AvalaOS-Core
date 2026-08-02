@@ -34,6 +34,7 @@ export interface ResolveViewAccessInput {
   authLoading: boolean;
   organization: Organization | null;
   enabledModules?: ProductModuleKey[];
+  authoritativeCapabilities?: readonly string[];
   view: View;
   scope: Scope;
 }
@@ -317,6 +318,18 @@ export function hasViewPermission(user: User, requiredPermissions: string[]) {
   return requiredPermissions.some(permission => userPermissions.includes(permission));
 }
 
+function hasAuthoritativeViewCapability(input: ResolveViewAccessInput, requiredPermissions: string[]) {
+  const capabilities = input.authoritativeCapabilities ?? [];
+  return capabilities.includes('assess.read') && requiredPermissions.includes('assessment.review');
+}
+
+function hasEffectiveViewPermission(input: ResolveViewAccessInput, requiredPermissions: string[]) {
+  return Boolean(input.user && (
+    hasViewPermission(input.user, requiredPermissions) ||
+    hasAuthoritativeViewCapability(input, requiredPermissions)
+  ));
+}
+
 function fallbackScopeFor(scopeTypes: ScopeType[], preferredScope?: Scope, fallbackScopeType?: ScopeType) {
   if (preferredScope && scopeTypes.includes(preferredScope.type)) return preferredScope;
 
@@ -343,7 +356,7 @@ function getDeniedFallback(
     const candidate = VIEW_ACCESS_METADATA[candidateView];
     if (!candidate || candidate.status !== 'active') continue;
     if (!isModuleEnabled(candidate.module, enabledModules)) continue;
-    if (input.user && !hasViewPermission(input.user, candidate.requiredPermissions)) continue;
+    if (!hasEffectiveViewPermission(input, candidate.requiredPermissions)) continue;
 
     return {
       fallbackView: candidate.view,
@@ -454,7 +467,7 @@ export function resolveViewAccess(input: ResolveViewAccessInput): ViewAccessResu
     return deniedResult(input, enabledModules, 'invalid_scope', 'redirect', metadata);
   }
 
-  if (!hasViewPermission(input.user, metadata.requiredPermissions)) {
+  if (!hasEffectiveViewPermission(input, metadata.requiredPermissions)) {
     return deniedResult(input, enabledModules, 'missing_permission', 'hide', metadata);
   }
 

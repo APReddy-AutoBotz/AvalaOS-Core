@@ -6,8 +6,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('server-configured local_demo exposes no demo authority', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByText('Enterprise workspace')).toBeVisible();
+  await page.goto('/sandbox');
+  await expect(page.getByText('Enterprise workspace', { exact: true })).toBeVisible();
   await expect(page.getByText('Controlled product sandbox')).toHaveCount(0);
   await expect(page.getByText('Demo roles')).toHaveCount(0);
   await expect(page.getByPlaceholder('name@company.com')).toHaveValue('');
@@ -17,18 +17,18 @@ test('server-configured local_demo exposes no demo authority', async ({ page }) 
 test('landing page explains the governed lifecycle with canonical branding and no external imagery', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('img', { name: 'Avala OS — Assess, Validate, Align, Launch, Audit' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Avala OS app icon' }).first()).toBeVisible();
   const heading = page.getByRole('heading', {
     level: 1,
     name: 'Evaluate before you automate. Govern before you execute.',
   });
   await expect(heading).toBeVisible();
-  await expect(page.getByText('Governed AI & Automation Delivery OS')).toBeVisible();
-  await expect(page.getByText('deterministic recommendations', { exact: false })).toBeVisible();
-  await expect(page.getByText('does not execute bots, RPA jobs, agents, or external systems', { exact: false })).toBeVisible();
+  await expect(page.locator('main').getByText('Governed decision intelligence', { exact: true })).toBeVisible();
+  await expect(page.getByText('Evidence becomes a deterministic recommendation,', { exact: false })).toBeVisible();
+  await expect(page.getByText('AvalaOS governs the decision', { exact: false })).toBeVisible();
 
-  for (const moduleName of ['Avala Assess', 'Avala Govern', 'Avala Studio', 'Avala Delivery', 'Avala Monitor']) {
-    await expect(page.getByText(moduleName, { exact: true })).toBeVisible();
+  for (const moduleName of ['Assess', 'Govern', 'Studio', 'Delivery', 'Monitor']) {
+    await expect(page.getByRole('tab', { name: new RegExp(moduleName) })).toBeVisible();
   }
 
   for (const assetPath of [
@@ -61,21 +61,18 @@ test('landing page explains the governed lifecycle with canonical branding and n
 
   expect(layout.bodyScrollWidth).toBeLessThanOrEqual(layout.bodyClientWidth);
   expect(layout.headingFamily).toContain('Outfit');
-  expect(layout.headingWeight).toBe('700');
+  expect(layout.headingWeight).toBe('600');
   expect(layout.maximumVisibleWeight).toBeLessThanOrEqual(700);
 
-  const landingShell = page.locator('.enterprise-landing');
-  const scrollLayout = await landingShell.evaluate(element => ({
-    clientHeight: element.clientHeight,
-    overflowY: getComputedStyle(element).overflowY,
-    scrollHeight: element.scrollHeight,
+  const scrollLayout = await page.evaluate(() => ({
+    clientHeight: window.innerHeight,
+    overflowY: getComputedStyle(document.body).overflowY,
+    scrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
   }));
   expect(scrollLayout.overflowY).toBe('auto');
   expect(scrollLayout.scrollHeight).toBeGreaterThan(scrollLayout.clientHeight);
-  await landingShell.evaluate(element => {
-    element.scrollTop = element.scrollHeight;
-  });
-  await expect(page.getByRole('heading', { name: 'Decision quality before delivery velocity' })).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' }));
+  await expect(page.getByRole('heading', { name: 'Explore how evidence becomes governed delivery context.' })).toBeVisible();
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);

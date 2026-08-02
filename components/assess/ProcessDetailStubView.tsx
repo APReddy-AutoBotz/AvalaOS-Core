@@ -32,9 +32,10 @@ interface ProcessDetailStubViewProps {
     onBack: () => void;
     onStartAssessment: (id: string) => void;
     onGenerateDocs?: (payload: NonNullable<ReturnType<typeof buildAssessToStudioHandoffPayload>>) => void;
+    captureMode?: boolean;
 }
 
-const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs }) => {
+const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
     const { currentOrganization: orgContext } = useOrganizationContext();
     const { processes, getProcessById, loading } = useProcessService();
@@ -282,6 +283,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 processName={process.name}
                 processDescription={process.description || ''}
                 v1Assessment={assessment}
+                captureMode={captureMode}
             />
 
             <section className="premium-surface rounded-3xl p-6">

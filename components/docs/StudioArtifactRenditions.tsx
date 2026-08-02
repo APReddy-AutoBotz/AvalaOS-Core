@@ -455,7 +455,9 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    {rendition.legalHoldActive ? 'Place another legal hold' : 'Place legal hold'}
+                    {rendition.legalHoldActive
+                      ? `Place another legal hold for ${formatLabel[format]}`
+                      : `Place legal hold for ${formatLabel[format]}`}
                   </button>
                 )}
                 {rendition &&
@@ -477,8 +479,8 @@ export default function StudioArtifactRenditions({
                     className="btn-ghost disabled:opacity-50"
                   >
                     {rendition.state === 'deletion_failed'
-                      ? 'Request deletion again'
-                      : 'Request deletion'}
+                      ? `Request deletion again for ${formatLabel[format]}`
+                      : `Request deletion for ${formatLabel[format]}`}
                   </button>
                 )}
                 {rendition && pendingDeletion && rendition.deletion && (
@@ -500,7 +502,7 @@ export default function StudioArtifactRenditions({
                       }
                       className="btn-ghost disabled:opacity-50"
                     >
-                      Approve deletion
+                      Approve deletion for {formatLabel[format]}
                     </button>
                     <button
                       type="button"
@@ -519,16 +521,17 @@ export default function StudioArtifactRenditions({
                       }
                       className="btn-ghost disabled:opacity-50"
                     >
-                      Reject deletion
+                      Reject deletion for {formatLabel[format]}
                     </button>
                   </>
                 )}
               </div>
               {rendition && canonicalMutationAllowed && (
                 <div className="mt-3">
-                  <label className="text-sm font-bold">
-                    Extend retention until
+                  <label htmlFor={`retention-${format}`} className="text-sm font-bold">
+                    Extend {formatLabel[format]} retention until
                     <input
+                      id={`retention-${format}`}
                       type="date"
                       value={retentionUntil}
                       onChange={event => setRetentionUntil(event.target.value)}

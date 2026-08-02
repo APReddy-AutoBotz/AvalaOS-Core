@@ -28,6 +28,7 @@ export interface ResolveProductNavigationStateInput extends ProductNavigationTar
   authLoading: boolean;
   organization: Organization | null;
   enabledModules?: ProductModuleKey[];
+  authoritativeCapabilities?: readonly string[];
   processes: AssessProcess[];
   projects: Project[];
   documentGenerations: DocumentGeneration[];
@@ -253,6 +254,7 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
     authLoading: input.authLoading,
     organization: input.organization,
     enabledModules: input.enabledModules ?? input.organization?.enabledModules ?? DEFAULT_ENABLED_MODULES,
+    authoritativeCapabilities: input.authoritativeCapabilities,
     preserveOrganizationWorkspace: input.preserveOrganizationWorkspace,
   });
 

@@ -86,7 +86,7 @@ export const AvalaAppIcon: React.FC<BrandAssetProps> = ({ className }) => (
 );
 
 export const AvalaHeroLogo: React.FC<BrandAssetProps> = ({ className }) => (
-  <svg className={className} viewBox="0 0 640 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Avala OS — Assess, Validate, Align, Launch, Audit">
+  <svg className={className} viewBox="0 0 640 148" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvalaOS — Governed decision intelligence">
     <GradientDefs prefix="avala-hero" />
     <g transform="translate(10 19)">
       <BrandMark prefix="avala-hero" />
@@ -94,7 +94,7 @@ export const AvalaHeroLogo: React.FC<BrandAssetProps> = ({ className }) => (
     <path d="M113 19V99" stroke="#456078" strokeWidth="1.5" />
     <Wordmark dark />
     <text x="138" y="121" fill="#C6D1DC" fontFamily="Outfit, 'Avenir Next', Inter, sans-serif" fontSize="16" fontWeight="600" letterSpacing="1.6">
-      ASSESS  •  VALIDATE  •  ALIGN  •  LAUNCH  •  AUDIT
+      GOVERNED DECISION INTELLIGENCE
     </text>
   </svg>
 );

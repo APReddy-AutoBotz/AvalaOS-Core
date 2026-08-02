@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { persistBeforeCommit } from './services/persistenceTransition';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
-import ModuleJourney from './components/shared/ModuleJourney';
+import GovernView from './components/govern/GovernView';
+import PublicWebsite from './components/public/PublicWebsite';
 import { Scope, View, ScopeType, Task, Project, Epic, Sprint, User, TaskStatus, Team, DocTemplate, Automation, TimesheetEntry, GeneratedArtifacts, ApprovalStatus, Filters, ProjectLifecycleStage, DocumentGeneration, ProjectDetails, WorkItem, TaskType, DocumentArtifactKeys, DocumentSection, AiProviderType, AssessToStudioHandoffPayload } from './types';
 import { MOCK_USERS, MOCK_TEAMS, MOCK_AUTOMATIONS, MOCK_TIMESHEET_ENTRIES } from './data/mockData';
 import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
-import EnterpriseAccessView from './components/auth/EnterpriseAccessView';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
 import OnboardingWizard from './components/auth/OnboardingWizard';
@@ -38,6 +38,21 @@ import {
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
+import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
+import {
+  isApplicationPortfolioMarketingCapture,
+  isProductMarketingCapture,
+  isStudioMarketingCapture,
+  preserveMarketingCaptureSearch,
+  resolveMarketingCapture,
+} from './services/marketingCapturePolicy';
+import {
+  MARKETING_CAPTURE_HANDOFFS,
+  MARKETING_CAPTURE_MONITOR_SIGNAL,
+  MARKETING_CAPTURE_PROCESSES,
+  MARKETING_CAPTURE_PROJECTS,
+  MARKETING_CAPTURE_TASKS,
+} from './data/marketingProductCapture';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -73,11 +88,13 @@ function App() {
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [isGovernViewOpen, setGovernViewOpen] = useState(false);
 
   // App State
   const { user: currentUser, loading: authLoading } = useAuth();
   const {
     currentOrganization,
+    currentWorkspace,
     organizations,
     tenantContext,
     sessionState,
@@ -144,12 +161,28 @@ function App() {
   // Assess Detail State
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const enabledModules = currentOrganization?.enabledModules;
+  const hasAdminAccess = Boolean(currentUser && (
+    currentUser.orgRole === 'Admin' ||
+    currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission)) ||
+    tenantContext?.capabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))
+  ));
   const explicitNavigationIntent = useMemo(
     () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
     [],
   );
   const navigationHydrated = useRef(false);
   const navigationWriteSuppressed = useRef(false);
+  const marketingCapture = useMemo(() => resolveMarketingCapture(
+    typeof window === 'undefined' ? '' : window.location.search,
+    {
+      development: import.meta.env.DEV,
+      test: import.meta.env.MODE === 'test',
+      dedicatedCaptureBuild: import.meta.env.VITE_AVALA_MARKETING_CAPTURE === 'true',
+    },
+  ), []);
+  const productMarketingCapture = isProductMarketingCapture(marketingCapture);
+  const studioMarketingCapture = isStudioMarketingCapture(marketingCapture);
+  const applicationPortfolioMarketingCapture = isApplicationPortfolioMarketingCapture(marketingCapture);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -163,19 +196,19 @@ function App() {
   }, []);
 
   const guardLoading = authLoading || orgLoading;
-  const viewAuthorityUser = useMemo(() => {
-    if (!currentUser || !tenantContext?.capabilities.includes('assess.read')) {
-      return currentUser;
-    }
-
-    return {
-      ...currentUser,
-      permissions: Array.from(new Set([
-        ...(currentUser.permissions ?? []),
-        'assessment.review',
-      ])),
-    };
-  }, [currentUser, tenantContext]);
+  const governPresentationAccess = useMemo(() => resolveGovernPresentationAccess({
+    user: currentUser,
+    organization: currentOrganization,
+    workspace: currentWorkspace,
+    tenantContext,
+    sessionState,
+    authLoading: guardLoading,
+    localRuntime: localRuntimeEnabled,
+  }), [currentOrganization, currentUser, currentWorkspace, guardLoading, localRuntimeEnabled, sessionState, tenantContext]);
+  const authoritativeViewCapabilities = useMemo(() => (
+    governPresentationAccess.allowed && tenantContext ? tenantContext.capabilities : []
+  ), [governPresentationAccess.allowed, governPresentationAccess.contextKey, tenantContext]);
+  const governContextKey = useRef<string | null>(null);
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
@@ -185,19 +218,35 @@ function App() {
 
   const resolveAppViewAccess = useCallback((view: View, scope: Scope = currentScope) => {
     return resolveViewAccess({
-      user: viewAuthorityUser,
+      user: currentUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
+      authoritativeCapabilities: authoritativeViewCapabilities,
       view,
       scope,
     });
-  }, [currentOrganization, currentScope, enabledModules, guardLoading, viewAuthorityUser]);
+  }, [authoritativeViewCapabilities, currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+
+  useEffect(() => {
+    if (!isGovernViewOpen || guardLoading) return;
+    if (!governPresentationAccess.allowed) {
+      governContextKey.current = null;
+      setGovernViewOpen(false);
+      return;
+    }
+    if (governContextKey.current && governContextKey.current !== governPresentationAccess.contextKey) {
+      governContextKey.current = null;
+      setGovernViewOpen(false);
+      return;
+    }
+    governContextKey.current = governPresentationAccess.contextKey;
+  }, [governPresentationAccess, guardLoading, isGovernViewOpen]);
 
   const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
     if (guardLoading) return false;
 
-    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && currentUser?.orgRole === 'Admin') {
+    if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && hasAdminAccess) {
       setScopeIfChanged(requestedScope);
       setCurrentView(view);
       return true;
@@ -213,15 +262,16 @@ function App() {
     setCurrentView(nextView);
 
     return access.allowed;
-  }, [currentScope, currentUser, guardLoading, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
+  }, [currentScope, currentUser, guardLoading, hasAdminAccess, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
 
   const replaceProductNavigationSearch = useCallback((nextSearch: string) => {
     if (typeof window === 'undefined') return;
-    const nextUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    const protectedSearch = preserveMarketingCaptureSearch(nextSearch, marketingCapture);
+    const nextUrl = `${window.location.pathname}${protectedSearch}${window.location.hash}`;
     if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
       window.history.replaceState(null, '', nextUrl);
     }
-  }, []);
+  }, [marketingCapture]);
 
   useEffect(() => {
     if (aiProviderType === 'openai') {
@@ -256,9 +306,10 @@ function App() {
   };
 
   const handleScopeChange = (scope: Scope) => {
+    setGovernViewOpen(false);
     if (scope.type === ScopeType.ORGANIZATION) {
       organizationScopeTransition.current = true;
-      if (currentUser?.orgRole === 'Admin') {
+      if (hasAdminAccess) {
         setScopeIfChanged(scope);
         setCurrentView(View.WORKSPACE);
       } else {
@@ -274,6 +325,7 @@ function App() {
   };
 
   const handleViewChange = (view: View) => {
+    setGovernViewOpen(false);
     if (view === View.DOCS_FORGE) {
       setAssessToStudioSourceContext(null);
     }
@@ -286,18 +338,6 @@ function App() {
   const handleDashboardStatClick = (filter: Filters) => {
     setQuickFilter(filter);
     applyGuardedView(View.LIST, { type: ScopeType.MY_WORK });
-  };
-
-  const handlePrimaryAction = () => {
-    const primaryCandidates = [View.PROCESS_CATALOG, View.DOCS_FORGE, View.BOARDS, View.DASHBOARD];
-    const allowedCandidate = primaryCandidates.find(view => resolveAppViewAccess(view, currentScope).allowed);
-    const targetView = allowedCandidate ?? primaryCandidates[0];
-
-    if (targetView === View.DOCS_FORGE) {
-      setAssessToStudioSourceContext(null);
-    }
-
-    applyGuardedView(targetView);
   };
 
   const handleProjectSelectedForDocForge = (project: Project) => {
@@ -431,15 +471,16 @@ function App() {
   };
 
   useEffect(() => {
-    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
+    if (guardLoading || !currentUser || !currentOrganization) return;
 
     const resolvedState = resolvePersistedViewScopeState({
       view: persistedView,
       scope: persistedScope,
-      user: viewAuthorityUser,
+      user: currentUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
+      authoritativeCapabilities: authoritativeViewCapabilities,
       preserveOrganizationWorkspace: true,
     });
 
@@ -455,7 +496,8 @@ function App() {
   }, [
     currentOrganization,
     currentScope,
-    viewAuthorityUser,
+    currentUser,
+    authoritativeViewCapabilities,
     currentView,
     enabledModules,
     guardLoading,
@@ -466,16 +508,17 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
+    if (guardLoading || !currentUser || !currentOrganization) return;
     if (!explicitNavigationIntent || navigationHydrated.current) return;
     if (processesLoading) return;
 
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
-      user: viewAuthorityUser,
+      user: currentUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
+      authoritativeCapabilities: authoritativeViewCapabilities,
       processes,
       projects,
       documentGenerations,
@@ -499,7 +542,8 @@ function App() {
     navigationHydrated.current = true;
   }, [
     currentOrganization,
-    viewAuthorityUser,
+    currentUser,
+    authoritativeViewCapabilities,
     documentGenerations,
     enabledModules,
     explicitNavigationIntent,
@@ -513,7 +557,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (guardLoading || !viewAuthorityUser || !currentOrganization) return;
+    if (guardLoading || !currentUser || !currentOrganization) return;
     if (explicitNavigationIntent && !navigationHydrated.current) return;
     if (processesLoading) return;
 
@@ -532,10 +576,11 @@ function App() {
       scope: currentScope,
       processId: selectedProcessId,
       documentGenerationId: activeGenerationId,
-      user: viewAuthorityUser,
+      user: currentUser,
       authLoading: guardLoading,
       organization: currentOrganization,
       enabledModules,
+      authoritativeCapabilities: authoritativeViewCapabilities,
       processes,
       projects,
       documentGenerations,
@@ -568,9 +613,10 @@ function App() {
     }));
   }, [
     activeGenerationId,
+    authoritativeViewCapabilities,
     currentOrganization,
     currentScope,
-    viewAuthorityUser,
+    currentUser,
     currentView,
     documentGenerations,
     enabledModules,
@@ -958,6 +1004,20 @@ function App() {
   const renderCurrentView = () => {
     const currentAccess = resolveAppViewAccess(currentView, currentScope);
 
+    if (isGovernViewOpen) {
+      const fallbackAccess = resolveAppViewAccess(View.PROCESS_CATALOG, currentScope);
+      if (governPresentationAccess.reason === 'loading') return <ViewLoadingFallback />;
+      if (!governPresentationAccess.allowed) {
+        return <div className="mx-auto max-w-3xl p-8"><div className="premium-surface rounded-3xl p-8 text-center"><p className="av-eyebrow">Governance overview unavailable</p><h1 className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">Open an authorized source context to review governance signals.</h1><p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-[var(--av-color-text-muted)]">This read-only overview requires the current Assess read authority and never creates review or approval authority.</p><button type="button" onClick={() => { setGovernViewOpen(false); applyGuardedView(fallbackAccess.fallbackView, fallbackAccess.fallbackScope ?? currentScope); }} className="btn-primary mt-6 inline-flex min-h-10 items-center justify-center px-4 text-sm font-bold">Open available workspace</button></div></div>;
+      }
+      return <GovernView
+        processes={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : processes}
+        handoffEntries={productMarketingCapture ? MARKETING_CAPTURE_HANDOFFS : handoffEntries}
+        onNavigate={handleViewChange}
+        captureMode={productMarketingCapture}
+      />;
+    }
+
     if (currentScope.type !== ScopeType.ORGANIZATION && !currentAccess.allowed && currentAccess.guardSeverity !== 'wait') {
       return (
         <div className="mx-auto max-w-3xl p-8">
@@ -980,6 +1040,7 @@ function App() {
         onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
         onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
+        captureMode={applicationPortfolioMarketingCapture}
       />;
     }
 
@@ -995,6 +1056,8 @@ function App() {
       return <ProcessCatalogView
         onViewDetail={(id) => { setSelectedProcessId(id); applyGuardedView(View.PROCESS_DETAIL); }}
         createProcessDecision={resolveProductActionDecision('process.create')}
+        presentationProcesses={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : undefined}
+        captureMode={productMarketingCapture}
       />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
@@ -1009,7 +1072,16 @@ function App() {
       case View.DASHBOARD:
         return <CustomDashboardView currentUser={currentUser} tasks={activeTasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
       case View.PORTFOLIO:
-        return <PortfolioView projects={projects} tasks={activeTasks} users={users} onUpdateProjectStage={handleUpdateProjectLifecycleStage} onScopeChange={handleScopeChange} onViewChange={handleViewChange} />;
+        return <PortfolioView
+          projects={productMarketingCapture ? MARKETING_CAPTURE_PROJECTS : projects}
+          tasks={productMarketingCapture ? MARKETING_CAPTURE_TASKS : activeTasks}
+          users={users}
+          onUpdateProjectStage={handleUpdateProjectLifecycleStage}
+          onScopeChange={handleScopeChange}
+          onViewChange={handleViewChange}
+          captureMode={productMarketingCapture}
+          outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
+        />;
       case View.DOCS_FORGE:
         return <DocsForgeView
           project={currentScope.type === ScopeType.PROJECT ? projectsForScope[0] : null}
@@ -1168,7 +1240,7 @@ function App() {
           setActiveGenerationId(id);
           setTempArtifacts(null);
           applyGuardedView(View.WORKSPACE);
-        }} />;
+        }} captureMode={studioMarketingCapture} />;
       default:
         if (currentScope.type === ScopeType.MY_WORK) {
           return <MyWorkView view={currentView} allTasks={tasksForScope} allProjects={projectsForScope} allEpics={epicsForScope} currentUser={currentUser} onUpdateTaskStatus={handleUpdateTaskStatus} onSelectTask={setSelectedTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} quickFilter={quickFilter} setQuickFilter={setQuickFilter} onUpdateTask={handleUpdateTask} />;
@@ -1257,7 +1329,7 @@ function App() {
   }
 
   if (!currentUser) {
-    return <EnterpriseAccessView />;
+    return <PublicWebsite />;
   }
 
   if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {
@@ -1271,13 +1343,20 @@ function App() {
   }
 
   return (
-    <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans">
+    <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans" data-marketing-capture={productMarketingCapture ? 'product' : undefined}>
+      <a href="#app-main" className="av-skip-link">Skip to main content</a>
       <Sidebar
         currentScope={currentScope}
         currentView={currentView}
         onViewChange={handleViewChange}
         onScopeChange={handleScopeChange}
         collapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(collapsed => !collapsed)}
+        canAccessAdmin={hasAdminAccess}
+        canAccessGovern={governPresentationAccess.allowed}
+        authoritativeViewCapabilities={authoritativeViewCapabilities}
+        governOpen={isGovernViewOpen}
+        onOpenGovern={() => governPresentationAccess.allowed && setGovernViewOpen(true)}
         mobileOpen={isMobileNavigationOpen}
         onMobileClose={() => setMobileNavigationOpen(false)}
       />
@@ -1285,8 +1364,9 @@ function App() {
         <Header
           theme={theme}
           toggleTheme={toggleTheme}
-          onStartNew={handlePrimaryAction}
           currentScope={currentScope}
+          currentView={isGovernViewOpen ? View.PROCESS_CATALOG : currentView}
+          currentContextLabel={isGovernViewOpen ? 'Avala Govern' : undefined}
           onScopeChange={handleScopeChange}
           currentUser={currentUser}
           teams={teams}
@@ -1295,15 +1375,7 @@ function App() {
           onToggleNavigation={() => setMobileNavigationOpen(open => !open)}
         />
         {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
-        {currentScope.type !== ScopeType.ORGANIZATION && (
-          <ModuleJourney
-            enabledModules={enabledModules}
-            currentScope={currentScope}
-            currentView={currentView}
-            onNavigate={handleViewChange}
-          />
-        )}
-        <main className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+        <main id="app-main" className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           <React.Suspense fallback={<ViewLoadingFallback />}>
             {renderCurrentView()}
           </React.Suspense>
