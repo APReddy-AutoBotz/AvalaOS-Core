@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DocumentGeneration, DocTemplate, TenantContextProjection } from '../../types';
 import { DocumentTextIcon, PlusCircleIcon, SparklesIcon } from '../shared/icons';
 import { useAuth } from '../auth/AuthProvider';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
+import { createMarketingStudioCaptureContext, createMarketingStudioCaptureTransport } from '../../data/marketingStudioCapture';
+import type { StudioArtifactTransport } from '../../services/studioArtifacts/client';
 
 interface DocsViewProps {
     generations: DocumentGeneration[];
@@ -21,10 +23,19 @@ const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTempla
     return `Document Set (${template.title})`;
 };
 
+const readMarketingStudioCapture = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('capture') === 'studio';
+
 const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic }) => {
 
     const { tenantContext, currentOrganization, currentWorkspace } = useOrganizationContext();
     const { user } = useAuth();
+    const [marketingStudioCapture, setMarketingStudioCapture] = useState(readMarketingStudioCapture);
+
+    useEffect(() => {
+        const syncMarketingCapture = () => setMarketingStudioCapture(readMarketingStudioCapture());
+        window.addEventListener('avalaos-marketing-capture', syncMarketingCapture);
+        return () => window.removeEventListener('avalaos-marketing-capture', syncMarketingCapture);
+    }, []);
 
     const studioContext = useMemo<TenantContextProjection | null>(() => {
         if (tenantContext) return tenantContext;
@@ -40,12 +51,21 @@ const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGener
         };
     }, [currentOrganization, currentWorkspace, tenantContext, user?.id]);
 
+    const studioTransport = useMemo<StudioArtifactTransport | undefined>(() => {
+        if (!marketingStudioCapture || !studioContext) return undefined;
+        return createMarketingStudioCaptureTransport(createMarketingStudioCaptureContext(studioContext));
+    }, [marketingStudioCapture, studioContext?.authorizationVersion, studioContext?.organizationId, studioContext?.workspaceId]);
+
+    const studioPresentationContext = marketingStudioCapture && studioContext
+        ? createMarketingStudioCaptureContext(studioContext)
+        : studioContext;
+
     const sortedGenerations = [...generations].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
     const artifactCount = generations.reduce((sum, generation) => sum + Object.keys(generation.artifacts || {}).length, 0);
 
     return (
         <div data-testid="studio-application-route">
-            {studioContext && <StudioArtifactWorkspace key={`${studioContext.organizationId}:${studioContext.workspaceId}`} context={studioContext} capabilities={studioContext.capabilities} />}
+            {studioPresentationContext && <StudioArtifactWorkspace key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${marketingStudioCapture ? 'capture' : 'live'}`} context={studioPresentationContext} capabilities={studioPresentationContext.capabilities} captureMode={marketingStudioCapture} transport={studioTransport} />}
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Legacy generated archive · unverified projection</p>

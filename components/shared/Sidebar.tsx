@@ -83,6 +83,9 @@ const deliverySubnav: NavItem[] = [
   { view: View.AUTOMATIONS, icon: BoltIcon, label: 'Automations' },
 ];
 
+const monitorViews = new Set<View>([View.PORTFOLIO]);
+const deliveryViews = new Set<View>(deliverySubnav.map(item => item.view));
+
 const formatScopeLabel = (scope: ScopeType) => scope === ScopeType.MY_WORK ? 'My Work' : scope.charAt(0).toUpperCase() + scope.slice(1);
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -176,7 +179,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const activeSubnav = !collapsed && !governOpen
     ? currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY ? assessSubnav
       : currentView === View.DOCS_FORGE || currentView === View.DOCS || currentView === View.TEMPLATE_STUDIO || currentView === View.WORKSPACE ? studioSubnav
-        : lifecycleItems.some(item => item.view === currentView) || deliverySubnav.some(item => item.view === currentView) ? deliverySubnav
+        : deliveryViews.has(currentView) ? deliverySubnav
+          : monitorViews.has(currentView) ? []
           : []
     : [];
 

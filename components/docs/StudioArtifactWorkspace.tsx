@@ -26,6 +26,7 @@ interface Props {
   context: TenantContextProjection;
   capabilities?: readonly string[];
   online?: boolean;
+  captureMode?: boolean;
   transport?: StudioArtifactTransport;
 }
 
@@ -85,7 +86,7 @@ const stateForError = (error: unknown, generation = false): { state: ViewState; 
 
 const sequence: StudioArtifactProjectionDto['lifecycle'][] = ['draft', 'reviewer_ready', 'in_review', 'approval_ready', 'approved'];
 
-export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, transport }: Props) {
+export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, captureMode = false, transport }: Props) {
   const [handoffs, setHandoffs] = useState<StudioHandoffOption[]>([]);
   const [handoffId, setHandoffId] = useState('');
   const [artifactType, setArtifactType] = useState<StudioArtifactType>('brd');
@@ -111,14 +112,13 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   }, []);
 
   const load = useCallback(async (selected = '', type = artifactType) => {
-    clearProjection();
-    setHandoffs([]);
     if (offline) {
-      setHandoffId('');
       setState('offline');
       setMessage('Offline. Committed content remains visible; mutations are blocked.');
       return;
     }
+    clearProjection();
+    setHandoffs([]);
     setState('loading');
     try {
       const sources = await readStudioHandoffs(context, transport);
@@ -134,7 +134,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         const value = await readStudioArtifact(context, id, type, transport);
         setArtifact(value);
         setState(value.readOnly ? 'read_only' : value.lifecycle);
-        setMessage(value.readOnly ? 'Read-only maintenance. Committed canonical artifacts remain available.' : 'Current committed artifact loaded.');
+        setMessage(captureMode ? 'Synthetic capture fixture · AP Invoice Exception Handling control brief. No persisted artifact state is changed.' : value.readOnly ? 'Read-only maintenance. Committed canonical artifacts remain available.' : 'Current committed artifact loaded.');
         if (['reviewer_ready', 'in_review'].includes(value.lifecycle)) {
           const eligible = await readStudioEligibleReviewers(context, value.id, value.currentVersion.id, transport);
           setReviewers(eligible);
@@ -153,7 +153,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setState(next.state === 'command_failed' ? 'stale' : next.state);
       setMessage(next.state === 'command_failed' ? 'Studio authority is unavailable. Reload the current committed state.' : next.message);
     }
-  }, [artifactType, clearProjection, context.organizationId, context.workspaceId, offline, transport]);
+  }, [artifactType, captureMode, clearProjection, context.organizationId, context.workspaceId, offline, transport]);
 
   useEffect(() => {
     void load('', artifactType);
@@ -210,7 +210,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   return (
     <section data-testid="studio-artifact-workspace" aria-labelledby="studio-artifact-title" className="av-surface mt-6 overflow-hidden">
       <header className="border-b border-[var(--av-color-border)] bg-[var(--av-color-bg-subtle)]/70 px-5 py-5 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="av-eyebrow">Avala Studio · governed artifact</p><h2 id="studio-artifact-title" className="mt-1 text-2xl font-bold text-[var(--av-color-text)]">Artifact workspace</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--av-color-text-muted)]">Structured content is committed by server authority. Business users see the governed artifact first; exact JSON, hashes, ancestry, and receipts remain available under advanced details.</p></div><StatusBadge tone="info">Committed source</StatusBadge></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="av-eyebrow">Avala Studio · governed artifact</p><h2 id="studio-artifact-title" className="mt-1 text-2xl font-bold text-[var(--av-color-text)]">Artifact workspace</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--av-color-text-muted)]">Structured content is committed by server authority. Business users see the governed artifact first; exact JSON, hashes, ancestry, and receipts remain available under advanced details.</p></div><StatusBadge tone="info">{captureMode ? 'Synthetic fixture' : 'Committed source'}</StatusBadge></div>
       </header>
 
       <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[240px_minmax(0,1fr)_280px]">

@@ -13,4 +13,5 @@ for(const token of [
   "state==='committed_reload_failed'",
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
+assert.ok(source.indexOf("if (offline)") < source.indexOf('clearProjection();'),'offline state must preserve the committed projection for read-only inspection');
 console.log('studio artifact workspace: 10 lifecycle, payload, reviewer, rendition and false-success assertions passed');

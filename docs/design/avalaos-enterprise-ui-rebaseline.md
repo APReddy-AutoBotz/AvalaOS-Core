@@ -20,6 +20,7 @@ In scope:
 - Studio Artifact Workspace presentation, tenant/workspace projection clearing, and fail-closed action affordances.
 - Responsive layout, keyboard navigation, focus treatment, skip links, semantic labels, reduced-motion handling, and product screenshot capture.
 - Document-level vertical scrolling for public pages while preserving the authenticated shell's internal workspace scroll region.
+- Final enterprise visual refinement across public Home, Platform, Solutions, Trust & BYOK, Sandbox/sign-in, and the authenticated shell, including balanced display wrapping, compact trust treatment, lifecycle tab behavior, explicit execution boundaries, and print-safe layout.
 
 Out of scope:
 
@@ -117,11 +118,16 @@ Screenshots were captured from the local synthetic product using Playwright at a
 - `public/marketing/screenshots/assess-process-catalog.png`
 - `public/marketing/screenshots/govern-workbench.png`
 - `public/marketing/screenshots/studio-artifact-workspace.png`
+- `public/marketing/screenshots/application-portfolio-readiness.png`
 - `public/marketing/screenshots/delivery-board.png`
 - `public/marketing/screenshots/monitor-overview.png`
 - `public/marketing/screenshots/admin-controls.png`
 
-The deterministic capture entry point is `scripts/ui-rebaseline-browser-capture.mjs`. Public pages use these files with explicit dimensions, lazy loading below the fold, descriptive alt text, and a light browser-frame treatment.
+The deterministic capture entry point is `scripts/ui-rebaseline-browser-capture.mjs`. Public pages use these files with explicit dimensions, lazy loading below the fold, descriptive alt text, and a light browser-frame treatment. The Application Portfolio capture is a populated, read-only synthetic readiness state. Studio capture uses a decoder-validated synthetic fixture with valid tenant scope, ancestry, hashes, lifecycle, and reviewer context; it does not persist artifact state or change the normal server-authoritative Studio path.
+
+The public copy and hierarchy are intentionally explicit: Home leads with `Governed decision intelligence` and `Evaluate before you automate. Govern before you execute.`, Platform presents the six-stage evidence-to-outcome architecture, Solutions uses four problem-to-governed-output rows, and Trust & BYOK separates provider configuration, server-side secrets, human authority, evidence, review separation, fail-closed behavior, and deployment transparency. The Home boundary visual distinguishes `AvalaOS governs` from `Execution systems execute`.
+
+The authenticated presentation keeps the existing view identifiers and authority contracts. Monitor now owns only Monitor destinations in the sidebar; Delivery destinations no longer appear as an accidental Monitor submenu. Offline Studio state preserves the last committed projection while clearly blocking mutations and showing the offline boundary.
 
 ## Accessibility and responsive treatment
 
@@ -153,6 +159,21 @@ Planned verification or not run in this UI-only branch:
 - Live Supabase, Storage, RLS, Edge, deployed RPC, hosted, pilot, production, and incident checks — **not run** by instruction.
 - Full authenticated production-mode browser/axe/performance suite — planned verification; local screenshot capture is executed evidence for the listed local synthetic states only.
 - Real deployed private-artifact RPC compatibility — planned verification; this change does not alter the canonical migration/client contract.
+
+## Final refinement verification
+
+The final pass added focused evidence beyond the original rebaseline record. The original seven-asset capture entry is superseded by the final eight-asset inventory above, which includes the dedicated Application Portfolio readiness capture:
+
+- `npm.cmd ci` passed with 0 vulnerabilities reported.
+- `npm.cmd run typecheck:edge` and `npm.cmd run build` passed.
+- `npm.cmd run test:marketing-studio-capture` passed; strict synthetic Studio IDs, ancestry, and reviewer context decode successfully.
+- `npm.cmd run test:ai-boundary-static` and `npm.cmd run test:secret-hygiene` passed; no forbidden AI-boundary hits, stale allowlist entries, or secret-hygiene findings.
+- `npm.cmd run test:pr1g-workspace` passed with five assertions and the workspace coverage gate above threshold.
+- `npm.cmd run test:studio-artifacts` and `npm.cmd run test:studio-private-artifacts-client` passed across command, generation, DB/RPC/provider, client, rendition, and workspace contracts.
+- `npx playwright test tests/browser/studioPrivateArtifacts.spec.ts --config=playwright.studio-private-artifacts.config.ts --reporter=line` passed 30 tests across desktop and Pixel 7, including offline committed-projection behavior.
+- `node scripts/ui-rebaseline-visual-verify.mjs` passed 60 route/theme/viewport captures across five public routes, critical/serious axe checks, horizontal-overflow and vertical-scroll checks, mobile focus trap/Escape/restore checks, lifecycle keyboard navigation, skip-link focus, and print PDF verification.
+
+Retained PR1A/PR1C browser assertions were aligned to the canonical current copy and verified after the refinement. Live Supabase, Storage, RLS, Edge, deployed RPC, hosted, pilot, production, and incident checks remain not run by instruction.
 
 ## Rollback and fallback
 

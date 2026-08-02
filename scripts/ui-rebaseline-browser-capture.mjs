@@ -48,15 +48,36 @@ await clickNav('Home');
 await capture('home-command-center.png');
 await clickNav('Assess');
 await capture('assess-process-catalog.png');
+await page.evaluate(() => window.history.replaceState({}, '', '/?capture=application-portfolio'));
+await page.getByRole('button', { name: 'View' }).first().click();
+await page.getByRole('heading', { name: 'AP Invoice Exception Handling', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+await page.locator('[data-testid="application-portfolio-workspace"]').waitFor({ state: 'visible', timeout: 15_000 });
+await capture('application-portfolio-readiness.png');
+await page.getByRole('button', { name: 'Back to Catalog' }).click();
+await page.evaluate(() => window.history.replaceState({}, '', '/'));
 await clickNav('Govern');
 await capture('govern-workbench.png');
 await page.getByRole('button', { name: 'Switch workspace context' }).click();
 await page.getByRole('button', { name: /^AP Invoice Exception Workflow/ }).last().click();
 await page.waitForTimeout(500);
 await clickNav('Studio');
-await page.getByRole('button', { name: 'Document Vault', exact: true }).click();
+await page.getByRole('button', { name: 'Document Vault', exact: true }).click({ noWaitAfter: true });
+await page.locator('[data-testid="studio-application-route"]').waitFor({ state: 'visible', timeout: 15_000 });
+await page.evaluate(() => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('capture', 'studio');
+  window.history.replaceState({}, '', url);
+  window.dispatchEvent(new Event('avalaos-marketing-capture'));
+});
+await page.getByText('Synthetic capture fixture · AP Invoice Exception Handling control brief. No persisted artifact state is changed.', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
 await page.waitForTimeout(1_000);
 await capture('studio-artifact-workspace.png');
+await page.evaluate(() => {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('capture');
+  window.history.replaceState({}, '', url);
+  window.dispatchEvent(new Event('avalaos-marketing-capture'));
+});
 await clickNav('Delivery');
 await capture('delivery-board.png');
 
@@ -113,4 +134,4 @@ if (pageErrors.length > 0) {
   process.exitCode = 1;
 }
 
-console.log(`Captured ${7} product screenshots in ${outputDir}`);
+console.log(`Captured ${8} product screenshots in ${outputDir}`);
