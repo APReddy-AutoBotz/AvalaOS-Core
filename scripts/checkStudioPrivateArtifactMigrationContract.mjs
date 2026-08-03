@@ -163,6 +163,16 @@ assert.match(
   /reconciliation_claimed_at <= clock_timestamp\(\) - interval '5 minutes'/,
   'rendition recovery authority must reject expired leases, not only null timestamps',
 );
+assert.match(
+  recoveryAuthority,
+  /current_approved_version_id = version\.id[\s\S]+SELECT \* INTO control[\s\S]+studio_private_artifact_runtime_control[\s\S]+FOR SHARE[\s\S]+NOT control\.enabled[\s\S]+control\.read_only[\s\S]+NOT control\.provider_enabled[\s\S]+STUDIO_READ_ONLY[\s\S]+RETURN x/s,
+  'every fenced rendition recovery mutation must lock and reread the safe-stop control last',
+);
+assert.match(
+  forward,
+  /\$rendition_phase_upgrade\$[\s\S]+attempt\.storage_provider = 'supabase'[\s\S]+attempt\.bucket_id = 'studio-private-artifacts'[\s\S]+attempt\.object_key = format\([\s\S]+attempt\.org_id[\s\S]+attempt\.workspace_id[\s\S]+attempt\.opaque_object_id[\s\S]+CASE attempt\.format WHEN 'markdown' THEN 'md' ELSE attempt\.format END[\s\S]+PR217_FORWARD_FIX_DIRTY_UPGRADE[\s\S]+DISABLE TRIGGER trg_studio_rendition_attempt_guard[\s\S]+UPDATE public\.studio_rendition_attempts/s,
+  'phase backfill preflight must reject noncanonical object keys before any trigger or data mutation',
+);
 assert.match(recoveryRendered,/studio_rendition_recovery_authority\(p_attempt,p_fence\)/);
 assert.match(
   recoveryRendered,

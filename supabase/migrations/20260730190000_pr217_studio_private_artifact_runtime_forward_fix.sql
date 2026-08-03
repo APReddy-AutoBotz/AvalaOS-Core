@@ -68,7 +68,13 @@ BEGIN
         OR (
           attempt.storage_provider = 'supabase'
           AND attempt.bucket_id = 'studio-private-artifacts'
-          AND attempt.object_key IS NOT NULL
+          AND attempt.object_key = format(
+            '%s/%s/studio-artifacts/%s.%s',
+            attempt.org_id,
+            attempt.workspace_id,
+            attempt.opaque_object_id,
+            CASE attempt.format WHEN 'markdown' THEN 'md' ELSE attempt.format END
+          )
           AND attempt.content_hash ~ '^[0-9a-f]{64}$'
           AND attempt.byte_length > 0
           AND attempt.mime_type = CASE attempt.format
@@ -1918,6 +1924,7 @@ AS $$
 DECLARE
   x public.studio_rendition_attempts;
   v public.studio_artifact_versions;
+  control public.studio_private_artifact_runtime_control;
 BEGIN
   SELECT * INTO x
   FROM public.studio_rendition_attempts
@@ -1951,6 +1958,22 @@ BEGIN
   FOR SHARE OF version, aggregate;
   IF v.id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
+  END IF;
+
+  -- Keep the safe-stop row locked through the caller's recovery mutation and
+  -- any provider-effect authority that follows it in this transaction. A
+  -- concurrent operator update therefore wins before this reread or waits for
+  -- the already-authorized recovery transaction to finish; it cannot interleave.
+  SELECT * INTO control
+  FROM public.studio_private_artifact_runtime_control
+  WHERE singleton
+  FOR SHARE;
+  IF control.singleton IS NULL
+     OR NOT control.enabled
+     OR control.read_only
+     OR NOT control.provider_enabled
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'STUDIO_READ_ONLY';
   END IF;
   RETURN x;
 END

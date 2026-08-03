@@ -14,6 +14,7 @@ import {runStudioRenditionLeaseAuthorityEvidence,studioRenditionLeaseAuthoritySc
 import {runStudioDeletionExecutionAuthorityEvidence,runStudioDeletionReconciliationClaimAuditEvidence,studioDeletionExecutionAuthorityScenarioNames,studioDeletionReconciliationClaimAuditScenarioNames} from './studioDeletionReconciliationClaimAuditPostgres.mjs';
 import {runStudioDeletionResolutionBindingEvidence} from './studioDeletionResolutionBindingPostgres.mjs';
 import {runStudioDueWorkActionabilityEvidence,studioDueWorkActionabilityScenarioNames} from './studioDueWorkActionabilityPostgres.mjs';
+import {runStudioRenditionRecoveryControlEvidence,studioRenditionRecoveryControlScenarioNames} from './studioRenditionRecoveryControlPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
 execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
@@ -154,13 +155,27 @@ export const scenarioNames={
  'deletion binding valid exact rejection succeeds',
  'deletion binding resolved request new key denied'
  ],
- dueActionability:studioDueWorkActionabilityScenarioNames
+ dueActionability:studioDueWorkActionabilityScenarioNames,
+ dirtyUpgrade:[
+  'dirty upgrade canonical deterministic object key accepted',
+  'dirty upgrade wrong organization object key rejected',
+  'dirty upgrade wrong workspace object key rejected',
+  'dirty upgrade wrong opaque object id key rejected',
+  'dirty upgrade wrong format extension key rejected',
+  'dirty upgrade partial rendition metadata rejected',
+  'dirty upgrade failures use exact error code',
+  'dirty upgrade failures preserve attempt row atomically',
+  'dirty upgrade failures leave phase column absent',
+  'dirty upgrade failures leave due routine absent',
+  'dirty upgrade failures leave immutable trigger enabled'
+ ],
+ renditionRecoveryControl:studioRenditionRecoveryControlScenarioNames
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26,renditionRecoveryPhase:12,renditionLeaseAuthority:36,deletionReconciliationClaimAudit:27,deletionExecutionAuthority:30,deletionResolutionBinding:11,dueActionability:17});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,336);assert.equal(new Set(allScenarios).size,336);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26,renditionRecoveryPhase:12,renditionLeaseAuthority:36,deletionReconciliationClaimAudit:27,deletionExecutionAuthority:30,deletionResolutionBinding:11,dueActionability:17,dirtyUpgrade:11,renditionRecoveryControl:27});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,374);assert.equal(new Set(allScenarios).size,374);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit','rendition_phase','deletion_claim_audit','deletion_binding','phase_dirty','cross_layer','deletion_execution_authority','rendition_lease_primary','rendition_lease_renewal','rendition_lease_race','due_actionability'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit','rendition_phase','deletion_claim_audit','deletion_binding','phase_dirty','cross_layer','deletion_execution_authority','rendition_lease_primary','rendition_lease_renewal','rendition_lease_race','due_actionability','runtime_control_primary','runtime_control_update_first','runtime_control_recovery_first'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -178,10 +193,50 @@ try{
  const upgradePostKey=`${upgradeBase.org}/${upgradeBase.workspace}/studio-artifacts/${upgradePost.renditionClaim.opaqueObjectId}.pdf`;
  await upgrade.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',storage_provider='supabase',bucket_id='studio-private-artifacts',object_key=$2::text,content_hash=$3::text,byte_length=256,mime_type='application/pdf',safe_filename='upgrade.pdf',reconciliation_count=1 WHERE id=$1::uuid",[upgradePost.renditionClaim.attemptId,upgradePostKey,'a'.repeat(64)]);
  await apply(upgrade,[feature]);
- assert.deepEqual((await upgrade.query('SELECT id,reconciliation_phase FROM public.studio_rendition_attempts WHERE id=ANY($1::uuid[]) ORDER BY id',[ [upgradePre.renditionClaim.attemptId,upgradePost.renditionClaim.attemptId] ])).rows.map(row=>row.reconciliation_phase).sort(),['pre_render','verify_or_upload']);
+ const upgradePhases=(await upgrade.query('SELECT id,reconciliation_phase FROM public.studio_rendition_attempts WHERE id=ANY($1::uuid[]) ORDER BY id',[ [upgradePre.renditionClaim.attemptId,upgradePost.renditionClaim.attemptId] ])).rows.map(row=>row.reconciliation_phase).sort();
+ assert.deepEqual(upgradePhases,['pre_render','verify_or_upload']);
  await apply(upgrade,[feature]);console.log('FOUNDATION PASS accepted-main upgrade phase backfill and additive reapply');
  const dirty=await createDb(databaseNames[2]);await apply(dirty,baseline);await apply(dirty,[accepted]);await dirty.query('ALTER TABLE public.studio_rendition_deletion_attempts ADD COLUMN execution_fence text');await assert.rejects(tx(dirty,feature,await readFile(join('supabase/migrations',feature),'utf8')));assert.equal((await dirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_deletion_attempts' AND column_name='state_changed_at'")).rowCount,0);assert.equal((await dirty.query("SELECT to_regprocedure('public.studio_private_artifact_reconciliation_due(integer)') procedure")).rows[0].procedure,null);console.log('FOUNDATION PASS dirty rejection atomic');
- const phaseDirty=await createDb(databaseNames[18]);await apply(phaseDirty,baseline);await apply(phaseDirty,[accepted]);const phaseDirtyBase=await createApprovedStudioFixture(phaseDirty);const phaseDirtyAttempt=await privateCommand(phaseDirty,{commandType:'studio.rendition.generate',actorId:phaseDirtyBase.requester,organizationId:phaseDirtyBase.org,workspaceId:phaseDirtyBase.workspace,requestId:'76000000-0000-4000-8000-000000000003',idempotencyKey:'dirty-partial-phase',authorizationVersion:phaseDirtyBase.authorizationVersions[phaseDirtyBase.requester],payload:{artifactVersionId:phaseDirtyBase.artifactVersionId,format:'docx'}});await phaseDirty.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',storage_provider='supabase',reconciliation_count=1 WHERE id=$1::uuid",[phaseDirtyAttempt.renditionClaim.attemptId]);await assert.rejects(tx(phaseDirty,feature,await readFile(join('supabase/migrations',feature),'utf8')),/PR217_FORWARD_FIX_DIRTY_UPGRADE/);assert.equal((await phaseDirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_attempts' AND column_name='reconciliation_phase'")).rowCount,0);console.log('FOUNDATION PASS partial rendition metadata dirty-upgrade rejection atomic');
+ const phaseDirty=await createDb(databaseNames[18]);
+ await apply(phaseDirty,baseline);await apply(phaseDirty,[accepted]);
+ const phaseDirtyBase=await createApprovedStudioFixture(phaseDirty);
+ const phaseDirtyAttempt=await privateCommand(phaseDirty,{commandType:'studio.rendition.generate',actorId:phaseDirtyBase.requester,organizationId:phaseDirtyBase.org,workspaceId:phaseDirtyBase.workspace,requestId:'76000000-0000-4000-8000-000000000003',idempotencyKey:'dirty-partial-phase',authorizationVersion:phaseDirtyBase.authorizationVersions[phaseDirtyBase.requester],payload:{artifactVersionId:phaseDirtyBase.artifactVersionId,format:'docx'}});
+ await phaseDirty.query("UPDATE public.studio_rendition_attempts SET state='reconciliation_required',storage_provider='supabase',reconciliation_count=1 WHERE id=$1::uuid",[phaseDirtyAttempt.renditionClaim.attemptId]);
+ const featureSql=await readFile(join('supabase/migrations',feature),'utf8');
+ const dirtyAttemptSnapshot=async()=>(await phaseDirty.query(`SELECT state,storage_provider,bucket_id,object_key,content_hash,byte_length,mime_type,safe_filename,reconciliation_count,reconciliation_claimed_at FROM public.studio_rendition_attempts WHERE id=$1::uuid`,[phaseDirtyAttempt.renditionClaim.attemptId])).rows[0];
+ const captureDirtyUpgrade=async label=>{
+  const before=await dirtyAttemptSnapshot();let message=null;
+  try{await tx(phaseDirty,`${feature}-${label}`,featureSql)}catch(error){message=String(error?.message??error)}
+  const after=await dirtyAttemptSnapshot();
+  const phaseColumn=(await phaseDirty.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='studio_rendition_attempts' AND column_name='reconciliation_phase'")).rowCount;
+  const dueRoutine=(await phaseDirty.query("SELECT to_regprocedure('public.studio_private_artifact_reconciliation_due(integer)') procedure")).rows[0].procedure;
+  const trigger=(await phaseDirty.query("SELECT tgenabled FROM pg_trigger WHERE tgrelid='public.studio_rendition_attempts'::regclass AND tgname='trg_studio_rendition_attempt_guard'")).rows[0].tgenabled;
+  return {label,message,before,after,phaseColumn,dueRoutine,trigger};
+ };
+ const partialDirtyEvidence=await captureDirtyUpgrade('partial');
+ const otherOrg=phaseDirtyBase.org==='11111111-1111-4111-8111-111111111111'?'22222222-2222-4222-8222-222222222222':'11111111-1111-4111-8111-111111111111';
+ const otherWorkspace=phaseDirtyBase.workspace==='33333333-3333-4333-8333-333333333333'?'44444444-4444-4444-8444-444444444444':'33333333-3333-4333-8333-333333333333';
+ const otherObject=phaseDirtyAttempt.renditionClaim.opaqueObjectId==='55555555-5555-4555-8555-555555555555'?'66666666-6666-4666-8666-666666666666':'55555555-5555-4555-8555-555555555555';
+ const canonicalDirtyKey=`${phaseDirtyBase.org}/${phaseDirtyBase.workspace}/studio-artifacts/${phaseDirtyAttempt.renditionClaim.opaqueObjectId}.docx`;
+ await phaseDirty.query("UPDATE public.studio_rendition_attempts SET bucket_id='studio-private-artifacts',object_key=$2::text,content_hash=$3::text,byte_length=256,mime_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',safe_filename='dirty.docx' WHERE id=$1::uuid",[phaseDirtyAttempt.renditionClaim.attemptId,canonicalDirtyKey,'b'.repeat(64)]);
+ const dirtyKeys=[
+  ['wrong organization',`${otherOrg}/${phaseDirtyBase.workspace}/studio-artifacts/${phaseDirtyAttempt.renditionClaim.opaqueObjectId}.docx`],
+  ['wrong workspace',`${phaseDirtyBase.org}/${otherWorkspace}/studio-artifacts/${phaseDirtyAttempt.renditionClaim.opaqueObjectId}.docx`],
+  ['wrong opaque object',`${phaseDirtyBase.org}/${phaseDirtyBase.workspace}/studio-artifacts/${otherObject}.docx`],
+  ['wrong extension',`${phaseDirtyBase.org}/${phaseDirtyBase.workspace}/studio-artifacts/${phaseDirtyAttempt.renditionClaim.opaqueObjectId}.pdf`]
+ ];
+ const dirtyKeyEvidence=[];
+ for(const [label,key] of dirtyKeys){await phaseDirty.query('UPDATE public.studio_rendition_attempts SET object_key=$2::text WHERE id=$1::uuid',[phaseDirtyAttempt.renditionClaim.attemptId,key]);dirtyKeyEvidence.push(await captureDirtyUpgrade(label))}
+ const allDirtyEvidence=[partialDirtyEvidence,...dirtyKeyEvidence];
+ await scenario(scenarioNames.dirtyUpgrade[0],async()=>assert.deepEqual(upgradePhases,['pre_render','verify_or_upload']));
+ for(let index=0;index<4;index+=1)await scenario(scenarioNames.dirtyUpgrade[index+1],async()=>assert.match(dirtyKeyEvidence[index].message,/PR217_FORWARD_FIX_DIRTY_UPGRADE/));
+ await scenario(scenarioNames.dirtyUpgrade[5],async()=>assert.match(partialDirtyEvidence.message,/PR217_FORWARD_FIX_DIRTY_UPGRADE/));
+ await scenario(scenarioNames.dirtyUpgrade[6],async()=>assert.equal(allDirtyEvidence.every(item=>/PR217_FORWARD_FIX_DIRTY_UPGRADE/.test(item.message)),true));
+ await scenario(scenarioNames.dirtyUpgrade[7],async()=>assert.equal(allDirtyEvidence.every(item=>JSON.stringify(item.before)===JSON.stringify(item.after)),true));
+ await scenario(scenarioNames.dirtyUpgrade[8],async()=>assert.equal(allDirtyEvidence.every(item=>item.phaseColumn===0),true));
+ await scenario(scenarioNames.dirtyUpgrade[9],async()=>assert.equal(allDirtyEvidence.every(item=>item.dueRoutine===null),true));
+ await scenario(scenarioNames.dirtyUpgrade[10],async()=>assert.equal(allDirtyEvidence.every(item=>item.trigger==='O'),true));
+ console.log(`DIRTY UPGRADE COUNTS ${JSON.stringify({canonical:upgradePostKey,failures:allDirtyEvidence.map(item=>item.label),atomic:allDirtyEvidence.every(item=>JSON.stringify(item.before)===JSON.stringify(item.after))})}`);
  const storage=await createDb(databaseNames[3]);await apply(storage,baseline);await storage.query('CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY');await apply(storage,[accepted]);await apply(storage,[feature]);assert.deepEqual((await storage.query("SELECT public FROM storage.buckets WHERE id='studio-private-artifacts'")).rows,[{public:false}]);assert.equal((await storage.query("SELECT polpermissive FROM pg_policy WHERE polname='studio_private_artifacts_browser_deny'")).rows[0].polpermissive,false);console.log('FOUNDATION PASS conditional Storage stub');
  const forward=await createDb(databaseNames[4]);await apply(forward,migrations);const forwardPeer=await connect(urlFor(databaseNames[4]));
  const race=await createDb(databaseNames[5]);await apply(race,migrations);const racePeer=await connect(urlFor(databaseNames[5]));
@@ -203,6 +258,9 @@ try{
  const renditionLeaseRenewalDb=await createDb(databaseNames[22]);await apply(renditionLeaseRenewalDb,migrations);const renditionLeaseRenewalPeer=await connect(urlFor(databaseNames[22]));
  const renditionLeaseRaceDb=await createDb(databaseNames[23]);await apply(renditionLeaseRaceDb,migrations);const renditionLeaseRacePeer=await connect(urlFor(databaseNames[23]));
  const dueActionabilityDb=await createDb(databaseNames[24]);await apply(dueActionabilityDb,migrations);const dueActionabilityPeer=await connect(urlFor(databaseNames[24]));
+ const runtimeControlPrimaryDb=await createDb(databaseNames[25]);await apply(runtimeControlPrimaryDb,migrations);
+ const runtimeControlUpdateFirstDb=await createDb(databaseNames[26]);await apply(runtimeControlUpdateFirstDb,migrations);const runtimeControlUpdateFirstPeer=await connect(urlFor(databaseNames[26]));
+ const runtimeControlRecoveryFirstDb=await createDb(databaseNames[27]);await apply(runtimeControlRecoveryFirstDb,migrations);const runtimeControlRecoveryFirstPeer=await connect(urlFor(databaseNames[27]));
  await runStudioPrivateArtifactConcurrencyEvidence({observer:generationConcurrencyDb,completionDb:generationCompletionPeer,commandDb:generationCommandPeer,staleRecoveryDb:staleWorkerDb,staleOriginalDb:staleOriginalPeer,scenario,names:scenarioNames.concurrencyP1});
  await runStudioRenditionReconciliationAuditEvidence({db:renditionAuditDb,peer:renditionAuditPeer,scenario,names:scenarioNames.renditionReconciliationAudit});
  const renditionPhaseCounts=await runStudioRenditionRecoveryPhaseEvidence({db:renditionPhaseDb,scenario,names:scenarioNames.renditionRecoveryPhase});
@@ -211,6 +269,7 @@ try{
  const deletionExecutionAuthorityCounts=await runStudioDeletionExecutionAuthorityEvidence({db:deletionExecutionAuthorityDb,peer:deletionExecutionAuthorityPeer,scenario,names:scenarioNames.deletionExecutionAuthority});
  const deletionBindingCounts=await runStudioDeletionResolutionBindingEvidence({db:deletionBindingDb,scenario,names:scenarioNames.deletionResolutionBinding});
  const dueActionabilityCounts=await runStudioDueWorkActionabilityEvidence({db:dueActionabilityDb,peer:dueActionabilityPeer,scenario,names:scenarioNames.dueActionability});
+ const recoveryControlCounts=await runStudioRenditionRecoveryControlEvidence({primaryDb:runtimeControlPrimaryDb,updateFirstDb:runtimeControlUpdateFirstDb,updateFirstPeer:runtimeControlUpdateFirstPeer,recoveryFirstDb:runtimeControlRecoveryFirstDb,recoveryFirstPeer:runtimeControlRecoveryFirstPeer,scenario,names:scenarioNames.renditionRecoveryControl});
  const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(crossLayerDb,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);
@@ -461,7 +520,7 @@ try{
  assert.equal(auditChecks.length,15);for(let index=0;index<auditChecks.length;index++)await scenario(auditNames[index],auditChecks[index]);
  console.log('LIFECYCLE TRUTH COUNTS '+JSON.stringify({retentionWins:{providerDeletes:extensionRaceEvidence.providerDeletes},deletionWins:{providerDeletes:deletionWinnerProviderDeletes},tombstoneRegeneration:{receiptDelta:tombstoneEvidence.after.receipts-tombstoneEvidence.before.receipts,attemptDelta:tombstoneEvidence.after.attempts-tombstoneEvidence.before.attempts,providerUploads:tombstoneEvidence.providerUploads,objects:tombstoneEvidence.objectCount},deletionRetry:{requests:retryCounts.requests,resolutions:retryCounts.resolutions,attempts:retryCounts.attempts},pendingRecovery:{initialState:pendingAttemptBefore.state,finalState:pendingRecoveredState}}));
  console.log('DELETION AUDIT COUNTS '+JSON.stringify({completedDeleted:deletionWinnerAudit.length,completedMissing:missingCompletionAudit.length,uncertainFailures:uncertainAudits.length,terminalFailures:retryTerminalAudit.length,exhaustion:exhaustionAudits.length,staleFence:retryStaleAfter.audit_count,completionReplay:missingCompletionAuditCount,failureReplay:retryTerminalAuditCount}));
- console.log('P1 CORRECTIVE COUNTS '+JSON.stringify({renditionPhase:renditionPhaseCounts,renditionLease:renditionLeaseCounts,deletionClaimAudit:deletionClaimAuditCounts,deletionExecutionAuthority:deletionExecutionAuthorityCounts,deletionBinding:deletionBindingCounts}));
+ console.log('P1 CORRECTIVE COUNTS '+JSON.stringify({renditionPhase:renditionPhaseCounts,renditionLease:renditionLeaseCounts,recoveryControl:recoveryControlCounts,deletionClaimAudit:deletionClaimAuditCounts,deletionExecutionAuthority:deletionExecutionAuthorityCounts,deletionBinding:deletionBindingCounts}));
  console.log('DUE ACTIONABILITY COUNTS '+JSON.stringify(dueActionabilityCounts));
  console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length){console.error(`FAILED SCENARIOS ${JSON.stringify(failed)}`);process.exitCode=1}
 }finally{for(const db of clients.reverse())if(db!==admin)await db.end().catch(()=>{});if(admin){for(const name of created.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{process.exitCode=1});await admin.end().catch(()=>{})}}
