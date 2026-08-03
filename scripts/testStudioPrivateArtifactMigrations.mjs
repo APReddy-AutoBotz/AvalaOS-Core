@@ -13,6 +13,7 @@ import {runStudioRenditionRecoveryPhaseEvidence} from './studioRenditionRecovery
 import {runStudioRenditionLeaseAuthorityEvidence,studioRenditionLeaseAuthorityScenarioNames} from './studioRenditionLeaseAuthorityPostgres.mjs';
 import {runStudioDeletionExecutionAuthorityEvidence,runStudioDeletionReconciliationClaimAuditEvidence,studioDeletionExecutionAuthorityScenarioNames,studioDeletionReconciliationClaimAuditScenarioNames} from './studioDeletionReconciliationClaimAuditPostgres.mjs';
 import {runStudioDeletionResolutionBindingEvidence} from './studioDeletionResolutionBindingPostgres.mjs';
+import {runStudioDueWorkActionabilityEvidence,studioDueWorkActionabilityScenarioNames} from './studioDueWorkActionabilityPostgres.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioPrivateArtifactMigrationContract.mjs'],{stdio:'inherit'});
 execFileSync(process.execPath,['scripts/runEdgeTypeScriptTest.mjs','types.ts','supabase/functions/deno.d.ts','supabase/functions/_shared/studioPrivateArtifactRpcContract.test.ts'],{stdio:'inherit'});
@@ -152,13 +153,14 @@ export const scenarioNames={
  'deletion binding exact approval replay is effect free',
  'deletion binding valid exact rejection succeeds',
  'deletion binding resolved request new key denied'
- ]
+ ],
+ dueActionability:studioDueWorkActionabilityScenarioNames
 };
-assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26,renditionRecoveryPhase:12,renditionLeaseAuthority:36,deletionReconciliationClaimAudit:27,deletionExecutionAuthority:30,deletionResolutionBinding:11});
-const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,319);assert.equal(new Set(allScenarios).size,319);
+assert.deepEqual(Object.fromEntries(Object.entries(scenarioNames).map(([key,value])=>[key,value.length])),{authority:9,rendition:11,retention:7,deletion:7,download:6,crossLayer:6,reconciliation:16,forwardFix:58,lifecycleTruth:14,auditEvidence:15,concurrencyP1:28,renditionReconciliationAudit:26,renditionRecoveryPhase:12,renditionLeaseAuthority:36,deletionReconciliationClaimAudit:27,deletionExecutionAuthority:30,deletionResolutionBinding:11,dueActionability:17});
+const allScenarios=Object.values(scenarioNames).flat();assert.equal(allScenarios.length,336);assert.equal(new Set(allScenarios).size,336);
 const adminUrl=process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw Error('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL 16 scenarios not run locally.');process.exit(0)}
-const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit','rendition_phase','deletion_claim_audit','deletion_binding','phase_dirty','cross_layer','deletion_execution_authority','rendition_lease_primary','rendition_lease_renewal','rendition_lease_race'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
+const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseNames=['fresh','upgrade','dirty','storage','forward','race','retention_race','deletion_race','deletion_retry','pending_recovery','audit_completion','audit_failure','generation_concurrency','stale_worker','rendition_audit','rendition_phase','deletion_claim_audit','deletion_binding','phase_dirty','cross_layer','deletion_execution_authority','rendition_lease_primary','rendition_lease_renewal','rendition_lease_race','due_actionability'].map(x=>`studio_private_${x}_${suffix}`);const created=[];const clients=[];let admin;
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';assert.equal(migrations.at(-1),feature);const baseline=migrations.filter(x=>x!==accepted&&x!==feature);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
@@ -200,6 +202,7 @@ try{
  const renditionLeasePrimaryDb=await createDb(databaseNames[21]);await apply(renditionLeasePrimaryDb,migrations);
  const renditionLeaseRenewalDb=await createDb(databaseNames[22]);await apply(renditionLeaseRenewalDb,migrations);const renditionLeaseRenewalPeer=await connect(urlFor(databaseNames[22]));
  const renditionLeaseRaceDb=await createDb(databaseNames[23]);await apply(renditionLeaseRaceDb,migrations);const renditionLeaseRacePeer=await connect(urlFor(databaseNames[23]));
+ const dueActionabilityDb=await createDb(databaseNames[24]);await apply(dueActionabilityDb,migrations);const dueActionabilityPeer=await connect(urlFor(databaseNames[24]));
  await runStudioPrivateArtifactConcurrencyEvidence({observer:generationConcurrencyDb,completionDb:generationCompletionPeer,commandDb:generationCommandPeer,staleRecoveryDb:staleWorkerDb,staleOriginalDb:staleOriginalPeer,scenario,names:scenarioNames.concurrencyP1});
  await runStudioRenditionReconciliationAuditEvidence({db:renditionAuditDb,peer:renditionAuditPeer,scenario,names:scenarioNames.renditionReconciliationAudit});
  const renditionPhaseCounts=await runStudioRenditionRecoveryPhaseEvidence({db:renditionPhaseDb,scenario,names:scenarioNames.renditionRecoveryPhase});
@@ -207,6 +210,7 @@ try{
  const deletionClaimAuditCounts=await runStudioDeletionReconciliationClaimAuditEvidence({db:deletionClaimAuditDb,peer:deletionClaimAuditPeer,scenario,names:scenarioNames.deletionReconciliationClaimAudit});
  const deletionExecutionAuthorityCounts=await runStudioDeletionExecutionAuthorityEvidence({db:deletionExecutionAuthorityDb,peer:deletionExecutionAuthorityPeer,scenario,names:scenarioNames.deletionExecutionAuthority});
  const deletionBindingCounts=await runStudioDeletionResolutionBindingEvidence({db:deletionBindingDb,scenario,names:scenarioNames.deletionResolutionBinding});
+ const dueActionabilityCounts=await runStudioDueWorkActionabilityEvidence({db:dueActionabilityDb,peer:dueActionabilityPeer,scenario,names:scenarioNames.dueActionability});
  const crossLayerCounts=await runStudioPrivateArtifactCrossLayerEvidence(crossLayerDb,{scenario,names:scenarioNames.crossLayer,contractParityPassed});
  const reconciliationPeer=await connect(urlFor(databaseNames[3]));const reconciliationCounts=await runStudioPrivateArtifactReconciliationEvidence(storage,reconciliationPeer,fresh,storage,{scenario,names:scenarioNames.reconciliation});
  const raceBase=await createApprovedStudioFixture(race);
@@ -458,5 +462,6 @@ try{
  console.log('LIFECYCLE TRUTH COUNTS '+JSON.stringify({retentionWins:{providerDeletes:extensionRaceEvidence.providerDeletes},deletionWins:{providerDeletes:deletionWinnerProviderDeletes},tombstoneRegeneration:{receiptDelta:tombstoneEvidence.after.receipts-tombstoneEvidence.before.receipts,attemptDelta:tombstoneEvidence.after.attempts-tombstoneEvidence.before.attempts,providerUploads:tombstoneEvidence.providerUploads,objects:tombstoneEvidence.objectCount},deletionRetry:{requests:retryCounts.requests,resolutions:retryCounts.resolutions,attempts:retryCounts.attempts},pendingRecovery:{initialState:pendingAttemptBefore.state,finalState:pendingRecoveredState}}));
  console.log('DELETION AUDIT COUNTS '+JSON.stringify({completedDeleted:deletionWinnerAudit.length,completedMissing:missingCompletionAudit.length,uncertainFailures:uncertainAudits.length,terminalFailures:retryTerminalAudit.length,exhaustion:exhaustionAudits.length,staleFence:retryStaleAfter.audit_count,completionReplay:missingCompletionAuditCount,failureReplay:retryTerminalAuditCount}));
  console.log('P1 CORRECTIVE COUNTS '+JSON.stringify({renditionPhase:renditionPhaseCounts,renditionLease:renditionLeaseCounts,deletionClaimAudit:deletionClaimAuditCounts,deletionExecutionAuthority:deletionExecutionAuthorityCounts,deletionBinding:deletionBindingCounts}));
+ console.log('DUE ACTIONABILITY COUNTS '+JSON.stringify(dueActionabilityCounts));
  console.log(`Studio private artifact PostgreSQL 16 scenarios: ${passed.length} passed, ${failed.length} failed.`);if(failed.length){console.error(`FAILED SCENARIOS ${JSON.stringify(failed)}`);process.exitCode=1}
 }finally{for(const db of clients.reverse())if(db!==admin)await db.end().catch(()=>{});if(admin){for(const name of created.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(()=>{process.exitCode=1});await admin.end().catch(()=>{})}}

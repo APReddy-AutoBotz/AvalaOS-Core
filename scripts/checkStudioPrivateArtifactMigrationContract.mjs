@@ -77,6 +77,10 @@ const forwardFunction = name =>
   new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]+?\\n\\$\\$;`, 'u').exec(forward)?.[0] ?? '';
 const effectiveForwardFunction = name =>
   [...forward.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]+?\\n\\$\\$;`, 'gu'))].at(-1)?.[0] ?? '';
+const dueDiscovery = effectiveForwardFunction('studio_private_artifact_reconciliation_due');
+const actorActionability = effectiveForwardFunction('studio_private_actor_has_current_authority');
+const renditionActionability = effectiveForwardFunction('studio_private_rendition_reconciliation_actionable');
+const deletionActionability = effectiveForwardFunction('studio_private_deletion_reconciliation_actionable');
 const deletionComplete = forwardFunction('studio_rendition_deletion_complete');
 const deletionFail = forwardFunction('studio_rendition_deletion_fail');
 const deletionReconciliationClaim = forwardFunction('studio_deletion_reconciliation_claim');
@@ -106,6 +110,32 @@ const renditionReconciliationClaim = effectiveForwardFunction('studio_rendition_
 const recoveryRendered = effectiveForwardFunction('studio_rendition_reconciliation_rendered');
 const recoveryComplete = effectiveForwardFunction('studio_rendition_reconciliation_complete');
 const recoveryFail = effectiveForwardFunction('studio_rendition_reconciliation_fail');
+for (const body of [actorActionability,renditionActionability,deletionActionability,dueDiscovery]) {
+  assert.ok(body,'due-work actionability helper/function must be present');
+}
+assert.doesNotMatch(actorActionability,/studio_assert_actor|RAISE EXCEPTION/);
+assert.match(actorActionability,/profile\.status = 'active'[\s\S]+organization_member\.status = 'active'[\s\S]+workspace_member\.status = 'active'/);
+assert.match(actorActionability,/organization_role\.scope = 'organization'[\s\S]+workspace_role\.scope = 'workspace'/);
+assert.match(actorActionability,/capability_key = p_capability[\s\S]+authority_version\.version[\s\S]+p_authorization/);
+assert.match(renditionActionability,/current_approved_version_id = version\.id[\s\S]+aggregate\.lifecycle = 'approved'[\s\S]+version\.lifecycle = 'approved'/);
+assert.match(renditionActionability,/studio\.artifacts\.rendition\.generate[\s\S]+requester_authorization_version/);
+assert.match(renditionActionability,/control\.enabled[\s\S]+NOT control\.read_only[\s\S]+control\.provider_enabled/);
+assert.match(renditionActionability,/reconciliation_phase[\s\S]+storage_provider[\s\S]+studio-private-artifacts[\s\S]+content_hash/);
+assert.match(deletionActionability,/control\.deletion_enabled/);
+assert.match(deletionActionability,/studio_active_hold_count[\s\S]+active_holds = 0/);
+assert.match(deletionActionability,/studio_effective_retention[\s\S]+retentionUntil[\s\S]+<= now\(\)/);
+assert.match(deletionActionability,/studio\.artifacts\.delete\.approve[\s\S]+resolver_authorization_version/);
+assert.match(deletionActionability,/receipt\.resource_id = resolution\.id[\s\S]+deletionRequestId[\s\S]+resolutionId[\s\S]+renditionId/);
+const renditionFilter = dueDiscovery.indexOf('studio_private_rendition_reconciliation_actionable');
+const deletionFilter = dueDiscovery.indexOf('studio_private_deletion_reconciliation_actionable');
+const globalOrder = dueDiscovery.indexOf('ORDER BY due_at, kind, attempt_id');
+const globalLimit = dueDiscovery.indexOf('LIMIT p_limit');
+assert.ok(renditionFilter >= 0 && deletionFilter >= 0 && globalOrder > renditionFilter && globalOrder > deletionFilter && globalLimit > globalOrder,'both kinds must be filtered for actionability before the shared order and limit');
+assert.match(dueDiscovery,/p_limit < 1 OR p_limit > 50/);
+assert.match(dueDiscovery,/jsonb_build_object\('kind', due\.kind, 'attemptId', due\.attempt_id\)/);
+assert.doesNotMatch(dueDiscovery,/(?:objectKey|bucketId|storageProvider|actorId|authorizationVersion|rejectionReason|signedUrl)/);
+assert.match(forward,/REVOKE ALL ON FUNCTION[\s\S]+studio_private_actor_has_current_authority\(uuid,uuid,uuid,text,bigint\)[\s\S]+studio_private_rendition_reconciliation_actionable\(uuid\)[\s\S]+studio_private_deletion_reconciliation_actionable\(uuid\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
+assert.doesNotMatch(forward,/GRANT EXECUTE ON FUNCTION[\s\S]+studio_private_(?:actor_has_current_authority|rendition_reconciliation_actionable|deletion_reconciliation_actionable)[\s\S]+TO (?:anon|authenticated|service_role)/);
 for (const field of ['p_org','p_workspace','p_artifact_version','p_format','p_renderer_version']) {
   assert.match(generationLock,new RegExp(`\\b${field}\\b`),`generation lock identity missing ${field}`);
 }
@@ -203,6 +233,13 @@ assert.match(
   /studio\.rendition\.deletion\.reconciliation\.claim/,
   'deletion recovery ownership must be audited',
 );
+assert.match(deletionReconciliationClaim,/studio_assert_actor[\s\S]+studio_active_hold_count[\s\S]+studio_effective_retention|studio_assert_actor[\s\S]+studio_effective_retention[\s\S]+studio_active_hold_count/);
+assert.ok(
+  deletionReconciliationClaim.indexOf('studio_effective_retention') <
+    deletionReconciliationClaim.indexOf('next_count := a.reconciliation_count + 1'),
+  'hold and retention rechecks must precede deletion retry consumption',
+);
+assert.match(deletionReconciliationClaim,/source_attempt\.state = 'available'[\s\S]+source_attempt\.object_key = r\.object_key/);
 assert.match(
   deletionReconciliationClaim,
   /SELECT \* INTO control[\s\S]+studio_private_artifact_runtime_control[\s\S]+FOR SHARE[\s\S]+control\.singleton IS NULL[\s\S]+NOT control\.enabled[\s\S]+control\.read_only[\s\S]+NOT control\.provider_enabled[\s\S]+NOT control\.deletion_enabled[\s\S]+STUDIO_READ_ONLY/,

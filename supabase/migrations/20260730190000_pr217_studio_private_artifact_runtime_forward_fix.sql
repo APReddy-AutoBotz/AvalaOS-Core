@@ -728,6 +728,340 @@ BEGIN
 END
 $$;
 
+CREATE OR REPLACE FUNCTION public.studio_private_actor_has_current_authority(
+  p_actor uuid,
+  p_org uuid,
+  p_workspace uuid,
+  p_capability text,
+  p_authorization bigint
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT COALESCE(
+    p_actor IS NOT NULL
+    AND p_org IS NOT NULL
+    AND p_workspace IS NOT NULL
+    AND p_capability IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles profile
+      JOIN public.organization_members organization_member
+        ON organization_member.user_id = profile.id
+       AND organization_member.org_id = p_org
+      JOIN public.workspace_memberships workspace_member
+        ON workspace_member.user_id = profile.id
+       AND workspace_member.org_id = organization_member.org_id
+       AND workspace_member.workspace_id = p_workspace
+      JOIN public.organizations organization
+        ON organization.id = organization_member.org_id
+      JOIN public.workspaces workspace
+        ON workspace.id = workspace_member.workspace_id
+       AND workspace.org_id = workspace_member.org_id
+      WHERE profile.id = p_actor
+        AND profile.status = 'active'
+        AND profile.deleted_at IS NULL
+        AND organization_member.status = 'active'
+        AND organization_member.deleted_at IS NULL
+        AND workspace_member.status = 'active'
+        AND workspace_member.deleted_at IS NULL
+        AND organization.status = 'active'
+        AND organization.deleted_at IS NULL
+        AND workspace.status = 'active'
+        AND workspace.deleted_at IS NULL
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM public.roles organization_role
+            JOIN public.role_capabilities organization_capability
+              ON organization_capability.role_id = organization_role.id
+             AND organization_capability.capability_key = p_capability
+            WHERE organization_role.id = organization_member.role_id
+              AND organization_role.scope = 'organization'
+              AND organization_role.org_id = p_org
+              AND organization_role.workspace_id IS NULL
+              AND organization_role.status = 'active'
+              AND organization_role.deleted_at IS NULL
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.roles workspace_role
+            JOIN public.role_capabilities workspace_capability
+              ON workspace_capability.role_id = workspace_role.id
+             AND workspace_capability.capability_key = p_capability
+            WHERE workspace_role.id = workspace_member.role_id
+              AND workspace_role.scope = 'workspace'
+              AND workspace_role.org_id = p_org
+              AND workspace_role.workspace_id = p_workspace
+              AND workspace_role.status = 'active'
+              AND workspace_role.deleted_at IS NULL
+          )
+        )
+    )
+    AND COALESCE((
+      SELECT authority_version.version
+      FROM public.authorization_versions authority_version
+      WHERE authority_version.org_id = p_org
+        AND authority_version.user_id = p_actor
+    ), 1) = p_authorization,
+    false
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_private_rendition_reconciliation_actionable(
+  p_attempt uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.studio_rendition_attempts attempt
+    JOIN public.studio_artifact_versions version
+      ON version.id = attempt.artifact_version_id
+     AND version.artifact_id = attempt.artifact_id
+     AND version.org_id = attempt.org_id
+     AND version.workspace_id = attempt.workspace_id
+    JOIN public.studio_artifact_aggregates aggregate
+      ON aggregate.id = version.artifact_id
+     AND aggregate.org_id = version.org_id
+     AND aggregate.workspace_id = version.workspace_id
+     AND aggregate.current_approved_version_id = version.id
+     AND aggregate.lifecycle = 'approved'
+    JOIN public.studio_private_artifact_runtime_control control
+      ON control.singleton
+     AND control.enabled
+     AND NOT control.read_only
+     AND control.provider_enabled
+    WHERE attempt.id = p_attempt
+      AND version.lifecycle = 'approved'
+      AND public.studio_private_actor_has_current_authority(
+        attempt.requested_by,
+        attempt.org_id,
+        attempt.workspace_id,
+        'studio.artifacts.rendition.generate',
+        attempt.requester_authorization_version
+      )
+      AND (
+        attempt.state = 'reconciliation_required'
+        OR (
+          attempt.state IN ('requested','rendering','uploaded')
+          AND attempt.state_changed_at <= now() - interval '5 minutes'
+        )
+        OR (
+          attempt.state = 'reconciling'
+          AND attempt.reconciliation_claimed_at <= now() - interval '5 minutes'
+        )
+      )
+      AND CASE
+        WHEN attempt.state IN ('requested','rendering') THEN
+          attempt.reconciliation_phase IS DISTINCT FROM 'verify_or_upload'
+          AND attempt.storage_provider IS NULL
+          AND attempt.bucket_id IS NULL
+          AND attempt.object_key IS NULL
+          AND attempt.content_hash IS NULL
+          AND attempt.byte_length IS NULL
+          AND attempt.mime_type IS NULL
+          AND attempt.safe_filename IS NULL
+        WHEN attempt.state = 'uploaded' THEN
+          attempt.reconciliation_phase IS DISTINCT FROM 'pre_render'
+          AND COALESCE(
+            attempt.storage_provider = 'supabase'
+            AND attempt.bucket_id = 'studio-private-artifacts'
+            AND attempt.object_key = format(
+              '%s/%s/studio-artifacts/%s.%s',
+              attempt.org_id,
+              attempt.workspace_id,
+              attempt.opaque_object_id,
+              CASE attempt.format WHEN 'markdown' THEN 'md' ELSE attempt.format END
+            )
+            AND attempt.content_hash ~ '^[0-9a-f]{64}$'
+            AND attempt.byte_length > 0
+            AND attempt.mime_type = CASE attempt.format
+              WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+              WHEN 'pdf' THEN 'application/pdf'
+              ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            END
+            AND attempt.safe_filename ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$',
+            false
+          )
+        WHEN attempt.state IN ('reconciliation_required','reconciling') THEN
+          (
+            COALESCE(
+              attempt.reconciliation_phase,
+              CASE WHEN
+                attempt.storage_provider IS NULL
+                AND attempt.bucket_id IS NULL
+                AND attempt.object_key IS NULL
+                AND attempt.content_hash IS NULL
+                AND attempt.byte_length IS NULL
+                AND attempt.mime_type IS NULL
+                AND attempt.safe_filename IS NULL
+              THEN 'pre_render' ELSE 'verify_or_upload' END
+            ) = 'pre_render'
+            AND attempt.storage_provider IS NULL
+            AND attempt.bucket_id IS NULL
+            AND attempt.object_key IS NULL
+            AND attempt.content_hash IS NULL
+            AND attempt.byte_length IS NULL
+            AND attempt.mime_type IS NULL
+            AND attempt.safe_filename IS NULL
+          )
+          OR (
+            COALESCE(
+              attempt.reconciliation_phase,
+              CASE WHEN
+                attempt.storage_provider IS NULL
+                AND attempt.bucket_id IS NULL
+                AND attempt.object_key IS NULL
+                AND attempt.content_hash IS NULL
+                AND attempt.byte_length IS NULL
+                AND attempt.mime_type IS NULL
+                AND attempt.safe_filename IS NULL
+              THEN 'pre_render' ELSE 'verify_or_upload' END
+            ) = 'verify_or_upload'
+            AND COALESCE(
+              attempt.storage_provider = 'supabase'
+              AND attempt.bucket_id = 'studio-private-artifacts'
+              AND attempt.object_key = format(
+                '%s/%s/studio-artifacts/%s.%s',
+                attempt.org_id,
+                attempt.workspace_id,
+                attempt.opaque_object_id,
+                CASE attempt.format WHEN 'markdown' THEN 'md' ELSE attempt.format END
+              )
+              AND attempt.content_hash ~ '^[0-9a-f]{64}$'
+              AND attempt.byte_length > 0
+              AND attempt.mime_type = CASE attempt.format
+                WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+                WHEN 'pdf' THEN 'application/pdf'
+                ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+              END
+              AND attempt.safe_filename ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$',
+              false
+            )
+          )
+        ELSE false
+      END
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION public.studio_private_deletion_reconciliation_actionable(
+  p_attempt uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.studio_rendition_deletion_attempts attempt
+    JOIN public.studio_rendition_deletion_resolutions resolution
+      ON resolution.id = attempt.resolution_id
+     AND resolution.request_id = attempt.request_id
+     AND resolution.rendition_id = attempt.rendition_id
+     AND resolution.org_id = attempt.org_id
+     AND resolution.workspace_id = attempt.workspace_id
+     AND resolution.outcome = 'approved'
+    JOIN public.studio_rendition_deletion_requests request
+      ON request.id = attempt.request_id
+     AND request.rendition_id = attempt.rendition_id
+     AND request.org_id = attempt.org_id
+     AND request.workspace_id = attempt.workspace_id
+    JOIN public.studio_private_artifact_command_receipts receipt
+      ON receipt.id = resolution.receipt_id
+     AND receipt.org_id = resolution.org_id
+     AND receipt.workspace_id = resolution.workspace_id
+     AND receipt.actor_id = resolution.resolved_by
+     AND receipt.command_type = 'studio.rendition.deletion.resolve'
+     AND receipt.status = 'committed'
+     AND receipt.resource_id = resolution.id
+     AND receipt.response ->> 'deletionRequestId' = resolution.request_id::text
+     AND receipt.response ->> 'resolutionId' = resolution.id::text
+     AND receipt.response ->> 'renditionId' = resolution.rendition_id::text
+     AND receipt.response ->> 'status' = 'deleting'
+    JOIN public.studio_renditions rendition
+      ON rendition.id = attempt.rendition_id
+     AND rendition.org_id = attempt.org_id
+     AND rendition.workspace_id = attempt.workspace_id
+     AND rendition.lifecycle = 'deleting'
+     AND rendition.storage_provider = 'supabase'
+     AND rendition.bucket_id = 'studio-private-artifacts'
+     AND rendition.content_hash ~ '^[0-9a-f]{64}$'
+     AND rendition.byte_length > 0
+     AND rendition.mime_type = CASE rendition.format
+       WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+       WHEN 'pdf' THEN 'application/pdf'
+       ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+     END
+     AND rendition.safe_filename ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+    JOIN public.studio_rendition_attempts source_attempt
+      ON source_attempt.id = rendition.attempt_id
+     AND source_attempt.rendition_id = rendition.id
+     AND source_attempt.org_id = rendition.org_id
+     AND source_attempt.workspace_id = rendition.workspace_id
+     AND source_attempt.state = 'available'
+     AND source_attempt.storage_provider = rendition.storage_provider
+     AND source_attempt.bucket_id = rendition.bucket_id
+     AND source_attempt.object_key = rendition.object_key
+     AND source_attempt.content_hash = rendition.content_hash
+     AND source_attempt.byte_length = rendition.byte_length
+     AND source_attempt.mime_type = rendition.mime_type
+     AND source_attempt.safe_filename = rendition.safe_filename
+     AND rendition.object_key = format(
+       '%s/%s/studio-artifacts/%s.%s',
+       source_attempt.org_id,
+       source_attempt.workspace_id,
+       source_attempt.opaque_object_id,
+       CASE source_attempt.format WHEN 'markdown' THEN 'md' ELSE source_attempt.format END
+     )
+    JOIN public.studio_private_artifact_runtime_control control
+      ON control.singleton
+     AND control.enabled
+     AND NOT control.read_only
+     AND control.provider_enabled
+     AND control.deletion_enabled
+    CROSS JOIN LATERAL (
+      SELECT
+        public.studio_effective_retention(rendition.id) AS retention,
+        public.studio_active_hold_count(rendition.id) AS active_holds
+    ) deletion_guard
+    WHERE attempt.id = p_attempt
+      AND public.studio_private_actor_has_current_authority(
+        resolution.resolved_by,
+        resolution.org_id,
+        resolution.workspace_id,
+        'studio.artifacts.delete.approve',
+        resolution.resolver_authorization_version
+      )
+      AND (
+        attempt.state = 'reconciliation_required'
+        OR (
+          attempt.state IN ('requested','executing')
+          AND attempt.state_changed_at <= now() - interval '5 minutes'
+        )
+        OR (
+          attempt.state = 'reconciling'
+          AND attempt.reconciliation_claimed_at <= now() - interval '5 minutes'
+        )
+      )
+      AND deletion_guard.active_holds = 0
+      AND deletion_guard.retention ->> 'indefinite' = 'false'
+      AND COALESCE(
+        (deletion_guard.retention ->> 'retentionUntil')::timestamptz,
+        'infinity'::timestamptz
+      ) <= now()
+  )
+$$;
+
 CREATE OR REPLACE FUNCTION public.studio_private_artifact_reconciliation_due(p_limit integer)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -745,24 +1079,12 @@ BEGIN
       SELECT 'rendition'::text AS kind, r.id AS attempt_id,
              COALESCE(r.reconciliation_claimed_at, r.state_changed_at, r.created_at) AS due_at
       FROM public.studio_rendition_attempts r
-      WHERE (
-        r.state = 'reconciliation_required'
-        OR (r.state IN ('requested','rendering','uploaded')
-            AND r.state_changed_at <= now() - interval '5 minutes')
-        OR (r.state = 'reconciling'
-            AND r.reconciliation_claimed_at <= now() - interval '5 minutes')
-      )
+      WHERE public.studio_private_rendition_reconciliation_actionable(r.id)
       UNION ALL
       SELECT 'deletion'::text, d.id,
              COALESCE(d.execution_claimed_at, d.reconciliation_claimed_at, d.state_changed_at, d.created_at)
       FROM public.studio_rendition_deletion_attempts d
-      WHERE (
-        d.state = 'reconciliation_required'
-        OR (d.state IN ('requested','executing')
-            AND d.state_changed_at <= now() - interval '5 minutes')
-        OR (d.state = 'reconciling'
-            AND d.reconciliation_claimed_at <= now() - interval '5 minutes')
-      )
+      WHERE public.studio_private_deletion_reconciliation_actionable(d.id)
       ORDER BY due_at, kind, attempt_id
       LIMIT p_limit
     ) due
@@ -1097,6 +1419,8 @@ DECLARE
   d public.studio_rendition_deletion_resolutions;
   r public.studio_renditions;
   control public.studio_private_artifact_runtime_control;
+  retention jsonb;
+  holds integer;
   audit_id uuid := gen_random_uuid();
   command_request_id uuid;
   next_count integer;
@@ -1104,7 +1428,14 @@ DECLARE
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
-  SELECT * INTO d FROM public.studio_rendition_deletion_resolutions WHERE id = a.resolution_id AND outcome = 'approved';
+  SELECT * INTO d
+  FROM public.studio_rendition_deletion_resolutions
+  WHERE id = a.resolution_id
+    AND request_id = a.request_id
+    AND rendition_id = a.rendition_id
+    AND org_id = a.org_id
+    AND workspace_id = a.workspace_id
+    AND outcome = 'approved';
   IF d.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
   PERFORM public.studio_assert_actor(
     d.resolved_by, d.org_id, d.workspace_id,
@@ -1112,7 +1443,41 @@ BEGIN
   );
   SELECT * INTO r FROM public.studio_renditions
   WHERE id = a.rendition_id AND org_id = a.org_id AND workspace_id = a.workspace_id FOR UPDATE;
-  IF r.id IS NULL THEN
+  IF r.id IS NULL
+     OR r.storage_provider IS DISTINCT FROM 'supabase'
+     OR r.bucket_id IS DISTINCT FROM 'studio-private-artifacts'
+     OR r.content_hash !~ '^[0-9a-f]{64}$'
+     OR r.byte_length <= 0
+     OR r.mime_type IS DISTINCT FROM (CASE r.format
+       WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+       WHEN 'pdf' THEN 'application/pdf'
+       ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+     END)
+     OR r.safe_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM public.studio_rendition_attempts source_attempt
+       WHERE source_attempt.id = r.attempt_id
+         AND source_attempt.rendition_id = r.id
+         AND source_attempt.org_id = r.org_id
+         AND source_attempt.workspace_id = r.workspace_id
+         AND source_attempt.state = 'available'
+         AND source_attempt.storage_provider = r.storage_provider
+         AND source_attempt.bucket_id = r.bucket_id
+         AND source_attempt.object_key = r.object_key
+         AND source_attempt.content_hash = r.content_hash
+         AND source_attempt.byte_length = r.byte_length
+         AND source_attempt.mime_type = r.mime_type
+         AND source_attempt.safe_filename = r.safe_filename
+         AND r.object_key = format(
+           '%s/%s/studio-artifacts/%s.%s',
+           source_attempt.org_id,
+           source_attempt.workspace_id,
+           source_attempt.opaque_object_id,
+           CASE source_attempt.format WHEN 'markdown' THEN 'md' ELSE source_attempt.format END
+         )
+     )
+  THEN
     RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(r.id::text, 0));
@@ -1138,13 +1503,28 @@ BEGIN
   THEN
     RAISE EXCEPTION USING MESSAGE = 'STUDIO_READ_ONLY';
   END IF;
+  retention := public.studio_effective_retention(r.id);
+  holds := public.studio_active_hold_count(r.id);
+  IF r.lifecycle <> 'deleting'
+     OR holds > 0
+     OR retention ->> 'indefinite' = 'true'
+     OR COALESCE((retention ->> 'retentionUntil')::timestamptz, 'infinity') > now()
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'STUDIO_DELETION_BLOCKED';
+  END IF;
   SELECT cr.request_id INTO command_request_id
   FROM public.studio_private_artifact_command_receipts cr
   WHERE cr.id = d.receipt_id
     AND cr.org_id = d.org_id
     AND cr.workspace_id = d.workspace_id
     AND cr.actor_id = d.resolved_by
-    AND cr.command_type = 'studio.rendition.deletion.resolve';
+    AND cr.command_type = 'studio.rendition.deletion.resolve'
+    AND cr.status = 'committed'
+    AND cr.resource_id = d.id
+    AND cr.response ->> 'deletionRequestId' = d.request_id::text
+    AND cr.response ->> 'resolutionId' = d.id::text
+    AND cr.response ->> 'renditionId' = d.rendition_id::text
+    AND cr.response ->> 'status' = 'deleting';
   IF command_request_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
   END IF;
@@ -1231,7 +1611,14 @@ DECLARE
 BEGIN
   SELECT * INTO a FROM public.studio_rendition_deletion_attempts WHERE id = p_attempt FOR UPDATE;
   IF a.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
-  SELECT * INTO d FROM public.studio_rendition_deletion_resolutions WHERE id = a.resolution_id AND outcome = 'approved';
+  SELECT * INTO d
+  FROM public.studio_rendition_deletion_resolutions
+  WHERE id = a.resolution_id
+    AND request_id = a.request_id
+    AND rendition_id = a.rendition_id
+    AND org_id = a.org_id
+    AND workspace_id = a.workspace_id
+    AND outcome = 'approved';
   IF d.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
   PERFORM public.studio_assert_actor(
     d.resolved_by, d.org_id, d.workspace_id,
@@ -1239,7 +1626,43 @@ BEGIN
   );
   SELECT * INTO r FROM public.studio_renditions
   WHERE id = a.rendition_id AND org_id = a.org_id AND workspace_id = a.workspace_id FOR UPDATE;
-  IF r.id IS NULL THEN RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE'; END IF;
+  IF r.id IS NULL
+     OR r.storage_provider IS DISTINCT FROM 'supabase'
+     OR r.bucket_id IS DISTINCT FROM 'studio-private-artifacts'
+     OR r.content_hash !~ '^[0-9a-f]{64}$'
+     OR r.byte_length <= 0
+     OR r.mime_type IS DISTINCT FROM (CASE r.format
+       WHEN 'markdown' THEN 'text/markdown; charset=utf-8'
+       WHEN 'pdf' THEN 'application/pdf'
+       ELSE 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+     END)
+     OR r.safe_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$'
+     OR NOT EXISTS (
+       SELECT 1
+       FROM public.studio_rendition_attempts source_attempt
+       WHERE source_attempt.id = r.attempt_id
+         AND source_attempt.rendition_id = r.id
+         AND source_attempt.org_id = r.org_id
+         AND source_attempt.workspace_id = r.workspace_id
+         AND source_attempt.state = 'available'
+         AND source_attempt.storage_provider = r.storage_provider
+         AND source_attempt.bucket_id = r.bucket_id
+         AND source_attempt.object_key = r.object_key
+         AND source_attempt.content_hash = r.content_hash
+         AND source_attempt.byte_length = r.byte_length
+         AND source_attempt.mime_type = r.mime_type
+         AND source_attempt.safe_filename = r.safe_filename
+         AND r.object_key = format(
+           '%s/%s/studio-artifacts/%s.%s',
+           source_attempt.org_id,
+           source_attempt.workspace_id,
+           source_attempt.opaque_object_id,
+           CASE source_attempt.format WHEN 'markdown' THEN 'md' ELSE source_attempt.format END
+         )
+     )
+  THEN
+    RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
+  END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(r.id::text, 0));
   SELECT * INTO control FROM public.studio_private_artifact_runtime_control WHERE singleton FOR SHARE;
   IF NOT control.enabled OR control.read_only OR NOT control.provider_enabled OR NOT control.deletion_enabled THEN
@@ -1263,7 +1686,13 @@ BEGIN
     AND cr.org_id = d.org_id
     AND cr.workspace_id = d.workspace_id
     AND cr.actor_id = d.resolved_by
-    AND cr.command_type = 'studio.rendition.deletion.resolve';
+    AND cr.command_type = 'studio.rendition.deletion.resolve'
+    AND cr.status = 'committed'
+    AND cr.resource_id = d.id
+    AND cr.response ->> 'deletionRequestId' = d.request_id::text
+    AND cr.response ->> 'resolutionId' = d.id::text
+    AND cr.response ->> 'renditionId' = d.rendition_id::text
+    AND cr.response ->> 'status' = 'deleting';
   IF command_request_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'RESOURCE_NOT_AVAILABLE';
   END IF;
@@ -1944,6 +2373,9 @@ REVOKE ALL ON FUNCTION public.studio_rendition_deletion_complete(uuid),
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.studio_private_state_timestamp(),
   public.studio_deletion_attempt_guard(),
+  public.studio_private_actor_has_current_authority(uuid,uuid,uuid,text,bigint),
+  public.studio_private_rendition_reconciliation_actionable(uuid),
+  public.studio_private_deletion_reconciliation_actionable(uuid),
   public.studio_rendition_generation_lock(uuid,uuid,uuid,text,text),
   public.studio_rendition_recovery_authority(uuid,bigint),
   public.studio_rendition_attempt_complete_internal(uuid,bigint),
@@ -1977,6 +2409,12 @@ GRANT EXECUTE ON FUNCTION public.studio_private_artifact_command_claim(jsonb),
   TO service_role;
 
 COMMENT ON FUNCTION public.studio_private_artifact_reconciliation_due(integer)
-IS 'Service-only bounded discovery of stale Studio private-artifact attempt identifiers. No Storage binding is returned.';
+IS 'Service-only bounded discovery of currently actionable Studio private-artifact attempt identifiers. Discovery is non-authoritative and returns no Storage or actor authority.';
+COMMENT ON FUNCTION public.studio_private_actor_has_current_authority(uuid,uuid,uuid,text,bigint)
+IS 'Private exception-free discovery prefilter mirroring current membership, role capability, and authorization-version semantics. Claim RPCs reauthorize under lock.';
+COMMENT ON FUNCTION public.studio_private_rendition_reconciliation_actionable(uuid)
+IS 'Private non-mutating rendition actionability prefilter used before the shared due-work limit.';
+COMMENT ON FUNCTION public.studio_private_deletion_reconciliation_actionable(uuid)
+IS 'Private non-mutating deletion actionability prefilter used before the shared due-work limit.';
 COMMENT ON FUNCTION public.studio_rendition_deletion_execution_claim(uuid)
 IS 'Service-only fenced execution-time guard. Rechecks retention and active holds before any provider deletion.';
