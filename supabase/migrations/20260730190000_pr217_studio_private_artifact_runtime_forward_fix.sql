@@ -1085,12 +1085,34 @@ BEGIN
       SELECT 'rendition'::text AS kind, r.id AS attempt_id,
              COALESCE(r.reconciliation_claimed_at, r.state_changed_at, r.created_at) AS due_at
       FROM public.studio_rendition_attempts r
-      WHERE public.studio_private_rendition_reconciliation_actionable(r.id)
+      WHERE (
+        r.state = 'reconciliation_required'
+        OR (
+          r.state IN ('requested','rendering','uploaded')
+          AND r.state_changed_at <= now() - interval '5 minutes'
+        )
+        OR (
+          r.state = 'reconciling'
+          AND r.reconciliation_claimed_at <= now() - interval '5 minutes'
+        )
+      )
+        AND public.studio_private_rendition_reconciliation_actionable(r.id)
       UNION ALL
       SELECT 'deletion'::text, d.id,
              COALESCE(d.execution_claimed_at, d.reconciliation_claimed_at, d.state_changed_at, d.created_at)
       FROM public.studio_rendition_deletion_attempts d
-      WHERE public.studio_private_deletion_reconciliation_actionable(d.id)
+      WHERE (
+        d.state = 'reconciliation_required'
+        OR (
+          d.state IN ('requested','executing')
+          AND d.state_changed_at <= now() - interval '5 minutes'
+        )
+        OR (
+          d.state = 'reconciling'
+          AND d.reconciliation_claimed_at <= now() - interval '5 minutes'
+        )
+      )
+        AND public.studio_private_deletion_reconciliation_actionable(d.id)
       ORDER BY due_at, kind, attempt_id
       LIMIT p_limit
     ) due

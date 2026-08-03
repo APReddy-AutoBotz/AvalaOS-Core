@@ -131,6 +131,18 @@ const deletionFilter = dueDiscovery.indexOf('studio_private_deletion_reconciliat
 const globalOrder = dueDiscovery.indexOf('ORDER BY due_at, kind, attempt_id');
 const globalLimit = dueDiscovery.indexOf('LIMIT p_limit');
 assert.ok(renditionFilter >= 0 && deletionFilter >= 0 && globalOrder > renditionFilter && globalOrder > deletionFilter && globalLimit > globalOrder,'both kinds must be filtered for actionability before the shared order and limit');
+const renditionDuePrefilter = dueDiscovery.indexOf("r.state = 'reconciliation_required'");
+const deletionDuePrefilter = dueDiscovery.indexOf("d.state = 'reconciliation_required'");
+assert.ok(
+  renditionDuePrefilter >= 0 && renditionDuePrefilter < renditionFilter,
+  'rendition indexed state/age prefilter must precede expensive actionability evaluation',
+);
+assert.ok(
+  deletionDuePrefilter >= 0 && deletionDuePrefilter < deletionFilter,
+  'deletion indexed state/age prefilter must precede expensive actionability evaluation',
+);
+assert.match(dueDiscovery,/r\.state IN \('requested','rendering','uploaded'\)[\s\S]+?r\.state_changed_at <= now\(\) - interval '5 minutes'[\s\S]+?r\.state = 'reconciling'[\s\S]+?r\.reconciliation_claimed_at <= now\(\) - interval '5 minutes'/u);
+assert.match(dueDiscovery,/d\.state IN \('requested','executing'\)[\s\S]+?d\.state_changed_at <= now\(\) - interval '5 minutes'[\s\S]+?d\.state = 'reconciling'[\s\S]+?d\.reconciliation_claimed_at <= now\(\) - interval '5 minutes'/u);
 assert.match(dueDiscovery,/p_limit < 1 OR p_limit > 50/);
 assert.match(dueDiscovery,/jsonb_build_object\('kind', due\.kind, 'attemptId', due\.attempt_id\)/);
 assert.doesNotMatch(dueDiscovery,/(?:objectKey|bucketId|storageProvider|actorId|authorizationVersion|rejectionReason|signedUrl)/);
