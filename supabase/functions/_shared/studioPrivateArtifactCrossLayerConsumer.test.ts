@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import { readFileSync, writeFileSync } from 'node:fs';
 import {
   decodeStudioDeletionClaim,
-  decodeStudioDeletionReconciliationClaim,
+  decodeStudioDeletionExecutionBinding,
   decodeStudioDownloadClaim,
   decodeStudioRenditionReconciliationClaim,
   decodeStudioRenditionClaim,
@@ -110,7 +110,10 @@ if (mode === 'rendition') {
     sha256: await sha256Hex(firstBytes),
   });
 } else if (mode === 'deletion') {
-  const claim = decodeStudioDeletionClaim(input.claim);
+  const pending = decodeStudioDeletionClaim(input.claim);
+  const execution = decodeStudioDeletionExecutionBinding(input.execution);
+  assert.ok(execution);
+  const claim = { ...execution, disposition: 'execute' as const, requestId: pending.requestId };
   const expectation = input.expectation as StudioStoredObjectExpectation;
   const bytes = new Uint8Array(Buffer.from(String(input.bytesBase64), 'base64'));
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
@@ -129,9 +132,6 @@ if (mode === 'rendition') {
           ? 'deleted'
           : 'deletion_failed',
       };
-    },
-    async markDeletionFailure() {
-      throw new Error('unexpected deletion failure');
     },
     async markDeletionReconciliationRequired() {
       throw new Error('unexpected deletion reconciliation');
@@ -154,24 +154,34 @@ if (mode === 'rendition') {
 } else if (mode === 'renditionReconciliation') {
   const claim = decodeStudioRenditionReconciliationClaim(input.claim);
   assert.ok(claim);
+  assert.equal(claim.phase, 'verify_or_upload');
+  if (claim.phase !== 'verify_or_upload') throw new Error('expected post-render reconciliation claim');
   const rendered = await renderStudioPrivateArtifact(claim.approvedContent, claim.format, { artifactType: claim.artifactType, contentSchemaVersion: claim.contentSchemaVersion, templateVersion: claim.templateVersion, rendererVersion: claim.rendererVersion });
   assert.deepEqual({ byteLength: rendered.byteLength, sha256: rendered.sha256, mimeType: rendered.mimeType, filename: rendered.filename }, { byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType, filename: claim.filename });
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
   const expectation = { organizationId: claim.organizationId, workspaceId: claim.workspaceId, objectKey: claim.objectKey, byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType };
   if (input.objectStatus === 'exists' || input.objectStatus === 'mismatch') { await storage.uploadCreateOnly({ ...expectation, bytes: rendered.bytes }); if (input.objectStatus === 'mismatch') storage.corruptObjectForTest(claim.objectKey); }
   storage.operationCounts.upload = 0; storage.operationCounts.probe = 0;
-  let completionCount = 0; const failures: string[] = []; const reconciliations: string[] = [];
+  let completionCount = 0; let renewalCount = 0; const failures: string[] = []; const reconciliations: string[] = [];
   const database: StudioRenditionSagaDatabase = {
     async claim() { throw new Error('reconciliation only'); }, async startAttempt() { throw new Error('reconciliation only'); }, async persistRendered() { throw new Error('reconciliation only'); },
+    async persistReconciledRendered(value) {
+      assert.equal(value.fence, claim.fence);
+      assert.deepEqual(
+        { objectKey: value.objectKey, byteLength: value.byteLength, sha256: value.sha256, mimeType: value.mimeType, filename: value.filename },
+        { objectKey: claim.objectKey, byteLength: claim.byteLength, sha256: claim.sha256, mimeType: claim.mimeType, filename: claim.filename },
+      );
+      renewalCount += 1;
+    },
     async markAvailable() { completionCount += 1; if (input.failCompletion === true) throw new Error('completion'); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'available' }; },
     async markFailed(value) { failures.push(value.failureCode); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'failed' }; },
     async markReconciliationRequired(value) { reconciliations.push(value.failureCode); return { attemptId: claim.attemptId, renditionId: claim.renditionId, format: claim.format, state: 'reconciliation_required' }; },
     async loadReconciliation() { return { ...claim, state: 'completion_pending' }; },
   };
   const result = await reconcileStudioRendition(claim.attemptId, { database, storage });
-  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, completionCount, failures, reconciliations, provider: { probes: storage.operationCounts.probe, uploads: storage.operationCounts.upload } });
+  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, completionCount, renewalCount, failures, reconciliations, provider: { probes: storage.operationCounts.probe, uploads: storage.operationCounts.upload } });
 } else if (mode === 'deletionReconciliation') {
-  const claim = decodeStudioDeletionReconciliationClaim(input.claim);
+  const claim = decodeStudioDeletionExecutionBinding(input.claim);
   assert.ok(claim);
   let exists = input.objectStatus === 'exists'; let presence = 0; let deletes = 0;
   const storage = {
@@ -179,17 +189,16 @@ if (mode === 'rendition') {
     async probePresence() { presence += 1; return { status: exists ? 'exists' as const : 'missing' as const }; },
     async deleteExact() { deletes += 1; if (input.deleteOutcomeUnknown === true) throw new Error('unknown'); const status = exists ? 'deleted' as const : 'missing' as const; exists = false; return { status }; },
   };
-  let tombstones = 0; const failures: string[] = []; const reconciliations: string[] = [];
+  let tombstones = 0; const reconciliations: string[] = [];
   const executable = { ...claim, disposition: 'execute' as const, requestId: claim.deletionAttemptId };
   const database: StudioDeletionSagaDatabase = {
     async claimDeletion() { throw new Error('reconciliation only'); },
     async markTombstone() { tombstones += 1; if (input.failTombstone === true) throw new Error('completion'); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'deleted' }; },
-    async markDeletionFailure(value) { failures.push(value.failureCode); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'deletion_failed' }; },
     async markDeletionReconciliationRequired(value) { reconciliations.push(value.failureCode); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'reconciliation_required' }; },
     async loadDeletionReconciliation() { return executable; },
   };
   const result = await reconcileStudioDeletion(claim.deletionAttemptId, { database, storage });
-  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, provider: { presence, deletes, exists }, tombstones, failures, reconciliations });
+  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, provider: { presence, deletes, exists }, tombstones, reconciliations });
 } else if (mode === 'bucketAuthority') {
   let requests = 0; let rejected = false;
   try { createStudioPrivateArtifactStorage({ supabaseUrl: 'https://example.invalid', serviceRoleKey: 'service-only', configuredBucket: String(input.bucket), configuredBucketAllowlist: String(input.allowlist), fetch: (async () => { requests += 1; return new Response(); }) as typeof fetch }); } catch { rejected = true; }

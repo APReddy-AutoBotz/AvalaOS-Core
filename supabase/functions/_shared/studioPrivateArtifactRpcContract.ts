@@ -48,46 +48,70 @@ export type StudioRenditionExecuteClaim = Readonly<{
   reconciliationCount: number;
 }>;
 
-export type StudioDeletionExecuteClaim = Readonly<{
+export type StudioDeletionPendingClaim = Readonly<{
   disposition: 'execute';
   requestId: string;
   deletionAttemptId: string;
   renditionId: string;
   organizationId: string;
   workspaceId: string;
-  objectKey: string;
   reconciliationCount: number;
 }>;
 
-export type StudioRenditionReconciliationClaim = Readonly<{
-  attemptId: string;
-  renditionId: string;
-  organizationId: string;
-  workspaceId: string;
-  objectKey: string;
-  format: StudioPrivateArtifactFormat;
-  artifactType: StudioPrivateArtifactType;
-  artifactId: string;
-  artifactVersionId: string;
-  opaqueObjectId: string;
-  approvedContent: StudioApprovedContent;
-  contentSchemaVersion: string;
-  byteLength: number;
-  sha256: string;
-  mimeType: StudioPrivateArtifactMimeType;
-  filename: string;
-  rendererVersion: StudioPrivateArtifactRendererVersion;
-  templateVersion: string;
-  reconciliationCount: number;
-}>;
-
-export type StudioDeletionReconciliationClaim = Readonly<{
+export type StudioDeletionExecutionBinding = Readonly<{
   deletionAttemptId: string;
   renditionId: string;
   organizationId: string;
   workspaceId: string;
   objectKey: string;
   reconciliationCount: number;
+  fence: number;
+}>;
+export type StudioDeletionExecuteClaim = StudioDeletionExecutionBinding &
+  Readonly<{ disposition: 'execute'; requestId: string }>;
+
+type StudioRenditionReconciliationCommon = Readonly<{
+  phase: 'pre_render' | 'verify_or_upload';
+  attemptId: string;
+  renditionId: string;
+  organizationId: string;
+  workspaceId: string;
+  format: StudioPrivateArtifactFormat;
+  artifactType: StudioPrivateArtifactType;
+  artifactId: string;
+  artifactVersionId: string;
+  artifactVersion: number;
+  opaqueObjectId: string;
+  approvedContent: StudioApprovedContent;
+  contentSchemaVersion: string;
+  rendererVersion: StudioPrivateArtifactRendererVersion;
+  templateVersion: string;
+  reconciliationCount: number;
+  fence: number;
+}>;
+export type StudioRenditionReconciliationClaim =
+  | (StudioRenditionReconciliationCommon & Readonly<{ phase: 'pre_render' }>)
+  | (StudioRenditionReconciliationCommon &
+      Readonly<{
+        phase: 'verify_or_upload';
+        objectKey: string;
+        byteLength: number;
+        sha256: string;
+        mimeType: StudioPrivateArtifactMimeType;
+        filename: string;
+      }>);
+
+export type StudioDeletionReconciliationClaim = Readonly<{
+  deletionAttemptId: string;
+  renditionId: string;
+  organizationId: string;
+  workspaceId: string;
+  reconciliationCount: number;
+}>;
+
+export type StudioPrivateArtifactDueWork = Readonly<{
+  kind: 'rendition' | 'deletion';
+  attemptId: string;
 }>;
 
 export type StudioDownloadExecuteClaim = Readonly<{
@@ -317,7 +341,7 @@ export const decodeStudioRenditionClaim = (
 
 export const decodeStudioDeletionClaim = (
   value: unknown,
-): StudioDeletionExecuteClaim => {
+): StudioDeletionPendingClaim => {
   const claim = record(value);
   exact(claim, [
     'disposition',
@@ -326,12 +350,9 @@ export const decodeStudioDeletionClaim = (
     'renditionId',
     'organizationId',
     'workspaceId',
-    'objectKey',
     'reconciliationCount',
   ]);
   if (claim.disposition !== 'execute') unavailable();
-  const objectKey = boundedText(claim.objectKey, 500);
-  if (!OBJECT_KEY.test(objectKey)) unavailable();
   return {
     disposition: 'execute',
     requestId: uuid(claim.requestId),
@@ -339,7 +360,6 @@ export const decodeStudioDeletionClaim = (
     renditionId: uuid(claim.renditionId),
     organizationId: uuid(claim.organizationId),
     workspaceId: uuid(claim.workspaceId),
-    objectKey,
     reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
   };
 };
@@ -349,37 +369,55 @@ export const decodeStudioRenditionReconciliationClaim = (
 ): StudioRenditionReconciliationClaim | null => {
   if (value === null) return null;
   const claim = record(value);
-  exact(claim, [
-    'attemptId', 'renditionId', 'organizationId', 'workspaceId', 'objectKey',
-    'format', 'artifactType', 'artifactId', 'artifactVersionId', 'opaqueObjectId',
-    'approvedContent', 'contentSchemaVersion', 'byteLength', 'sha256', 'mimeType',
-    'filename', 'rendererVersion', 'templateVersion', 'reconciliationCount',
-  ]);
+  if (claim.phase !== 'pre_render' && claim.phase !== 'verify_or_upload') unavailable();
+  const commonKeys = [
+    'phase', 'attemptId', 'renditionId', 'organizationId', 'workspaceId',
+    'format', 'artifactType', 'artifactId', 'artifactVersionId',
+    'artifactVersion', 'opaqueObjectId', 'approvedContent',
+    'contentSchemaVersion', 'rendererVersion', 'templateVersion',
+    'reconciliationCount', 'fence',
+  ] as const;
+  exact(
+    claim,
+    claim.phase === 'pre_render'
+      ? commonKeys
+      : [...commonKeys, 'objectKey', 'byteLength', 'sha256', 'mimeType', 'filename'],
+  );
   const decodedFormat = format(claim.format);
+  const common = {
+    phase: claim.phase,
+    attemptId: uuid(claim.attemptId),
+    renditionId: uuid(claim.renditionId),
+    organizationId: uuid(claim.organizationId),
+    workspaceId: uuid(claim.workspaceId),
+    format: decodedFormat,
+    artifactType: artifactType(claim.artifactType),
+    artifactId: uuid(claim.artifactId),
+    artifactVersionId: uuid(claim.artifactVersionId),
+    artifactVersion: positiveInteger(claim.artifactVersion),
+    opaqueObjectId: uuid(claim.opaqueObjectId),
+    approvedContent: decodeStudioApprovedContent(claim.approvedContent),
+    contentSchemaVersion: boundedText(claim.contentSchemaVersion),
+    rendererVersion: rendererVersion(claim.rendererVersion, decodedFormat),
+    templateVersion: boundedText(claim.templateVersion),
+    reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
+    fence: positiveInteger(claim.fence),
+  };
+  if (claim.phase === 'pre_render') {
+    return { ...common, phase: 'pre_render' };
+  }
   const objectKey = boundedText(claim.objectKey, 500);
   const sha256 = boundedText(claim.sha256, 64);
   const filename = boundedText(claim.filename, 120);
   if (!OBJECT_KEY.test(objectKey) || !HASH.test(sha256) || !SAFE_FILENAME.test(filename)) unavailable();
   return {
-    attemptId: uuid(claim.attemptId),
-    renditionId: uuid(claim.renditionId),
-    organizationId: uuid(claim.organizationId),
-    workspaceId: uuid(claim.workspaceId),
+    ...common,
+    phase: 'verify_or_upload',
     objectKey,
-    format: decodedFormat,
-    artifactType: artifactType(claim.artifactType),
-    artifactId: uuid(claim.artifactId),
-    artifactVersionId: uuid(claim.artifactVersionId),
-    opaqueObjectId: uuid(claim.opaqueObjectId),
-    approvedContent: decodeStudioApprovedContent(claim.approvedContent),
-    contentSchemaVersion: boundedText(claim.contentSchemaVersion),
     byteLength: positiveInteger(claim.byteLength),
     sha256,
     mimeType: internalMimeType(claim.mimeType),
     filename,
-    rendererVersion: rendererVersion(claim.rendererVersion, decodedFormat),
-    templateVersion: boundedText(claim.templateVersion),
-    reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
   };
 };
 
@@ -388,7 +426,30 @@ export const decodeStudioDeletionReconciliationClaim = (
 ): StudioDeletionReconciliationClaim | null => {
   if (value === null) return null;
   const claim = record(value);
-  exact(claim, ['deletionAttemptId', 'renditionId', 'organizationId', 'workspaceId', 'objectKey', 'reconciliationCount']);
+  exact(claim, ['deletionAttemptId', 'renditionId', 'organizationId', 'workspaceId', 'reconciliationCount']);
+  return {
+    deletionAttemptId: uuid(claim.deletionAttemptId),
+    renditionId: uuid(claim.renditionId),
+    organizationId: uuid(claim.organizationId),
+    workspaceId: uuid(claim.workspaceId),
+    reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
+  };
+};
+
+export const decodeStudioDeletionExecutionBinding = (
+  value: unknown,
+): StudioDeletionExecutionBinding | null => {
+  if (value === null) return null;
+  const claim = record(value);
+  exact(claim, [
+    'deletionAttemptId',
+    'renditionId',
+    'organizationId',
+    'workspaceId',
+    'objectKey',
+    'reconciliationCount',
+    'fence',
+  ]);
   const objectKey = boundedText(claim.objectKey, 500);
   if (!OBJECT_KEY.test(objectKey)) unavailable();
   return {
@@ -398,7 +459,22 @@ export const decodeStudioDeletionReconciliationClaim = (
     workspaceId: uuid(claim.workspaceId),
     objectKey,
     reconciliationCount: nonNegativeInteger(claim.reconciliationCount),
+    fence: positiveInteger(claim.fence),
   };
+};
+
+export const decodeStudioPrivateArtifactDueWork = (
+  value: unknown,
+): readonly StudioPrivateArtifactDueWork[] => {
+  if (!Array.isArray(value)) return unavailable();
+  if (value.length > 50) unavailable();
+  return value.map(item => {
+    const due = record(item);
+    exact(due, ['kind', 'attemptId']);
+    if (due.kind !== 'rendition' && due.kind !== 'deletion') unavailable();
+    const kind = due.kind as 'rendition' | 'deletion';
+    return { kind, attemptId: uuid(due.attemptId) };
+  });
 };
 
 export const decodeStudioDownloadClaim = (
@@ -655,19 +731,55 @@ export const STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST = {
     parameterNames: ['p_attempt'],
     decode: decodeStudioRenditionReconciliationClaim,
   },
+  reconciliationDue: {
+    functionName: 'studio_private_artifact_reconciliation_due',
+    parameterNames: ['p_limit'],
+    decode: decodeStudioPrivateArtifactDueWork,
+  },
+  renditionReconciliationRendered: {
+    functionName: 'studio_rendition_reconciliation_rendered',
+    parameterNames: [
+      'p_attempt',
+      'p_fence',
+      'p_object_key',
+      'p_hash',
+      'p_byte_length',
+      'p_mime',
+      'p_safe_filename',
+      'p_renderer_version',
+      'p_template_version',
+      'p_content_schema_version',
+    ],
+    decode: decodeAttemptReceipt,
+  },
+  renditionReconciliationComplete: {
+    functionName: 'studio_rendition_reconciliation_complete',
+    parameterNames: ['p_attempt', 'p_fence'],
+    decode: decodeAttemptReceipt,
+  },
+  renditionReconciliationFail: {
+    functionName: 'studio_rendition_reconciliation_fail',
+    parameterNames: ['p_attempt', 'p_fence', 'p_failure'],
+    decode: decodeAttemptReceipt,
+  },
   deletionReconciliationClaim: {
     functionName: 'studio_deletion_reconciliation_claim',
     parameterNames: ['p_attempt'],
     decode: decodeStudioDeletionReconciliationClaim,
   },
+  deletionExecutionClaim: {
+    functionName: 'studio_rendition_deletion_execution_claim',
+    parameterNames: ['p_attempt'],
+    decode: decodeStudioDeletionExecutionBinding,
+  },
   deletionComplete: {
     functionName: 'studio_rendition_deletion_complete',
-    parameterNames: ['p_attempt'],
+    parameterNames: ['p_attempt', 'p_fence', 'p_provider_outcome'],
     decode: decodeAttemptReceipt,
   },
   deletionFail: {
     functionName: 'studio_rendition_deletion_fail',
-    parameterNames: ['p_attempt', 'p_failure'],
+    parameterNames: ['p_attempt', 'p_fence', 'p_failure'],
     decode: decodeAttemptReceipt,
   },
   downloadClaim: {
@@ -717,9 +829,33 @@ export interface StudioPrivateArtifactRpcArgs {
   renditionComplete: { p_attempt: string };
   renditionFail: { p_attempt: string; p_failure: string };
   renditionReconciliationClaim: { p_attempt: string };
+  reconciliationDue: { p_limit: number };
+  renditionReconciliationRendered: {
+    p_attempt: string;
+    p_fence: number;
+    p_object_key: string;
+    p_hash: string;
+    p_byte_length: number;
+    p_mime: string;
+    p_safe_filename: string;
+    p_renderer_version: StudioPrivateArtifactRendererVersion;
+    p_template_version: string;
+    p_content_schema_version: string;
+  };
+  renditionReconciliationComplete: { p_attempt: string; p_fence: number };
+  renditionReconciliationFail: {
+    p_attempt: string;
+    p_fence: number;
+    p_failure: string;
+  };
   deletionReconciliationClaim: { p_attempt: string };
-  deletionComplete: { p_attempt: string };
-  deletionFail: { p_attempt: string; p_failure: string };
+  deletionExecutionClaim: { p_attempt: string };
+  deletionComplete: {
+    p_attempt: string;
+    p_fence: number;
+    p_provider_outcome: 'deleted' | 'missing';
+  };
+  deletionFail: { p_attempt: string; p_fence: number; p_failure: string };
   downloadClaim: { p_command: unknown };
   downloadComplete: { p_receipt: string };
   downloadFail: { p_receipt: string; p_failure: string };
@@ -738,7 +874,12 @@ export interface StudioPrivateArtifactRpcResults {
   renditionComplete: StudioRenditionLifecycleReceipt;
   renditionFail: StudioRenditionLifecycleReceipt;
   renditionReconciliationClaim: StudioRenditionReconciliationClaim | null;
+  reconciliationDue: readonly StudioPrivateArtifactDueWork[];
+  renditionReconciliationRendered: StudioRenditionLifecycleReceipt;
+  renditionReconciliationComplete: StudioRenditionLifecycleReceipt;
+  renditionReconciliationFail: StudioRenditionLifecycleReceipt;
   deletionReconciliationClaim: StudioDeletionReconciliationClaim | null;
+  deletionExecutionClaim: StudioDeletionExecutionBinding | null;
   deletionComplete: StudioRenditionLifecycleReceipt;
   deletionFail: StudioRenditionLifecycleReceipt;
   downloadClaim: StudioDownloadRpcClaimResult;

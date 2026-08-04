@@ -4,9 +4,16 @@ import { handleStudioPrivateArtifactReconciliation } from './studioPrivateArtifa
 
 const secret = 'studio-worker-secret-32-characters-minimum';
 const attemptId = '11111111-1111-4111-8111-111111111111';
+const deletionAttemptId = '22222222-2222-4222-8222-222222222222';
 const calls = { rendition: 0, deletion: 0 };
 const dependencies = {
   configuredWorkerSecret: secret,
+  async loadDue() {
+    return [
+      { kind: 'rendition' as const, attemptId },
+      { kind: 'deletion' as const, attemptId: deletionAttemptId },
+    ];
+  },
   async reconcileRendition() { calls.rendition += 1; return { status: 'available' as const }; },
   async reconcileDeletion() { calls.deletion += 1; return { status: 'deleted' as const }; },
 };
@@ -70,4 +77,57 @@ test('internal failures are sanitized without claim or provider fields', async (
   const serialized = await result.text();
   assert.equal(serialized, JSON.stringify({ status: 'unavailable' }));
   for (const forbidden of ['bucket', 'object', 'provider', attemptId]) assert.equal(serialized.includes(forbidden), false);
+});
+
+test('due worker requires one bounded limit and emits aggregate counts only', async () => {
+  for (const body of [{}, { limit: 0 }, { limit: 51 }, { limit: 2, attemptId }]) {
+    const result = await handleStudioPrivateArtifactReconciliation(
+      request(body),
+      'due',
+      dependencies,
+    );
+    assert.equal(result.status, 400);
+  }
+  const result = await handleStudioPrivateArtifactReconciliation(
+    request({ limit: 2 }),
+    'due',
+    dependencies,
+  );
+  assert.equal(result.status, 200);
+  const body = await result.json();
+  assert.deepEqual(body, {
+    status: 'processed',
+    attempted: 2,
+    available: 1,
+    deleted: 1,
+    replay: 0,
+    failed: 0,
+    reconciliation_required: 0,
+    not_executable: 0,
+    unavailable: 0,
+  });
+  const serialized = JSON.stringify(body);
+  assert.equal(serialized.includes(attemptId), false);
+  assert.equal(serialized.includes(deletionAttemptId), false);
+});
+
+test('due worker isolates an item failure and continues the bounded batch', async () => {
+  let secondRan = false;
+  const result = await handleStudioPrivateArtifactReconciliation(
+    request({ limit: 2 }),
+    'due',
+    {
+      ...dependencies,
+      reconcileRendition: async () => { throw new Error('private provider detail'); },
+      reconcileDeletion: async () => {
+        secondRan = true;
+        return { status: 'deleted' as const };
+      },
+    },
+  );
+  assert.equal(result.status, 200);
+  assert.equal(secondRan, true);
+  const body = await result.json();
+  assert.equal(body.unavailable, 1);
+  assert.equal(body.deleted, 1);
 });

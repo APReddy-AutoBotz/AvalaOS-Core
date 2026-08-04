@@ -1,8 +1,10 @@
 import type { StudioPrivateArtifactReconciliationOperationResult } from './studioPrivateArtifactDb.ts';
+import type { StudioPrivateArtifactDueWork } from './studioPrivateArtifactRpcContract.ts';
 
-export type StudioPrivateArtifactReconciliationKind = 'rendition' | 'deletion';
+export type StudioPrivateArtifactReconciliationKind = 'rendition' | 'deletion' | 'due';
 export interface StudioPrivateArtifactReconciliationDependencies {
   configuredWorkerSecret?: string;
+  loadDue?(limit: number): Promise<readonly StudioPrivateArtifactDueWork[]>;
   reconcileRendition(attemptId: string): Promise<StudioPrivateArtifactReconciliationOperationResult>;
   reconcileDeletion(attemptId: string): Promise<StudioPrivateArtifactReconciliationOperationResult>;
 }
@@ -50,6 +52,20 @@ const parseAttempt = async (request: Request) => {
   return String(record.attemptId);
 };
 
+const parseDueLimit = async (request: Request) => {
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return null;
+  let value: unknown;
+  try { value = await request.json(); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).length === 1 &&
+      Number.isSafeInteger(record.limit) &&
+      Number(record.limit) >= 1 &&
+      Number(record.limit) <= 50
+    ? Number(record.limit)
+    : null;
+};
+
 export const handleStudioPrivateArtifactReconciliation = async (
   request: Request,
   kind: StudioPrivateArtifactReconciliationKind,
@@ -59,9 +75,37 @@ export const handleStudioPrivateArtifactReconciliation = async (
   if (!(await authenticateStudioPrivateArtifactWorker(request, dependencies.configuredWorkerSecret))) {
     return response(401, { error: 'worker_authentication_required' });
   }
-  const attemptId = await parseAttempt(request);
-  if (!attemptId) return response(400, { error: 'invalid_request' });
   try {
+    if (kind === 'due') {
+      const limit = await parseDueLimit(request);
+      if (!limit) return response(400, { error: 'invalid_request' });
+      if (!dependencies.loadDue) return response(503, { status: 'unavailable' });
+      const due = await dependencies.loadDue(limit);
+      const counts: Record<string, number> = {
+        attempted: 0,
+        available: 0,
+        deleted: 0,
+        replay: 0,
+        failed: 0,
+        reconciliation_required: 0,
+        not_executable: 0,
+        unavailable: 0,
+      };
+      for (const item of due) {
+        counts.attempted += 1;
+        try {
+          const result = item.kind === 'rendition'
+            ? await dependencies.reconcileRendition(item.attemptId)
+            : await dependencies.reconcileDeletion(item.attemptId);
+          counts[result.status] += 1;
+        } catch {
+          counts.unavailable += 1;
+        }
+      }
+      return response(200, { status: 'processed', ...counts });
+    }
+    const attemptId = await parseAttempt(request);
+    if (!attemptId) return response(400, { error: 'invalid_request' });
     const result = kind === 'rendition'
       ? await dependencies.reconcileRendition(attemptId)
       : await dependencies.reconcileDeletion(attemptId);

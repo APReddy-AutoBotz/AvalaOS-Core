@@ -8,6 +8,7 @@ import type {
   StudioDeletionExecuteClaim,
   StudioPrivateArtifactType,
   StudioRenditionExecuteClaim,
+  StudioRenditionReconciliationClaim,
 } from './studioPrivateArtifactRpcContract.ts';
 import {
   buildStudioPrivateArtifactObjectKey,
@@ -65,7 +66,10 @@ export interface StudioRenditionSagaDatabase {
   markAvailable(input: { attemptId: string }): Promise<StudioSagaPublicReceipt>;
   markFailed(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
   markReconciliationRequired(input: { attemptId: string; failureCode: StudioSagaFailureCode }): Promise<StudioSagaPublicReceipt>;
-  loadReconciliation(attemptId: string): Promise<StudioCommittedRenditionWork | null>;
+  loadReconciliation(attemptId: string): Promise<StudioRenditionReconciliationClaim | null>;
+  persistReconciledRendered?(input: Omit<StudioCommittedRenditionWork, 'state' | 'reconciliationCount'> & {
+    fence: number;
+  }): Promise<void>;
 }
 
 export type StudioRenditionSagaResult =
@@ -180,23 +184,25 @@ export const reconcileStudioRendition = async (
 ): Promise<StudioRenditionSagaResult> => {
   const work = await deps.database.loadReconciliation(attemptId);
   if (!work) throw new Error('RENDITION_RECONCILIATION_NOT_FOUND');
-  if (work.state === 'available') {
-    return { outcome: 'replay', receipt: { attemptId: work.attemptId, renditionId: work.renditionId, format: work.format, state: 'available' } };
+  if ('state' in work && work.state === 'available') {
+    return {
+      outcome: 'replay',
+      receipt: {
+        attemptId: work.attemptId,
+        renditionId: work.renditionId,
+        format: work.format,
+        state: 'available',
+      },
+    };
   }
-  if (work.state === 'failed' || work.reconciliationCount >= MAX_RECONCILIATION_ATTEMPTS) {
+  if (
+    ('state' in work && work.state === 'failed') ||
+    work.reconciliationCount >= MAX_RECONCILIATION_ATTEMPTS
+  ) {
     return failed(deps.database, work.attemptId, 'RECONCILIATION_EXHAUSTED');
   }
-  const expected = expectation(work);
-  let probe;
-  try {
-    probe = await deps.storage.probeExact(expected);
-  } catch (error) {
-    if (error instanceof StudioStorageError && error.code === 'OBJECT_MISMATCH') {
-      return failed(deps.database, work.attemptId, 'STORAGE_OBJECT_MISMATCH');
-    }
-    return reconcilable(deps.database, work.attemptId, 'UPLOAD_OUTCOME_UNKNOWN');
-  }
-  if (probe.status === 'missing') {
+  let committed: StudioCommittedRenditionWork;
+  if (work.phase === 'pre_render') {
     let rendered: StudioRenderedArtifact;
     try {
       rendered = await (deps.render ?? renderStudioPrivateArtifact)(
@@ -212,12 +218,72 @@ export const reconcileStudioRendition = async (
     } catch {
       return failed(deps.database, work.attemptId, 'RENDER_FAILED');
     }
-    if (rendered.byteLength !== work.byteLength || rendered.sha256 !== work.sha256 ||
-        rendered.mimeType !== work.mimeType || rendered.rendererVersion !== work.rendererVersion ||
-        rendered.templateVersion !== work.templateVersion ||
-        rendered.contentSchemaVersion !== work.contentSchemaVersion ||
-        rendered.filename !== work.filename) {
+    committed = {
+      ...work,
+      objectKey: buildStudioPrivateArtifactObjectKey(work),
+      byteLength: rendered.byteLength,
+      sha256: rendered.sha256,
+      mimeType: rendered.mimeType,
+      filename: rendered.filename,
+      state: 'completion_pending',
+    };
+    if (!deps.database.persistReconciledRendered) {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+    }
+    try {
+      await deps.database.persistReconciledRendered({
+        ...committed,
+        fence: work.fence,
+      });
+    } catch {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+    }
+  } else {
+    committed = { ...work, state: 'completion_pending' };
+  }
+  const expected = expectation(committed);
+  let probe;
+  try {
+    probe = await deps.storage.probeExact(expected);
+  } catch (error) {
+    if (error instanceof StudioStorageError && error.code === 'OBJECT_MISMATCH') {
       return failed(deps.database, work.attemptId, 'STORAGE_OBJECT_MISMATCH');
+    }
+    return reconcilable(deps.database, work.attemptId, 'UPLOAD_OUTCOME_UNKNOWN');
+  }
+  if (probe.status === 'missing') {
+    let rendered: StudioRenderedArtifact;
+    try {
+      rendered = await (deps.render ?? renderStudioPrivateArtifact)(
+        committed.approvedContent,
+        committed.format,
+        {
+          artifactType: committed.artifactType,
+          contentSchemaVersion: committed.contentSchemaVersion,
+          templateVersion: committed.templateVersion,
+          rendererVersion: committed.rendererVersion,
+        },
+      );
+    } catch {
+      return failed(deps.database, work.attemptId, 'RENDER_FAILED');
+    }
+    if (rendered.byteLength !== committed.byteLength || rendered.sha256 !== committed.sha256 ||
+        rendered.mimeType !== committed.mimeType || rendered.rendererVersion !== committed.rendererVersion ||
+        rendered.templateVersion !== committed.templateVersion ||
+        rendered.contentSchemaVersion !== committed.contentSchemaVersion ||
+        rendered.filename !== committed.filename) {
+      return failed(deps.database, work.attemptId, 'STORAGE_OBJECT_MISMATCH');
+    }
+    if (!deps.database.persistReconciledRendered) {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
+    }
+    try {
+      await deps.database.persistReconciledRendered({
+        ...committed,
+        fence: work.fence,
+      });
+    } catch {
+      return failed(deps.database, work.attemptId, 'RENDER_METADATA_PERSIST_FAILED');
     }
     try {
       await deps.storage.uploadCreateOnly({ ...expected, bytes: rendered.bytes });
@@ -249,14 +315,12 @@ export type StudioDeletionClaim = ExecuteDeletionClaim | ReplayDeletionClaim;
 export interface StudioDeletionSagaDatabase {
   claimDeletion(requestId: string): Promise<ExecuteDeletionClaim | ReplayDeletionClaim>;
   markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }): Promise<StudioDeletionReceipt>;
-  markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }): Promise<StudioDeletionReceipt>;
   markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' }): Promise<StudioDeletionReceipt>;
   loadDeletionReconciliation(deletionAttemptId: string): Promise<ExecuteDeletionClaim | null>;
 }
 export type StudioDeletionSagaResult =
   | { outcome: 'deleted'; receipt: StudioDeletionReceipt; providerOutcome: 'deleted' | 'missing' }
   | { outcome: 'replay'; receipt: StudioDeletionReceipt }
-  | { outcome: 'failed'; receipt: StudioDeletionReceipt; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }
   | { outcome: 'reconciliation_required'; receipt: StudioDeletionReceipt; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' };
 
 const runCommittedDeletion = async (
@@ -295,10 +359,6 @@ export const reconcileStudioDeletion = async (
 ): Promise<StudioDeletionSagaResult> => {
   const claim = await deps.database.loadDeletionReconciliation(deletionAttemptId);
   if (!claim) throw new Error('DELETION_RECONCILIATION_NOT_FOUND');
-  if (claim.reconciliationCount >= MAX_RECONCILIATION_ATTEMPTS) {
-    const receipt = await deps.database.markDeletionFailure({ deletionAttemptId, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' });
-    return { outcome: 'failed', receipt, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' };
-  }
   let presence;
   try { presence = await deps.storage.probePresence(claim); } catch {
     const receipt = await deps.database.markDeletionReconciliationRequired({ deletionAttemptId, failureCode: 'DELETE_OUTCOME_UNKNOWN' });

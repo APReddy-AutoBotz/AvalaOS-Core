@@ -58,6 +58,16 @@ for (const file of canonicalFiles) {
 }
 
 const contracts = sources.get('services/studioArtifacts/privateArtifactContracts.ts');
+for (const token of [
+  "name: 'studio_private_artifact_projection'",
+  "argumentKeys: ['p_org', 'p_workspace', 'p_artifact_version']",
+  "'reconciliation_required'",
+  "'reconciling'",
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
+  'activeHolds',
+  'holdId: string',
+]) assert(contracts.includes(token), `public projection contract missing: ${token}`);
 const commandPayloadSection = contracts.slice(
   contracts.indexOf('export interface StudioPrivateArtifactCommandPayloads'),
   contracts.indexOf('export interface StudioPrivateArtifactCommandEnvelope'),
@@ -118,14 +128,107 @@ assert(
   'fresh command authority must precede receipt/resource inspection',
 );
 assert(
-  handler.indexOf("result.outcome === 'replayed'", handler.indexOf('const result')) <
-    handler.indexOf('const external = await deps.executeClaimedRendition', handler.indexOf('const result')),
+  handler.indexOf("result.outcome === 'replayed'") <
+    handler.indexOf('const external = await deps.executeClaimedRendition'),
   'exact command replay must precede every external effect',
 );
 assert(
   handler.includes("throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE')"),
   'missing executable side-effect claim must fail closed',
 );
+assert(
+  handler.includes('toStudioPrivateArtifactSqlCommand(envelope, actor.id)') &&
+    !handler.includes('{ ...envelope, actorId: actor.id }'),
+  'public payload must pass through the exact public-to-SQL translator',
+);
+for (const token of [
+  "'committed_reconciliation_pending'",
+  'receiptId: result.receiptId',
+  'resourceId: result.resourceId',
+  'recoveredAfterTransportFailure',
+  'committedPublicResource',
+  'committedCommandHasExternalEffect',
+  'committedDatabaseResult',
+]) assert(handler.includes(token), `truthful post-commit boundary missing: ${token}`);
+const effectClassifier = handler.slice(
+  handler.indexOf('const POST_COMMIT_EFFECT_KIND'),
+  handler.indexOf('const FORBIDDEN_PUBLIC_KEYS'),
+);
+for (const token of [
+  "'studio.rendition.generate': 'external'",
+  "'studio.retention.policy.publish': 'database_only'",
+  "'studio.rendition.retention.extend': 'database_only'",
+  "'studio.legal_hold.place': 'database_only'",
+  "'studio.legal_hold.release': 'database_only'",
+  "'studio.rendition.deletion.request': 'database_only'",
+  "'studio.rendition.deletion.resolve': 'deletion_outcome'",
+  "command.payload.outcome === 'approve'",
+  "command.payload.outcome === 'reject'",
+  "throw new StudioPrivateArtifactError('INVALID_COMMAND')",
+]) assert(effectClassifier.includes(token), `post-commit effect classifier missing: ${token}`);
+assert(
+  effectClassifier.includes("Record<\n  StudioPrivateArtifactAtomicCommand['commandType']"),
+  'post-commit effect classification must be exhaustive over the typed command union',
+);
+const recoveredReplayBoundary = handler.slice(
+  handler.indexOf('recoveredAfterTransportFailure &&'),
+  handler.indexOf('// An exact replay returns committed state only'),
+);
+assert(
+  recoveredReplayBoundary.includes("result.outcome === 'replayed'") &&
+    recoveredReplayBoundary.includes('committedCommandHasExternalEffect') &&
+    recoveredReplayBoundary.includes('return committedPending'),
+  'transport-recovered replay may map to pending only after external-effect classification',
+);
+assert(
+  !/recoveredAfterTransportFailure\s*&&\s*result\.outcome === 'replayed'\s*\)\s*\{\s*return committedPending/u.test(handler),
+  'transport-recovered replay may not map unconditionally to committed pending',
+);
+assert(
+  (handler.match(/external\.state === 'reconciliation_required'/gu) ?? []).length === 2 &&
+    handler.includes("| { state: 'reconciliation_required'; failureCode: string }"),
+  'rendition and deletion handlers must preserve reconciliation-required outcomes',
+);
+const pendingBoundary = handler.slice(
+  handler.indexOf('const committedPending'),
+  handler.indexOf('export const handleStudioPrivateArtifactCommand'),
+);
+for (const forbidden of ['renditionClaim', 'deletionClaim', 'objectKey', 'bucket', 'provider']) {
+  assert(!pendingBoundary.includes(forbidden), `committed-pending response leaks ${forbidden}`);
+}
+const databaseReplayBoundary = handler.slice(
+  handler.indexOf('const committedDatabaseResult'),
+  handler.indexOf('export const handleStudioPrivateArtifactCommand'),
+);
+for (const forbidden of ['renditionClaim', 'deletionClaim', 'objectKey', 'bucket', 'provider']) {
+  assert(!databaseReplayBoundary.includes(forbidden), `committed database response leaks ${forbidden}`);
+}
+const postCommitCatch = handler.slice(
+  handler.lastIndexOf('} catch (error) {'),
+  handler.indexOf('const safe = asStudioPrivateArtifactError(error)'),
+);
+assert(
+  postCommitCatch.indexOf('if (committedCommandHasExternalEffect === false)') <
+    postCommitCatch.indexOf('return committedPending') &&
+    postCommitCatch.includes('return committedDatabaseResult'),
+  'post-commit catch must classify database-only completion before pending recovery',
+);
+assert(
+  !handler.includes("committedPublicResource ?? { state: 'reconciliation_required' }"),
+  'post-commit catch may not fabricate reconciliation state for a completed database command',
+);
+assert(
+  handler.indexOf('if (committed)') < handler.indexOf('studioPrivateArtifactErrorBody(safe)'),
+  'post-commit exceptions must not map to failed_before_commit',
+);
+for (const token of [
+  'parseStudioPrivateArtifactSqlCommand',
+  'toStudioPrivateArtifactSqlCommand',
+  'extendUntil',
+  'retentionUntil',
+  'rationale',
+  'holdId',
+]) assert(command.includes(token), `command translator contract missing: ${token}`);
 
 const download = sources.get(
   'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.ts',
@@ -166,11 +269,45 @@ assert(storageBoundary.includes('configuredAllowlist !== STUDIO_PRIVATE_ARTIFACT
 assert(!storageBoundary.includes('studio-private-archive'), 'alternate Studio bucket leaked into production authority');
 const database = sources.get('supabase/functions/_shared/studioPrivateArtifactDb.ts');
 assert(database.includes('reconcileStudioPrivateRendition') && database.includes('reconcileStudioPrivateDeletion'), 'production reconciliation operations missing');
+for (const token of [
+  'mapStudioClaimedRenditionResult',
+  'mapStudioClaimedDeletionResult',
+  "case 'reconciliation_required':",
+  "state: 'reconciliation_required'",
+  "case 'replay':",
+]) assert(database.includes(token), `production outcome-preservation mapping missing: ${token}`);
+const renditionExecutor = database.slice(
+  database.indexOf('const executeClaimedRendition'),
+  database.indexOf('const executeClaimedDeletion'),
+);
+const deletionExecutor = database.slice(
+  database.indexOf('const executeClaimedDeletion'),
+  database.indexOf('export type StudioPrivateArtifactReconciliationOperationResult'),
+);
+assert(
+  renditionExecutor.includes('return mapStudioClaimedRenditionResult(result)') &&
+    deletionExecutor.includes('return mapStudioClaimedDeletionResult(result)') &&
+    !renditionExecutor.includes("state: 'failed'") &&
+    !deletionExecutor.includes("state: 'failed'"),
+  'production adapters collapse a non-success saga outcome into failed',
+);
 assert(!/load(?:Deletion)?Reconciliation:\s*async\s*\(\)\s*=>\s*null/u.test(database), 'production reconciliation loader remains unwired');
+assert(
+  database.indexOf("rpc('deletionExecutionClaim'") <
+    database.indexOf('const result = await executeStudioDeletionSaga'),
+  'deletion execution claim must be wired before provider-effect saga execution',
+);
+for (const token of [
+  "rpc('renditionReconciliationRendered'",
+  "rpc('renditionReconciliationComplete'",
+  "rpc('renditionReconciliationFail'",
+  "rpc('reconciliationDue'",
+]) assert(database.includes(token), `fenced recovery adapter missing: ${token}`);
 const worker = sources.get('supabase/functions/_shared/studioPrivateArtifactReconciliationHandler.ts');
 for (const token of ['x-avala-studio-worker-secret', "request.method !== 'POST'", "request.headers.has('authorization')", "request.headers.has('origin')", "status: 'unavailable'"]) assert(worker.includes(token), 'worker boundary missing: ' + token);
 const workerEndpoint = sources.get('supabase/functions/studio-private-artifact-reconcile/index.ts');
 assert(workerEndpoint.includes('STUDIO_PRIVATE_ARTIFACT_RECONCILIATION_WORKER_SECRET'), 'worker secret config missing');
+assert(workerEndpoint.includes("pathname.endsWith('/due')"), 'bounded due-work endpoint missing');
 const supabaseConfig = await readFile('supabase/config.toml', 'utf8');
 assert(/\[functions\.studio-private-artifact-reconcile\][\s\S]*verify_jwt = false/u.test(supabaseConfig), 'custom-auth worker function config missing');
 const saga = sources.get('supabase/functions/_shared/studioPrivateArtifactSaga.ts');
@@ -183,6 +320,35 @@ for (const token of [
 ]) {
   assert(saga.includes(token), `side-effect saga contract missing: ${token}`);
 }
+assert(!saga.includes('markDeletionFailure'), 'generic deletion failure must not own bounded exhaustion');
+assert(
+  !/claim\.reconciliationCount\s*>=\s*MAX_RECONCILIATION_ATTEMPTS/u.test(saga),
+  'count three must remain an executable deletion recovery attempt',
+);
+const deletionReconciliationLoader = database.slice(
+  database.indexOf('const loadDeletionReconciliation'),
+  database.indexOf('export const mapStudioClaimedRenditionResult'),
+);
+assert(
+  deletionReconciliationLoader.indexOf('if (!claim) return null') <
+    deletionReconciliationLoader.indexOf("rpc('deletionExecutionClaim'"),
+  'null or exhausted deletion claim must return before provider authority',
+);
+const missingObjectRecovery = saga.slice(
+  saga.indexOf("if (probe.status === 'missing')"),
+  saga.indexOf('const receipt = await deps.database.markAvailable', saga.indexOf("if (probe.status === 'missing')")),
+);
+assert(
+  missingObjectRecovery.indexOf('await deps.database.persistReconciledRendered') <
+    missingObjectRecovery.indexOf('await deps.storage.uploadCreateOnly'),
+  'missing-object recovery must renew the exact-fence lease before create-only upload',
+);
+assert(
+  /persistReconciledRendered\([\s\S]+?catch \{[\s\S]+?return failed\([\s\S]+?RENDER_METADATA_PERSIST_FAILED[\s\S]+?uploadCreateOnly/u.test(
+    missingObjectRecovery,
+  ),
+  'failed recovery lease renewal must return before any provider upload',
+);
 
 const ui = sources.get('components/docs/StudioArtifactRenditions.tsx');
 for (const misleading of [
@@ -196,6 +362,26 @@ assert(
   ui.includes("rendition.state !== 'available'") &&
     ui.includes("panelState === 'committed_reload_failed'"),
   'UI must gate downloads and mutations on committed state',
+);
+for (const token of [
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
+  "'Request deletion again'",
+  'immutable deleted tombstone',
+  'new approved artifact version',
+]) assert(ui.includes(token), `UI lifecycle guard missing: ${token}`);
+assert(
+  /canonicalRenditionMutationStates[\s\S]+?'available'[\s\S]+?'deletion_requested'[\s\S]+?'deletion_failed'[\s\S]+?canonicalRenditionMutationStates\.has\(rendition\.state\)/u.test(ui),
+  'canonical rendition mutations must use the exact server-supported state allowlist',
+);
+assert(
+  ui.match(/\{rendition && canonicalMutationAllowed && \(/gu)?.length === 2,
+  'legal-hold placement and retention extension must share the canonical allowlist',
+);
+assert(!ui.includes('retentionBlocked') && !ui.includes('legalHoldPlacementBlockedStates'));
+assert(
+  !ui.includes("!['failed', 'deleted'].includes(rendition.state)"),
+  'deleted tombstones must never expose generation',
 );
 
 const migrationPath =

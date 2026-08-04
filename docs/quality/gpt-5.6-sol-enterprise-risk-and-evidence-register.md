@@ -1,8 +1,8 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
-## Studio PR B candidate risk boundary
+## Studio PR B post-merge corrective risk boundary
 
-The 2B candidate addresses private-rendition source risks with forced RLS, service-only RPCs, opaque paths, deterministic render validation, exact replay, bounded reconciliation, retention/hold rechecks, and deletion separation of duty. Local source, renderer, and browser evidence plus exact-head PostgreSQL 16 CI are required before acceptance. Hosted Storage, deployment, pilot, production, security-certification, compliance, and legal-retention sufficiency remain unproven.
+PR #217 merged, but closure remains blocked by five confirmed P1 projection, command, recovery, and hold/deletion race defects. The additive corrective candidate preserves the accepted migration and adds exact RPC/DTO parity, strict public-to-private translation, stale crash-window recovery, bounded service-only due discovery, provider-effect fencing, and shared hold/deletion serialization. Local source, renderer, browser, PostgreSQL 16 race evidence, and exact-head CI are required before acceptance. Hosted Storage, deployment, pilot, production, readiness, security-certification, compliance, and legal-retention sufficiency remain unproven.
 
 ## Studio PR A active boundary
 

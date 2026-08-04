@@ -51,13 +51,17 @@ const formatLabel: Record<StudioPrivateArtifactFormat, string> = {
   docx: 'DOCX',
 };
 const stateLabel: Record<StudioRenditionProjectionDto['state'], string> = {
-  requested: 'Generating',
-  rendering: 'Generating',
-  uploading: 'Generating',
+  requested: 'Generation requested',
+  rendering: 'Rendering',
+  uploading: 'Uploading',
+  reconciliation_required: 'Generation reconciliation required',
+  reconciling: 'Reconciling generation',
   available: 'Available',
   failed: 'Generation failed',
-  deletion_requested: 'Deletion requested · approval pending',
+  deletion_requested: 'Deletion requested — approval pending',
   deleting: 'Deleting',
+  deletion_reconciliation_required: 'Deletion reconciliation required',
+  deletion_reconciling: 'Reconciling deletion',
   deleted: 'Deleted',
   deletion_failed: 'Deletion failed',
 };
@@ -68,6 +72,11 @@ const mutationBlockingStates = new Set([
   'version_conflict',
   'read_only',
   'committed_reload_failed',
+]);
+const canonicalRenditionMutationStates = new Set<StudioRenditionProjectionDto['state']>([
+  'available',
+  'deletion_requested',
+  'deletion_failed',
 ]);
 
 const stateForError = (error: unknown): { state: PanelState; message: string } => {
@@ -103,6 +112,12 @@ const stateForError = (error: unknown): { state: PanelState; message: string } =
       return {
         state: 'command_failed',
         message: 'Deletion is blocked by committed retention or legal-hold authority.',
+      };
+    }
+    if (error.code === 'STUDIO_DELETION_BLOCKED') {
+      return {
+        state: 'command_failed',
+        message: 'The lifecycle change is blocked because deletion authority has already advanced.',
       };
     }
   }
@@ -240,7 +255,9 @@ export default function StudioArtifactRenditions({
         const failed =
           result.outcome === 'rendition_failed' || result.outcome === 'deletion_failed';
         setMessage(
-          failed
+          result.outcome === 'committed_reconciliation_pending'
+            ? `Command committed (receipt ${result.receiptId}), but the external effect is unconfirmed. Recovery is pending; committed state was reloaded.`
+            : failed
             ? 'The committed operation failed. No success state was recorded.'
             : `Committed state reloaded (receipt ${result.receiptId}).`,
         );
@@ -321,6 +338,9 @@ export default function StudioArtifactRenditions({
           const pendingDeletion =
             rendition?.deletion?.state === 'pending' ||
             rendition?.state === 'deletion_requested';
+          const canonicalMutationAllowed = Boolean(
+            rendition && canonicalRenditionMutationStates.has(rendition.state),
+          );
           return (
             <article
               key={format}
@@ -343,13 +363,44 @@ export default function StudioArtifactRenditions({
                   <dd>{rendition.byteLength?.toLocaleString() ?? 'Pending verification'}</dd>
                   <dt className="font-bold">Retention</dt>
                   <dd className="min-w-0 break-words">
-                    {rendition.retentionMode === 'indefinite'
+                    {rendition.retentionMode === null
+                      ? 'Pending availability snapshot'
+                      : rendition.retentionMode === 'indefinite'
                       ? 'Indefinite retention'
                       : `Active through ${new Date(rendition.retentionUntil!).toLocaleDateString()}`}
                   </dd>
                   <dt className="font-bold">Legal hold</dt>
                   <dd>{rendition.legalHoldActive ? 'Active' : 'Not active'}</dd>
                 </dl>
+              )}
+              {rendition && rendition.activeHolds.length > 0 && (
+                <ul
+                  aria-label={`${formatLabel[format]} active legal holds`}
+                  className="mt-2 space-y-2"
+                >
+                  {rendition.activeHolds.map(hold => (
+                    <li key={hold.holdId} className="rounded-lg bg-amber-50 p-2 text-sm">
+                      <span>
+                        Hold placed {new Date(hold.placedAt).toLocaleDateString()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!can('studio.legal_hold.release') || !reason}
+                        onClick={() =>
+                          void run('studio.legal_hold.release', rendition, {
+                            renditionId: rendition.id,
+                            holdId: hold.holdId,
+                            reason,
+                          })
+                        }
+                        className="btn-ghost ml-2 disabled:opacity-50"
+                        aria-label={`Release legal hold placed ${new Date(hold.placedAt).toLocaleDateString()}`}
+                      >
+                        Release hold
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
               {rendition?.failureCode && (
                 <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm">
@@ -361,7 +412,7 @@ export default function StudioArtifactRenditions({
                   type="button"
                   disabled={
                     !can('studio.rendition.generate') ||
-                    Boolean(rendition && !['failed', 'deleted'].includes(rendition.state)) ||
+                    Boolean(rendition && rendition.state !== 'failed') ||
                     Boolean(generating)
                   }
                   onClick={() =>
@@ -375,6 +426,11 @@ export default function StudioArtifactRenditions({
                 >
                   {rendition?.state === 'failed' ? `Retry ${formatLabel[format]}` : `Generate ${formatLabel[format]}`}
                 </button>
+                {rendition?.state === 'deleted' && (
+                  <p className="w-full rounded-lg bg-slate-100 p-2 text-sm">
+                    This rendition is an immutable deleted tombstone. Generate from a new approved artifact version.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={
@@ -387,7 +443,7 @@ export default function StudioArtifactRenditions({
                 >
                   {downloadable ? `Download ${formatLabel[format]}` : 'Download unavailable'}
                 </button>
-                {rendition && !rendition.legalHoldActive && (
+                {rendition && canonicalMutationAllowed && (
                   <button
                     type="button"
                     disabled={!can('studio.legal_hold.place') || !reason}
@@ -399,25 +455,14 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    Place legal hold for {formatLabel[format]}
+                    {rendition.legalHoldActive
+                      ? `Place another legal hold for ${formatLabel[format]}`
+                      : `Place legal hold for ${formatLabel[format]}`}
                   </button>
                 )}
-                {rendition?.legalHoldActive && (
-                  <button
-                    type="button"
-                    disabled={!can('studio.legal_hold.release') || !reason}
-                    onClick={() =>
-                      void run('studio.legal_hold.release', rendition, {
-                        renditionId: rendition.id,
-                        reason,
-                      })
-                    }
-                    className="btn-ghost disabled:opacity-50"
-                  >
-                    Release legal hold for {formatLabel[format]}
-                  </button>
-                )}
-                {rendition && rendition.state === 'available' && (
+                {rendition &&
+                  ['available', 'deletion_failed'].includes(rendition.state) &&
+                  !pendingDeletion && (
                   <button
                     type="button"
                     disabled={
@@ -433,7 +478,9 @@ export default function StudioArtifactRenditions({
                     }
                     className="btn-ghost disabled:opacity-50"
                   >
-                    Request deletion for {formatLabel[format]}
+                    {`${rendition.state === 'deletion_failed'
+                      ? 'Request deletion again'
+                      : 'Request deletion'} for ${formatLabel[format]}`}
                   </button>
                 )}
                 {rendition && pendingDeletion && rendition.deletion && (
@@ -479,7 +526,7 @@ export default function StudioArtifactRenditions({
                   </>
                 )}
               </div>
-              {rendition && (
+              {rendition && canonicalMutationAllowed && (
                 <div className="mt-3">
                   <label htmlFor={`retention-${format}`} className="text-sm font-bold">
                     Extend {formatLabel[format]} retention until

@@ -5,14 +5,20 @@ const source = readFileSync('components/docs/StudioArtifactRenditions.tsx', 'utf
 for (const token of [
   'Private governed renditions',
   'Not generated',
-  'Generating',
+  'Generation requested',
+  'Rendering',
+  'Uploading',
+  'Generation reconciliation required',
+  'Reconciling generation',
   'Generation failed',
   'Available',
   'Download unavailable',
   'Indefinite retention',
   'Legal hold',
-  'Deletion requested · approval pending',
+  'Deletion requested — approval pending',
   'Deleting',
+  'Deletion reconciliation required',
+  'Reconciling deletion',
   'Deleted',
   'Deletion failed',
   'Authorization is stale or revoked',
@@ -30,6 +36,17 @@ for (const token of [
   'downloadStudioPrivateArtifact',
   'Current committed private rendition state loaded.',
   'Legacy document cards remain non-canonical.',
+  'Pending availability snapshot',
+  'activeHolds',
+  'holdId: hold.holdId',
+  'Place another legal hold',
+  'committed_reconciliation_pending',
+  'external effect is unconfirmed',
+  'Request deletion again',
+  'immutable deleted tombstone',
+  'new approved artifact version',
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
 ]) {
   assert.ok(source.includes(token), `private rendition UI contract missing: ${token}`);
 }
@@ -49,10 +66,21 @@ assert.ok(
   'download must require committed available state',
 );
 assert.ok(
-  source.includes("result.outcome === 'rendition_failed'") &&
+  source.includes("result.outcome === 'committed_reconciliation_pending'") &&
+    source.includes("result.outcome === 'rendition_failed'") &&
     source.includes("result.outcome === 'deletion_failed'"),
   'external-side-effect failure must remain truthful',
 );
+assert.match(
+  source,
+  /canonicalRenditionMutationStates[\s\S]+?'available'[\s\S]+?'deletion_requested'[\s\S]+?'deletion_failed'[\s\S]+?canonicalRenditionMutationStates\.has\(rendition\.state\)/u,
+  'canonical rendition mutations must use the exact server-supported state allowlist',
+);
+assert.equal(
+  source.match(/\{rendition && canonicalMutationAllowed && \(/gu)?.length,
+  2,
+  'legal-hold placement and retention extension must share the canonical allowlist',
+);
 console.log(
-  'studio artifact renditions UI: 37 state, capability, broker, and false-success assertions passed',
+  'studio artifact renditions UI: 46 state, capability, recovery, broker, and false-success assertions passed',
 );

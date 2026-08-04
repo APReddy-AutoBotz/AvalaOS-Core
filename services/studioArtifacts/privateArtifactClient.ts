@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import {
   STUDIO_PRIVATE_ARTIFACT_COMMAND_TYPES,
   STUDIO_PRIVATE_ARTIFACT_FORMATS,
+  STUDIO_PRIVATE_ARTIFACT_PROJECTION_RPC,
   STUDIO_RENDITION_STATES,
   type StudioPrivateArtifactCommandEnvelope,
   type StudioPrivateArtifactCommandPayloads,
@@ -28,6 +29,7 @@ export const STUDIO_PRIVATE_ARTIFACT_SAFE_ERROR_CODES = [
   'RENDERING_FAILED',
   'STORAGE_FAILED',
   'DELETION_FAILED',
+  'STUDIO_DELETION_BLOCKED',
   'FEATURE_DISABLED',
   'READ_ONLY',
   'INVALID_COMMAND',
@@ -88,6 +90,7 @@ const RENDITION_KEYS = [
   'retentionMode',
   'retentionUntil',
   'legalHoldActive',
+  'activeHolds',
   'deletion',
   'failureCode',
   'updatedAt',
@@ -111,6 +114,23 @@ const decodeDeletion = (value: unknown): StudioRenditionProjectionDto['deletion'
   return value as unknown as StudioRenditionProjectionDto['deletion'];
 };
 
+const decodeActiveHolds = (
+  value: unknown,
+): StudioRenditionProjectionDto['activeHolds'] => {
+  if (!Array.isArray(value)) return unavailable();
+  const holds = value.map(hold => {
+    if (
+      !object(hold) ||
+      !exact(hold, ['holdId', 'placedAt']) ||
+      !uuid(hold.holdId) ||
+      !date(hold.placedAt)
+    ) unavailable();
+    return { holdId: hold.holdId, placedAt: hold.placedAt };
+  });
+  if (new Set(holds.map(hold => hold.holdId)).size !== holds.length) unavailable();
+  return holds;
+};
+
 const decodeRendition = (value: unknown): StudioRenditionProjectionDto => {
   const record: Record<string, unknown> = object(value) ? value : unavailable();
   if (
@@ -120,13 +140,17 @@ const decodeRendition = (value: unknown): StudioRenditionProjectionDto => {
     !STUDIO_PRIVATE_ARTIFACT_FORMATS.includes(record.format as StudioPrivateArtifactFormat) ||
     !STUDIO_RENDITION_STATES.includes(record.state as StudioRenditionProjectionDto['state']) ||
     !text(record.rendererVersion) ||
-    !['until', 'indefinite'].includes(record.retentionMode as string) ||
+    !(
+      record.retentionMode === null ||
+      ['until', 'indefinite'].includes(record.retentionMode as string)
+    ) ||
     typeof record.legalHoldActive !== 'boolean' ||
     !(record.failureCode === null || (text(record.failureCode) && /^[A-Z][A-Z0-9_]{2,63}$/.test(record.failureCode))) ||
     !date(record.updatedAt)
   ) unavailable();
   const state = record.state as StudioRenditionProjectionDto['state'];
   const format = record.format as StudioPrivateArtifactFormat;
+  const activeHolds = decodeActiveHolds(record.activeHolds);
   const availableMetadata =
     text(record.mimeType) &&
     record.mimeType === MIME_BY_FORMAT[format] &&
@@ -135,7 +159,23 @@ const decodeRendition = (value: unknown): StudioRenditionProjectionDto => {
     !/[\\/]/.test(record.filename) &&
     positive(record.byteLength) &&
     sha256(record.sha256);
-  const metadataMayBeAbsent = ['requested', 'rendering', 'uploading', 'failed'].includes(state);
+  const metadataMayBeAbsent = [
+    'requested',
+    'rendering',
+    'uploading',
+    'reconciliation_required',
+    'reconciling',
+    'failed',
+  ].includes(state);
+  const requiresRetentionSnapshot = [
+    'available',
+    'deletion_requested',
+    'deleting',
+    'deletion_reconciliation_required',
+    'deletion_reconciling',
+    'deleted',
+    'deletion_failed',
+  ].includes(state);
   if (
     (!metadataMayBeAbsent && !availableMetadata) ||
     (metadataMayBeAbsent &&
@@ -146,8 +186,12 @@ const decodeRendition = (value: unknown): StudioRenditionProjectionDto => {
           record.sha256 === null) ||
         availableMetadata
       )) ||
+    (record.retentionMode === null && record.retentionUntil !== null) ||
+    (requiresRetentionSnapshot && record.retentionMode === null) ||
     (record.retentionMode === 'until' && !date(record.retentionUntil)) ||
-    (record.retentionMode === 'indefinite' && record.retentionUntil !== null)
+    (record.retentionMode === 'indefinite' && record.retentionUntil !== null) ||
+    record.legalHoldActive !== (activeHolds.length > 0) ||
+    (state === 'deleted' && activeHolds.length > 0)
   ) unavailable();
   return {
     id: record.id as string,
@@ -162,6 +206,7 @@ const decodeRendition = (value: unknown): StudioRenditionProjectionDto => {
     retentionMode: record.retentionMode as StudioRenditionProjectionDto['retentionMode'],
     retentionUntil: record.retentionUntil as string | null,
     legalHoldActive: record.legalHoldActive as boolean,
+    activeHolds,
     deletion: decodeDeletion(record.deletion),
     failureCode: record.failureCode as string | null,
     updatedAt: record.updatedAt as string,
@@ -258,7 +303,11 @@ export const decodeStudioPrivateArtifactCommandResponse = (
   if (
     !object(value) ||
     !exact(value, keys) ||
-    value.ok !== true ||
+    !(
+      value.ok === true ||
+      (value.ok === false &&
+        value.outcome === 'committed_reconciliation_pending')
+    ) ||
     ![
       'committed',
       'replayed',
@@ -266,7 +315,11 @@ export const decodeStudioPrivateArtifactCommandResponse = (
       'rendition_failed',
       'deletion_completed',
       'deletion_failed',
+      'committed_reconciliation_pending',
     ].includes(value.outcome as string) ||
+    (value.outcome === 'committed_reconciliation_pending'
+      ? value.ok !== false
+      : value.ok !== true) ||
     !uuid(value.receiptId) ||
     !uuid(value.resourceId) ||
     !object(value.resource)
@@ -316,14 +369,21 @@ export const decodeStudioPrivateArtifactDownload = async (
   return { bytes, filename, mimeType };
 };
 
+export const buildStudioPrivateArtifactProjectionRpcArguments = (
+  context: TenantContextProjection,
+  artifactVersionId: string,
+) => ({
+  p_org: context.organizationId,
+  p_workspace: context.workspaceId,
+  p_artifact_version: artifactVersionId,
+});
+
 export const studioPrivateArtifactDefaultTransport: StudioPrivateArtifactTransport = {
-  async readProjection(context, artifactId, artifactVersionId) {
-    const { data, error } = await supabase.rpc('studio_private_artifact_projection', {
-      p_organization_id: context.organizationId,
-      p_workspace_id: context.workspaceId,
-      p_artifact_id: artifactId,
-      p_artifact_version_id: artifactVersionId,
-    });
+  async readProjection(context, _artifactId, artifactVersionId) {
+    const { data, error } = await supabase.rpc(
+      STUDIO_PRIVATE_ARTIFACT_PROJECTION_RPC.name,
+      buildStudioPrivateArtifactProjectionRpcArguments(context, artifactVersionId),
+    );
     if (error) throw decodeStudioPrivateArtifactSafeError(error);
     return data;
   },
@@ -369,6 +429,68 @@ export const readStudioPrivateArtifact = async (
     { artifactId, artifactVersionId },
   );
 
+const validatePublicCommandPayload = (
+  commandType: StudioPrivateArtifactCommandType,
+  value: unknown,
+) => {
+  const payload: Record<string, unknown> = object(value) ? value : unavailable();
+  const reason = (candidate: unknown) =>
+    typeof candidate === 'string' &&
+    candidate.trim().length > 0 &&
+    candidate.length <= 4000;
+  if (commandType === 'studio.rendition.generate') {
+    if (
+      !exact(payload, ['artifactId', 'artifactVersionId', 'format']) ||
+      !uuid(payload.artifactId) ||
+      !uuid(payload.artifactVersionId) ||
+      !STUDIO_PRIVATE_ARTIFACT_FORMATS.includes(
+        payload.format as StudioPrivateArtifactFormat,
+      )
+    ) unavailable();
+  } else if (commandType === 'studio.retention.policy.publish') {
+    if (
+      !exact(payload, ['artifactType', 'retentionDays', 'reason']) ||
+      !['brd', 'frd', 'pdd'].includes(payload.artifactType as string) ||
+      !(
+        payload.retentionDays === null ||
+        (Number.isSafeInteger(payload.retentionDays) &&
+          Number(payload.retentionDays) >= 1 &&
+          Number(payload.retentionDays) <= 36_500)
+      ) ||
+      !reason(payload.reason)
+    ) unavailable();
+  } else if (commandType === 'studio.rendition.retention.extend') {
+    if (
+      !exact(payload, ['renditionId', 'retentionUntil', 'reason']) ||
+      !uuid(payload.renditionId) ||
+      !(payload.retentionUntil === null || date(payload.retentionUntil)) ||
+      !reason(payload.reason)
+    ) unavailable();
+  } else if (commandType === 'studio.legal_hold.release') {
+    if (
+      !exact(payload, ['renditionId', 'holdId', 'reason']) ||
+      !uuid(payload.renditionId) ||
+      !uuid(payload.holdId) ||
+      !reason(payload.reason)
+    ) unavailable();
+  } else if (
+    commandType === 'studio.legal_hold.place' ||
+    commandType === 'studio.rendition.deletion.request'
+  ) {
+    if (
+      !exact(payload, ['renditionId', 'reason']) ||
+      !uuid(payload.renditionId) ||
+      !reason(payload.reason)
+    ) unavailable();
+  } else if (
+    !exact(payload, ['renditionId', 'deletionRequestId', 'outcome', 'reason']) ||
+    !uuid(payload.renditionId) ||
+    !uuid(payload.deletionRequestId) ||
+    !['approve', 'reject'].includes(payload.outcome as string) ||
+    !reason(payload.reason)
+  ) unavailable();
+};
+
 export const executeStudioPrivateArtifactCommand = async <
   C extends StudioPrivateArtifactCommandType,
 >(
@@ -381,6 +503,7 @@ export const executeStudioPrivateArtifactCommand = async <
   transport = studioPrivateArtifactDefaultTransport,
 ): Promise<StudioPrivateArtifactCommandResponse> => {
   if (!STUDIO_PRIVATE_ARTIFACT_COMMAND_TYPES.includes(commandType)) unavailable();
+  validatePublicCommandPayload(commandType, payload);
   const envelope: StudioPrivateArtifactCommandEnvelope = {
     requestId: crypto.randomUUID(),
     idempotencyKey,

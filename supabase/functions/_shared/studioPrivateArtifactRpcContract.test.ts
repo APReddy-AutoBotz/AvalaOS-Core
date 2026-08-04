@@ -4,16 +4,21 @@ import test from 'node:test';
 import {
   decodeStudioAtomicResult,
   decodeStudioDeletionClaim,
+  decodeStudioDeletionExecutionBinding,
   decodeStudioDeletionReconciliationClaim,
   decodeStudioDownloadClaim,
   decodeStudioRenditionReconciliationClaim,
   decodeStudioRenditionClaim,
+  decodeStudioPrivateArtifactDueWork,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
 } from './studioPrivateArtifactRpcContract.ts';
 
 const migration = readFileSync(
   'supabase/migrations/20260729163251_studio_private_artifact_authority.sql',
+  'utf8',
+) + readFileSync(
+  'supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql',
   'utf8',
 );
 const adapter = readFileSync(
@@ -36,7 +41,7 @@ for (const match of migration.matchAll(signaturePattern)) {
 }
 
 test('every production RPC name and parameter key exactly matches SQL', () => {
-  assert.equal(Object.keys(STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST).length, 14);
+  assert.equal(Object.keys(STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST).length, 19);
   for (const [surface, contract] of Object.entries(
     STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
   )) {
@@ -109,7 +114,6 @@ test('real private claim vocabulary is strict and versioned', () => {
     renditionId: uuid(3),
     organizationId: uuid(4),
     workspaceId: uuid(5),
-    objectKey: `${uuid(4)}/${uuid(5)}/studio-artifacts/${uuid(6)}.md`,
     reconciliationCount: 0,
   });
   assert.equal(deletion.deletionAttemptId, uuid(9));
@@ -119,28 +123,54 @@ test('real private claim vocabulary is strict and versioned', () => {
       attemptId: deletion.deletionAttemptId,
     }),
   );
+  const execution = decodeStudioDeletionExecutionBinding({
+    deletionAttemptId: uuid(9),
+    renditionId: uuid(3),
+    organizationId: uuid(4),
+    workspaceId: uuid(5),
+    objectKey: `${uuid(4)}/${uuid(5)}/studio-artifacts/${uuid(6)}.md`,
+    reconciliationCount: 0,
+    fence: 1,
+  });
+  assert.equal(execution?.fence, 1);
 });
 
 test('reconciliation claims use strict private production shapes', () => {
   const rendition = decodeStudioRenditionReconciliationClaim({
+    phase: 'verify_or_upload',
     attemptId: uuid(2), renditionId: uuid(3), organizationId: uuid(4), workspaceId: uuid(5),
     objectKey: uuid(4) + '/' + uuid(5) + '/studio-artifacts/' + uuid(6) + '.md', format: 'markdown',
-    artifactType: 'brd', artifactId: uuid(7), artifactVersionId: uuid(8), opaqueObjectId: uuid(6),
+    artifactType: 'brd', artifactId: uuid(7), artifactVersionId: uuid(8), artifactVersion: 4, opaqueObjectId: uuid(6),
     approvedContent: { title: 'Committed content' }, contentSchemaVersion: 'studio-artifact-1',
     byteLength: 128, sha256: 'b'.repeat(64), mimeType: 'text/markdown; charset=utf-8',
     filename: 'studio-artifact-rendition.md', rendererVersion: 'studio-markdown-1',
-    templateVersion: 'studio-brd-1', reconciliationCount: 1,
+    templateVersion: 'studio-brd-1', reconciliationCount: 1, fence: 2,
   });
   assert.equal(rendition?.attemptId, uuid(2));
   assert.equal(decodeStudioRenditionReconciliationClaim(null), null);
   assert.throws(() => decodeStudioRenditionReconciliationClaim({ ...rendition, bucketId: 'studio-private-artifacts' }));
   const deletion = decodeStudioDeletionReconciliationClaim({
     deletionAttemptId: uuid(9), renditionId: uuid(3), organizationId: uuid(4), workspaceId: uuid(5),
-    objectKey: uuid(4) + '/' + uuid(5) + '/studio-artifacts/' + uuid(6) + '.md', reconciliationCount: 1,
+    reconciliationCount: 1,
   });
   assert.equal(deletion?.deletionAttemptId, uuid(9));
   assert.equal(decodeStudioDeletionReconciliationClaim(null), null);
   assert.throws(() => decodeStudioDeletionReconciliationClaim({ ...deletion, providerOutcome: 'missing' }));
+  const preRender = decodeStudioRenditionReconciliationClaim({
+    phase: 'pre_render',
+    attemptId: uuid(2), renditionId: uuid(3), organizationId: uuid(4), workspaceId: uuid(5),
+    format: 'markdown', artifactType: 'brd', artifactId: uuid(7),
+    artifactVersionId: uuid(8), artifactVersion: 4, opaqueObjectId: uuid(6),
+    approvedContent: { title: 'Committed content' }, contentSchemaVersion: 'studio-artifact-1',
+    rendererVersion: 'studio-markdown-1', templateVersion: 'studio-brd-1',
+    reconciliationCount: 1, fence: 3,
+  });
+  assert.equal(preRender?.phase, 'pre_render');
+  assert.throws(() => decodeStudioRenditionReconciliationClaim({ ...preRender, objectKey: 'private' }));
+  assert.deepEqual(decodeStudioPrivateArtifactDueWork([
+    { kind: 'rendition', attemptId: uuid(2) },
+    { kind: 'deletion', attemptId: uuid(9) },
+  ]).map(item => item.kind), ['rendition', 'deletion']);
 });
 test('download claim uses exact vocabulary and successful replay remains executable', () => {
   const claim = decodeStudioDownloadClaim({

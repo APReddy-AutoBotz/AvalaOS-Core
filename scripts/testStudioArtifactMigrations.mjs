@@ -19,11 +19,13 @@ const migrations=(await readdir('supabase/migrations')).filter(n=>n.endsWith('.s
 const studio='20260727120000_studio_governed_artifact_authority.sql';
 const membershipFix='20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql';
 const privateStudio='20260729163251_studio_private_artifact_authority.sql';
-assert.equal(migrations.at(-1),privateStudio,'Studio PR B migration must be the chronological tip');
+const privateStudioForwardFix='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
+assert.equal(migrations.at(-1),privateStudioForwardFix,'Studio PR #217 forward fix must be the chronological tip');
 assert.ok(migrations.indexOf(privateStudio)===migrations.indexOf(studio)+1,'Studio PR B must immediately follow accepted Studio PR A authority');
+assert.ok(migrations.indexOf(privateStudioForwardFix)===migrations.indexOf(privateStudio)+1,'Studio PR #217 forward fix must immediately follow accepted Studio PR B authority');
 assert.ok(migrations.indexOf(membershipFix)===migrations.indexOf(studio)-1,'membership trigger correction must immediately precede Studio authority');
-const baseline=migrations.filter(n=>n!==membershipFix&&n!==studio&&n!==privateStudio);
-const featureMigrations=[membershipFix,studio,privateStudio];
+const baseline=migrations.filter(n=>n!==membershipFix&&n!==studio&&n!==privateStudio&&n!==privateStudioForwardFix);
+const featureMigrations=[membershipFix,studio,privateStudio,privateStudioForwardFix];
 const urlFor=name=>{const u=new URL(adminUrl);u.pathname=`/${name}`;return u.toString()};
 const connect=async url=>{const c=new Client({connectionString:url});await c.connect();clients.push(c);return c};
 const transaction=async(c,label,sql)=>{await c.query('BEGIN');try{await c.query(sql);await c.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await c.query('ROLLBACK');throw Error(`${label}: ${error instanceof Error?error.message:String(error)}`)}};

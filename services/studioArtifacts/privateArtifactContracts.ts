@@ -10,14 +10,29 @@
 export const STUDIO_PRIVATE_ARTIFACT_FORMATS = ['markdown', 'pdf', 'docx'] as const;
 export type StudioPrivateArtifactFormat = (typeof STUDIO_PRIVATE_ARTIFACT_FORMATS)[number];
 
+export const STUDIO_PRIVATE_ARTIFACT_PROJECTION_RPC = {
+  name: 'studio_private_artifact_projection',
+  argumentKeys: ['p_org', 'p_workspace', 'p_artifact_version'],
+} as const;
+export type StudioPrivateArtifactProjectionRpcArgumentKey =
+  (typeof STUDIO_PRIVATE_ARTIFACT_PROJECTION_RPC.argumentKeys)[number];
+export type StudioPrivateArtifactProjectionRpcArguments = Record<
+  StudioPrivateArtifactProjectionRpcArgumentKey,
+  string
+>;
+
 export const STUDIO_RENDITION_STATES = [
   'requested',
   'rendering',
   'uploading',
+  'reconciliation_required',
+  'reconciling',
   'available',
   'failed',
   'deletion_requested',
   'deleting',
+  'deletion_reconciliation_required',
+  'deletion_reconciling',
   'deleted',
   'deletion_failed',
 ] as const;
@@ -69,6 +84,7 @@ export interface StudioPrivateArtifactCommandPayloads {
   };
   'studio.legal_hold.release': {
     renditionId: string;
+    holdId: string;
     reason: string;
   };
   'studio.rendition.deletion.request': {
@@ -103,6 +119,11 @@ export interface StudioDeletionProjectionDto {
   requesterIsCurrentActor: boolean;
 }
 
+export interface StudioActiveHoldProjectionDto {
+  holdId: string;
+  placedAt: string;
+}
+
 export interface StudioRenditionProjectionDto {
   id: string;
   version: number;
@@ -113,9 +134,10 @@ export interface StudioRenditionProjectionDto {
   byteLength: number | null;
   sha256: string | null;
   rendererVersion: string;
-  retentionMode: StudioRetentionMode;
+  retentionMode: StudioRetentionMode | null;
   retentionUntil: string | null;
   legalHoldActive: boolean;
+  activeHolds: readonly StudioActiveHoldProjectionDto[];
   deletion: StudioDeletionProjectionDto | null;
   failureCode: string | null;
   updatedAt: string;
@@ -137,15 +159,31 @@ export type StudioPrivateArtifactCommandOutcome =
   | 'rendition_available'
   | 'rendition_failed'
   | 'deletion_completed'
-  | 'deletion_failed';
+  | 'deletion_failed'
+  | 'committed_reconciliation_pending';
 
-export interface StudioPrivateArtifactCommandResponse {
+export interface StudioPrivateArtifactCompletedCommandResponse {
   ok: true;
-  outcome: StudioPrivateArtifactCommandOutcome;
+  outcome: Exclude<
+    StudioPrivateArtifactCommandOutcome,
+    'committed_reconciliation_pending'
+  >;
   receiptId: string;
   resourceId: string;
   resource: Record<string, unknown>;
 }
+
+export interface StudioPrivateArtifactPendingCommandResponse {
+  ok: false;
+  outcome: 'committed_reconciliation_pending';
+  receiptId: string;
+  resourceId: string;
+  resource: Record<string, unknown>;
+}
+
+export type StudioPrivateArtifactCommandResponse =
+  | StudioPrivateArtifactCompletedCommandResponse
+  | StudioPrivateArtifactPendingCommandResponse;
 
 export interface StudioPrivateArtifactDownloadRequest {
   requestId: string;
