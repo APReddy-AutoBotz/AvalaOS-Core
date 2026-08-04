@@ -94,7 +94,8 @@ export class EnterpriseCommandError extends Error {
       | 'RESOURCE_STALE'
       | 'INVALID_PAYLOAD'
       | 'COMMAND_BLOCKED'
-      | 'COMMAND_UNAVAILABLE',
+      | 'COMMAND_UNAVAILABLE'
+      | 'RECEIPT_FINALIZATION_FAILED',
     public readonly status = codeToStatus(code),
   ) {
     super(code);
@@ -110,7 +111,7 @@ const codeToStatus = (code: EnterpriseCommandError['code']) => {
   if (code === 'RESOURCE_NOT_FOUND') return 404;
   if (code === 'RESOURCE_STALE') return 409;
   if (code === 'COMMAND_IN_PROGRESS') return 409;
-  if (code === 'COMMAND_UNAVAILABLE') return 503;
+  if (code === 'COMMAND_UNAVAILABLE' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   return 400;
 };
 
@@ -353,6 +354,9 @@ const claimReceipt = async (
   envelope: EnterpriseCommandEnvelope,
   requestHash: string,
 ): Promise<ReceiptRow> => {
+  const resourceType = envelope.commandType === 'approval.review.record' || envelope.commandType === 'approval.record'
+    ? requireString(envelope.payload.resourceType, 80)
+    : null;
   const value = await rpc<ReceiptRow | ReceiptRow[]>('enterprise_ai_claim_command', {
     p_actor: authority.actorId,
     p_org: authority.organizationId,
@@ -361,6 +365,7 @@ const claimReceipt = async (
     p_key: envelope.idempotencyKey,
     p_request: envelope.requestId,
     p_hash: requestHash,
+    p_resource_type: resourceType,
   });
   const row = Array.isArray(value) ? value[0] : value;
   if (!row?.id) throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
@@ -385,7 +390,19 @@ const failReceipt = async (receipt: ReceiptRow, authority: Authority, result: Js
     p_workspace: authority.workspaceId,
     p_response: result,
     p_blocked: blocked,
-  }).catch(() => undefined);
+  });
+};
+
+const finalizeReceipt = async (operation: () => Promise<void>) => {
+  try {
+    await operation();
+  } catch {
+    try {
+      await operation();
+    } catch {
+      throw new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+    }
+  }
 };
 
 const resolveRoute = async (authority: Authority, capability: EnterpriseAiCapability, requestedConfigId?: string, allowDisabled = false) => {
@@ -1293,12 +1310,19 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
             : typeof resultObject.decisionId === 'string'
               ? resultObject.decisionId
               : undefined;
-    await completeReceipt(receipt, authority, resultObject, resourceId);
+    await finalizeReceipt(() => completeReceipt(receipt, authority, resultObject, resourceId));
     return jsonResponse({ ok: true, replayed: false, ...resultObject });
   } catch (error) {
     const commandError = error instanceof EnterpriseCommandError ? error : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-    if (claimedReceipt && claimedAuthority) {
-      await failReceipt(claimedReceipt, claimedAuthority, enterpriseCommandErrorBody(commandError), commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED');
+    if (claimedReceipt && claimedAuthority && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+      try {
+        await finalizeReceipt(() => failReceipt(claimedReceipt, claimedAuthority, enterpriseCommandErrorBody(commandError), commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED'));
+      } catch (finalizationError) {
+        const explicitFailure = finalizationError instanceof EnterpriseCommandError
+          ? finalizationError
+          : new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+        return jsonResponse(enterpriseCommandErrorBody(explicitFailure), explicitFailure.status);
+      }
     }
     return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
   }

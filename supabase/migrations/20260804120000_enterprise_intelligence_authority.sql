@@ -201,6 +201,8 @@ CREATE TABLE public.enterprise_ai_command_receipts (
   workspace_id UUID NOT NULL,
   actor_id UUID NOT NULL REFERENCES public.profiles(id),
   command_type TEXT NOT NULL CHECK (length(btrim(command_type)) BETWEEN 1 AND 120),
+  runtime_area TEXT NOT NULL CHECK (runtime_area IN ('provider', 'ingestion', 'delivery', 'assemble')),
+  resource_type TEXT CHECK (resource_type IS NULL OR length(btrim(resource_type)) BETWEEN 1 AND 80),
   idempotency_key TEXT NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
   request_id UUID NOT NULL,
   request_hash TEXT NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
@@ -264,6 +266,56 @@ CREATE TABLE public.enterprise_ai_job_ledger (
   UNIQUE (org_id, actor_id, capability, idempotency_key)
 );
 
+CREATE OR REPLACE FUNCTION public.enterprise_command_runtime_area(
+  p_command_type TEXT,
+  p_resource_type TEXT DEFAULT NULL
+)
+RETURNS TEXT
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog
+AS $$
+BEGIN
+  CASE p_command_type
+    WHEN 'provider.register', 'provider.validate', 'provider.activate',
+         'provider.route.toggle', 'provider.revoke' THEN
+      IF p_resource_type IS NOT NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA'; END IF;
+      RETURN 'provider';
+    WHEN 'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
+         'evidence.assess.promote' THEN
+      IF p_resource_type IS NOT NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA'; END IF;
+      RETURN 'ingestion';
+    WHEN 'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create' THEN
+      IF p_resource_type IS NOT NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA'; END IF;
+      RETURN 'delivery';
+    WHEN 'assemble.blueprint.create' THEN
+      IF p_resource_type IS NOT NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA'; END IF;
+      RETURN 'assemble';
+    WHEN 'approval.review.record', 'approval.record' THEN
+      IF p_resource_type = 'assemble_blueprint' THEN RETURN 'assemble'; END IF;
+      IF p_resource_type IN ('modernization_decision', 'delivery_work_package', 'monitor_baseline', 'evidence_candidate') THEN
+        RETURN 'delivery';
+      END IF;
+      RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA';
+    ELSE
+      RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA';
+  END CASE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_assert_writable(p_area TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE control public.enterprise_intelligence_runtime_control;
+BEGIN
+  SELECT * INTO control FROM public.enterprise_intelligence_runtime_control WHERE singleton = true FOR SHARE;
+  IF control.singleton IS NULL OR NOT control.enabled OR control.read_only THEN RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_READ_ONLY'; END IF;
+  IF p_area = 'provider' AND NOT control.provider_enabled THEN RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED';
+  ELSIF p_area = 'ingestion' AND NOT control.ingestion_enabled THEN RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_INGESTION_DISABLED';
+  ELSIF p_area = 'delivery' AND NOT control.delivery_enabled THEN RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_DELIVERY_DISABLED';
+  ELSIF p_area = 'assemble' AND NOT control.assemble_enabled THEN RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_ASSEMBLE_DISABLED';
+  ELSIF p_area NOT IN ('provider', 'ingestion', 'delivery', 'assemble') THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA';
+  END IF;
+END;
+$$;
+
 -- Claim idempotency before any Storage, provider, or state effect. A unique
 -- row lock makes a concurrent duplicate observe the in-progress claim instead
 -- of executing the command a second time. Completion/failure are forward-only
@@ -275,23 +327,37 @@ CREATE OR REPLACE FUNCTION public.enterprise_ai_claim_command(
   p_command_type TEXT,
   p_key TEXT,
   p_request UUID,
-  p_hash TEXT
+  p_hash TEXT,
+  p_resource_type TEXT DEFAULT NULL
 )
 RETURNS public.enterprise_ai_command_receipts
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
 AS $$
-DECLARE v_row public.enterprise_ai_command_receipts;
+DECLARE v_row public.enterprise_ai_command_receipts; v_area TEXT;
 BEGIN
   IF p_actor IS NULL OR p_org IS NULL OR p_workspace IS NULL OR p_request IS NULL
      OR p_key IS NULL OR length(btrim(p_key)) NOT BETWEEN 8 AND 200
      OR p_hash IS NULL OR p_hash !~ '^[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND';
   END IF;
+  v_area := public.enterprise_command_runtime_area(p_command_type, p_resource_type);
+  SELECT * INTO v_row FROM public.enterprise_ai_command_receipts
+  WHERE org_id = p_org AND workspace_id = p_workspace AND actor_id = p_actor
+    AND command_type = p_command_type AND idempotency_key = p_key
+  FOR UPDATE;
+  IF v_row.id IS NOT NULL THEN
+    IF v_row.request_id IS DISTINCT FROM p_request OR v_row.request_hash IS DISTINCT FROM p_hash
+       OR v_row.runtime_area IS DISTINCT FROM v_area OR v_row.resource_type IS DISTINCT FROM p_resource_type THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN v_row;
+  END IF;
+  PERFORM public.enterprise_assert_writable(v_area);
   INSERT INTO public.enterprise_ai_command_receipts(
-    org_id, workspace_id, actor_id, command_type, idempotency_key,
+    org_id, workspace_id, actor_id, command_type, runtime_area, resource_type, idempotency_key,
     request_id, request_hash, status, response
   ) VALUES (
-    p_org, p_workspace, p_actor, p_command_type, p_key,
+    p_org, p_workspace, p_actor, p_command_type, v_area, p_resource_type, p_key,
     p_request, p_hash, 'claimed', '{}'::jsonb
   )
   ON CONFLICT (org_id, actor_id, command_type, idempotency_key) DO NOTHING
@@ -304,7 +370,10 @@ BEGIN
       AND idempotency_key = p_key
     FOR UPDATE;
     IF v_row.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_NOT_FOUND'; END IF;
-    IF v_row.request_hash <> p_hash THEN RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+    IF v_row.request_id IS DISTINCT FROM p_request OR v_row.request_hash IS DISTINCT FROM p_hash
+       OR v_row.runtime_area IS DISTINCT FROM v_area OR v_row.resource_type IS DISTINCT FROM p_resource_type THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+    END IF;
   END IF;
   RETURN v_row;
 END;
@@ -319,11 +388,17 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
 AS $$
 DECLARE v_row public.enterprise_ai_command_receipts;
 BEGIN
-  PERFORM public.enterprise_assert_writable('provider');
+  SELECT * INTO v_row
+  FROM public.enterprise_ai_command_receipts
+  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace
+  FOR UPDATE;
+  IF v_row.id IS NULL OR v_row.status <> 'claimed' THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED';
+  END IF;
   UPDATE public.enterprise_ai_command_receipts
   SET status = 'committed', response = COALESCE(p_response, '{}'::jsonb),
       resource_id = p_resource_id, completed_at = statement_timestamp()
-  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace AND status = 'claimed'
+  WHERE id = v_row.id AND status = 'claimed'
   RETURNING * INTO v_row;
   IF v_row.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED'; END IF;
   RETURN v_row;
@@ -338,21 +413,27 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
 AS $$
 DECLARE v_row public.enterprise_ai_command_receipts;
 BEGIN
-  PERFORM public.enterprise_assert_writable('provider');
+  SELECT * INTO v_row
+  FROM public.enterprise_ai_command_receipts
+  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace
+  FOR UPDATE;
+  IF v_row.id IS NULL OR v_row.status <> 'claimed' THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED';
+  END IF;
   UPDATE public.enterprise_ai_command_receipts
   SET status = CASE WHEN p_blocked THEN 'blocked' ELSE 'failed' END,
       response = COALESCE(p_response, '{}'::jsonb), completed_at = statement_timestamp()
-  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace AND status = 'claimed'
+  WHERE id = v_row.id AND status = 'claimed'
   RETURNING * INTO v_row;
   IF v_row.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED'; END IF;
   RETURN v_row;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN) TO service_role;
 
@@ -609,23 +690,37 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.enterprise_ai_claim_command(
   p_actor UUID, p_org UUID, p_workspace UUID, p_command_type TEXT,
-  p_key TEXT, p_request UUID, p_hash TEXT
+  p_key TEXT, p_request UUID, p_hash TEXT, p_resource_type TEXT DEFAULT NULL
 )
 RETURNS public.enterprise_ai_command_receipts
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
-DECLARE receipt public.enterprise_ai_command_receipts;
+DECLARE receipt public.enterprise_ai_command_receipts; runtime_area TEXT;
 BEGIN
-  PERFORM public.enterprise_assert_writable('provider');
   IF p_actor IS NULL OR p_org IS NULL OR p_workspace IS NULL OR p_request IS NULL
      OR length(btrim(COALESCE(p_command_type, ''))) NOT BETWEEN 1 AND 120
      OR length(btrim(COALESCE(p_key, ''))) NOT BETWEEN 8 AND 200
      OR p_hash !~ '^[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND';
   END IF;
+  runtime_area := public.enterprise_command_runtime_area(p_command_type, p_resource_type);
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE org_id = p_org AND workspace_id = p_workspace AND actor_id = p_actor
+    AND command_type = p_command_type AND idempotency_key = p_key
+  FOR UPDATE;
+  IF receipt.id IS NOT NULL THEN
+    IF receipt.request_id IS DISTINCT FROM p_request
+       OR receipt.request_hash IS DISTINCT FROM p_hash
+       OR receipt.runtime_area IS DISTINCT FROM runtime_area
+       OR receipt.resource_type IS DISTINCT FROM p_resource_type THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN receipt;
+  END IF;
+  PERFORM public.enterprise_assert_writable(runtime_area);
   INSERT INTO public.enterprise_ai_command_receipts(
-    org_id, workspace_id, actor_id, command_type, idempotency_key,
+    org_id, workspace_id, actor_id, command_type, runtime_area, resource_type, idempotency_key,
     request_id, request_hash, status, response
-  ) VALUES (p_org, p_workspace, p_actor, p_command_type, p_key, p_request, p_hash, 'claimed', '{}'::jsonb)
+  ) VALUES (p_org, p_workspace, p_actor, p_command_type, runtime_area, p_resource_type, p_key, p_request, p_hash, 'claimed', '{}'::jsonb)
   ON CONFLICT (org_id, actor_id, command_type, idempotency_key) DO NOTHING
   RETURNING * INTO receipt;
   IF receipt.id IS NULL THEN
@@ -635,7 +730,9 @@ BEGIN
     FOR UPDATE;
     IF receipt.workspace_id IS DISTINCT FROM p_workspace
        OR receipt.request_id IS DISTINCT FROM p_request
-       OR receipt.request_hash IS DISTINCT FROM p_hash THEN
+       OR receipt.request_hash IS DISTINCT FROM p_hash
+       OR receipt.runtime_area IS DISTINCT FROM runtime_area
+       OR receipt.resource_type IS DISTINCT FROM p_resource_type THEN
       RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
     END IF;
   END IF;
@@ -691,8 +788,8 @@ BEGIN
     'organizationId', p_org, 'workspaceId', p_workspace
   ));
   receipt := public.enterprise_ai_claim_command(
-    p_actor, p_org, p_workspace, 'evidence.candidate.promote',
-    p_idempotency_key, p_request, request_hash
+    p_actor, p_org, p_workspace, 'evidence.assess.promote',
+    p_idempotency_key, p_request, request_hash, NULL
   );
   IF receipt.status = 'committed' THEN
     RETURN jsonb_build_object('outcome', 'replayed', 'resource', receipt.response);
@@ -2669,6 +2766,7 @@ DROP FUNCTION public.enterprise_commit_high_impact_approval_legacy_untrusted(JSO
 
 REVOKE ALL ON FUNCTION
   public.enterprise_sha256_jsonb(JSONB),
+  public.enterprise_command_runtime_area(TEXT, TEXT),
   public.enterprise_assert_writable(TEXT),
   public.enterprise_source_version_derive(),
   public.enterprise_candidate_derive(),
@@ -2684,7 +2782,7 @@ REVOKE ALL ON FUNCTION
 FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION
-  public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT),
+  public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT, TEXT),
   public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID),
   public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN),
   public.enterprise_provider_lifecycle_transition(TEXT, UUID, UUID, UUID, BIGINT, JSONB),
@@ -2701,7 +2799,8 @@ REVOKE ALL ON FUNCTION
 FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION
-  public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT),
+  public.enterprise_command_runtime_area(TEXT, TEXT),
+  public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT, TEXT),
   public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID),
   public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN),
   public.enterprise_provider_lifecycle_transition(TEXT, UUID, UUID, UUID, BIGINT, JSONB),

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { EnterpriseCommandError, parseEnterpriseCommandEnvelope } from './enterpriseIntelligenceCommand';
+import { EnterpriseCommandError, enterpriseCommandErrorBody, parseEnterpriseCommandEnvelope } from './enterpriseIntelligenceCommand';
 
 const base = {
   commandType: 'evidence.candidate.review',
@@ -40,4 +40,16 @@ test('rejects unknown commands and raw secret fields', () => {
 test('rejects malformed ids and unsafe idempotency keys', () => {
   assert.throws(() => parseEnterpriseCommandEnvelope({ ...base, requestId: 'not-a-uuid' }), /INVALID_PAYLOAD/);
   assert.throws(() => parseEnterpriseCommandEnvelope({ ...base, idempotencyKey: 'bad key' }), /INVALID_COMMAND/);
+});
+
+test('receipt finalization failure is explicit and fail-closed', () => {
+  const error = new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+  assert.equal(error.status, 503);
+  assert.deepEqual(enterpriseCommandErrorBody(error), {
+    ok: false,
+    error: {
+      code: 'RECEIPT_FINALIZATION_FAILED',
+      message: 'The Enterprise Intelligence command could not be completed.',
+    },
+  });
 });

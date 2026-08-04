@@ -36,24 +36,26 @@ Assess scoring changes; OCR; audio transcription; remote URL or archive ingestio
 8. Monitor reads the exact current approved package version and reports only a deterministic baseline; it does not infer telemetry or execution.
 9. Assemble creates only structured documentation with execution, tool, agent, credential, infrastructure, deployment, and telemetry controls disabled.
 10. High-impact approval requires distinct creator, reviewer, and approver identities plus current resource and authorization versions.
-11. Retried commands replay committed results or stable failures; concurrent/raced requests do not duplicate canonical records.
-12. Browser clients receive minimized selectors and cannot invoke service-only mutation RPCs directly.
+11. Every new command is exhaustively classified as provider, ingestion, delivery, or Assemble and is blocked by global read-only or only its own disabled area before any receipt or effect.
+12. Claimed receipts finalize truthfully after a runtime-control change; exact committed replay remains available while disabled, changed payloads conflict, and no finalization failure is silently swallowed.
+13. Retried commands replay committed results or stable failures; concurrent/raced requests do not duplicate canonical records.
+14. Browser clients receive minimized selectors and cannot invoke service-only mutation RPCs directly.
 
 ## Feature quality gates
 
 Executed in the isolated worktree:
 
 - `node scripts/checkEnterpriseIntelligenceBoundaries.mjs` and the feature CI contract passed.
-- `node scripts/testEnterpriseIntelligenceMigration.mjs` passed 79 strict assertions.
-- Disposable PostgreSQL 16 passed fresh chain, accepted-main upgrade, populated upgrade, atomic dirty rejection, 12 Enterprise authority scenarios, read-only fallback, and cleanup.
+- `node scripts/testEnterpriseIntelligenceMigration.mjs` passed 111 strict assertions, including command-area, claim-order, ungated-finalizer, and explicit-finalization-failure guards.
+- Disposable PostgreSQL 16 passed fresh chain, accepted-main upgrade, populated upgrade, atomic dirty rejection, 17 Enterprise authority scenarios, read-only fallback, and cleanup. Receipt evidence includes the 17-command classifier/read-only matrix; 1 provider, 4 ingestion, 5 delivery, and 3 Assemble commands blocked before receipt/effect by their own area; three cross-area commands allowed while provider was disabled; one truthful post-effect completion with zero duplicates; one terminal failure finalized while disabled; exact replay; changed-hash conflict; and zero final claimed receipts.
 - The retained Studio PostgreSQL 16 harness passed fresh/upgrade/populated/dirty paths, 20 membership scenarios, 16 Studio scenarios, and cleanup.
-- `npm.cmd run test:enterprise-intelligence` passed 10 domain, 4 AI, 6 ingestion, 3 command, tenant-query, 4 mocked lifecycle, CI-contract, and migration-contract groups.
+- `npm.cmd run test:enterprise-intelligence` passed 10 domain, 4 AI, 6 ingestion, 4 command, tenant-query, 4 mocked lifecycle, CI-contract, and migration-contract groups.
 - `npm.cmd run typecheck` and `npm.cmd run typecheck:edge` passed.
 - `npm.cmd run test:ai-boundary-static` passed with 0 forbidden and 0 stale allowlist entries.
 - `npm.cmd run test:secret-hygiene` passed with 0 forbidden hits and 0 tracked `.env` files.
 - `npm.cmd run test:scoring` passed; Assess scoring law remains unchanged.
 - `npm.cmd run test:browser:enterprise-intelligence` passed 16/16 Desktop Chrome and Pixel 7 journeys, including axe, keyboard, responsive overflow, reload persistence, stale/denied/unavailable states, no-BYOK/provider-unavailable states, and sensitive-data absence.
-- `npm.cmd run test` completed with exit 0 in 31m08s, including retained PR1A–PR1E coverage and the Enterprise Intelligence tail.
+- `npm.cmd run test` completed on the receipt/runtime correction with exit 0 in 15m12s, including retained PR1A–PR1E coverage and the Enterprise Intelligence tail.
 - `npm.cmd run build`, `npm.cmd audit --audit-level=moderate`, retained Studio lint, Enterprise lint, and `git diff --check` passed; audit reported 0 vulnerabilities.
 
 Pending before publication: exact-head GitHub workflows. Real provider calls, live Vault, hosted Supabase/Storage, deployment, telemetry, and infrastructure inspection are not run because they require separate explicit authority.

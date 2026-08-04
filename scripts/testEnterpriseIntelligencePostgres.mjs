@@ -276,12 +276,143 @@ try {
   });
   await scenario('idempotent command replay and conflicting update rejection', async () => {
     const request = fixture.uuid(320); const hash = fixture.hash('c');
-    const first = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)).*', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', request, hash])).rows[0];
-    const replay = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)).*', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', request, hash])).rows[0];
+    const first = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, 'provider.register', 'fixture-command-001', request, hash, null])).rows[0];
+    const replay = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, 'provider.register', 'fixture-command-001', request, hash, null])).rows[0];
     assert.equal(replay.id, first.id);
-    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', fixture.uuid(321), fixture.hash('d')]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)', [fixture.requester, fixture.org, fixture.workspace, 'provider.register', 'fixture-command-001', fixture.uuid(321), fixture.hash('d'), null]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
     await authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{\"ok\":true}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]);
     await assert.rejects(authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]), /ENTERPRISE_AI_RECEIPT_NOT_CLAIMED/);
+  });
+  await scenario('exhaustive command runtime-area classification', async () => {
+    const matrix = [
+      ['provider.register', null, 'provider'], ['provider.validate', null, 'provider'],
+      ['provider.activate', null, 'provider'], ['provider.route.toggle', null, 'provider'],
+      ['provider.revoke', null, 'provider'], ['evidence.source.create', null, 'ingestion'],
+      ['evidence.extract', null, 'ingestion'], ['evidence.candidate.review', null, 'ingestion'],
+      ['evidence.assess.promote', null, 'ingestion'], ['modernization.evaluate', null, 'delivery'],
+      ['studio.delivery.handoff', null, 'delivery'], ['monitor.baseline.create', null, 'delivery'],
+      ['approval.review.record', 'delivery_work_package', 'delivery'],
+      ['approval.record', 'monitor_baseline', 'delivery'],
+      ['assemble.blueprint.create', null, 'assemble'],
+      ['approval.review.record', 'assemble_blueprint', 'assemble'],
+      ['approval.record', 'assemble_blueprint', 'assemble'],
+    ];
+    for (const [commandType, resourceType, expectedArea] of matrix) {
+      const actual = (await authority.query('SELECT public.enterprise_command_runtime_area($1,$2) area', [commandType, resourceType])).rows[0].area;
+      assert.equal(actual, expectedArea, `${commandType}:${resourceType || '-'}`);
+    }
+    await assert.rejects(authority.query('SELECT public.enterprise_command_runtime_area($1,$2)', ['unknown.command', null]), /ENTERPRISE_AI_INVALID_COMMAND_AREA/);
+    await assert.rejects(authority.query('SELECT public.enterprise_command_runtime_area($1,$2)', ['approval.record', null]), /ENTERPRISE_AI_INVALID_COMMAND_AREA/);
+    console.log(`COMMAND AREA MATRIX ${JSON.stringify(matrix.map(([commandType, resourceType, runtimeArea]) => ({commandType, resourceType, runtimeArea})))}`);
+  });
+  await scenario('area disablement blocks only its new commands before receipts or effects', async () => {
+    const countEffects = async () => {
+      const row = (await authority.query(`SELECT
+        (SELECT count(*)::int FROM public.enterprise_ai_command_receipts) receipts,
+        (SELECT count(*)::int FROM public.enterprise_ai_job_ledger) provider_effects,
+        (SELECT count(*)::int FROM public.enterprise_evidence_sources) source_storage_effects,
+        (SELECT count(*)::int FROM public.enterprise_evidence_assess_promotions) promotion_effects,
+        (SELECT count(*)::int FROM public.enterprise_delivery_work_packages) package_effects,
+        (SELECT count(*)::int FROM public.enterprise_monitor_baselines) baseline_effects,
+        (SELECT count(*)::int FROM public.enterprise_assemble_blueprints) blueprint_effects`)).rows[0];
+      return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
+    };
+    const claim = async (commandType, key, seed, resourceType = null) => (
+      await authority.query(
+        'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*',
+        [fixture.requester, fixture.org, fixture.workspace, commandType, key, fixture.uuid(seed), fixture.hash(String(seed % 10)), resourceType],
+      )
+    ).rows[0];
+    const blocked = {provider: 0, ingestion: 0, delivery: 0, assemble: 0};
+    const before = await countEffects();
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton=true');
+    await assert.rejects(claim('provider.register', 'blocked-provider-001', 500), /ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED/); blocked.provider += 1;
+    const ingestion = await claim('evidence.source.create', 'allowed-ingestion-001', 501);
+    const delivery = await claim('monitor.baseline.create', 'allowed-delivery-001', 502);
+    const assemble = await claim('assemble.blueprint.create', 'allowed-assemble-001', 503);
+    for (const receipt of [ingestion, delivery, assemble]) {
+      await authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{\"ok\":true}'::jsonb,NULL)", [receipt.id, fixture.org, fixture.workspace]);
+    }
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true,ingestion_enabled=false WHERE singleton=true');
+    for (const [index, commandType] of ['evidence.source.create','evidence.extract','evidence.candidate.review','evidence.assess.promote'].entries()) {
+      await assert.rejects(claim(commandType, `blocked-ingestion-${index + 1}-001`, 510 + index), /ENTERPRISE_INTELLIGENCE_INGESTION_DISABLED/); blocked.ingestion += 1;
+    }
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET ingestion_enabled=true,delivery_enabled=false WHERE singleton=true');
+    const deliveryCommands = [
+      ['modernization.evaluate', null], ['studio.delivery.handoff', null], ['monitor.baseline.create', null],
+      ['approval.review.record', 'delivery_work_package'], ['approval.record', 'monitor_baseline'],
+    ];
+    for (const [index, [commandType, resourceType]] of deliveryCommands.entries()) {
+      await assert.rejects(claim(commandType, `blocked-delivery-${index + 1}-001`, 520 + index, resourceType), /ENTERPRISE_INTELLIGENCE_DELIVERY_DISABLED/); blocked.delivery += 1;
+    }
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET delivery_enabled=true,assemble_enabled=false WHERE singleton=true');
+    const assembleCommands = [
+      ['assemble.blueprint.create', null], ['approval.review.record', 'assemble_blueprint'], ['approval.record', 'assemble_blueprint'],
+    ];
+    for (const [index, [commandType, resourceType]] of assembleCommands.entries()) {
+      await assert.rejects(claim(commandType, `blocked-assemble-${index + 1}-001`, 530 + index, resourceType), /ENTERPRISE_INTELLIGENCE_ASSEMBLE_DISABLED/); blocked.assemble += 1;
+    }
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET assemble_enabled=true WHERE singleton=true');
+    const after = await countEffects();
+    assert.equal(after.receipts - before.receipts, 3);
+    const blockedReceiptDelta = after.receipts - before.receipts - 3;
+    assert.equal(blockedReceiptDelta, 0);
+    for (const key of ['provider_effects','source_storage_effects','promotion_effects','package_effects','baseline_effects','blueprint_effects']) assert.equal(after[key], before[key], key);
+    assert.equal((await authority.query("SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE status='claimed'")).rows[0].n, 0);
+    console.log(`BLOCKED COMMAND COUNTS ${JSON.stringify({blocked,blockedReceiptDelta,allowedReceiptDelta:3,effectDeltas:Object.fromEntries(['provider_effects','source_storage_effects','promotion_effects','package_effects','baseline_effects','blueprint_effects'].map(key => [key, after[key] - before[key]]))})}`);
+  });
+  await scenario('read-only blocks every new command but committed exact replay remains truthful', async () => {
+    const claim = async (commandType, key, seed, hash, resourceType = null) => (
+      await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, commandType, key, fixture.uuid(seed), hash, resourceType])
+    ).rows[0];
+    const replayHash = fixture.hash('8');
+    const committed = await claim('provider.validate', 'readonly-replay-001', 540, replayHash);
+    await authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{\"truth\":\"committed\"}'::jsonb,NULL)", [committed.id, fixture.org, fixture.workspace]);
+    const before = Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_ai_command_receipts')).rows[0].n);
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET read_only=true WHERE singleton=true');
+    const matrix = [
+      ['provider.register', null], ['provider.validate', null], ['provider.activate', null], ['provider.route.toggle', null], ['provider.revoke', null],
+      ['evidence.source.create', null], ['evidence.extract', null], ['evidence.candidate.review', null], ['evidence.assess.promote', null],
+      ['modernization.evaluate', null], ['studio.delivery.handoff', null], ['monitor.baseline.create', null],
+      ['approval.review.record', 'delivery_work_package'], ['approval.record', 'monitor_baseline'],
+      ['assemble.blueprint.create', null], ['approval.review.record', 'assemble_blueprint'], ['approval.record', 'assemble_blueprint'],
+    ];
+    for (const [index, [commandType, resourceType]] of matrix.entries()) {
+      await assert.rejects(claim(commandType, `readonly-new-${index + 1}-001`, 550 + index, fixture.hash(String((index + 1) % 10)), resourceType), /ENTERPRISE_INTELLIGENCE_READ_ONLY/);
+    }
+    const replay = await claim('provider.validate', 'readonly-replay-001', 540, replayHash);
+    assert.deepEqual([replay.id, replay.status, replay.response.truth], [committed.id, 'committed', 'committed']);
+    assert.equal(Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_ai_command_receipts')).rows[0].n), before);
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET read_only=false WHERE singleton=true');
+    console.log(`READ ONLY COUNTS ${JSON.stringify({blockedNewCommands:matrix.length,receiptDelta:0,replayStatus:replay.status})}`);
+  });
+  await scenario('post-commit control change finalizes truthfully and replay is effect-free', async () => {
+    const request = fixture.uuid(580); const hash = fixture.hash('9');
+    const receipt = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, 'evidence.candidate.review', 'post-commit-control-001', request, hash, null])).rows[0];
+    assert.equal(receipt.status, 'claimed');
+    const effectId = fixture.uuid(581);
+    const beforeEffects = Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_evidence_questions')).rows[0].n);
+    await authority.query("INSERT INTO public.enterprise_evidence_questions(id,source_id,org_id,workspace_id,question,status,created_by) VALUES($1,$2,$3,$4,'Post-commit truth fixture','open',$5)", [effectId, fixture.sources[0].sourceId, fixture.org, fixture.workspace, fixture.requester]);
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET ingestion_enabled=false WHERE singleton=true');
+    assert.equal((await authority.query('SELECT status FROM public.enterprise_ai_command_receipts WHERE id=$1', [receipt.id])).rows[0]?.status, 'claimed');
+    const completed = (await authority.query("SELECT completed.* FROM public.enterprise_ai_complete_command($1,$2,$3,'{\"outcome\":\"committed\"}'::jsonb,$4) completed", [receipt.id, fixture.org, fixture.workspace, effectId])).rows[0];
+    assert.deepEqual([completed.status, completed.response.outcome], ['committed', 'committed']);
+    const replay = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, 'evidence.candidate.review', 'post-commit-control-001', request, hash, null])).rows[0];
+    assert.deepEqual([replay.id, replay.status, replay.response.outcome], [receipt.id, 'committed', 'committed']);
+    assert.equal(Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_evidence_questions')).rows[0].n), beforeEffects + 1);
+    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)', [fixture.requester, fixture.org, fixture.workspace, 'evidence.candidate.review', 'post-commit-control-001', request, fixture.hash('0'), null]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET ingestion_enabled=true WHERE singleton=true');
+    console.log(`POST COMMIT CONTROL CHANGE ${JSON.stringify({receiptStatus:completed.status,effectDelta:1,replayStatus:replay.status,duplicateEffects:0,conflict:'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'})}`);
+  });
+  await scenario('terminal failure finalizes while disabled and no claimed receipts remain', async () => {
+    const receipt = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)).*', [fixture.requester, fixture.org, fixture.workspace, 'assemble.blueprint.create', 'disabled-failure-001', fixture.uuid(590), fixture.hash('7'), null])).rows[0];
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET assemble_enabled=false WHERE singleton=true');
+    const failed = (await authority.query("SELECT failed.* FROM public.enterprise_ai_fail_command($1,$2,$3,'{\"code\":\"TERMINAL_FIXTURE_FAILURE\"}'::jsonb,false) failed", [receipt.id, fixture.org, fixture.workspace])).rows[0];
+    assert.deepEqual([failed.status, failed.response.code], ['failed', 'TERMINAL_FIXTURE_FAILURE']);
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET assemble_enabled=true WHERE singleton=true');
+    const claimed = Number((await authority.query("SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE status='claimed'")).rows[0].n);
+    assert.equal(claimed, 0);
+    console.log(`RECEIPT FINALIZATION COUNTS ${JSON.stringify({failedWhileDisabled:1,claimedFinal:claimed})}`);
   });
   await scenario('candidate lineage, stale edit rejection, acceptance, and Assess draft promotion', async () => {
     const initial = (await authority.query('SELECT value,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
@@ -387,7 +518,7 @@ try {
   });
   await scenario('read-only rollback blocks mutations while capability projection remains available', async () => {
     await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET read_only=true WHERE singleton=true');
-    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)', [fixture.requester, fixture.org, fixture.workspace, 'fixture.readonly', 'fixture-readonly-001', fixture.uuid(350), fixture.hash('a')]), /ENTERPRISE_INTELLIGENCE_READ_ONLY/);
+    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)', [fixture.requester, fixture.org, fixture.workspace, 'evidence.source.create', 'fixture-readonly-001', fixture.uuid(350), fixture.hash('a'), null]), /ENTERPRISE_INTELLIGENCE_READ_ONLY/);
     await authority.query('BEGIN');
     try {
       await authority.query('SET LOCAL ROLE authenticated');

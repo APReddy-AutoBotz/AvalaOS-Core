@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const migrationPath = path.join(process.cwd(), 'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql');
 const sql = fs.readFileSync(migrationPath, 'utf8');
+const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const requiredTables = [
   'enterprise_intelligence_runtime_control',
   'enterprise_ai_capability_routes',
@@ -80,5 +81,32 @@ check(!sql.slice(finalAcl).includes('GRANT SELECT ON TABLE public.%I TO authenti
 check(sql.includes('DROP FUNCTION public.enterprise_commit_delivery_handoff_legacy_untrusted'), 'Untrusted Delivery mutation entry point must be removed.');
 check(sql.includes('DROP FUNCTION public.enterprise_commit_modernization_assessment_legacy_untrusted'), 'Untrusted modernization entry point must be removed.');
 check(sql.includes('DROP FUNCTION public.enterprise_commit_high_impact_approval_legacy_untrusted'), 'Untrusted approval entry point must be removed.');
+check(sql.includes('FUNCTION public.enterprise_command_runtime_area'), 'One exhaustive command-to-runtime-area classifier is required.');
+const classifierStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_command_runtime_area');
+const classifierEnd = sql.indexOf('$$;', classifierStart);
+const classifier = sql.slice(classifierStart, classifierEnd);
+for (const commandType of [
+  'provider.register', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.revoke',
+  'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
+  'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create',
+  'approval.review.record', 'approval.record', 'assemble.blueprint.create',
+]) check(classifier.includes(`'${commandType}'`), `Runtime-area classifier is missing ${commandType}.`);
+for (const area of ['provider', 'ingestion', 'delivery', 'assemble']) check(classifier.includes(`'${area}'`), `Runtime-area classifier is missing ${area}.`);
+check(classifier.includes("p_resource_type = 'assemble_blueprint'"), 'Approval commands must classify Assemble blueprints separately.');
+const receiptFunctions = name => [...sql.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'g'))].map(match => match[0]);
+for (const name of ['enterprise_ai_complete_command', 'enterprise_ai_fail_command']) {
+  const bodies = receiptFunctions(name);
+  check(bodies.length > 0, `${name} must exist.`);
+  check(bodies.every(body => !body.includes('enterprise_assert_writable')), `${name} must finalize durable truth without runtime gating.`);
+}
+const claims = receiptFunctions('enterprise_ai_claim_command');
+const effectiveClaim = claims.at(-1) || '';
+check(effectiveClaim.includes('enterprise_command_runtime_area'), 'Effective claim must use the exhaustive runtime-area classifier.');
+check(effectiveClaim.indexOf('SELECT * INTO receipt') < effectiveClaim.indexOf('enterprise_assert_writable'), 'Exact replay must be resolved before runtime validation.');
+check(effectiveClaim.indexOf('enterprise_assert_writable') < effectiveClaim.indexOf('INSERT INTO public.enterprise_ai_command_receipts'), 'New commands must be runtime-validated before receipt creation.');
+check(sql.includes("runtime_area TEXT NOT NULL CHECK (runtime_area IN ('provider', 'ingestion', 'delivery', 'assemble'))"), 'Receipts must persist their classified runtime area.');
+check(!/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(commandSource), 'Receipt failure finalization must not be silently swallowed.');
+check(commandSource.includes("RECEIPT_FINALIZATION_FAILED"), 'Genuine finalization failure requires an explicit stable error.');
+check(commandSource.indexOf("existing?.status === 'committed'") < commandSource.indexOf('const receipt = await claimReceipt'), 'Committed replay must return before a new claim.');
 
 console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);

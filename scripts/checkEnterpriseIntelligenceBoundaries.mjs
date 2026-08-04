@@ -53,5 +53,26 @@ const migration = read('supabase/migrations/20260804120000_enterprise_intelligen
 for (const required of ['FORCE ROW LEVEL SECURITY', 'enterprise_ai_command_receipts', 'enterprise_evidence_source_versions', 'enterprise_high_impact_approval_separation_check', 'live_telemetry_connected BOOLEAN NOT NULL DEFAULT false']) {
   if (!migration.includes(required)) throw new Error(`Enterprise migration invariant is missing ${required}.`);
 }
+const functionBodies = name => [...migration.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'g'))].map(match => match[0]);
+const classifier = functionBodies('enterprise_command_runtime_area').at(-1) || '';
+for (const commandType of [
+  'provider.register', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.revoke',
+  'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
+  'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create',
+  'approval.review.record', 'approval.record', 'assemble.blueprint.create',
+]) {
+  if (!classifier.includes(`'${commandType}'`)) throw new Error(`Runtime-area classifier is missing ${commandType}.`);
+}
+for (const name of ['enterprise_ai_complete_command', 'enterprise_ai_fail_command']) {
+  if (functionBodies(name).some(body => body.includes('enterprise_assert_writable'))) {
+    throw new Error(`${name} must not gate durable receipt finalization on runtime controls.`);
+  }
+}
+const effectiveClaim = functionBodies('enterprise_ai_claim_command').at(-1) || '';
+if (!effectiveClaim.includes('enterprise_command_runtime_area')) throw new Error('New receipt claims require exhaustive runtime-area classification.');
+if (effectiveClaim.indexOf('SELECT * INTO receipt') > effectiveClaim.indexOf('enterprise_assert_writable')) throw new Error('Exact replay must be resolved before current runtime controls.');
+if (effectiveClaim.indexOf('enterprise_assert_writable') > effectiveClaim.indexOf('INSERT INTO public.enterprise_ai_command_receipts')) throw new Error('New receipt claims must validate runtime controls before insertion.');
+if (/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(command)) throw new Error('Receipt finalization errors must not be silently swallowed.');
+if (!command.includes('RECEIPT_FINALIZATION_FAILED')) throw new Error('Receipt finalization failure requires explicit sanitized evidence.');
 
 console.log('Enterprise Intelligence source-boundary scan passed.');
