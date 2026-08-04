@@ -315,14 +315,12 @@ export type StudioDeletionClaim = ExecuteDeletionClaim | ReplayDeletionClaim;
 export interface StudioDeletionSagaDatabase {
   claimDeletion(requestId: string): Promise<ExecuteDeletionClaim | ReplayDeletionClaim>;
   markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }): Promise<StudioDeletionReceipt>;
-  markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }): Promise<StudioDeletionReceipt>;
   markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' }): Promise<StudioDeletionReceipt>;
   loadDeletionReconciliation(deletionAttemptId: string): Promise<ExecuteDeletionClaim | null>;
 }
 export type StudioDeletionSagaResult =
   | { outcome: 'deleted'; receipt: StudioDeletionReceipt; providerOutcome: 'deleted' | 'missing' }
   | { outcome: 'replay'; receipt: StudioDeletionReceipt }
-  | { outcome: 'failed'; receipt: StudioDeletionReceipt; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }
   | { outcome: 'reconciliation_required'; receipt: StudioDeletionReceipt; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' };
 
 const runCommittedDeletion = async (
@@ -361,10 +359,6 @@ export const reconcileStudioDeletion = async (
 ): Promise<StudioDeletionSagaResult> => {
   const claim = await deps.database.loadDeletionReconciliation(deletionAttemptId);
   if (!claim) throw new Error('DELETION_RECONCILIATION_NOT_FOUND');
-  if (claim.reconciliationCount >= MAX_RECONCILIATION_ATTEMPTS) {
-    const receipt = await deps.database.markDeletionFailure({ deletionAttemptId, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' });
-    return { outcome: 'failed', receipt, failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' };
-  }
   let presence;
   try { presence = await deps.storage.probePresence(claim); } catch {
     const receipt = await deps.database.markDeletionReconciliationRequired({ deletionAttemptId, failureCode: 'DELETE_OUTCOME_UNKNOWN' });

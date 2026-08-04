@@ -87,6 +87,11 @@ const deletionReconciliationClaim = forwardFunction('studio_deletion_reconciliat
 const deletionExecutionClaim = forwardFunction('studio_rendition_deletion_execution_claim');
 assert.match(deletionComplete,/p_provider_outcome text[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.complete/);
 assert.match(deletionFail,/studio_assert_actor[\s\S]+privileged_audit_events[\s\S]+studio\.rendition\.deletion\.fail/);
+assert.match(
+  deletionFail,
+  /p_failure = 'DELETION_RECONCILIATION_EXHAUSTED'[\s\S]+INVALID_FAILURE/,
+  'generic deletion failure must reject the dedicated exhaustion code',
+);
 assert.match(deletionReconciliationClaim,/privileged_audit_events[\s\S]+studio\.rendition\.deletion\.reconciliation\.exhausted/);
 for (const body of [deletionComplete,deletionFail,deletionReconciliationClaim]) {
   assert.doesNotMatch(body,/'(?:bucket|bucketId|objectKey|credentials|signedUrl)'/u);

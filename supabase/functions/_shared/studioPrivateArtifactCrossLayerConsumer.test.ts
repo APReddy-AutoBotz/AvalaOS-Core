@@ -133,9 +133,6 @@ if (mode === 'rendition') {
           : 'deletion_failed',
       };
     },
-    async markDeletionFailure() {
-      throw new Error('unexpected deletion failure');
-    },
     async markDeletionReconciliationRequired() {
       throw new Error('unexpected deletion reconciliation');
     },
@@ -192,17 +189,16 @@ if (mode === 'rendition') {
     async probePresence() { presence += 1; return { status: exists ? 'exists' as const : 'missing' as const }; },
     async deleteExact() { deletes += 1; if (input.deleteOutcomeUnknown === true) throw new Error('unknown'); const status = exists ? 'deleted' as const : 'missing' as const; exists = false; return { status }; },
   };
-  let tombstones = 0; const failures: string[] = []; const reconciliations: string[] = [];
+  let tombstones = 0; const reconciliations: string[] = [];
   const executable = { ...claim, disposition: 'execute' as const, requestId: claim.deletionAttemptId };
   const database: StudioDeletionSagaDatabase = {
     async claimDeletion() { throw new Error('reconciliation only'); },
     async markTombstone() { tombstones += 1; if (input.failTombstone === true) throw new Error('completion'); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'deleted' }; },
-    async markDeletionFailure(value) { failures.push(value.failureCode); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'deletion_failed' }; },
     async markDeletionReconciliationRequired(value) { reconciliations.push(value.failureCode); return { deletionAttemptId: claim.deletionAttemptId, renditionId: claim.renditionId, state: 'reconciliation_required' }; },
     async loadDeletionReconciliation() { return executable; },
   };
   const result = await reconcileStudioDeletion(claim.deletionAttemptId, { database, storage });
-  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, provider: { presence, deletes, exists }, tombstones, failures, reconciliations });
+  write({ outcome: result.outcome, failureCode: 'failureCode' in result ? result.failureCode : null, provider: { presence, deletes, exists }, tombstones, reconciliations });
 } else if (mode === 'bucketAuthority') {
   let requests = 0; let rejected = false;
   try { createStudioPrivateArtifactStorage({ supabaseUrl: 'https://example.invalid', serviceRoleKey: 'service-only', configuredBucket: String(input.bucket), configuredBucketAllowlist: String(input.allowlist), fetch: (async () => { requests += 1; return new Response(); }) as typeof fetch }); } catch { rejected = true; }

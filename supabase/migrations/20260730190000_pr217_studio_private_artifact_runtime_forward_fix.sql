@@ -1875,7 +1875,9 @@ BEGIN
   IF a.id IS NULL OR a.state <> 'executing' OR a.execution_fence <> p_fence THEN
     RAISE EXCEPTION USING MESSAGE = 'AUTHORITY_STALE';
   END IF;
-  IF p_failure !~ '^[A-Z0-9_]{1,64}$' THEN
+  IF p_failure = 'DELETION_RECONCILIATION_EXHAUSTED'
+     OR p_failure !~ '^[A-Z0-9_]{1,64}$'
+  THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_FAILURE';
   END IF;
   SELECT * INTO d FROM public.studio_rendition_deletion_resolutions WHERE id = a.resolution_id;

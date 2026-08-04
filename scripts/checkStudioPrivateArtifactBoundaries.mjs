@@ -320,6 +320,20 @@ for (const token of [
 ]) {
   assert(saga.includes(token), `side-effect saga contract missing: ${token}`);
 }
+assert(!saga.includes('markDeletionFailure'), 'generic deletion failure must not own bounded exhaustion');
+assert(
+  !/claim\.reconciliationCount\s*>=\s*MAX_RECONCILIATION_ATTEMPTS/u.test(saga),
+  'count three must remain an executable deletion recovery attempt',
+);
+const deletionReconciliationLoader = database.slice(
+  database.indexOf('const loadDeletionReconciliation'),
+  database.indexOf('export const mapStudioClaimedRenditionResult'),
+);
+assert(
+  deletionReconciliationLoader.indexOf('if (!claim) return null') <
+    deletionReconciliationLoader.indexOf("rpc('deletionExecutionClaim'"),
+  'null or exhausted deletion claim must return before provider authority',
+);
 const missingObjectRecovery = saga.slice(
   saga.indexOf("if (probe.status === 'missing')"),
   saga.indexOf('const receipt = await deps.database.markAvailable', saga.indexOf("if (probe.status === 'missing')")),

@@ -41,6 +41,20 @@ export const studioDeletionReconciliationClaimAuditScenarioNames=[
   'deletion reconciliation exhaustion evidence excludes private authority',
 ];
 
+export const studioDeletionExhaustionAuthorityScenarioNames=[
+  'deletion exhaustion initial uncertainty retains count one',
+  'deletion exhaustion first recovery uncertainty retains count two',
+  'deletion exhaustion second recovery uncertainty retains count three',
+  'deletion exhaustion count three remains an executable provider attempt',
+  'deletion exhaustion concurrent fourth claims return no provider authority',
+  'deletion exhaustion concurrent fourth claims commit one terminal transition and audit',
+  'deletion exhaustion terminal state retains bounded count three',
+  'deletion exhaustion emits zero generic failure audit',
+  'generic deletion failure rejects the dedicated exhaustion code atomically',
+  'deletion count three deleted provider outcome completes',
+  'deletion count three missing provider outcome completes',
+];
+
 export const studioDeletionExecutionAuthorityScenarioNames=[
   'deletion runtime disabled pauses requested recovery',
   'deletion runtime read only pauses requested recovery',
@@ -369,6 +383,146 @@ export async function runStudioDeletionReconciliationClaimAuditEvidence({db,peer
     exhaustedReplayAuditDelta:replayExhaustionAfter-replayExhaustionBefore,
   };
   console.log(`DELETION RECONCILIATION CLAIM AUDIT COUNTS ${JSON.stringify(evidence)}`);
+  return evidence;
+}
+
+export async function runStudioDeletionExhaustionAuthorityEvidence({exhaustionDb,peer,deletedDb,missingDb,scenario,names=studioDeletionExhaustionAuthorityScenarioNames}){
+  const failureAction='studio.rendition.deletion.fail';
+  const failUncertain=async(targetDb,attemptId,fence)=>targetDb.query(
+    "SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'DELETE_OUTCOME_UNKNOWN')",
+    [attemptId,fence],
+  );
+  const advanceToThirdExecution=async(targetDb)=>{
+    const fixture=await createDeletionFixture(targetDb);
+    const initialExecution=await executionClaim(targetDb,fixture.attemptId);
+    await failUncertain(targetDb,fixture.attemptId,initialExecution.fence);
+    const afterInitialUncertainty=await attemptSnapshot(targetDb,fixture.attemptId);
+    const firstRecoveryClaim=await claim(targetDb,fixture.attemptId);
+    const firstRecoveryExecution=await executionClaim(targetDb,fixture.attemptId);
+    await failUncertain(targetDb,fixture.attemptId,firstRecoveryExecution.fence);
+    const afterFirstRecoveryUncertainty=await attemptSnapshot(targetDb,fixture.attemptId);
+    const secondRecoveryClaim=await claim(targetDb,fixture.attemptId);
+    const secondRecoveryExecution=await executionClaim(targetDb,fixture.attemptId);
+    return{
+      ...fixture,initialExecution,afterInitialUncertainty,
+      firstRecoveryClaim,firstRecoveryExecution,afterFirstRecoveryUncertainty,
+      secondRecoveryClaim,secondRecoveryExecution,
+    };
+  };
+
+  const exhaustion=await advanceToThirdExecution(exhaustionDb);
+  await failUncertain(exhaustionDb,exhaustion.attemptId,exhaustion.secondRecoveryExecution.fence);
+  const afterSecondRecoveryUncertainty=await attemptSnapshot(exhaustionDb,exhaustion.attemptId);
+  const beforeExhaustion={
+    state:afterSecondRecoveryUncertainty,
+    dedicated:await countAction(exhaustionDb,exhaustionAction,exhaustion.attemptId),
+    execution:await countAction(exhaustionDb,'studio.rendition.deletion.execution.claim',exhaustion.attemptId),
+  };
+  const concurrentClaims=await Promise.all([
+    claim(exhaustionDb,exhaustion.attemptId),
+    claim(peer,exhaustion.attemptId),
+  ]);
+  const afterExhaustion={
+    state:await attemptSnapshot(exhaustionDb,exhaustion.attemptId),
+    dedicated:await countAction(exhaustionDb,exhaustionAction,exhaustion.attemptId),
+    execution:await countAction(exhaustionDb,'studio.rendition.deletion.execution.claim',exhaustion.attemptId),
+  };
+  const genericExhaustionAudits=Number((await exhaustionDb.query(
+    `SELECT count(*)::int n FROM public.privileged_audit_events
+     WHERE action=$1::text
+       AND metadata->>'deletionAttemptId'=$2::text
+       AND metadata->>'failureCode'='DELETION_RECONCILIATION_EXHAUSTED'`,
+    [failureAction,exhaustion.attemptId],
+  )).rows[0].n);
+
+  const rejectedGeneric=await advanceToThirdExecution(deletedDb);
+  const rejectedBefore={
+    state:await attemptSnapshot(deletedDb,rejectedGeneric.attemptId),
+    failAudits:await countAction(deletedDb,failureAction,rejectedGeneric.attemptId),
+  };
+  let rejectedGenericError;
+  try{
+    await deletedDb.query(
+      "SELECT public.studio_rendition_deletion_fail($1::uuid,$2::bigint,'DELETION_RECONCILIATION_EXHAUSTED')",
+      [rejectedGeneric.attemptId,rejectedGeneric.secondRecoveryExecution.fence],
+    );
+  }catch(error){
+    rejectedGenericError=error instanceof Error?error.message:String(error);
+  }
+  const rejectedAfter={
+    state:await attemptSnapshot(deletedDb,rejectedGeneric.attemptId),
+    failAudits:await countAction(deletedDb,failureAction,rejectedGeneric.attemptId),
+  };
+
+  const deletedAtThree=rejectedGeneric;
+  const deletedResult=(await deletedDb.query(
+    "SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'deleted') result",
+    [deletedAtThree.attemptId,deletedAtThree.secondRecoveryExecution.fence],
+  )).rows[0].result;
+  const deletedState=await attemptSnapshot(deletedDb,deletedAtThree.attemptId);
+
+  const missingAtThree=await advanceToThirdExecution(missingDb);
+  const missingResult=(await missingDb.query(
+    "SELECT public.studio_rendition_deletion_complete($1::uuid,$2::bigint,'missing') result",
+    [missingAtThree.attemptId,missingAtThree.secondRecoveryExecution.fence],
+  )).rows[0].result;
+  const missingState=await attemptSnapshot(missingDb,missingAtThree.attemptId);
+
+  const checks=[
+    async()=>assert.deepEqual(
+      {execution:Number(exhaustion.initialExecution.reconciliationCount),persisted:Number(exhaustion.afterInitialUncertainty.reconciliation_count)},
+      {execution:1,persisted:1},
+    ),
+    async()=>assert.deepEqual(
+      {claim:Number(exhaustion.firstRecoveryClaim.reconciliationCount),execution:Number(exhaustion.firstRecoveryExecution.reconciliationCount),persisted:Number(exhaustion.afterFirstRecoveryUncertainty.reconciliation_count)},
+      {claim:2,execution:2,persisted:2},
+    ),
+    async()=>assert.deepEqual(
+      {claim:Number(exhaustion.secondRecoveryClaim.reconciliationCount),execution:Number(exhaustion.secondRecoveryExecution.reconciliationCount),persisted:Number(afterSecondRecoveryUncertainty.reconciliation_count)},
+      {claim:3,execution:3,persisted:3},
+    ),
+    async()=>assert.deepEqual(
+      {state:afterSecondRecoveryUncertainty.state,count:Number(afterSecondRecoveryUncertainty.reconciliation_count),fence:Number(exhaustion.secondRecoveryExecution.fence)>0},
+      {state:'reconciliation_required',count:3,fence:true},
+    ),
+    async()=>assert.deepEqual(
+      {claims:concurrentClaims,executionAuditDelta:afterExhaustion.execution-beforeExhaustion.execution},
+      {claims:[null,null],executionAuditDelta:0},
+    ),
+    async()=>assert.deepEqual(
+      {auditDelta:afterExhaustion.dedicated-beforeExhaustion.dedicated,lifecycleVersionDelta:Number(afterExhaustion.state.lifecycle_version)-Number(beforeExhaustion.state.lifecycle_version)},
+      {auditDelta:1,lifecycleVersionDelta:1},
+    ),
+    async()=>assert.deepEqual(
+      {state:afterExhaustion.state.state,lifecycle:afterExhaustion.state.lifecycle,failureCode:afterExhaustion.state.failure_code,count:Number(afterExhaustion.state.reconciliation_count)},
+      {state:'failed',lifecycle:'deletion_failed',failureCode:'DELETION_RECONCILIATION_EXHAUSTED',count:3},
+    ),
+    async()=>assert.equal(genericExhaustionAudits,0),
+    async()=>{
+      assert.match(rejectedGenericError,/INVALID_FAILURE/);
+      assert.deepEqual(rejectedAfter,rejectedBefore);
+    },
+    async()=>assert.deepEqual(
+      {result:deletedResult.state,state:deletedState.state,lifecycle:deletedState.lifecycle,count:Number(deletedState.reconciliation_count)},
+      {result:'deleted',state:'completed',lifecycle:'deleted',count:3},
+    ),
+    async()=>assert.deepEqual(
+      {result:missingResult.state,state:missingState.state,lifecycle:missingState.lifecycle,count:Number(missingState.reconciliation_count)},
+      {result:'deleted',state:'completed',lifecycle:'deleted',count:3},
+    ),
+  ];
+  assert.equal(names.length,studioDeletionExhaustionAuthorityScenarioNames.length);
+  assert.equal(checks.length,names.length);
+  for(let index=0;index<checks.length;index++)await scenario(names[index],checks[index]);
+
+  const evidence={
+    counts:{initial:1,firstRecovery:2,secondRecovery:3,terminal:3},
+    concurrent:{claims:concurrentClaims.filter(Boolean).length,executionAuthorityDelta:afterExhaustion.execution-beforeExhaustion.execution,dedicatedAuditDelta:afterExhaustion.dedicated-beforeExhaustion.dedicated,lifecycleVersionDelta:Number(afterExhaustion.state.lifecycle_version)-Number(beforeExhaustion.state.lifecycle_version)},
+    genericExhaustionAudits,
+    genericCodeRejected:/INVALID_FAILURE/.test(rejectedGenericError??''),
+    countThreeCompletion:{deleted:deletedState.lifecycle,missing:missingState.lifecycle},
+  };
+  console.log(`DELETION EXHAUSTION AUTHORITY COUNTS ${JSON.stringify(evidence)}`);
   return evidence;
 }
 

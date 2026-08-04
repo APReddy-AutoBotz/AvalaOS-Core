@@ -89,14 +89,6 @@ assert(
   'terminal rendition failure remains failed',
 );
 assert(
-  mapStudioClaimedDeletionResult({
-    outcome: 'failed',
-    receipt: { ...deletionReceipt, state: 'deletion_failed' },
-    failureCode: 'DELETION_RECONCILIATION_EXHAUSTED',
-  }).state === 'failed',
-  'terminal deletion exhaustion remains failed',
-);
-assert(
   mapStudioClaimedRenditionResult({
     outcome: 'available',
     receipt: { ...renditionReceipt, state: 'available' },
@@ -255,11 +247,13 @@ void (async () => {
     assert(calls.length === 7, 'private RPC adapters exercised');
     assert(calls.some(call => call.url.includes('studio_rendition_reconciliation_claim')), 'rendition loader is not null');
     assert(calls.some(call => call.url.includes('studio_deletion_reconciliation_claim')), 'deletion loader is not null');
+    assert(!calls.some(call => call.url.includes('studio_rendition_deletion_execution_claim')), 'null exhaustion claim returns no provider authority');
+    assert(!calls.some(call => call.url.includes('studio_rendition_deletion_fail')), 'null exhaustion claim never uses generic deletion failure');
   } finally {
     globalThis.fetch = priorFetch;
   }
   console.log(
-    'studio private artifact DB adapter: 38 mapping, safe-error, private RPC, and reconciliation loader assertions passed',
+    'studio private artifact DB adapter: 39 mapping, safe-error, private RPC, and reconciliation loader assertions passed',
   );
 })().catch(error => {
   console.error(error);

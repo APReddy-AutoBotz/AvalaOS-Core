@@ -223,17 +223,12 @@ class FakeDeletionDb implements StudioDeletionSagaDatabase {
   loadValue: any = deletionClaim;
   failTombstone = false;
   tombstones: Array<'deleted' | 'missing'> = [];
-  failures: string[] = [];
   reconciliationCodes: string[] = [];
   async claimDeletion(_requestId: string) { return this.claimValue; }
   async markTombstone(input: { deletionAttemptId: string; providerOutcome: 'deleted' | 'missing' }) {
     if (this.failTombstone) { this.failTombstone = false; throw new Error('db'); }
     this.tombstones.push(input.providerOutcome);
     return { deletionAttemptId: 'delete-1', renditionId: 'rendition-1', state: 'deleted' as const };
-  }
-  async markDeletionFailure(input: { deletionAttemptId: string; failureCode: 'DELETION_RECONCILIATION_EXHAUSTED' }) {
-    this.failures.push(input.failureCode);
-    return { deletionAttemptId: 'delete-1', renditionId: 'rendition-1', state: 'deletion_failed' as const };
   }
   async markDeletionReconciliationRequired(input: { deletionAttemptId: string; failureCode: 'DELETE_OUTCOME_UNKNOWN' | 'TOMBSTONE_COMPLETION_FAILED' }) {
     this.reconciliationCodes.push(input.failureCode);
@@ -301,12 +296,21 @@ void test('deletion reconciliation probes an existing exact object and deletes i
   assert.equal(storage.operationCounts.presence, 1);
   assert.equal(storage.operationCounts.delete, 1);
 });
-void test('deletion reconciliation is bounded after three committed attempts', async () => {
+void test('deletion reconciliation count three remains a provider recovery attempt and completes missing', async () => {
   const database = new FakeDeletionDb(); database.loadValue = { ...deletionClaim, reconciliationCount: 3 };
   const storage = new DeterministicFakeStudioPrivateArtifactStorage();
   const result = await reconcileStudioDeletion('delete-1', { database, storage });
-  assert.equal(result.outcome, 'failed');
-  assert.deepEqual(database.failures, ['DELETION_RECONCILIATION_EXHAUSTED']);
+  assert.equal(result.outcome, 'deleted');
+  assert.deepEqual(database.tombstones, ['missing']);
   assert.equal(storage.operationCounts.delete, 0);
-  assert.equal(storage.operationCounts.presence, 0);
+  assert.equal(storage.operationCounts.presence, 1);
+});
+void test('deletion reconciliation count three can delete an existing provider object', async () => {
+  const database = new FakeDeletionDb(); database.loadValue = { ...deletionClaim, reconciliationCount: 3 };
+  const storage = new DeterministicFakeStudioPrivateArtifactStorage(); await seedDeletionObject(storage);
+  const result = await reconcileStudioDeletion('delete-1', { database, storage });
+  assert.equal(result.outcome, 'deleted');
+  assert.deepEqual(database.tombstones, ['deleted']);
+  assert.equal(storage.operationCounts.presence, 1);
+  assert.equal(storage.operationCounts.delete, 1);
 });

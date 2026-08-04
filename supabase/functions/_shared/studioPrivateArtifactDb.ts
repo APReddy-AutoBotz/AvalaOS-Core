@@ -246,15 +246,6 @@ const deletionDatabase = (
     }
     return deletionReceipt(execution, 'deleted');
   },
-  markDeletionFailure: async input => {
-    const execution = bound();
-    await rpc('deletionFail', {
-      p_attempt: input.deletionAttemptId,
-      p_fence: execution.fence,
-      p_failure: input.failureCode,
-    });
-    return deletionReceipt(execution, 'deletion_failed');
-  },
   markDeletionReconciliationRequired: async input => {
     const execution = bound();
     await rpc('deletionFail', {
@@ -310,8 +301,6 @@ export const mapStudioClaimedDeletionResult = (
   switch (result.outcome) {
     case 'deleted':
       return { state: 'deleted', resource: result.receipt };
-    case 'failed':
-      return { state: 'failed', failureCode: result.failureCode };
     case 'reconciliation_required':
       return {
         state: 'reconciliation_required',
@@ -433,15 +422,6 @@ export const reconcileStudioPrivateDeletion = async (
         throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
       }
       return deletionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }, 'deleted');
-    },
-    markDeletionFailure: async input => {
-      if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
-      await rpc('deletionFail', {
-        p_attempt: input.deletionAttemptId,
-        p_fence: boundClaim.fence,
-        p_failure: input.failureCode,
-      });
-      return deletionReceipt({ ...boundClaim, disposition: 'execute', requestId: boundClaim.deletionAttemptId }, 'deletion_failed');
     },
     markDeletionReconciliationRequired: async input => {
       if (!boundClaim) throw new StudioPrivateArtifactError('COMMAND_UNAVAILABLE');
