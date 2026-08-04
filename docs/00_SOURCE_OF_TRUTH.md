@@ -1,12 +1,12 @@
 # AvalaOS Core Source Of Truth
 
-## Studio PR B post-merge corrective candidate
+## Studio PR B accepted corrective closure
 
-PR #217 merged over accepted PR #216 authority, but its closure remains blocked by five post-merge P1 runtime-contract findings. One additive forward-fix candidate corrects projection/RPC parity, public-to-private command translation, crash recovery, and hold/deletion serialization without rewriting accepted history. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and exact-head CI evidence are acceptance inputs, not hosted, deployment, pilot, production, readiness, security-certification, or compliance proof.
+PR #217 accepted head `c83d456501741dbeecc864846fe7419c8d9046e7` merged as `372ed0880950d3209f79139704d3935b49c294d0`. Corrective PR #218 accepted head `f713d30cfe64040a143c9442a18064b3523c1d94` merged as and is contained in verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`. PR #218 corrects the five PR #217 projection/RPC, strict-decoder, command-translation, crash-recovery, and hold/deletion-serialization findings; both PRs have zero unresolved review threads. The accepted migration remains unchanged at blob `3383268eab95d1b2f12f4bb8a77246e63c3e30a3`. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and CI acceptance is not hosted, deployment, pilot, production, readiness, security-certification, or compliance proof.
 
 ## Studio PR A active authority
 
-PR 1G remains accepted at the required `4ac6ca16b1513561779c53bbfb71cfb5a9160061` starting authority. PR A establishes governed structured-JSON artifact generation, immutable revision/review, and three-person approval authority. Private storage, file renditions, brokered download, retention, legal hold, and deletion remain outside PR A authority and are addressed only by the Studio PR B implementation candidate above. Legacy `document_generations` rows remain unverified and non-canonical.
+PR 1G remains accepted at the required `4ac6ca16b1513561779c53bbfb71cfb5a9160061` starting authority. PR A establishes governed structured-JSON artifact generation, immutable revision/review, and three-person approval authority. Private storage, file renditions, brokered download, retention, legal hold, and deletion remain outside PR A authority and are addressed by the accepted Studio PR B boundary above. Legacy `document_generations` rows remain unverified and non-canonical.
 
 
 AvalaOS Core is the governed AI and automation delivery platform.
@@ -104,7 +104,7 @@ Do not read the full historical planning/evidence corpus by default.
 4. PR #208 / PR 1C, Enterprise Assess UI Cutover, Govern Resolution, and Studio Handoff, is accepted at the PR #208 merge baseline.
 5. PR 1D is accepted; PR #211 / PR 1E governed review, approval, action-specific Govern resolution, and durable Studio source handoff is accepted.
 6. PR #212 / PR 1F Assess V2 economics, calibration reporting, realized outcomes, and portfolio intelligence is accepted and post-merge verified.
-7. Application Portfolio & AI-Assisted Modernization Assessment is accepted through PR #214 and corrective PR #215 after PR 1F; broader Studio/private-artifact work remains later.
+7. Application Portfolio & AI-Assisted Modernization Assessment is accepted through PR #214 and corrective PR #215 after PR 1F; Studio governed generation is accepted through PR #216 and private-artifact authority through PR #217 plus corrective PR #218.
 8. Continue through Delivery/lineage, Monitor/Admin/Trust, and deployment/pilot control as defined by the acceleration plan.
 
 PR 1C remains one substantial vertical PR. It does not authorize deployment, live-system access, later workstreams, or a readiness claim. Routine plan-only, evidence-only, reconciliation-only, post-merge-only, and closure-only PRs remain prohibited.

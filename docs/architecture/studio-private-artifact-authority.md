@@ -1,6 +1,6 @@
 # Studio Private Artifact Authority
 
-Status: PR #217 is merged and its closure remains blocked pending the post-merge runtime-contract forward-fix candidate. This document defines source architecture and verification obligations; it is not deployment, hosted Storage, pilot, production, security-certification, or compliance evidence.
+Status: accepted at source/CI level through PR #217 and corrective PR #218 on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`; both PRs have zero unresolved review threads. This document defines source architecture and verification obligations; it is not deployment, hosted Storage, pilot, production, security-certification, or compliance evidence.
 
 ## Objective and boundary
 

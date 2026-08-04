@@ -1,15 +1,15 @@
 # AvalaOS Core Implementation Status
 
-## Studio PR B implementation candidate
+## Studio PR B accepted implementation boundary
 
-Implemented on the candidate branch: deterministic Markdown/PDF/DOCX rendition authority, private create-only storage, brokered downloads, retention-policy snapshots, legal-hold events, governed deletion with independent approval, strict projection/client/UI states, reconciliation, and feature-owned tests/CI. Acceptance remains pending exact-head CI and review. No hosted/live, deployment, readiness, security-certification, or compliance proof is claimed.
+Accepted through PR #217 and corrective PR #218 on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`: deterministic Markdown/PDF/DOCX rendition authority, private create-only storage, brokered downloads, retention-policy snapshots, legal-hold events, governed deletion with independent approval, strict projection/client/UI states, reconciliation, and feature-owned tests/CI. The five PR #217 post-merge findings are closed and both PRs have zero unresolved review threads. No hosted/live, deployment, readiness, security-certification, or compliance proof is claimed.
 
 ## Studio PR A implementation boundary
 
-Studio PR A owns exact accepted PR 1E ancestry, immutable structured-JSON versions, durable staged provider attempts, independent review, and separate approval. Provider calls are not cross-system atomic. Studio PR B private storage and governed rendition/download are a separate implementation candidate; legacy `document_generations` remains unverified. Rollback is mutation/provider disablement with read-only committed projection and additive forward fixes.
+Studio PR A owns exact accepted PR 1E ancestry, immutable structured-JSON versions, durable staged provider attempts, independent review, and separate approval. Provider calls are not cross-system atomic. Accepted Studio PR B private storage and governed rendition/download remain a separate authority boundary; legacy `document_generations` remains unverified. Rollback is mutation/provider disablement with read-only committed projection and additive forward fixes.
 
 
-Baseline: PR #212 / PR 1F accepted and post-merge verified on `main` at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`.
+Baseline: Studio PR B accepted and post-merge verified on `main` at `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`.
 
 ## Honest Maturity Verdict
 

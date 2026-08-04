@@ -1,15 +1,15 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
-## Studio PR B candidate boundary
+## Studio PR B accepted boundary
 
-The active 2B candidate is one substantial vertical: approved PR #216 versions only, deterministic rendition bytes, create-only private storage, brokered no-store downloads, retention snapshots, legal holds, governed deletion, reconciliation, and feature-owned CI. No live infrastructure access or deployment is authorized. Safe rollback disables mutation, rendition, download, and deletion execution while retaining committed metadata and read-only projections for additive repair.
+Studio PR B is accepted through PR #217 and corrective PR #218 on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`: approved PR #216 versions only, deterministic rendition bytes, create-only private storage, brokered no-store downloads, retention snapshots, legal holds, governed deletion, reconciliation, and feature-owned CI. The five PR #217 post-merge findings are closed by PR #218 and both PRs have zero unresolved review threads. No live infrastructure access or deployment was performed. Safe rollback disables mutation, rendition, download, and deletion execution while retaining committed metadata and read-only projections for additive repair.
 
 ## Studio PR A acceleration boundary
 
-Studio PR A now owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The separate Studio PR B candidate above now owns the private-storage, rendition, brokered-download, retention, hold, and deletion boundary pending acceptance. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
+Studio PR A owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The accepted Studio PR B boundary above owns private storage, rendition, brokered download, retention, hold, deletion, and reconciliation source authority. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
 
 
-Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, and PR #212 / PR 1F are accepted; PR 1F is post-merge verified at `480cc9b943e8b51b074873c20c2a9f30dc6521c2`
+Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, PR #212 / PR 1F, PR #214/#215 / PR 1G, PR #216, and PR #217 plus corrective PR #218 are accepted; Studio PR B is post-merge verified at `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 

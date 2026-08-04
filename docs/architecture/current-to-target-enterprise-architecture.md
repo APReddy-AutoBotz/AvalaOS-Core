@@ -1,16 +1,16 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
-## Studio PR B candidate architecture
+## Studio PR B accepted architecture
 
-The 2B candidate adds a server-authoritative database claim -> deterministic renderer -> private create-only object -> verified completion saga. Browsers receive only tenant-scoped projections and binary broker responses; they never receive storage coordinates or mutation authority. Retention and legal-hold state are rechecked before a separate-human deletion approval can claim physical deletion. Canonical metadata and tombstones are never hard deleted.
+PR #217 plus corrective PR #218 establish a server-authoritative database claim -> deterministic renderer -> private create-only object -> verified completion saga on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`. Browsers receive only tenant-scoped projections and binary broker responses; they never receive storage coordinates or mutation authority. Retention and legal-hold state are rechecked before a separate-human deletion approval can claim physical deletion. Canonical metadata and tombstones are never hard deleted.
 
 ## Studio PR A authority
 
-PR 1G remains accepted. Studio PR A adds a server-authoritative aggregate and append-only structured-JSON version boundary over exact accepted PR 1E ancestry, with durable staged provider attempts, human revision, independent review, separate approval, and atomic supersession. Provider execution is an external effect, not cross-system atomic. Legacy `document_generations` is unverified and excluded. Those private-storage, rendition, brokered-download, retention, legal-hold, and deletion concerns remain outside PR A and are addressed by the separate Studio PR B candidate boundary above. Safe rollback disables mutations and provider generation while preserving read-only committed records for additive forward repair.
+PR 1G remains accepted. Studio PR A adds a server-authoritative aggregate and append-only structured-JSON version boundary over exact accepted PR 1E ancestry, with durable staged provider attempts, human revision, independent review, separate approval, and atomic supersession. Provider execution is an external effect, not cross-system atomic. Legacy `document_generations` is unverified and excluded. Those private-storage, rendition, brokered-download, retention, legal-hold, and deletion concerns remain outside PR A and are addressed by the accepted Studio PR B boundary above. Safe rollback disables mutations and provider generation while preserving read-only committed records for additive forward repair.
 
 
-Baseline: accepted `main` at `de87c86`
-Status: PR #208 / PR 1C accepted; PR 1D target and implementation contract
+Baseline: accepted source/CI `main` at `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`
+Status: Studio PR B accepted through PR #217 and corrective PR #218; hosted and deployment validation remain unproven
 
 ## Current Architecture
 
