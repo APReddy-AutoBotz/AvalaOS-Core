@@ -235,7 +235,46 @@ const projectEvidence = (raw: EnterpriseIntelligenceRawProjection, actorId: stri
       value: text(candidate.value).slice(0, 12_000), safeExcerpt: short(candidate.safe_excerpt, 1_000) || undefined,
       sourceLocator: short(candidate.source_locator, 400), confidence: Math.max(0, Math.min(1, number(candidate.confidence))),
       status: candidate.suggestion_status as EvidenceSuggestionStatus,
-      promptVersionLabel: short(candidatïm­¢G§²ÚîÆ­yÕrn raw.studioAggregates.flatMap(aggregate => {
+      promptVersionLabel: short(candidate.prompt_version, 120) || undefined,
+      provenanceState: candidate.excerpt_hash && candidate.source_version_id && candidate.source_locator ? 'anchored' as const : 'incomplete' as const,
+      reviewState: !reviewedBy ? 'pending' as const : reviewedBy === actorId ? 'reviewed_by_you' as const : 'reviewed_by_another' as const,
+      reviewedAt: text(candidate.reviewed_at) || undefined,
+    }];
+  });
+  return { sources, candidates };
+};
+
+const projectAssessDrafts = (raw: EnterpriseIntelligenceRawProjection): EnterpriseAssessDraftProjection[] => raw.assessDrafts.flatMap(row => {
+  if (!uuid.test(text(row.id)) || row.status !== 'draft' || !Number.isSafeInteger(number(row.version)) || number(row.version) < 1) return [];
+  const updatedAt = text(row.updated_at);
+  return [{
+    id: text(row.id),
+    label: `Assess draft Â· updated ${Number.isFinite(Date.parse(updatedAt)) ? new Date(updatedAt).toLocaleDateString('en-GB') : 'recently'}`,
+    versionLabel: `Draft version ${number(row.version)}`,
+    status: 'draft' as const,
+    updatedAt,
+  }];
+});
+
+const projectApplications = (raw: EnterpriseIntelligenceRawProjection) => {
+  const latestApproved = latestBy(raw.applicationAssessments, 'application_id');
+  const assessedApplications = new Set(raw.modernizationAssessments.map(row => text(row.application_ref)));
+  return raw.applications.flatMap(application => {
+    const assessment = latestApproved.get(text(application.id));
+    if (!assessment) return [];
+    return [{
+      id: text(application.id), name: short(application.name, 240),
+      approvedAssessmentLabel: `Approved assessment v${number(assessment.version, 1)}`,
+      decisionModelLabel: short(assessment.decision_model_version, 120), approvedAt: text(assessment.created_at),
+      modernizationState: assessedApplications.has(text(application.id)) ? 'already_assessed' as const : 'eligible' as const,
+    }];
+  });
+};
+
+const projectStudio = (raw: EnterpriseIntelligenceRawProjection): EnterpriseStudioDocumentProjection[] => {
+  const versions = new Map(raw.studioVersions.map(row => [text(row.id), row]));
+  const handoffs = latestBy(raw.studioHandoffs, 'studio_document_id');
+  return raw.studioAggregates.flatMap(aggregate => {
     const version = versions.get(text(aggregate.current_approved_version_id));
     if (!version || !includes(['brd', 'frd', 'pdd'] as const, aggregate.artifact_type)) return [];
     const handoff = handoffs.get(text(aggregate.id));

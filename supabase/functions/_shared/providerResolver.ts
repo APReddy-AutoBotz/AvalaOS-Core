@@ -416,143 +416,426 @@ const isConfigEligible = (
   && config.allowed_modes.includes(mode)
   && config.allowed_operations.includes(operation);
 
-const isExpired = (expiresAt: string | null | undefined, now: Date) =>ë«h‘éì¶»§q«^wİšY\‹ˆ›İÎˆ]KBŠNˆ›İšY\”™\ÛÛ™\‘˜Z[\™PÛ\ÜÈ[OˆÃBˆYˆ
-BˆÙ^T™Y‹›Ü™×ÚYOOHÜ™ÒYBˆÙ^T™Y‹œ›İšY\ˆOOH›İšY\ƒBˆÙ^T™Y‹œİ]\ÈOOH	ØXİ]™IÃBˆÙ^T™Y‹™[]YØ]Bˆ\Ñ^\™Y
-Ù^T™Y‹™^\™\×Ø]›İÊCBˆÙ^T™Y‹œ™\ÛÛ™\—İ\HOOH	ÛX[X[ÜXÙZÛ\‰ÃBˆÙ^T™Y‹œ™\ÛÛ™\—İ\HOOH	Ù^\›˜[ÜÙXÜ™]Ü™Y™\™[˜ÙIÃBˆ
-HÃBˆ™]\›ˆ	ÚÙ^WÜ™Y™\™[˜ÙWÚ[™[YÚX›IÎÃBˆCBƒBˆYˆ
-Ù^T™Y‹œ™\ÛÛ™\—İ\HOOH	ÜÙ\™\—Ü™Y™\™[˜ÙIÈÙ^T™Y‹œ™Y™\™[˜ÙTØY™]HOOH	Ü™Y™\™[˜ÙWÛÛ›IÊHÃBˆ™]\›ˆ	ÜÙXÜ™]Ü™Y™\™[˜ÙWİ[œØY™IÎÃBˆCBƒBˆ™]\›ˆ[ÃBŸNÃBƒB™^ÜÛÛœİ™\ÛÛ™T›İšY\‘›Ü“Ü\˜][ÛˆH\Ş[˜È
-ˆ[œ]ˆ›İšY\”™\ÛÛ™\’[œ]ˆ\Îˆ›İšY\”™\ÛÛ™\‘\ËŠNˆ›ÛZ\ÙOYØXŞT›İšY\”™\ÛÛ™\‘XÚ\Ú[ÛˆOˆÂˆÛÛœİÛÜœ™[][Û’YH™\ÛÛ™PÛÜœ™[][Û’Y
-[œ]\ÊNÃBˆÛÛœİ]šY[˜ÙT™YˆH›Ü›X[^™Tİš[™Ê[œ]™]šY[˜ÙT™YŠNÃBˆÛÛœİÛÜšÜÜXÙRYH›Ü›X[^™Tİš[™Ê[œ]ÛÜšÜÜXÙRY
-NÃBˆÛÛœİ™\]Y\İY›İšY\ÛÛ™šYÒYH›Ü›X[^™Tİš[™Ê[œ]œ™\]Y\İY›İšY\ÛÛ™šYÒY
-NÃBˆÛÛœİÜ™ÒYH›Ü›X[^™Tİš[™Ê[œ]›Ü™ÒY
-NÃBˆÛÛœİXİÜ’YH›Ü›X[^™Tİš[™Ê[œ]˜XİÜ’Y
-NÃBˆÛÛœİ[ÙHH›Ü›X[^™S[ÙJ[œ]›[ÙJNÃBˆÛÛœİÜ\˜][ÛˆH›Ü›X[^™SÜ\˜][ÛŠ[œ]›Ü\˜][ÛŠNÃBˆÛÛœİ›İšY\ˆH›Ü›X[^™T›İšY\Š[œ]œ™\]Y\İY›İšY\ŠNÃBƒBˆÛÛœİ›ØÚÈH
-˜Z[\™PÛ\ÜÎˆ›İšY\”™\ÛÛ™\‘˜Z[\™PÛ\ÜË^˜NˆÃBˆ›İšY\ÛÛ™šYÒYÎˆİš[™ÎÃBˆÙ^T™Y’YÎˆİš[™ÎÃBˆY]Y]OÎˆ™XÛÜ™İš[™Ë›İšY\”™\ÛÛ™\]Y]Y]Y]U˜[YOÃBˆHHßJHOˆZ[›ØÚÙYXÚ\Ú[ÛŠÃBˆ˜Z[\™PÛ\ÜËBˆÛÜœ™[][Û’YBˆ›İšY\‹Bˆ›İšY\ÛÛ™šYÒYˆ^˜Kœ›İšY\ÛÛ™šYÒYBˆÙ^T™Y’Yˆ^˜KšÙ^T™Y’YBˆÜ\˜][Û‹Bˆ[ÙKBˆÜ™ÒYBˆÛÜšÜÜXÙRYBˆXİÜ’YBˆ]šY[˜ÙT™Y‹BˆY]Y]Nˆ^˜K›Y]Y]KBˆJNÃBƒBˆYˆ
-[[ÙJH™]\›ˆ›ØÚÊ	Û[ÙWÛ›İØ[İÙY	ÊNÃBˆYˆ
-XXİÜ’Y
-H™]\›ˆ›ØÚÊ	İ[˜]][XØ]Y	ÊNÃBˆYˆ
-[Ü™ÒY
-H™]\›ˆ›ØÚÊ	ÛÜ™×ÛZ\ÜÚ[™ÉÊNÃBƒBˆÛÛœİY[X™\œÚ\H]ØZ]\Ëœ]Y\SY[X™\œÚ\[™›Û\ÊÈÜ™ÒYXİÜ’YJNÃBˆYˆ
-[Y[X™\œÚ\Y[X™\œÚ\œİ]\ÈOOH	ØXİ]™IÊH™]\›ˆ›ØÚÊ	ÛY[X™\œÚ\Ù[šYY	ÊNÃBˆYˆ
+const isExpired = (expiresAt: string | null | undefined, now: Date) =>
+  Boolean(expiresAt && new Date(expiresAt).getTime() <= now.getTime());
 
-Y[X™\œÚ\œ›ÛS˜[Y\È×JK›[™İOOH	‰ˆ
-Y[X™\œÚ\œ›ÛRYÈ×JK›[™İOOH
-HÃBˆ™]\›ˆ›ØÚÊ	Ü›ÛWÛ›İØ[İÙY	ÊNÃBˆCBƒBˆYˆ
-[Ü\˜][ÛŠH™]\›ˆ›ØÚÊ	ÛÜ\˜][Û—Û›İØ[İÙY	ÊNÃBˆYˆ
-\›İšY\ŠH™]\›ˆ›ØÚÊ	Ü›İšY\—Û›İÜİ\ÜY	ÊNÃBƒBˆÛÛœİÛXÚY\ÈH]ØZ]\Ëœ]Y\T›İšY\”ÛXŞJÃBˆÜ™ÒYBˆÜ\˜][Û‹Bˆ[ÙKBˆ™\]Y\İY›İšY\ÛÛ™šYÒYBˆJNÃBˆÛÛœİXİ]™TÛXÚY\ÈHÛXÚY\Ë™š[\ŠÛXŞHOƒBˆ\ÔÛXŞPXİ]™Q›Ü”™\]Y\İ
-ÛXŞKÜ™ÒYÜ\˜][Û‹[ÙK™\]Y\İY›İšY\ÛÛ™šYÒY
-CBˆ
-NÃBˆYˆ
-Xİ]™TÛXÚY\Ë›[™İOOH
-H™]\›ˆ›ØÚÊ	Ü›İšY\—ÜÛXŞWÛZ\ÜÚ[™ÉÊNÃBˆYˆ
-Xİ]™TÛXÚY\Ë›[™İˆJH™]\›ˆ›ØÚÊ	Ü›İšY\—ÜÛXŞWØ[XšYİ[İ\ÉÊNÃBƒBˆÛÛœİÛXŞHHXİ]™TÛXÚY\ÖÌNÃBˆYˆ
-\›ÛSX]Ú\ÔÛXŞJY[X™\œÚ\ÛXŞJJH™]\›ˆ›ØÚÊ	Ü›ÛWÛ›İØ[İÙY	ËÃBˆ›İšY\ÛÛ™šYÒYˆÛXŞKœ›İšY\—ØÛÛ™šY×ÚYBˆJNÃBƒBˆÛÛœİ›İšY\ÛÛ™šYÒYHÛXŞKœ›İšY\—ØÛÛ™šY×ÚYÃBˆÛÛœİÛÛ™šYÈH]ØZ]\Ëœ]Y\T›İšY\ÛÛ™šYÊÈÜ™ÒY›İšY\ÛÛ™šYÒYJNÃBˆYˆ
-XÛÛ™šYÊH™]\›ˆ›ØÚÊ	Ü›İšY\—ØÛÛ™šY×ÛZ\ÜÚ[™ÉËÈ›İšY\ÛÛ™šYÒYJNÃBˆYˆ
-Z\ĞÛÛ™šYÑ[YÚX›JÛÛ™šYËÜ™ÒY›İšY\‹Ü\˜][Û‹[ÙJJHÃBˆ™]\›ˆ›ØÚÊ	Ü›İšY\—ØÛÛ™šY×Ú[™[YÚX›IËÈ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÃBˆCBƒBˆYˆ
-XÛÛ™šYËšÙ^WÜ™Y—ÚY
-H™]\›ˆ›ØÚÊ	ÚÙ^WÜ™Y™\™[˜ÙWÛZ\ÜÚ[™ÉËÈ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÃBƒBˆÛÛœİÙ^T™YˆH]ØZ]\Ëœ]Y\T›İšY\’Ù^T™YŠÃBˆÜ™ÒYBˆ›İšY\‹BˆÙ^T™Y’YˆÛÛ™šYËšÙ^WÜ™Y—ÚYBˆJNÃBˆYˆ
-ZÙ^T™YŠHÃBˆ™]\›ˆ›ØÚÊ	ÚÙ^WÜ™Y™\™[˜ÙWÛZ\ÜÚ[™ÉËÃBˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÛÛ™šYËšÙ^WÜ™Y—ÚYBˆJNÃBˆCBƒBˆÛÛœİÙ^T™Y‘˜Z[\™HHÛ\ÜÚYRÙ^T™Y‘˜Z[\™JÙ^T™Y‹Ü™ÒY›İšY\‹\Ë››İÊ
-JNÃBˆYˆ
-Ù^T™Y‘˜Z[\™JHÃBˆ™]\›ˆ›ØÚÊÙ^T™Y‘˜Z[\™KÃBˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÙ^T™Y‹šYBˆJNÃBˆCBƒBˆYˆ
-[œ]œØØ[›™\Û\ÜÚYšXØ][ÛËœİ]\ÈOOH	ØÛ\ÜÚYšYY	ÊHÃBˆ™]\›ˆ›ØÚÊ	ÜØØ[›™\—ØÛ\ÜÚYšXØ][Û—ÛZ\ÜÚ[™ÉËÃBˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÙ^T™Y‹šYBˆJNÃBˆCBƒBˆHÃBˆÛÛœİ]Y]]™[HZ[›İšY\”™\ÛÛ™\]Y]]™[Ú[
-ÃBˆÜ™ÒYBˆÛÜšÜÜXÙRYBˆ›İšY\‹Bˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÙ^T™Y‹šYBˆÜ\˜][Û‹Bˆ[ÙKBˆÛXŞT™\İ[ˆ	Ø[İÙY	ËBˆİ]\Îˆ	Ø[İÙY	ËBˆXİÜ’YBˆÛÜœ™[][Û’YBˆ]šY[˜ÙT™Y‹BˆY]Y]NˆÃBˆY[X™\œÚ\ˆ	ØXİ]™IËBˆÛXŞNˆ	ÛX]ÚY	ËBˆ›İšY\ÛÛ™šYÎˆ	Ù[YÚX›IËBˆÙ^T™Y™\™[˜ÙNˆ	Ù[YÚX›WÙ›Ü—Ù]\™WÛÛÚİ\	ËBˆØØ[›™\Û\ÜÚYšXØ][Ûˆ[œ]œØØ[›™\Û\ÜÚYšXØ][Û‹œ™Y™\™[˜ÙH	ØÛ\ÜÚYšYY	ËBˆ‹‹Š[œ]˜]Y]Y]Y]HßJKBˆKBˆJNÃBƒBˆ™]\›ˆÃBˆİ]\Îˆ	Ø[İÙY	ËBˆ]\™TÙXÜ™]ÛÚİ\[YÚX›NˆYKBˆ›İšY\‹Bˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÙ^T™Y‹šYBˆÙ^T™Y”™\ÛÛ™\•\Nˆ	ÜÙ\™\—Ü™Y™\™[˜ÙIËBˆÜ\˜][Û‹Bˆ[ÙKBˆÜ™ÒYBˆÛÜšÜÜXÙRYBˆXİÜ’YBˆÛÜœ™[][Û’YBˆ]šY[˜ÙT™Y‹BˆÛXŞT™\İ[ˆ	Ø[İÙY	ËBˆ]Y]]™[BˆNÃBˆHØ]Ú
-\œ›ÜŠHÃBˆYˆ
-\œ›Üˆ[œİ[˜Ù[Ùˆ›İšY\”™\ÛÛ™\]Y]Y]Y]Q\œ›ÜŠHÃBˆ™]\›ˆZ[›ØÚÙYXÚ\Ú[ÛŠÃBˆ˜Z[\™PÛ\ÜÎˆ	Ø]Y]ØÛÛ^İ[œØY™IËBˆÛÜœ™[][Û’YBˆ›İšY\‹Bˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYBˆÙ^T™Y’YˆÙ^T™Y‹šYBˆÜ\˜][Û‹Bˆ[ÙKBˆÜ™ÒYBˆÛÜšÜÜXÙRYBˆXİÜ’YBˆ]šY[˜ÙT™Y‹BˆJNÃBˆCBˆ›İÈ\œ›ÜÃBˆBŸNÂ‚™^ÜÛÛœİS•T”’TÑWÔ“Õ’QT—ÕSQUSÓ—ÓPVĞQÑWÓTÈH
-ˆŒ
-ˆŒ
-ˆLÂ‚™^Ü\H[\œš\ÙT›İšY\”›İ]T›İÈHÂˆYˆİš[™ÎÂˆÜ™×ÚYˆİš[™ÎÂˆÛÜšÜÜXÙWÚYˆİš[™ÎÂˆ›İšY\—ØÛÛ™šY×ÚYˆİš[™ÎÂˆØ\Xš[]Nˆ›İšY\”™\ÛÛ™\“Ü\˜][ÛÂˆ[Ù[ˆİš[™ÎÂˆ[˜X›Yˆ›ÛÛX[Âˆ[İÙYÜ›Û\Îˆİš[™Ö×NÂˆ[]YØ]Îˆİš[™È[ÂŸNÂ‚™^Ü\H[\œš\ÙT›İšY\•\ØYÙHHÂˆZ[T™\]Y\İÎˆ[X™\Âˆ[ÛUÚÙ[œÎˆ[X™\ÂŸNÂ‚™^Ü\H[\œš\ÙT›İšY\”›İ]T™\ÛÛ™\‘\ÈHÂˆ›İÎˆ
+const classifyKeyRefFailure = (
+  keyRef: ProviderKeyRefRow,
+  orgId: string,
+  provider: ProviderResolverSupportedProvider,
+  now: Date,
+): ProviderResolverFailureClass | null => {
+  if (
+    keyRef.org_id !== orgId
+    || keyRef.provider !== provider
+    || keyRef.status !== 'active'
+    || keyRef.deleted_at
+    || isExpired(keyRef.expires_at, now)
+    || keyRef.resolver_type === 'manual_placeholder'
+    || keyRef.resolver_type === 'external_secret_reference'
+  ) {
+    return 'key_reference_ineligible';
+  }
 
-HOˆ]NÂˆÜ™X]PÛÜœ™[][Û’Yˆ
+  if (keyRef.resolver_type !== 'server_reference' || keyRef.referenceSafety !== 'reference_only') {
+    return 'secret_reference_unsafe';
+  }
 
-HOˆİš[™ÎÂˆ]Y\T›İ]\Îˆ
-[œ]ˆÂˆÜ™ÒYˆİš[™ÎÂˆÛÜšÜÜXÙRYˆİš[™ÎÂˆØ\Xš[]Nˆ›İšY\”™\ÛÛ™\“Ü\˜][ÛÂˆ™\]Y\İY›İšY\ÛÛ™šYÒYÎˆİš[™ÎÂˆ[˜ÛYQ\ØX›Yˆ›ÛÛX[ÂˆJHOˆ›ÛZ\ÙO[\œš\ÙT›İšY\”›İ]T›İÖ×OÂˆ]Y\T›İšY\ÛÛ™šYÎˆ
-[œ]ˆÛÛ™šYÓÛÚİ\[œ]
-HOˆ›ÛZ\ÙO›İšY\ÛÛ™šYÔ›İÈ[Âˆ]Y\T›İšY\’Ù^T™Yˆ
-[œ]ˆÙ^T™Y“ÛÚİ\[œ]
-HOˆ›ÛZ\ÙO›İšY\’Ù^T™Y”›İÈ[Âˆ]Y\U\ØYÙNˆ
-[œ]ˆÂˆÜ™ÒYˆİš[™ÎÂˆÛÜšÜÜXÙRYˆİš[™ÎÂˆ›İšY\ÛÛ™šYÒYˆİš[™ÎÂˆ›İÎˆ]NÂˆJHOˆ›ÛZ\ÙO[\œš\ÙT›İšY\•\ØYÙOÂˆ\Ñ[™Ú[[İÙYˆ
-›İšY\ˆ[\œš\ÙT›İšY\”™\ÛÛ™\”›İšY\‹[™Ú[ˆİš[™ÊHOˆ›ÛÛX[ÂŸNÂ‚™^Ü\H[\œš\ÙT›İšY\”›İ]T™\ÛÛ™\’[œ]HÂˆ[ÙNˆ›İšY\”™\ÛÛ™\“[ÙNÂˆØ\Xš[]Nˆ›İšY\”™\ÛÛ™\“Ü\˜][ÛÂˆÜ™Ø[š^˜][Û’Yˆİš[™ÎÂˆÛÜšÜÜXÙRYˆİš[™ÎÂˆXİÜ’Yˆİš[™ÎÂˆ›ÛS˜[Y\Îˆİš[™Ö×NÂˆ™\]Y\İY›İšY\ÛÛ™šYÒYÎˆİš[™ÎÂˆ[˜ÛYQ\ØX›YÎˆ›ÛÛX[Âˆ›ÜÜÙY[İÙY›Û\ÏÎˆİš[™Ö×NÂˆÛÜœ™[][Û’YÎˆİš[™ÎÂˆ]šY[˜ÙT™YÎˆİš[™ÎÂˆØØ[›™\”™Y™\™[˜ÙNˆİš[™ÎÂŸNÂ‚˜ÛÛœİ[\œš\ÙT›İšY\œÈH™]ÈÙ][\œš\ÙT›İšY\”™\ÛÛ™\”›İšY\ŠÂˆ	ÛÜ[˜ZIËˆ	Ø^\™WÛÜ[˜ZIËˆ	Ø[›ÜXÉËˆ	ÙÙ[Z[šIËˆ	ÛÜ[˜ZWØÛÛ\]X›IË—JNÂ‚˜ÛÛœİÛ\ÜÚYQ[\œš\ÙPÛÛ™šYÈH
-ˆÛÛ™šYÎˆ›İšY\ÛÛ™šYÔ›İËˆ[œ]ˆ[\œš\ÙT›İšY\”›İ]T™\ÛÛ™\’[œ]ˆ›İÎˆ]KŠNˆ›İšY\”™\ÛÛ™\‘˜Z[\™PÛ\ÜÈ[OˆÂˆYˆ
-ÛÛ™šYË›Ü™×ÚYOOH[œ]›Ü™Ø[š^˜][Û’Y
-H™]\›ˆ	İÜ›Û™×İ[˜[	ÎÂˆYˆ
-ÛÛ™šYË™[]YØ]ÛÛ™šYËœİ]\ÈOOH	Ü™]\™Y	ÈÛÛ™šYËœİ]\ÈOOH	Ü™]›ÚÙY	ÊH™]\›ˆ	Ü›İšY\—Ü™]›ÚÙY	ÎÂˆYˆ
-ÛÛ™šYËœİ]\ÈOOH	Ù\ØX›Y	ÊH™]\›ˆ	Ü›İšY\—Ù\ØX›Y	ÎÂˆYˆ
-ÛÛ™šYËœİ]\ÈOOH	ØXİ]™IÊH™]\›ˆ	Ü›İšY\—ØÛÛ™šY×Ú[™[YÚX›IÎÂˆYˆ
-Y[\œš\ÙT›İšY\œËš\ÊÛÛ™šYËœ›İšY\ˆ\È[\œš\ÙT›İšY\”™\ÛÛ™\”›İšY\ŠJH™]\›ˆ	Ü›İšY\—Û›İÜİ\ÜY	ÎÂˆYˆ
-XÛÛ™šYË›\İİ˜[Y]YØ]
-H™]\›ˆ	Ü›İšY\—İ[˜[Y]Y	ÎÂˆÛÛœİ˜[Y]Y]H™]È]JÛÛ™šYË›\İİ˜[Y]YØ]
-K™Ù][YJ
-NÂˆYˆ
-S[X™\‹š\Ñš[š]J˜[Y]Y]
-H˜[Y]Y]ˆ›İË™Ù][YJ
-H›İË™Ù][YJ
-HH˜[Y]Y]ˆS•T”’TÑWÔ“Õ’QT—ÕSQUSÓ—ÓPVĞQÑWÓTÊHÂˆ™]\›ˆ	Ü›İšY\—İ˜[Y][Û—Üİ[IÎÂˆBˆ™]\›ˆ[ÂŸNÂ‚˜ÛÛœİÛÛ™šYİ\™YYÙ]H
-ÛÛ™šYÎˆ›İšY\ÛÛ™šYÔ›İÊHOˆÂˆÛÛœİÛXŞHHÛÛ™šYË˜YÙ]ÜÛXŞHßNÂˆÛÛœİ™XY[Z]H
-Ù^Nˆ	ÙZ[T™\]Y\İÉÈ	Û[ÛUÚÙ[œÉÊHOˆÂˆÛÛœİ˜[YHHÛXŞVÚÙ^WNÂˆ™]\›ˆ[X™\‹š\ÔØY™R[YÙ\Š˜[YJH	‰ˆ[X™\Š˜[YJHˆÈ[X™\Š˜[YJHˆ[™Yš[™YÂˆNÂˆ™]\›ˆÈZ[T™\]Y\İÎˆ™XY[Z]
-	ÙZ[T™\]Y\İÉÊK[ÛUÚÙ[œÎˆ™XY[Z]
-	Û[ÛUÚÙ[œÉÊHNÂŸNÂ‚‹ÊŠ‚ˆ
-ˆØ[›ÛšXØ[[\œš\ÙH[[YÙ[˜ÙH›İ]H]]Üš]Kˆ][[[Û˜[H™]\›œÂˆ
-ˆ›ÈÙXÜ™]™Y™\™[˜ÙHÜˆÙ^HX]\šX[ÈHÙXÜ™]Y\\ˆ™K[ØYÈH^Xİˆ
-ˆ[˜[Ü›İšY\‹X›İ[™Ù^H™Y™\™[˜ÙHÛ›HY\ˆ\ÈXÚ\Ú[Ûˆ\È[İÙY‚ˆ
-‹Â™^ÜÛÛœİ™\ÛÛ™Q[\œš\ÙT›İšY\”›İ]HH\Ş[˜È
-ˆ[œ]ˆ[\œš\ÙT›İšY\”›İ]T™\ÛÛ™\’[œ]ˆ\Îˆ[\œš\ÙT›İšY\”›İ]T™\ÛÛ™\‘\ËŠNˆ›ÛZ\ÙO[\œš\ÙT›İšY\”™\ÛÛ™\‘XÚ\Ú[ÛˆOˆÂˆÛÛœİÛÜœ™[][Û’YH›Ü›X[^™Tİš[™Ê[œ]˜ÛÜœ™[][Û’Y
-H\Ë˜Ü™X]PÛÜœ™[][Û’Y
+  return null;
+};
 
-NÂˆÛÛœİÜ™ÒYH›Ü›X[^™Tİš[™Ê[œ]›Ü™Ø[š^˜][Û’Y
-NÂˆÛÛœİÛÜšÜÜXÙRYH›Ü›X[^™Tİš[™Ê[œ]ÛÜšÜÜXÙRY
-NÂˆÛÛœİXİÜ’YH›Ü›X[^™Tİš[™Ê[œ]˜XİÜ’Y
-NÂˆÛÛœİØ\Xš[]HH›Ü›X[^™SÜ\˜][ÛŠ[œ]˜Ø\Xš[]JNÂˆÛÛœİ™\]Y\İY›İšY\ÛÛ™šYÒYH›Ü›X[^™Tİš[™Ê[œ]œ™\]Y\İY›İšY\ÛÛ™šYÒY
-NÂˆÛÛœİ›ØÚÈH
-ˆ˜Z[\™PÛ\ÜÎˆ›İšY\”™\ÛÛ™\‘˜Z[\™PÛ\ÜËˆ^˜NˆÈ›İšY\Îˆ›İšY\”™\ÛÛ™\”İ\ÜY›İšY\È›İšY\ÛÛ™šYÒYÎˆİš[™ÎÈÙ^T™Y’YÎˆİš[™ÈHHßKˆ
-HOˆZ[›ØÚÙYXÚ\Ú[ÛŠÂˆ˜Z[\™PÛ\ÜËˆÛÜœ™[][Û’Yˆ›İšY\ˆ^˜Kœ›İšY\‹ˆ›İšY\ÛÛ™šYÒYˆ^˜Kœ›İšY\ÛÛ™šYÒYˆÙ^T™Y’Yˆ^˜KšÙ^T™Y’YˆÜ\˜][ÛˆØ\Xš[]Kˆ[ÙNˆ[œ]›[ÙKˆÜ™ÒYˆÛÜšÜÜXÙRYˆXİÜ’Yˆ]šY[˜ÙT™Yˆ›Ü›X[^™Tİš[™Ê[œ]™]šY[˜ÙT™YŠKˆJNÂ‚ˆYˆ
-[Ü™ÒY]ÛÜšÜÜXÙRYXXİÜ’Y
-H™]\›ˆ›ØÚÊ	İÜ›Û™×İ[˜[	ÊNÂˆYˆ
-XØ\Xš[]HXØ\Xš[]Kš[˜ÛY\Ê	Ë‰ÊJH™]\›ˆ›ØÚÊ	ÛÜ\˜][Û—Û›İØ[İÙY	ÊNÂˆYˆ
-Z[œ]œØØ[›™\”™Y™\™[˜ÙOËš[J
-JH™]\›ˆ›ØÚÊ	ÜØØ[›™\—ØÛ\ÜÚYšXØ][Û—ÛZ\ÜÚ[™ÉÊNÂ‚ˆHÂˆÛÛœİ›İ]\ÈH]ØZ]\Ëœ]Y\T›İ]\ÊÂˆÜ™ÒYˆÛÜšÜÜXÙRYˆØ\Xš[]Kˆ™\]Y\İY›İšY\ÛÛ™šYÒYˆ[˜ÛYQ\ØX›Yˆ[œ]š[˜ÛYQ\ØX›YOOHYKˆJNÂˆYˆ
-›İ]\Ë›[™İOOH
-H™]\›ˆ›ØÚÊ	Ü›İ]WÛZ\ÜÚ[™ÉÊNÂˆYˆ
-›İ]\Ë›[™İˆJH™]\›ˆ›ØÚÊ	Ü›İšY\—ÜÛXŞWØ[XšYİ[İ\ÉÊNÂˆÛÛœİ›İ]HH›İ]\ÖÌNÂˆYˆ
-›İ]K›Ü™×ÚYOOHÜ™ÒY›İ]KÛÜšÜÜXÙWÚYOOHÛÜšÜÜXÙRY
-H™]\›ˆ›ØÚÊ	İÜ›Û™×İ[˜[	ÊNÂˆYˆ
-›İ]K™[]YØ]
-\›İ]K™[˜X›Y	‰ˆ[œ]š[˜ÛYQ\ØX›YOOHYJJHÂˆ™]\›ˆ›ØÚÊ	Ü›İ]WÙ\ØX›Y	ËÈ›İšY\ÛÛ™šYÒYˆ›İ]Kœ›İšY\—ØÛÛ™šY×ÚYJNÂˆB‚ˆÛÛœİ›Ü›X[^™Y›Û\ÈH™]ÈÙ]
-[œ]œ›ÛS˜[Y\Ë›X\
-›ÛHOˆ›ÛKš[J
-KÓİÙ\Ø\ÙJ
-JK™š[\Š›ÛÛX[ŠJNÂˆÛÛœİ[İÙY›Û\ÈH
-ˆ[œ]š[˜ÛYQ\ØX›Y	‰ˆ[œ]œ›ÜÜÙY[İÙY›Û\ÂˆÈ[œ]œ›ÜÜÙY[İÙY›Û\Âˆˆ›İ]K˜[İÙYÜ›Û\È×Bˆ
-K›X\
-›ÛHOˆ›ÛKš[J
-KÓİÙ\Ø\ÙJ
-JK™š[\Š›ÛÛX[ŠNÂˆYˆ
-[İÙY›Û\Ë›[™İOOHX[İÙY›Û\ËœÛÛYJ›ÛHOˆ›Ü›X[^™Y›Û\Ëš\Ê›ÛJJJHÂˆ™]\›ˆ›ØÚÊ	Ü›ÛWÛ›İØ[İÙY	ËÈ›İšY\ÛÛ™šYÒYˆ›İ]Kœ›İšY\—ØÛÛ™šY×ÚYJNÂˆB‚ˆÛÛœİÛÛ™šYÈH]ØZ]\Ëœ]Y\T›İšY\ÛÛ™šYÊÈÜ™ÒY›İšY\ÛÛ™šYÒYˆ›İ]Kœ›İšY\—ØÛÛ™šY×ÚYJNÂˆYˆ
-XÛÛ™šYÊH™]\›ˆ›ØÚÊ	Ü›İšY\—ØÛÛ™šY×ÛZ\ÜÚ[™ÉËÈ›İšY\ÛÛ™šYÒYˆ›İ]Kœ›İšY\—ØÛÛ™šY×ÚYJNÂˆÛÛœİ›İšY\ˆH›Ü›X[^™Q[\œš\ÙT›İšY\ŠÛÛ™šYËœ›İšY\ŠNÂˆÛÛœİÛÛ™šYÑ˜Z[\™HHÛ\ÜÚYQ[\œš\ÙPÛÛ™šYÊÛÛ™šYË[œ]\Ë››İÊ
-JNÂˆYˆ
-\›İšY\ˆÛÛ™šYÑ˜Z[\™JHÂˆ™]\›ˆ›ØÚÊÛÛ™šYÑ˜Z[\™H	Ü›İšY\—Û›İÜİ\ÜY	ËÂˆ›İšY\‹ˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYˆJNÂˆB‚ˆÛÛœİ[™Ú[HÛÛ™šYË™[™Ú[İ\›Ëš[J
-NÂˆYˆ
+export const resolveProviderForOperation = async (
+  input: ProviderResolverInput,
+  deps: ProviderResolverDeps,
+): Promise<LegacyProviderResolverDecision> => {
+  const correlationId = resolveCorrelationId(input, deps);
+  const evidenceRef = normalizeString(input.evidenceRef);
+  const workspaceId = normalizeString(input.workspaceId);
+  const requestedProviderConfigId = normalizeString(input.requestedProviderConfigId);
+  const orgId = normalizeString(input.orgId);
+  const actorId = normalizeString(input.actorId);
+  const mode = normalizeMode(input.mode);
+  const operation = normalizeOperation(input.operation);
+  const provider = normalizeProvider(input.requestedProvider);
 
-›İšY\ˆOOH	Ø^\™WÛÜ[˜ZIÈ›İšY\ˆOOH	ÛÜ[˜ZWØÛÛ\]X›IÊH	‰ˆY[™Ú[
-HÂˆ™]\›ˆ›ØÚÊ	Ü›İšY\—ØÛÛ™šY×Ú[™[YÚX›IËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÂˆBˆYˆ
-[™Ú[	‰ˆY\Ëš\Ñ[™Ú[[İÙY
-›İšY\ˆ\È[\œš\ÙT›İšY\”™\ÛÛ™\”›İšY\‹[™Ú[
-JHÂˆ™]\›ˆ›ØÚÊ	Ü›İšY\—ØÛÛ™šY×Ú[™[YÚX›IËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÂˆBˆÛÛœİ[Ù[H›İ]K›[Ù[Ëš[J
-HÛÛ™šYË™Y˜][Û[Ù[Ëš[J
-NÂˆYˆ
-[[Ù[JÛÛ™šYË›[Ù[Ø[İÛ\İ×JKš[˜ÛY\Ê[Ù[
-JHÂˆ™]\›ˆ›ØÚÊ	Û[Ù[Û›İØ[İÙY	ËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÂˆBˆYˆ
-XÛÛ™šYËšÙ^WÜ™Y—ÚY
-H™]\›ˆ›ØÚÊ	ÚÙ^WÜ™Y™\™[˜ÙWÛZ\ÜÚ[™ÉËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYJNÂˆÛÛœİÙ^T™YˆH]ØZ]\Ëœ]Y\T›İšY\’Ù^T™YŠÈÜ™ÒY›İšY\‹Ù^T™Y’YˆÛÛ™šYËšÙ^WÜ™Y—ÚYJNÂˆYˆ
-ZÙ^T™YŠH™]\›ˆ›ØÚÊ	ÚÙ^WÜ™Y™\™[˜ÙWÛZ\ÜÚ[™ÉËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYÙ^T™Y’YˆÛÛ™šYËšÙ^WÜ™Y—ÚYJNÂˆÛÛœİÙ^Q˜Z[\™HHÛ\ÜÚYRÙ^T™Y‘˜Z[\™JÙ^T™Y‹Ü™ÒY›İšY\‹\Ë››İÊ
-JNÂˆYˆ
-Ù^Q˜Z[\™JH™]\›ˆ›ØÚÊÙ^Q˜Z[\™KÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYÙ^T™Y’YˆÙ^T™Y‹šYJNÂ‚ˆÛÛœİYÙ]HÛÛ™šYİ\™YYÙ]
-ÛÛ™šYÊNÂˆYˆ
-YÙ]™Z[T™\]Y\İÈOOH[™Yš[™YYÙ]›[ÛUÚÙ[œÈOOH[™Yš[™Y
-HÂˆÛÛœİ\ØYÙHH]ØZ]\Ëœ]Y\U\ØYÙJÈÜ™ÒYÛÜšÜÜXÙRY›İšY\ÛÛ™šYÒYˆÛÛ™šYËšY›İÎˆ\Ë››İÊ
-HJNÂˆYˆ
-ˆ
-YÙ]™Z[T™\]Y\İÈOOH[™Yš[™Y	‰ˆ\ØYÙK™Z[T™\]Y\İÈHYÙ]™Z[T™\]Y\İÊBˆ
-YÙ]›[ÛUÚÙ[œÈOOH[™Yš[™Y	‰ˆ\ØYÙK›[ÛUÚÙ[œÈHYÙ]›[ÛUÚÙ[œÊBˆ
-H™]\›ˆ›ØÚÊ	ØYÙ]Ù^]\İY	ËÈ›İšY\‹›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYÙ^T™Y’YˆÙ^T™Y‹šYJNÂˆB‚ˆÛÛœİ]Y]]™[HZ[›İšY\”™\ÛÛ™\]Y]]™[Ú[
-ÂˆÜ™ÒYˆÛÜšÜÜXÙRYˆ›İšY\‹ˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYˆÙ^T™Y’YˆÙ^T™Y‹šYˆÜ\˜][ÛˆØ\Xš[]Kˆ[ÙNˆ[œ]›[ÙKˆÛXŞT™\İ[ˆ	Ø[İÙY	Ëˆİ]\Îˆ	Ø[İÙY	ËˆXİÜ’YˆÛÜœ™[][Û’Yˆ]šY[˜ÙT™Yˆ›Ü›X[^™Tİš[™Ê[œ]™]šY[˜ÙT™YŠKˆY]Y]NˆÂˆY[X™\œÚ\ˆ	ØXİ]™IËˆ›İ]Nˆ	Ù[YÚX›IËˆ›İšY\ÛÛ™šYÎˆ	ØXİ]™WØ[™İ˜[Y]Y	ËˆÙ^T™Y™\™[˜ÙNˆ	Ù[YÚX›WÙ›Ü—ÛÛÚİ\	ËˆØØ[›™\Û\ÜÚYšXØ][Ûˆ[œ]œØØ[›™\”™Y™\™[˜ÙKˆKˆJNÂˆ™]\›ˆÂˆİ]\Îˆ	Ø[İÙY	Ëˆ]\™TÙXÜ™]ÛÚİ\[YÚX›NˆYKˆ›İšY\‹ˆ›İšY\ÛÛ™šYÒYˆÛÛ™šYËšYˆÙ^T™Y’YˆÙ^T™Y‹šYˆÙ^T™Y”™\ÛÛ™\•\Nˆ	ÜÙ\™\—Ü™Y™\™[˜ÙIËˆÜ\˜][ÛˆØ\Xš[]KˆØ\Xš[]Kˆ[ÙNˆ[œ]›[ÙKˆÜ™ÒYˆÛÜšÜÜXÙRYˆXİÜ’YˆÛÜœ™[][Û’Yˆ]šY[˜ÙT™Yˆ›Ü›X[^™Tİš[™Ê[œ]™]šY[˜ÙT™YŠKˆÛXŞT™\İ[ˆ	Ø[İÙY	Ëˆ[Ù[ˆ[™Ú[ˆ\Ş[Y[ˆÛÛ™šYË™\Ş[Y[Û˜[YOËš[J
-H[™Yš[™Yˆ]Y]]™[ˆNÂˆHØ]ÚÂˆ™]\›ˆ›ØÚÊ	Ü›İšY\—İ[˜]˜Z[X›IËÈ›İšY\ÛÛ™šYÒYˆ™\]Y\İY›İšY\ÛÛ™šYÒYJNÂˆBŸNÂ
+  const block = (failureClass: ProviderResolverFailureClass, extra: {
+    providerConfigId?: string;
+    keyRefId?: string;
+    metadata?: Record<string, ProviderResolverAuditMetadataValue>;
+  } = {}) => buildBlockedDecision({
+    failureClass,
+    correlationId,
+    provider,
+    providerConfigId: extra.providerConfigId,
+    keyRefId: extra.keyRefId,
+    operation,
+    mode,
+    orgId,
+    workspaceId,
+    actorId,
+    evidenceRef,
+    metadata: extra.metadata,
+  });
+
+  if (!mode) return block('mode_not_allowed');
+  if (!actorId) return block('unauthenticated');
+  if (!orgId) return block('org_missing');
+
+  const membership = await deps.queryMembershipAndRoles({ orgId, actorId });
+  if (!membership || membership.status !== 'active') return block('membership_denied');
+  if ((membership.roleNames || []).length === 0 && (membership.roleIds || []).length === 0) {
+    return block('role_not_allowed');
+  }
+
+  if (!operation) return block('operation_not_allowed');
+  if (!provider) return block('provider_not_supported');
+
+  const policies = await deps.queryProviderPolicy({
+    orgId,
+    operation,
+    mode,
+    requestedProviderConfigId,
+  });
+  const activePolicies = policies.filter(policy =>
+    isPolicyActiveForRequest(policy, orgId, operation, mode, requestedProviderConfigId)
+  );
+  if (activePolicies.length === 0) return block('provider_policy_missing');
+  if (activePolicies.length > 1) return block('provider_policy_ambiguous');
+
+  const policy = activePolicies[0];
+  if (!roleMatchesPolicy(membership, policy)) return block('role_not_allowed', {
+    providerConfigId: policy.provider_config_id,
+  });
+
+  const providerConfigId = policy.provider_config_id;
+  const config = await deps.queryProviderConfig({ orgId, providerConfigId });
+  if (!config) return block('provider_config_missing', { providerConfigId });
+  if (!isConfigEligible(config, orgId, provider, operation, mode)) {
+    return block('provider_config_ineligible', { providerConfigId: config.id });
+  }
+
+  if (!config.key_ref_id) return block('key_reference_missing', { providerConfigId: config.id });
+
+  const keyRef = await deps.queryProviderKeyRef({
+    orgId,
+    provider,
+    keyRefId: config.key_ref_id,
+  });
+  if (!keyRef) {
+    return block('key_reference_missing', {
+      providerConfigId: config.id,
+      keyRefId: config.key_ref_id,
+    });
+  }
+
+  const keyRefFailure = classifyKeyRefFailure(keyRef, orgId, provider, deps.now());
+  if (keyRefFailure) {
+    return block(keyRefFailure, {
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+    });
+  }
+
+  if (input.scannerClassification?.status !== 'classified') {
+    return block('scanner_classification_missing', {
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+    });
+  }
+
+  try {
+    const auditEvent = buildProviderResolverAuditEventShell({
+      orgId,
+      workspaceId,
+      provider,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      operation,
+      mode,
+      policyResult: 'allowed',
+      status: 'allowed',
+      actorId,
+      correlationId,
+      evidenceRef,
+      metadata: {
+        membership: 'active',
+        policy: 'matched',
+        providerConfig: 'eligible',
+        keyReference: 'eligible_for_future_lookup',
+        scannerClassification: input.scannerClassification.reference || 'classified',
+        ...(input.auditMetadata || {}),
+      },
+    });
+
+    return {
+      status: 'allowed',
+      futureSecretLookupEligible: true,
+      provider,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      keyRefResolverType: 'server_reference',
+      operation,
+      mode,
+      orgId,
+      workspaceId,
+      actorId,
+      correlationId,
+      evidenceRef,
+      policyResult: 'allowed',
+      auditEvent,
+    };
+  } catch (error) {
+    if (error instanceof ProviderResolverAuditMetadataError) {
+      return buildBlockedDecision({
+        failureClass: 'audit_context_unsafe',
+        correlationId,
+        provider,
+        providerConfigId: config.id,
+        keyRefId: keyRef.id,
+        operation,
+        mode,
+        orgId,
+        workspaceId,
+        actorId,
+        evidenceRef,
+      });
+    }
+    throw error;
+  }
+};
+
+export const ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export type EnterpriseProviderRouteRow = {
+  id: string;
+  org_id: string;
+  workspace_id: string;
+  provider_config_id: string;
+  capability: ProviderResolverOperation;
+  model: string;
+  enabled: boolean;
+  allowed_roles: string[];
+  deleted_at?: string | null;
+};
+
+export type EnterpriseProviderUsage = {
+  dailyRequests: number;
+  monthlyTokens: number;
+};
+
+export type EnterpriseProviderRouteResolverDeps = {
+  now: () => Date;
+  createCorrelationId: () => string;
+  queryRoutes: (input: {
+    orgId: string;
+    workspaceId: string;
+    capability: ProviderResolverOperation;
+    requestedProviderConfigId?: string;
+    includeDisabled: boolean;
+  }) => Promise<EnterpriseProviderRouteRow[]>;
+  queryProviderConfig: (input: ConfigLookupInput) => Promise<ProviderConfigRow | null>;
+  queryProviderKeyRef: (input: KeyRefLookupInput) => Promise<ProviderKeyRefRow | null>;
+  queryUsage: (input: {
+    orgId: string;
+    workspaceId: string;
+    providerConfigId: string;
+    now: Date;
+  }) => Promise<EnterpriseProviderUsage>;
+  isEndpointAllowed: (provider: EnterpriseProviderResolverProvider, endpoint: string) => boolean;
+};
+
+export type EnterpriseProviderRouteResolverInput = {
+  mode: ProviderResolverMode;
+  capability: ProviderResolverOperation;
+  organizationId: string;
+  workspaceId: string;
+  actorId: string;
+  roleNames: string[];
+  requestedProviderConfigId?: string;
+  includeDisabled?: boolean;
+  proposedAllowedRoles?: string[];
+  correlationId?: string;
+  evidenceRef?: string;
+  scannerReference: string;
+};
+
+const enterpriseProviders = new Set<EnterpriseProviderResolverProvider>([
+  'openai',
+  'azure_openai',
+  'anthropic',
+  'gemini',
+  'openai_compatible',
+]);
+
+const classifyEnterpriseConfig = (
+  config: ProviderConfigRow,
+  input: EnterpriseProviderRouteResolverInput,
+  now: Date,
+): ProviderResolverFailureClass | null => {
+  if (config.org_id !== input.organizationId) return 'wrong_tenant';
+  if (config.deleted_at || config.status === 'retired' || config.status === 'revoked') return 'provider_revoked';
+  if (config.status === 'disabled') return 'provider_disabled';
+  if (config.status !== 'active') return 'provider_config_ineligible';
+  if (!enterpriseProviders.has(config.provider as EnterpriseProviderResolverProvider)) return 'provider_not_supported';
+  if (!config.last_validated_at) return 'provider_unvalidated';
+  const validatedAt = new Date(config.last_validated_at).getTime();
+  if (!Number.isFinite(validatedAt) || validatedAt > now.getTime() || now.getTime() - validatedAt > ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS) {
+    return 'provider_validation_stale';
+  }
+  return null;
+};
+
+const configuredBudget = (config: ProviderConfigRow) => {
+  const policy = config.budget_policy || {};
+  const readLimit = (key: 'dailyRequests' | 'monthlyTokens') => {
+    const value = policy[key];
+    return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : undefined;
+  };
+  return { dailyRequests: readLimit('dailyRequests'), monthlyTokens: readLimit('monthlyTokens') };
+};
+
+/**
+ * Canonical Enterprise Intelligence route authority. It intentionally returns
+ * no secret reference or key material; the secret adapter re-loads the exact
+ * tenant/provider-bound key reference only after this decision is allowed.
+ */
+export const resolveEnterpriseProviderRoute = async (
+  input: EnterpriseProviderRouteResolverInput,
+  deps: EnterpriseProviderRouteResolverDeps,
+): Promise<EnterpriseProviderResolverDecision> => {
+  const correlationId = normalizeString(input.correlationId) || deps.createCorrelationId();
+  const orgId = normalizeString(input.organizationId);
+  const workspaceId = normalizeString(input.workspaceId);
+  const actorId = normalizeString(input.actorId);
+  const capability = normalizeOperation(input.capability);
+  const requestedProviderConfigId = normalizeString(input.requestedProviderConfigId);
+  const block = (
+    failureClass: ProviderResolverFailureClass,
+    extra: { provider?: ProviderResolverSupportedProvider; providerConfigId?: string; keyRefId?: string } = {},
+  ) => buildBlockedDecision({
+    failureClass,
+    correlationId,
+    provider: extra.provider,
+    providerConfigId: extra.providerConfigId,
+    keyRefId: extra.keyRefId,
+    operation: capability,
+    mode: input.mode,
+    orgId,
+    workspaceId,
+    actorId,
+    evidenceRef: normalizeString(input.evidenceRef),
+  });
+
+  if (!orgId || !workspaceId || !actorId) return block('wrong_tenant');
+  if (!capability || !capability.includes('.')) return block('operation_not_allowed');
+  if (!input.scannerReference?.trim()) return block('scanner_classification_missing');
+
+  try {
+    const routes = await deps.queryRoutes({
+      orgId,
+      workspaceId,
+      capability,
+      requestedProviderConfigId,
+      includeDisabled: input.includeDisabled === true,
+    });
+    if (routes.length === 0) return block('route_missing');
+    if (routes.length > 1) return block('provider_policy_ambiguous');
+    const route = routes[0];
+    if (route.org_id !== orgId || route.workspace_id !== workspaceId) return block('wrong_tenant');
+    if (route.deleted_at || (!route.enabled && input.includeDisabled !== true)) {
+      return block('route_disabled', { providerConfigId: route.provider_config_id });
+    }
+
+    const normalizedRoles = new Set(input.roleNames.map(role => role.trim().toLowerCase()).filter(Boolean));
+    const allowedRoles = (
+      input.includeDisabled && input.proposedAllowedRoles
+        ? input.proposedAllowedRoles
+        : route.allowed_roles || []
+    ).map(role => role.trim().toLowerCase()).filter(Boolean);
+    if (allowedRoles.length === 0 || !allowedRoles.some(role => normalizedRoles.has(role))) {
+      return block('role_not_allowed', { providerConfigId: route.provider_config_id });
+    }
+
+    const config = await deps.queryProviderConfig({ orgId, providerConfigId: route.provider_config_id });
+    if (!config) return block('provider_config_missing', { providerConfigId: route.provider_config_id });
+    const provider = normalizeEnterpriseProvider(config.provider);
+    const configFailure = classifyEnterpriseConfig(config, input, deps.now());
+    if (!provider || configFailure) {
+      return block(configFailure || 'provider_not_supported', {
+        provider,
+        providerConfigId: config.id,
+      });
+    }
+
+    const endpoint = config.endpoint_url?.trim();
+    if ((provider === 'azure_openai' || provider === 'openai_compatible') && !endpoint) {
+      return block('provider_config_ineligible', { provider, providerConfigId: config.id });
+    }
+    if (endpoint && !deps.isEndpointAllowed(provider as EnterpriseProviderResolverProvider, endpoint)) {
+      return block('provider_config_ineligible', { provider, providerConfigId: config.id });
+    }
+    const model = route.model?.trim() || config.default_model?.trim();
+    if (!model || !(config.model_allowlist || []).includes(model)) {
+      return block('model_not_allowed', { provider, providerConfigId: config.id });
+    }
+    if (!config.key_ref_id) return block('key_reference_missing', { provider, providerConfigId: config.id });
+    const keyRef = await deps.queryProviderKeyRef({ orgId, provider, keyRefId: config.key_ref_id });
+    if (!keyRef) return block('key_reference_missing', { provider, providerConfigId: config.id, keyRefId: config.key_ref_id });
+    const keyFailure = classifyKeyRefFailure(keyRef, orgId, provider, deps.now());
+    if (keyFailure) return block(keyFailure, { provider, providerConfigId: config.id, keyRefId: keyRef.id });
+
+    const budget = configuredBudget(config);
+    if (budget.dailyRequests !== undefined || budget.monthlyTokens !== undefined) {
+      const usage = await deps.queryUsage({ orgId, workspaceId, providerConfigId: config.id, now: deps.now() });
+      if (
+        (budget.dailyRequests !== undefined && usage.dailyRequests >= budget.dailyRequests)
+        || (budget.monthlyTokens !== undefined && usage.monthlyTokens >= budget.monthlyTokens)
+      ) return block('budget_exhausted', { provider, providerConfigId: config.id, keyRefId: keyRef.id });
+    }
+
+    const auditEvent = buildProviderResolverAuditEventShell({
+      orgId,
+      workspaceId,
+      provider,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      operation: capability,
+      mode: input.mode,
+      policyResult: 'allowed',
+      status: 'allowed',
+      actorId,
+      correlationId,
+      evidenceRef: normalizeString(input.evidenceRef),
+      metadata: {
+        membership: 'active',
+        route: 'eligible',
+        providerConfig: 'active_and_validated',
+        keyReference: 'eligible_for_lookup',
+        scannerClassification: input.scannerReference,
+      },
+    });
+    return {
+      status: 'allowed',
+      futureSecretLookupEligible: true,
+      provider,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      keyRefResolverType: 'server_reference',
+      operation: capability,
+      capability,
+      mode: input.mode,
+      orgId,
+      workspaceId,
+      actorId,
+      correlationId,
+      evidenceRef: normalizeString(input.evidenceRef),
+      policyResult: 'allowed',
+      model,
+      endpoint,
+      deployment: config.deployment_name?.trim() || undefined,
+      auditEvent,
+    };
+  } catch {
+    return block('provider_unavailable', { providerConfigId: requestedProviderConfigId });
+  }
+};

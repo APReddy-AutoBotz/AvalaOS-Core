@@ -518,7 +518,25 @@ const hashStep = (seed: number, value: string) => {
 export const stableFingerprint = (value: string) => {
   const normalized = value.normalize('NFKC');
   const first = hashStep(2166136261, normalized).toString(16).padStart(8, '0');
-  const second = hashStep(2166136261 ^ 0x9e3779b9ßm¢G§²ÚîÆ­yÕPath|versionId)$/i;
+  const second = hashStep(2166136261 ^ 0x9e3779b9, normalized).toString(16).padStart(8, '0');
+  return `${first}${second}`.repeat(4).slice(0, 64);
+};
+
+export const sanitizeEvidenceExcerpt = (value: string, maxLength = 480) => value
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, maxLength);
+
+const projectionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const projectionKeys = [
+  'schemaVersion', 'organizationId', 'workspaceId', 'authorizationVersion', 'generatedAt',
+  'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
+  'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
+  'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
+  'assessPromotion',
+] as const;
+const prohibitedProjectionKey = /(?:^|_)(?:apiKey|authorization|bearerToken|contentHash|extractedTextHash|idempotencyKey|objectKey|providerKey|rawKey|secret|secretReference|storageBucket|storagePath|versionId)$/i;
 
 const rejectSensitiveProjectionFields = (value: unknown): void => {
   if (Array.isArray(value)) {

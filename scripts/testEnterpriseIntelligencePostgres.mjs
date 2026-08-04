@@ -210,4 +210,211 @@ try {
       safeFingerprint: `sha256:${'2'.repeat(24)}`, backend: 'environment', lastValidatedAt: new Date().toISOString(),
     });
     assert.deepEqual((await authority.query('SELECT status,rotation_status,deleted_at IS NOT NULL retired FROM public.ai_provider_key_refs WHERE id=$1', [firstKey])).rows[0], {status: 'retired', rotation_status: 'rotated', retired: true});
-    await rßNø¶‰žËkºwµçI”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€½Ù•É¸Ñ¡”É•Ù¥•Ý•™¥áÑÕÉ”ÁÉ½•ÍÌœ°™¥áÑÕÉ”¹¡…Í  ”œ¤°€…•ÁÑ•œ°™¥áÑÕÉ”¹É•Ù¥•Ý•È°€½Ù•É¸Ñ¡”É•Ù¥•Ý•™¥áÑÕÉ”ÁÉ½•ÍÌœ°€•ÁÑ•……¥¹ÍÐÍ½ÕÉ”t¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰UAQÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}ØÉ}…Í•ÌMPÍÑ…ÑÕÌô‘É…™Ðœ]!I¥ôÄˆ°m™¥áÑÕÉ”¹…Í•%‘t¤ì(€€€½¹ÍÐ…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸€ô9Õµ‰•È ¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÙ•ÉÍ¥½¸I=4ÁÕ‰±¥Œ¹…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¹Ì]!I½É}¥ôÄ9ÕÍ•É}¥ôÈœ°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤¤¹É½ÝÍlÁt¹Ù•ÉÍ¥½¸¤ì(€€€½¹ÍÐÉ•ÅÕ•ÍÐ€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÌÀ¤ì(€€€½¹ÍÐÁÉ½µ½Ñ•€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}ÁÉ½µ½Ñ•}•Ù¥‘•¹•}Ñ½}…ÍÍ•ÍÍ}ØÈ Ä°È°Ì°Ð°Ô°Ø°Ü°à°ä¤É•ÍÕ±Ðœ°m™¥áÑÕÉ”¹…¹‘¥‘…Ñ”°™¥áÑÕÉ”¹…Í•%°€È°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°É•ÅÕ•ÍÐ°€™¥áÑÕÉ”µÁÉ½µ½Ñ¥½¸´ÀÀÄœ°…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¹t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡ÁÉ½µ½Ñ•¹½ÕÑ½µ”°€½µµ¥ÑÑ•œ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡9Õµ‰•È¡ÁÉ½µ½Ñ•¹É•Í½ÕÉ”¹…Í•Y•ÉÍ¥½¸¤°€Ì¤ì(€€€½¹ÍÐÉ•Á±…ä€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}ÁÉ½µ½Ñ•}•Ù¥‘•¹•}Ñ½}…ÍÍ•ÍÍ}ØÈ Ä°È°Ì°Ð°Ô°Ø°Ü°à°ä¤É•ÍÕ±Ðœ°m™¥áÑÕÉ”¹…¹‘¥‘…Ñ”°™¥áÑÕÉ”¹…Í•%°€È°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°É•ÅÕ•ÍÐ°€™¥áÑÕÉ”µÁÉ½µ½Ñ¥½¸´ÀÀÄœ°…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¹t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•Á±…ä¹½ÕÑ½µ”°€É•Á±…å•œ¤ì(€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä UAQÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}•Ù¥‘•¹•}…ÍÍ•ÍÍ}ÁÉ½µ½Ñ¥½¹ÌMP™¥•±‘}­•äôÄ]!I…¹‘¥‘…Ñ•}¥ôÈœ°l½ÕÑ½µ”œ°™¥áÑÕÉ”¹…¹‘¥‘…Ñ•t¤°€½9QIAI%M}AA9}=91d¼¤ì(€ô¤ì(€…Ý…¥ÐÍ•¹…É¥¼ •±¥Ù•Éä‘•É¥Ù•Ì%Ì½¡…Í¡•Ì°•¹™½É•ÌÑ¡É•”µÁ•ÉÍ½¸…ÁÁÉ½Ù…°°…¹…Ñ•Ì5½¹¥Ñ½Èœ°…Íå¹Œ€ ¤€ôøì(€€€½¹ÍÐ¡…¹‘½™˜€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÀ¤ì½¹ÍÐÝ½É­A…­…”€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÄ¤ì½¹ÍÐÙ•ÉÍ¥½¸€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÈ¤ì(€€€½¹ÍÐÉ½½Ñ1½¥…°€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÌ¤ì½¹ÍÐ¡¥±‘1½¥…°€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÐ¤ì(€€€½¹ÍÐÉ•ÍÕ±Ð€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}‘•±¥Ù•Éå}¡…¹‘½™˜ Äèé©Í½¹ˆ°Èèé©Í½¹ˆ°Ìèé©Í½¹ˆ°Ðèé©Í½¹ˆ¤É•ÍÕ±Ðœ°l(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡í¥è¡…¹‘½™˜°½É}¥è™¥áÑÕÉ”¹½Éœ°Ý½É­ÍÁ…•}¥è™¥áÑÕÉ”¹Ý½É­ÍÁ…”°ÍÑÕ‘¥½}‘½Õµ•¹Ñ}¥è™¥áÑÕÉ”¹…ÉÑ¥™…Ñ%°ÍÑÕ‘¥½}Ù•ÉÍ¥½¹}¥è™¥áÑÕÉ”¹Ù•ÉÍ¥½¸¹¥°ÍÑÕ‘¥½}Ù•ÉÍ¥½¸è9Õµ‰•È¡™¥áÑÕÉ”¹Ù•ÉÍ¥½¸¹Ù•ÉÍ¥½¸¤°ÍÑÕ‘¥½}½¹Ñ•¹Ñ}¡…Í è™¥áÑÕÉ”¹Ù•ÉÍ¥½¸¹½¹Ñ•¹Ñ}¡…Í °É•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô¤°(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡í¥èÝ½É­A…­…”°É•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô¤°(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡í¥èÙ•ÉÍ¥½¸°½¹Ñ•¹ÐèíÑ¥Ñ±”è€…¹½¹¥…°‘•±¥Ù•Éäô°½¹Ñ•¹Ñ}¡…Í è™¥áÑÕÉ”¹¡…Í  ˜œ¤°É•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô¤°(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡l(€€€€€€€í¥èÉ½½Ñ1½¥…°°¥Ñ•µQåÁ”è€Á¥Œœ°Ñ¥Ñ±”è€I½½Ðœ°‘•ÍÉ¥ÁÑ¥½¸è€œœ°…•ÁÑ…¹•É¥Ñ•É¥„èlÉ•Ù¥•Ý•t°¹½¹Õ¹Ñ¥½¹…±I•ÅÕ¥É•µ•¹ÑÌèmt°Í½ÕÉ•M•Ñ¥½¹1½…Ñ½Èè€Í•Ñ¥½¹ÍlÁtœ°¥‘•µÁ½Ñ•¹å-•äè€‘•±¥Ù•ÉäµÉ½½Ð´ÀÀÄœ°É•…Ñ•‘	äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô°(€€€€€€€í¥è¡¥±‘1½¥…°°Á…É•¹Ñ%èÉ½½Ñ1½¥…°°¥Ñ•µQåÁ”è€Q…Í¬œ°Ñ¥Ñ±”è€¡¥±œ°‘•ÍÉ¥ÁÑ¥½¸è€œœ°…•ÁÑ…¹•É¥Ñ•É¥„èlÙ•É¥™¥•t°¹½¹Õ¹Ñ¥½¹…±I•ÅÕ¥É•µ•¹ÑÌèmt°Í½ÕÉ•M•Ñ¥½¹1½…Ñ½Èè€Í•Ñ¥½¹ÍlÁtœ°¥‘•µÁ½Ñ•¹å-•äè€‘•±¥Ù•Éäµ¡¥±´ÀÀÄœ°É•…Ñ•‘	äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô°(€€€€€t¤°(€€€t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹¹½ÑÅÕ…°¡É•ÍÕ±Ð¹½¹Ñ•¹Ñ!…Í °™¥áÑÕÉ”¹¡…Í  ˜œ¤¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•ÍÕ±Ð¹¥Ñ•µ%‘Ì¹±•¹Ñ °€È¤ì(€€€½¹ÍÐ¡¥±€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰M1PÁ…É•¹Ñ}¥Ñ•µ}¥I=4ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}‘•±¥Ù•Éå}Ý½É­}¥Ñ•µÌ]!IÁ…­…•}Ù•ÉÍ¥½¹}¥ôÄ9Ñ¥Ñ±”ô¡¥±œˆ°mÙ•ÉÍ¥½¹t¤¤¹É½ÝÍlÁtì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡¡¥±¹Á…É•¹Ñ}¥Ñ•µ}¥°É•ÍÕ±Ð¹¥Ñ•µ%‘ÍlÁt¤ì(€€€½¹ÍÐÉ•Ù¥•Ý•ÉY•ÉÍ¥½¸€ô9Õµ‰•È ¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÙ•ÉÍ¥½¸I=4ÁÕ‰±¥Œ¹…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¹Ì]!I½É}¥ôÄ9ÕÍ•É}¥ôÈœ°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹É•Ù¥•Ý•Ét¤¤¹É½ÝÍlÁt¹Ù•ÉÍ¥½¸¤ì(€€€½¹ÍÐÉ•Ù¥•ÝÙ•¹Ð€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐÔ¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}¡¥¡}¥µÁ…Ñ}É•Ù¥•Ý}•Ù•¹ÑÌ¡¥±½É}¥±Ý½É­ÍÁ…•}¥±É•Í½ÕÉ•}ÑåÁ”±É•Í½ÕÉ•}¥±É•Ù¥•Ý•É}¥±É•Ù¥•Ý•É}…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}¡…Í ±½ÕÑ½µ”±É…Ñ¥½¹…±”¤(€€€€€Y1UL Ä°È°Ì°‘•±¥Ù•Éå}Ý½É­}Á…­…”œ°Ð°Ô°Ø°äää°Ü°…ÁÁÉ½Ù•œ°%¹‘•Á•¹‘•¹Ð™¥áÑÕÉ”É•Ù¥•Üœ¥€°mÉ•Ù¥•ÝÙ•¹Ð°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°Ý½É­A…­…”°™¥áÑÕÉ”¹É•Ù¥•Ý•È°É•Ù¥•Ý•ÉY•ÉÍ¥½¸°™¥áÑÕÉ”¹¡…Í  œÀœ¥t¤ì(€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…° Äèé©Í½¹ˆ°È°Ì°Ð°Ô°Ø¤œ°m)M=8¹ÍÑÉ¥¹¥™ä¡íÉ•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°É•Ù¥•Ý•‘}‰äè™¥áÑÕÉ”¹É•Ù¥•Ý•È°…ÁÁÉ½Ù•‘}‰äè™¥áÑÕÉ”¹É•Ù¥•Ý•È°É•Ù¥•Ý}•Ù•¹Ñ}¥èÉ•Ù¥•ÝÙ•¹Ð°½ÕÑ½µ”è€…ÁÁÉ½Ù•œ°É…Ñ¥½¹…±”è€¥¹Ù…±¥Í…µ”…Ñ½Èô¤°€‘•±¥Ù•Éå}Ý½É­}Á…­…”œ°Ý½É­A…­…”°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€…ÁÁÉ½Ù•t¤°€½9QIAI%M}AAI=Y1}MAIQ%=8¼¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…° Äèé©Í½¹ˆ°È°Ì°Ð°Ô°Ø¤œ°m)M=8¹ÍÑÉ¥¹¥™ä¡íÉ•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°É•Ù¥•Ý•‘}‰äè™¥áÑÕÉ”¹É•Ù¥•Ý•È°…ÁÁÉ½Ù•‘}‰äè™¥áÑÕÉ”¹…ÁÁÉ½Ù•È°É•Ù¥•Ý}•Ù•¹Ñ}¥èÉ•Ù¥•ÝÙ•¹Ð°½ÕÑ½µ”è€…ÁÁÉ½Ù•œ°É…Ñ¥½¹…±”è€%¹‘•Á•¹‘•¹Ð…ÁÁÉ½Ù…°ô¤°€‘•±¥Ù•Éå}Ý½É­}Á…­…”œ°Ý½É­A…­…”°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€…ÁÁÉ½Ù•t¤ì(€€€½¹ÍÐ‰…Í•±¥¹•%€ô™¥áÑÕÉ”¹ÕÕ¥ ÌÐØ¤ì(€€€½¹ÍÐµ½¹¥Ñ½È€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}µ½¹¥Ñ½É}‰…Í•±¥¹” Äèé©Í½¹ˆ°È°Ì°Ð¤É•ÍÕ±Ðœ°m)M=8¹ÍÑÉ¥¹¥™ä¡í¥è‰…Í•±¥¹•%°Ý½É­A…­…•Y•ÉÍ¥½¹%èÙ•ÉÍ¥½¸°…ÁÁÉ½Ù•‘%Ñ•µ%‘ÌèÉ•ÍÕ±Ð¹¥Ñ•µ%‘Ì°µ¥±•ÍÑ½¹•Ìèmt°‘•Á•¹‘•¹¥•Ìèmt°‰±½­•ÉÌèmt°É¥Í­Ìèmuô¤°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…•t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡mµ½¹¥Ñ½È¹ÍÑ…ÑÕÌ°µ½¹¥Ñ½È¹É•…‘¥¹•ÍÍt°l…ÁÁÉ½Ù…±}É•ÅÕ¥É•œ°€É•Ù¥•Ý}É•ÅÕ¥É•t¤ì(€€€½¹ÍÐÁ•ÉÍ¥ÍÑ•€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1P±¥Ù•}Ñ•±•µ•ÑÉå}½¹¹•Ñ•±É•Í½ÕÉ•}¡…Í I=4ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}µ½¹¥Ñ½É}‰…Í•±¥¹•Ì]!I¥ôÄœ°m‰…Í•±¥¹•%‘t¤¤¹É½ÝÍlÁtì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡Á•ÉÍ¥ÍÑ•¹±¥Ù•}Ñ•±•µ•ÑÉå}½¹¹•Ñ•°™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡Á•ÉÍ¥ÍÑ•¹É•Í½ÕÉ•}¡…Í °µ½¹¥Ñ½È¹É•Í½ÕÉ•!…Í ¤ì(€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰UAQÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}‘•±¥Ù•Éå}Ý½É­}¥Ñ•µÌMPÑ¥Ñ±”ôµÕÑ…Ñ•œ]!IÁ…­…•}Ù•ÉÍ¥½¹}¥ôÄˆ°mÙ•ÉÍ¥½¹t¤°€½9QIAI%M}AA9}=91d¼¤ì(€ô¤ì(€…Ý…¥ÐÍ•¹…É¥¼ 5½‘•É¹¥é…Ñ¥½¸…¹•ÍÑÉä‘•É¥Ù•Ì„½Ù•É¹•‘•¥Í¥½¸…¹ÍÍ•µ‰±”É•µ…¥¹Ì‘É…™Ðµ½¹±äÕ¹Ñ¥°…ÁÁÉ½Ù…°œ°…Íå¹Œ€ ¤€ôøì(€€€½¹ÍÐ…ÁÁ±¥…Ñ¥½¸€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÀ¤ì½¹ÍÐµ•Ñ…‘…Ñ„€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÄ¤ì½¹ÍÐÍ½ÕÉ•ÍÍ•ÍÍµ•¹Ð€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÈ¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}…ÁÁ±¥…Ñ¥½¹}…ÍÍ•ÑÌ¡¥±½É}¥±Ý½É­ÍÁ…•}¥±¹…µ”±¹½Éµ…±¥é•‘}¹…µ”±É•…Ñ•‘}‰ä¤(€€€€€Y1UL Ä°È°Ì°¥áÑÕÉ”…ÁÁ±¥…Ñ¥½¸œ°™¥áÑÕÉ”…ÁÁ±¥…Ñ¥½¸œ°Ð¥€°m…ÁÁ±¥…Ñ¥½¸°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}…ÁÁ±¥…Ñ¥½¹}µ•Ñ…‘…Ñ…}Ù•ÉÍ¥½¹Ì¡¥±½É}¥±Ý½É­ÍÁ…•}¥±…ÁÁ±¥…Ñ¥½¹}¥±Ù•ÉÍ¥½¸±±¥™•å±”±µ•Ñ…‘…Ñ„±…ÕÑ¡½É}¥¤(€€€€€Y1UL Ä°È°Ì°Ð°Ä°…ÁÁÉ½Ù•œ°íôœèé©Í½¹ˆ°Ô¥€°mµ•Ñ…‘…Ñ„°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°…ÁÁ±¥…Ñ¥½¸°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤ì(€€€½¹ÍÐ…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸€ô9Õµ‰•È ¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÙ•ÉÍ¥½¸I=4ÁÕ‰±¥Œ¹…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¹Ì]!I½É}¥ôÄ9ÕÍ•É}¥ôÈœ°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤¤¹É½ÝÍlÁt¹Ù•ÉÍ¥½¸¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}…ÁÁ±¥…Ñ¥½¹}…ÍÍ•ÍÍµ•¹Ñ}Ù•ÉÍ¥½¹Ì (€€€€€¥±½É}¥±Ý½É­ÍÁ…•}¥±…ÁÁ±¥…Ñ¥½¹}¥±µ•Ñ…‘…Ñ…}Ù•ÉÍ¥½¹}¥±Ù•ÉÍ¥½¸±‘•¥Í¥½¹}µ½‘•±}Ù•ÉÍ¥½¸±±¥™•å±”±…ÕÑ¡½É}¥±…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¸¤(€€€€€Y1UL Ä°È°Ì°Ð°Ô°Ä°…ÍÍ•ÍÌµØÈµ…ÁÁ±¥…Ñ¥½¸µÁ½ÉÑ™½±¥¼´ÈÀÈØ´ÀÜœ°…ÁÁÉ½Ù•œ°Ø°Ü¥€°(€€€mÍ½ÕÉ•ÍÍ•ÍÍµ•¹Ð°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°…ÁÁ±¥…Ñ¥½¸°µ•Ñ…‘…Ñ„°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¹t¤ì(€€€½¹ÍÐ‘¥µ•¹Í¥½¹Ì€ôl(€€€€€€¥¹Ñ•É…Ñ¥½¹}…•ÍÍ¥‰¥±¥Ñäœ°€Í•µ…¹Ñ¥}…¹‘}‘…Ñ…}±…É¥Ñäœ°€ÍÑ…Ñ•}…¹‘}•á•ÕÑ¥½¸œ°(€€€€€€Í•ÕÉ¥Ñå}…¹‘}½¹ÑÉ½°œ°€…É¡¥Ñ•ÑÕÉ•}¡…¹•…‰¥±¥Ñäœ°€Õ¥}…ÕÑ½µ…Ñ¥½¹}É•…‘¥¹•ÍÌœ°(€€€€€€…¥}…ÍÍ¥ÍÑ•‘}•¹¥¹••É¥¹}É•…‘¥¹•ÍÌœ°(€€€tì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}…ÁÁ±¥…Ñ¥½¹}‘¥µ•¹Í¥½¹}É•ÍÕ±ÑÌ (€€€€€½É}¥±Ý½É­ÍÁ…•}¥±…ÁÁ±¥…Ñ¥½¹}¥±µ•Ñ…‘…Ñ…}Ù•ÉÍ¥½¹}¥±…ÍÍ•ÍÍµ•¹Ñ}Ù•ÉÍ¥½¹}¥±‘¥µ•¹Í¥½¸°(€€€€€É•…‘¥¹•ÍÍ}‰…¹±•Ù¥‘•¹•}½¹™¥‘•¹”±¡…É‘}…Ñ•Ì±•Ù¥‘•¹•}É•™Ì±µ¥ÍÍ¥¹}•Ù¥‘•¹”±É…Ñ¥½¹…±”°(€€€€€½¹ÑÉ…‘¥Ñ¥½¹Ì±É•µ•‘¥…Ñ¥½¹}É•ÅÕ¥É•µ•¹ÑÌ±Ý¡…Ñ}Ý½Õ±‘}¡…¹”¤(€€€€€M1P€Ä°È°Ì°Ð°Ô±‘¥µ•¹Í¥½¸°I•…‘äœ°Y•É¥™¥•œ°íôœèéÑ•áÑmt°mtœèé©Í½¹ˆ°(€€€€€€€€íôœèéÑ•áÑmt±IIelÙ•É¥™¥•t°íôœèéÑ•áÑmt°íôœèéÑ•áÑmt±IIel¹•Ü•Ù¥‘•¹”t(€€€€€I=4Õ¹¹•ÍÐ ØèéÑ•áÑmt¤‘¥µ•¹Í¥½¹€°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°…ÁÁ±¥…Ñ¥½¸°µ•Ñ…‘…Ñ„°Í½ÕÉ•ÍÍ•ÍÍµ•¹Ð°‘¥µ•¹Í¥½¹Ít¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹…ÍÍ•ÍÍ}…ÁÁ±¥…Ñ¥½¹}µ½‘•É¹¥é…Ñ¥½¹}É•½µµ•¹‘…Ñ¥½¹Ì (€€€€€½É}¥±Ý½É­ÍÁ…•}¥±…ÁÁ±¥…Ñ¥½¹}¥±µ•Ñ…‘…Ñ…}Ù•ÉÍ¥½¹}¥±…ÍÍ•ÍÍµ•¹Ñ}Ù•ÉÍ¥½¹}¥±‘¥ÍÁ½Í¥Ñ¥½¸°(€€€€€µ¥É…Ñ¥½¹}‰½Õ¹‘…Éä±É½±±‰…­}ÍÑÉ…Ñ•ä±•Ù¥‘•¹•}½¹™¥‘•¹”¤(€€€€€Y1UL Ä°È°Ì°Ð°Ô°…ÍÍ•µ‰±”œ°‘É…™Ðµ½¹±ä‰½Õ¹‘…Éäœ°É•Ñ…¥¸ÕÉÉ•¹ÐÍåÍÑ•´œ°Y•É¥™¥•œ¥€°(€€€m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°…ÁÁ±¥…Ñ¥½¸°µ•Ñ…‘…Ñ„°Í½ÕÉ•ÍÍ•ÍÍµ•¹Ñt¤ì(€€€½¹ÍÐ•¹Ñ•ÉÁÉ¥Í•ÍÍ•ÍÍµ•¹Ð€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÌ¤ì½¹ÍÐ‘•¥Í¥½¸€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÐ¤ì(€€€½¹ÍÐ½µµ¥ÑÑ•€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}µ½‘•É¹¥é…Ñ¥½¹}…ÍÍ•ÍÍµ•¹Ð Äèé©Í½¹ˆ°Èèé©Í½¹ˆ¤É•ÍÕ±Ðœ°l(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡í¥è•¹Ñ•ÉÁÉ¥Í•ÍÍ•ÍÍµ•¹Ð°½É}¥è™¥áÑÕÉ”¹½Éœ°Ý½É­ÍÁ…•}¥è™¥áÑÕÉ”¹Ý½É­ÍÁ…”°…ÁÁ±¥…Ñ¥½¹}É•˜è…ÁÁ±¥…Ñ¥½¸°Í½ÕÉ•}…ÍÍ•ÍÍµ•¹Ñ}¥èÍ½ÕÉ•ÍÍ•ÍÍµ•¹Ð°Í½ÕÉ•}µ•Ñ…‘…Ñ…}Ù•ÉÍ¥½¹}¥èµ•Ñ…‘…Ñ„°É•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô¤°(€€€€€)M=8¹ÍÑÉ¥¹¥™ä¡í¥è‘•¥Í¥½¸°É•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Éô¤°(€€€t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½µµ¥ÑÑ•¹ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸°€…ÍÍ•µ‰±”œ¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ ¡½µµ¥ÑÑ•¹É•Í½ÕÉ•!…Í °€½ylÀ´å„µ™uìØÑô¼¤ì(€€€½¹ÍÐÉ•Ù¥•Ý•ÉY•ÉÍ¥½¸€ô9Õµ‰•È ¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÙ•ÉÍ¥½¸I=4ÁÕ‰±¥Œ¹…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¹Ì]!I½É}¥ôÄ9ÕÍ•É}¥ôÈœ°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹É•Ù¥•Ý•Ét¤¤¹É½ÝÍlÁt¹Ù•ÉÍ¥½¸¤ì(€€€½¹ÍÐ‘•¥Í¥½¹I•Ù¥•Ü€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÔ¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}¡¥¡}¥µÁ…Ñ}É•Ù¥•Ý}•Ù•¹ÑÌ¡¥±½É}¥±Ý½É­ÍÁ…•}¥±É•Í½ÕÉ•}ÑåÁ”±É•Í½ÕÉ•}¥±É•Ù¥•Ý•É}¥±É•Ù¥•Ý•É}…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}¡…Í ±½ÕÑ½µ”±É…Ñ¥½¹…±”¤(€€€€€Y1UL Ä°È°Ì°µ½‘•É¹¥é…Ñ¥½¹}‘•¥Í¥½¸œ°Ð°Ô°Ø°Ä°Ü°…ÁÁÉ½Ù•œ°%¹‘•Á•¹‘•¹Ðµ½‘•É¹¥é…Ñ¥½¸É•Ù¥•Üœ¥€°(€€€m‘•¥Í¥½¹I•Ù¥•Ü°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°‘•¥Í¥½¸°™¥áÑÕÉ”¹É•Ù¥•Ý•È°É•Ù¥•Ý•ÉY•ÉÍ¥½¸°™¥áÑÕÉ”¹¡…Í  œÀœ¥t¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…° Äèé©Í½¹ˆ°È°Ì°Ð°Ô°Ø¤œ°m)M=8¹ÍÑÉ¥¹¥™ä¡íÉ•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°É•Ù¥•Ý•‘}‰äè™¥áÑÕÉ”¹É•Ù¥•Ý•È°…ÁÁÉ½Ù•‘}‰äè™¥áÑÕÉ”¹…ÁÁÉ½Ù•È°É•Ù¥•Ý}•Ù•¹Ñ}¥è‘•¥Í¥½¹I•Ù¥•Ü°½ÕÑ½µ”è€…ÁÁÉ½Ù•œ°É…Ñ¥½¹…±”è€5½‘•É¹¥é…Ñ¥½¸…ÁÁÉ½Ù…°ô¤°€µ½‘•É¹¥é…Ñ¥½¹}‘•¥Í¥½¸œ°‘•¥Í¥½¸°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€…ÁÁÉ½Ù•t¤ì(€€€½¹ÍÐ‰±Õ•ÁÉ¥¹Ð€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØØ¤ì(€€€½¹ÍÐ…ÍÍ•µ‰±•€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹Ð Äèé©Í½¹ˆ°È°Ì°Ð¤É•ÍÕ±Ðœ°m)M=8¹ÍÑÉ¥¹¥™ä¡í¥è‰±Õ•ÁÉ¥¹Ð°µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹%è‘•¥Í¥½¸°ÍÑÉÕÑÕÉ•‘½¹Ñ•¹Ðèí½µÁ½¹•¹ÑÌèmuô°É•…‘…‰±•½Õµ•¹Ðè€É…™Ðµ½¹±ä™¥áÑÕÉ”‰±Õ•ÁÉ¥¹Ðô¤°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…•t¤¤¹É½ÝÍlÁt¹É•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡m…ÍÍ•µ‰±•¹ÍÑ…ÑÕÌ°…ÍÍ•µ‰±•¹•á•ÕÑ¥½¹¹…‰±•°…ÍÍ•µ‰±•¹ÉÕ¹Ñ¥µ••¹ÑÍ¹…‰±•°…ÍÍ•µ‰±•¹±¥Ù•Q•±•µ•ÑÉå¹…‰±•‘t°l‘É…™Ðœ°™…±Í”°™…±Í”°™…±Í•t¤ì(€€€½¹ÍÐ™±…Ì€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡M1P½‘•}•¹•É…Ñ¥½¹}•¹…‰±•±‘•Á±½åµ•¹Ñ}•¹…‰±•±¥¹™É…ÍÑÉÕÑÕÉ•}¡…¹•Í}•¹…‰±•°(€€€€€É•‘•¹Ñ¥…±}…•ÍÍ}•¹…‰±•±Í½ÕÉ•}ÍåÍÑ•µ}…±±Í}•¹…‰±•±ÉÕ¹Ñ¥µ•}…•¹ÑÍ}•¹…‰±•±±¥Ù•}Ñ•±•µ•ÑÉå}•¹…‰±•(€€€€€I=4ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹ÑÌ]!I¥ôÅ€°m‰±Õ•ÁÉ¥¹Ñt¤¤¹É½ÝÍlÁtì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡=‰©•Ð¹Ù…±Õ•Ì¡™±…Ì¤°m™…±Í”°™…±Í”°™…±Í”°™…±Í”°™…±Í”°™…±Í”°™…±Í•t¤ì(€€€½¹ÍÐ‰±Õ•ÁÉ¥¹ÑI•Ù¥•Ü€ô™¥áÑÕÉ”¹ÕÕ¥ ÌØÜ¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä¡%9MIP%9Q<ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}¡¥¡}¥µÁ…Ñ}É•Ù¥•Ý}•Ù•¹ÑÌ¡¥±½É}¥±Ý½É­ÍÁ…•}¥±É•Í½ÕÉ•}ÑåÁ”±É•Í½ÕÉ•}¥±É•Ù¥•Ý•É}¥±É•Ù¥•Ý•É}…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}Ù•ÉÍ¥½¸±É•Í½ÕÉ•}¡…Í ±½ÕÑ½µ”±É…Ñ¥½¹…±”¤(€€€€€Y1UL Ä°È°Ì°…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹Ðœ°Ð°Ô°Ø°Ä°Ü°…ÁÁÉ½Ù•œ°%¹‘•Á•¹‘•¹Ð‰±Õ•ÁÉ¥¹ÐÉ•Ù¥•Üœ¥€°(€€€m‰±Õ•ÁÉ¥¹ÑI•Ù¥•Ü°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°‰±Õ•ÁÉ¥¹Ð°™¥áÑÕÉ”¹É•Ù¥•Ý•È°É•Ù¥•Ý•ÉY•ÉÍ¥½¸°™¥áÑÕÉ”¹¡…Í  œÀœ¥t¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…° Äèé©Í½¹ˆ°È°Ì°Ð°Ô°Ø¤œ°m)M=8¹ÍÑÉ¥¹¥™ä¡íÉ•…Ñ•‘}‰äè™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°É•Ù¥•Ý•‘}‰äè™¥áÑÕÉ”¹É•Ù¥•Ý•È°…ÁÁÉ½Ù•‘}‰äè™¥áÑÕÉ”¹…ÁÁÉ½Ù•È°É•Ù¥•Ý}•Ù•¹Ñ}¥è‰±Õ•ÁÉ¥¹ÑI•Ù¥•Ü°½ÕÑ½µ”è€…ÁÁÉ½Ù•œ°É…Ñ¥½¹…±”è€	±Õ•ÁÉ¥¹Ð…ÁÁÉ½Ù…°ô¤°€…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹Ðœ°‰±Õ•ÁÉ¥¹Ð°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€…ÁÁÉ½Ù•t¤ì(€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰UAQÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹ÑÌMPÍÑ…ÑÕÌôÉ•©•Ñ•œ]!I¥ôÄˆ°m‰±Õ•ÁÉ¥¹Ñt¤°€½9QIAI%M}IM=UI}%55UQ	1}=I}QI9M%Q%=9}%9Y1%¼¤ì(€ô¤ì(€…Ý…¥ÐÍ•¹…É¥¼ É•…µ½¹±äÉ½±±‰…¬‰±½­ÌµÕÑ…Ñ¥½¹ÌÝ¡¥±”…Á…‰¥±¥ÑäÁÉ½©•Ñ¥½¸É•µ…¥¹Ì…Ù…¥±…‰±”œ°…Íå¹Œ€ ¤€ôøì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä UAQÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}¥¹Ñ•±±¥•¹•}ÉÕ¹Ñ¥µ•}½¹ÑÉ½°MPÉ•…‘}½¹±äõÑÉÕ”]!IÍ¥¹±•Ñ½¸õÑÉÕ”œ¤ì(€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}…¥}±…¥µ}½µµ…¹ Ä°È°Ì°Ð°Ô°Ø°Ü¤œ°m™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•È°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°€™¥áÑÕÉ”¹É•…‘½¹±äœ°€™¥áÑÕÉ”µÉ•…‘½¹±ä´ÀÀÄœ°™¥áÑÕÉ”¹ÕÕ¥ ÌÔÀ¤°™¥áÑÕÉ”¹¡…Í  „œ¥t¤°€½9QIAI%M}%9Q11%9}I}=91d¼¤ì(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä 	%8œ¤ì(€€€ÑÉäì(€€€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä MP1=0I=1…ÕÑ¡•¹Ñ¥…Ñ•œ¤ì(€€€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰M1PÍ•Ñ}½¹™¥œ É•ÅÕ•ÍÐ¹©ÝÐ¹±…¥´¹ÍÕˆœ°Ä±ÑÉÕ”¤ˆ°m™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤ì(€€€€€½¹ÍÐÁÉ½©•Ñ¥½¸€ô€¡…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä M1PÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}•Ù¥‘•¹•}Í½ÕÉ•}ÁÉ½©•Ñ¥½¸ Ä°È°Ì¤ÁÉ½©•Ñ¥½¸œ°m™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°™¥áÑÕÉ”¹Í½ÕÉ•ÍlÁt¹Í½ÕÉ•%‘t¤¤¹É½ÝÍlÁt¹ÁÉ½©•Ñ¥½¸ì(€€€€€…ÍÍ•ÉÐ¹½¬¡ÁÉ½©•Ñ¥½¸¤ì(€€€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡=‰©•Ð¹¡…Í=Ý¸¡ÁÉ½©•Ñ¥½¸°€ÍÑ½É…•A…Ñ œ¤°™…±Í”¤ì(€€€€€…Ý…¥Ð…ÍÍ•ÉÐ¹É•©•ÑÌ¡…ÕÑ¡½É¥Ñä¹ÅÕ•Éä ‰%9MIP%9Q<ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}•Ù¥‘•¹•}ÅÕ•ÍÑ¥½¹Ì¡Í½ÕÉ•}¥±½É}¥±Ý½É­ÍÁ…•}¥±ÅÕ•ÍÑ¥½¸±ÍÑ…ÑÕÌ±É•…Ñ•‘}‰ä¤Y1UL Ä°È°Ì°™½É‰¥‘‘•¸œ°½Á•¸œ°Ð¤ˆ°m™¥áÑÕÉ”¹Í½ÕÉ•ÍlÁt¹Í½ÕÉ•%°™¥áÑÕÉ”¹½Éœ°™¥áÑÕÉ”¹Ý½É­ÍÁ…”°™¥áÑÕÉ”¹É•ÅÕ•ÍÑ•Ét¤°€½Á•Éµ¥ÍÍ¥½¸‘•¹¥•¼¤ì(€€€ô™¥¹…±±äì…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä I=11	,œ¤ìô(€€€…Ý…¥Ð…ÕÑ¡½É¥Ñä¹ÅÕ•Éä UAQÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}¥¹Ñ•±±¥•¹•}ÉÕ¹Ñ¥µ•}½¹ÑÉ½°MPÉ•…‘}½¹±äõ™…±Í”]!IÍ¥¹±•Ñ½¸õÑÉÕ”œ¤ì(€ô¤ì((€½¹Í½±”¹±½œ¡¹Ñ•ÉÁÉ¥Í”%¹Ñ•±±¥•¹”A½ÍÑÉ•ME0•á•ÕÑ…‰±”Í•¹…É¥½Ìè€‘íÍ•¹…É¥½Ì¹±•¹Ñ¡ôÁ…ÍÍ•°€À™…¥±•¹€¤ì)ô™¥¹…±±äì(€™½È€¡½¹ÍÐ±¥•¹Ð½˜±¥•¹ÑÌ¹É•Ù•ÉÍ” ¤¤¥˜€¡±¥•¹Ð€„ôô…‘µ¥¸¤…Ý…¥Ð±¥•¹Ð¹•¹ ¤¹…Ñ   ¤€ôøíô¤ì(€¥˜€¡…‘µ¥¸¤ì(€€€±•Ð±•…¹ÕÁ…¥±•€ô™…±Í”ì(€€€™½È€¡½¹ÍÐ¹…µ”½˜É•…Ñ•‘…Ñ…‰…Í•Ì¹É•Ù•ÉÍ” ¤¤ì(€€€€€ÑÉäì…Ý…¥Ð…‘µ¥¸¹ÅÕ•Éä¡I=@Q	M%a%MQL€‘í¹…µ•ô]%Q €¡=I¥€¤ì½¹Í½±”¹±½œ¡19U@I=AAQ	M€‘í¹…µ•õ€¤ìô(€€€€€…Ñ €¡•ÉÉ½È¤ì±•…¹ÕÁ…¥±•€ôÑÉÕ”ì½¹Í½±”¹•ÉÉ½È¡19U@%1Q	M€‘í¹…µ•ôè€‘í•ÉÉ½È¥¹ÍÑ…¹•½˜ÉÉ½È€ü•ÉÉ½È¹µ•ÍÍ…”€èMÑÉ¥¹œ¡•ÉÉ½È¥õ€¤ìô(€€€ô(€€€™½È€¡½¹ÍÐÉ½±”½˜É•…Ñ•‘I½±•Ì¹É•Ù•ÉÍ” ¤¤ì(€€€€€ÑÉäì…Ý…¥Ð…‘µ¥¸¹ÅÕ•Éä¡I=@I=1%a%MQL€‘íÉ½±•õ€¤ìô(€€€€€…Ñ €¡•ÉÉ½È¤ì±•…¹ÕÁ…¥±•€ôÑÉÕ”ì½¹Í½±”¹•ÉÉ½È¡19U@%1I=1€‘íÉ½±•ôè€‘í•ÉÉ½È¥¹ÍÑ…¹•½˜ÉÉ½È€ü•ÉÉ½È¹µ•ÍÍ…”€èMÑÉ¥¹œ¡•ÉÉ½È¥õ€¤ìô(€€€ô(€€€…Ý…¥Ð…‘µ¥¸¹•¹ ¤¹…Ñ   ¤€ôøíô¤ì(€€€½¹Í½±”¹±½œ¡19U@€‘í±•…¹ÕÁ…¥±•€ü€%1œ€è€AMLõ€¤ì(€€€¥˜€¡±•…¹ÕÁ…¥±•¤ÁÉ½•ÍÌ¹•á¥Ñ½‘”€ô€Äì(€ô)ô(
+    await rpc('provider.revoke', {providerConfigId: config, keyRefId: secondKey, disableAllRoutes: true});
+    assert.deepEqual((await authority.query('SELECT c.status,r.enabled,k.status key_status FROM public.ai_provider_configs c JOIN public.enterprise_ai_capability_routes r ON r.provider_config_id=c.id JOIN public.ai_provider_key_refs k ON k.id=$2 WHERE c.id=$1', [config, secondKey])).rows[0], {status: 'retired', enabled: false, key_status: 'retired'});
+    assert.deepEqual((await authority.query('SELECT workspace_id,enabled FROM public.enterprise_ai_capability_routes WHERE provider_config_id=$1 ORDER BY workspace_id', [config])).rows, [
+      {workspace_id: fixture.workspace, enabled: false},
+      {workspace_id: secondWorkspace, enabled: false},
+    ].sort((left, right) => left.workspace_id.localeCompare(right.workspace_id)));
+    const evidence = (await authority.query('SELECT count(*)::int events, bool_and(org_id=$2 AND workspace_id=$3) tenant_bound, string_agg(metadata::text,\' \') metadata FROM public.ai_provider_audit_events WHERE provider_config_id=$1', [config, fixture.org, fixture.workspace])).rows[0];
+    assert.equal(evidence.events, 10);
+    assert.equal(evidence.tenant_bound, true);
+    assert.doesNotMatch(evidence.metadata, /sk-test-must-never-persist|AVALA_PROVIDER_SECRET|providerKey/i);
+  });
+  await scenario('text-native, CSV, transcript, text-PDF, and DOCX provenance', async () => {
+    const expected = new Map([
+      ['text/plain', 'text_native'], ['text/markdown', 'text_native'], ['text/csv', 'csv'],
+      ['text/vtt', 'vtt'], ['application/x-subrip', 'srt'], ['application/pdf', 'pdf_text'],
+      ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
+    ]);
+    for (const source of fixture.sources.filter(item => item.parsed)) {
+      const row = (await authority.query('SELECT parser_kind,extraction_status,provenance_hash FROM public.enterprise_evidence_source_versions WHERE id=$1', [source.sourceVersionId])).rows[0];
+      assert.equal(row.parser_kind, expected.get(source.mimeType));
+      assert.equal(row.extraction_status, 'parsed');
+      assert.match(row.provenance_hash, /^[0-9a-f]{64}$/);
+      assert.notEqual(row.provenance_hash, '0'.repeat(64));
+    }
+  });
+  await scenario('scanned PDF records truthful OCR-required failure and immutable provenance', async () => {
+    const scanned = fixture.sources.find(source => source.extension === 'scanned.pdf');
+    const before = (await authority.query('SELECT provenance_hash FROM public.enterprise_evidence_source_versions WHERE id=$1', [scanned.sourceVersionId])).rows[0].provenance_hash;
+    const result = (await authority.query('SELECT public.enterprise_record_source_extraction_failure($1,$2,$3,$4) result', [scanned.sourceVersionId, fixture.org, fixture.workspace, 'OCR_REQUIRED'])).rows[0].result;
+    assert.equal(result.status, 'failed_ocr_required');
+    const after = (await authority.query('SELECT provenance_hash,extraction_status,extraction_failure_code FROM public.enterprise_evidence_source_versions WHERE id=$1', [scanned.sourceVersionId])).rows[0];
+    assert.equal(after.provenance_hash, before);
+    assert.deepEqual([after.extraction_status, after.extraction_failure_code], ['failed_ocr_required', 'OCR_REQUIRED']);
+    await assert.rejects(authority.query('SELECT public.enterprise_record_source_extraction_failure($1,$2,$3,$4)', [scanned.sourceVersionId, fixture.org, fixture.workspace, 'OCR_REQUIRED']), /ENTERPRISE_EVIDENCE_VERSION_CONFLICT/);
+  });
+  await scenario('tenant linkage, uniqueness, checks, and atomic invalid source rejection', async () => {
+    const otherOrg = fixture.uuid(300); const otherWorkspace = fixture.uuid(301);
+    await authority.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'Other tenant','enterprise-other')", [otherOrg]);
+    await authority.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Other workspace','enterprise-other')", [otherWorkspace, otherOrg]);
+    await assert.rejects(authority.query(
+      `INSERT INTO public.enterprise_ai_capability_routes(org_id,workspace_id,provider_config_id,capability,model,enabled,created_by,updated_by)
+       VALUES($1,$2,$3,'assess.evidence.extract','fixture-model',true,$4,$4)`,
+      [otherOrg, otherWorkspace, fixture.provider, fixture.requester],
+    ), /enterprise_ai_routes_provider_org_fkey/);
+    const invalidSource = fixture.uuid(302);
+    await assert.rejects(authority.query('SELECT public.enterprise_create_evidence_source($1::jsonb,$2::jsonb)', [JSON.stringify({
+      id: invalidSource, org_id: fixture.org, workspace_id: fixture.workspace, display_name: 'Invalid', source_kind: 'upload', mime_type: 'text/plain', created_by: fixture.requester,
+    }), JSON.stringify({
+      id: fixture.uuid(303), original_filename: 'invalid.txt', content_hash: fixture.hash('b'), content_bytes: 12582913,
+      storage_bucket: 'source-uploads', storage_path: 'wrong/path', created_by: fixture.requester,
+    })]), /ENTERPRISE_EVIDENCE_STORAGE_BINDING_INVALID|content_bytes/);
+    assert.equal((await authority.query('SELECT count(*)::int n FROM public.enterprise_evidence_sources WHERE id=$1', [invalidSource])).rows[0].n, 0);
+  });
+  await scenario('provider/key deletion retains immutable job lineage', async () => {
+    const key = fixture.uuid(310); const provider = fixture.uuid(311); const job = fixture.uuid(312);
+    await authority.query("INSERT INTO public.ai_provider_key_refs(id,org_id,provider,secret_ref,status) VALUES($1,$2,'openai','fixture/delete/reference','active')", [key, fixture.org]);
+    await authority.query("INSERT INTO public.ai_provider_configs(id,org_id,provider,display_name,key_ref_id,status) VALUES($1,$2,'openai','Delete semantics',$3,'active')", [provider, fixture.org, key]);
+    await authority.query(`INSERT INTO public.enterprise_ai_job_ledger(id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,actor_id,request_id,idempotency_key,status,approval_state)
+      VALUES($1,$2,$3,'assess.evidence.extract',$4,'openai','fixture-model','delete-test','1',$5,$6,'delete-provider-001','failed','review_required')`, [job, fixture.org, fixture.workspace, provider, fixture.requester, fixture.uuid(313)]);
+    await authority.query('DELETE FROM public.ai_provider_key_refs WHERE id=$1', [key]);
+    assert.equal((await authority.query('SELECT key_ref_id FROM public.ai_provider_configs WHERE id=$1', [provider])).rows[0].key_ref_id, null);
+    await authority.query('DELETE FROM public.ai_provider_configs WHERE id=$1', [provider]);
+    assert.equal((await authority.query('SELECT provider_config_id FROM public.enterprise_ai_job_ledger WHERE id=$1', [job])).rows[0].provider_config_id, null);
+  });
+  await scenario('idempotent command replay and conflicting update rejection', async () => {
+    const request = fixture.uuid(320); const hash = fixture.hash('c');
+    const first = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)).*', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', request, hash])).rows[0];
+    const replay = (await authority.query('SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)).*', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', request, hash])).rows[0];
+    assert.equal(replay.id, first.id);
+    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)', [fixture.requester, fixture.org, fixture.workspace, 'fixture.command', 'fixture-command-001', fixture.uuid(321), fixture.hash('d')]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+    await authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{\"ok\":true}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]);
+    await assert.rejects(authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]), /ENTERPRISE_AI_RECEIPT_NOT_CLAIMED/);
+  });
+  await scenario('candidate lineage, stale edit rejection, acceptance, and Assess draft promotion', async () => {
+    const initial = (await authority.query('SELECT value,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
+    const edited = (await authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.org, fixture.workspace, 'Govern the reviewed fixture process', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'Corrected against source'])).rows[0].result;
+    assert.equal(Number(edited.version), 2);
+    assert.notEqual(edited.provenanceHash, initial.provenance_hash);
+    await assert.rejects(authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9)', [fixture.candidate, fixture.org, fixture.workspace, 'stale', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'stale']), /ENTERPRISE_EVIDENCE_VERSION_CONFLICT/);
+    await authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9)', [fixture.candidate, fixture.org, fixture.workspace, 'Govern the reviewed fixture process', fixture.hash('e'), 'accepted', fixture.reviewer, 'Govern the reviewed fixture process', 'Accepted against source']);
+    await authority.query("UPDATE public.assess_v2_cases SET status='draft' WHERE id=$1", [fixture.caseId]);
+    const authorizationVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.requester])).rows[0].version);
+    const request = fixture.uuid(330);
+    const promoted = (await authority.query('SELECT public.enterprise_promote_evidence_to_assess_v2($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.caseId, 2, fixture.requester, fixture.org, fixture.workspace, request, 'fixture-promotion-001', authorizationVersion])).rows[0].result;
+    assert.equal(promoted.outcome, 'committed');
+    assert.equal(Number(promoted.resource.caseVersion), 3);
+    const replay = (await authority.query('SELECT public.enterprise_promote_evidence_to_assess_v2($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.caseId, 2, fixture.requester, fixture.org, fixture.workspace, request, 'fixture-promotion-001', authorizationVersion])).rows[0].result;
+    assert.equal(replay.outcome, 'replayed');
+    await assert.rejects(authority.query('UPDATE public.enterprise_evidence_assess_promotions SET field_key=$1 WHERE candidate_id=$2', ['outcome', fixture.candidate]), /ENTERPRISE_APPEND_ONLY/);
+  });
+  await scenario('Delivery derives IDs/hashes, enforces three-person approval, and gates Monitor', async () => {
+    const handoff = fixture.uuid(340); const workPackage = fixture.uuid(341); const version = fixture.uuid(342);
+    const rootLogical = fixture.uuid(343); const childLogical = fixture.uuid(344);
+    const result = (await authority.query('SELECT public.enterprise_commit_delivery_handoff($1::jsonb,$2::jsonb,$3::jsonb,$4::jsonb) result', [
+      JSON.stringify({id: handoff, org_id: fixture.org, workspace_id: fixture.workspace, studio_document_id: fixture.artifactId, studio_version_id: fixture.version.id, studio_version: Number(fixture.version.version), studio_content_hash: fixture.version.content_hash, created_by: fixture.requester}),
+      JSON.stringify({id: workPackage, created_by: fixture.requester}),
+      JSON.stringify({id: version, content: {title: 'Canonical delivery'}, content_hash: fixture.hash('f'), created_by: fixture.requester}),
+      JSON.stringify([
+        {id: rootLogical, itemType: 'Epic', title: 'Root', description: '', acceptanceCriteria: ['reviewed'], nonFunctionalRequirements: [], sourceSectionLocator: 'sections[0]', idempotencyKey: 'delivery-root-001', createdBy: fixture.requester},
+        {id: childLogical, parentId: rootLogical, itemType: 'Task', title: 'Child', description: '', acceptanceCriteria: ['verified'], nonFunctionalRequirements: [], sourceSectionLocator: 'sections[0]', idempotencyKey: 'delivery-child-001', createdBy: fixture.requester},
+      ]),
+    ])).rows[0].result;
+    assert.notEqual(result.contentHash, fixture.hash('f'));
+    assert.equal(result.itemIds.length, 2);
+    const child = (await authority.query("SELECT parent_item_id FROM public.enterprise_delivery_work_items WHERE package_version_id=$1 AND title='Child'", [version])).rows[0];
+    assert.equal(child.parent_item_id, result.itemIds[0]);
+    const reviewerVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.reviewer])).rows[0].version);
+    const reviewEvent = fixture.uuid(345);
+    await authority.query(`INSERT INTO public.enterprise_high_impact_review_events(id,org_id,workspace_id,resource_type,resource_id,reviewer_id,reviewer_authorization_version,resource_version,resource_hash,outcome,rationale)
+      VALUES($1,$2,$3,'delivery_work_package',$4,$5,$6,999,$7,'approved','Independent fixture review')`, [reviewEvent, fixture.org, fixture.workspace, workPackage, fixture.reviewer, reviewerVersion, fixture.hash('0')]);
+    await assert.rejects(authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.reviewer, review_event_id: reviewEvent, outcome: 'approved', rationale: 'invalid same actor'}), 'delivery_work_package', workPackage, fixture.org, fixture.workspace, 'approved']), /ENTERPRISE_APPROVAL_SEPARATION/);
+    await authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.approver, review_event_id: reviewEvent, outcome: 'approved', rationale: 'Independent approval'}), 'delivery_work_package', workPackage, fixture.org, fixture.workspace, 'approved']);
+    const baselineId = fixture.uuid(346);
+    const monitor = (await authority.query('SELECT public.enterprise_commit_monitor_baseline($1::jsonb,$2,$3,$4) result', [JSON.stringify({id: baselineId, workPackageVersionId: version, approvedItemIds: result.itemIds, milestones: [], dependencies: [], blockers: [], risks: []}), fixture.requester, fixture.org, fixture.workspace])).rows[0].result;
+    assert.deepEqual([monitor.status, monitor.readiness], ['approval_required', 'review_required']);
+    const persisted = (await authority.query('SELECT live_telemetry_connected,resource_hash FROM public.enterprise_monitor_baselines WHERE id=$1', [baselineId])).rows[0];
+    assert.equal(persisted.live_telemetry_connected, false);
+    assert.equal(persisted.resource_hash, monitor.resourceHash);
+    await assert.rejects(authority.query("UPDATE public.enterprise_delivery_work_items SET title='mutated' WHERE package_version_id=$1", [version]), /ENTERPRISE_APPEND_ONLY/);
+  });
+  await scenario('Modernization ancestry derives a governed decision and Assemble remains draft-only until approval', async () => {
+    const application = fixture.uuid(360); const metadata = fixture.uuid(361); const sourceAssessment = fixture.uuid(362);
+    await authority.query(`INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,created_by)
+      VALUES($1,$2,$3,'Fixture application','fixture application',$4)`, [application, fixture.org, fixture.workspace, fixture.requester]);
+    await authority.query(`INSERT INTO public.assess_application_metadata_versions(id,org_id,workspace_id,application_id,version,lifecycle,metadata,author_id)
+      VALUES($1,$2,$3,$4,1,'approved','{}'::jsonb,$5)`, [metadata, fixture.org, fixture.workspace, application, fixture.requester]);
+    const authorizationVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.requester])).rows[0].version);
+    await authority.query(`INSERT INTO public.assess_application_assessment_versions(
+      id,org_id,workspace_id,application_id,metadata_version_id,version,decision_model_version,lifecycle,author_id,authorization_version)
+      VALUES($1,$2,$3,$4,$5,1,'assess-v2-application-portfolio-2026-07','approved',$6,$7)`,
+    [sourceAssessment, fixture.org, fixture.workspace, application, metadata, fixture.requester, authorizationVersion]);
+    const dimensions = [
+      'integration_accessibility', 'semantic_and_data_clarity', 'state_and_execution',
+      'security_and_control', 'architecture_changeability', 'ui_automation_readiness',
+      'ai_assisted_engineering_readiness',
+    ];
+    await authority.query(`INSERT INTO public.assess_application_dimension_results(
+      org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,dimension,
+      readiness_band,evidence_confidence,hard_gates,evidence_refs,missing_evidence,rationale,
+      contradictions,remediation_requirements,what_would_change)
+      SELECT $1,$2,$3,$4,$5,dimension,'Ready','Verified','{}'::text[],'[]'::jsonb,
+        '{}'::text[],ARRAY['verified'],'{}'::text[],'{}'::text[],ARRAY['new evidence']
+      FROM unnest($6::text[]) dimension`, [fixture.org, fixture.workspace, application, metadata, sourceAssessment, dimensions]);
+    await authority.query(`INSERT INTO public.assess_application_modernization_recommendations(
+      org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,
+      migration_boundary,rollback_strategy,evidence_confidence)
+      VALUES($1,$2,$3,$4,$5,'assemble','draft-only boundary','retain current system','Verified')`,
+    [fixture.org, fixture.workspace, application, metadata, sourceAssessment]);
+    const enterpriseAssessment = fixture.uuid(363); const decision = fixture.uuid(364);
+    const committed = (await authority.query('SELECT public.enterprise_commit_modernization_assessment($1::jsonb,$2::jsonb) result', [
+      JSON.stringify({id: enterpriseAssessment, org_id: fixture.org, workspace_id: fixture.workspace, application_ref: application, source_assessment_id: sourceAssessment, source_metadata_version_id: metadata, created_by: fixture.requester}),
+      JSON.stringify({id: decision, created_by: fixture.requester}),
+    ])).rows[0].result;
+    assert.equal(committed.primaryDisposition, 'assemble');
+    assert.match(committed.resourceHash, /^[0-9a-f]{64}$/);
+    const reviewerVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.reviewer])).rows[0].version);
+    const decisionReview = fixture.uuid(365);
+    await authority.query(`INSERT INTO public.enterprise_high_impact_review_events(id,org_id,workspace_id,resource_type,resource_id,reviewer_id,reviewer_authorization_version,resource_version,resource_hash,outcome,rationale)
+      VALUES($1,$2,$3,'modernization_decision',$4,$5,$6,1,$7,'approved','Independent modernization review')`,
+    [decisionReview, fixture.org, fixture.workspace, decision, fixture.reviewer, reviewerVersion, fixture.hash('0')]);
+    await authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.approver, review_event_id: decisionReview, outcome: 'approved', rationale: 'Modernization approval'}), 'modernization_decision', decision, fixture.org, fixture.workspace, 'approved']);
+    const blueprint = fixture.uuid(366);
+    const assembled = (await authority.query('SELECT public.enterprise_commit_assemble_blueprint($1::jsonb,$2,$3,$4) result', [JSON.stringify({id: blueprint, modernizationDecisionId: decision, structuredContent: {components: []}, readableDocument: 'Draft-only fixture blueprint'}), fixture.requester, fixture.org, fixture.workspace])).rows[0].result;
+    assert.deepEqual([assembled.status, assembled.executionEnabled, assembled.runtimeAgentsEnabled, assembled.liveTelemetryEnabled], ['draft', false, false, false]);
+    const flags = (await authority.query(`SELECT code_generation_enabled,deployment_enabled,infrastructure_changes_enabled,
+      credential_access_enabled,source_system_calls_enabled,runtime_agents_enabled,live_telemetry_enabled
+      FROM public.enterprise_assemble_blueprints WHERE id=$1`, [blueprint])).rows[0];
+    assert.deepEqual(Object.values(flags), [false, false, false, false, false, false, false]);
+    const blueprintReview = fixture.uuid(367);
+    await authority.query(`INSERT INTO public.enterprise_high_impact_review_events(id,org_id,workspace_id,resource_type,resource_id,reviewer_id,reviewer_authorization_version,resource_version,resource_hash,outcome,rationale)
+      VALUES($1,$2,$3,'assemble_blueprint',$4,$5,$6,1,$7,'approved','Independent blueprint review')`,
+    [blueprintReview, fixture.org, fixture.workspace, blueprint, fixture.reviewer, reviewerVersion, fixture.hash('0')]);
+    await authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.approver, review_event_id: blueprintReview, outcome: 'approved', rationale: 'Blueprint approval'}), 'assemble_blueprint', blueprint, fixture.org, fixture.workspace, 'approved']);
+    await assert.rejects(authority.query("UPDATE public.enterprise_assemble_blueprints SET status='rejected' WHERE id=$1", [blueprint]), /ENTERPRISE_RESOURCE_IMMUTABLE_OR_TRANSITION_INVALID/);
+  });
+  await scenario('read-only rollback blocks mutations while capability projection remains available', async () => {
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET read_only=true WHERE singleton=true');
+    await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7)', [fixture.requester, fixture.org, fixture.workspace, 'fixture.readonly', 'fixture-readonly-001', fixture.uuid(350), fixture.hash('a')]), /ENTERPRISE_INTELLIGENCE_READ_ONLY/);
+    await authority.query('BEGIN');
+    try {
+      await authority.query('SET LOCAL ROLE authenticated');
+      await authority.query("SELECT set_config('request.jwt.claim.sub',$1,true)", [fixture.requester]);
+      const projection = (await authority.query('SELECT public.enterprise_evidence_source_projection($1,$2,$3) projection', [fixture.org, fixture.workspace, fixture.sources[0].sourceId])).rows[0].projection;
+      assert.ok(projection);
+      assert.equal(Object.hasOwn(projection, 'storagePath'), false);
+      await assert.rejects(authority.query("INSERT INTO public.enterprise_evidence_questions(source_id,org_id,workspace_id,question,status,created_by) VALUES($1,$2,$3,'forbidden','open',$4)", [fixture.sources[0].sourceId, fixture.org, fixture.workspace, fixture.requester]), /permission denied/);
+    } finally { await authority.query('ROLLBACK'); }
+    await authority.query('UPDATE public.enterprise_intelligence_runtime_control SET read_only=false WHERE singleton=true');
+  });
+
+  console.log(`Enterprise Intelligence PostgreSQL executable scenarios: ${scenarios.length} passed, 0 failed.`);
+} finally {
+  for (const client of clients.reverse()) if (client !== admin) await client.end().catch(() => {});
+  if (admin) {
+    let cleanupFailed = false;
+    for (const name of createdDatabases.reverse()) {
+      try { await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); console.log(`CLEANUP DROPPED DATABASE ${name}`); }
+      catch (error) { cleanupFailed = true; console.error(`CLEANUP FAILED DATABASE ${name}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    for (const role of createdRoles.reverse()) {
+      try { await admin.query(`DROP ROLE IF EXISTS ${role}`); }
+      catch (error) { cleanupFailed = true; console.error(`CLEANUP FAILED ROLE ${role}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    await admin.end().catch(() => {});
+    console.log(`CLEANUP ${cleanupFailed ? 'FAILED' : 'PASS'}`);
+    if (cleanupFailed) process.exitCode = 1;
+  }
+}
