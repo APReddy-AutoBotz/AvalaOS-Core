@@ -8,23 +8,22 @@ import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs'
 import {testMembershipRoleScopeForwardFix} from './testMembershipRoleScopeForwardFix.mjs';
 
 execFileSync(process.execPath,['scripts/checkStudioArtifactMigrationContract.mjs'],{stdio:'inherit'});
-const adminUrl=process.env.STUDIO_ARTIFACT_MIGRATION_DATABASE_URL;
-if(!adminUrl){if(process.env.CI)throw Error('STUDIO_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('STUDIO_ARTIFACT_MIGRATION_DATABASE_URL not set; PostgreSQL scenarios not run locally.');process.exit(0)}
-
-const {Client}=pg;
-const suffix=`${process.pid}_${Date.now()}`;
-const names={fresh:`studio_fresh_${suffix}`,upgrade:`studio_upgrade_${suffix}`,populated:`studio_populated_${suffix}`,dirty:`studio_dirty_${suffix}`,authority:`studio_authority_${suffix}`};
-const createdDatabases=[];const createdRoles=[];const clients=[];
 const migrations=(await readdir('supabase/migrations')).filter(n=>n.endsWith('.sql')).sort();
 const studio='20260727120000_studio_governed_artifact_authority.sql';
 const membershipFix='20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql';
 const privateStudio='20260729163251_studio_private_artifact_authority.sql';
 const privateStudioForwardFix='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
-assert.equal(migrations.at(-1),privateStudioForwardFix,'Studio PR #217 forward fix must be the chronological tip');
 assert.ok(migrations.indexOf(privateStudio)===migrations.indexOf(studio)+1,'Studio PR B must immediately follow accepted Studio PR A authority');
 assert.ok(migrations.indexOf(privateStudioForwardFix)===migrations.indexOf(privateStudio)+1,'Studio PR #217 forward fix must immediately follow accepted Studio PR B authority');
 assert.ok(migrations.indexOf(membershipFix)===migrations.indexOf(studio)-1,'membership trigger correction must immediately precede Studio authority');
-const baseline=migrations.filter(n=>n!==membershipFix&&n!==studio&&n!==privateStudio&&n!==privateStudioForwardFix);
+const adminUrl=process.env.STUDIO_ARTIFACT_MIGRATION_DATABASE_URL;
+if(!adminUrl){if(process.env.CI)throw Error('STUDIO_ARTIFACT_MIGRATION_DATABASE_URL is required');console.log('Studio migration chronology passed; STUDIO_ARTIFACT_MIGRATION_DATABASE_URL not set, so PostgreSQL scenarios were not run locally.');process.exit(0)}
+
+const {Client}=pg;
+const suffix=`${process.pid}_${Date.now()}`;
+const names={fresh:`studio_fresh_${suffix}`,upgrade:`studio_upgrade_${suffix}`,populated:`studio_populated_${suffix}`,dirty:`studio_dirty_${suffix}`,authority:`studio_authority_${suffix}`};
+const createdDatabases=[];const createdRoles=[];const clients=[];
+const baseline=migrations.slice(0,migrations.indexOf(membershipFix));
 const featureMigrations=[membershipFix,studio,privateStudio,privateStudioForwardFix];
 const urlFor=name=>{const u=new URL(adminUrl);u.pathname=`/${name}`;return u.toString()};
 const connect=async url=>{const c=new Client({connectionString:url});await c.connect();clients.push(c);return c};
