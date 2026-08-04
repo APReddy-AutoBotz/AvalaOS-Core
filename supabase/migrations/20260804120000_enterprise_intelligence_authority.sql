@@ -6,6 +6,48 @@
 -- these tables; the Enterprise Intelligence Edge command boundary uses the
 -- service role only after resolving the caller's tenant authority.
 
+-- Fail before any capability/provider mutation when an earlier or manually
+-- created Enterprise Intelligence schema is present. This migration is the
+-- sole authority for these unaccepted objects; CREATE TABLE IF NOT EXISTS
+-- would otherwise bless unknown columns, constraints, ACLs, and policies.
+DO $enterprise_intelligence_preflight$
+DECLARE
+  dirty_relation TEXT;
+BEGIN
+  SELECT relation_name INTO dirty_relation
+  FROM unnest(ARRAY[
+    'enterprise_intelligence_runtime_control',
+    'enterprise_ai_capability_routes', 'enterprise_ai_command_receipts',
+    'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
+    'enterprise_evidence_sources', 'enterprise_evidence_source_versions',
+    'enterprise_evidence_candidates', 'enterprise_evidence_candidate_edits',
+    'enterprise_evidence_questions', 'enterprise_evidence_assess_promotions',
+    'enterprise_studio_delivery_handoffs', 'enterprise_delivery_work_packages',
+    'enterprise_delivery_work_package_versions', 'enterprise_delivery_work_items',
+    'enterprise_monitor_baselines', 'enterprise_modernization_assessments',
+    'enterprise_modernization_decisions', 'enterprise_assemble_blueprints',
+    'enterprise_high_impact_review_events', 'enterprise_high_impact_approvals'
+  ]) AS expected(relation_name)
+  WHERE to_regclass(format('public.%I', relation_name)) IS NOT NULL
+  ORDER BY relation_name
+  LIMIT 1;
+
+  IF dirty_relation IS NOT NULL THEN
+    RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_DIRTY_SCHEMA relation=%', dirty_relation;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'ai_provider_configs'
+      AND column_name IN ('endpoint_url', 'deployment_name', 'model_allowlist', 'budget_policy', 'last_validated_at')
+  ) THEN
+    RAISE EXCEPTION 'ENTERPRISE_INTELLIGENCE_DIRTY_SCHEMA relation=ai_provider_configs';
+  END IF;
+END
+$enterprise_intelligence_preflight$;
+
 INSERT INTO public.capabilities (capability_key, module, description) VALUES
   ('org.admin', 'organization', 'Manage organization-scoped governed controls'),
   ('byok.manage', 'admin', 'Register and enable server-managed provider routes'),
@@ -56,11 +98,11 @@ ALTER TABLE public.ai_provider_configs
   ADD CONSTRAINT ai_provider_configs_provider_check
   CHECK (provider IN ('gemini', 'groq', 'openai', 'azure_openai', 'anthropic', 'openai_compatible')) NOT VALID;
 
-ALTER TABLE public.ai_provider_configs ADD COLUMN IF NOT EXISTS endpoint_url TEXT;
-ALTER TABLE public.ai_provider_configs ADD COLUMN IF NOT EXISTS deployment_name TEXT;
-ALTER TABLE public.ai_provider_configs ADD COLUMN IF NOT EXISTS model_allowlist TEXT[] NOT NULL DEFAULT '{}'::text[];
-ALTER TABLE public.ai_provider_configs ADD COLUMN IF NOT EXISTS budget_policy JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE public.ai_provider_configs ADD COLUMN IF NOT EXISTS last_validated_at TIMESTAMPTZ;
+ALTER TABLE public.ai_provider_configs ADD COLUMN endpoint_url TEXT;
+ALTER TABLE public.ai_provider_configs ADD COLUMN deployment_name TEXT;
+ALTER TABLE public.ai_provider_configs ADD COLUMN model_allowlist TEXT[] NOT NULL DEFAULT '{}'::text[];
+ALTER TABLE public.ai_provider_configs ADD COLUMN budget_policy JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.ai_provider_configs ADD COLUMN last_validated_at TIMESTAMPTZ;
 ALTER TABLE public.ai_provider_configs DROP CONSTRAINT IF EXISTS ai_provider_configs_model_allowlist_check;
 ALTER TABLE public.ai_provider_configs
   ADD CONSTRAINT ai_provider_configs_model_allowlist_check
@@ -98,11 +140,23 @@ BEGIN
     ALTER TABLE public.ai_provider_configs
       ADD CONSTRAINT ai_provider_configs_key_ref_org_fkey
       FOREIGN KEY (key_ref_id, org_id)
-      REFERENCES public.ai_provider_key_refs(id, org_id) ON DELETE SET NULL;
+      REFERENCES public.ai_provider_key_refs(id, org_id) ON DELETE SET NULL (key_ref_id);
   END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS public.enterprise_ai_capability_routes (
+CREATE TABLE public.enterprise_intelligence_runtime_control (
+  singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  read_only BOOLEAN NOT NULL DEFAULT false,
+  provider_enabled BOOLEAN NOT NULL DEFAULT true,
+  ingestion_enabled BOOLEAN NOT NULL DEFAULT true,
+  delivery_enabled BOOLEAN NOT NULL DEFAULT true,
+  assemble_enabled BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO public.enterprise_intelligence_runtime_control(singleton) VALUES (true);
+
+CREATE TABLE public.enterprise_ai_capability_routes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   workspace_id UUID NOT NULL,
@@ -118,6 +172,7 @@ CREATE TABLE IF NOT EXISTS public.enterprise_ai_capability_routes (
   model TEXT NOT NULL CHECK (length(btrim(model)) BETWEEN 1 AND 200),
   enabled BOOLEAN NOT NULL DEFAULT false,
   allowed_roles TEXT[] NOT NULL DEFAULT '{}'::text[],
+  version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0),
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   updated_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -140,7 +195,7 @@ CREATE INDEX IF NOT EXISTS enterprise_ai_routes_workspace
   ON public.enterprise_ai_capability_routes(org_id, workspace_id, enabled)
   WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS public.enterprise_ai_command_receipts (
+CREATE TABLE public.enterprise_ai_command_receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   workspace_id UUID NOT NULL,
@@ -160,7 +215,7 @@ CREATE TABLE IF NOT EXISTS public.enterprise_ai_command_receipts (
   UNIQUE (org_id, actor_id, command_type, idempotency_key)
 );
 
-CREATE TABLE IF NOT EXISTS public.enterprise_ai_job_ledger (
+CREATE TABLE public.enterprise_ai_job_ledger (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   workspace_id UUID NOT NULL,
@@ -204,7 +259,7 @@ CREATE TABLE IF NOT EXISTS public.enterprise_ai_job_ledger (
     REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
   CONSTRAINT enterprise_ai_job_provider_org_fkey
     FOREIGN KEY (provider_config_id, org_id)
-    REFERENCES public.ai_provider_configs(id, org_id) ON DELETE SET NULL,
+    REFERENCES public.ai_provider_configs(id, org_id) ON DELETE SET NULL (provider_config_id),
   UNIQUE (id, org_id),
   UNIQUE (org_id, actor_id, capability, idempotency_key)
 );
@@ -255,915 +310,9 @@ BEGIN
 END;
 $$;
 
+
 CREATE OR REPLACE FUNCTION public.enterprise_ai_complete_command(
   p_id UUID, p_org UUID, p_workspace UUID, p_response JSONB, p_resource_id UUID DEFAULT NULL
 )
 RETURNS public.enterprise_ai_command_receipts
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE v_row public.enterprise_ai_command_receipts;
-BEGIN
-  UPDATE public.enterprise_ai_command_receipts
-  SET status = 'committed', response = COALESCE(p_response, '{}'::jsonb),
-      resource_id = p_resource_id, completed_at = statement_timestamp()
-  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace AND status = 'claimed'
-  RETURNING * INTO v_row;
-  IF v_row.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED'; END IF;
-  RETURN v_row;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.enterprise_ai_fail_command(
-  p_id UUID, p_org UUID, p_workspace UUID, p_response JSONB, p_blocked BOOLEAN DEFAULT false
-)
-RETURNS public.enterprise_ai_command_receipts
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE v_row public.enterprise_ai_command_receipts;
-BEGIN
-  UPDATE public.enterprise_ai_command_receipts
-  SET status = CASE WHEN p_blocked THEN 'blocked' ELSE 'failed' END,
-      response = COALESCE(p_response, '{}'::jsonb), completed_at = statement_timestamp()
-  WHERE id = p_id AND org_id = p_org AND workspace_id = p_workspace AND status = 'claimed'
-  RETURNING * INTO v_row;
-  IF v_row.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED'; END IF;
-  RETURN v_row;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_ai_claim_command(UUID, UUID, UUID, TEXT, TEXT, UUID, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.enterprise_ai_complete_command(UUID, UUID, UUID, JSONB, UUID) TO service_role;
-GRANT EXECUTE ON FUNCTION public.enterprise_ai_fail_command(UUID, UUID, UUID, JSONB, BOOLEAN) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_ai_usage_ledger (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id UUID NOT NULL,
-  provider_config_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  provider TEXT NOT NULL CHECK (provider IN ('gemini', 'groq', 'openai', 'azure_openai', 'anthropic', 'openai_compatible')),
-  model TEXT NOT NULL CHECK (length(btrim(model)) BETWEEN 1 AND 200),
-  input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
-  output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
-  request_count INTEGER NOT NULL DEFAULT 1 CHECK (request_count = 1),
-  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_ai_usage_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_ai_usage_job_org_fkey
-    FOREIGN KEY (job_id, org_id)
-    REFERENCES public.enterprise_ai_job_ledger(id, org_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_ai_usage_provider_org_fkey
-    FOREIGN KEY (provider_config_id, org_id)
-    REFERENCES public.ai_provider_configs(id, org_id) ON DELETE RESTRICT,
-  UNIQUE (job_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_evidence_sources (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  display_name TEXT NOT NULL CHECK (length(btrim(display_name)) BETWEEN 1 AND 240),
-  source_kind TEXT NOT NULL CHECK (source_kind IN ('upload', 'pasted_text')),
-  mime_type TEXT NOT NULL CHECK (mime_type IN (
-    'text/plain', 'text/markdown', 'text/csv', 'text/vtt', 'application/x-subrip',
-    'text/x-srt', 'text/meeting-notes', 'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  )),
-  current_version INTEGER NOT NULL DEFAULT 1 CHECK (current_version > 0),
-  status TEXT NOT NULL CHECK (status IN ('uploaded', 'extracting', 'review', 'deleted', 'failed')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at TIMESTAMPTZ,
-  CONSTRAINT enterprise_evidence_sources_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  UNIQUE (id, org_id, workspace_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_evidence_source_versions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  version INTEGER NOT NULL CHECK (version > 0),
-  original_filename TEXT NOT NULL CHECK (length(btrim(original_filename)) BETWEEN 1 AND 240),
-  content_hash TEXT NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
-  content_bytes BIGINT NOT NULL CHECK (content_bytes > 0),
-  storage_bucket TEXT NOT NULL DEFAULT 'source-uploads' CHECK (storage_bucket = 'source-uploads'),
-  storage_path TEXT NOT NULL CHECK (length(btrim(storage_path)) BETWEEN 1 AND 1024),
-  extracted_text_hash TEXT CHECK (extracted_text_hash IS NULL OR extracted_text_hash ~ '^[0-9a-f]{64}$'),
-  extracted_character_count INTEGER CHECK (extracted_character_count IS NULL OR extracted_character_count >= 0),
-  source_locator_schema TEXT NOT NULL DEFAULT 'source-locator-1',
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_evidence_versions_source_fkey
-    FOREIGN KEY (source_id, org_id, workspace_id)
-    REFERENCES public.enterprise_evidence_sources(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, source_id, org_id, workspace_id),
-  UNIQUE (source_id, version),
-  UNIQUE (org_id, workspace_id, content_hash)
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_create_evidence_source(p_source JSONB, p_version JSONB)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE v_source public.enterprise_evidence_sources; v_version public.enterprise_evidence_source_versions;
-BEGIN
-  INSERT INTO public.enterprise_evidence_sources(
-    id, org_id, workspace_id, display_name, source_kind, mime_type,
-    current_version, status, created_by
-  ) VALUES (
-    (p_source->>'id')::uuid, (p_source->>'org_id')::uuid, (p_source->>'workspace_id')::uuid,
-    p_source->>'display_name', p_source->>'source_kind', p_source->>'mime_type',
-    (p_source->>'current_version')::integer, p_source->>'status', (p_source->>'created_by')::uuid
-  ) RETURNING * INTO v_source;
-  INSERT INTO public.enterprise_evidence_source_versions(
-    id, source_id, org_id, workspace_id, version, original_filename,
-    content_hash, content_bytes, storage_bucket, storage_path,
-    extracted_text_hash, extracted_character_count, created_by
-  ) VALUES (
-    (p_version->>'id')::uuid, (p_version->>'source_id')::uuid,
-    (p_version->>'org_id')::uuid, (p_version->>'workspace_id')::uuid,
-    (p_version->>'version')::integer, p_version->>'original_filename',
-    p_version->>'content_hash', (p_version->>'content_bytes')::bigint,
-    p_version->>'storage_bucket', p_version->>'storage_path',
-    p_version->>'extracted_text_hash', (p_version->>'extracted_character_count')::integer,
-    (p_version->>'created_by')::uuid
-  ) RETURNING * INTO v_version;
-  RETURN jsonb_build_object('sourceId', v_source.id, 'sourceVersionId', v_version.id);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_create_evidence_source(JSONB, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_create_evidence_source(JSONB, JSONB) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_evidence_candidates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL,
-  source_version_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  field_key TEXT NOT NULL CHECK (field_key IN (
-    'process_objective', 'outcome', 'trigger', 'completion', 'actors', 'systems',
-    'steps', 'rules', 'exceptions', 'manual_activities', 'controls_approvals',
-    'inputs_outputs', 'volumes_frequencies', 'slas', 'pain_points', 'risks',
-    'data_sensitivity', 'automation_opportunities', 'integrations',
-    'unresolved_questions', 'assumptions'
-  )),
-  value TEXT NOT NULL CHECK (length(btrim(value)) BETWEEN 1 AND 12000),
-  safe_excerpt TEXT CHECK (safe_excerpt IS NULL OR length(safe_excerpt) <= 1000),
-  excerpt_hash TEXT NOT NULL CHECK (excerpt_hash ~ '^[0-9a-f]{64}$'),
-  source_locator TEXT NOT NULL CHECK (length(btrim(source_locator)) BETWEEN 1 AND 400),
-  confidence NUMERIC(5,4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-  ai_job_id UUID REFERENCES public.enterprise_ai_job_ledger(id) ON DELETE SET NULL,
-  prompt_version TEXT,
-  suggestion_status TEXT NOT NULL CHECK (suggestion_status IN ('suggested', 'accepted', 'rejected', 'edited')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  reviewed_by UUID REFERENCES public.profiles(id),
-  reviewed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_evidence_candidates_source_fkey
-    FOREIGN KEY (source_id, org_id, workspace_id)
-    REFERENCES public.enterprise_evidence_sources(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_evidence_candidates_version_fkey
-    FOREIGN KEY (source_version_id, source_id, org_id, workspace_id)
-    REFERENCES public.enterprise_evidence_source_versions(id, source_id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_evidence_candidates_job_org_fkey
-    FOREIGN KEY (ai_job_id, org_id)
-    REFERENCES public.enterprise_ai_job_ledger(id, org_id) ON DELETE SET NULL,
-  UNIQUE (id, org_id, workspace_id)
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_commit_evidence_extraction(
-  p_job_id UUID,
-  p_source_id UUID,
-  p_org UUID,
-  p_workspace UUID,
-  p_output_hash TEXT,
-  p_latency_ms INTEGER,
-  p_provider_config_id UUID,
-  p_provider TEXT,
-  p_model TEXT,
-  p_token_input INTEGER,
-  p_token_output INTEGER,
-  p_candidates JSONB
-)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE item JSONB;
-BEGIN
-  FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(p_candidates, '[]'::jsonb)) LOOP
-    INSERT INTO public.enterprise_evidence_candidates(
-      id, source_id, source_version_id, org_id, workspace_id, field_key,
-      value, safe_excerpt, excerpt_hash, source_locator, confidence,
-      ai_job_id, prompt_version, suggestion_status, created_by
-    ) VALUES (
-      (item->>'id')::uuid, p_source_id, (item->>'sourceVersionId')::uuid,
-      p_org, p_workspace, item->>'field', item->>'value', item->>'safeExcerpt',
-      item->>'excerptHash', item->>'sourceLocator', (item->>'confidence')::numeric,
-      p_job_id, item->>'promptVersion', item->>'status', (item->>'createdBy')::uuid
-    );
-  END LOOP;
-  UPDATE public.enterprise_ai_job_ledger
-  SET status = 'succeeded', output_hash = p_output_hash, latency_ms = p_latency_ms,
-      token_input = p_token_input, token_output = p_token_output,
-      completed_at = statement_timestamp()
-  WHERE id = p_job_id AND org_id = p_org AND workspace_id = p_workspace AND status = 'running';
-  IF NOT FOUND THEN RAISE EXCEPTION 'ENTERPRISE_AI_JOB_NOT_RUNNING'; END IF;
-  INSERT INTO public.enterprise_ai_usage_ledger(
-    job_id, provider_config_id, org_id, workspace_id, provider, model,
-    input_tokens, output_tokens
-  ) VALUES (p_job_id, p_provider_config_id, p_org, p_workspace, p_provider, p_model, p_token_input, p_token_output);
-  UPDATE public.enterprise_evidence_sources
-  SET status = 'review', updated_at = statement_timestamp()
-  WHERE id = p_source_id AND org_id = p_org AND workspace_id = p_workspace AND deleted_at IS NULL;
-  RETURN jsonb_build_object('jobId', p_job_id, 'candidateCount', jsonb_array_length(COALESCE(p_candidates, '[]'::jsonb)));
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_commit_evidence_extraction(UUID, UUID, UUID, UUID, TEXT, INTEGER, UUID, TEXT, TEXT, INTEGER, INTEGER, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_commit_evidence_extraction(UUID, UUID, UUID, UUID, TEXT, INTEGER, UUID, TEXT, TEXT, INTEGER, INTEGER, JSONB) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_evidence_candidate_edits (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  candidate_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  actor_id UUID NOT NULL REFERENCES public.profiles(id),
-  previous_value TEXT NOT NULL,
-  next_value TEXT NOT NULL,
-  reason TEXT NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 2000),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_evidence_edits_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_evidence_edits_candidate_fkey
-    FOREIGN KEY (candidate_id, org_id, workspace_id)
-    REFERENCES public.enterprise_evidence_candidates(id, org_id, workspace_id) ON DELETE RESTRICT
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_review_evidence_candidate(
-  p_candidate_id UUID, p_org UUID, p_workspace UUID, p_value TEXT,
-  p_excerpt_hash TEXT, p_status TEXT, p_actor UUID,
-  p_previous_value TEXT, p_reason TEXT
-)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-BEGIN
-  UPDATE public.enterprise_evidence_candidates
-  SET value = p_value, excerpt_hash = p_excerpt_hash, suggestion_status = p_status,
-      reviewed_by = p_actor, reviewed_at = statement_timestamp(), updated_at = statement_timestamp()
-  WHERE id = p_candidate_id AND org_id = p_org AND workspace_id = p_workspace;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ENTERPRISE_AI_CANDIDATE_NOT_FOUND'; END IF;
-  IF p_status = 'edited' THEN
-    INSERT INTO public.enterprise_evidence_candidate_edits(
-      candidate_id, org_id, workspace_id, actor_id, previous_value, next_value, reason
-    ) VALUES (p_candidate_id, p_org, p_workspace, p_actor, p_previous_value, p_value, p_reason);
-  END IF;
-  RETURN jsonb_build_object('candidateId', p_candidate_id, 'status', p_status, 'reviewedBy', p_actor);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_review_evidence_candidate(UUID, UUID, UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_review_evidence_candidate(UUID, UUID, UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_evidence_questions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  question TEXT NOT NULL CHECK (length(btrim(question)) BETWEEN 1 AND 2000),
-  status TEXT NOT NULL CHECK (status IN ('open', 'answered', 'deferred')),
-  answer TEXT,
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  resolved_by UUID REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  CONSTRAINT enterprise_evidence_questions_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_evidence_questions_source_fkey
-    FOREIGN KEY (source_id, org_id, workspace_id)
-    REFERENCES public.enterprise_evidence_sources(id, org_id, workspace_id) ON DELETE RESTRICT
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_studio_delivery_handoffs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  studio_document_id UUID NOT NULL,
-  artifact_type TEXT NOT NULL CHECK (artifact_type IN ('brd', 'frd', 'pdd')),
-  studio_version_id UUID NOT NULL,
-  studio_version BIGINT NOT NULL CHECK (studio_version > 0),
-  studio_content_hash TEXT NOT NULL CHECK (studio_content_hash ~ '^[0-9a-f]{64}$'),
-  source_status TEXT NOT NULL CHECK (source_status = 'approved'),
-  source_snapshot JSONB NOT NULL CHECK (jsonb_typeof(source_snapshot) = 'object'),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'approved', 'stale', 'blocked')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_studio_handoffs_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_studio_handoffs_studio_fkey
-    FOREIGN KEY (studio_document_id, org_id, workspace_id)
-    REFERENCES public.studio_artifact_aggregates(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_studio_handoffs_version_fkey
-    FOREIGN KEY (studio_version_id, studio_document_id, org_id, workspace_id)
-    REFERENCES public.studio_artifact_versions(id, artifact_id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (org_id, workspace_id, studio_document_id, studio_version, studio_content_hash)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_delivery_work_packages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  handoff_id UUID NOT NULL,
-  current_version BIGINT NOT NULL DEFAULT 1 CHECK (current_version > 0),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'approved', 'stale', 'blocked')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_work_packages_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_work_packages_handoff_fkey
-    FOREIGN KEY (handoff_id, org_id, workspace_id)
-    REFERENCES public.enterprise_studio_delivery_handoffs(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (org_id, workspace_id, handoff_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_delivery_work_package_versions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  work_package_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  version BIGINT NOT NULL CHECK (version > 0),
-  studio_document_id UUID NOT NULL,
-  artifact_type TEXT NOT NULL CHECK (artifact_type IN ('brd', 'frd', 'pdd')),
-  studio_version_id UUID NOT NULL,
-  studio_version BIGINT NOT NULL CHECK (studio_version > 0),
-  studio_content_hash TEXT NOT NULL CHECK (studio_content_hash ~ '^[0-9a-f]{64}$'),
-  content JSONB NOT NULL CHECK (jsonb_typeof(content) = 'object' AND pg_column_size(content) <= 2097152),
-  content_hash TEXT NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'approved', 'superseded', 'stale', 'blocked')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_work_package_versions_package_fkey
-    FOREIGN KEY (work_package_id, org_id, workspace_id)
-    REFERENCES public.enterprise_delivery_work_packages(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_work_package_versions_studio_fkey
-    FOREIGN KEY (studio_version_id, studio_document_id, org_id, workspace_id)
-    REFERENCES public.studio_artifact_versions(id, artifact_id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, work_package_id, org_id, workspace_id),
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (work_package_id, version)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_delivery_work_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  package_version_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  parent_item_id UUID,
-  item_type TEXT NOT NULL CHECK (item_type IN ('Epic', 'Story', 'Task', 'Milestone', 'Dependency', 'Risk')),
-  title TEXT NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 400),
-  description TEXT NOT NULL DEFAULT '',
-  acceptance_criteria JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(acceptance_criteria) = 'array'),
-  non_functional_requirements JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(non_functional_requirements) = 'array'),
-  source_section_locator TEXT NOT NULL,
-  source_document_id UUID NOT NULL,
-  source_document_version BIGINT NOT NULL CHECK (source_document_version > 0),
-  source_document_hash TEXT NOT NULL CHECK (source_document_hash ~ '^[0-9a-f]{64}$'),
-  idempotency_key TEXT NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_work_items_version_fkey
-    FOREIGN KEY (package_version_id, org_id, workspace_id)
-    REFERENCES public.enterprise_delivery_work_package_versions(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_work_items_parent_fkey
-    FOREIGN KEY (parent_item_id, org_id, workspace_id)
-    REFERENCES public.enterprise_delivery_work_items(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (package_version_id, idempotency_key)
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_commit_delivery_handoff(
-  p_handoff JSONB, p_package JSONB, p_version JSONB, p_items JSONB
-)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE item JSONB;
-BEGIN
-  INSERT INTO public.enterprise_studio_delivery_handoffs(
-    id, org_id, workspace_id, studio_document_id, studio_version_id,
-    studio_version, studio_content_hash, artifact_type, source_status,
-    source_snapshot, status, created_by
-  ) VALUES (
-    (p_handoff->>'id')::uuid, (p_handoff->>'org_id')::uuid, (p_handoff->>'workspace_id')::uuid,
-    (p_handoff->>'studio_document_id')::uuid, (p_handoff->>'studio_version_id')::uuid,
-    (p_handoff->>'studio_version')::bigint, p_handoff->>'studio_content_hash',
-    p_handoff->>'artifact_type', p_handoff->>'source_status', p_handoff->'source_snapshot',
-    p_handoff->>'status', (p_handoff->>'created_by')::uuid
-  );
-  INSERT INTO public.enterprise_delivery_work_packages(
-    id, org_id, workspace_id, handoff_id, current_version, status, created_by
-  ) VALUES (
-    (p_package->>'id')::uuid, (p_package->>'org_id')::uuid, (p_package->>'workspace_id')::uuid,
-    (p_package->>'handoff_id')::uuid, (p_package->>'current_version')::bigint,
-    p_package->>'status', (p_package->>'created_by')::uuid
-  );
-  INSERT INTO public.enterprise_delivery_work_package_versions(
-    id, work_package_id, org_id, workspace_id, version, studio_document_id,
-    artifact_type, studio_version_id, studio_version, studio_content_hash,
-    content, content_hash, status, created_by
-  ) VALUES (
-    (p_version->>'id')::uuid, (p_version->>'work_package_id')::uuid,
-    (p_version->>'org_id')::uuid, (p_version->>'workspace_id')::uuid,
-    (p_version->>'version')::bigint, (p_version->>'studio_document_id')::uuid,
-    p_version->>'artifact_type', (p_version->>'studio_version_id')::uuid,
-    (p_version->>'studio_version')::bigint, p_version->>'studio_content_hash',
-    p_version->'content', p_version->>'content_hash', p_version->>'status',
-    (p_version->>'created_by')::uuid
-  );
-  FOR item IN SELECT value FROM jsonb_array_elements(COALESCE(p_items, '[]'::jsonb)) LOOP
-    INSERT INTO public.enterprise_delivery_work_items(
-      id, package_version_id, org_id, workspace_id, parent_item_id, item_type,
-      title, description, acceptance_criteria, non_functional_requirements,
-      source_section_locator, source_document_id, source_document_version,
-      source_document_hash, idempotency_key, created_by
-    ) VALUES (
-      (item->>'id')::uuid, (p_version->>'id')::uuid, (p_version->>'org_id')::uuid,
-      (p_version->>'workspace_id')::uuid, NULLIF(item->>'parentId', '')::uuid,
-      item->>'itemType', item->>'title', item->>'description',
-      COALESCE(item->'acceptanceCriteria', '[]'::jsonb),
-      COALESCE(item->'nonFunctionalRequirements', '[]'::jsonb),
-      item->>'sourceSectionLocator', (item->>'sourceDocumentId')::uuid,
-      (item->>'sourceDocumentVersion')::bigint, item->>'sourceDocumentHash',
-      item->>'idempotencyKey', (item->>'createdBy')::uuid
-    );
-  END LOOP;
-  RETURN jsonb_build_object(
-    'handoffId', (p_handoff->>'id')::uuid,
-    'workPackageId', (p_package->>'id')::uuid,
-    'packageVersionId', (p_version->>'id')::uuid,
-    'itemIds', COALESCE((SELECT jsonb_agg(value->>'id') FROM jsonb_array_elements(COALESCE(p_items, '[]'::jsonb))), '[]'::jsonb)
-  );
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_commit_delivery_handoff(JSONB, JSONB, JSONB, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_commit_delivery_handoff(JSONB, JSONB, JSONB, JSONB) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_monitor_baselines (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  work_package_id UUID NOT NULL,
-  work_package_version_id UUID NOT NULL,
-  studio_document_id UUID NOT NULL,
-  studio_version BIGINT NOT NULL CHECK (studio_version > 0),
-  studio_content_hash TEXT NOT NULL CHECK (studio_content_hash ~ '^[0-9a-f]{64}$'),
-  approved_item_ids JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(approved_item_ids) = 'array'),
-  milestones JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(milestones) = 'array'),
-  dependencies JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(dependencies) = 'array'),
-  blockers JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(blockers) = 'array'),
-  risks JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(risks) = 'array'),
-  readiness TEXT NOT NULL CHECK (readiness IN ('not_ready', 'review_required')),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'approval_required', 'approved', 'blocked', 'stale')),
-  live_telemetry_connected BOOLEAN NOT NULL DEFAULT false CHECK (live_telemetry_connected = false),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_monitor_baselines_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_monitor_baselines_package_fkey
-    FOREIGN KEY (work_package_id, org_id, workspace_id)
-    REFERENCES public.enterprise_delivery_work_packages(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_monitor_baselines_package_version_fkey
-    FOREIGN KEY (work_package_version_id, work_package_id, org_id, workspace_id)
-    REFERENCES public.enterprise_delivery_work_package_versions(id, work_package_id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (org_id, workspace_id, work_package_version_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_modernization_assessments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  application_ref UUID NOT NULL,
-  application_version BIGINT NOT NULL CHECK (application_version > 0),
-  source_assessment_id UUID NOT NULL,
-  source_assessment_version BIGINT NOT NULL CHECK (source_assessment_version > 0),
-  source_metadata_version_id UUID NOT NULL,
-  factor_bands JSONB NOT NULL CHECK (jsonb_typeof(factor_bands) = 'object'),
-  model_version TEXT NOT NULL,
-  source_decision_model_version TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'approved', 'stale', 'blocked')),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_modernization_assessments_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_modernization_assessments_application_fkey
-    FOREIGN KEY (application_ref, org_id, workspace_id)
-    REFERENCES public.assess_application_assets(id, org_id, workspace_id) ON DELETE RESTRICT,
-  CONSTRAINT enterprise_modernization_assessments_source_fkey
-    FOREIGN KEY (source_assessment_id, application_ref, source_metadata_version_id, org_id, workspace_id)
-    REFERENCES public.assess_application_assessment_versions(id, application_id, metadata_version_id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (org_id, workspace_id, application_ref, application_version),
-  UNIQUE (id, org_id, workspace_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_modernization_decisions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  modernization_assessment_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  primary_disposition TEXT NOT NULL CHECK (primary_disposition IN (
-    'retain', 'optimize', 'automate_around', 'integrate', 'api_enable_wrap',
-    'refactor', 'replatform', 'rebuild', 'replace', 'assemble', 'retire',
-    'insufficient_evidence', 'blocked'
-  )),
-  alternative_disposition TEXT,
-  eligible_dispositions JSONB NOT NULL CHECK (jsonb_typeof(eligible_dispositions) = 'array'),
-  blockers JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(blockers) = 'array'),
-  conflicts JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(conflicts) = 'array'),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'approved', 'rejected', 'stale', 'blocked')),
-  requires_human_approval BOOLEAN NOT NULL DEFAULT true CHECK (requires_human_approval = true),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_modernization_decisions_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_modernization_decisions_assessment_fkey
-    FOREIGN KEY (modernization_assessment_id, org_id, workspace_id)
-    REFERENCES public.enterprise_modernization_assessments(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (modernization_assessment_id)
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_commit_modernization_assessment(p_assessment JSONB, p_decision JSONB)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE v_assessment public.enterprise_modernization_assessments; v_decision public.enterprise_modernization_decisions;
-BEGIN
-  INSERT INTO public.enterprise_modernization_assessments(
-    id, org_id, workspace_id, application_ref, application_version,
-    source_assessment_id, source_assessment_version, source_metadata_version_id,
-    factor_bands, model_version, source_decision_model_version, status, created_by
-  ) VALUES (
-    (p_assessment->>'id')::uuid, (p_assessment->>'org_id')::uuid, (p_assessment->>'workspace_id')::uuid,
-    (p_assessment->>'application_ref')::uuid, (p_assessment->>'application_version')::bigint,
-    (p_assessment->>'source_assessment_id')::uuid, (p_assessment->>'source_assessment_version')::bigint,
-    (p_assessment->>'source_metadata_version_id')::uuid, p_assessment->'factor_bands',
-    p_assessment->>'model_version', p_assessment->>'source_decision_model_version',
-    p_assessment->>'status', (p_assessment->>'created_by')::uuid
-  ) RETURNING * INTO v_assessment;
-  INSERT INTO public.enterprise_modernization_decisions(
-    id, modernization_assessment_id, org_id, workspace_id, primary_disposition,
-    alternative_disposition, eligible_dispositions, blockers, conflicts, status,
-    requires_human_approval, created_by
-  ) VALUES (
-    (p_decision->>'id')::uuid, v_assessment.id, (p_decision->>'org_id')::uuid,
-    (p_decision->>'workspace_id')::uuid, p_decision->>'primary_disposition',
-    NULLIF(p_decision->>'alternative_disposition', ''), p_decision->'eligible_dispositions',
-    p_decision->'blockers', p_decision->'conflicts', p_decision->>'status', true,
-    (p_decision->>'created_by')::uuid
-  ) RETURNING * INTO v_decision;
-  RETURN jsonb_build_object('modernizationAssessmentId', v_assessment.id, 'decisionId', v_decision.id);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_commit_modernization_assessment(JSONB, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_commit_modernization_assessment(JSONB, JSONB) TO service_role;
-
-CREATE TABLE IF NOT EXISTS public.enterprise_assemble_blueprints (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  modernization_decision_id UUID NOT NULL,
-  disposition TEXT NOT NULL CHECK (disposition IN ('api_enable_wrap', 'refactor', 'rebuild', 'assemble')),
-  schema_version TEXT NOT NULL,
-  version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0),
-  structured_content JSONB NOT NULL CHECK (jsonb_typeof(structured_content) = 'object'),
-  readable_document TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('draft', 'edit', 'review', 'approval_required', 'approved', 'stale', 'blocked')),
-  code_generation_enabled BOOLEAN NOT NULL DEFAULT false CHECK (code_generation_enabled = false),
-  deployment_enabled BOOLEAN NOT NULL DEFAULT false CHECK (deployment_enabled = false),
-  infrastructure_changes_enabled BOOLEAN NOT NULL DEFAULT false CHECK (infrastructure_changes_enabled = false),
-  credential_access_enabled BOOLEAN NOT NULL DEFAULT false CHECK (credential_access_enabled = false),
-  source_system_calls_enabled BOOLEAN NOT NULL DEFAULT false CHECK (source_system_calls_enabled = false),
-  runtime_agents_enabled BOOLEAN NOT NULL DEFAULT false CHECK (runtime_agents_enabled = false),
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_assemble_blueprints_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_assemble_blueprints_decision_fkey
-    FOREIGN KEY (modernization_decision_id, org_id, workspace_id)
-    REFERENCES public.enterprise_modernization_decisions(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (modernization_decision_id, version)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_high_impact_review_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  resource_type TEXT NOT NULL CHECK (resource_type IN ('evidence_candidate', 'modernization_decision', 'delivery_work_package', 'monitor_baseline', 'assemble_blueprint')),
-  resource_id UUID NOT NULL,
-  reviewer_id UUID NOT NULL REFERENCES public.profiles(id),
-  reviewer_authorization_version BIGINT NOT NULL CHECK (reviewer_authorization_version > 0),
-  resource_hash TEXT NOT NULL CHECK (resource_hash ~ '^[0-9a-f]{64}$'),
-  rationale TEXT NOT NULL CHECK (length(btrim(rationale)) BETWEEN 1 AND 4000),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_high_impact_reviews_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  UNIQUE (id, org_id, workspace_id),
-  UNIQUE (org_id, workspace_id, resource_type, resource_id, reviewer_id, resource_hash)
-);
-
-CREATE TABLE IF NOT EXISTS public.enterprise_high_impact_approvals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL,
-  resource_type TEXT NOT NULL CHECK (resource_type IN ('evidence_candidate', 'modernization_decision', 'delivery_work_package', 'monitor_baseline', 'assemble_blueprint')),
-  resource_id UUID NOT NULL,
-  created_by UUID NOT NULL REFERENCES public.profiles(id),
-  reviewed_by UUID NOT NULL REFERENCES public.profiles(id),
-  approved_by UUID NOT NULL REFERENCES public.profiles(id),
-  review_event_id UUID NOT NULL,
-  outcome TEXT NOT NULL CHECK (outcome IN ('approved', 'rejected')),
-  rationale TEXT NOT NULL CHECK (length(btrim(rationale)) BETWEEN 1 AND 4000),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT enterprise_high_impact_approvals_workspace_org_fkey
-    FOREIGN KEY (workspace_id, org_id)
-    REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  CONSTRAINT enterprise_high_impact_approval_separation_check
-    CHECK (created_by <> reviewed_by AND created_by <> approved_by AND reviewed_by <> approved_by),
-  CONSTRAINT enterprise_high_impact_approval_review_event_fkey
-    FOREIGN KEY (review_event_id, org_id, workspace_id)
-    REFERENCES public.enterprise_high_impact_review_events(id, org_id, workspace_id) ON DELETE RESTRICT,
-  UNIQUE (org_id, workspace_id, resource_type, resource_id)
-);
-
-CREATE OR REPLACE FUNCTION public.enterprise_commit_high_impact_approval(
-  p_approval JSONB, p_resource_type TEXT, p_resource_id UUID,
-  p_org UUID, p_workspace UUID, p_next_status TEXT
-)
-RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE v_current_version BIGINT;
-BEGIN
-  INSERT INTO public.enterprise_high_impact_approvals(
-    org_id, workspace_id, resource_type, resource_id, created_by,
-    reviewed_by, approved_by, review_event_id, outcome, rationale
-  ) VALUES (
-    p_org, p_workspace, p_resource_type, p_resource_id,
-    (p_approval->>'created_by')::uuid, (p_approval->>'reviewed_by')::uuid,
-    (p_approval->>'approved_by')::uuid, (p_approval->>'review_event_id')::uuid,
-    p_approval->>'outcome', p_approval->>'rationale'
-  );
-  IF p_resource_type = 'evidence_candidate' THEN
-    UPDATE public.enterprise_evidence_candidates
-    SET suggestion_status = CASE WHEN p_next_status = 'approved' THEN 'accepted' ELSE 'rejected' END,
-        updated_at = statement_timestamp()
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace;
-  ELSIF p_resource_type = 'modernization_decision' THEN
-    UPDATE public.enterprise_modernization_decisions
-    SET status = p_next_status
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace;
-  ELSIF p_resource_type = 'delivery_work_package' THEN
-    SELECT current_version INTO v_current_version
-    FROM public.enterprise_delivery_work_packages
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace
-    FOR UPDATE;
-    UPDATE public.enterprise_delivery_work_packages
-    SET status = p_next_status, updated_at = statement_timestamp()
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace;
-    UPDATE public.enterprise_delivery_work_package_versions
-    SET status = p_next_status
-    WHERE work_package_id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace AND version = v_current_version;
-  ELSIF p_resource_type = 'monitor_baseline' THEN
-    UPDATE public.enterprise_monitor_baselines
-    SET status = p_next_status
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace;
-  ELSIF p_resource_type = 'assemble_blueprint' THEN
-    UPDATE public.enterprise_assemble_blueprints
-    SET status = p_next_status
-    WHERE id = p_resource_id AND org_id = p_org AND workspace_id = p_workspace;
-  END IF;
-  RETURN jsonb_build_object('resourceType', p_resource_type, 'resourceId', p_resource_id, 'status', p_next_status);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.enterprise_commit_high_impact_approval(JSONB, TEXT, UUID, UUID, UUID, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.enterprise_commit_high_impact_approval(JSONB, TEXT, UUID, UUID, UUID, TEXT) TO service_role;
-
-ALTER TABLE public.enterprise_ai_capability_routes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_command_receipts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_job_ledger ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_usage_ledger ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_sources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_source_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_candidates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_candidate_edits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_studio_delivery_handoffs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_packages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_package_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_monitor_baselines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_modernization_assessments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_modernization_decisions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_assemble_blueprints ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_high_impact_review_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_high_impact_approvals ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE public.enterprise_ai_capability_routes FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_command_receipts FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_job_ledger FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_ai_usage_ledger FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_sources FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_source_versions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_candidates FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_candidate_edits FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_evidence_questions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_studio_delivery_handoffs FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_packages FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_package_versions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_delivery_work_items FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_monitor_baselines FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_modernization_assessments FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_modernization_decisions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_assemble_blueprints FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_high_impact_review_events FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.enterprise_high_impact_approvals FORCE ROW LEVEL SECURITY;
-
-DO $$
-DECLARE
-  table_name TEXT;
-BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
-    'enterprise_ai_capability_routes', 'enterprise_ai_command_receipts',
-    'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
-    'enterprise_evidence_sources', 'enterprise_evidence_source_versions',
-    'enterprise_evidence_candidates', 'enterprise_evidence_candidate_edits',
-    'enterprise_evidence_questions', 'enterprise_studio_delivery_handoffs',
-    'enterprise_delivery_work_packages', 'enterprise_delivery_work_package_versions',
-    'enterprise_delivery_work_items', 'enterprise_monitor_baselines',
-    'enterprise_modernization_assessments', 'enterprise_modernization_decisions',
-    'enterprise_assemble_blueprints', 'enterprise_high_impact_review_events',
-    'enterprise_high_impact_approvals'
-  ] LOOP
-    EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC, anon, authenticated', table_name);
-  END LOOP;
-END $$;
-
--- Safe read projections are intentionally narrow. Source storage paths,
--- opaque secret references, raw AI prompts, and raw provider outputs are not
--- exposed through browser table reads.
-GRANT SELECT ON TABLE public.enterprise_ai_capability_routes TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_ai_job_ledger TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_ai_usage_ledger TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_delivery_work_packages TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_delivery_work_package_versions TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_delivery_work_items TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_monitor_baselines TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_modernization_assessments TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_modernization_decisions TO authenticated;
-GRANT SELECT ON TABLE public.enterprise_assemble_blueprints TO authenticated;
-
-DROP POLICY IF EXISTS enterprise_ai_routes_select_member ON public.enterprise_ai_capability_routes;
-CREATE POLICY enterprise_ai_routes_select_member
-  ON public.enterprise_ai_capability_routes FOR SELECT TO authenticated
-  USING (deleted_at IS NULL AND public.has_workspace_capability(workspace_id, org_id, 'byok.manage'));
-
-DROP POLICY IF EXISTS enterprise_ai_jobs_select_member ON public.enterprise_ai_job_ledger;
-CREATE POLICY enterprise_ai_jobs_select_member
-  ON public.enterprise_ai_job_ledger FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'assess.audit.read'));
-
-DROP POLICY IF EXISTS enterprise_ai_usage_select_member ON public.enterprise_ai_usage_ledger;
-CREATE POLICY enterprise_ai_usage_select_member
-  ON public.enterprise_ai_usage_ledger FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'assess.audit.read'));
-
-DROP POLICY IF EXISTS enterprise_delivery_packages_select_member ON public.enterprise_delivery_work_packages;
-CREATE POLICY enterprise_delivery_packages_select_member
-  ON public.enterprise_delivery_work_packages FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'project.read'));
-
-DROP POLICY IF EXISTS enterprise_delivery_versions_select_member ON public.enterprise_delivery_work_package_versions;
-CREATE POLICY enterprise_delivery_versions_select_member
-  ON public.enterprise_delivery_work_package_versions FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'project.read'));
-
-DROP POLICY IF EXISTS enterprise_delivery_items_select_member ON public.enterprise_delivery_work_items;
-CREATE POLICY enterprise_delivery_items_select_member
-  ON public.enterprise_delivery_work_items FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'project.read'));
-
-DROP POLICY IF EXISTS enterprise_monitor_select_member ON public.enterprise_monitor_baselines;
-CREATE POLICY enterprise_monitor_select_member
-  ON public.enterprise_monitor_baselines FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'monitor.read'));
-
-DROP POLICY IF EXISTS enterprise_modernization_select_member ON public.enterprise_modernization_assessments;
-CREATE POLICY enterprise_modernization_select_member
-  ON public.enterprise_modernization_assessments FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'assess.applications.read'));
-
-DROP POLICY IF EXISTS enterprise_modernization_decisions_select_member ON public.enterprise_modernization_decisions;
-CREATE POLICY enterprise_modernization_decisions_select_member
-  ON public.enterprise_modernization_decisions FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'assess.applications.read'));
-
-DROP POLICY IF EXISTS enterprise_assemble_select_member ON public.enterprise_assemble_blueprints;
-CREATE POLICY enterprise_assemble_select_member
-  ON public.enterprise_assemble_blueprints FOR SELECT TO authenticated
-  USING (public.has_workspace_capability(workspace_id, org_id, 'assess.applications.read'));
-
--- Provider configuration and key-reference rows are consumed only by the
--- server command boundary. Remove the legacy organization-wide browser read
--- surface so endpoint, budget, and resolver metadata cannot be enumerated.
-REVOKE ALL ON TABLE public.ai_provider_configs, public.ai_provider_key_refs FROM PUBLIC, anon, authenticated;
-DROP POLICY IF EXISTS "Members can read org AI provider configs" ON public.ai_provider_configs;
-DROP POLICY IF EXISTS "Members can read org AI provider key refs" ON public.ai_provider_key_refs;
-
-CREATE INDEX IF NOT EXISTS enterprise_evidence_sources_scope
-  ON public.enterprise_evidence_sources(org_id, workspace_id, status)
-  WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS enterprise_evidence_candidates_scope
-  ON public.enterprise_evidence_candidates(org_id, workspace_id, source_id, suggestion_status);
-CREATE INDEX IF NOT EXISTS enterprise_handoffs_scope
-  ON public.enterprise_studio_delivery_handoffs(org_id, workspace_id, status);
-CREATE INDEX IF NOT EXISTS enterprise_modernization_scope
-  ON public.enterprise_modernization_assessments(org_id, workspace_id, status);
-
--- Source and version rows are append-only. The command boundary creates a new
--- version for edits and a new work-package/blueprint version for supersession.
-CREATE OR REPLACE FUNCTION public.enterprise_reject_mutation() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog AS $$
-BEGIN
-  RAISE EXCEPTION 'ENTERPRISE_APPEND_ONLY';
-END;
-$$;
-
-DROP TRIGGER IF EXISTS enterprise_source_version_immutable ON public.enterprise_evidence_source_versions;
-CREATE TRIGGER enterprise_source_version_immutable
-  BEFORE UPDATE OR DELETE ON public.enterprise_evidence_source_versions
-  FOR EACH ROW EXECUTE FUNCTION public.enterprise_reject_mutation();
-DROP TRIGGER IF EXISTS enterprise_candidate_edit_immutable ON public.enterprise_evidence_candidate_edits;
-CREATE TRIGGER enterprise_candidate_edit_immutable
-  BEFORE UPDATE OR DELETE ON public.enterprise_evidence_candidate_edits
-  FOR EACH ROW EXECUTE FUNCTION public.enterprise_reject_mutation();
-DROP TRIGGER IF EXISTS enterprise_delivery_version_immutable ON public.enterprise_delivery_work_package_versions;
-CREATE TRIGGER enterprise_delivery_version_immutable
-  BEFORE UPDATE OR DELETE ON public.enterprise_delivery_work_package_versions
-  FOR EACH ROW EXECUTE FUNCTION public.enterprise_reject_mutation();
-DROP TRIGGER IF EXISTS enterprise_high_impact_approval_immutable ON public.enterprise_high_impact_approvals;
-CREATE TRIGGER enterprise_high_impact_approval_immutable
-  BEFORE UPDATE OR DELETE ON public.enterprise_high_impact_approvals
-  FOR EACH ROW EXECUTE FUNCTION public.enterprise_reject_mutation();
-DROP TRIGGER IF EXISTS enterprise_high_impact_review_immutable ON public.enterprise_high_impact_review_events;
-CREATE TRIGGER enterprise_high_impact_review_immutable
-  BEFORE UPDATE OR DELETE ON public.enterprise_high_impact_review_events
-  FOR EACH ROW EXECUTE FUNCTION public.enterprise_reject_mutation();
-
-DO $storage$
-BEGIN
-  IF to_regclass('storage.buckets') IS NOT NULL AND to_regclass('storage.objects') IS NOT NULL THEN
-    INSERT INTO storage.buckets(id, name, public)
-    VALUES ('source-uploads', 'source-uploads', false)
-    ON CONFLICT (id) DO UPDATE SET public = false;
-    EXECUTE 'DROP POLICY IF EXISTS enterprise_source_uploads_browser_deny ON storage.objects';
-    EXECUTE $policy$
-      CREATE POLICY enterprise_source_uploads_browser_deny
-      ON storage.objects AS RESTRICTIVE FOR ALL TO anon, authenticated
-      USING (bucket_id <> 'source-uploads')
-      WITH CHECK (bucket_id <> 'source-uploads')
-    $policy$;
-  END IF;
-END
-$storage$;
-
-COMMENT ON TABLE public.enterprise_ai_job_ledger IS 'Durable Enterprise Intelligence job ledger. Prompt bodies, completion bodies, provider keys, auth headers, secret payloads, storage paths, and raw customer content are prohibited.';
-COMMENT ON TABLE public.enterprise_evidence_source_versions IS 'Immutable server-managed source versions. storage_path is service-only and never a browser projection.';
-COMMENT ON TABLE public.enterprise_studio_delivery_handoffs IS 'Exact approved Studio document handoff snapshots. Stale versions require a new handoff and cannot overwrite completed work.';
-COMMENT ON TABLE public.enterprise_assemble_blueprints IS 'Assemble Phase 1 structured blueprint drafts. No code, deployment, infrastructure, credentials, source calls, or runtime agents.';
+LANGUAGE ãovòÚ$z{-®éÜj×—6UöWf–FVæ6Uö76W75÷&öÖ÷F–öç2rÂvVçFW'&—6UöFVÆ—fW'•÷v÷&µö—FV×2rÀ¢vVçFW'&—6Uö†–v…ö–×7E÷&Wf–WuöWfVçG2rÂvVçFW'&—6Uö†–v…ö–×7Eö&÷fÇ2p¢ÒÄôõ ¢U„T5UDRf÷&ÖB‚tE$õE$”ttU"”bU„•5E2VçFW'&—6UòT•öf–æÅö–Ö×WF&ÆRôâV&Æ–2âT’rÂF&ÆUöæÖRÂF&ÆUöæÖR“°¢U„T5UDRf÷&ÖB‚t5$TDRE$”ttU"VçFW'&—6UòT•öf–æÅö–Ö×WF&ÆR$Tdõ$RUDDRõ"DTÄUDRôâV&Æ–2âT’dõ"T4‚$õrU„T5UDReTä5D”ôâV&Æ–2æVçFW'&—6U÷&V¦V7Eö×WFF–öâ‚’rÂF&ÆUöæÖRÂF&ÆUöæÖR“°¢TäBÄôõ°¤Tä@¢FVçFW'&—6Uö–Ö×WF&ÆU÷F&ÆW2C° ¤5$TDRõ"$UÄ4ReTä5D”ôâV&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷&ö¦V7F–öâ‡ö÷&rUT”BÂ÷v÷&·76RUT”BÂ÷6÷W&6RUT”B¥$UEU$å2¥4ôä"ÄäuTtR7Â5D$ÄR4T5U$•E’DTd”äU"4UB6V&6…÷F‚Òuö6FÆör2B@¢4TÄT5B44Rt„TâäõB€¢V&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂvWf–FVæ6Rçw&—FRr¢õ"V&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂvWf–FVæ6Rç&Wf–Wrr¢õ"V&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂv76W76ÖVçBæVF—Br¢’D„TâåTÄÂTÅ4R€¢4TÄT5B§6öæ%ö'V–ÆEöö&¦V7B€¢w6÷W&6T–BrÂ2æ–BÂwfW'6–öârÂ2æ7W'&VçE÷fW'6–öâÂvÆ–fV7–6ÆUfW'6–öârÂ2æÆ–fV7–6ÆU÷fW'6–öâÀ¢vF—7Æ”æÖRrÂ2æF—7Æ•öæÖRÂw6÷W&6T¶–æBrÂ2ç6÷W&6Uö¶–æBÂvÖ–ÖUG—RrÂ2æÖ–ÖU÷G—RÀ¢w7FGW2rÂ2ç7FGW2Âv7&VFVDBrÂ2æ7&VFVEöBÀ¢wfW'6–öç2rÂ4ôÄU44R‚…4TÄT5B§6öæ%övr†§6öæ%ö'V–ÆEöö&¦V7B€¢w6÷W&6UfW'6–öä–BrÂbæ–BÂwfW'6–öârÂbçfW'6–öâÂv÷&–v–æÄf–ÆVæÖRrÂbæ÷&–v–æÅöf–ÆVæÖRÀ¢v6öçFVçD†6‚rÂbæ6öçFVçEö†6‚Âv6öçFVçD'—FW2rÂbæ6öçFVçEö'—FW2À¢vW‡G&7FVEFW‡D†6‚rÂbæW‡G&7FVE÷FW‡Eö†6‚ÂvW‡G&7FVD6†&7FW$6÷VçBrÂbæW‡G&7FVEö6†&7FW%ö6÷VçBÀ¢vW‡G&7F–öå7FGW2rÂbæW‡G&7F–öå÷7FGW2Âw'6W$¶–æBrÂbç'6W%ö¶–æBÀ¢w'6W%fW'6–öârÂbç'6W%÷fW'6–öâÂvf–ÇW&T6öFRrÂbæW‡G&7F–öåöf–ÇW&Uö6öFRÀ¢w&÷fVææ6T†6‚rÂbç&÷fVææ6Uö†6‚Âv7&VFVDBrÂbæ7&VFVEö@¢’õ$DU"%’bçfW'6–öâ’e$ôÒV&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷fW'6–öç2`¢t„U$Rbç6÷W&6Uö–BÒ2æ–BäBbæ÷&uö–BÒ2æ÷&uö–BäBbçv÷&·76Uö–BÒ2çv÷&·76Uö–B’ÂuµÒs£¦§6öæ"’À¢v6æF–FFW2rÂ4ôÄU44R‚…4TÄT5B§6öæ%övr†§6öæ%ö'V–ÆEöö&¦V7B€¢v6æF–FFT–BrÂ2æ–BÂw6÷W&6UfW'6–öä–BrÂ2ç6÷W&6U÷fW'6–öåö–BÀ¢vf–VÆD¶W’rÂ2æf–VÆEö¶W’ÂwfÇVRrÂ2çfÇVRÂw6fTW†6W'BrÂ2ç6fUöW†6W'BÀ¢w6÷W&6TÆö6F÷"rÂ2ç6÷W&6UöÆö6F÷"Âv6öæf–FVæ6RrÂ2æ6öæf–FVæ6RÀ¢w7FGW2rÂ2ç7VvvW7F–öå÷7FGW2ÂwfW'6–öârÂ2çfW'6–öâÀ¢w&÷fVææ6T†6‚rÂ2ç&÷fVææ6Uö†6‚Âw&Wf–WvVDBrÂ2ç&Wf–WvVEö@¢’õ$DU"%’2æ7&VFVEöBÂ2æ–B’e$ôÒV&Æ–2æVçFW'&—6UöWf–FVæ6Uö6æF–FFW20¢t„U$R2ç6÷W&6Uö–BÒ2æ–BäB2æ÷&uö–BÒ2æ÷&uö–BäB2çv÷&·76Uö–BÒ2çv÷&·76Uö–B’ÂuµÒs£¦§6öæ"¢’e$ôÒV&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6W20¢t„U$R2æ–BÒ÷6÷W&6RäB2æ÷&uö–BÒö÷&räB2çv÷&·76Uö–BÒ÷v÷&·76RäB2æFVÆWFVEöB•2åTÄÀ¢’Tä@¢BC° ¤5$TDRõ"$UÄ4ReTä5D”ôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷6¶vU÷&ö¦V7F–öâ‡ö÷&rUT”BÂ÷v÷&·76RUT”BÂ÷6¶vRUT”B¥$UEU$å2¥4ôä"ÄäuTtR7Â5D$ÄR4T5U$•E’DTd”äU"4UB6V&6…÷F‚Òuö6FÆör2B@¢4TÄT5B44Rt„TâäõBV&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂw&ö¦V7Bç&VBr’D„TâåTÄÂTÅ4R€¢4TÄT5B§6öæ%ö'V–ÆEöö&¦V7B€¢wv÷&µ6¶vT–BrÂæ–BÂwfW'6–öârÂæ7W'&VçE÷fW'6–öâÂw7FGW2rÂç7FGW2À¢v†æFöfd–BrÂæ†æFöfeö–BÂw&VDöæÇ’rÂ7FÂç&VEööæÇ’õ"äõB7FÂæVæ&ÆVBõ"äõB7FÂæFVÆ—fW'•öVæ&ÆVBÀ¢v7W'&VçBrÂ§6öæ%ö'V–ÆEöö&¦V7B€¢w6¶vUfW'6–öä–BrÂbæ–BÂv6öçFVçD†6‚rÂbæ6öçFVçEö†6‚À¢w7GVF–ôFö7VÖVçD–BrÂbç7GVF–õöFö7VÖVçEö–BÂw7GVF–õfW'6–öä–BrÂbç7GVF–õ÷fW'6–öåö–BÀ¢w7GVF–õfW'6–öârÂbç7GVF–õ÷fW'6–öâÂw7GVF–ô6öçFVçD†6‚rÂbç7GVF–õö6öçFVçEö†6‚À¢v'F–f7EG—RrÂbæ'F–f7E÷G—RÂw7FGW2rÂbç7FGW2Âv6öçFVçBrÂbæ6öçFVç@¢’À¢v—FV×2rÂ4ôÄU44R‚…4TÄT5B§6öæ%övr†§6öæ%ö'V–ÆEöö&¦V7B€¢v–BrÂ’æ–BÂw&VçD–BrÂ’ç&VçEö—FVÕö–BÂv—FVÕG—RrÂ’æ—FVÕ÷G—RÀ¢wF—FÆRrÂ’çF—FÆRÂvFW67&—F–öârÂ’æFW67&—F–öâÀ¢v66WFæ6T7&—FW&–rÂ’æ66WFæ6Uö7&—FW&–À¢væöägVæ7F–öæÅ&WV—&VÖVçG2rÂ’ææöåögVæ7F–öæÅ÷&WV—&VÖVçG2À¢w6÷W&6U6V7F–öäÆö6F÷"rÂ’ç6÷W&6U÷6V7F–öåöÆö6F÷ ¢’õ$DU"%’’æ—FVÕ÷G—RÂ’æ–B’e$ôÒV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µö—FV×2¢t„U$R’ç6¶vU÷fW'6–öåö–BÒbæ–BäB’æ÷&uö–BÒæ÷&uö–BäB’çv÷&·76Uö–BÒçv÷&·76Uö–B’ÂuµÒs£¦§6öæ"¢’e$ôÒV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vW2 ¢¤ô”âV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vU÷fW'6–öç2`¢ôâbçv÷&µ÷6¶vUö–BÒæ–BäBbçfW'6–öâÒæ7W'&VçE÷fW'6–öà¢äBbæ÷&uö–BÒæ÷&uö–BäBbçv÷&·76Uö–BÒçv÷&·76Uö–@¢5$õ52¤ô”âV&Æ–2æVçFW'&—6Uö–çFVÆÆ–vVæ6U÷'VçF–ÖUö6öçG&öÂ7FÀ¢t„U$R7FÂç6–ævÆWFöâäBæ–BÒ÷6¶vRäBæ÷&uö–BÒö÷&räBçv÷&·76Uö–BÒ÷v÷&·76P¢’Tä@¢BC° ¤5$TDRõ"$UÄ4ReTä5D”ôâV&Æ–2æVçFW'&—6UöÖöæ—F÷%÷&ö¦V7F–öâ‡ö÷&rUT”BÂ÷v÷&·76RUT”BÂö&6VÆ–æRUT”B¥$UEU$å2¥4ôä"ÄäuTtR7Â5D$ÄR4T5U$•E’DTd”äU"4UB6V&6…÷F‚Òuö6FÆör2B@¢4TÄT5B44Rt„TâäõBV&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂvÖöæ—F÷"ç&VBr’D„TâåTÄÂTÅ4R€¢4TÄT5B§6öæ%ö'V–ÆEöö&¦V7B€¢v&6VÆ–æT–BrÂÒæ–BÂwv÷&µ6¶vT–BrÂÒçv÷&µ÷6¶vUö–BÀ¢wv÷&µ6¶vUfW'6–öä–BrÂÒçv÷&µ÷6¶vU÷fW'6–öåö–BÂwfW'6–öârÂÒçfW'6–öâÀ¢w&W6÷W&6T†6‚rÂÒç&W6÷W&6Uö†6‚Âv&÷fVD—FVÔ–G2rÂÒæ&÷fVEö—FVÕö–G2À¢vÖ–ÆW7FöæW2rÂÒæÖ–ÆW7FöæW2ÂvFWVæFVæ6–W2rÂÒæFWVæFVæ6–W2À¢v&Æö6¶W'2rÂÒæ&Æö6¶W'2Âw&—6·2rÂÒç&—6·2Âw&VF–æW72rÂÒç&VF–æW72À¢w7FGW2rÂÒç7FGW2ÂvÆ—fUFVÆVÖWG'”6öææV7FVBrÂfÇ6P¢’e$ôÒV&Æ–2æVçFW'&—6UöÖöæ—F÷%ö&6VÆ–æW2Ğ¢t„U$RÒæ–BÒö&6VÆ–æRäBÒæ÷&uö–BÒö÷&räBÒçv÷&·76Uö–BÒ÷v÷&·76P¢’Tä@¢BC° ¤5$TDRõ"$UÄ4ReTä5D”ôâV&Æ–2æVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çE÷&ö¦V7F–öâ‡ö÷&rUT”BÂ÷v÷&·76RUT”BÂö&ÇVW&–çBUT”B¥$UEU$å2¥4ôä"ÄäuTtR7Â5D$ÄR4T5U$•E’DTd”äU"4UB6V&6…÷F‚Òuö6FÆör2B@¢4TÄT5B44Rt„TâäõBV&Æ–2æ†5÷v÷&·76Uö6&–Æ—G’‡÷v÷&·76RÂö÷&rÂv76VÖ&ÆRæÖævRr’D„TâåTÄÂTÅ4R€¢4TÄT5B§6öæ%ö'V–ÆEöö&¦V7B€¢v&ÇVW&–çD–BrÂ"æ–BÂvÖöFW&æ—¦F–öäFV6—6–öä–BrÂ"æÖöFW&æ—¦F–öåöFV6—6–öåö–BÀ¢vF—7÷6—F–öârÂ"æF—7÷6—F–öâÂw66†VÖfW'6–öârÂ"ç66†VÖ÷fW'6–öâÀ¢wfW'6–öârÂ"çfW'6–öâÂw&W6÷W&6T†6‚rÂ"ç&W6÷W&6Uö†6‚À¢w7G'V7GW&VD6öçFVçBrÂ"ç7G'V7GW&VEö6öçFVçBÂw&VF&ÆTFö7VÖVçBrÂ"ç&VF&ÆUöFö7VÖVçBÀ¢w7FGW2rÂ"ç7FGW2Âv6öFTvVæW&F–öäVæ&ÆVBrÂfÇ6RÂvFWÆ÷–ÖVçDVæ&ÆVBrÂfÇ6RÀ¢v–æg&7G'V7GW&T6†ævW4Væ&ÆVBrÂfÇ6RÂv7&VFVçF–Ä66W74Væ&ÆVBrÂfÇ6RÀ¢w6÷W&6U7—7FVÔ6ÆÇ4Væ&ÆVBrÂfÇ6RÂw'VçF–ÖTvVçG4Væ&ÆVBrÂfÇ6RÀ¢vÆ—fUFVÆVÖWG'”Væ&ÆVBrÂfÇ6P¢’e$ôÒV&Æ–2æVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çG2 ¢t„U$R"æ–BÒö&ÇVW&–çBäB"æ÷&uö–BÒö÷&räB"çv÷&·76Uö–BÒ÷v÷&·76P¢’Tä@¢BC° ¤DòFVçFW'&—6Uöf–æÅö6Â@¤DT4Ä$RF&ÆUöæÖRDU…C°¤$Tt”à¢dõ$T4‚F&ÆUöæÖR”â%$’%$•°¢vVçFW'&—6Uö–çFVÆÆ–vVæ6U÷'VçF–ÖUö6öçG&öÂrÀ¢vVçFW'&—6Uö•ö6&–Æ—G•÷&÷WFW2rÂvVçFW'&—6Uö•ö6öÖÖæE÷&V6V—G2rÀ¢vVçFW'&—6Uö•ö¦ö%öÆVFvW"rÂvVçFW'&—6Uö•÷W6vUöÆVFvW"rÀ¢vVçFW'&—6UöWf–FVæ6U÷6÷W&6W2rÂvVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷fW'6–öç2rÀ¢vVçFW'&—6UöWf–FVæ6Uö6æF–FFW2rÂvVçFW'&—6UöWf–FVæ6Uö6æF–FFUöVF—G2rÀ¢vVçFW'&—6UöWf–FVæ6U÷VW7F–öç2rÂvVçFW'&—6UöWf–FVæ6Uö76W75÷&öÖ÷F–öç2rÀ¢vVçFW'&—6U÷7GVF–õöFVÆ—fW'•ö†æFöfg2rÂvVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vW2rÀ¢vVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vU÷fW'6–öç2rÂvVçFW'&—6UöFVÆ—fW'•÷v÷&µö—FV×2rÀ¢vVçFW'&—6UöÖöæ—F÷%ö&6VÆ–æW2rÂvVçFW'&—6UöÖöFW&æ—¦F–öåö76W76ÖVçG2rÀ¢vVçFW'&—6UöÖöFW&æ—¦F–öåöFV6—6–öç2rÂvVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çG2rÀ¢vVçFW'&—6Uö†–v…ö–×7E÷&Wf–WuöWfVçG2rÂvVçFW'&—6Uö†–v…ö–×7Eö&÷fÇ2p¢ÒÄôõ ¢U„T5UDRf÷&ÖB‚tÅDU"D$ÄRV&Æ–2âT’Tä$ÄR$õrÄUdTÂ4T5U$•E’rÂF&ÆUöæÖR“°¢U„T5UDRf÷&ÖB‚tÅDU"D$ÄRV&Æ–2âT’dõ$4R$õrÄUdTÂ4T5U$•E’rÂF&ÆUöæÖR“°¢U„T5UDRf÷&ÖB‚u$Udô´RÄÂôâD$ÄRV&Æ–2âT’e$ôÒT$Ä”2ÂæöâÂWF†VçF–6FVBÂ6W'f–6U÷&öÆRrÂF&ÆUöæÖR“°¢U„T5UDRf÷&ÖB‚tu$åB4TÄT5BôâD$ÄRV&Æ–2âT’Dò6W'f–6U÷&öÆRrÂF&ÆUöæÖR“°¢TäBÄôõ°¤Tä@¢FVçFW'&—6Uöf–æÅö6ÂC° ¤E$õôÄ”5’”bU„•5E2VçFW'&—6Uö•÷&÷WFW5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6Uö•ö6&–Æ—G•÷&÷WFW3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6Uö•ö¦ö'5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6Uö•ö¦ö%öÆVFvW#°¤E$õôÄ”5’”bU„•5E2VçFW'&—6Uö•÷W6vU÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6Uö•÷W6vUöÆVFvW#°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöFVÆ—fW'•÷6¶vW5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vW3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöFVÆ—fW'•÷fW'6–öç5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vU÷fW'6–öç3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöFVÆ—fW'•ö—FV×5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µö—FV×3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöÖöæ—F÷%÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöÖöæ—F÷%ö&6VÆ–æW3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöÖöFW&æ—¦F–öå÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöÖöFW&æ—¦F–öåö76W76ÖVçG3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6UöÖöFW&æ—¦F–öåöFV6—6–öç5÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6UöÖöFW&æ—¦F–öåöFV6—6–öç3°¤E$õôÄ”5’”bU„•5E2VçFW'&—6Uö76VÖ&ÆU÷6VÆV7EöÖVÖ&W"ôâV&Æ–2æVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çG3° ¤E$õeTä5D”ôâV&Æ–2æVçFW'&—6Uö6öÖÖ—EöFVÆ—fW'•ö†æFöfeöÆVv7•÷VçG'W7FVB„¥4ôä"Â¥4ôä"Â¥4ôä"Â¥4ôä"“°¤E$õeTä5D”ôâV&Æ–2æVçFW'&—6Uö6öÖÖ—EöÖöFW&æ—¦F–öåö76W76ÖVçEöÆVv7•÷VçG'W7FVB„¥4ôä"Â¥4ôä"“°¤E$õeTä5D”ôâV&Æ–2æVçFW'&—6Uö6öÖÖ—Eö†–v…ö–×7Eö&÷fÅöÆVv7•÷VçG'W7FVB„¥4ôä"ÂDU…BÂUT”BÂUT”BÂUT”BÂDU…B“° ¥$Udô´RÄÂôâeTä5D”ôà¢V&Æ–2æVçFW'&—6U÷6†#Seö§6öæ"„¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö76W'E÷w&—F&ÆR…DU…B’À¢V&Æ–2æVçFW'&—6U÷6÷W&6U÷fW'6–öåöFW&—fR‚’À¢V&Æ–2æVçFW'&—6Uö6æF–FFUöFW&—fR‚’À¢V&Æ–2æVçFW'&—6U÷6÷W&6U÷fW'6–öåöwV&B‚’À¢V&Æ–2æVçFW'&—6Uö6æF–FFUöwV&B‚’À¢V&Æ–2æVçFW'&—6U÷&V6V—EöwV&B‚’À¢V&Æ–2æVçFW'&—6Uö¦ö%öwV&B‚’À¢V&Æ–2æVçFW'&—6U÷7FGW5ööæÇ•öwV&B‚’À¢V&Æ–2æVçFW'&—6U÷&W6÷W&6U÷6æ6†÷B…DU…BÂUT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6U÷&Wf–WuöWfVçEöFW&—fR‚’À¢V&Æ–2æVçFW'&—6Uö&÷fÅöFW&—fR‚’À¢V&Æ–2æVçFW'&—6U÷&V¦V7Eö×WFF–öâ‚¤e$ôÒT$Ä”2ÂæöâÂWF†VçF–6FVBÂ6W'f–6U÷&öÆS° ¥$Udô´RÄÂôâeTä5D”ôà¢V&Æ–2æVçFW'&—6Uö•ö6Æ–Õö6öÖÖæB…UT”BÂUT”BÂUT”BÂDU…BÂDU…BÂUT”BÂDU…B’À¢V&Æ–2æVçFW'&—6Uö•ö6ö×ÆWFUö6öÖÖæB…UT”BÂUT”BÂUT”BÂ¥4ôä"ÂUT”B’À¢V&Æ–2æVçFW'&—6Uö•öf–Åö6öÖÖæB…UT”BÂUT”BÂUT”BÂ¥4ôä"Â$ôôÄTâ’À¢V&Æ–2æVçFW'&—6U÷&÷f–FW%öÆ–fV7–6ÆU÷G&ç6—F–öâ…DU…BÂUT”BÂUT”BÂUT”BÂ$”t”åBÂ¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö7&VFUöWf–FVæ6U÷6÷W&6R„¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6U÷&V6÷&E÷6÷W&6UöW‡G&7F–öåöf–ÇW&R…UT”BÂUT”BÂUT”BÂDU…B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöWf–FVæ6UöW‡G&7F–öâ…UT”BÂUT”BÂUT”BÂUT”BÂDU…BÂ”åDTtU"ÂUT”BÂDU…BÂDU…BÂ”åDTtU"Â”åDTtU"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6U÷&Wf–WuöWf–FVæ6Uö6æF–FFR…UT”BÂUT”BÂUT”BÂDU…BÂDU…BÂDU…BÂUT”BÂDU…BÂDU…B’À¢V&Æ–2æVçFW'&—6U÷&öÖ÷FUöWf–FVæ6U÷Fõö76W75÷c"…UT”BÂUT”BÂ$”t”åBÂUT”BÂUT”BÂUT”BÂUT”BÂDU…BÂ$”t”åB’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöFVÆ—fW'•ö†æFöfb„¥4ôä"Â¥4ôä"Â¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöÖöæ—F÷%ö&6VÆ–æR„¥4ôä"ÂUT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöÖöFW&æ—¦F–öåö76W76ÖVçB„¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—Eö76VÖ&ÆUö&ÇVW&–çB„¥4ôä"ÂUT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—Eö†–v…ö–×7Eö&÷fÂ„¥4ôä"ÂDU…BÂUT”BÂUT”BÂUT”BÂDU…B¤e$ôÒT$Ä”2ÂæöâÂWF†VçF–6FVC° ¤u$åBU„T5UDRôâeTä5D”ôà¢V&Æ–2æVçFW'&—6Uö•ö6Æ–Õö6öÖÖæB…UT”BÂUT”BÂUT”BÂDU…BÂDU…BÂUT”BÂDU…B’À¢V&Æ–2æVçFW'&—6Uö•ö6ö×ÆWFUö6öÖÖæB…UT”BÂUT”BÂUT”BÂ¥4ôä"ÂUT”B’À¢V&Æ–2æVçFW'&—6Uö•öf–Åö6öÖÖæB…UT”BÂUT”BÂUT”BÂ¥4ôä"Â$ôôÄTâ’À¢V&Æ–2æVçFW'&—6U÷&÷f–FW%öÆ–fV7–6ÆU÷G&ç6—F–öâ…DU…BÂUT”BÂUT”BÂUT”BÂ$”t”åBÂ¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö7&VFUöWf–FVæ6U÷6÷W&6R„¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6U÷&V6÷&E÷6÷W&6UöW‡G&7F–öåöf–ÇW&R…UT”BÂUT”BÂUT”BÂDU…B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöWf–FVæ6UöW‡G&7F–öâ…UT”BÂUT”BÂUT”BÂUT”BÂDU…BÂ”åDTtU"ÂUT”BÂDU…BÂDU…BÂ”åDTtU"Â”åDTtU"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6U÷&Wf–WuöWf–FVæ6Uö6æF–FFR…UT”BÂUT”BÂUT”BÂDU…BÂDU…BÂDU…BÂUT”BÂDU…BÂDU…B’À¢V&Æ–2æVçFW'&—6U÷&öÖ÷FUöWf–FVæ6U÷Fõö76W75÷c"…UT”BÂUT”BÂ$”t”åBÂUT”BÂUT”BÂUT”BÂUT”BÂDU…BÂ$”t”åB’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöFVÆ—fW'•ö†æFöfb„¥4ôä"Â¥4ôä"Â¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöÖöæ—F÷%ö&6VÆ–æR„¥4ôä"ÂUT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—EöÖöFW&æ—¦F–öåö76W76ÖVçB„¥4ôä"Â¥4ôä"’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—Eö76VÖ&ÆUö&ÇVW&–çB„¥4ôä"ÂUT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö6öÖÖ—Eö†–v…ö–×7Eö&÷fÂ„¥4ôä"ÂDU…BÂUT”BÂUT”BÂUT”BÂDU…B¥Dò6W'f–6U÷&öÆS° ¥$Udô´RÄÂôâeTä5D”ôà¢V&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6UöFVÆ—fW'•÷6¶vU÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6UöÖöæ—F÷%÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çE÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B¤e$ôÒT$Ä”2Âæöã°¤u$åBU„T5UDRôâeTä5D”ôà¢V&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6UöFVÆ—fW'•÷6¶vU÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6UöÖöæ—F÷%÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’À¢V&Æ–2æVçFW'&—6Uö76VÖ&ÆUö&ÇVW&–çE÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B¥DòWF†VçF–6FVC° ¤5$TDR”äDU‚VçFW'&—6Uö•÷&V6V—G5÷66÷RôâV&Æ–2æVçFW'&—6Uö•ö6öÖÖæE÷&V6V—G2†÷&uö–BÂv÷&·76Uö–BÂ7F÷%ö–BÂ7FGW2“°¤5$TDR”äDU‚VçFW'&—6Uö•ö¦ö'5÷&÷f–FW%÷66÷RôâV&Æ–2æVçFW'&—6Uö•ö¦ö%öÆVFvW"‡&÷f–FW%ö6öæf–uö–BÂ÷&uö–BÂv÷&·76Uö–BÂ7FGW2“°¤5$TDR”äDU‚VçFW'&—6Uö•÷W6vU÷&÷f–FW%÷66÷RôâV&Æ–2æVçFW'&—6Uö•÷W6vUöÆVFvW"‡&÷f–FW%ö6öæf–uö–BÂ÷&uö–BÂv÷&·76Uö–BÂ&V6÷&FVEöB“°¤5$TDR”äDU‚VçFW'&—6UöWf–FVæ6U÷fW'6–öç5÷66÷RôâV&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷fW'6–öç2†÷&uö–BÂv÷&·76Uö–BÂ6÷W&6Uö–BÂfW'6–öâ“°¤5$TDR”äDU‚VçFW'&—6UöWf–FVæ6UöVF—G5ö6æF–FFU÷66÷RôâV&Æ–2æVçFW'&—6UöWf–FVæ6Uö6æF–FFUöVF—G2†6æF–FFUö–BÂ÷&uö–BÂv÷&·76Uö–B“°¤5$TDR”äDU‚VçFW'&—6UöWf–FVæ6U÷&öÖ÷F–öç5ö66U÷66÷RôâV&Æ–2æVçFW'&—6UöWf–FVæ6Uö76W75÷&öÖ÷F–öç2†76W75ö66Uö–BÂ÷&uö–BÂv÷&·76Uö–BÂ76W75ö66U÷fW'6–öâ“°¤5$TDR”äDU‚VçFW'&—6U÷6¶vU÷fW'6–öç5÷66÷RôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µ÷6¶vU÷fW'6–öç2‡v÷&µ÷6¶vUö–BÂ÷&uö–BÂv÷&·76Uö–BÂfW'6–öâ“°¤5$TDR”äDU‚VçFW'&—6U÷v÷&µö—FV×5÷&VçE÷66÷RôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷v÷&µö—FV×2‡&VçEö—FVÕö–BÂ÷&uö–BÂv÷&·76Uö–B’t„U$R&VçEö—FVÕö–B•2äõBåTÄÃ°¤5$TDR”äDU‚VçFW'&—6Uö†–v…÷&Wf–Ww5÷&W6÷W&6U÷66÷RôâV&Æ–2æVçFW'&—6Uö†–v…ö–×7E÷&Wf–WuöWfVçG2‡&W6÷W&6U÷G—RÂ&W6÷W&6Uö–BÂ÷&uö–BÂv÷&·76Uö–BÂ7&VFVEöB“° ¤4ôÔÔTåBôâD$ÄRV&Æ–2æVçFW'&—6Uö–çFVÆÆ–vVæ6U÷'VçF–ÖUö6öçG&öÂ•2tf–ÂÖ6Æ÷6VB6÷W&6RÖÆWfVÂ&öÆÆ&6²6öçG&öÂâ&VEööæÇ’7F÷2ÆÂVçFW'&—6R–çFVÆÆ–vVæ6R×WFF–öâv†–ÆR&W6W'f–ær6fR&ö¦V7F–öç2âs°¤4ôÔÔTåBôâD$ÄRV&Æ–2æVçFW'&—6UöWf–FVæ6Uö76W75÷&öÖ÷F–öç2•2t–Ö×WF&ÆR66WFVBÖ6æF–FFR&÷fVææ6R&öÖ÷FVB–çFòöæR–Ö×WF&ÆR76W72c"G&gBfW'6–öââs°¤4ôÔÔTåBôâeTä5D”ôâV&Æ–2æVçFW'&—6UöWf–FVæ6U÷6÷W&6U÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’•2t6&–Æ—G’×66÷VB6÷W&6Rö6æF–FFR&ö¦V7F–öâW†6ÇVF–ær'V6¶WBæBö&¦V7BF‚WF†÷&—G’âs°¤4ôÔÔTåBôâeTä5D”ôâV&Æ–2æVçFW'&—6UöFVÆ—fW'•÷6¶vU÷&ö¦V7F–öâ…UT”BÂUT”BÂUT”B’•2t6&–Æ—G’×66÷VB6æöæ–6ÂFVÆ—fW'’6¶vR&ö¦V7F–öâv—F‚6W'fW"ÖFW&—fVB”G2æB†6†W2âs°

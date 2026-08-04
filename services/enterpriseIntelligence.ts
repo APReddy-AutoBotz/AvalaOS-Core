@@ -74,6 +74,197 @@ export type EvidenceCandidateField = typeof EVIDENCE_CANDIDATE_FIELDS[number];
 export type EvidenceSuggestionStatus = 'suggested' | 'accepted' | 'rejected' | 'edited';
 export type EvidenceSourceStatus = 'uploaded' | 'extracting' | 'review' | 'deleted' | 'failed';
 
+export const ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION = 'enterprise-intelligence-projection-1' as const;
+
+export type EnterpriseProjectionAvailability = 'ready' | 'empty' | 'blocked' | 'stale' | 'unavailable';
+
+export interface EnterpriseProviderRouteProjection {
+  id: string;
+  capability: EnterpriseAiCapability;
+  modelLabel: string;
+  enabled: boolean;
+  availability: 'ready' | 'disabled' | 'validation_required' | 'provider_unavailable';
+  allowedRoleCount: number;
+}
+
+export interface EnterpriseProviderProjection {
+  id: string;
+  provider: EnterpriseAiProvider;
+  displayName: string;
+  defaultModel: string;
+  status: 'pending_review' | 'active' | 'disabled' | 'retired';
+  credentialState: 'server_reference_present' | 'server_reference_missing';
+  endpointState: 'first_party' | 'server_configured';
+  validationState: 'validated' | 'validation_required';
+  lastValidatedAt?: string;
+  budgetState: 'configured' | 'not_configured';
+  routes: EnterpriseProviderRouteProjection[];
+}
+
+export interface EnterpriseEvidenceSourceProjection {
+  id: string;
+  displayName: string;
+  mimeType: SupportedEvidenceMimeType;
+  status: EvidenceSourceStatus;
+  versionLabel: string;
+  extractedCharacterCount: number;
+  extractionState: 'ready' | 'empty_text_layer' | 'pending' | 'failed';
+  sourceBytesAnchored: boolean;
+  extractedTextAnchored: boolean;
+  createdAt: string;
+}
+
+export interface EnterpriseEvidenceCandidateProjection {
+  id: string;
+  sourceId: string;
+  field: EvidenceCandidateField;
+  value: string;
+  safeExcerpt?: string;
+  sourceLocator: string;
+  confidence: number;
+  status: EvidenceSuggestionStatus;
+  promptVersionLabel?: string;
+  provenanceState: 'anchored' | 'incomplete';
+  reviewState: 'pending' | 'reviewed_by_you' | 'reviewed_by_another';
+  reviewedAt?: string;
+}
+
+export interface EnterpriseAssessDraftProjection {
+  id: string;
+  label: string;
+  versionLabel: string;
+  status: 'draft';
+  updatedAt: string;
+}
+
+export interface EnterpriseApplicationProjection {
+  id: string;
+  name: string;
+  approvedAssessmentLabel: string;
+  decisionModelLabel: string;
+  approvedAt: string;
+  modernizationState: 'eligible' | 'already_assessed';
+}
+
+export interface EnterpriseStudioDocumentProjection {
+  id: string;
+  label: string;
+  artifactType: 'brd' | 'frd' | 'pdd';
+  approvedVersionLabel: string;
+  lifecycle: 'approved';
+  handoffState: 'available' | 'already_handed_off' | 'stale';
+}
+
+export interface EnterpriseDeliveryItemProjection {
+  itemType: DeliveryWorkPackageItem['itemType'];
+  title: string;
+  acceptanceCriteriaCount: number;
+  sourceLocator: string;
+}
+
+export interface EnterpriseDeliveryPackageProjection {
+  id: string;
+  label: string;
+  status: 'draft' | 'review' | 'approved' | 'stale' | 'blocked';
+  currentVersionLabel: string;
+  sourceLabel: string;
+  lineageState: 'complete' | 'stale' | 'blocked';
+  items: EnterpriseDeliveryItemProjection[];
+  createdByCurrentActor: boolean;
+}
+
+export interface EnterpriseMonitorProjection {
+  id: string;
+  label: string;
+  workPackageId: string;
+  status: 'draft' | 'approval_required' | 'approved' | 'blocked' | 'stale';
+  readiness: 'not_ready' | 'review_required';
+  approvedItemCount: number;
+  lineageComplete: boolean;
+  liveTelemetryConnected: false;
+  createdByCurrentActor: boolean;
+}
+
+export interface EnterpriseModernizationProjection {
+  id: string;
+  applicationName: string;
+  status: 'draft' | 'review' | 'approved' | 'rejected' | 'stale' | 'blocked';
+  primaryDisposition: ModernizationDisposition;
+  alternativeDisposition?: ModernizationDisposition;
+  blockers: string[];
+  conflicts: string[];
+  assembleEligible: boolean;
+  createdByCurrentActor: boolean;
+}
+
+export interface EnterpriseBlueprintProjection {
+  id: string;
+  name: string;
+  status: 'draft' | 'edit' | 'review' | 'approval_required' | 'approved' | 'stale' | 'blocked';
+  versionLabel: string;
+  disposition: ModernizationDisposition;
+  components: Array<{ type: AssembleComponentType; name: string; enabled: boolean }>;
+  safety: AssembleBlueprintDraft['safety'];
+  createdByCurrentActor: boolean;
+}
+
+export type EnterpriseApprovalResourceType = 'evidence_candidate' | 'modernization_decision' | 'delivery_work_package' | 'monitor_baseline' | 'assemble_blueprint';
+
+export interface EnterpriseApprovalResourceProjection {
+  id: string;
+  resourceType: EnterpriseApprovalResourceType;
+  label: string;
+  status: string;
+  createdByCurrentActor: boolean;
+  independentReviewState: 'not_recorded' | 'recorded_by_you' | 'recorded_by_another';
+  approvalState: 'not_recorded' | 'approved' | 'rejected';
+  separationOfDuties: 'creator_cannot_review' | 'reviewer_cannot_approve' | 'eligible_for_review' | 'eligible_for_approval' | 'complete';
+}
+
+export interface EnterpriseCommandActivityProjection {
+  commandType: string;
+  status: 'claimed' | 'committed' | 'failed' | 'blocked';
+  completedAt?: string;
+  idempotencyState: 'in_progress' | 'committed' | 'stable_failure';
+}
+
+export interface EnterpriseIntelligenceProjection {
+  schemaVersion: typeof ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION;
+  organizationId: string;
+  workspaceId: string;
+  authorizationVersion: number;
+  generatedAt: string;
+  capabilities: string[];
+  availability: EnterpriseProjectionAvailability;
+  providers: EnterpriseProviderProjection[];
+  evidenceSources: EnterpriseEvidenceSourceProjection[];
+  evidenceCandidates: EnterpriseEvidenceCandidateProjection[];
+  assessDrafts: EnterpriseAssessDraftProjection[];
+  applications: EnterpriseApplicationProjection[];
+  studioDocuments: EnterpriseStudioDocumentProjection[];
+  deliveryPackages: EnterpriseDeliveryPackageProjection[];
+  monitorBaselines: EnterpriseMonitorProjection[];
+  modernizationDecisions: EnterpriseModernizationProjection[];
+  blueprints: EnterpriseBlueprintProjection[];
+  approvalResources: EnterpriseApprovalResourceProjection[];
+  commandActivity: EnterpriseCommandActivityProjection[];
+  assessPromotion: {
+    state: 'contract_pending' | 'ready' | 'conflict' | 'promoted';
+    acceptedCandidateCount: number;
+    provenanceComplete: boolean;
+    draftVersionLabel?: string;
+    idempotencyState: 'not_started' | 'in_progress' | 'committed' | 'stable_failure';
+    conflicts: string[];
+  };
+}
+
+export type EvidenceFileSupport = {
+  supported: boolean;
+  mimeType?: SupportedEvidenceMimeType;
+  state: 'native_text' | 'text_pdf_requires_text_layer' | 'docx_text' | 'unsupported';
+  message: string;
+};
+
 export interface EnterpriseProviderConfigProjection {
   id: string;
   provider: EnterpriseAiProvider;
@@ -327,15 +518,97 @@ const hashStep = (seed: number, value: string) => {
 export const stableFingerprint = (value: string) => {
   const normalized = value.normalize('NFKC');
   const first = hashStep(2166136261, normalized).toString(16).padStart(8, '0');
-  const second = hashStep(2166136261 ^ 0x9e3779b9, normalized).toString(16).padStart(8, '0');
-  return `${first}${second}`.repeat(4).slice(0, 64);
+  const second = hashStep(2166136261 ^ 0x9e3779b9ßm¢G§²ÚîÆ­yÕPath|versionId)$/i;
+
+const rejectSensitiveProjectionFields = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    value.forEach(rejectSensitiveProjectionFields);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+    if (prohibitedProjectionKey.test(key)) throw new Error('ENTERPRISE_PROJECTION_SENSITIVE_FIELD');
+    rejectSensitiveProjectionFields(entry);
+  });
 };
 
-export const sanitizeEvidenceExcerpt = (value: string, maxLength = 480) => value
-  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, maxLength);
+/** Strict browser decoder for the server-issued, minimized read projection. */
+export const decodeEnterpriseIntelligenceProjection = (value: unknown): EnterpriseIntelligenceProjection => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).some(key => !projectionKeys.includes(key as typeof projectionKeys[number]))) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  if (
+    row.schemaVersion !== ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION
+    || typeof row.organizationId !== 'string' || !projectionUuid.test(row.organizationId)
+    || typeof row.workspaceId !== 'string' || !projectionUuid.test(row.workspaceId)
+    || !Number.isSafeInteger(row.authorizationVersion) || Number(row.authorizationVersion) < 1
+    || typeof row.generatedAt !== 'string' || !Number.isFinite(Date.parse(row.generatedAt))
+    || !Array.isArray(row.capabilities) || row.capabilities.some(capability => typeof capability !== 'string')
+    || !['ready', 'empty', 'blocked', 'stale', 'unavailable'].includes(String(row.availability))
+    || !['providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts', 'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines', 'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity'].every(key => Array.isArray(row[key]))
+    || !row.assessPromotion || typeof row.assessPromotion !== 'object' || Array.isArray(row.assessPromotion)
+  ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  rejectSensitiveProjectionFields(row);
+  return structuredClone(row) as unknown as EnterpriseIntelligenceProjection;
+};
+
+export const classifyEvidenceFile = (name: string, browserMimeType: string, size: number): EvidenceFileSupport => {
+  if (!Number.isSafeInteger(size) || size <= 0 || size > 12_000_000) {
+    return { supported: false, state: 'unsupported', message: 'Sources must contain data and be no larger than 12 MB.' };
+  }
+  const extension = name.trim().toLocaleLowerCase().match(/\.[a-z0-9]+$/)?.[0] || '';
+  const byExtension: Record<string, SupportedEvidenceMimeType> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.markdown': 'text/markdown',
+    '.csv': 'text/csv',
+    '.vtt': 'text/vtt',
+    '.srt': 'application/x-subrip',
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  const mimeType = byExtension[extension]
+    || (isSupportedEvidenceMimeType(browserMimeType) ? browserMimeType : undefined);
+  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, CSV, VTT/SRT, a text PDF, or DOCX.' };
+  if (mimeType === 'application/pdf') {
+    return { supported: true, mimeType, state: 'text_pdf_requires_text_layer', message: 'Text PDFs are supported. Scanned PDFs need OCR, which is not available in this vertical.' };
+  }
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return { supported: true, mimeType, state: 'docx_text', message: 'DOCX text is extracted server-side; embedded images and OCR are not processed.' };
+  }
+  return { supported: true, mimeType, state: 'native_text', message: 'This text-oriented format is supported for bounded server extraction.' };
+};
+
+const requireProjectionId = (value: string) => {
+  if (!projectionUuid.test(value)) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+  return value;
+};
+
+/** Selector-only mutation payloads never carry authoritative hashes or immutable versions. */
+export const buildEnterpriseSelectorPayloads = {
+  evidenceExtraction(sourceId: string) {
+    return { sourceId: requireProjectionId(sourceId) };
+  },
+  modernization(applicationId: string) {
+    return { applicationId: requireProjectionId(applicationId) };
+  },
+  studioHandoff(studioDocumentId: string) {
+    return { studioDocumentId: requireProjectionId(studioDocumentId) };
+  },
+  monitorBaseline(workPackageId: string) {
+    return { workPackageId: requireProjectionId(workPackageId) };
+  },
+  assessPromotion(sourceId: string, assessDraftId: string, candidateIds: string[]) {
+    if (!Array.isArray(candidateIds) || candidateIds.length < 1 || candidateIds.length > 100) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+    const normalizedCandidates = candidateIds.map(requireProjectionId);
+    if (new Set(normalizedCandidates).size !== normalizedCandidates.length) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+    return {
+      sourceId: requireProjectionId(sourceId),
+      assessDraftId: requireProjectionId(assessDraftId),
+      candidateIds: normalizedCandidates,
+    };
+  },
+};
 
 export const isSupportedEvidenceMimeType = (value: string): value is SupportedEvidenceMimeType => (
   SUPPORTED_EVIDENCE_MIME_TYPES.includes(value as SupportedEvidenceMimeType)

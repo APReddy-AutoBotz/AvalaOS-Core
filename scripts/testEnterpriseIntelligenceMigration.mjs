@@ -1,31 +1,84 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const migrationPath = path.join(process.cwd(), 'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql');
 const sql = fs.readFileSync(migrationPath, 'utf8');
 const requiredTables = [
+  'enterprise_intelligence_runtime_control',
   'enterprise_ai_capability_routes',
   'enterprise_ai_command_receipts',
   'enterprise_ai_job_ledger',
+  'enterprise_ai_usage_ledger',
   'enterprise_evidence_sources',
   'enterprise_evidence_source_versions',
   'enterprise_evidence_candidates',
+  'enterprise_evidence_candidate_edits',
+  'enterprise_evidence_questions',
+  'enterprise_evidence_assess_promotions',
   'enterprise_studio_delivery_handoffs',
   'enterprise_delivery_work_packages',
+  'enterprise_delivery_work_package_versions',
+  'enterprise_delivery_work_items',
   'enterprise_monitor_baselines',
   'enterprise_modernization_assessments',
   'enterprise_modernization_decisions',
   'enterprise_assemble_blueprints',
+  'enterprise_high_impact_review_events',
   'enterprise_high_impact_approvals',
 ];
+
+let assertions = 0;
+const check = (condition, message) => { assert.ok(condition, message); assertions += 1; };
 for (const table of requiredTables) {
-  if (!sql.includes(`CREATE TABLE IF NOT EXISTS public.${table}`)) throw new Error(`Missing table ${table}`);
+  check(sql.includes(`CREATE TABLE public.${table}`), `Missing strict table creation for ${table}`);
 }
-const forceRlsCount = (sql.match(/FORCE ROW LEVEL SECURITY/g) || []).length;
-if (forceRlsCount < requiredTables.length) throw new Error(`Expected forced RLS for ${requiredTables.length} tables, found ${forceRlsCount}.`);
-if (/live_telemetry_connected\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql)) throw new Error('Live telemetry must remain disabled.');
-if (/readiness\s+TEXT\s+NOT NULL\s+CHECK\s*\([^)]*\bready\b/i.test(sql)) throw new Error('Monitor readiness cannot claim ready in Phase 1.');
-if (/status\s+TEXT\s+NOT NULL\s+CHECK\s*\([^)]*published/i.test(sql)) throw new Error('Enterprise Phase 1 schema cannot publish external side effects.');
-if (!sql.includes('FOREIGN KEY (workspace_id, org_id)')) throw new Error('Workspace/org composite foreign keys are required.');
-if (!sql.includes('enterprise_high_impact_approval_separation_check')) throw new Error('Three-person approval separation is required.');
-console.log('Enterprise Intelligence migration contract passed (static PostgreSQL contract; live PostgreSQL execution remains a separate gate).');
+check(!/CREATE TABLE IF NOT EXISTS public\.enterprise_/i.test(sql), 'Enterprise tables must reject dirty drift instead of accepting IF NOT EXISTS.');
+check(sql.includes('ENTERPRISE_INTELLIGENCE_DIRTY_SCHEMA'), 'A fail-fast dirty-schema preflight is required.');
+check(sql.indexOf('ENTERPRISE_INTELLIGENCE_DIRTY_SCHEMA') < sql.indexOf('INSERT INTO public.capabilities'), 'Dirty-schema rejection must precede all feature mutations.');
+check(sql.includes("ON DELETE SET NULL (provider_config_id)"), 'Provider deletion must retain the job and null only its provider reference.');
+check(sql.includes("ON DELETE SET NULL (key_ref_id)"), 'Key deletion must retain provider configuration lineage.');
+check(sql.includes("content_bytes <= 12582912"), 'The 12 MiB source authority limit is required.');
+for (const token of [
+  "'text/plain'", "'text/markdown'", "'text/csv'", "'text/vtt'", "'application/x-subrip'",
+  "'application/pdf'", "'application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
+  "'text_native'", "'csv'", "'vtt'", "'srt'", "'pdf_text'", "'docx'",
+  "'failed_ocr_required'", "'OCR_REQUIRED'",
+]) check(sql.includes(token), `Missing source/provenance contract token ${token}`);
+for (const signature of [
+  'enterprise_evidence_source_projection', 'enterprise_delivery_package_projection',
+  'enterprise_monitor_projection', 'enterprise_assemble_blueprint_projection',
+]) check(sql.includes(`FUNCTION public.${signature}`), `Missing safe projection ${signature}`);
+check(sql.includes('enterprise_high_impact_approval_separation_check'), 'Three-person approval separation is required.');
+check(sql.includes('enterprise_evidence_assess_promotions'), 'Accepted evidence must have immutable Assess promotion lineage.');
+check(sql.includes('enterprise_provider_lifecycle_transition'), 'The service-only provider lifecycle transition RPC is required.');
+for (const operation of [
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+  'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+]) check(sql.includes(`'${operation}'`), `Missing provider lifecycle operation ${operation}`);
+check(sql.includes('p_payload ?| forbidden_keys'), 'Provider lifecycle SQL must reject raw secret-bearing payload keys.');
+check(sql.includes('rawCompletion|raw_completion'), 'Provider lifecycle SQL must reject nested raw secret/prompt/completion keys.');
+check(sql.includes("last_validated_at < statement_timestamp() - interval '24 hours'"), 'Provider activation and route enablement require fresh validation.');
+check(sql.includes('roles := route.allowed_roles'), 'Route toggles must preserve allowed roles when omitted.');
+check(sql.includes("SET status = 'retired', rotation_status = 'rotated'"), 'Rotation must retire the prior key reference.');
+check(sql.includes('SET enabled = false, version = version + 1'), 'Provider revocation must disable routes atomically.');
+check(sql.includes('WHERE provider_config_id = config.id AND org_id = p_org AND deleted_at IS NULL'), 'Provider revocation must disable all organization routes across workspaces.');
+check(sql.includes('candidate_provenance_hash'), 'Candidate provenance must be retained through promotion.');
+check(sql.includes('resource_version') && sql.includes('resource_hash'), 'Review and approval authority must bind exact versions and hashes.');
+check(sql.includes('enterprise_reject_mutation'), 'Immutable lineage tables require mutation rejection triggers.');
+check(sql.includes("read_only stops all Enterprise Intelligence mutation"), 'A documented read-only rollback fallback is required.');
+check(!/live_telemetry_connected\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Live telemetry must remain disabled.');
+check(!/runtime_agents_enabled\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Runtime agents must remain disabled.');
+check(!/deployment_enabled\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Deployment must remain disabled.');
+check(!/readiness\s+TEXT\s+NOT NULL\s+CHECK\s*\([^)]*\bready\b/i.test(sql), 'Monitor authority cannot claim ready in this slice.');
+check(sql.includes('FOREIGN KEY (workspace_id, org_id)'), 'Workspace/org composite foreign keys are required.');
+check(sql.includes('enterprise_final_acl'), 'Final least-privilege ACL reconciliation is required.');
+const finalAcl = sql.indexOf('DO $enterprise_final_acl$');
+check(finalAcl > sql.lastIndexOf('GRANT SELECT ON TABLE public.enterprise_'), 'Final ACL revocation must follow all legacy grants.');
+check(sql.slice(finalAcl).includes('GRANT SELECT ON TABLE public.%I TO service_role'), 'Service role must receive read-only table access.');
+check(!sql.slice(finalAcl).includes('GRANT SELECT ON TABLE public.%I TO authenticated'), 'Authenticated users must not receive raw Enterprise table access.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_delivery_handoff_legacy_untrusted'), 'Untrusted Delivery mutation entry point must be removed.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_modernization_assessment_legacy_untrusted'), 'Untrusted modernization entry point must be removed.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_high_impact_approval_legacy_untrusted'), 'Untrusted approval entry point must be removed.');
+
+console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);

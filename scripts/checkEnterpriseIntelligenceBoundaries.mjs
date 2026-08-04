@@ -8,7 +8,12 @@ const requiredFiles = [
   'components/enterprise/EnterpriseIntelligenceView.tsx',
   'supabase/functions/_shared/enterpriseIntelligenceAi.ts',
   'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
+  'supabase/functions/_shared/enterpriseIntelligenceQuery.ts',
+  'supabase/functions/_shared/providerLifecycle.ts',
+  'supabase/functions/_shared/providerLifecycleEndpoint.ts',
   'supabase/functions/enterprise-intelligence-command/index.ts',
+  'supabase/functions/enterprise-intelligence-query/index.ts',
+  'supabase/functions/enterprise-provider-lifecycle/index.ts',
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
 ];
 
@@ -29,8 +34,19 @@ const hits = forbidden.filter(pattern => pattern.test(featureText));
 if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: ${hits.map(String).join(', ')}`);
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
-for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_ai_job_ledger', 'runGovernedProviderRequest', 'RESOURCE_STALE']) {
+for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_ai_job_ledger', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_to_assess_v2']) {
   if (!command.includes(required)) throw new Error(`Enterprise command boundary is missing ${required}.`);
+}
+if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(command)) {
+  throw new Error('Enterprise commands may not accept browser-supplied authoritative versions, hashes, or item identifiers.');
+}
+
+const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
+for (const pattern of [/placeholder=["'`]UUID/iu, /\b(?:studioContentHash|studioVersion|assessmentVersionId|packageVersionId|approvedItemIds|secretReference)\b/u]) {
+  if (pattern.test(view)) throw new Error(`Enterprise UI exposes a raw authority input: ${pattern}.`);
+}
+for (const required of ['loadProjection', 'Reload committed state', 'projection reload failed', 'type="password"']) {
+  if (!view.includes(required)) throw new Error(`Enterprise UI is missing reloadable projection behavior: ${required}.`);
 }
 
 const migration = read('supabase/migrations/20260804120000_enterprise_intelligence_authority.sql');

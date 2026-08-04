@@ -4,8 +4,12 @@ import {
   assertHighImpactApprovalSeparation,
   buildAssembleBlueprintDraft,
   buildDeliveryWorkPackageDraft,
+  buildEnterpriseSelectorPayloads,
   buildEvidenceCandidate,
   buildMonitorBaseline,
+  classifyEvidenceFile,
+  decodeEnterpriseIntelligenceProjection,
+  ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
   evaluateModernizationDecision,
   type ModernizationFactors,
 } from './enterpriseIntelligence';
@@ -140,4 +144,56 @@ test('high-impact actions require three distinct people', () => {
     () => assertHighImpactApprovalSeparation({ createdBy: 'a', reviewedBy: 'a', approvedBy: 'c' }),
     /APPROVAL_SEPARATION_REQUIRED/,
   );
+});
+
+test('selector-only payloads omit authoritative hashes, versions, and item identifiers', () => {
+  const applicationId = '10000000-0000-4000-8000-000000000001';
+  const documentId = '20000000-0000-4000-8000-000000000002';
+  const packageId = '30000000-0000-4000-8000-000000000003';
+  const draftId = '40000000-0000-4000-8000-000000000004';
+  const candidateId = '50000000-0000-4000-8000-000000000005';
+  assert.deepEqual(buildEnterpriseSelectorPayloads.evidenceExtraction(applicationId), { sourceId: applicationId });
+  assert.deepEqual(buildEnterpriseSelectorPayloads.modernization(applicationId), { applicationId });
+  assert.deepEqual(buildEnterpriseSelectorPayloads.studioHandoff(documentId), { studioDocumentId: documentId });
+  assert.deepEqual(buildEnterpriseSelectorPayloads.monitorBaseline(packageId), { workPackageId: packageId });
+  assert.deepEqual(buildEnterpriseSelectorPayloads.assessPromotion(applicationId, draftId, [candidateId]), { sourceId: applicationId, assessDraftId: draftId, candidateIds: [candidateId] });
+  assert.ok(!JSON.stringify(buildEnterpriseSelectorPayloads.studioHandoff(documentId)).match(/hash|version/i));
+  assert.ok(!JSON.stringify(buildEnterpriseSelectorPayloads.monitorBaseline(packageId)).match(/item/i));
+});
+
+test('file support is truthful about native text, DOCX, and scanned PDF OCR limits', () => {
+  assert.deepEqual(classifyEvidenceFile('notes.md', '', 20).mimeType, 'text/markdown');
+  assert.equal(classifyEvidenceFile('meeting.srt', '', 20).supported, true);
+  assert.equal(classifyEvidenceFile('source.docx', 'application/octet-stream', 20).state, 'docx_text');
+  const pdf = classifyEvidenceFile('scan.pdf', 'application/pdf', 20);
+  assert.equal(pdf.state, 'text_pdf_requires_text_layer');
+  assert.match(pdf.message, /OCR.*not available/i);
+  assert.equal(classifyEvidenceFile('audio.mp3', 'audio/mpeg', 20).supported, false);
+  assert.equal(classifyEvidenceFile('too-large.txt', 'text/plain', 12_000_001).supported, false);
+});
+
+test('browser projection decoder rejects raw authority and sensitive server fields', () => {
+  const baseProjection = {
+    schemaVersion: ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
+    organizationId: '10000000-0000-4000-8000-000000000001',
+    workspaceId: '20000000-0000-4000-8000-000000000002',
+    authorizationVersion: 7,
+    generatedAt: '2026-08-04T00:00:00.000Z',
+    capabilities: ['evidence.review'],
+    availability: 'ready',
+    providers: [], evidenceSources: [], evidenceCandidates: [], assessDrafts: [], applications: [],
+    studioDocuments: [], deliveryPackages: [], monitorBaselines: [],
+    modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
+    assessPromotion: { state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [] },
+  };
+  assert.equal(decodeEnterpriseIntelligenceProjection(baseProjection).authorizationVersion, 7);
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({ ...baseProjection, providers: [{ secretReference: 'server-only' }] }),
+    /ENTERPRISE_PROJECTION_SENSITIVE_FIELD/,
+  );
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({ ...baseProjection, studioDocuments: [{ contentHash: 'a'.repeat(64) }] }),
+    /ENTERPRISE_PROJECTION_SENSITIVE_FIELD/,
+  );
+  assert.throws(() => decodeEnterpriseIntelligenceProjection({ ...baseProjection, extraAuthority: true }), /ENTERPRISE_PROJECTION_INVALID/);
 });
