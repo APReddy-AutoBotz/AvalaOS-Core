@@ -3,10 +3,13 @@ import {
   type EnterpriseAiCapability,
   type EnterpriseAiProvider,
 } from '../../../services/enterpriseIntelligence.ts';
-
-export type SecretStore = {
-  resolve: (input: { provider: EnterpriseAiProvider; secretRef: string; organizationId: string }) => Promise<string | undefined>;
-};
+import type { AllowedEnterpriseProviderResolverDecision, AllowedProviderResolverDecision } from './providerResolver.ts';
+import {
+  isAllowedProviderSecretRef,
+  resolveProviderSecretForDecision,
+  type ProviderSecretBackend,
+  type ProviderSecretKeyRefRow,
+} from './providerSecretAdapter.ts';
 
 export class EnterpriseAiGatewayError extends Error {
   constructor(
@@ -30,7 +33,6 @@ export type EnterpriseProviderRequest = {
   endpoint?: string;
   deployment?: string;
   model: string;
-  secretRef: string;
   capability: EnterpriseAiCapability;
   untrustedSource: string;
   taskInstruction: string;
@@ -42,6 +44,7 @@ export type EnterpriseProviderRequest = {
     providerConfigId: string;
     capability: EnterpriseAiCapability;
     routeEnabled: true;
+    resolverDecision: AllowedEnterpriseProviderResolverDecision;
   };
 };
 
@@ -52,88 +55,17 @@ export type EnterpriseProviderResult = {
   latencyMs: number;
 };
 
-const reservedSecretRefs = new Set([
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'DATABASE_URL',
-  ...['OPENAI', 'AZURE_OPENAI', 'ANTHROPIC', 'GEMINI', 'GROQ'].map(provider => `${provider}_${'API_KEY'}`),
-  'JWT_SECRET',
-]);
-
-const secretRefPatterns: Record<EnterpriseAiProvider, RegExp> = {
-  openai: /^AVALA_PROVIDER_SECRET_OPENAI_[A-Z0-9_]+$/,
-  azure_openai: /^AVALA_PROVIDER_SECRET_AZURE_OPENAI_[A-Z0-9_]+$/,
-  anthropic: /^AVALA_PROVIDER_SECRET_ANTHROPIC_[A-Z0-9_]+$/,
-  gemini: /^AVALA_PROVIDER_SECRET_GEMINI_[A-Z0-9_]+$/,
-  openai_compatible: /^AVALA_PROVIDER_SECRET_OPENAI_COMPATIBLE_[A-Z0-9_]+$/,
-};
-
-const tenantSecretSegment = (organizationId: string) => organizationId.replaceAll('-', '').toUpperCase();
-
 export const isSafeEnterpriseSecretReference = (
   provider: EnterpriseAiProvider,
   secretRef: string,
   organizationId?: string,
-) => (
-  typeof secretRef === 'string'
-  && !reservedSecretRefs.has(secretRef)
-  && secretRefPatterns[provider].test(secretRef)
-  && (!organizationId || secretRef.includes(`_${tenantSecretSegment(organizationId)}_`))
-);
+) => isAllowedProviderSecretRef(provider, secretRef, organizationId);
 
 const readServerEnv = (name: string) => {
   const runtime = globalThis as typeof globalThis & {
     Deno?: { env?: { get?: (key: string) => string | undefined } };
   };
   return runtime.Deno?.env?.get?.(name);
-};
-
-export class EnvironmentSecretStore implements SecretStore {
-  async resolve(input: { provider: EnterpriseAiProvider; secretRef: string; organizationId: string }) {
-    if (!isSafeEnterpriseSecretReference(input.provider, input.secretRef, input.organizationId)) {
-      throw new EnterpriseAiGatewayError('SECRET_REFERENCE_UNSAFE');
-    }
-    return readServerEnv(input.secretRef);
-  }
-}
-
-/**
- * Optional server-only Vault adapter. The provider key remains in Vault; the
- * application database stores only the opaque reference. If Vault is not
- * configured, callers can use the existing server environment secret
- * facility without introducing a second encryption scheme.
- */
-export class VaultSecretStore implements SecretStore {
-  constructor(
-    private readonly address: string,
-    private readonly token: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
-
-  async resolve(input: { provider: EnterpriseAiProvider; secretRef: string; organizationId: string }) {
-    if (!isSafeEnterpriseSecretReference(input.provider, input.secretRef, input.organizationId)) {
-      throw new EnterpriseAiGatewayError('SECRET_REFERENCE_UNSAFE');
-    }
-    const endpoint = new URL(`/v1/${tenantSecretSegment(input.organizationId)}/${input.secretRef}`, this.address);
-    const response = await this.fetchImpl(endpoint, {
-      method: 'GET',
-      redirect: 'error',
-      headers: { 'X-Vault-Token': this.token },
-    });
-    if (!response.ok) return undefined;
-    const body = await response.json() as { data?: { data?: { value?: unknown }; value?: unknown } };
-    const value = body?.data?.data?.value ?? body?.data?.value;
-    return typeof value === 'string' && value.length > 0 ? value : undefined;
-  }
-}
-
-export const createServerSecretStore = () => {
-  const address = readServerEnv('AVALA_VAULT_ADDR');
-  const token = readServerEnv('AVALA_VAULT_TOKEN');
-  return address && token
-    ? new VaultSecretStore(address, token)
-    : new EnvironmentSecretStore();
 };
 
 export const isSafeProviderEndpoint = (endpoint: string) => {
@@ -330,13 +262,54 @@ const requestGemini = async (
   return readResponseText(response);
 };
 
+/** A bounded, header-only provider probe used by validate/rotate lifecycle commands. */
+export const validateProviderConnection = async (
+  input: {
+    provider: EnterpriseAiProvider;
+    endpoint?: string;
+    deployment?: string;
+    model: string;
+    apiKey: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+) => {
+  const base = buildEndpoint({
+    ...input,
+    capability: 'assess.evidence.extract',
+    untrustedSource: 'validation',
+    taskInstruction: 'validation',
+    authorization: {} as EnterpriseProviderRequest['authorization'],
+  });
+  let url = `${base}/v1/models`;
+  let headers: Record<string, string> = { Authorization: `Bearer ${input.apiKey}` };
+  if (input.provider === 'azure_openai') {
+    if (!input.deployment?.trim()) throw new EnterpriseAiGatewayError('ENDPOINT_UNSAFE');
+    url = `${base}/openai/deployments/${encodeURIComponent(input.deployment.trim())}/models?api-version=2024-10-21`;
+    headers = { 'api-key': input.apiKey };
+  } else if (input.provider === 'anthropic') {
+    headers = { 'x-api-key': input.apiKey, 'anthropic-version': '2023-06-01' };
+  } else if (input.provider === 'gemini') {
+    url = `${base}/v1beta/models`;
+    headers = { 'x-goog-api-key': input.apiKey };
+  }
+  const response = await fetchImpl(url, { method: 'GET', redirect: 'error', headers });
+  if (!response.ok) throw new EnterpriseAiGatewayError('PROVIDER_REQUEST_FAILED');
+  return { validated: true as const };
+};
+
 export const runGovernedProviderRequest = async (
   request: EnterpriseProviderRequest,
-  deps: { secretStore?: SecretStore; fetchImpl?: typeof fetch; now?: () => number } = {},
+  deps: {
+    secretBackend?: ProviderSecretBackend;
+    lookupKeyRef?: (decision: AllowedEnterpriseProviderResolverDecision | AllowedProviderResolverDecision) => Promise<ProviderSecretKeyRefRow | null>;
+    fetchImpl?: typeof fetch;
+    now?: () => number;
+  } = {},
 ): Promise<EnterpriseProviderResult> => {
   if (!ENTERPRISE_AI_PROVIDERS.includes(request.provider)) {
     throw new EnterpriseAiGatewayError('PROVIDER_UNSUPPORTED');
   }
+  const decision = request.authorization.resolverDecision;
   if (
     request.authorization.routeEnabled !== true
     || request.authorization.capability !== request.capability
@@ -344,21 +317,28 @@ export const runGovernedProviderRequest = async (
     || request.authorization.organizationId.trim().length === 0
     || request.authorization.workspaceId.trim().length === 0
     || request.authorization.actorId.trim().length === 0
+    || decision.status !== 'allowed'
+    || decision.provider !== request.provider
+    || decision.providerConfigId !== request.authorization.providerConfigId
+    || decision.operation !== request.capability
+    || decision.orgId !== request.authorization.organizationId
+    || decision.workspaceId !== request.authorization.workspaceId
+    || decision.actorId !== request.authorization.actorId
+    || decision.model !== request.model
   ) throw new EnterpriseAiGatewayError('CAPABILITY_UNAVAILABLE');
   if (!request.model.trim() || !request.capability) {
     throw new EnterpriseAiGatewayError('CAPABILITY_UNAVAILABLE');
   }
 
-  const secretStore = deps.secretStore || createServerSecretStore();
-  if (!isSafeEnterpriseSecretReference(request.provider, request.secretRef, request.authorization.organizationId)) {
-    throw new EnterpriseAiGatewayError('SECRET_REFERENCE_UNSAFE');
-  }
-  const apiKey = await secretStore.resolve({
-    provider: request.provider,
-    secretRef: request.secretRef,
-    organizationId: request.authorization.organizationId,
+  const secret = await resolveProviderSecretForDecision(decision, {
+    backend: deps.secretBackend,
+    lookupKeyRef: deps.lookupKeyRef,
   });
-  if (!apiKey) throw new EnterpriseAiGatewayError('SECRET_UNAVAILABLE');
+  if (secret.status === 'blocked') {
+    if (secret.failureClass === 'secret_reference_unsafe') throw new EnterpriseAiGatewayError('SECRET_REFERENCE_UNSAFE');
+    throw new EnterpriseAiGatewayError('SECRET_UNAVAILABLE');
+  }
+  const apiKey = secret.apiKey;
 
   const prompt = buildGovernedPrompt({
     capability: request.capability,

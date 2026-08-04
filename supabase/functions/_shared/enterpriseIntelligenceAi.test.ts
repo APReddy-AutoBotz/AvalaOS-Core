@@ -14,6 +14,24 @@ const authorization = {
   providerConfigId: '44444444-4444-4444-8444-444444444444',
   capability: 'assess.evidence.extract' as const,
   routeEnabled: true as const,
+  resolverDecision: {
+    status: 'allowed' as const,
+    futureSecretLookupEligible: true as const,
+    provider: 'openai' as const,
+    providerConfigId: '44444444-4444-4444-8444-444444444444',
+    keyRefId: '55555555-5555-4555-8555-555555555555',
+    keyRefResolverType: 'server_reference' as const,
+    operation: 'assess.evidence.extract' as const,
+    capability: 'assess.evidence.extract' as const,
+    mode: 'pilot' as const,
+    orgId: '11111111-1111-4111-8111-111111111111',
+    workspaceId: '22222222-2222-4222-8222-222222222222',
+    actorId: '33333333-3333-4333-8333-333333333333',
+    correlationId: 'enterprise-ai-test-1',
+    policyResult: 'allowed' as const,
+    model: 'approved-model',
+    auditEvent: {} as never,
+  },
 };
 
 const test = async (name: string, callback: () => Promise<void> | void) => {
@@ -57,13 +75,20 @@ await test('provider adapters use headers and never put keys in URLs', async () 
   const result = await runGovernedProviderRequest({
     provider: 'openai',
     model: 'approved-model',
-    secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_PRIMARY',
     capability: 'assess.evidence.extract',
     taskInstruction: 'Extract candidates.',
     untrustedSource: 'Evidence text.',
     authorization,
   }, {
-    secretStore: { resolve: async () => 'server-only-secret' },
+    secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret' },
+    lookupKeyRef: async () => ({
+      id: authorization.resolverDecision.keyRefId,
+      org_id: authorization.organizationId,
+      provider: 'openai',
+      resolver_type: 'server_reference',
+      secret_ref: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_PRIMARY',
+      status: 'active',
+    }),
     fetchImpl,
     now: (() => { let value = 10; return () => value += 5; })(),
   });

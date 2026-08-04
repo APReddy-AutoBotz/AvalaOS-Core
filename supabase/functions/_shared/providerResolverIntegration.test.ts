@@ -15,6 +15,9 @@ import { resolveProviderSecretForDecision } from './providerSecretAdapter';
 console.log('Starting M3.2n resolver Edge Function integration regression suite...');
 
 const orgId = '11111111-1111-4111-8111-111111111111';
+const tenantSecretSegment = orgId.replaceAll('-', '').toUpperCase();
+const groqSecretRef = `AVALA_PROVIDER_SECRET_GROQ_${tenantSecretSegment}_PRIMARY`;
+const geminiSecretRef = `AVALA_PROVIDER_SECRET_GEMINI_${tenantSecretSegment}_PRIMARY`;
 const actorId = '00000000-0000-4000-8000-000000000008';
 const configId = '33333333-3333-4333-8333-333333333333';
 const keyRefId = '44444444-4444-4444-8444-444444444444';
@@ -314,7 +317,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'manual_placeholder',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
+      secret_ref: groqSecretRef,
       status: 'active',
     }),
   });
@@ -327,7 +330,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'external_secret_reference',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
+      secret_ref: groqSecretRef,
       status: 'active',
     }),
   });
@@ -371,7 +374,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'server_reference',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY',
+      secret_ref: geminiSecretRef,
       status: 'active',
     }),
     readEnv: () => {
@@ -390,7 +393,7 @@ const main = async () => {
       org_id: orgId,
       provider: 'gemini',
       resolver_type: 'server_reference',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
+      secret_ref: groqSecretRef,
       status: 'active',
     }),
     readEnv: () => {
@@ -408,11 +411,11 @@ const main = async () => {
       org_id: orgId,
       provider: 'groq',
       resolver_type: 'server_reference',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY',
+      secret_ref: groqSecretRef,
       status: 'active',
     }),
     readEnv: (name) => {
-      assert.equal(name, 'AVALA_PROVIDER_SECRET_GROQ_PRIMARY');
+      assert.equal(name, groqSecretRef);
       return 'mock-provider-key';
     },
   });
@@ -425,11 +428,11 @@ const main = async () => {
       org_id: orgId,
       provider: 'gemini',
       resolver_type: 'server_reference',
-      secret_ref: 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY',
+      secret_ref: geminiSecretRef,
       status: 'active',
     }),
     readEnv: (name) => {
-      assert.equal(name, 'AVALA_PROVIDER_SECRET_GEMINI_PRIMARY');
+      assert.equal(name, geminiSecretRef);
       return 'mock-provider-key';
     },
   });

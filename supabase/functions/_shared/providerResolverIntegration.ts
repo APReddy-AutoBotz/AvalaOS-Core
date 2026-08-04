@@ -1,5 +1,5 @@
 import {
-  ProviderResolverDecision,
+  LegacyProviderResolverDecision,
   ProviderResolverDeps,
   ProviderResolverFailureClass,
   ProviderResolverOperation,
@@ -16,6 +16,7 @@ type SafeFailureClass =
   | 'audit_context_unsafe'
   | 'key_reference_ineligible'
   | 'secret_reference_unsafe'
+  | 'secret_backend_unavailable'
   | 'provider_call_blocked'
   | ProviderResolverFailureClass;
 
@@ -60,7 +61,7 @@ export type ProviderGovernedOperationInput<T> = {
 export type ProviderGovernedOperationDeps = {
   getMode?: () => string | undefined;
   resolverDeps?: ProviderResolverDeps;
-  resolveSecret?: (decision: ProviderResolverDecision) => Promise<ProviderSecretLookupResult>;
+  resolveSecret?: (decision: LegacyProviderResolverDecision) => Promise<ProviderSecretLookupResult>;
   persistAudit?: (event: ProviderResolverAuditEventShell) => Promise<{ status: 'persisted' | 'skipped'; reason?: string }>;
 };
 
@@ -103,7 +104,7 @@ const safeFailure = (
   },
 });
 
-const safeFailureFromDecision = (decision: ProviderResolverDecision): ProviderGovernedResult<never> => {
+const safeFailureFromDecision = (decision: LegacyProviderResolverDecision): ProviderGovernedResult<never> => {
   if (decision.status === 'allowed') {
     return safeFailure('provider_call_blocked', decision.correlationId);
   }
@@ -130,7 +131,7 @@ export const runProviderGovernedOperation = async <T>(
   const requestedProvider = input.requestedProvider?.trim() || 'groq';
   const correlationId = resolveSafeCorrelationId(input.correlationId);
 
-  let decision: ProviderResolverDecision;
+  let decision: LegacyProviderResolverDecision;
   try {
     decision = await resolveProviderForOperation({
       mode,
@@ -178,6 +179,9 @@ export const runProviderGovernedOperation = async <T>(
 
   if (secret.status === 'blocked') {
     return safeFailure(secret.failureClass, secret.correlationId);
+  }
+  if (secret.provider !== decision.provider) {
+    return safeFailure('key_reference_ineligible', decision.correlationId);
   }
 
   const value = await input.runAllowed({
