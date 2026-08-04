@@ -46,6 +46,7 @@ export const VIEW_MODULE_MAP: Partial<Record<View, ProductModuleKey>> = {
     [View.TEMPLATE_LIBRARY]: 'assess',
     [View.PROCESS_DETAIL]: 'assess',
     [View.GUIDED_ASSESSMENT]: 'assess',
+    [View.ENTERPRISE_INTELLIGENCE]: 'assess',
 
     [View.DOCS_FORGE]: 'docs',
     [View.DOCS]: 'docs',

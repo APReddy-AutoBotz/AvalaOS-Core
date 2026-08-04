@@ -25,6 +25,21 @@ This is the active source for enterprise security, reliability, quality, migrati
 
 Evidence must never include secrets, tokens, raw logs, signed URLs, customer data, storage object identifiers, or production infrastructure identifiers.
 
+## Enterprise Intelligence Draft PR risk boundary
+
+This section records the active source-level boundary for the Draft PR on branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`, based on required source baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5`. It is an executed source evidence record, not deployment or readiness proof.
+
+| Risk | Current classification | Executed evidence | Planned verification / closure |
+| --- | --- | --- | --- |
+| Hosted schema, Edge deployment, Storage configuration, and tenant isolation | Deployment status unknown | No live infrastructure or hosted environment was accessed. | Approved fresh/upgrade PostgreSQL, RLS/two-tenant, Storage, and Edge checks. |
+| Enterprise Intelligence migration and service-only RPCs | Planned verification | Static migration contract passed; live PostgreSQL execution was not run. | Fresh and supported-upgrade execution, rollback/read-only checks, and adversarial transaction tests. |
+| Provider secret stores, endpoint allowlists, validation freshness, and budgets | Planned verification | Source tests cover opaque tenant-bound references, unsafe endpoint rejection, header-only key use, and route guards. | Approved environment/Vault integration, provider validation, allowlist configuration, and budget exhaustion tests without recording secrets. |
+| Evidence provenance and ingestion limits | Executed source evidence with runtime boundary unproven | Bounded extraction, source/extracted hashes, and anchored excerpt contracts passed. | Browser/API integration, larger-input rejection, private bucket/RLS, and supported-format regression tests. |
+| Delivery/Monitor and Assemble safety | Executed source evidence with hosted behavior unproven | Exact approved/stale lineage and draft-only blueprint contracts passed. | Browser desktop/mobile/accessibility/performance and live projection checks under approved authority. |
+| Provider calls, telemetry, and operational outcomes | Not run | No real provider call, live telemetry, task execution, deployment, or infrastructure action occurred. | Separate approved runtime validation; no readiness claim may be inferred from source tests. |
+
+Rollback remains route disablement and command stop with read-only committed projections; schema correction is additive forward migration. No secrets, raw source, signed URLs, customer data, object identifiers, raw logs, or production identifiers belong in evidence.
+
 ## P0 Stop Gate
 
 ### P0-001 - Service-role Storage URL escape

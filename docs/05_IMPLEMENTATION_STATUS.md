@@ -1,5 +1,13 @@
 # AvalaOS Core Implementation Status
 
+## Enterprise Intelligence Draft PR (in progress)
+
+The isolated implementation worktree is based on exact required baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5` and uses branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`. The original dirty checkout and its two existing deck files are outside this worktree and were not modified.
+
+The source candidate implements multi-provider BYOK, bounded document/transcript ingestion into Assess, server-derived Modernization disposition, exact approved Studio handoff to Delivery and Monitor, and draft-only Assemble Phase 1 blueprints. Assess scoring law is unchanged; runtime agents, browser AI, live telemetry, deployment, and live infrastructure access are not included.
+
+Executed evidence: feature-owned source-boundary scan, static migration contract, aggregate Enterprise Intelligence domain/AI/ingestion/command suites, dependency installation, TypeScript, Edge typecheck, build, AI-boundary scan, secret hygiene, unchanged scoring regression, and diff hygiene passed. The bounded full repository chain passed its early regression, buyer-acceptance, provider-resolver, required-supplemental, and PR1D source/domain stages before timing out in the existing PR1D coverage stage after ten minutes; no product assertion failure was reported. Fresh/upgrade PostgreSQL, RLS adversarial, browser accessibility/performance, provider, secret-store, hosted, and live checks are not run. Deployment status unknown; no pilot, production, security-certification, compliance, or readiness claim is made.
+
 ## Studio PR B accepted implementation boundary
 
 Accepted through PR #217 and corrective PR #218 on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`: deterministic Markdown/PDF/DOCX rendition authority, private create-only storage, brokered downloads, retention-policy snapshots, legal-hold events, governed deletion with independent approval, strict projection/client/UI states, reconciliation, and feature-owned tests/CI. The five PR #217 post-merge findings are closed and both PRs have zero unresolved review threads. No hosted/live, deployment, readiness, security-certification, or compliance proof is claimed.

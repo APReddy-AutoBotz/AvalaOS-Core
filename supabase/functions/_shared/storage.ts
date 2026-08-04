@@ -2,6 +2,7 @@ declare const Deno: { env: { get: (key: string) => string | undefined } };
 import { supabaseEnv } from './supabase.ts';
 import {
   assertTenantStoragePath,
+  assertWorkspaceStoragePath,
   buildStorageObjectUrl,
   buildStorageRemovalUrl,
   selectSourceUploadsBucket,
@@ -14,16 +15,26 @@ export const resolveSourceUploadsBucket = () => selectSourceUploadsBucket(
   Deno.env.get('SOURCE_UPLOADS_BUCKET_ALLOWLIST'),
 );
 
+export const assertSourceUploadsBucket = (bucket: string) => {
+  if (bucket !== resolveSourceUploadsBucket()) throw new Error('Source uploads bucket is not server-authorized.');
+  return bucket;
+};
+
 export const prepareTextArtifact = (input: {
   orgId: string;
+  workspaceId?: string;
   bucket: string;
   artifactType: string;
   extension: string;
+  artifactId?: string;
 }) => {
-  const artifactId = crypto.randomUUID();
+  const artifactId = input.artifactId || crypto.randomUUID();
   const safeType = input.artifactType.replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
-  const path = `${input.orgId}/${safeType}/${artifactId}.${input.extension}`;
-  assertTenantStoragePath(input.orgId, path);
+  const path = input.workspaceId
+    ? `${input.orgId}/${input.workspaceId}/${safeType}/${artifactId}.${input.extension}`
+    : `${input.orgId}/${safeType}/${artifactId}.${input.extension}`;
+  if (input.workspaceId) assertWorkspaceStoragePath(input.orgId, input.workspaceId, path);
+  else assertTenantStoragePath(input.orgId, path);
   return { artifactId, bucket: input.bucket, path };
 };
 
@@ -50,12 +61,40 @@ export const uploadTextArtifact = async (input: {
   return input.artifact;
 };
 
+export const uploadBinaryArtifact = async (input: {
+  artifact: { artifactId: string; bucket: string; path: string };
+  orgId: string;
+  workspaceId?: string;
+  contentType: string;
+  content: Uint8Array;
+}) => {
+  const { url, serviceRoleKey } = supabaseEnv();
+  if (input.artifact.bucket === resolveSourceUploadsBucket()) assertSourceUploadsBucket(input.artifact.bucket);
+  if (input.workspaceId) assertWorkspaceStoragePath(input.orgId, input.workspaceId, input.artifact.path);
+  else assertTenantStoragePath(input.orgId, input.artifact.path);
+  const response = await fetch(buildStorageObjectUrl(url, input.artifact.bucket, input.artifact.path), {
+    method: 'POST',
+    redirect: 'error',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': input.contentType,
+      'x-upsert': 'false',
+    },
+    body: input.content,
+  });
+  if (!response.ok) throw new Error('Storage upload failed.');
+  return input.artifact;
+};
+
 export const removeTextArtifact = async (
   artifact: { artifactId: string; bucket: string; path: string },
   orgId: string,
+  workspaceId?: string,
 ) => {
   const { url, serviceRoleKey } = supabaseEnv();
-  assertTenantStoragePath(orgId, artifact.path);
+  if (workspaceId) assertWorkspaceStoragePath(orgId, workspaceId, artifact.path);
+  else assertTenantStoragePath(orgId, artifact.path);
   const response = await fetch(buildStorageRemovalUrl(url, artifact.bucket), {
     method: 'DELETE',
     redirect: 'error',
@@ -89,11 +128,14 @@ export const removeTextArtifact = async (
 
 export const downloadStoredFile = async (input: {
   orgId: string;
+  workspaceId?: string;
   bucket: string;
   storagePath: string;
 }) => {
   const { url, serviceRoleKey } = supabaseEnv();
-  assertTenantStoragePath(input.orgId, input.storagePath);
+  if (input.bucket === resolveSourceUploadsBucket()) assertSourceUploadsBucket(input.bucket);
+  if (input.workspaceId) assertWorkspaceStoragePath(input.orgId, input.workspaceId, input.storagePath);
+  else assertTenantStoragePath(input.orgId, input.storagePath);
   const response = await fetch(buildStorageObjectUrl(url, input.bucket, input.storagePath), {
     method: 'GET',
     redirect: 'error',

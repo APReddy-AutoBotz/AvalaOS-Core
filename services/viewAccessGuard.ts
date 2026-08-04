@@ -130,6 +130,14 @@ export const VIEW_ACCESS_METADATA: Record<View, ViewAccessMetadata> = {
     status: 'active',
     fallbackView: View.PROCESS_CATALOG,
   },
+  [View.ENTERPRISE_INTELLIGENCE]: {
+    view: View.ENTERPRISE_INTELLIGENCE,
+    module: 'assess',
+    allowedScopes: ALL_ASSESS_SCOPES,
+    requiredPermissions: ['assessment.review', 'evidence.write', 'byok.manage', 'docs.approve', 'project.manage'],
+    status: 'active',
+    fallbackView: View.PROCESS_CATALOG,
+  },
   [View.DOCS_FORGE]: {
     view: View.DOCS_FORGE,
     module: 'docs',
@@ -291,6 +299,7 @@ const VIEW_ACCESS_ORDER = [
   View.AUTOMATIONS,
   View.PROCESS_DETAIL,
   View.GUIDED_ASSESSMENT,
+  View.ENTERPRISE_INTELLIGENCE,
   View.WORKSPACE,
 ];
 

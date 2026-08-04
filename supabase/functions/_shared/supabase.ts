@@ -70,6 +70,28 @@ export const postgrest = async <T>(
   return response.json() as Promise<T>;
 };
 
+/**
+ * Invoke a server-only Postgres function through the service-role transport.
+ * The function itself remains responsible for rechecking actor, tenant,
+ * workspace, capability, and authorization-version authority.
+ */
+export const rpc = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
+  const { url, serviceRoleKey } = supabaseEnv();
+  const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    redirect: 'error',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(args),
+  });
+  if (!response.ok) throw new Error('Supabase RPC failed.');
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+};
+
 type Membership = {
   org_id: string;
   status: string;
@@ -111,4 +133,9 @@ export const updateRows = async <T>(
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
+};
+
+export const deleteRows = async <T>(table: string, filters: Record<string, string>): Promise<T[]> => {
+  const query = new URLSearchParams(filters).toString();
+  return postgrest<T[]>(`${table}?${query}`, { method: 'DELETE' });
 };

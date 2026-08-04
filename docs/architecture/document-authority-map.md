@@ -33,6 +33,7 @@ Read only this sequence unless the active task requires more:
 | Durable agent and PR rules | `AGENTS.md` |
 | Enterprise implementation sequence and PR boundaries | `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md` |
 | Current and target trust/data/runtime architecture | `docs/architecture/current-to-target-enterprise-architecture.md` |
+| Enterprise Intelligence BYOK, evidence ingestion, Studio handoff, Delivery/Monitor lineage, Modernization, and Assemble Phase 1 authority | `docs/architecture/enterprise-intelligence-authority.md` |
 | Active security, reliability, quality, and readiness risks | `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` |
 | Cross-layer execution-plan requirements | `PLANS.md` |
 | Product strategy and boundaries | `docs/01_PRODUCT_STRATEGY.md`, then `docs/02_PRODUCT_REQUIREMENTS.md` |
@@ -48,6 +49,8 @@ Read only this sequence unless the active task requires more:
 | Studio PR B private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
 | PR #217 post-merge projection, command-translation, crash-recovery, due-work, and hold/deletion serialization correction | `docs/architecture/pr217-post-merge-runtime-contract-forward-fix.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
+
+The Enterprise Intelligence implementation plan and acceptance gates are maintained in `docs/planning/enterprise-intelligence-byok-ingestion-delivery-assemble-plan.md`. It is an active execution plan, not a substitute for the authority documents above.
 
 ## PR Governance Boundary
 

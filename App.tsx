@@ -70,6 +70,7 @@ const ProcessCatalogView = React.lazy(() => import('./components/assess/ProcessC
 const TemplateLibraryView = React.lazy(() => import('./components/assess/TemplateLibraryView'));
 const ProcessDetailStubView = React.lazy(() => import('./components/assess/ProcessDetailStubView'));
 const GuidedAssessmentView = React.lazy(() => import('./components/assess/GuidedAssessmentView'));
+const EnterpriseIntelligenceView = React.lazy(() => import('./components/enterprise/EnterpriseIntelligenceView'));
 
 const ViewLoadingFallback = () => (
   <div className="mx-auto max-w-3xl p-8">
@@ -191,10 +192,6 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
-  useEffect(() => {
-    localStorage.removeItem(StorageKeys.API_KEY);
-  }, []);
-
   const guardLoading = authLoading || orgLoading;
   const governPresentationAccess = useMemo(() => resolveGovernPresentationAccess({
     user: currentUser,
@@ -1062,6 +1059,14 @@ function App() {
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
       return <TemplateLibraryView />;
+    }
+
+    if (currentView === View.ENTERPRISE_INTELLIGENCE) {
+      return <EnterpriseIntelligenceView
+        organization={currentOrganization}
+        workspace={currentWorkspace}
+        currentUser={currentUser}
+      />;
     }
 
     if (currentScope.type === ScopeType.ORGANIZATION) {

@@ -30,27 +30,14 @@
       "pathPrefix": "tests/browser/pr1g.spec.ts",
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App PR 1G browser fixture setup confined to browser tests; do not treat it as runtime authority."
+    },
+    {
+      "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
+      "reason": "test/control documentation",
+      "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
     }
   ],
   "entries": [
-    {
-      "pattern": "StorageKeys.API_KEY",
-      "path": "App.tsx",
-      "lines": [
-        195
-      ],
-      "reason": "deprecated cleanup-only path",
-      "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
-    },
-    {
-      "pattern": "localStorage",
-      "path": "App.tsx",
-      "lines": [
-        195
-      ],
-      "reason": "deprecated cleanup-only path",
-      "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
-    },
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1c.spec.ts",
@@ -76,19 +63,8 @@
       "path": "services/aiOrchestrator.ts",
       "lines": [
         1,
-        85,
-        99,
-        133
-      ],
-      "reason": "explicit local-demo/internal-dev fallback",
-      "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
-    },
-    {
-      "pattern": "getAiProviderApiKey",
-      "path": "services/aiOrchestrator.ts",
-      "lines": [
-        1,
-        94
+        42,
+        71
       ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
