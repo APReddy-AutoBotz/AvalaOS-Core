@@ -80,5 +80,12 @@ const providerEndpoint = read('supabase/functions/_shared/providerLifecycleEndpo
 for (const required of ['requestId', 'idempotencyKey', 'providerLifecycleRequestHash', 'reloadEnterpriseReceipt']) {
   if (!providerEndpoint.includes(required)) throw new Error(`Provider lifecycle receipt boundary is missing ${required}.`);
 }
+const browserClient = read('services/enterpriseIntelligenceClient.ts');
+for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {
+  if (!browserClient.includes(required)) throw new Error(`Browser retry contract is missing ${required}.`);
+}
+if (/if \(invocation\.error\) invocation = await supabase\.functions\.invoke/u.test(browserClient)) {
+  throw new Error('Browser retry must not replay application-level HTTP failures.');
+}
 
 console.log('Enterprise Intelligence source-boundary scan passed.');

@@ -14,6 +14,11 @@ const commandEnabled = () => getRuntimeDataAccess() === 'server' && isSupabaseCo
 
 const createId = () => globalThis.crypto?.randomUUID?.() || `ei-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const isRetryableTransportError = (error: unknown) => {
+  const name = typeof error === 'object' && error && 'name' in error ? String(error.name) : '';
+  return name === 'FunctionsFetchError' || name === 'FunctionsRelayError';
+};
+
 const errorMessages: Record<string, string> = {
   AUTHENTICATION_REQUIRED: 'Your session expired. Sign in again before continuing.',
   AUTHORIZATION_STALE: 'Your authorization changed. Reload the workspace before continuing.',
@@ -61,7 +66,9 @@ const invokeCommand = async <T>(input: {
     payload: input.payload,
   };
   let invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
-  if (invocation.error) invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+  if (isRetryableTransportError(invocation.error)) {
+    invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+  }
   const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string; message?: string }; [key: string]: unknown } | null;
   if (error) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
@@ -88,7 +95,9 @@ const invokeProviderLifecycle = async <T>(input: {
     }),
   };
   let invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
-  if (invocation.error) invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
+  if (isRetryableTransportError(invocation.error)) {
+    invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
+  }
   const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string }; [key: string]: unknown } | null;
   if (error || !response?.ok) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
