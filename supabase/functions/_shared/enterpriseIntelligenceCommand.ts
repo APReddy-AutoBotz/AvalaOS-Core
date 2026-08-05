@@ -799,52 +799,70 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
     || candidates.some(candidate => !candidateIds.includes(candidate.id) || !/^[0-9a-f]{64}$/.test(candidate.provenance_hash))) {
     throw new EnterpriseCommandError('COMMAND_BLOCKED');
   }
+  const candidateById = new Map(candidates.map(candidate => [candidate.id, candidate]));
+  const promotionCandidates = candidateIds.map(candidateId => {
+    const candidate = candidateById.get(candidateId);
+    if (!candidate || !Number.isSafeInteger(candidate.version) || candidate.version < 1) {
+      throw new EnterpriseCommandError('COMMAND_BLOCKED');
+    }
+    return {
+      candidateId: candidate.id,
+      expectedVersion: candidate.version,
+      provenanceHash: candidate.provenance_hash,
+    };
+  });
   const plannedStartVersion = Number(receipt.execution_plan?.promotionStartVersion);
-  const expectedCandidateIds = [...candidates.map(candidate => candidate.id)].sort();
+  const expectedCandidateIds = [...candidateIds].sort();
   if (Array.isArray(receipt.execution_plan?.promotionCandidateIds)
     && JSON.stringify(receipt.execution_plan?.promotionCandidateIds) !== JSON.stringify(expectedCandidateIds)) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  if (Array.isArray(receipt.execution_plan?.promotionCandidates)
+    && JSON.stringify(receipt.execution_plan.promotionCandidates) !== JSON.stringify(promotionCandidates)) {
     throw new EnterpriseCommandError('RESOURCE_STALE');
   }
   const promotionStartVersion = Number.isSafeInteger(plannedStartVersion) && plannedStartVersion > 0
     ? plannedStartVersion
     : cases[0].version;
-  await ensureExecutionPlan(receipt, authority, { promotionStartVersion, promotionCandidateIds: expectedCandidateIds });
-  let expectedVersion = promotionStartVersion;
-  const promotions: Array<{ candidateId: string; caseVersion: number }> = [];
-  for (const candidate of candidates) {
-    const promotionResult = { candidateId: candidate.id, assessDraftId: cases[0].id, expectedVersion };
-    const response = await rpc<{ outcome?: string; resource?: { candidateId?: string; caseVersion?: number } }>(
-      'enterprise_promote_evidence_to_assess_v2',
-      {
-        p_candidate: candidate.id,
-        p_case: cases[0].id,
-        p_expected_version: expectedVersion,
-        p_actor: authority.actorId,
-        p_org: authority.organizationId,
-        p_workspace: authority.workspaceId,
-        p_request: candidate.id,
-        p_idempotency_key: `assess-promotion:${cases[0].id}:${candidate.id}:${expectedVersion}`,
-        p_authorization_version: authority.authorizationVersion,
-        p_outer_receipt: receipt.id,
-        p_execution_token: receipt.execution_token,
-        p_execution_fence: receipt.execution_fence,
-        p_result: promotionResult,
-      },
-    );
-    const nextVersion = response?.resource?.caseVersion;
-    if (!Number.isSafeInteger(nextVersion) || Number(nextVersion) !== expectedVersion + 1) {
-      throw new EnterpriseCommandError('RESOURCE_STALE');
-    }
-    expectedVersion = Number(nextVersion);
-    promotions.push({ candidateId: candidate.id, caseVersion: expectedVersion });
+  await ensureExecutionPlan(receipt, authority, {
+    promotionSourceId: sourceId,
+    promotionStartVersion,
+    promotionCandidateIds: expectedCandidateIds,
+    promotionCandidates,
+  });
+  const response = await rpc<{
+    sourceId?: string;
+    assessDraftId?: string;
+    startVersion?: number;
+    finalVersion?: number;
+    candidateIds?: string[];
+    promotedCandidateCount?: number;
+    promotionIds?: string[];
+    assessDraftVersionLabel?: string;
+    status?: string;
+  }>('enterprise_promote_evidence_batch_to_assess_v2', {
+    p_source: sourceId,
+    p_candidates: promotionCandidates,
+    p_case: cases[0].id,
+    p_expected_version: promotionStartVersion,
+    p_actor: authority.actorId,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    p_authorization_version: authority.authorizationVersion,
+    p_receipt: receipt.id,
+    p_execution_token: receipt.execution_token,
+    p_execution_fence: receipt.execution_fence,
+  });
+  const expectedFinalVersion = promotionStartVersion + promotionCandidates.length;
+  if (response?.sourceId !== sourceId || response?.assessDraftId !== assessDraftId
+    || response?.startVersion !== promotionStartVersion || response?.finalVersion !== expectedFinalVersion
+    || response?.promotedCandidateCount !== promotionCandidates.length || response?.status !== 'promoted'
+    || JSON.stringify(response?.candidateIds) !== JSON.stringify(candidateIds)
+    || !Array.isArray(response?.promotionIds) || response.promotionIds.length !== promotionCandidates.length
+    || response.promotionIds.some(id => typeof id !== 'string' || !uuidPattern.test(id))) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
   }
-  return {
-    sourceId,
-    assessDraftId,
-    promotedCandidateCount: promotions.length,
-    assessDraftVersionLabel: `Assess draft version ${expectedVersion}`,
-    status: 'promoted',
-  };
+  return response;
 };
 
 const assertApprovedApplicationAssessment = async (authority: Authority, payload: JsonObject) => {

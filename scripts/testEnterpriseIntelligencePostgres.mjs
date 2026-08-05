@@ -763,6 +763,212 @@ try {
     assert.equal(claimed, 0);
     console.log(`RECEIPT FINALIZATION COUNTS ${JSON.stringify({failedWhileDisabled:1,claimedFinal:claimed})}`);
   });
+  await scenario('candidate batch promotion is atomic, replayable, and draft-serialized', async () => {
+    const source = fixture.sources[0];
+    const otherSource = fixture.sources[1];
+    const authorizationVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, fixture.requester],
+    )).rows[0].version);
+    let ordinal = 500;
+    const nextId = () => fixture.uuid(ordinal++);
+    const createdReceiptIds = [];
+    const createCase = async (currentVersion = 1) => {
+      const processId = nextId(); const caseId = nextId(); const firstVersionId = nextId();
+      await authority.query(
+        "INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,'Atomic promotion process','Draft')",
+        [processId, fixture.org, fixture.workspace],
+      );
+      await authority.query(
+        "INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id,status,version) VALUES($1,$2,$3,$4,$5,'draft',1)",
+        [caseId, fixture.org, fixture.workspace, processId, fixture.requester],
+      );
+      await authority.query(
+        "INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,source_kind,created_by) VALUES($1,$2,$3,$4,1,'Atomic promotion fixture','create',$5)",
+        [firstVersionId, caseId, fixture.org, fixture.workspace, fixture.requester],
+      );
+      await authority.query('UPDATE public.assess_v2_cases SET head_version_id=$1 WHERE id=$2', [firstVersionId, caseId]);
+      if (currentVersion === 2) {
+        const secondVersionId = nextId();
+        await authority.query(
+          "INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,source_kind,created_by) VALUES($1,$2,$3,$4,2,'Changed atomic promotion fixture','draft_upsert',$5)",
+          [secondVersionId, caseId, fixture.org, fixture.workspace, fixture.requester],
+        );
+        await authority.query('UPDATE public.assess_v2_cases SET version=2,head_version_id=$1 WHERE id=$2', [secondVersionId, caseId]);
+      }
+      return caseId;
+    };
+    const createCandidate = async ({selectedSource = source, status = 'accepted', version = 1} = {}) => {
+      const id = nextId();
+      const safeExcerpt = `Atomic evidence excerpt ${id}`;
+      await authority.query(
+        `INSERT INTO public.enterprise_evidence_candidates(
+           id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
+           excerpt_hash,provenance_hash,version,source_locator,confidence,suggestion_status,
+           created_by,reviewed_by,reviewed_at
+         ) VALUES($1,$2,$3,$4,$5,'process_objective',$6,$7,$8,$8,$9,'line:1-1',0.95,$10,$11,$12,statement_timestamp())`,
+        [id, selectedSource.sourceId, selectedSource.sourceVersionId, fixture.org, fixture.workspace,
+          `Atomic candidate ${id}`, safeExcerpt, fixture.hash('0'), version, status, fixture.requester, fixture.reviewer],
+      );
+      return id;
+    };
+    const candidatePlan = async candidateIds => {
+      const rows = (await authority.query(
+        'SELECT id,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=ANY($1::uuid[])',
+        [candidateIds],
+      )).rows;
+      const byId = new Map(rows.map(row => [row.id, row]));
+      return candidateIds.map(candidateId => ({
+        candidateId,
+        expectedVersion: Number(byId.get(candidateId).version),
+        provenanceHash: byId.get(candidateId).provenance_hash,
+      }));
+    };
+    const createReceipt = async (caseId, startVersion, candidates, key, client = authority) => {
+      const requestId = nextId(); const executionToken = nextId(); const requestHash = fixture.hash('8');
+      const receipt = (await client.query(
+        'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8,$9)).*',
+        [fixture.requester, fixture.org, fixture.workspace, 'evidence.assess.promote', key,
+          requestId, requestHash, null, executionToken],
+      )).rows[0];
+      const plan = {
+        promotionSourceId: source.sourceId,
+        promotionStartVersion: startVersion,
+        promotionCandidateIds: [...candidates.map(item => item.candidateId)].sort(),
+        promotionCandidates: candidates,
+      };
+      const planned = (await client.query(
+        'SELECT (public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)).*',
+        [receipt.id, fixture.org, fixture.workspace, receipt.execution_token,
+          Number(receipt.execution_fence), JSON.stringify(plan)],
+      )).rows[0];
+      createdReceiptIds.push(planned.id);
+      return {...planned, key, requestHash, caseId, startVersion, candidates};
+    };
+    const promote = (receipt, client = authority, selectedSource = source.sourceId) => client.query(
+      'SELECT public.enterprise_promote_evidence_batch_to_assess_v2($1,$2::jsonb,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
+      [selectedSource, JSON.stringify(receipt.candidates), receipt.caseId, receipt.startVersion,
+        fixture.requester, fixture.org, fixture.workspace, authorizationVersion,
+        receipt.id, receipt.execution_token, Number(receipt.execution_fence)],
+    );
+    const failReceipt = receipt => authority.query(
+      'SELECT public.enterprise_ai_fail_command($1,$2,$3,$4,$5,$6::jsonb,false)',
+      [receipt.id, fixture.org, fixture.workspace, receipt.execution_token,
+        Number(receipt.execution_fence), JSON.stringify({ok:false,error:{code:'COMMAND_BLOCKED'}})],
+    );
+    const caseCounts = async (caseId, receiptIds) => (await authority.query(
+      `SELECT
+         (SELECT count(*)::int FROM public.assess_v2_case_versions WHERE case_id=$1) case_versions,
+         (SELECT count(*)::int FROM public.enterprise_evidence_assess_promotions WHERE assess_case_id=$1) promotions,
+         (SELECT count(*)::int FROM public.privileged_audit_events WHERE resource_id=$1 AND action='evidence.candidate.promote') audits,
+         (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($2::uuid[]) AND terminal_status='committed') effects`,
+      [caseId, receiptIds],
+    )).rows[0];
+
+    const successCase = await createCase();
+    const successIds = [await createCandidate(), await createCandidate(), await createCandidate()];
+    const orderedSuccessIds = [successIds[2], successIds[0], successIds[1]];
+    const successReceipt = await createReceipt(
+      successCase, 1, await candidatePlan(orderedSuccessIds), 'atomic-promotion-success-001',
+    );
+    const success = (await promote(successReceipt)).rows[0].result;
+    assert.deepEqual(success.candidateIds, orderedSuccessIds);
+    assert.equal(Number(success.startVersion), 1);
+    assert.equal(Number(success.finalVersion), 4);
+    assert.equal(Number(success.promotedCandidateCount), 3);
+    assert.equal(success.promotionIds.length, 3);
+    assert.deepEqual(await caseCounts(successCase, [successReceipt.id]), {
+      case_versions: 4, promotions: 3, audits: 3, effects: 1,
+    });
+
+    // Simulate response loss: domain/effect committed while the outer receipt is still claimed.
+    assert.equal((await authority.query('SELECT status FROM public.enterprise_ai_command_receipts WHERE id=$1', [successReceipt.id])).rows[0].status, 'claimed');
+    const recovered = (await authority.query(
+      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+      [successReceipt.id, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.equal(recovered.status, 'committed');
+    assert.deepEqual(recovered.response, success);
+    const replay = (await authority.query(
+      'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8,$9)).*',
+      [fixture.requester, fixture.org, fixture.workspace, 'evidence.assess.promote', successReceipt.key,
+        nextId(), successReceipt.requestHash, null, nextId()],
+    )).rows[0];
+    assert.equal(replay.status, 'committed');
+    assert.deepEqual(await caseCounts(successCase, [successReceipt.id]), {
+      case_versions: 4, promotions: 3, audits: 3, effects: 1,
+    });
+
+    const assertAtomicRejection = async ({caseId, ids, plan, key, expected, selectedSource = source.sourceId, startVersion = 1}) => {
+      const receipt = await createReceipt(caseId, startVersion, plan || await candidatePlan(ids), key);
+      await assert.rejects(promote(receipt, authority, selectedSource), expected);
+      assert.deepEqual(await caseCounts(caseId, [receipt.id]), {
+        case_versions: startVersion === 1 ? 1 : 2, promotions: 0, audits: 0, effects: 0,
+      });
+      await failReceipt(receipt);
+      return receipt;
+    };
+
+    const staleCase = await createCase();
+    const staleIds = [await createCandidate(), await createCandidate(), await createCandidate()];
+    const stalePlan = await candidatePlan(staleIds);
+    stalePlan[2] = {...stalePlan[2], provenanceHash: fixture.hash('f')};
+    await assertAtomicRejection({caseId:staleCase,ids:staleIds,plan:stalePlan,key:'atomic-promotion-stale-final',expected:/ENTERPRISE_EVIDENCE_CANDIDATE_STALE/});
+
+    const editedCase = await createCase();
+    const editedIds = [await createCandidate(), await createCandidate(), await createCandidate({status:'edited',version:2})];
+    await assertAtomicRejection({caseId:editedCase,ids:editedIds,key:'atomic-promotion-edit-history',expected:/ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED/});
+
+    const crossSourceCase = await createCase();
+    const crossSourceIds = [await createCandidate(), await createCandidate(), await createCandidate({selectedSource:otherSource})];
+    await assertAtomicRejection({caseId:crossSourceCase,ids:crossSourceIds,key:'atomic-promotion-cross-source',expected:/ENTERPRISE_EVIDENCE_CANDIDATE_STALE/});
+
+    const promotedAgainCase = await createCase();
+    await assertAtomicRejection({caseId:promotedAgainCase,ids:[successIds[0]],key:'atomic-promotion-already-promoted',expected:/ENTERPRISE_EVIDENCE_ALREADY_PROMOTED/});
+
+    const changedCase = await createCase(2);
+    const changedIds = [await createCandidate()];
+    const changedReceipt = await createReceipt(changedCase, 1, await candidatePlan(changedIds), 'atomic-promotion-draft-changed');
+    await assert.rejects(promote(changedReceipt), /ENTERPRISE_EVIDENCE_ASSESS_VERSION_CONFLICT/);
+    assert.deepEqual(await caseCounts(changedCase, [changedReceipt.id]), {case_versions:2,promotions:0,audits:0,effects:0});
+    await failReceipt(changedReceipt);
+
+    const concurrentCase = await createCase();
+    const concurrentIds = [await createCandidate(), await createCandidate(), await createCandidate()];
+    const concurrentPlan = await candidatePlan(concurrentIds);
+    const contender = await connect(urlFor(names.authority));
+    const left = await createReceipt(concurrentCase, 1, concurrentPlan, 'atomic-promotion-concurrent-left');
+    const right = await createReceipt(concurrentCase, 1, concurrentPlan, 'atomic-promotion-concurrent-right', contender);
+    const concurrent = await Promise.allSettled([promote(left), promote(right, contender)]);
+    assert.equal(concurrent.filter(item => item.status === 'fulfilled').length, 1);
+    assert.equal(concurrent.filter(item => item.status === 'rejected').length, 1);
+    assert.match(String(concurrent.find(item => item.status === 'rejected').reason), /ENTERPRISE_EVIDENCE_ASSESS_VERSION_CONFLICT/);
+    const effectRows = (await authority.query(
+      'SELECT receipt_id FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($1::uuid[])',
+      [[left.id, right.id]],
+    )).rows;
+    assert.equal(effectRows.length, 1);
+    const winner = effectRows[0].receipt_id === left.id ? left : right;
+    const loser = winner.id === left.id ? right : left;
+    await authority.query('SELECT public.enterprise_ai_reload_command($1,$2,$3)', [winner.id, fixture.org, fixture.workspace]);
+    await failReceipt(loser);
+    assert.deepEqual(await caseCounts(concurrentCase, [left.id, right.id]), {
+      case_versions: 4, promotions: 3, audits: 3, effects: 1,
+    });
+    assert.equal(Number((await authority.query('SELECT version FROM public.assess_v2_cases WHERE id=$1', [concurrentCase])).rows[0].version), 4);
+
+    const claimedFinal = Number((await authority.query(
+      "SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE id=ANY($1::uuid[]) AND status='claimed'",
+      [createdReceiptIds],
+    )).rows[0].n);
+    assert.equal(claimedFinal, 0);
+    console.log(`ATOMIC PROMOTION COUNTS ${JSON.stringify({
+      committedCandidates:3, successCaseVersion:4, failureVersionDelta:0,
+      failurePromotionDelta:0, failureAuditDelta:0, failureEffectDelta:0,
+      replayAdditionalWrites:0, concurrentWinners:1, concurrentLosers:1,
+      concurrentFinalVersion:4, claimedFinal,
+    })}`);
+  });
   await scenario('candidate lineage, stale edit rejection, and edited Assess draft promotion', async () => {
     const initial = (await authority.query('SELECT value,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
     const edited = (await authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.org, fixture.workspace, 'Govern the reviewed fixture process', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'Corrected against source'])).rows[0].result;

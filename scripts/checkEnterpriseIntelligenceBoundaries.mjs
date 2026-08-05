@@ -18,6 +18,7 @@ const requiredFiles = [
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
   'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql',
   'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql',
+  'supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -37,7 +38,7 @@ const hits = forbidden.filter(pattern => pattern.test(featureText));
 if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: ${hits.map(String).join(', ')}`);
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
-for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_ai_job_ledger', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_to_assess_v2']) {
+for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_ai_job_ledger', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
   if (!command.includes(required)) throw new Error(`Enterprise command boundary is missing ${required}.`);
 }
 if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(command)) {
@@ -107,6 +108,27 @@ for (const required of [
   'enterprise_record_source_extraction_success', 'ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED',
 ]) {
   if (!readyReviewCorrection.includes(required)) throw new Error(`Ready-review correction is missing ${required}.`);
+}
+const atomicPromotion = read('supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql');
+const promotionCommand = command.slice(
+  command.indexOf('const commandEvidenceAssessPromote'),
+  command.indexOf('const assertApprovedApplicationAssessment'),
+);
+if (/for\s*\([^)]*candidate[^)]*\)[\s\S]*?rpc\(['"]enterprise_promote_evidence_to_assess_v2/iu.test(promotionCommand)) {
+  throw new Error('Assess candidate promotion must not loop over the single-candidate RPC.');
+}
+if ((promotionCommand.match(/enterprise_promote_evidence_batch_to_assess_v2/gu) || []).length !== 1) {
+  throw new Error('One Assess promotion command must issue exactly one batch promotion RPC.');
+}
+const completeValidation = atomicPromotion.indexOf('-- All preconditions are now locked and valid.');
+const firstPromotionMutation = atomicPromotion.indexOf('INSERT INTO public.assess_v2_case_versions');
+if (!(completeValidation >= 0 && firstPromotionMutation > completeValidation)) {
+  throw new Error('Assess batch promotion must complete set validation before its first mutation.');
+}
+const batchEffect = atomicPromotion.indexOf('PERFORM public.enterprise_ai_record_effect');
+const batchReturn = atomicPromotion.indexOf('RETURN result;', batchEffect);
+if (!(batchEffect > firstPromotionMutation && batchReturn > batchEffect)) {
+  throw new Error('Assess batch promotion must journal its one receipt effect before success.');
 }
 const browserClient = read('services/enterpriseIntelligenceClient.ts');
 for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {

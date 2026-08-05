@@ -16,6 +16,10 @@ const readyReviewSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql'),
   'utf8',
 );
+const atomicPromotionSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -88,6 +92,16 @@ check(readyReviewSql.includes('enterprise_record_source_extraction_success'), 'S
 check(readyReviewSql.includes("p_failure_code, 'command'" ) || readyReviewSql.includes("'evidence.source.create', 'command'"), 'Deterministic parse failure requires a receipt-aware terminal effect.');
 check(readyReviewSql.includes("candidate.suggestion_status NOT IN ('accepted', 'edited')"), 'Reviewed edited candidates must be eligible for promotion.');
 check(readyReviewSql.includes('ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED'), 'Edited promotion requires append-only edit history.');
+check(atomicPromotionSql.includes('FUNCTION public.enterprise_promote_evidence_batch_to_assess_v2'), 'One service-only batch promotion RPC is required.');
+check(atomicPromotionSql.includes("'evidence.assess.promote', 'command'"), 'Batch promotion requires one command effect for response-loss recovery.');
+check(atomicPromotionSql.indexOf('-- All preconditions are now locked and valid.') < atomicPromotionSql.indexOf('INSERT INTO public.assess_v2_case_versions'), 'Every candidate must validate before the first promotion mutation.');
+const promotionCommand = commandSource.slice(
+  commandSource.indexOf('const commandEvidenceAssessPromote'),
+  commandSource.indexOf('const assertApprovedApplicationAssessment'),
+);
+check(!/for\s*\([^)]*candidate[^)]*\)[\s\S]*?rpc\(['"]enterprise_promote_evidence_to_assess_v2/iu.test(promotionCommand), 'The command handler must not loop over the single-candidate promotion RPC.');
+check((promotionCommand.match(/enterprise_promote_evidence_batch_to_assess_v2/gu) || []).length === 1, 'The command handler must make exactly one promotion RPC call.');
+check(atomicPromotionSql.indexOf('PERFORM public.enterprise_ai_record_effect') < atomicPromotionSql.indexOf('RETURN result;'), 'Batch success requires a durable receipt effect.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
