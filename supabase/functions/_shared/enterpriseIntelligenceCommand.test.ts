@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import {
   EnterpriseCommandError,
   enterpriseCommandErrorBody,
+  extractionRouteMatchesPlan,
   mapEnterpriseCommandRpcError,
+  mapExtractionPersistenceError,
   parseEnterpriseCommandEnvelope,
+  readEvidenceExtractionRoutePlan,
   resolveEnterpriseCommandResourceId,
 } from './enterpriseIntelligenceCommand';
 import { hashReceiptValue, mapEnterpriseReceiptRpcError } from './enterpriseReceipt';
@@ -86,6 +89,61 @@ test('structured RPC domain signals map without exposing database text', () => {
   assert.equal(publicBody.includes('arbitrary database text'), false);
   assert.equal(publicBody.includes('Supabase RPC failed'), false);
   assert.equal(publicBody, '{"ok":false,"error":{"code":"COMMAND_UNAVAILABLE","message":"The Enterprise Intelligence command could not be completed."}}');
+});
+
+test('recovery retains the immutable planned route and model', () => {
+  const plan = {
+    jobId: '77777777-7777-4777-8777-777777777777',
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    sourceId: '88888888-8888-4888-8888-888888888888',
+    sourceVersionId: '99999999-9999-4999-8999-999999999999',
+    capability: 'assess.evidence.extract',
+    routeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    providerConfigId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    provider: 'openai',
+    model: 'planned-model',
+    endpointIdentity: null,
+    deploymentIdentity: null,
+    promptKey: 'assess.evidence.extract',
+    promptVersion: 'enterprise-evidence-extract-1',
+    requestHash: 'c'.repeat(64),
+  };
+  const recovered = readEvidenceExtractionRoutePlan(plan, {
+    organizationId: plan.organizationId,
+    workspaceId: plan.workspaceId,
+    sourceId: plan.sourceId,
+    sourceVersionId: plan.sourceVersionId,
+    requestHash: plan.requestHash,
+  });
+  assert.deepEqual(recovered, plan);
+  assert.equal(extractionRouteMatchesPlan(recovered!, {
+    routeId: plan.routeId,
+    providerConfigId: plan.providerConfigId,
+    provider: 'openai',
+    model: 'planned-model',
+  }), true);
+  assert.equal(extractionRouteMatchesPlan(recovered!, {
+    routeId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    providerConfigId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    provider: 'openai',
+    model: 'new-default-model',
+  }), false);
+  assert.throws(() => readEvidenceExtractionRoutePlan({ ...plan, sourceId: base.workspaceId }, {
+    organizationId: plan.organizationId,
+    workspaceId: plan.workspaceId,
+    sourceId: plan.sourceId,
+    sourceVersionId: plan.sourceVersionId,
+    requestHash: plan.requestHash,
+  }), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE');
+});
+
+test('generic staging and commit transport uncertainty remains recoverable', () => {
+  assert.equal(mapExtractionPersistenceError(new TypeError('relay unavailable')).code, 'COMMAND_UNAVAILABLE');
+  assert.equal(mapExtractionPersistenceError(new SupabaseRpcError({
+    status: 409,
+    databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  })).code, 'COMMAND_IN_PROGRESS');
 });
 
 test('promotion receipt identity is the explicit Assess draft resource', () => {

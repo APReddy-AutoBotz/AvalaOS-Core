@@ -120,7 +120,7 @@ if (/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand)) {
 if (/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand)) {
   throw new Error('Evidence extraction terminal state must be receipt-atomic, not a direct table patch.');
 }
-if (!(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job')
+if (!(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job_v2')
   < extractionCommand.indexOf('runGovernedProviderRequest'))) {
   throw new Error('Evidence extraction must own the fenced job attempt before provider invocation.');
 }
@@ -135,6 +135,7 @@ if (/message\.includes\(['"]ENTERPRISE_/u.test(command)
 }
 const atomicPromotion = read('supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql');
 const extractionRecovery = read('supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql');
+const extractionRouteStaging = read('supabase/migrations/20260805170000_enterprise_extraction_route_and_staging.sql');
 for (const required of [
   'enterprise_claim_or_resume_evidence_extraction_job', 'enterprise_fail_evidence_extraction_job',
   'receipt_id', 'source_version_id', 'request_hash', 'execution_token', 'execution_fence',
@@ -155,6 +156,33 @@ if (extractionClaimSql.includes('gen_random_uuid()')) {
 }
 for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key', 'authorization']) {
   if (extractionRecovery.includes(forbidden)) throw new Error(`Extraction job/attempt ledger contains forbidden field ${forbidden}.`);
+}
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job_v2',
+  'enterprise_ai_extraction_staged_results',
+  'enterprise_stage_evidence_extraction_result',
+  'enterprise_commit_staged_evidence_extraction',
+  "receipt.execution_plan->>'routeId'",
+  "receipt.execution_plan->>'model'",
+]) {
+  if (!extractionRouteStaging.includes(required)) throw new Error(`Extraction route/staging contract is missing ${required}.`);
+}
+if (!(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('))) {
+  throw new Error('Recovered extraction must read its immutable route plan before route resolution.');
+}
+if (!extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }')) {
+  throw new Error('Recovered extraction must revalidate the exact planned route and model.');
+}
+if (!(extractionCommand.indexOf('enterprise_stage_evidence_extraction_result')
+  < extractionCommand.lastIndexOf('commitStagedEvidenceExtraction'))) {
+  throw new Error('A sanitized staged result must exist before canonical extraction commit.');
+}
+const uncertainCommit = command.slice(
+  command.indexOf('const commitStagedEvidenceExtraction'),
+  command.indexOf('const commandEvidenceExtract'),
+);
+if (uncertainCommit.includes('enterprise_fail_evidence_extraction_job')) {
+  throw new Error('Generic staging/commit uncertainty must not terminalize the extraction job.');
 }
 const promotionCommand = command.slice(
   command.indexOf('const commandEvidenceAssessPromote'),

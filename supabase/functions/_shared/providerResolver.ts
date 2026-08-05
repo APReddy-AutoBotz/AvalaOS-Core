@@ -187,6 +187,7 @@ export type AllowedEnterpriseProviderResolverDecision = Omit<
   'provider' | 'operation' | 'capability'
 > & {
   provider: EnterpriseProviderResolverProvider;
+  routeId: string;
   operation: ProviderResolverOperation;
   capability: ProviderResolverOperation;
 };
@@ -631,6 +632,7 @@ export type EnterpriseProviderRouteResolverDeps = {
     workspaceId: string;
     capability: ProviderResolverOperation;
     requestedProviderConfigId?: string;
+    requestedRouteId?: string;
     includeDisabled: boolean;
   }) => Promise<EnterpriseProviderRouteRow[]>;
   queryProviderConfig: (input: ConfigLookupInput) => Promise<ProviderConfigRow | null>;
@@ -653,6 +655,8 @@ export type EnterpriseProviderRouteResolverInput = {
   roleNames: string[];
   roleIds?: string[];
   requestedProviderConfigId?: string;
+  requestedRouteId?: string;
+  requestedModel?: string;
   includeDisabled?: boolean;
   proposedAllowedRoles?: string[];
   /**
@@ -716,6 +720,8 @@ export const resolveEnterpriseProviderRoute = async (
   const actorId = normalizeString(input.actorId);
   const capability = normalizeOperation(input.capability);
   const requestedProviderConfigId = normalizeString(input.requestedProviderConfigId);
+  const requestedRouteId = normalizeString(input.requestedRouteId);
+  const requestedModel = normalizeString(input.requestedModel);
   const block = (
     failureClass: ProviderResolverFailureClass,
     extra: { provider?: ProviderResolverSupportedProvider; providerConfigId?: string; keyRefId?: string } = {},
@@ -743,6 +749,7 @@ export const resolveEnterpriseProviderRoute = async (
       workspaceId,
       capability,
       requestedProviderConfigId,
+      requestedRouteId,
       includeDisabled: input.includeDisabled === true,
     });
     if (routes.length === 0) return block('route_missing');
@@ -784,7 +791,7 @@ export const resolveEnterpriseProviderRoute = async (
     if (endpoint && !deps.isEndpointAllowed(provider as EnterpriseProviderResolverProvider, endpoint)) {
       return block('provider_config_ineligible', { provider, providerConfigId: config.id });
     }
-    const model = route.model?.trim() || config.default_model?.trim();
+    const model = requestedModel || route.model?.trim() || config.default_model?.trim();
     if (!model || !(config.model_allowlist || []).includes(model)) {
       return block('model_not_allowed', { provider, providerConfigId: config.id });
     }
@@ -828,6 +835,7 @@ export const resolveEnterpriseProviderRoute = async (
       status: 'allowed',
       futureSecretLookupEligible: true,
       provider,
+      routeId: route.id,
       providerConfigId: config.id,
       keyRefId: keyRef.id,
       keyRefResolverType: 'server_reference',

@@ -97,9 +97,12 @@ const queryEnterpriseProviderRoutes: EnterpriseProviderRouteResolverDeps['queryR
   const configFilter = input.requestedProviderConfigId
     ? `&provider_config_id=eq.${encode(input.requestedProviderConfigId)}`
     : '';
+  const routeFilter = input.requestedRouteId
+    ? `&id=eq.${encode(input.requestedRouteId)}`
+    : '';
   const enabledFilter = input.includeDisabled ? '' : '&enabled=is.true';
   return postgrest<EnterpriseProviderRouteRow[]>(
-    `enterprise_ai_capability_routes?select=id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,deleted_at&org_id=eq.${encode(input.orgId)}&workspace_id=eq.${encode(input.workspaceId)}&capability=eq.${encode(input.capability)}&deleted_at=is.null${configFilter}${enabledFilter}`,
+    `enterprise_ai_capability_routes?select=id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,deleted_at&org_id=eq.${encode(input.orgId)}&workspace_id=eq.${encode(input.workspaceId)}&capability=eq.${encode(input.capability)}&deleted_at=is.null${configFilter}${routeFilter}${enabledFilter}`,
     { method: 'GET' },
   );
 };

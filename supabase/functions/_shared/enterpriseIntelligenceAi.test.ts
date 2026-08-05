@@ -18,6 +18,7 @@ const authorization = {
     status: 'allowed' as const,
     futureSecretLookupEligible: true as const,
     provider: 'openai' as const,
+    routeId: '66666666-6666-4666-8666-666666666666',
     providerConfigId: '44444444-4444-4444-8444-444444444444',
     keyRefId: '55555555-5555-4555-8555-555555555555',
     keyRefResolverType: 'server_reference' as const,

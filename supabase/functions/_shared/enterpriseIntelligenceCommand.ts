@@ -393,7 +393,13 @@ const findOne = async <T>(table: string, query: string) => {
   return rows[0] || null;
 };
 
-const resolveRoute = async (authority: Authority, capability: EnterpriseAiCapability, requestedConfigId?: string, allowDisabled = false) => {
+const resolveRoute = async (
+  authority: Authority,
+  capability: EnterpriseAiCapability,
+  requestedConfigId?: string,
+  exact?: { routeId?: string; model?: string },
+  allowDisabled = false,
+) => {
   const decision = await resolveEnterpriseProviderRoute({
     mode: 'pilot',
     capability,
@@ -403,6 +409,8 @@ const resolveRoute = async (authority: Authority, capability: EnterpriseAiCapabi
     roleNames: [...authority.roleNames],
     roleIds: [...authority.organizationRoleIds, ...authority.workspaceRoleIds],
     requestedProviderConfigId: requestedConfigId,
+    requestedRouteId: exact?.routeId,
+    requestedModel: exact?.model,
     includeDisabled: allowDisabled,
     scannerReference: 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
   }, buildEnterpriseProviderRouteDbDeps(isAllowedProviderEndpoint));
@@ -420,6 +428,7 @@ const resolveRoute = async (authority: Authority, capability: EnterpriseAiCapabi
     config: {
       id: decision.providerConfigId,
       provider: decision.provider as EnterpriseAiProvider,
+      route_id: decision.routeId,
       endpoint_url: decision.endpoint,
       deployment_name: decision.deployment,
     },
@@ -656,12 +665,149 @@ type EvidenceVersionRow = {
 };
 
 type EvidenceExtractionClaim = {
-  state: 'owned' | 'running' | 'committed' | 'failed' | 'blocked';
+  state: 'owned' | 'running' | 'staged' | 'committed' | 'failed' | 'blocked';
   ownsExecution: boolean;
   jobId: string;
   attemptCount: number;
   recoveryCount: number;
   safeResult?: JsonObject;
+};
+
+export type EvidenceExtractionRoutePlan = {
+  jobId: string;
+  organizationId: string;
+  workspaceId: string;
+  sourceId: string;
+  sourceVersionId: string;
+  capability: 'assess.evidence.extract';
+  routeId: string;
+  providerConfigId: string;
+  provider: EnterpriseAiProvider;
+  model: string;
+  endpointIdentity: string | null;
+  deploymentIdentity: string | null;
+  promptKey: 'assess.evidence.extract';
+  promptVersion: string;
+  requestHash: string;
+};
+
+const extractionRoutePlanKeys = [
+  'routeId', 'providerConfigId', 'provider', 'model', 'endpointIdentity', 'deploymentIdentity',
+] as const;
+
+const nullablePlanString = (value: unknown, maximum: number) => (
+  value === null ? null : typeof value === 'string' && value.length <= maximum ? value : undefined
+);
+
+export const readEvidenceExtractionRoutePlan = (
+  plan: JsonObject,
+  expected: Pick<EvidenceExtractionRoutePlan,
+    'organizationId' | 'workspaceId' | 'sourceId' | 'sourceVersionId' | 'requestHash'>,
+): EvidenceExtractionRoutePlan | null => {
+  if (!extractionRoutePlanKeys.some(key => plan[key] !== undefined)) return null;
+  const provider = plan.provider;
+  const parsed: EvidenceExtractionRoutePlan = {
+    jobId: typeof plan.jobId === 'string' && uuidPattern.test(plan.jobId) ? plan.jobId : '',
+    organizationId: typeof plan.organizationId === 'string' && uuidPattern.test(plan.organizationId) ? plan.organizationId : '',
+    workspaceId: typeof plan.workspaceId === 'string' && uuidPattern.test(plan.workspaceId) ? plan.workspaceId : '',
+    sourceId: typeof plan.sourceId === 'string' && uuidPattern.test(plan.sourceId) ? plan.sourceId : '',
+    sourceVersionId: typeof plan.sourceVersionId === 'string' && uuidPattern.test(plan.sourceVersionId) ? plan.sourceVersionId : '',
+    capability: plan.capability === 'assess.evidence.extract' ? plan.capability : 'assess.evidence.extract',
+    routeId: typeof plan.routeId === 'string' && uuidPattern.test(plan.routeId) ? plan.routeId : '',
+    providerConfigId: typeof plan.providerConfigId === 'string' && uuidPattern.test(plan.providerConfigId) ? plan.providerConfigId : '',
+    provider: ENTERPRISE_AI_PROVIDERS.includes(provider as EnterpriseAiProvider) ? provider as EnterpriseAiProvider : 'openai',
+    model: typeof plan.model === 'string' && plan.model.length > 0 && plan.model.length <= 200 ? plan.model : '',
+    endpointIdentity: nullablePlanString(plan.endpointIdentity, 2_000) as string | null,
+    deploymentIdentity: nullablePlanString(plan.deploymentIdentity, 240) as string | null,
+    promptKey: plan.promptKey === 'assess.evidence.extract' ? plan.promptKey : 'assess.evidence.extract',
+    promptVersion: typeof plan.promptVersion === 'string' && plan.promptVersion.length > 0 && plan.promptVersion.length <= 120 ? plan.promptVersion : '',
+    requestHash: typeof plan.requestHash === 'string' && /^[0-9a-f]{64}$/.test(plan.requestHash) ? plan.requestHash : '',
+  };
+  const structurallyValid = parsed.jobId && parsed.organizationId && parsed.workspaceId
+    && parsed.sourceId && parsed.sourceVersionId && parsed.routeId && parsed.providerConfigId
+    && parsed.model && parsed.promptVersion && parsed.requestHash
+    && plan.capability === 'assess.evidence.extract'
+    && plan.promptKey === 'assess.evidence.extract'
+    && ENTERPRISE_AI_PROVIDERS.includes(provider as EnterpriseAiProvider)
+    && nullablePlanString(plan.endpointIdentity, 2_000) !== undefined
+    && nullablePlanString(plan.deploymentIdentity, 240) !== undefined;
+  if (!structurallyValid
+    || parsed.organizationId !== expected.organizationId
+    || parsed.workspaceId !== expected.workspaceId
+    || parsed.sourceId !== expected.sourceId
+    || parsed.sourceVersionId !== expected.sourceVersionId
+    || parsed.requestHash !== expected.requestHash) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  return parsed;
+};
+
+export const extractionRouteMatchesPlan = (
+  planned: EvidenceExtractionRoutePlan,
+  resolved: {
+    routeId: string; providerConfigId: string; provider: EnterpriseAiProvider; model: string;
+    endpointIdentity?: string | null; deploymentIdentity?: string | null;
+  },
+) => planned.routeId === resolved.routeId
+  && planned.providerConfigId === resolved.providerConfigId
+  && planned.provider === resolved.provider
+  && planned.model === resolved.model
+  && planned.endpointIdentity === (resolved.endpointIdentity || null)
+  && planned.deploymentIdentity === (resolved.deploymentIdentity || null);
+
+export const mapExtractionPersistenceError = (error: unknown) => (
+  isSupabaseRpcError(error)
+    ? mapEnterpriseCommandRpcError(error)
+    : new EnterpriseCommandError('COMMAND_UNAVAILABLE')
+);
+
+const failEvidenceExtractionAttempt = async (
+  authority: Authority,
+  receipt: EnterpriseReceiptRow,
+  jobId: string,
+  requestStarted: number,
+  terminalError: EnterpriseCommandError,
+  failureClass: string,
+) => {
+  try {
+    await rpc('enterprise_fail_evidence_extraction_job', {
+      p_job_id: jobId,
+      p_receipt: receipt.id,
+      p_org: authority.organizationId,
+      p_workspace: authority.workspaceId,
+      p_execution_token: receipt.execution_token,
+      p_execution_fence: receipt.execution_fence,
+      p_failure_class: failureClass,
+      p_latency_ms: Math.max(0, Date.now() - requestStarted),
+      p_response: enterpriseCommandErrorBody(terminalError),
+      p_blocked: terminalError.code === 'COMMAND_BLOCKED' || terminalError.code === 'PERMISSION_DENIED',
+    });
+  } catch (failureError) {
+    throw isSupabaseRpcError(failureError)
+      ? mapEnterpriseCommandRpcError(failureError)
+      : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+  }
+};
+
+const commitStagedEvidenceExtraction = async (
+  authority: Authority,
+  receipt: EnterpriseReceiptRow,
+  jobId: string,
+) => {
+  try {
+    await rpc('enterprise_commit_staged_evidence_extraction', {
+      p_job_id: jobId,
+      p_receipt: receipt.id,
+      p_org: authority.organizationId,
+      p_workspace: authority.workspaceId,
+      p_execution_token: receipt.execution_token,
+      p_execution_fence: receipt.execution_fence,
+    });
+  } catch (error) {
+    // A generic transport exception cannot prove whether PostgreSQL committed.
+    // Keep the job running and receipt claimed for effect/stage reconciliation.
+    throw mapExtractionPersistenceError(error);
+  }
 };
 
 const commandEvidenceExtract = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
@@ -678,30 +824,47 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
   );
   if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
   const sourceVersionId = version.id;
-  assertSourceUploadsBucket(version.storage_bucket);
-  const bytes = new Uint8Array(await (await downloadStoredFile({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket: version.storage_bucket, storagePath: version.storage_path })).arrayBuffer());
-  if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
-  const text = await extractEvidenceText(bytes, source.mime_type);
-  if (version.extracted_text_hash && await sha256Hex(text) !== version.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
-  if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
-  const route = await resolveRoute(authority, 'assess.evidence.extract', typeof payload.providerConfigId === 'string' ? payload.providerConfigId : undefined);
   const jobId = plannedUuid(receipt, 'jobId');
   const promptKey = 'assess.evidence.extract';
   const promptVersion = 'enterprise-evidence-extract-1';
-  await ensureExecutionPlan(receipt, authority, {
-    jobId,
+  const expectedPlanIdentity = {
+    organizationId: authority.organizationId,
+    workspaceId: authority.workspaceId,
     sourceId,
     sourceVersionId,
-    providerConfigId: route.config.id,
-    provider: route.config.provider,
-    capability: 'assess.evidence.extract',
-    model: route.model,
-    promptKey,
-    promptVersion,
     requestHash: receipt.request_hash,
-  });
-  const requestStarted = Date.now();
-  const claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job', {
+  };
+  let routePlan = readEvidenceExtractionRoutePlan(receipt.execution_plan || {}, expectedPlanIdentity);
+  let route: Awaited<ReturnType<typeof resolveRoute>> | null = null;
+  if (routePlan) {
+    if (typeof payload.providerConfigId === 'string' && payload.providerConfigId !== routePlan.providerConfigId) {
+      throw new EnterpriseCommandError('IDEMPOTENCY_CONFLICT');
+    }
+  } else {
+    route = await resolveRoute(
+      authority,
+      'assess.evidence.extract',
+      typeof payload.providerConfigId === 'string' ? payload.providerConfigId : undefined,
+    );
+    routePlan = {
+      jobId,
+      ...expectedPlanIdentity,
+      capability: 'assess.evidence.extract',
+      routeId: route.config.route_id,
+      providerConfigId: route.config.id,
+      provider: route.config.provider,
+      model: route.model,
+      endpointIdentity: route.config.endpoint_url || null,
+      deploymentIdentity: route.config.deployment_name || null,
+      promptKey,
+      promptVersion,
+    };
+    await ensureExecutionPlan(receipt, authority, routePlan);
+    routePlan = readEvidenceExtractionRoutePlan(receipt.execution_plan || {}, expectedPlanIdentity);
+    if (!routePlan) throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  const claimStarted = Date.now();
+  const claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', {
     p_job_id: jobId,
     p_receipt: receipt.id,
     p_org: authority.organizationId,
@@ -709,10 +872,13 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
     p_actor: authority.actorId,
     p_source_id: sourceId,
     p_source_version_id: sourceVersionId,
-    p_provider_config_id: route.config.id,
-    p_provider: route.config.provider,
+    p_route_id: routePlan.routeId,
+    p_provider_config_id: routePlan.providerConfigId,
+    p_provider: routePlan.provider,
     p_capability: 'assess.evidence.extract',
-    p_model: route.model,
+    p_model: routePlan.model,
+    p_endpoint_identity: routePlan.endpointIdentity,
+    p_deployment_identity: routePlan.deploymentIdentity,
     p_prompt_key: promptKey,
     p_prompt_version: promptVersion,
     p_request_hash: receipt.request_hash,
@@ -722,12 +888,52 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
   if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
   if (claim.state === 'failed' || claim.state === 'blocked') throw new EnterpriseCommandError('COMMAND_BLOCKED');
   if (!claim.ownsExecution || claim.jobId !== jobId) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
+  if (claim.state === 'staged') {
+    if (!isRecord(claim.safeResult)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    await commitStagedEvidenceExtraction(authority, receipt, jobId);
+    return claim.safeResult;
+  }
   try {
-    const result = await runGovernedProviderRequest({
+    route ||= await resolveRoute(
+      authority,
+      'assess.evidence.extract',
+      routePlan.providerConfigId,
+      { routeId: routePlan.routeId, model: routePlan.model },
+    );
+    if (!extractionRouteMatchesPlan(routePlan, {
+      routeId: route.config.route_id,
+      providerConfigId: route.config.id,
       provider: route.config.provider,
+      model: route.model,
+      endpointIdentity: route.config.endpoint_url,
+      deploymentIdentity: route.config.deployment_name,
+    })) throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  } catch (error) {
+    const terminalError = error instanceof EnterpriseCommandError ? error : new EnterpriseCommandError('COMMAND_BLOCKED');
+    await failEvidenceExtractionAttempt(authority, receipt, jobId, claimStarted, terminalError, 'EXTRACTION_ROUTE_BLOCKED');
+    throw terminalError;
+  }
+  let text: string;
+  try {
+    assertSourceUploadsBucket(version.storage_bucket);
+    const bytes = new Uint8Array(await (await downloadStoredFile({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket: version.storage_bucket, storagePath: version.storage_path })).arrayBuffer());
+    if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
+    text = await extractEvidenceText(bytes, source.mime_type);
+    if (version.extracted_text_hash && await sha256Hex(text) !== version.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
+    if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  } catch (error) {
+    const terminalError = error instanceof EnterpriseCommandError ? error : new EnterpriseCommandError('COMMAND_BLOCKED');
+    await failEvidenceExtractionAttempt(authority, receipt, jobId, claimStarted, terminalError, 'SOURCE_DECODE_FAILED');
+    throw terminalError;
+  }
+  const requestStarted = Date.now();
+  let providerResult: Awaited<ReturnType<typeof runGovernedProviderRequest>>;
+  try {
+    providerResult = await runGovernedProviderRequest({
+      provider: routePlan.provider,
       endpoint: route.config.endpoint_url || undefined,
       deployment: route.config.deployment_name || undefined,
-      model: route.model,
+      model: routePlan.model,
       capability: 'assess.evidence.extract',
       taskInstruction: `Extract candidate evidence as JSON with a candidates array. Each item must have fieldKey from ${EVIDENCE_CANDIDATE_FIELDS.join(', ')}, value, sourceLocator, confidence between 0 and 1, and safeExcerpt. Do not infer missing facts; use unresolved_questions or assumptions when needed.`,
       untrustedSource: text,
@@ -735,17 +941,25 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
         organizationId: authority.organizationId,
         workspaceId: authority.workspaceId,
         actorId: authority.actorId,
-        providerConfigId: route.config.id,
+        providerConfigId: routePlan.providerConfigId,
         capability: 'assess.evidence.extract',
         routeEnabled: true,
         resolverDecision: route.decision,
       },
     });
-    const decoded = parseJsonObjectResponse<{ candidates?: unknown[] }>(result.output, (value): value is { candidates?: unknown[] } => (
+  } catch (error) {
+    const terminalError = new EnterpriseCommandError('COMMAND_BLOCKED');
+    const failureClass = error instanceof EnterpriseAiGatewayError ? error.code : 'PROVIDER_REQUEST_FAILED';
+    await failEvidenceExtractionAttempt(authority, receipt, jobId, requestStarted, terminalError, failureClass);
+    throw terminalError;
+  }
+  let candidates: ReturnType<typeof buildEvidenceCandidate>[];
+  try {
+    const decoded = parseJsonObjectResponse<{ candidates?: unknown[] }>(providerResult.output, (value): value is { candidates?: unknown[] } => (
       isRecord(value) && (value.candidates === undefined || Array.isArray(value.candidates))
     ));
     const rawCandidates = Array.isArray(decoded.candidates) ? decoded.candidates.slice(0, 200) : [];
-    const candidates = [];
+    candidates = [];
     for (const raw of rawCandidates) {
       if (!isRecord(raw)) continue;
       const field = raw.fieldKey;
@@ -783,65 +997,66 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       }));
       candidates.push(candidate);
     }
-    const safeResult = { jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
-    await rpc('enterprise_commit_evidence_extraction', {
-      p_job_id: jobId,
-      p_source_id: sourceId,
-      p_org: authority.organizationId,
-      p_workspace: authority.workspaceId,
-      p_output_hash: await sha256Hex(result.output),
-      p_latency_ms: Math.max(0, Date.now() - requestStarted),
-      p_provider_config_id: route.config.id,
-      p_provider: route.config.provider,
-      p_model: route.model,
-      p_token_input: Math.max(1, Math.ceil(text.length / 4)),
-      p_token_output: Math.max(1, Math.ceil(result.output.length / 4)),
-      p_candidates: candidates.map(candidate => ({
-        id: candidate.id,
-        sourceVersionId: candidate.sourceVersionId,
-        field: candidate.field,
-        value: candidate.value,
-        safeExcerpt: candidate.safeExcerpt || null,
-        excerptHash: candidate.excerptHash,
-        sourceLocator: candidate.sourceLocator,
-        confidence: candidate.confidence,
-        promptVersion: candidate.promptVersion,
-        status: candidate.status,
-        createdBy: authority.actorId,
-      })),
-      ...receiptMutationArgs(receipt, safeResult),
-    });
-    return safeResult;
-  } catch (error) {
-    // A commit RPC failure has an uncertain database outcome. Preserve the
-    // running job and claimed receipt for reconciliation or fenced recovery.
-    if (isSupabaseRpcError(error)) throw mapEnterpriseCommandRpcError(error);
-    const terminalError = error instanceof EnterpriseCommandError
-      ? error
-      : new EnterpriseCommandError('COMMAND_BLOCKED');
-    const failureClass = error instanceof EnterpriseAiGatewayError
-      ? error.code
-      : 'PROVIDER_RESPONSE_INVALID';
-    try {
-      await rpc('enterprise_fail_evidence_extraction_job', {
-        p_job_id: jobId,
-        p_receipt: receipt.id,
-        p_org: authority.organizationId,
-        p_workspace: authority.workspaceId,
-        p_execution_token: receipt.execution_token,
-        p_execution_fence: receipt.execution_fence,
-        p_failure_class: failureClass,
-        p_latency_ms: Math.max(0, Date.now() - requestStarted),
-        p_response: enterpriseCommandErrorBody(terminalError),
-        p_blocked: terminalError.code === 'COMMAND_BLOCKED',
-      });
-    } catch (failureError) {
-      throw isSupabaseRpcError(failureError)
-        ? mapEnterpriseCommandRpcError(failureError)
-        : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-    }
+  } catch {
+    const terminalError = new EnterpriseCommandError('COMMAND_BLOCKED');
+    await failEvidenceExtractionAttempt(authority, receipt, jobId, requestStarted, terminalError, 'PROVIDER_RESPONSE_INVALID');
     throw terminalError;
   }
+  const safeResult = { jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
+  const outputHash = await sha256Hex(providerResult.output);
+  const tokenInput = Math.max(1, Math.ceil(text.length / 4));
+  const tokenOutput = Math.max(1, Math.ceil(providerResult.output.length / 4));
+  const latencyMs = Math.max(0, Date.now() - requestStarted);
+  const stagedCandidates = candidates.map(candidate => ({
+    id: candidate.id,
+    sourceVersionId: candidate.sourceVersionId,
+    field: candidate.field,
+    value: candidate.value,
+    safeExcerpt: candidate.safeExcerpt || null,
+    excerptHash: candidate.excerptHash,
+    sourceLocator: candidate.sourceLocator,
+    confidence: candidate.confidence,
+    promptVersion: candidate.promptVersion,
+    status: candidate.status,
+    createdBy: authority.actorId,
+  }));
+  const stagedPayloadHash = await sha256Json({
+    jobId, receiptId: receipt.id, requestHash: receipt.request_hash,
+    routeId: routePlan.routeId, providerConfigId: routePlan.providerConfigId,
+    provider: routePlan.provider, model: routePlan.model, sourceId, sourceVersionId,
+    outputHash, tokenInput, tokenOutput, latencyMs, candidates: stagedCandidates, safeResult,
+    executionFence: receipt.execution_fence,
+  });
+  try {
+    await rpc('enterprise_stage_evidence_extraction_result', {
+      p_job_id: jobId,
+      p_receipt: receipt.id,
+      p_source_id: sourceId,
+      p_source_version_id: sourceVersionId,
+      p_org: authority.organizationId,
+      p_workspace: authority.workspaceId,
+      p_route_id: routePlan.routeId,
+      p_provider_config_id: routePlan.providerConfigId,
+      p_provider: routePlan.provider,
+      p_model: routePlan.model,
+      p_request_hash: receipt.request_hash,
+      p_output_hash: outputHash,
+      p_latency_ms: latencyMs,
+      p_token_input: tokenInput,
+      p_token_output: tokenOutput,
+      p_candidates: stagedCandidates,
+      p_result: safeResult,
+      p_staged_payload_hash: stagedPayloadHash,
+      p_execution_token: receipt.execution_token,
+      p_execution_fence: receipt.execution_fence,
+    });
+  } catch (error) {
+    // Staging may have committed even when its response was lost. Never turn
+    // this uncertainty into a terminal provider failure.
+    throw mapExtractionPersistenceError(error);
+  }
+  await commitStagedEvidenceExtraction(authority, receipt, jobId);
+  return safeResult;
 };
 
 const commandEvidenceCandidateReview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {

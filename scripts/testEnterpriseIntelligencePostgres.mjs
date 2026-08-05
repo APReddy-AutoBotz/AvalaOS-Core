@@ -70,7 +70,7 @@ const enterpriseTables = [
   'enterprise_intelligence_runtime_control', 'enterprise_ai_capability_routes',
   'enterprise_ai_command_receipts', 'enterprise_ai_receipt_replay_requests',
   'enterprise_ai_effect_journal', 'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
-  'enterprise_ai_job_attempts',
+  'enterprise_ai_job_attempts', 'enterprise_ai_extraction_staged_results',
   'enterprise_evidence_sources', 'enterprise_evidence_source_versions', 'enterprise_evidence_candidates',
   'enterprise_evidence_candidate_edits', 'enterprise_evidence_questions', 'enterprise_evidence_assess_promotions',
   'enterprise_studio_delivery_handoffs', 'enterprise_delivery_work_packages',
@@ -146,6 +146,9 @@ try {
     assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
     assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
     assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, true);
+    assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_stage_evidence_extraction_result(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,jsonb,text,uuid,bigint)','EXECUTE') allowed")).rows[0].allowed, false);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_stage_evidence_extraction_result(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,jsonb,text,uuid,bigint)','EXECUTE') allowed")).rows[0].allowed, true);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_commit_evidence_extraction(uuid,uuid,uuid,uuid,text,integer,uuid,text,text,integer,integer,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
   });
 
   const fixture = await createEnterpriseIntelligenceFixture(authority);
@@ -159,6 +162,13 @@ try {
     const model = 'fixture-model';
     const promptKey = 'assess.evidence.extract';
     const promptVersion = 'enterprise-evidence-extract-1';
+    const routeId = fixture.uuid(690);
+    await authority.query(
+      `INSERT INTO public.enterprise_ai_capability_routes(
+        id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,created_by,updated_by
+      ) VALUES($1,$2,$3,$4,$5,$6,true,ARRAY[$7::text],$8,$8)`,
+      [routeId, fixture.org, fixture.workspace, fixture.provider, capability, model, fixture.routeRole, fixture.requester],
+    );
     let sequence = 700;
     const nextUuid = () => fixture.uuid(sequence++);
     const createReceipt = async (source, label, client = authority) => {
@@ -175,7 +185,9 @@ try {
       const jobId = nextUuid();
       const plan = {
         jobId, sourceId: source.sourceId, sourceVersionId: source.sourceVersionId,
-        providerConfigId: fixture.provider, provider, capability, model,
+        organizationId: fixture.org, workspaceId: fixture.workspace,
+        routeId, providerConfigId: fixture.provider, provider, capability, model,
+        endpointIdentity: null, deploymentIdentity: null,
         promptKey, promptVersion, requestHash,
       };
       const planned = (await client.query(
@@ -193,12 +205,12 @@ try {
         requestHash: entry.requestHash, ...overrides,
       };
       return (await client.query(
-        `SELECT public.enterprise_claim_or_resume_evidence_extraction_job(
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+        `SELECT public.enterprise_claim_or_resume_evidence_extraction_job_v2(
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
         ) result`,
         [entry.jobId, entry.receipt.id, fixture.org, fixture.workspace, fixture.requester,
-          values.sourceId, values.sourceVersionId, values.providerConfigId, values.provider,
-          values.capability, values.model, values.promptKey, values.promptVersion,
+          values.sourceId, values.sourceVersionId, routeId, values.providerConfigId, values.provider,
+          values.capability, values.model, null, null, values.promptKey, values.promptVersion,
           values.requestHash, token, fence],
       )).rows[0].result;
     };
@@ -220,8 +232,8 @@ try {
           `extraction-recovery-${entry.label}`, nextUuid(), entry.requestHash, token],
       )
     ).rows[0];
-    const commit = async (entry, receipt, candidateId) => {
-      providerCalls += 1;
+    const stage = async (entry, receipt, candidateId, {countProvider = true, stageHash = fixture.hash('f')} = {}) => {
+      if (countProvider) providerCalls += 1;
       trackedCandidates.push(candidateId);
       const safeResult = {
         jobId: entry.jobId, sourceId: entry.source.sourceId,
@@ -236,13 +248,30 @@ try {
         promptVersion, status: 'suggested', createdBy: fixture.requester,
       }];
       await authority.query(
-        `SELECT public.enterprise_commit_evidence_extraction(
-          $1,$2,$3,$4,$5,12,$6,$7,$8,20,10,$9::jsonb,$10,$11,$12,$13::jsonb
+        `SELECT public.enterprise_stage_evidence_extraction_result(
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,12,20,10,$13::jsonb,$14::jsonb,$15,$16,$17
         )`,
-        [entry.jobId, entry.source.sourceId, fixture.org, fixture.workspace, fixture.hash('e'),
-          fixture.provider, provider, model, JSON.stringify(candidates), receipt.id,
-          receipt.execution_token, receipt.execution_fence, JSON.stringify(safeResult)],
+        [entry.jobId, receipt.id, entry.source.sourceId, entry.source.sourceVersionId,
+          fixture.org, fixture.workspace, routeId, fixture.provider, provider, model,
+          entry.requestHash, fixture.hash('e'), JSON.stringify(candidates), JSON.stringify(safeResult),
+          stageHash, receipt.execution_token, receipt.execution_fence],
       );
+      return safeResult;
+    };
+    const commitStaged = async (entry, receipt, {reconcile = true} = {}) => {
+      await authority.query(
+        'SELECT public.enterprise_commit_staged_evidence_extraction($1,$2,$3,$4,$5,$6)',
+        [entry.jobId, receipt.id, fixture.org, fixture.workspace,
+          receipt.execution_token, receipt.execution_fence],
+      );
+      if (reconcile) {
+        await authority.query('SELECT public.enterprise_ai_reload_command($1,$2,$3)',
+          [receipt.id, fixture.org, fixture.workspace]);
+      }
+    };
+    const commit = async (entry, receipt, candidateId, options) => {
+      const safeResult = await stage(entry, receipt, candidateId);
+      await commitStaged(entry, receipt, options);
       return safeResult;
     };
     const fail = async (entry, receipt, failureClass = 'PROVIDER_RESPONSE_INVALID') => {
@@ -266,7 +295,7 @@ try {
     assert.equal(recoveredReceipt.execution_token, recoveredToken);
     const resumed = await claimJob(crashed, recoveredToken, recoveredReceipt.execution_fence);
     assert.deepEqual([resumed.jobId, resumed.attemptCount, resumed.recoveryCount], [crashed.jobId, 2, 1]);
-    const crashedResult = await commit(crashed, recoveredReceipt, nextUuid());
+    const crashedResult = await commit(crashed, recoveredReceipt, nextUuid(), {reconcile:false});
     // Simulate a lost commit response: reload reconciles the canonical effect.
     const reconciled = (await authority.query(
       'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
@@ -276,8 +305,65 @@ try {
     const succeededReplay = await claimJob({...crashed, receipt: reconciled}, recoveredToken, recoveredReceipt.execution_fence);
     assert.deepEqual([succeededReplay.state, succeededReplay.ownsExecution, succeededReplay.safeResult], ['committed', false, crashedResult]);
 
+    // A changed default model cannot overwrite the receipt-owned route plan.
+    const modelChange = await createReceipt(fixture.sources[2], 'model-change'); modelChange.label = 'model-change';
+    await claimJob(modelChange);
+    await authority.query(
+      "UPDATE public.ai_provider_configs SET default_model='new-default-model', model_allowlist=ARRAY['fixture-model','new-default-model'] WHERE id=$1",
+      [fixture.provider],
+    );
+    await expire(modelChange);
+    const modelToken = nextUuid();
+    const modelReceipt = await reclaimReceipt(modelChange, modelToken);
+    const modelResume = await claimJob(modelChange, modelToken, modelReceipt.execution_fence);
+    assert.equal(modelResume.ownsExecution, true);
+    const persistedModelPlan = (await authority.query(
+      'SELECT execution_plan FROM public.enterprise_ai_command_receipts WHERE id=$1', [modelChange.receipt.id],
+    )).rows[0].execution_plan;
+    assert.deepEqual([persistedModelPlan.routeId, persistedModelPlan.providerConfigId, persistedModelPlan.model],
+      [routeId, fixture.provider, model]);
+    await fail(modelChange, modelReceipt, 'EXTRACTION_ROUTE_BLOCKED');
+
+    // Provider success before staging remains recoverable; the later attempt
+    // reuses the same job and one durable candidate/effect set.
+    const preStage = await createReceipt(fixture.sources[3], 'pre-stage'); preStage.label = 'pre-stage';
+    await claimJob(preStage);
+    providerCalls += 1;
+    await expire(preStage);
+    const preStageToken = nextUuid();
+    const preStageReceipt = await reclaimReceipt(preStage, preStageToken);
+    assert.equal((await claimJob(preStage, preStageToken, preStageReceipt.execution_fence)).state, 'owned');
+    await commit(preStage, preStageReceipt, nextUuid());
+
+    // Staging response loss: recovery finds immutable sanitized data and does
+    // not execute the provider again.
+    const stageLost = await createReceipt(fixture.sources[4], 'stage-lost'); stageLost.label = 'stage-lost';
+    await claimJob(stageLost);
+    const stageLostResult = await stage(stageLost, stageLost.receipt, nextUuid());
+    const providerCallsAfterStage = providerCalls;
+    await expire(stageLost);
+    const stageLostToken = nextUuid();
+    const stageLostReceipt = await reclaimReceipt(stageLost, stageLostToken);
+    const stagedRecovery = await claimJob(stageLost, stageLostToken, stageLostReceipt.execution_fence);
+    assert.deepEqual([stagedRecovery.state, stagedRecovery.safeResult], ['staged', stageLostResult]);
+    assert.equal(providerCalls, providerCallsAfterStage);
+    await commitStaged(stageLost, stageLostReceipt);
+
+    // Commit transport failure before database execution leaves the staged
+    // result and running ownership recoverable without a provider replay.
+    const commitTransport = await createReceipt(fixture.sources[5], 'commit-transport'); commitTransport.label = 'commit-transport';
+    await claimJob(commitTransport);
+    await stage(commitTransport, commitTransport.receipt, nextUuid());
+    const providerCallsBeforeCommitRecovery = providerCalls;
+    await expire(commitTransport);
+    const commitTransportToken = nextUuid();
+    const commitTransportReceipt = await reclaimReceipt(commitTransport, commitTransportToken);
+    assert.equal((await claimJob(commitTransport, commitTransportToken, commitTransportReceipt.execution_fence)).state, 'staged');
+    await commitStaged(commitTransport, commitTransportReceipt);
+    assert.equal(providerCalls, providerCallsBeforeCommitRecovery);
+
     // Two recovery contenders: the receipt fence admits one token; the other is stale.
-    const concurrent = await createReceipt(fixture.sources[2], 'concurrent'); concurrent.label = 'concurrent';
+    const concurrent = await createReceipt(fixture.sources[6], 'concurrent'); concurrent.label = 'concurrent';
     await claimJob(concurrent);
     await expire(concurrent);
     const contender = await connect(urlFor(names.authority));
@@ -296,7 +382,7 @@ try {
     await authority.query('SELECT public.enterprise_ai_reload_command($1,$2,$3)', [concurrent.receipt.id, fixture.org, fixture.workspace]);
 
     // A non-expired owner excludes a new worker; terminate the original attempt.
-    const active = await createReceipt(fixture.sources[3], 'active'); active.label = 'active';
+    const active = await createReceipt(fixture.sources[7], 'active'); active.label = 'active';
     await claimJob(active);
     const activeContenderToken = nextUuid();
     const activeReplay = await reclaimReceipt(active, activeContenderToken);
@@ -305,7 +391,7 @@ try {
     await fail(active, active.receipt, 'PROVIDER_TIMEOUT');
 
     // Canonical mismatches fail without effects, then the original owner can finalize safely.
-    const mismatch = await createReceipt(fixture.sources[4], 'mismatch'); mismatch.label = 'mismatch';
+    const mismatch = await createReceipt(fixture.sources[1], 'mismatch'); mismatch.label = 'mismatch';
     await claimJob(mismatch);
     const effectsBeforeMismatch = Number((await authority.query(
       'SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [mismatch.receipt.id],
@@ -317,12 +403,24 @@ try {
     await fail(mismatch, mismatch.receipt);
 
     // Provider/decoding failure reaches one terminal job/receipt and exact replay.
-    const decoding = await createReceipt(fixture.sources[5], 'decoding'); decoding.label = 'decoding';
+    const decoding = await createReceipt(fixture.sources[2], 'decoding'); decoding.label = 'decoding';
     await claimJob(decoding);
     providerCalls += 1;
     const failedResult = await fail(decoding, decoding.receipt);
     const failedReplay = await claimJob(decoding);
     assert.deepEqual([failedReplay.state, failedReplay.ownsExecution, failedReplay.safeResult], ['blocked', false, failedResult]);
+
+    // A revoked planned route is terminal and never falls back to another
+    // provider configuration or model.
+    const revoked = await createReceipt(fixture.sources[3], 'route-revoked'); revoked.label = 'route-revoked';
+    await claimJob(revoked);
+    const providerCallsBeforeRevocation = providerCalls;
+    await authority.query('UPDATE public.enterprise_ai_capability_routes SET enabled=false WHERE id=$1', [routeId]);
+    assert.equal((await authority.query('SELECT enabled FROM public.enterprise_ai_capability_routes WHERE id=$1', [routeId])).rows[0].enabled, false);
+    const revokedResult = await fail(revoked, revoked.receipt, 'EXTRACTION_ROUTE_BLOCKED');
+    assert.equal(providerCalls, providerCallsBeforeRevocation);
+    const revokedReplay = await claimJob(revoked);
+    assert.deepEqual([revokedReplay.state, revokedReplay.safeResult], ['blocked', revokedResult]);
 
     const counts = (await authority.query(`SELECT
       (SELECT count(*)::int FROM public.enterprise_ai_command_receipts WHERE id=ANY($1::uuid[]) AND status='claimed') claimed_receipts,
@@ -335,11 +433,13 @@ try {
       [trackedReceipts, trackedJobs, trackedCandidates])).rows[0];
     assert.deepEqual(counts, {
       claimed_receipts:0, running_jobs:0, duplicate_jobs:0,
-      candidates:2, usage_rows:2, effects:5, attempts:7,
+      candidates:5, usage_rows:5, effects:10, attempts:16,
     });
-    assert.equal(providerCalls, 3);
+    assert.equal(providerCalls, 7);
     console.log(`EXTRACTION RECOVERY COUNTS ${JSON.stringify({...counts, providerCalls,
-      duplicateCandidates:0, duplicateUsageRows:0, recoveredJobId:crashed.jobId,
+      duplicateCandidates:0, duplicateUsageRows:0, duplicateEffects:0,
+      planConflictCount:0, newDefaultProviderCalls:0, extractionFailureCallsForTransport:0,
+      stagedRecoveries:2, recoveredJobId:crashed.jobId,
       concurrentWinners:1, concurrentLosers:1})}`);
   });
   await scenario('provider lifecycle is atomic, tenant-bound, freshness-gated, sanitized, and fail-closed', async () => {

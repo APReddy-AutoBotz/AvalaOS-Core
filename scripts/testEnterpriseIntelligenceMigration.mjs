@@ -24,6 +24,10 @@ const extractionRecoverySql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql'),
   'utf8',
 );
+const extractionRouteStagingSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805170000_enterprise_extraction_route_and_staging.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -124,13 +128,47 @@ check(!extractionClaimSql.includes('gen_random_uuid()'), 'Recovery must not gene
 for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key', 'authorization']) {
   check(!extractionRecoverySql.includes(forbidden), `Extraction ledgers must reject ${forbidden}.`);
 }
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job_v2',
+  'enterprise_ai_extraction_staged_results',
+  'enterprise_stage_evidence_extraction_result',
+  'enterprise_commit_staged_evidence_extraction',
+  "'state','staged'",
+  "receipt.execution_plan->>'routeId'",
+  "receipt.execution_plan->>'providerConfigId'",
+  "receipt.execution_plan->>'model'",
+  'stage.safe_result',
+]) check(extractionRouteStagingSql.includes(required), `Extraction route/staging correction is missing ${required}.`);
+check(extractionRouteStagingSql.indexOf("effect_key='command'")
+  < extractionRouteStagingSql.indexOf("job.status IN ('succeeded','failed','blocked')"),
+'Recovery must check the canonical effect before terminal job state.');
+check(extractionRouteStagingSql.indexOf('enterprise_ai_extraction_staged_results')
+  < extractionRouteStagingSql.lastIndexOf("attempt_lease_expires_at>statement_timestamp()"),
+'Recovery must inspect staged sanitized output before deciding whether another provider attempt may start.');
+check(extractionRouteStagingSql.includes('staged_payload_hash IS DISTINCT FROM p_staged_payload_hash'),
+  'Changed staged payloads must conflict.');
+check(extractionRouteStagingSql.includes('enterprise_extraction_stage_immutable'),
+  'Staged sanitized extraction output must be immutable.');
+check(extractionRouteStagingSql.includes('REVOKE ALL ON TABLE public.enterprise_ai_extraction_staged_results FROM PUBLIC,anon,authenticated'),
+  'Browser roles must not read staged extraction output.');
+for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key']) {
+  check(!extractionRouteStagingSql.includes(forbidden), `Staging schema must not define forbidden field ${forbidden}.`);
+}
 const extractionCommand = commandSource.slice(
   commandSource.indexOf('const commandEvidenceExtract'),
   commandSource.indexOf('const commandEvidenceCandidateReview'),
 );
 check(!/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly insert its job row.');
 check(!/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly patch terminal job state.');
-check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
+check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job_v2') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
+check(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('), 'Recovery must read the immutable route plan before any default route resolution.');
+check(extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }'), 'Recovery must request the exact planned route and model.');
+check(extractionCommand.indexOf('enterprise_stage_evidence_extraction_result') < extractionCommand.lastIndexOf('commitStagedEvidenceExtraction'), 'Sanitized staging must precede canonical commit.');
+const uncertainCommit = commandSource.slice(
+  commandSource.indexOf('const commitStagedEvidenceExtraction'),
+  commandSource.indexOf('const commandEvidenceExtract'),
+);
+check(!uncertainCommit.includes('enterprise_fail_evidence_extraction_job'), 'Generic commit uncertainty must never call the extraction failure RPC.');
 const resourceResolver = commandSource.slice(
   commandSource.indexOf('export const resolveEnterpriseCommandResourceId'),
   commandSource.indexOf('const ensureExecutionPlan'),
