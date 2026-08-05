@@ -33,6 +33,16 @@ import {
 import { resolveEnterpriseProviderRoute } from './providerResolver.ts';
 import { buildEnterpriseProviderRouteDbDeps } from './providerResolverDb.ts';
 import { extractEvidenceText, decodeBase64, sha256Hex } from './enterpriseIntelligenceIngestion.ts';
+import {
+  claimEnterpriseReceipt,
+  completeEnterpriseReceipt,
+  EnterpriseReceiptError,
+  failEnterpriseReceipt,
+  hashReceiptValue,
+  persistEnterpriseExecutionPlan,
+  reloadEnterpriseReceipt,
+  type EnterpriseReceiptRow,
+} from './enterpriseReceipt.ts';
 import { handleOptions, jsonResponse } from './http.ts';
 import {
   getAuthUser,
@@ -202,7 +212,11 @@ type Authority = {
   workspaceId: string;
   isAdmin: boolean;
   permissions: Set<string>;
+  organizationPermissions: Set<string>;
+  workspacePermissions: Set<string>;
   roleNames: Set<string>;
+  organizationRoleNames: Set<string>;
+  workspaceRoleNames: Set<string>;
   authorizationVersion: number;
 };
 
@@ -249,14 +263,24 @@ const resolveAuthority = async (actorId: string, organizationId: string, workspa
     `role_capabilities?select=role_id,capability_key&role_id=in.(${validRoleIds.map(encodeURIComponent).join(',')})`,
     { method: 'GET' },
   );
-  const permissions = new Set(capabilities.map(row => row.capability_key));
+  const organizationRoleIds = new Set(roles.filter(role => role.id === orgMembership.role_id && validRoleIds.includes(role.id)).map(role => role.id));
+  const workspaceRoleIds = new Set(roles.filter(role => role.id === workspaceMembership.role_id && validRoleIds.includes(role.id)).map(role => role.id));
+  const organizationPermissions = new Set(capabilities.filter(row => organizationRoleIds.has(row.role_id)).map(row => row.capability_key));
+  const workspacePermissions = new Set(capabilities.filter(row => workspaceRoleIds.has(row.role_id)).map(row => row.capability_key));
+  const permissions = new Set([...organizationPermissions, ...workspacePermissions]);
+  const organizationRoleNames = new Set(roles.filter(role => organizationRoleIds.has(role.id)).map(role => String(role.name || '').toLowerCase()).filter(Boolean));
+  const workspaceRoleNames = new Set(roles.filter(role => workspaceRoleIds.has(role.id)).map(role => String(role.name || '').toLowerCase()).filter(Boolean));
   return {
     actorId,
     organizationId,
     workspaceId,
-    isAdmin: permissions.has('org.admin'),
+    isAdmin: organizationPermissions.has('org.admin'),
     permissions,
-    roleNames: new Set(roles.filter(role => validRoleIds.includes(role.id)).map(role => String(role.name || '').toLowerCase()).filter(Boolean)),
+    organizationPermissions,
+    workspacePermissions,
+    roleNames: new Set([...organizationRoleNames, ...workspaceRoleNames]),
+    organizationRoleNames,
+    workspaceRoleNames,
     authorizationVersion: authorization.version,
   };
 };
@@ -335,76 +359,6 @@ const findOne = async <T>(table: string, query: string) => {
   return rows[0] || null;
 };
 
-type ReceiptRow = {
-  id: string;
-  request_hash: string;
-  request_id: string;
-  status: string;
-  resource_id?: string | null;
-  response?: JsonObject;
-};
-
-const findReceipt = async (authority: Authority, envelope: EnterpriseCommandEnvelope) => findOne<ReceiptRow>(
-  'enterprise_ai_command_receipts',
-  `select=id,request_hash,request_id,status,resource_id,response&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&actor_id=eq.${encodeURIComponent(authority.actorId)}&command_type=eq.${encodeURIComponent(envelope.commandType)}&idempotency_key=eq.${encodeURIComponent(envelope.idempotencyKey)}`,
-);
-
-const claimReceipt = async (
-  authority: Authority,
-  envelope: EnterpriseCommandEnvelope,
-  requestHash: string,
-): Promise<ReceiptRow> => {
-  const resourceType = envelope.commandType === 'approval.review.record' || envelope.commandType === 'approval.record'
-    ? requireString(envelope.payload.resourceType, 80)
-    : null;
-  const value = await rpc<ReceiptRow | ReceiptRow[]>('enterprise_ai_claim_command', {
-    p_actor: authority.actorId,
-    p_org: authority.organizationId,
-    p_workspace: authority.workspaceId,
-    p_command_type: envelope.commandType,
-    p_key: envelope.idempotencyKey,
-    p_request: envelope.requestId,
-    p_hash: requestHash,
-    p_resource_type: resourceType,
-  });
-  const row = Array.isArray(value) ? value[0] : value;
-  if (!row?.id) throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-  if (row.request_hash !== requestHash) throw new EnterpriseCommandError('IDEMPOTENCY_CONFLICT', 409);
-  return row;
-};
-
-const completeReceipt = async (receipt: ReceiptRow, authority: Authority, result: JsonObject, resourceId?: string) => {
-  await rpc('enterprise_ai_complete_command', {
-    p_id: receipt.id,
-    p_org: authority.organizationId,
-    p_workspace: authority.workspaceId,
-    p_response: result,
-    p_resource_id: resourceId || null,
-  });
-};
-
-const failReceipt = async (receipt: ReceiptRow, authority: Authority, result: JsonObject, blocked: boolean) => {
-  await rpc('enterprise_ai_fail_command', {
-    p_id: receipt.id,
-    p_org: authority.organizationId,
-    p_workspace: authority.workspaceId,
-    p_response: result,
-    p_blocked: blocked,
-  });
-};
-
-const finalizeReceipt = async (operation: () => Promise<void>) => {
-  try {
-    await operation();
-  } catch {
-    try {
-      await operation();
-    } catch {
-      throw new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
-    }
-  }
-};
-
 const resolveRoute = async (authority: Authority, capability: EnterpriseAiCapability, requestedConfigId?: string, allowDisabled = false) => {
   const decision = await resolveEnterpriseProviderRoute({
     mode: 'pilot',
@@ -443,22 +397,60 @@ const lifecycleAuthority = (authority: Authority): ProviderLifecycleAuthority =>
   organizationId: authority.organizationId,
   workspaceId: authority.workspaceId,
   authorizationVersion: authority.authorizationVersion,
-  capabilities: new Set(authority.permissions),
-  roleNames: new Set(authority.roleNames),
+  organizationCapabilities: new Set(authority.organizationPermissions),
+  workspaceCapabilities: new Set(authority.workspacePermissions),
+  organizationRoleNames: new Set(authority.organizationRoleNames),
+  workspaceRoleNames: new Set(authority.workspaceRoleNames),
 });
+
+const receiptMutationArgs = (receipt: EnterpriseReceiptRow, result: JsonObject) => ({
+  p_receipt: receipt.id,
+  p_execution_token: receipt.execution_token,
+  p_execution_fence: receipt.execution_fence,
+  p_result: result,
+});
+
+const ensureExecutionPlan = async (
+  receipt: EnterpriseReceiptRow,
+  authority: Authority,
+  additions: JsonObject,
+) => {
+  const plan = { ...(receipt.execution_plan || {}), ...additions };
+  const persisted = await persistEnterpriseExecutionPlan(receipt, authority, plan);
+  receipt.execution_plan = persisted.execution_plan || plan;
+  return receipt.execution_plan;
+};
+
+const plannedUuid = (receipt: EnterpriseReceiptRow, key: string) => {
+  const existing = receipt.execution_plan?.[key];
+  return typeof existing === 'string' && uuidPattern.test(existing) ? existing : crypto.randomUUID();
+};
 
 const commandProviderLifecycle = async (
   operation: ProviderLifecycleOperation,
   authority: Authority,
   payload: JsonObject,
+  receipt: EnterpriseReceiptRow,
 ) => {
   requirePermission(authority, 'byok.manage', 'security.manage');
   try {
+    const execution = {
+      receiptId: receipt.id,
+      executionToken: receipt.execution_token,
+      executionFence: receipt.execution_fence,
+      plan: receipt.execution_plan || {},
+      async persistPlan(plan: JsonObject) {
+        const planned = await persistEnterpriseExecutionPlan(receipt, authority, plan);
+        receipt.execution_plan = planned.execution_plan || {};
+        return receipt.execution_plan;
+      },
+    };
     return await executeProviderLifecycleCommand(
       operation,
       lifecycleAuthority(authority),
       payload,
       createProviderLifecycleDeps(buildEnterpriseProviderRouteDbDeps(isAllowedProviderEndpoint)),
+      execution,
     );
   } catch (error) {
     if (error instanceof ProviderLifecycleError) {
@@ -473,7 +465,7 @@ const commandProviderLifecycle = async (
   }
 };
 
-const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonObject) => {
+const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.write');
   const mimeType = requireMime(payload.mimeType);
   const contentBase64 = requireString(payload.contentBase64, 16_000_000);
@@ -482,17 +474,37 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
   const filename = requireString(payload.filename || 'evidence.txt', 240).split(/[\\/]/).pop() || 'evidence.txt';
   const displayName = requireString(payload.displayName || filename, 240);
   const sourceKind = payload.sourceKind === 'pasted_text' ? 'pasted_text' : 'upload';
-  const sourceId = crypto.randomUUID();
+  const sourceId = plannedUuid(receipt, 'sourceId');
+  const versionId = plannedUuid(receipt, 'sourceVersionId');
   const bucket = assertSourceUploadsBucket(resolveSourceUploadsBucket());
   const artifact = prepareTextArtifact({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket, artifactType: 'enterprise-evidence', extension: 'bin', artifactId: sourceId });
+  await ensureExecutionPlan(receipt, authority, {
+    sourceId,
+    sourceVersionId: versionId,
+    storageBucket: bucket,
+    storagePath: artifact.path,
+  });
   let uploaded = false;
   try {
-    await uploadBinaryArtifact({ artifact, orgId: authority.organizationId, workspaceId: authority.workspaceId, contentType: mimeType, content: bytes });
-    uploaded = true;
+    if (receipt.execution_plan?.externalStorageWritten !== true) {
+      await uploadBinaryArtifact({ artifact, orgId: authority.organizationId, workspaceId: authority.workspaceId, contentType: mimeType, content: bytes });
+      uploaded = true;
+      await ensureExecutionPlan(receipt, authority, { externalStorageWritten: true });
+    }
     const text = await extractEvidenceText(bytes, mimeType);
     const contentHash = await sha256Hex(bytes);
     const extractedTextHash = await sha256Hex(text);
-    const versionId = crypto.randomUUID();
+    const result = {
+      sourceId,
+      sourceVersionId: versionId,
+      version: 1,
+      displayName,
+      mimeType,
+      status: 'review',
+      contentHash,
+      extractedCharacterCount: text.length,
+      ingestion: 'server_managed',
+    };
     await rpc('enterprise_create_evidence_source', {
       p_source: {
         id: sourceId,
@@ -520,20 +532,13 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
         extracted_character_count: text.length,
         created_by: authority.actorId,
       },
+      ...receiptMutationArgs(receipt, result),
     });
-    return {
-      sourceId,
-      sourceVersionId: versionId,
-      version: 1,
-      displayName,
-      mimeType,
-      status: 'review',
-      contentHash,
-      extractedCharacterCount: text.length,
-      ingestion: 'server_managed',
-    };
+    return result;
   } catch (error) {
-    if (uploaded) await removeTextArtifact(artifact, authority.organizationId, authority.workspaceId).catch(() => undefined);
+    if (uploaded && receipt.execution_plan?.externalStorageWritten !== true) {
+      await removeTextArtifact(artifact, authority.organizationId, authority.workspaceId).catch(() => undefined);
+    }
     if (error instanceof EnterpriseCommandError) throw error;
     throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
   }
@@ -551,7 +556,7 @@ type EvidenceVersionRow = {
   extracted_text_hash?: string | null;
 };
 
-const commandEvidenceExtract = async (authority: Authority, payload: JsonObject) => {
+const commandEvidenceExtract = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.write');
   const sourceId = requireUuid(payload.sourceId);
   const source = await findOne<{ id: string; mime_type: SupportedEvidenceMimeType; status: string; current_version: number }>(
@@ -572,7 +577,8 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject)
   if (version.extracted_text_hash && await sha256Hex(text) !== version.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
   if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   const route = await resolveRoute(authority, 'assess.evidence.extract', typeof payload.providerConfigId === 'string' ? payload.providerConfigId : undefined);
-  const jobId = crypto.randomUUID();
+  const jobId = plannedUuid(receipt, 'jobId');
+  await ensureExecutionPlan(receipt, authority, { jobId, sourceId, sourceVersionId });
   const requestStarted = Date.now();
   await insertRow('enterprise_ai_job_ledger', {
     id: jobId,
@@ -652,6 +658,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject)
       }));
       candidates.push(candidate);
     }
+    const safeResult = { jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
     await rpc('enterprise_commit_evidence_extraction', {
       p_job_id: jobId,
       p_source_id: sourceId,
@@ -677,8 +684,9 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject)
         status: candidate.status,
         createdBy: authority.actorId,
       })),
+      ...receiptMutationArgs(receipt, safeResult),
     });
-    return { jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
+    return safeResult;
   } catch (error) {
     await updateRows('enterprise_ai_job_ledger', { id: `eq.${jobId}`, org_id: `eq.${authority.organizationId}`, workspace_id: `eq.${authority.workspaceId}`, status: 'eq.running' }, {
       status: 'failed',
@@ -691,7 +699,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject)
   }
 };
 
-const commandEvidenceCandidateReview = async (authority: Authority, payload: JsonObject) => {
+const commandEvidenceCandidateReview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.review');
   const candidateId = requireUuid(payload.candidateId);
   const status = payload.status;
@@ -716,6 +724,7 @@ const commandEvidenceCandidateReview = async (authority: Authority, payload: Jso
     safeExcerpt: current.safe_excerpt || null,
     value: nextValue,
   }));
+  const result = { candidateId, status, reviewedBy: authority.actorId };
   await rpc('enterprise_review_evidence_candidate', {
     p_candidate_id: candidateId,
     p_org: authority.organizationId,
@@ -726,11 +735,12 @@ const commandEvidenceCandidateReview = async (authority: Authority, payload: Jso
     p_actor: authority.actorId,
     p_previous_value: current.value,
     p_reason: reason,
+    ...receiptMutationArgs(receipt, result),
   });
-  return { candidateId, status, reviewedBy: authority.actorId };
+  return result;
 };
 
-const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonObject) => {
+const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'assessment.edit');
   const sourceId = requireUuid(payload.sourceId);
   const assessDraftId = requireUuid(payload.assessDraftId);
@@ -752,9 +762,20 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
     || candidates.some(candidate => !candidateIds.includes(candidate.id) || !/^[0-9a-f]{64}$/.test(candidate.provenance_hash))) {
     throw new EnterpriseCommandError('COMMAND_BLOCKED');
   }
-  let expectedVersion = cases[0].version;
+  const plannedStartVersion = Number(receipt.execution_plan?.promotionStartVersion);
+  const expectedCandidateIds = [...candidates.map(candidate => candidate.id)].sort();
+  if (Array.isArray(receipt.execution_plan?.promotionCandidateIds)
+    && JSON.stringify(receipt.execution_plan?.promotionCandidateIds) !== JSON.stringify(expectedCandidateIds)) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  const promotionStartVersion = Number.isSafeInteger(plannedStartVersion) && plannedStartVersion > 0
+    ? plannedStartVersion
+    : cases[0].version;
+  await ensureExecutionPlan(receipt, authority, { promotionStartVersion, promotionCandidateIds: expectedCandidateIds });
+  let expectedVersion = promotionStartVersion;
   const promotions: Array<{ candidateId: string; caseVersion: number }> = [];
   for (const candidate of candidates) {
+    const promotionResult = { candidateId: candidate.id, assessDraftId: cases[0].id, expectedVersion };
     const response = await rpc<{ outcome?: string; resource?: { candidateId?: string; caseVersion?: number } }>(
       'enterprise_promote_evidence_to_assess_v2',
       {
@@ -767,6 +788,10 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
         p_request: candidate.id,
         p_idempotency_key: `assess-promotion:${cases[0].id}:${candidate.id}:${expectedVersion}`,
         p_authorization_version: authority.authorizationVersion,
+        p_outer_receipt: receipt.id,
+        p_execution_token: receipt.execution_token,
+        p_execution_fence: receipt.execution_fence,
+        p_result: promotionResult,
       },
     );
     const nextVersion = response?.resource?.caseVersion;
@@ -860,7 +885,7 @@ const deriveModernizationFactors = async (authority: Authority, assessment: { id
   return { factors, sourceDecisionModelVersion: 'assess-v2-application-portfolio-2026-07' };
 };
 
-const commandModernizationEvaluate = async (authority: Authority, payload: JsonObject) => {
+const commandModernizationEvaluate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'portfolio.manage');
   const assessment = await assertApprovedApplicationAssessment(authority, payload);
   const { factors, sourceDecisionModelVersion } = await deriveModernizationFactors(authority, assessment);
@@ -869,8 +894,10 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
     assessmentVersion: String(assessment.version),
     factors,
   });
-  const modernizationAssessmentId = crypto.randomUUID();
-  const decisionId = crypto.randomUUID();
+  const modernizationAssessmentId = plannedUuid(receipt, 'modernizationAssessmentId');
+  const decisionId = plannedUuid(receipt, 'modernizationDecisionId');
+  await ensureExecutionPlan(receipt, authority, { modernizationAssessmentId, modernizationDecisionId: decisionId });
+  const result = { modernizationAssessmentId, decisionId, decision };
   await rpc('enterprise_commit_modernization_assessment', {
     p_assessment: {
       id: modernizationAssessmentId,
@@ -899,8 +926,9 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
       status: 'review',
       created_by: authority.actorId,
     },
+    ...receiptMutationArgs(receipt, result),
   });
-  return { modernizationAssessmentId, decisionId, decision };
+  return result;
 };
 
 type ResourceAuthority = { created_by: string; status: string; table: string; id: string; snapshotHash: string };
@@ -931,7 +959,7 @@ const resolveApprovalResource = async (authority: Authority, resourceType: strin
   return { id: row.id, created_by: row.created_by, status, table, snapshotHash: await sha256Json({ resourceType, row }) };
 };
 
-const commandApprovalReviewRecord = async (authority: Authority, payload: JsonObject) => {
+const commandApprovalReviewRecord = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'approvals.review');
   const resourceType = requireString(payload.resourceType, 80);
   const resourceId = requireUuid(payload.resourceId);
@@ -939,8 +967,9 @@ const commandApprovalReviewRecord = async (authority: Authority, payload: JsonOb
   const rationale = requireString(payload.rationale, 4_000);
   if (resource.created_by === authority.actorId) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   if (['approved', 'rejected', 'stale', 'blocked'].includes(resource.status)) throw new EnterpriseCommandError('COMMAND_BLOCKED');
-  const reviewEventId = crypto.randomUUID();
-  await insertRow('enterprise_high_impact_review_events', {
+  const reviewEventId = plannedUuid(receipt, 'reviewEventId');
+  await ensureExecutionPlan(receipt, authority, { reviewEventId });
+  const event = {
     id: reviewEventId,
     org_id: authority.organizationId,
     workspace_id: authority.workspaceId,
@@ -950,11 +979,16 @@ const commandApprovalReviewRecord = async (authority: Authority, payload: JsonOb
     reviewer_authorization_version: authority.authorizationVersion,
     resource_hash: resource.snapshotHash,
     rationale,
+  };
+  const result = { reviewEventId, resourceType, resourceId, reviewerId: authority.actorId, resourceHash: resource.snapshotHash };
+  await rpc('enterprise_record_high_impact_review', {
+    p_event: event,
+    ...receiptMutationArgs(receipt, result),
   });
-  return { reviewEventId, resourceType, resourceId, reviewerId: authority.actorId, resourceHash: resource.snapshotHash };
+  return result;
 };
 
-const commandApprovalRecord = async (authority: Authority, payload: JsonObject) => {
+const commandApprovalRecord = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'approvals.review');
   const resourceType = requireString(payload.resourceType, 80);
   const resourceId = requireUuid(payload.resourceId);
@@ -977,6 +1011,7 @@ const commandApprovalRecord = async (authority: Authority, payload: JsonObject) 
   const outcome = payload.outcome;
   if (outcome !== 'approved' && outcome !== 'rejected') throw new EnterpriseCommandError('INVALID_PAYLOAD');
   const nextStatus = outcome === 'approved' ? 'approved' : 'rejected';
+  const result = { resourceType, resourceId, status: nextStatus, reviewedBy: reviewEvent.reviewer_id, approvedBy };
   await rpc('enterprise_commit_high_impact_approval', {
     p_approval: {
       created_by: resource.created_by,
@@ -991,8 +1026,9 @@ const commandApprovalRecord = async (authority: Authority, payload: JsonObject) 
     p_org: authority.organizationId,
     p_workspace: authority.workspaceId,
     p_next_status: nextStatus,
+    ...receiptMutationArgs(receipt, result),
   });
-  return { resourceType, resourceId, status: nextStatus, reviewedBy: reviewEvent.reviewer_id, approvedBy };
+  return result;
 };
 
 type StudioAggregateRow = {
@@ -1014,7 +1050,7 @@ const extractStudioSections = (content: JsonObject, artifactType: string) => {
   return mapped.length ? mapped : [{ locator: `${artifactType}.root`, title: `${artifactType.toUpperCase()} handoff`, summary: 'Review the approved Studio document content and define governed delivery work.' }];
 };
 
-const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonObject) => {
+const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'docs.approve');
   const studioDocumentId = requireUuid(payload.studioDocumentId);
   const aggregate = await findOne<StudioAggregateRow>(
@@ -1036,14 +1072,14 @@ const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonO
     artifactType: aggregate.artifact_type,
     lifecycle: 'approved' as const,
   };
-  const workPackageId = crypto.randomUUID();
+  const workPackageId = plannedUuid(receipt, 'workPackageId');
   const draft = buildDeliveryWorkPackageDraft({
     packageId: workPackageId,
     approvedDocument,
     currentApprovedDocument: approvedDocument,
     sourceSections: extractStudioSections(version.content, aggregate.artifact_type),
   });
-  const handoffId = crypto.randomUUID();
+  const handoffId = plannedUuid(receipt, 'handoffId');
   const handoffRecord = {
     id: handoffId,
     org_id: authority.organizationId,
@@ -1067,9 +1103,20 @@ const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonO
     status: draft.status,
     created_by: authority.actorId,
   };
-  const packageVersionId = crypto.randomUUID();
+  const packageVersionId = plannedUuid(receipt, 'packageVersionId');
+  const plannedItemIds = Array.isArray(receipt.execution_plan?.deliveryItemIds)
+    ? receipt.execution_plan.deliveryItemIds.filter((value): value is string => typeof value === 'string' && uuidPattern.test(value))
+    : [];
+  if (plannedItemIds.length && plannedItemIds.length !== draft.items.length) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const stableItemIds = plannedItemIds.length ? plannedItemIds : draft.items.map(() => crypto.randomUUID());
+  await ensureExecutionPlan(receipt, authority, {
+    handoffId,
+    workPackageId,
+    packageVersionId,
+    deliveryItemIds: stableItemIds,
+  });
   const itemIds = new Map<string, string>();
-  draft.items.forEach(item => itemIds.set(item.id, crypto.randomUUID()));
+  draft.items.forEach((item, index) => itemIds.set(item.id, stableItemIds[index]));
   const persistedItems = await Promise.all(draft.items.map(async item => ({
     ...item,
     id: itemIds.get(item.id) || item.id,
@@ -1098,13 +1145,15 @@ const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonO
     status: draft.status,
     created_by: authority.actorId,
   };
+  const result = { handoffId, workPackageId, packageVersionId, itemIds: Array.from(itemIds.values()), source: approvedDocument, status: draft.status, itemCount: draft.items.length, requiresHumanReview: true };
   await rpc('enterprise_commit_delivery_handoff', {
     p_handoff: handoffRecord,
     p_package: packageRecord,
     p_version: versionRecord,
     p_items: persistedItems,
+    ...receiptMutationArgs(receipt, result),
   });
-  return { handoffId, workPackageId, packageVersionId, itemIds: Array.from(itemIds.values()), source: approvedDocument, status: draft.status, itemCount: draft.items.length, requiresHumanReview: true };
+  return result;
 };
 
 type PackageVersionRow = {
@@ -1118,7 +1167,7 @@ type PackageVersionRow = {
   status: string;
 };
 
-const commandMonitorBaselineCreate = async (authority: Authority, payload: JsonObject) => {
+const commandMonitorBaselineCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'monitor.manage');
   const workPackageId = requireUuid(payload.workPackageId);
   const packageAggregate = await findOne<{ id: string; current_version: number; status: string }>(
@@ -1166,30 +1215,28 @@ const commandMonitorBaselineCreate = async (authority: Authority, payload: JsonO
     requiresHumanReview: true as const,
     canPublish: false as const,
   };
-  const baseline = buildMonitorBaseline({ id: crypto.randomUUID(), workPackageId: version.work_package_id, workPackage: workPackageDraft, approvedItemIds: itemRows.map(item => item.id) });
-  await insertRow('enterprise_monitor_baselines', {
-    id: baseline.id,
-    org_id: authority.organizationId,
-    workspace_id: authority.workspaceId,
-    work_package_id: version.work_package_id,
-    work_package_version_id: packageVersionId,
-    studio_document_id: baseline.sourceDocumentId,
-    studio_version: baseline.sourceDocumentVersion,
-    studio_content_hash: baseline.sourceDocumentHash,
-    approved_item_ids: baseline.approvedItemIds,
-    milestones: baseline.milestones,
-    dependencies: baseline.dependencies,
-    blockers: baseline.blockers,
-    risks: baseline.risks,
-    readiness: baseline.readiness,
-    status: baseline.status,
-    live_telemetry_connected: false,
-    created_by: authority.actorId,
+  const baselineId = plannedUuid(receipt, 'monitorBaselineId');
+  await ensureExecutionPlan(receipt, authority, { monitorBaselineId: baselineId, workPackageId, packageVersionId });
+  const baseline = buildMonitorBaseline({ id: baselineId, workPackageId: version.work_package_id, workPackage: workPackageDraft, approvedItemIds: itemRows.map(item => item.id) });
+  await rpc('enterprise_commit_monitor_baseline', {
+    p_baseline: {
+      id: baseline.id,
+      workPackageVersionId: packageVersionId,
+      approvedItemIds: baseline.approvedItemIds,
+      milestones: baseline.milestones,
+      dependencies: baseline.dependencies,
+      blockers: baseline.blockers,
+      risks: baseline.risks,
+    },
+    p_actor: authority.actorId,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    ...receiptMutationArgs(receipt, baseline as unknown as JsonObject),
   });
   return baseline;
 };
 
-const commandAssembleBlueprintCreate = async (authority: Authority, payload: JsonObject): Promise<AssembleBlueprintDraft> => {
+const commandAssembleBlueprintCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow): Promise<AssembleBlueprintDraft> => {
   requirePermission(authority, 'assemble.manage');
   const decisionId = requireUuid(payload.modernizationDecisionId);
   const decision = await findOne<{ id: string; primary_disposition: ModernizationDisposition; status: string }>(
@@ -1197,35 +1244,25 @@ const commandAssembleBlueprintCreate = async (authority: Authority, payload: Jso
     `select=id,primary_disposition,status&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(decisionId)}`,
   );
   if (!decision || decision.status !== 'approved' || !ASSEMBLE_ELIGIBLE_DISPOSITIONS.includes(decision.primary_disposition)) throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  const blueprintId = plannedUuid(receipt, 'assembleBlueprintId');
+  await ensureExecutionPlan(receipt, authority, { assembleBlueprintId: blueprintId, modernizationDecisionId: decision.id });
   const blueprint = buildAssembleBlueprintDraft({
-    blueprintId: crypto.randomUUID(),
+    blueprintId,
     modernizationDecisionId: decision.id,
     disposition: decision.primary_disposition,
     name: requireString(payload.name, 240),
   });
-  await insertRow('enterprise_assemble_blueprints', {
-    id: blueprint.id,
-    org_id: authority.organizationId,
-    workspace_id: authority.workspaceId,
-    modernization_decision_id: decision.id,
-    disposition: blueprint.disposition,
-    schema_version: blueprint.schemaVersion,
-    version: 1,
-    structured_content: blueprint,
-    readable_document: blueprint.readableDocument,
-    status: 'draft',
-    code_generation_enabled: false,
-    deployment_enabled: false,
-    infrastructure_changes_enabled: false,
-    credential_access_enabled: false,
-    source_system_calls_enabled: false,
-    runtime_agents_enabled: false,
-    created_by: authority.actorId,
+  await rpc('enterprise_commit_assemble_blueprint', {
+    p_blueprint: { ...blueprint, structuredContent: blueprint },
+    p_actor: authority.actorId,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    ...receiptMutationArgs(receipt, blueprint as unknown as JsonObject),
   });
   return blueprint;
 };
 
-const executeEnterpriseCommand = async (authority: Authority, envelope: EnterpriseCommandEnvelope) => {
+const executeEnterpriseCommand = async (authority: Authority, envelope: EnterpriseCommandEnvelope, receipt: EnterpriseReceiptRow) => {
   const commandCapabilities: Record<EnterpriseCommandType, string[]> = {
     'provider.register': ['byok.manage', 'security.manage'],
     'provider.validate': ['byok.manage', 'security.manage'],
@@ -1245,21 +1282,21 @@ const executeEnterpriseCommand = async (authority: Authority, envelope: Enterpri
   };
   await assertFreshAuthority(authority, commandCapabilities[envelope.commandType]);
   switch (envelope.commandType) {
-    case 'provider.register': return commandProviderLifecycle('provider.register', authority, envelope.payload);
-    case 'provider.validate': return commandProviderLifecycle('provider.validate', authority, envelope.payload);
-    case 'provider.activate': return commandProviderLifecycle('provider.activate', authority, envelope.payload);
-    case 'provider.route.toggle': return commandProviderLifecycle('provider.route.toggle', authority, envelope.payload);
-    case 'provider.revoke': return commandProviderLifecycle('provider.revoke', authority, envelope.payload);
-    case 'evidence.source.create': return commandEvidenceSourceCreate(authority, envelope.payload);
-    case 'evidence.extract': return commandEvidenceExtract(authority, envelope.payload);
-    case 'evidence.candidate.review': return commandEvidenceCandidateReview(authority, envelope.payload);
-    case 'evidence.assess.promote': return commandEvidenceAssessPromote(authority, envelope.payload);
-    case 'modernization.evaluate': return commandModernizationEvaluate(authority, envelope.payload);
-    case 'approval.review.record': return commandApprovalReviewRecord(authority, envelope.payload);
-    case 'approval.record': return commandApprovalRecord(authority, envelope.payload);
-    case 'studio.delivery.handoff': return commandStudioDeliveryHandoff(authority, envelope.payload);
-    case 'monitor.baseline.create': return commandMonitorBaselineCreate(authority, envelope.payload);
-    case 'assemble.blueprint.create': return commandAssembleBlueprintCreate(authority, envelope.payload);
+    case 'provider.register': return commandProviderLifecycle('provider.register', authority, envelope.payload, receipt);
+    case 'provider.validate': return commandProviderLifecycle('provider.validate', authority, envelope.payload, receipt);
+    case 'provider.activate': return commandProviderLifecycle('provider.activate', authority, envelope.payload, receipt);
+    case 'provider.route.toggle': return commandProviderLifecycle('provider.route.toggle', authority, envelope.payload, receipt);
+    case 'provider.revoke': return commandProviderLifecycle('provider.revoke', authority, envelope.payload, receipt);
+    case 'evidence.source.create': return commandEvidenceSourceCreate(authority, envelope.payload, receipt);
+    case 'evidence.extract': return commandEvidenceExtract(authority, envelope.payload, receipt);
+    case 'evidence.candidate.review': return commandEvidenceCandidateReview(authority, envelope.payload, receipt);
+    case 'evidence.assess.promote': return commandEvidenceAssessPromote(authority, envelope.payload, receipt);
+    case 'modernization.evaluate': return commandModernizationEvaluate(authority, envelope.payload, receipt);
+    case 'approval.review.record': return commandApprovalReviewRecord(authority, envelope.payload, receipt);
+    case 'approval.record': return commandApprovalRecord(authority, envelope.payload, receipt);
+    case 'studio.delivery.handoff': return commandStudioDeliveryHandoff(authority, envelope.payload, receipt);
+    case 'monitor.baseline.create': return commandMonitorBaselineCreate(authority, envelope.payload, receipt);
+    case 'assemble.blueprint.create': return commandAssembleBlueprintCreate(authority, envelope.payload, receipt);
   }
 };
 
@@ -1270,7 +1307,7 @@ export const enterpriseCommandErrorBody = (error: EnterpriseCommandError) => ({
 
 export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
   if (request.method !== 'POST') return jsonResponse(enterpriseCommandErrorBody(new EnterpriseCommandError('METHOD_NOT_ALLOWED')), 405);
-  let claimedReceipt: ReceiptRow | null = null;
+  let claimedReceipt: EnterpriseReceiptRow | null = null;
   let claimedAuthority: Authority | null = null;
   try {
     const user = await getAuthUser(request);
@@ -1279,25 +1316,28 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
     const organizationId = await resolveOrgId(user.id, envelope.organizationId);
     if (organizationId !== envelope.organizationId) throw new EnterpriseCommandError('TENANT_ACCESS_DENIED');
     const authority = await resolveAuthority(user.id, organizationId, envelope.workspaceId);
-    const requestHash = await sha256Json({ ...envelope, requestId: null });
-    const existing = await findReceipt(authority, envelope);
-    if (existing && existing.request_hash !== requestHash) throw new EnterpriseCommandError('IDEMPOTENCY_CONFLICT', 409);
-    if (existing?.status === 'committed') {
-      return jsonResponse({ ok: true, replayed: true, ...(existing.response || {}), resourceId: existing.resource_id || undefined });
-    }
-    if (existing?.status === 'failed' || existing?.status === 'blocked') {
-      return jsonResponse({ ...(existing.response || enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED'))), replayed: true }, 409);
-    }
-    if (existing?.status === 'claimed') throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
-    const receipt = await claimReceipt(authority, envelope, requestHash);
+    const { requestId: _transportRequestId, ...canonicalEnvelope } = envelope;
+    const requestHash = await hashReceiptValue(canonicalEnvelope);
+    const resourceType = envelope.commandType === 'approval.review.record' || envelope.commandType === 'approval.record'
+      ? requireString(envelope.payload.resourceType, 80)
+      : null;
+    const { receipt, ownsExecution } = await claimEnterpriseReceipt(authority, {
+      commandType: envelope.commandType,
+      idempotencyKey: envelope.idempotencyKey,
+      requestId: envelope.requestId,
+      requestHash,
+      resourceType,
+    });
     if (receipt.status === 'committed') {
       return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}), resourceId: receipt.resource_id || undefined });
     }
-    if (receipt.status !== 'claimed') throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
-    if (receipt.request_id !== envelope.requestId) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
+    if (receipt.status === 'failed' || receipt.status === 'blocked') {
+      return jsonResponse({ ...(receipt.response || enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED'))), replayed: true }, 409);
+    }
+    if (receipt.status !== 'claimed' || !ownsExecution) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
     claimedReceipt = receipt;
     claimedAuthority = authority;
-    const result = await executeEnterpriseCommand(authority, envelope);
+    const result = await executeEnterpriseCommand(authority, envelope, receipt);
     const resultObject: JsonObject = isRecord(result) ? result : { result };
     const resourceId = typeof resultObject.id === 'string'
       ? resultObject.id
@@ -1310,17 +1350,46 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
             : typeof resultObject.decisionId === 'string'
               ? resultObject.decisionId
               : undefined;
-    await finalizeReceipt(() => completeReceipt(receipt, authority, resultObject, resourceId));
-    return jsonResponse({ ok: true, replayed: false, ...resultObject });
+    const completed = await completeEnterpriseReceipt(receipt, authority, resultObject, resourceId);
+    return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {
-    const commandError = error instanceof EnterpriseCommandError ? error : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-    if (claimedReceipt && claimedAuthority && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+    const commandError = error instanceof EnterpriseCommandError
+      ? error
+      : error instanceof EnterpriseReceiptError
+        ? new EnterpriseCommandError(error.code)
+        : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+    if (claimedReceipt && claimedAuthority) {
       try {
-        await finalizeReceipt(() => failReceipt(claimedReceipt, claimedAuthority, enterpriseCommandErrorBody(commandError), commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED'));
+        const recovered = await reloadEnterpriseReceipt(claimedReceipt, claimedAuthority);
+        if (recovered.status === 'committed') {
+          return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}), resourceId: recovered.resource_id || undefined });
+        }
+        if (recovered.status === 'failed' || recovered.status === 'blocked') {
+          return jsonResponse({ ...(recovered.response || enterpriseCommandErrorBody(commandError)), replayed: true }, 409);
+        }
+      } catch {
+        if (commandError.code === 'RECEIPT_FINALIZATION_FAILED') {
+          return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
+        }
+      }
+    }
+    if (claimedReceipt && claimedAuthority && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+      const recoverableStorageEffect = commandError.code === 'COMMAND_UNAVAILABLE'
+        && claimedReceipt.execution_plan?.externalStorageWritten === true;
+      if (recoverableStorageEffect) {
+        return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
+      }
+      try {
+        await failEnterpriseReceipt(
+          claimedReceipt,
+          claimedAuthority,
+          enterpriseCommandErrorBody(commandError),
+          commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED',
+        );
       } catch (finalizationError) {
-        const explicitFailure = finalizationError instanceof EnterpriseCommandError
-          ? finalizationError
-          : new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+        const explicitFailure = new EnterpriseCommandError(
+          finalizationError instanceof EnterpriseReceiptError ? finalizationError.code : 'RECEIPT_FINALIZATION_FAILED',
+        );
         return jsonResponse(enterpriseCommandErrorBody(explicitFailure), explicitFailure.status);
       }
     }

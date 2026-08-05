@@ -9,6 +9,17 @@ import {
   type ProviderLifecycleOperation,
 } from './providerLifecycle.ts';
 import { buildEnterpriseProviderRouteDbDeps } from './providerResolverDb.ts';
+import { fingerprintProviderSecret } from './providerSecretAdapter.ts';
+import {
+  claimEnterpriseReceipt,
+  completeEnterpriseReceipt,
+  EnterpriseReceiptError,
+  failEnterpriseReceipt,
+  hashReceiptValue,
+  persistEnterpriseExecutionPlan,
+  reloadEnterpriseReceipt,
+  type EnterpriseReceiptRow,
+} from './enterpriseReceipt.ts';
 import { getAuthUser, postgrest } from './supabase.ts';
 import { resolveTenantAuthority } from './tenantAuthority.ts';
 import { createTenantAuthorityDatabase } from './tenantAuthorityDb.ts';
@@ -37,6 +48,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 export type ProviderLifecycleEnvelope = {
   operation: ProviderLifecycleOperation;
+  requestId: string;
+  idempotencyKey: string;
   organizationId: string;
   workspaceId: string;
   expectedAuthorizationVersion: number;
@@ -64,6 +77,8 @@ export const parseProviderLifecycleEnvelope = (value: unknown): ProviderLifecycl
   const operation = value.operation as ProviderLifecycleOperation;
   if (typeof value.organizationId !== 'string' || !uuid.test(value.organizationId)
     || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)
+    || typeof value.requestId !== 'string' || !uuid.test(value.requestId)
+    || typeof value.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,200}$/.test(value.idempotencyKey)
     || !Number.isSafeInteger(value.expectedAuthorizationVersion) || Number(value.expectedAuthorizationVersion) < 1
     || !isRecord(value.payload)) {
     throw new ProviderLifecycleError('INVALID_REQUEST');
@@ -77,6 +92,8 @@ export const parseProviderLifecycleEnvelope = (value: unknown): ProviderLifecycl
   }
   return {
     operation,
+    requestId: value.requestId,
+    idempotencyKey: value.idempotencyKey,
     organizationId: value.organizationId,
     workspaceId: value.workspaceId,
     expectedAuthorizationVersion: Number(value.expectedAuthorizationVersion),
@@ -106,25 +123,57 @@ const authenticateProviderLifecycle = async (
   ]);
   const roleIds = [...new Set([...orgMemberships, ...workspaceMemberships].map(row => row.role_id).filter((id): id is string => Boolean(id)))];
   if (!roleIds.length) throw new ProviderLifecycleError('TENANT_ACCESS_DENIED');
-  const roles = await postgrest<Array<{ id: string; name?: string | null }>>(
-    `roles?select=id,name&id=in.(${roleIds.map(encodeURIComponent).join(',')})&org_id=eq.${encodeURIComponent(context.organizationId)}&status=eq.active&deleted_at=is.null`,
+  const roles = await postgrest<Array<{ id: string; name?: string | null; scope: string; org_id?: string | null; workspace_id?: string | null }>>(
+    `roles?select=id,name,scope,org_id,workspace_id&id=in.(${roleIds.map(encodeURIComponent).join(',')})&org_id=eq.${encodeURIComponent(context.organizationId)}&status=eq.active&deleted_at=is.null`,
     { method: 'GET' },
   );
   if (!roles.length) throw new ProviderLifecycleError('TENANT_ACCESS_DENIED');
+  const organizationRole = roles.find(role => role.id === orgMemberships[0]?.role_id
+    && role.scope === 'organization' && role.org_id === context.organizationId && !role.workspace_id);
+  const workspaceRole = roles.find(role => role.id === workspaceMemberships[0]?.role_id
+    && role.scope === 'workspace' && role.org_id === context.organizationId && role.workspace_id === context.workspaceId);
+  if (!organizationRole && !workspaceRole) throw new ProviderLifecycleError('TENANT_ACCESS_DENIED');
+  const capabilities = await postgrest<Array<{ role_id: string; capability_key: string }>>(
+    `role_capabilities?select=role_id,capability_key&role_id=in.(${roles.map(role => encodeURIComponent(role.id)).join(',')})`,
+    { method: 'GET' },
+  );
   return {
     actorId: context.userId,
     organizationId: context.organizationId,
     workspaceId: context.workspaceId,
     authorizationVersion: context.authorizationVersion,
-    capabilities: new Set(context.capabilities),
-    roleNames: new Set(roles.map(role => String(role.name || '').trim().toLowerCase()).filter(Boolean)),
+    organizationCapabilities: new Set(capabilities.filter(row => row.role_id === organizationRole?.id).map(row => row.capability_key)),
+    workspaceCapabilities: new Set(capabilities.filter(row => row.role_id === workspaceRole?.id).map(row => row.capability_key)),
+    organizationRoleNames: new Set(organizationRole ? [String(organizationRole.name || '').trim().toLowerCase()].filter(Boolean) : []),
+    workspaceRoleNames: new Set(workspaceRole ? [String(workspaceRole.name || '').trim().toLowerCase()].filter(Boolean) : []),
   };
+};
+
+export const providerLifecycleRequestHash = async (envelope: ProviderLifecycleEnvelope) => {
+  const payload = { ...envelope.payload };
+  if (typeof payload.providerKey === 'string') {
+    payload.providerKeyFingerprint = await fingerprintProviderSecret(payload.providerKey);
+    delete payload.providerKey;
+  }
+  if (typeof payload.preProvisionedReference === 'string') {
+    payload.preProvisionedReferenceHash = await hashReceiptValue(payload.preProvisionedReference);
+    delete payload.preProvisionedReference;
+  }
+  return hashReceiptValue({
+    operation: envelope.operation,
+    organizationId: envelope.organizationId,
+    workspaceId: envelope.workspaceId,
+    expectedAuthorizationVersion: envelope.expectedAuthorizationVersion,
+    payload,
+  });
 };
 
 const statusFor = (error: ProviderLifecycleError) => {
   if (error.code === 'TENANT_ACCESS_DENIED' || error.code === 'PERMISSION_DENIED') return 403;
   if (error.code === 'RESOURCE_NOT_FOUND') return 404;
   if (error.code === 'RESOURCE_CONFLICT' || error.code === 'PROVIDER_BLOCKED') return 409;
+  if (error.code === 'IDEMPOTENCY_CONFLICT' || error.code === 'COMMAND_IN_PROGRESS') return 409;
+  if (error.code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') return 503;
   if (error.code === 'VALIDATION_FAILED') return 422;
   return 400;
@@ -151,18 +200,80 @@ export const handleProviderLifecycleRequest = async (
     const error = new ProviderLifecycleError('INVALID_REQUEST');
     return jsonResponse(providerLifecycleErrorBody(error), 405);
   }
+  let claimedReceipt: EnterpriseReceiptRow | null = null;
+  let claimedAuthority: ProviderLifecycleAuthority | null = null;
   try {
     const envelope = parseProviderLifecycleEnvelope(await request.json());
     const authority = await (overrides.authenticate || authenticateProviderLifecycle)(request, envelope);
+    const requestHash = await providerLifecycleRequestHash(envelope);
+    const { receipt, ownsExecution } = await claimEnterpriseReceipt(authority, {
+      commandType: envelope.operation,
+      idempotencyKey: envelope.idempotencyKey,
+      requestId: envelope.requestId,
+      requestHash,
+    });
+    if (receipt.status === 'committed') return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
+    if (receipt.status === 'failed' || receipt.status === 'blocked') {
+      return jsonResponse({ ...(receipt.response || providerLifecycleErrorBody(new ProviderLifecycleError('PROVIDER_BLOCKED'))), replayed: true }, 409);
+    }
+    if (!ownsExecution) throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+    claimedReceipt = receipt;
+    claimedAuthority = authority;
     const deps = overrides.deps || createProviderLifecycleDeps(
       buildEnterpriseProviderRouteDbDeps(isAllowedProviderEndpoint),
     );
-    const result = await executeProviderLifecycleCommand(envelope.operation, authority, envelope.payload, deps);
-    return jsonResponse({ ok: true, ...result }, 200);
+    const execution = {
+      receiptId: receipt.id,
+      executionToken: receipt.execution_token,
+      executionFence: receipt.execution_fence,
+      plan: receipt.execution_plan || {},
+      async persistPlan(plan: JsonObject) {
+        const planned = await persistEnterpriseExecutionPlan(receipt, authority, plan);
+        receipt.execution_plan = planned.execution_plan || {};
+        return receipt.execution_plan;
+      },
+    };
+    const result = await executeProviderLifecycleCommand(envelope.operation, authority, envelope.payload, deps, execution);
+    const resourceId = typeof result.providerConfigId === 'string' ? result.providerConfigId : undefined;
+    const completed = await completeEnterpriseReceipt(receipt, authority, result, resourceId);
+    return jsonResponse({ ok: true, replayed: false, ...(completed.response || result) }, 200);
   } catch (error) {
-    const safeError = error instanceof ProviderLifecycleError
-      ? error
-      : new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    const safeError = error instanceof ProviderLifecycleError ? error
+      : error instanceof EnterpriseReceiptError ? new ProviderLifecycleError(
+        error.code === 'COMMAND_UNAVAILABLE' ? 'PERSISTENCE_UNAVAILABLE' : error.code,
+      )
+        : new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    if (claimedReceipt && claimedAuthority) {
+      try {
+        const recovered = await reloadEnterpriseReceipt(claimedReceipt, claimedAuthority);
+        if (recovered.status === 'committed') {
+          return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
+        }
+        if (recovered.status === 'failed' || recovered.status === 'blocked') {
+          return jsonResponse({ ...(recovered.response || providerLifecycleErrorBody(safeError)), replayed: true }, 409);
+        }
+      } catch {
+        if (safeError.code === 'RECEIPT_FINALIZATION_FAILED') {
+          return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
+        }
+      }
+    }
+    if (claimedReceipt && claimedAuthority && safeError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+      const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true;
+      if (!(safeError.code === 'PERSISTENCE_UNAVAILABLE' && externalEffectPlanned)) {
+        try {
+          await failEnterpriseReceipt(
+            claimedReceipt,
+            claimedAuthority,
+            providerLifecycleErrorBody(safeError),
+            safeError.code === 'PERMISSION_DENIED' || safeError.code === 'TENANT_ACCESS_DENIED' || safeError.code === 'PROVIDER_BLOCKED',
+          );
+        } catch {
+          const finalization = new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
+          return jsonResponse(providerLifecycleErrorBody(finalization), statusFor(finalization));
+        }
+      }
+    }
     return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
   }
 };

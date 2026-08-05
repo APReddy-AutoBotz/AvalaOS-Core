@@ -9,6 +9,7 @@ const requiredFiles = [
   'supabase/functions/_shared/enterpriseIntelligenceAi.ts',
   'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
   'supabase/functions/_shared/enterpriseIntelligenceQuery.ts',
+  'supabase/functions/_shared/enterpriseReceipt.ts',
   'supabase/functions/_shared/providerLifecycle.ts',
   'supabase/functions/_shared/providerLifecycleEndpoint.ts',
   'supabase/functions/enterprise-intelligence-command/index.ts',
@@ -56,7 +57,7 @@ for (const required of ['FORCE ROW LEVEL SECURITY', 'enterprise_ai_command_recei
 const functionBodies = name => [...migration.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'g'))].map(match => match[0]);
 const classifier = functionBodies('enterprise_command_runtime_area').at(-1) || '';
 for (const commandType of [
-  'provider.register', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.revoke',
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
   'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create',
   'approval.review.record', 'approval.record', 'assemble.blueprint.create',
@@ -68,11 +69,16 @@ for (const name of ['enterprise_ai_complete_command', 'enterprise_ai_fail_comman
     throw new Error(`${name} must not gate durable receipt finalization on runtime controls.`);
   }
 }
-const effectiveClaim = functionBodies('enterprise_ai_claim_command').at(-1) || '';
+const effectiveClaim = functionBodies('enterprise_ai_claim_command').findLast(body => body.includes('p_execution_token UUID') && body.includes('enterprise_assert_writable')) || '';
 if (!effectiveClaim.includes('enterprise_command_runtime_area')) throw new Error('New receipt claims require exhaustive runtime-area classification.');
 if (effectiveClaim.indexOf('SELECT * INTO receipt') > effectiveClaim.indexOf('enterprise_assert_writable')) throw new Error('Exact replay must be resolved before current runtime controls.');
 if (effectiveClaim.indexOf('enterprise_assert_writable') > effectiveClaim.indexOf('INSERT INTO public.enterprise_ai_command_receipts')) throw new Error('New receipt claims must validate runtime controls before insertion.');
 if (/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(command)) throw new Error('Receipt finalization errors must not be silently swallowed.');
 if (!command.includes('RECEIPT_FINALIZATION_FAILED')) throw new Error('Receipt finalization failure requires explicit sanitized evidence.');
+if (!command.includes('reloadEnterpriseReceipt')) throw new Error('Command recovery must reload terminal receipts and durable effect evidence.');
+const providerEndpoint = read('supabase/functions/_shared/providerLifecycleEndpoint.ts');
+for (const required of ['requestId', 'idempotencyKey', 'providerLifecycleRequestHash', 'reloadEnterpriseReceipt']) {
+  if (!providerEndpoint.includes(required)) throw new Error(`Provider lifecycle receipt boundary is missing ${required}.`);
+}
 
 console.log('Enterprise Intelligence source-boundary scan passed.');

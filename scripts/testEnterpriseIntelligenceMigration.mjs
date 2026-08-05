@@ -9,6 +9,8 @@ const requiredTables = [
   'enterprise_intelligence_runtime_control',
   'enterprise_ai_capability_routes',
   'enterprise_ai_command_receipts',
+  'enterprise_ai_receipt_replay_requests',
+  'enterprise_ai_effect_journal',
   'enterprise_ai_job_ledger',
   'enterprise_ai_usage_ledger',
   'enterprise_evidence_sources',
@@ -86,7 +88,7 @@ const classifierStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.enterpris
 const classifierEnd = sql.indexOf('$$;', classifierStart);
 const classifier = sql.slice(classifierStart, classifierEnd);
 for (const commandType of [
-  'provider.register', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.revoke',
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
   'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create',
   'approval.review.record', 'approval.record', 'assemble.blueprint.create',
@@ -100,13 +102,27 @@ for (const name of ['enterprise_ai_complete_command', 'enterprise_ai_fail_comman
   check(bodies.every(body => !body.includes('enterprise_assert_writable')), `${name} must finalize durable truth without runtime gating.`);
 }
 const claims = receiptFunctions('enterprise_ai_claim_command');
-const effectiveClaim = claims.at(-1) || '';
+const effectiveClaim = claims.findLast(body => body.includes('p_execution_token UUID') && body.includes('enterprise_assert_writable')) || '';
 check(effectiveClaim.includes('enterprise_command_runtime_area'), 'Effective claim must use the exhaustive runtime-area classifier.');
 check(effectiveClaim.indexOf('SELECT * INTO receipt') < effectiveClaim.indexOf('enterprise_assert_writable'), 'Exact replay must be resolved before runtime validation.');
 check(effectiveClaim.indexOf('enterprise_assert_writable') < effectiveClaim.indexOf('INSERT INTO public.enterprise_ai_command_receipts'), 'New commands must be runtime-validated before receipt creation.');
 check(sql.includes("runtime_area TEXT NOT NULL CHECK (runtime_area IN ('provider', 'ingestion', 'delivery', 'assemble'))"), 'Receipts must persist their classified runtime area.');
 check(!/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(commandSource), 'Receipt failure finalization must not be silently swallowed.');
 check(commandSource.includes("RECEIPT_FINALIZATION_FAILED"), 'Genuine finalization failure requires an explicit stable error.');
-check(commandSource.indexOf("existing?.status === 'committed'") < commandSource.indexOf('const receipt = await claimReceipt'), 'Committed replay must return before a new claim.');
+for (const token of ['initial_request_id', 'execution_fence', 'lease_expires_at', 'reconciliation_count', 'enterprise_ai_effect_journal', 'enterprise_ai_reconcile_command', 'enterprise_ai_reload_command', 'enterprise_effect_journal_immutable']) {
+  check(sql.includes(token), `Receipt recovery contract is missing ${token}.`);
+}
+check(!effectiveClaim.includes('request_id IS DISTINCT FROM p_request'), 'requestId must not be part of logical replay identity.');
+check(sql.includes('UNIQUE (org_id, workspace_id, actor_id, command_type, idempotency_key)'), 'Logical receipt identity must include workspace scope.');
+check(commandSource.includes('claimEnterpriseReceipt'), 'Command handler must use the shared request-ID-independent receipt coordinator.');
+check(commandSource.includes('reloadEnterpriseReceipt'), 'Command handler must reload durable effect truth before reporting finalization failure.');
+for (const mutation of [
+  'enterprise_create_evidence_source', 'enterprise_commit_evidence_extraction',
+  'enterprise_review_evidence_candidate', 'enterprise_promote_evidence_to_assess_v2',
+  'enterprise_commit_modernization_assessment', 'enterprise_record_high_impact_review',
+  'enterprise_commit_high_impact_approval', 'enterprise_commit_delivery_handoff',
+  'enterprise_commit_monitor_baseline', 'enterprise_commit_assemble_blueprint',
+]) check(sql.includes(`FUNCTION public.${mutation}`), `Receipt-aware mutation RPC is missing ${mutation}.`);
+check(sql.includes('receipt-unaware implementations are private implementation details'), 'Receipt-unaware mutation overloads must be revoked from Edge service authority.');
 
 console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);

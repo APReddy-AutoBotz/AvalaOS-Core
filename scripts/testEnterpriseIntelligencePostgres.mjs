@@ -68,7 +68,8 @@ const scenario = async (name, operation) => {
 };
 const enterpriseTables = [
   'enterprise_intelligence_runtime_control', 'enterprise_ai_capability_routes',
-  'enterprise_ai_command_receipts', 'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
+  'enterprise_ai_command_receipts', 'enterprise_ai_receipt_replay_requests',
+  'enterprise_ai_effect_journal', 'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
   'enterprise_evidence_sources', 'enterprise_evidence_source_versions', 'enterprise_evidence_candidates',
   'enterprise_evidence_candidate_edits', 'enterprise_evidence_questions', 'enterprise_evidence_assess_promotions',
   'enterprise_studio_delivery_handoffs', 'enterprise_delivery_work_packages',
@@ -134,12 +135,16 @@ try {
     for (const table of enterpriseTables) {
       assert.equal((await authority.query("SELECT has_table_privilege('authenticated',$1,'SELECT') allowed", [`public.${table}`])).rows[0].allowed, false, table);
       assert.equal((await authority.query("SELECT has_table_privilege('service_role',$1,'SELECT') allowed", [`public.${table}`])).rows[0].allowed, true, table);
-      assert.equal((await authority.query("SELECT has_table_privilege('service_role',$1,'INSERT,UPDATE,DELETE') allowed", [`public.${table}`])).rows[0].allowed, false, table);
+      const appendOnly = table === 'enterprise_ai_receipt_replay_requests' || table === 'enterprise_ai_effect_journal';
+      assert.equal((await authority.query("SELECT has_table_privilege('service_role',$1,'INSERT') allowed", [`public.${table}`])).rows[0].allowed, appendOnly, `${table}:insert`);
+      assert.equal((await authority.query("SELECT has_table_privilege('service_role',$1,'UPDATE,DELETE') allowed", [`public.${table}`])).rows[0].allowed, false, `${table}:update-delete`);
     }
     assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_create_evidence_source(jsonb,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
-    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source(jsonb,jsonb)','EXECUTE') allowed")).rows[0].allowed, true);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source(jsonb,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, true);
     assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
-    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, true);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_provider_lifecycle_transition(text,uuid,uuid,uuid,bigint,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed, true);
   });
 
   const fixture = await createEnterpriseIntelligenceFixture(authority);
@@ -221,6 +226,61 @@ try {
     assert.equal(evidence.tenant_bound, true);
     assert.doesNotMatch(evidence.metadata, /sk-test-must-never-persist|AVALA_PROVIDER_SECRET|providerKey/i);
   });
+  await scenario('provider organization authority and exact workspace routes are separated', async () => {
+    const workspaceB = fixture.uuid(630); const routeA = fixture.uuid(631); const routeB = fixture.uuid(632);
+    const workspaceManager = fixture.uuid(633); const orgMemberRole = fixture.uuid(634); const workspaceRole = fixture.uuid(635);
+    await authority.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Provider workspace B','provider-workspace-b')", [workspaceB, fixture.org]);
+    await authority.query('INSERT INTO auth.users(id) VALUES($1)', [workspaceManager]);
+    await authority.query("INSERT INTO public.profiles(id,email) VALUES($1,'workspace-manager@fixture.invalid')", [workspaceManager]);
+    await authority.query("INSERT INTO public.roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Organization member','provider-org-member','organization','[]')", [orgMemberRole, fixture.org]);
+    await authority.query("INSERT INTO public.roles(id,org_id,workspace_id,name,slug,scope,permissions) VALUES($1,$2,$3,'Workspace provider manager','provider-workspace-manager','workspace','[]')", [workspaceRole, fixture.org, workspaceB]);
+    await authority.query("INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,'byok.manage'),($1,'security.manage')", [workspaceRole]);
+    await authority.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [fixture.org, workspaceManager, orgMemberRole]);
+    await authority.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status) VALUES($1,$2,$3,$4,'active')", [fixture.org, workspaceB, workspaceManager, workspaceRole]);
+    const managerVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, workspaceManager])).rows[0].version);
+    await authority.query(`INSERT INTO public.enterprise_ai_capability_routes(
+      id,org_id,workspace_id,provider_config_id,capability,model,enabled,created_by,updated_by)
+      VALUES($1,$2,$3,$4,'assess.evidence.extract','fixture-model',true,$5,$5),
+            ($6,$2,$7,$4,'assess.evidence.extract','fixture-model',true,$5,$5)`,
+    [routeA, fixture.org, fixture.workspace, fixture.provider, fixture.requester, routeB, workspaceB]);
+
+    const deniedOperations = [
+      ['provider.secret.bind', {providerConfigId: fixture.provider}],
+      ['provider.validate', {providerConfigId: fixture.provider}],
+      ['provider.activate', {providerConfigId: fixture.provider}],
+      ['provider.secret.rotate', {providerConfigId: fixture.provider}],
+      ['provider.revoke', {providerConfigId: fixture.provider}],
+    ];
+    for (const [index, [operation, payload]] of deniedOperations.entries()) {
+      await assert.rejects(authority.query(
+        'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,1,$9::jsonb)',
+        [operation, workspaceManager, fixture.org, workspaceB, managerVersion, JSON.stringify(payload), fixture.uuid(640 + index), fixture.uuid(650 + index), JSON.stringify({providerConfigId: fixture.provider})],
+      ), /ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED/);
+    }
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,1,$9::jsonb)',
+      ['provider.route.toggle', workspaceManager, fixture.org, workspaceB, managerVersion, JSON.stringify({providerConfigId: fixture.provider, routeId: routeA, enabled: false}), fixture.uuid(660), fixture.uuid(661), JSON.stringify({providerConfigId: fixture.provider, routeId: routeA, enabled: false})],
+    ), /ENTERPRISE_PROVIDER_ROUTE_INVALID/);
+
+    const request = fixture.uuid(662); const token = fixture.uuid(663); const result = {providerConfigId: fixture.provider, routeId: routeB, enabled: false};
+    const receipt = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'provider.route.toggle','workspace-b-route-001',$4,$5,NULL,$6)).*",
+      [workspaceManager, fixture.org, workspaceB, request, fixture.hash('4'), token],
+    )).rows[0];
+    await authority.query(
+      'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10::jsonb)',
+      ['provider.route.toggle', workspaceManager, fixture.org, workspaceB, managerVersion, JSON.stringify({providerConfigId: fixture.provider, routeId: routeB, enabled: false}), receipt.id, token, receipt.execution_fence, JSON.stringify(result)],
+    );
+    await authority.query(
+      'SELECT public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
+      [receipt.id, fixture.org, workspaceB, token, receipt.execution_fence, JSON.stringify(result), fixture.provider],
+    );
+    assert.deepEqual((await authority.query('SELECT id,enabled FROM public.enterprise_ai_capability_routes WHERE id=ANY($1::uuid[]) ORDER BY id', [[routeA, routeB]])).rows, [
+      {id: routeA, enabled: true}, {id: routeB, enabled: false},
+    ].sort((left, right) => left.id.localeCompare(right.id)));
+    assert.equal((await authority.query("SELECT public.enterprise_actor_has_organization_capability($1,$2,'byok.manage',$3) allowed", [workspaceManager, fixture.org, managerVersion])).rows[0].allowed, false);
+    console.log(`PROVIDER AUTHORITY MATRIX ${JSON.stringify({workspaceOnlyOrganizationMutationsDenied:5,crossWorkspaceRouteDenied:1,ownWorkspaceRouteTransitions:1,otherWorkspaceRouteChanges:0})}`);
+  });
   await scenario('text-native, CSV, transcript, text-PDF, and DOCX provenance', async () => {
     const expected = new Map([
       ['text/plain', 'text_native'], ['text/markdown', 'text_native'], ['text/csv', 'csv'],
@@ -281,7 +341,111 @@ try {
     assert.equal(replay.id, first.id);
     await assert.rejects(authority.query('SELECT public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8)', [fixture.requester, fixture.org, fixture.workspace, 'provider.register', 'fixture-command-001', fixture.uuid(321), fixture.hash('d'), null]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
     await authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{\"ok\":true}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]);
-    await assert.rejects(authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]), /ENTERPRISE_AI_RECEIPT_NOT_CLAIMED/);
+    const exactCompletionReplay = (await authority.query("SELECT (public.enterprise_ai_complete_command($1,$2,$3,'{\"ok\":true}'::jsonb,NULL)).*", [first.id, fixture.org, fixture.workspace])).rows[0];
+    assert.equal(exactCompletionReplay.status, 'committed');
+    await assert.rejects(authority.query("SELECT public.enterprise_ai_complete_command($1,$2,$3,'{}'::jsonb,NULL)", [first.id, fixture.org, fixture.workspace]), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+  });
+  await scenario('request correlation, response loss, stranded effects, and fenced recovery converge', async () => {
+    const claim = async (client, {key, request, token, hash, command = 'provider.register'}) => (
+      await client.query(
+        'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,NULL,$8)).*',
+        [fixture.requester, fixture.org, fixture.workspace, command, key, request, hash, token],
+      )
+    ).rows[0];
+
+    const logicalHash = fixture.hash('e');
+    const ownerToken = fixture.uuid(601);
+    const first = await claim(authority, {
+      key: 'request-correlation-001', request: fixture.uuid(602), token: ownerToken, hash: logicalHash,
+    });
+    const differentRequestReplay = await claim(authority, {
+      key: 'request-correlation-001', request: fixture.uuid(603), token: fixture.uuid(604), hash: logicalHash,
+    });
+    assert.equal(differentRequestReplay.id, first.id);
+    assert.equal(differentRequestReplay.execution_token, ownerToken);
+    assert.equal((await authority.query('SELECT count(*)::int n FROM public.enterprise_ai_receipt_replay_requests WHERE receipt_id=$1', [first.id])).rows[0].n, 2);
+    await assert.rejects(claim(authority, {
+      key: 'request-correlation-001', request: fixture.uuid(605), token: fixture.uuid(606), hash: fixture.hash('f'),
+    }), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+
+    const committedResult = {truth: 'committed-after-lost-response'};
+    await authority.query(
+      'SELECT public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,NULL)',
+      [first.id, fixture.org, fixture.workspace, ownerToken, first.execution_fence, JSON.stringify(committedResult)],
+    );
+    const completionReplay = (await authority.query(
+      'SELECT (public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,NULL)).*',
+      [first.id, fixture.org, fixture.workspace, ownerToken, first.execution_fence, JSON.stringify(committedResult)],
+    )).rows[0];
+    assert.equal(completionReplay.status, 'committed');
+    assert.deepEqual(completionReplay.response, committedResult);
+
+    const strandedToken = fixture.uuid(607);
+    const stranded = await claim(authority, {
+      key: 'stranded-effect-001', request: fixture.uuid(608), token: strandedToken, hash: fixture.hash('1'), command: 'monitor.baseline.create',
+    });
+    const strandedResult = {baselineId: fixture.uuid(609), status: 'approval_required'};
+    await authority.query(
+      "SELECT public.enterprise_ai_record_effect($1,$2,$3,$4,$5,'monitor.baseline.create','command',$6,$7::jsonb,'committed')",
+      [stranded.id, fixture.org, fixture.workspace, strandedToken, stranded.execution_fence, strandedResult.baselineId, JSON.stringify(strandedResult)],
+    );
+    const reconciledByClaim = await claim(authority, {
+      key: 'stranded-effect-001', request: fixture.uuid(610), token: fixture.uuid(611), hash: fixture.hash('1'), command: 'monitor.baseline.create',
+    });
+    assert.equal(reconciledByClaim.status, 'committed');
+    assert.deepEqual(reconciledByClaim.response, strandedResult);
+
+    const failedToken = fixture.uuid(612);
+    const failed = await claim(authority, {
+      key: 'failure-response-loss-001', request: fixture.uuid(613), token: failedToken, hash: fixture.hash('2'),
+    });
+    const failureResult = {ok: false, error: {code: 'COMMAND_BLOCKED'}};
+    await authority.query(
+      'SELECT public.enterprise_ai_fail_command($1,$2,$3,$4,$5,$6::jsonb,true)',
+      [failed.id, fixture.org, fixture.workspace, failedToken, failed.execution_fence, JSON.stringify(failureResult)],
+    );
+    const failureReplay = (await authority.query(
+      'SELECT (public.enterprise_ai_fail_command($1,$2,$3,$4,$5,$6::jsonb,true)).*',
+      [failed.id, fixture.org, fixture.workspace, failedToken, failed.execution_fence, JSON.stringify(failureResult)],
+    )).rows[0];
+    assert.equal(failureReplay.status, 'blocked');
+
+    const leaseToken = fixture.uuid(614);
+    const leased = await claim(authority, {
+      key: 'fenced-recovery-001', request: fixture.uuid(615), token: leaseToken, hash: fixture.hash('3'), command: 'assemble.blueprint.create',
+    });
+    await authority.query(
+      'SELECT public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)',
+      [leased.id, fixture.org, fixture.workspace, leaseToken, leased.execution_fence, JSON.stringify({blueprintId: fixture.uuid(616)})],
+    );
+    await authority.query("UPDATE public.enterprise_ai_command_receipts SET lease_expires_at=statement_timestamp()-interval '1 second' WHERE id=$1", [leased.id]);
+    const peer = await connect(urlFor(names.authority));
+    const contenders = await Promise.all([
+      claim(authority, {key: 'fenced-recovery-001', request: fixture.uuid(617), token: fixture.uuid(618), hash: fixture.hash('3'), command: 'assemble.blueprint.create'}),
+      claim(peer, {key: 'fenced-recovery-001', request: fixture.uuid(619), token: fixture.uuid(620), hash: fixture.hash('3'), command: 'assemble.blueprint.create'}),
+    ]);
+    assert.equal(new Set(contenders.map(row => row.execution_token)).size, 1);
+    assert.equal(new Set(contenders.map(row => Number(row.execution_fence))).size, 1);
+    const winner = contenders[0];
+    assert.equal(Number(winner.execution_fence), Number(leased.execution_fence) + 1);
+    assert.deepEqual(winner.execution_plan, {blueprintId: fixture.uuid(616)});
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
+      [leased.id, fixture.org, fixture.workspace, leaseToken, leased.execution_fence, JSON.stringify({blueprintId: fixture.uuid(616)}), fixture.uuid(616)],
+    ), /ENTERPRISE_AI_STALE_EXECUTION_FENCE/);
+    await authority.query(
+      'SELECT public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
+      [leased.id, fixture.org, fixture.workspace, winner.execution_token, winner.execution_fence, JSON.stringify({blueprintId: fixture.uuid(616)}), fixture.uuid(616)],
+    );
+
+    const counts = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.enterprise_ai_command_receipts WHERE status='claimed') claimed,
+      (SELECT count(*)::int FROM public.enterprise_ai_effect_journal) effects,
+      (SELECT count(*)::int FROM (SELECT receipt_id,effect_key,count(*) FROM public.enterprise_ai_effect_journal GROUP BY receipt_id,effect_key HAVING count(*)>1) duplicate) duplicate_effects`)).rows[0];
+    assert.equal(counts.claimed, 0);
+    assert.equal(counts.duplicate_effects, 0);
+    await assert.rejects(authority.query('UPDATE public.enterprise_ai_effect_journal SET safe_result=safe_result WHERE receipt_id=$1', [first.id]), /ENTERPRISE_AI_EFFECT_JOURNAL_IMMUTABLE/);
+    console.log(`RECEIPT RECOVERY COUNTS ${JSON.stringify({claimedFinal:counts.claimed,duplicateEffects:counts.duplicate_effects,effectRows:counts.effects,replayRequests:2,recoveryWinners:1})}`);
   });
   await scenario('exhaustive command runtime-area classification', async () => {
     const matrix = [

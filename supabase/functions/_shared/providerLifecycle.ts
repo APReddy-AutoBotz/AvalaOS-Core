@@ -36,8 +36,18 @@ export type ProviderLifecycleAuthority = {
   organizationId: string;
   workspaceId: string;
   authorizationVersion: number;
-  capabilities: Set<string>;
-  roleNames: Set<string>;
+  organizationCapabilities: Set<string>;
+  workspaceCapabilities: Set<string>;
+  organizationRoleNames: Set<string>;
+  workspaceRoleNames: Set<string>;
+};
+
+export type ProviderLifecycleExecutionContext = {
+  receiptId: string;
+  executionToken: string;
+  executionFence: number;
+  plan: JsonObject;
+  persistPlan(plan: JsonObject): Promise<JsonObject>;
 };
 
 export type ProviderLifecycleKeyRef = {
@@ -68,6 +78,7 @@ export type ProviderLifecycleDatabase = {
     operation: ProviderLifecycleOperation;
     authority: ProviderLifecycleAuthority;
     payload: JsonObject;
+    execution?: Pick<ProviderLifecycleExecutionContext, 'receiptId' | 'executionToken' | 'executionFence'> & { result: JsonObject };
   }): Promise<JsonObject>;
 };
 
@@ -91,7 +102,10 @@ export class ProviderLifecycleError extends Error {
     | 'SECRET_UNAVAILABLE'
     | 'VALIDATION_FAILED'
     | 'PROVIDER_BLOCKED'
-    | 'PERSISTENCE_UNAVAILABLE') {
+    | 'PERSISTENCE_UNAVAILABLE'
+    | 'IDEMPOTENCY_CONFLICT'
+    | 'COMMAND_IN_PROGRESS'
+    | 'RECEIPT_FINALIZATION_FAILED') {
     super(code);
     this.name = 'ProviderLifecycleError';
   }
@@ -143,10 +157,16 @@ const requireBudget = (value: unknown) => {
 };
 
 const requireManager = (authority: ProviderLifecycleAuthority, secretMutation = false) => {
-  if (authority.capabilities.has('org.admin')) return;
-  const byok = authority.capabilities.has('byok.manage');
-  const security = authority.capabilities.has('security.manage');
+  if (authority.organizationCapabilities.has('org.admin')) return;
+  const byok = authority.organizationCapabilities.has('byok.manage');
+  const security = authority.organizationCapabilities.has('security.manage');
   if (secretMutation ? byok && security : byok || security) return;
+  throw new ProviderLifecycleError('PERMISSION_DENIED');
+};
+
+const requireWorkspaceManager = (authority: ProviderLifecycleAuthority) => {
+  if (authority.organizationCapabilities.has('org.admin')) return;
+  if (authority.workspaceCapabilities.has('byok.manage') || authority.workspaceCapabilities.has('security.manage')) return;
   throw new ProviderLifecycleError('PERMISSION_DENIED');
 };
 
@@ -169,11 +189,23 @@ const safeTransition = async (
   operation: ProviderLifecycleOperation,
   authority: ProviderLifecycleAuthority,
   payload: JsonObject,
+  result: JsonObject,
+  execution?: ProviderLifecycleExecutionContext,
 ) => {
   try {
-    const result = await deps.database.transition({ operation, authority, payload });
-    if (!isRecord(result)) throw new Error('invalid transition response');
-    return result;
+    const transition = await deps.database.transition({
+      operation,
+      authority,
+      payload,
+      execution: execution ? {
+        receiptId: execution.receiptId,
+        executionToken: execution.executionToken,
+        executionFence: execution.executionFence,
+        result,
+      } : undefined,
+    });
+    if (!isRecord(transition)) throw new Error('invalid transition response');
+    return transition;
   } catch (error) {
     if (error instanceof ProviderLifecycleError) throw error;
     throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
@@ -210,11 +242,22 @@ const resolveBoundSecret = async (
   }
 };
 
+const persistExecutionPlan = async (
+  execution: ProviderLifecycleExecutionContext | undefined,
+  additions: JsonObject,
+) => {
+  if (!execution) return additions;
+  const next = { ...execution.plan, ...additions };
+  execution.plan = await execution.persistPlan(next);
+  return execution.plan;
+};
+
 const writeOrResolveSecret = async (
   provider: EnterpriseAiProvider,
   authority: ProviderLifecycleAuthority,
   payload: JsonObject,
   deps: ProviderLifecycleDeps,
+  execution?: ProviderLifecycleExecutionContext,
 ) => {
   const raw = typeof payload.providerKey === 'string' ? payload.providerKey : undefined;
   const preProvisioned = typeof payload.preProvisionedReference === 'string'
@@ -226,17 +269,37 @@ const writeOrResolveSecret = async (
       throw new ProviderLifecycleError('SECRET_BACKEND_REQUIRED');
     }
     if (raw.length < 8 || raw.length > 16_384) throw new ProviderLifecycleError('INVALID_REQUEST');
-    const secretRef = createProviderSecretReference(provider, authority.organizationId, deps.randomId());
+    const fingerprint = await fingerprintProviderSecret(raw);
+    if (execution?.plan.safeFingerprint && execution.plan.safeFingerprint !== fingerprint) {
+      throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    }
+    const secretRef = typeof execution?.plan.secretReference === 'string'
+      ? execution.plan.secretReference
+      : createProviderSecretReference(provider, authority.organizationId, deps.randomId());
+    const keyRefId = typeof execution?.plan.keyRefId === 'string' ? execution.plan.keyRefId : deps.randomId();
+    await persistExecutionPlan(execution, { provider, secretReference: secretRef, keyRefId, safeFingerprint: fingerprint });
+    const existing = await deps.secretBackend.resolve({ provider, secretRef, organizationId: authority.organizationId });
+    if (existing) {
+      if (await fingerprintProviderSecret(existing) !== fingerprint) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+      return { secretRef, keyRefId, fingerprint, wrote: false, value: existing };
+    }
     await deps.secretBackend.write({ provider, secretRef, organizationId: authority.organizationId, value: raw });
-    return { secretRef, fingerprint: await fingerprintProviderSecret(raw), wrote: true, value: raw };
+    await persistExecutionPlan(execution, { externalSecretWritten: true });
+    return { secretRef, keyRefId, fingerprint, wrote: true, value: raw };
   }
   if (deps.secretBackend.writable) throw new ProviderLifecycleError('INVALID_REQUEST');
   if (!preProvisioned || !isAllowedProviderSecretRef(provider, preProvisioned, authority.organizationId)) {
     throw new ProviderLifecycleError('INVALID_REQUEST');
   }
+  const referenceHash = await fingerprintProviderSecret(preProvisioned);
+  if (execution?.plan.preProvisionedReferenceHash && execution.plan.preProvisionedReferenceHash !== referenceHash) {
+    throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+  }
+  const keyRefId = typeof execution?.plan.keyRefId === 'string' ? execution.plan.keyRefId : deps.randomId();
+  await persistExecutionPlan(execution, { provider, keyRefId, preProvisionedReferenceHash: referenceHash });
   const value = await deps.secretBackend.resolve({ provider, secretRef: preProvisioned, organizationId: authority.organizationId });
   if (!value) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
-  return { secretRef: preProvisioned, fingerprint: await fingerprintProviderSecret(value), wrote: false, value };
+  return { secretRef: preProvisioned, keyRefId, fingerprint: await fingerprintProviderSecret(value), wrote: false, value };
 };
 
 const cleanupNewSecret = async (
@@ -256,10 +319,14 @@ export const executeProviderLifecycleCommand = async (
   authority: ProviderLifecycleAuthority,
   payloadValue: unknown,
   deps: ProviderLifecycleDeps,
+  execution?: ProviderLifecycleExecutionContext,
 ): Promise<JsonObject> => {
   const payload = isRecord(payloadValue) ? payloadValue : (() => { throw new ProviderLifecycleError('INVALID_REQUEST'); })();
-  requireManager(authority, operation === 'provider.secret.bind' || operation === 'provider.secret.rotate' || operation === 'provider.revoke');
-  if (authority.roleNames.size === 0) throw new ProviderLifecycleError('PERMISSION_DENIED');
+  if (operation === 'provider.route.toggle') requireWorkspaceManager(authority);
+  else requireManager(authority, operation === 'provider.secret.bind' || operation === 'provider.secret.rotate' || operation === 'provider.revoke');
+  if (authority.organizationRoleNames.size === 0 && authority.workspaceRoleNames.size === 0) {
+    throw new ProviderLifecycleError('PERMISSION_DENIED');
+  }
 
   if (operation === 'provider.register') {
     const provider = requireProvider(payload.provider);
@@ -275,8 +342,16 @@ export const executeProviderLifecycleCommand = async (
       ? [...new Set(payload.modelAllowlist.map(item => requireString(item, 200)))]
       : [defaultModel];
     if (modelAllowlist.length > 64 || !modelAllowlist.includes(defaultModel)) throw new ProviderLifecycleError('INVALID_REQUEST');
-    const providerConfigId = deps.randomId();
-    const routes = capabilities.map(capability => ({ id: deps.randomId(), capability, model: defaultModel }));
+    const plannedConfigId = typeof execution?.plan.providerConfigId === 'string' ? execution.plan.providerConfigId : deps.randomId();
+    const plannedRouteIds = Array.isArray(execution?.plan.routeIds)
+      ? execution.plan.routeIds.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (plannedRouteIds.length && plannedRouteIds.length !== capabilities.length) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    const providerConfigId = plannedConfigId;
+    const routeIds = plannedRouteIds.length ? plannedRouteIds : capabilities.map(() => deps.randomId());
+    await persistExecutionPlan(execution, { providerConfigId, routeIds });
+    const routes = capabilities.map((capability, index) => ({ id: routeIds[index], capability, model: defaultModel }));
+    const result = { providerConfigId, provider, status: 'pending_review', routes };
     await safeTransition(deps, operation, authority, {
       providerConfigId,
       provider,
@@ -288,8 +363,8 @@ export const executeProviderLifecycleCommand = async (
       capabilities,
       routes,
       budget: requireBudget(payload.budget),
-    });
-    return { providerConfigId, provider, status: 'pending_review', routes };
+    }, result, execution);
+    return result;
   }
 
   const config = await loadConfig(deps, authority, payload.providerConfigId);
@@ -297,8 +372,9 @@ export const executeProviderLifecycleCommand = async (
 
   if (operation === 'provider.secret.bind') {
     if (config.keyRef) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
-    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps);
-    const keyRefId = deps.randomId();
+    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
+    const keyRefId = prepared.keyRefId;
+    const result = { providerConfigId: config.id, keyRefId, status: 'pending_review', safeFingerprint: prepared.fingerprint };
     try {
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
@@ -307,37 +383,45 @@ export const executeProviderLifecycleCommand = async (
         secretReference: prepared.secretRef,
         safeFingerprint: prepared.fingerprint,
         backend: deps.secretBackend.kind,
-      });
-      return { providerConfigId: config.id, keyRefId, status: 'pending_review', safeFingerprint: prepared.fingerprint };
+      }, result, execution);
+      return result;
     } catch (error) {
-      await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
+      if (!execution) await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
       throw error;
     }
   }
 
   if (operation === 'provider.validate') {
-    const providerKey = await resolveBoundSecret(config, authority, deps);
-    try {
-      await deps.validateConnection({
-        provider: config.provider,
-        endpoint: config.endpoint,
-        deployment: config.deployment,
-        model: config.defaultModel,
-        apiKey: providerKey,
-      });
-    } catch {
-      throw new ProviderLifecycleError('VALIDATION_FAILED');
+    let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
+      ? execution.plan.lastValidatedAt
+      : undefined;
+    if (!lastValidatedAt) {
+      const providerKey = await resolveBoundSecret(config, authority, deps);
+      try {
+        await deps.validateConnection({
+          provider: config.provider,
+          endpoint: config.endpoint,
+          deployment: config.deployment,
+          model: config.defaultModel,
+          apiKey: providerKey,
+        });
+      } catch {
+        throw new ProviderLifecycleError('VALIDATION_FAILED');
+      }
+      lastValidatedAt = deps.now().toISOString();
+      await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
     }
-    const lastValidatedAt = deps.now().toISOString();
-    await safeTransition(deps, operation, authority, { providerConfigId: config.id, lastValidatedAt });
-    return { providerConfigId: config.id, status: 'validated', lastValidatedAt };
+    const result = { providerConfigId: config.id, status: 'validated', lastValidatedAt };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, lastValidatedAt }, result, execution);
+    return result;
   }
 
   if (operation === 'provider.activate') {
     if (!config.keyRef || !isFreshValidation(config.lastValidatedAt, deps.now())) throw new ProviderLifecycleError('PROVIDER_BLOCKED');
     await resolveBoundSecret(config, authority, deps);
-    await safeTransition(deps, operation, authority, { providerConfigId: config.id, keyRefId: config.keyRef.id });
-    return { providerConfigId: config.id, status: 'active' };
+    const result = { providerConfigId: config.id, status: 'active' };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, keyRefId: config.keyRef.id }, result, execution);
+    return result;
   }
 
   if (operation === 'provider.route.toggle') {
@@ -352,7 +436,7 @@ export const executeProviderLifecycleCommand = async (
         organizationId: authority.organizationId,
         workspaceId: authority.workspaceId,
         actorId: authority.actorId,
-        roleNames: [...authority.roleNames],
+        roleNames: [...authority.organizationRoleNames, ...authority.workspaceRoleNames],
         requestedProviderConfigId: config.id,
         includeDisabled: true,
         proposedAllowedRoles: allowedRoles,
@@ -373,32 +457,41 @@ export const executeProviderLifecycleCommand = async (
           : null,
       });
       if (secret.status !== 'resolved') throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
+      const result = { providerConfigId: config.id, routeId, enabled: true, capability, allowedRolePolicy: allowedRoles ? 'updated' : 'preserved' };
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
         routeId,
         capability,
         enabled: true,
         ...(allowedRoles ? { allowedRoles } : {}),
-      });
-      return { providerConfigId: config.id, routeId, enabled: true, capability, allowedRolePolicy: allowedRoles ? 'updated' : 'preserved' };
+      }, result, execution);
+      return result;
     }
-    await safeTransition(deps, operation, authority, { providerConfigId: config.id, routeId, enabled: false });
-    return { providerConfigId: config.id, routeId, enabled: false };
+    const result = { providerConfigId: config.id, routeId, enabled: false };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, routeId, enabled: false }, result, execution);
+    return result;
   }
 
   if (operation === 'provider.secret.rotate') {
     if (!config.keyRef) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
-    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps);
-    const keyRefId = deps.randomId();
+    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
+    const keyRefId = prepared.keyRefId;
     try {
-      await deps.validateConnection({
-        provider: config.provider,
-        endpoint: config.endpoint,
-        deployment: config.deployment,
-        model: config.defaultModel,
-        apiKey: prepared.value,
-      });
-      const lastValidatedAt = deps.now().toISOString();
+      let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
+        ? execution.plan.lastValidatedAt
+        : undefined;
+      if (!lastValidatedAt) {
+        await deps.validateConnection({
+          provider: config.provider,
+          endpoint: config.endpoint,
+          deployment: config.deployment,
+          model: config.defaultModel,
+          apiKey: prepared.value,
+        });
+        lastValidatedAt = deps.now().toISOString();
+        await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
+      }
+      const result = { providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
         provider: config.provider,
@@ -408,18 +501,17 @@ export const executeProviderLifecycleCommand = async (
         safeFingerprint: prepared.fingerprint,
         backend: deps.secretBackend.kind,
         lastValidatedAt,
-      });
-      let cleanupPending = false;
+      }, result, execution);
       if (deps.secretBackend.writable && deps.secretBackend.remove) {
         await deps.secretBackend.remove({
           provider: config.provider,
           secretRef: config.keyRef.secretRef,
           organizationId: authority.organizationId,
-        }).catch(() => { cleanupPending = true; });
+        }).catch(() => undefined);
       }
-      return { providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt, cleanupPending };
+      return result;
     } catch (error) {
-      await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
+      if (!execution) await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
       if (error instanceof ProviderLifecycleError) throw error;
       if (error instanceof EnterpriseAiGatewayError) throw new ProviderLifecycleError('VALIDATION_FAILED');
       throw new ProviderLifecycleError('VALIDATION_FAILED');
@@ -427,20 +519,20 @@ export const executeProviderLifecycleCommand = async (
   }
 
   if (operation === 'provider.revoke') {
+    const result = { providerConfigId: config.id, status: 'retired', routesEnabled: false };
     await safeTransition(deps, operation, authority, {
       providerConfigId: config.id,
       keyRefId: config.keyRef?.id || null,
       disableAllRoutes: true,
-    });
-    let cleanupPending = false;
+    }, result, execution);
     if (config.keyRef && deps.secretBackend.writable && deps.secretBackend.remove) {
       await deps.secretBackend.remove({
         provider: config.provider,
         secretRef: config.keyRef.secretRef,
         organizationId: authority.organizationId,
-      }).catch(() => { cleanupPending = true; });
+      }).catch(() => undefined);
     }
-    return { providerConfigId: config.id, status: 'retired', routesEnabled: false, cleanupPending };
+    return result;
   }
 
   throw new ProviderLifecycleError('INVALID_REQUEST');
@@ -504,6 +596,10 @@ export const createProviderLifecycleDatabase = (): ProviderLifecycleDatabase => 
       p_workspace: input.authority.workspaceId,
       p_authorization_version: input.authority.authorizationVersion,
       p_payload: input.payload,
+      p_receipt: input.execution?.receiptId || null,
+      p_execution_token: input.execution?.executionToken || null,
+      p_execution_fence: input.execution?.executionFence || null,
+      p_result: input.execution?.result || null,
     });
     if (!isRecord(value)) throw new Error('Provider lifecycle transition failed.');
     return value;

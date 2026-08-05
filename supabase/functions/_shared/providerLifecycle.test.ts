@@ -5,9 +5,10 @@ import {
   type ProviderLifecycleAuthority,
   type ProviderLifecycleConfig,
   type ProviderLifecycleDatabase,
+  type ProviderLifecycleOperation,
 } from './providerLifecycle';
 import type { ProviderSecretBackend } from './providerSecretAdapter';
-import { parseProviderLifecycleEnvelope } from './providerLifecycleEndpoint';
+import { parseProviderLifecycleEnvelope, providerLifecycleRequestHash } from './providerLifecycleEndpoint';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -25,8 +26,10 @@ const authority: ProviderLifecycleAuthority = {
   organizationId: ORG,
   workspaceId: WORKSPACE,
   authorizationVersion: 8,
-  capabilities: new Set(['byok.manage', 'security.manage']),
-  roleNames: new Set(['admin']),
+  organizationCapabilities: new Set(['byok.manage', 'security.manage']),
+  workspaceCapabilities: new Set(['byok.manage']),
+  organizationRoleNames: new Set(['admin']),
+  workspaceRoleNames: new Set(['workspace manager']),
 };
 
 const test = async (name: string, callback: () => Promise<void>) => {
@@ -126,6 +129,8 @@ await test('fails closed for wrong-tenant provider configuration', async () => {
 
 await test('accepts raw key material only for bind or rotate and rejects unbounded budget metadata', async () => {
   const envelope = {
+    requestId: NONCE_ONE,
+    idempotencyKey: 'provider-bind-001',
     organizationId: ORG,
     workspaceId: WORKSPACE,
     expectedAuthorizationVersion: 8,
@@ -155,4 +160,125 @@ await test('accepts raw key material only for bind or rotate and rejects unbound
     }),
     (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'INVALID_REQUEST',
   );
+});
+
+await test('separates organization provider authority from workspace route authority', async () => {
+  const config: ProviderLifecycleConfig = {
+    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_EXISTING', status: 'active' },
+  };
+  const transitions: ProviderLifecycleOperation[] = [];
+  const database: ProviderLifecycleDatabase = {
+    loadConfig: async () => config,
+    transition: async input => { transitions.push(input.operation); return input.execution?.result || { status: 'committed' }; },
+  };
+  const workspaceOnly: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(),
+    organizationRoleNames: new Set(['member']),
+    workspaceCapabilities: new Set(['byok.manage']),
+  };
+  const deps = {
+    database,
+    secretBackend: { kind: 'environment', writable: false, resolve: async () => 'server-secret' } as ProviderSecretBackend,
+    routeResolverDeps: {} as never,
+    validateConnection: async () => ({ validated: true as const }),
+    now: () => now,
+    randomId: () => KEY_TWO,
+  };
+  for (const operation of ['provider.secret.bind', 'provider.validate', 'provider.activate', 'provider.secret.rotate', 'provider.revoke'] as const) {
+    await assert.rejects(
+      executeProviderLifecycleCommand(operation, workspaceOnly, { providerConfigId: CONFIG }, deps),
+      (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED',
+    );
+  }
+  const toggled = await executeProviderLifecycleCommand(
+    'provider.route.toggle', workspaceOnly,
+    { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: false }, deps,
+  );
+  assert.equal(toggled.routeId, ROUTE);
+  assert.deepEqual(transitions, ['provider.route.toggle']);
+
+  const orgAdmin: ProviderLifecycleAuthority = {
+    ...workspaceOnly,
+    organizationCapabilities: new Set(['org.admin']),
+    organizationRoleNames: new Set(['organization administrator']),
+  };
+  const activated = await executeProviderLifecycleCommand('provider.activate', orgAdmin, { providerConfigId: CONFIG }, deps);
+  assert.equal(activated.status, 'active');
+});
+
+await test('hashes raw keys and pre-provisioned references outside receipt material', async () => {
+  const rawEnvelope = parseProviderLifecycleEnvelope({
+    operation: 'provider.secret.bind', requestId: NONCE_ONE, idempotencyKey: 'provider-bind-hash-001',
+    organizationId: ORG, workspaceId: WORKSPACE, expectedAuthorizationVersion: 8,
+    payload: { providerConfigId: CONFIG, providerKey: 'raw-provider-key-value' },
+  });
+  const referenceEnvelope = parseProviderLifecycleEnvelope({
+    operation: 'provider.secret.bind', requestId: NONCE_TWO, idempotencyKey: 'provider-bind-hash-002',
+    organizationId: ORG, workspaceId: WORKSPACE, expectedAuthorizationVersion: 8,
+    payload: { providerConfigId: CONFIG, preProvisionedReference: 'AVALA_PROVIDER_SECRET_OPENAI_SAFE_REFERENCE' },
+  });
+  const rawHash = await providerLifecycleRequestHash(rawEnvelope);
+  const replayHash = await providerLifecycleRequestHash({ ...rawEnvelope, requestId: NONCE_TWO });
+  const referenceHash = await providerLifecycleRequestHash(referenceEnvelope);
+  assert.equal(rawHash, replayHash);
+  assert.notEqual(rawHash, referenceHash);
+  assert.match(rawHash, /^[0-9a-f]{64}$/);
+});
+
+await test('reuses the planned rotation secret, key reference, and validation after a lost database response', async () => {
+  const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD';
+  const config: ProviderLifecycleConfig = {
+    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: oldReference, status: 'active' },
+  };
+  let transitionAttempts = 0; let writes = 0; let validations = 0;
+  const secrets = new Map([[oldReference, 'old-secret']]);
+  const database: ProviderLifecycleDatabase = {
+    loadConfig: async () => structuredClone(config),
+    transition: async input => {
+      transitionAttempts += 1;
+      if (transitionAttempts === 1) throw new Error('response lost after external effect');
+      config.keyRef = {
+        id: String(input.payload.keyRefId), provider: 'openai', resolverType: 'server_reference',
+        secretRef: String(input.payload.secretReference), status: 'active',
+      };
+      return input.execution?.result || {};
+    },
+  };
+  const secretBackend: ProviderSecretBackend = {
+    kind: 'vault', writable: true,
+    resolve: async input => secrets.get(input.secretRef),
+    write: async input => { writes += 1; secrets.set(input.secretRef, input.value); },
+    remove: async input => { secrets.delete(input.secretRef); },
+  };
+  const ids = [NONCE_ONE, KEY_TWO];
+  const execution = {
+    receiptId: NONCE_TWO,
+    executionToken: NONCE_ONE,
+    executionFence: 1,
+    plan: {} as Record<string, unknown>,
+    async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+  };
+  const deps = {
+    database, secretBackend, routeResolverDeps: {} as never,
+    validateConnection: async () => { validations += 1; return { validated: true as const }; },
+    now: () => now,
+    randomId: () => ids.shift() || crypto.randomUUID(),
+  };
+  await assert.rejects(
+    executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution),
+    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PERSISTENCE_UNAVAILABLE',
+  );
+  const plannedReference = String(execution.plan.secretReference);
+  const plannedKeyRef = String(execution.plan.keyRefId);
+  const replay = await executeProviderLifecycleCommand(
+    'provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution,
+  );
+  assert.equal(replay.keyRefId, plannedKeyRef);
+  assert.equal(config.keyRef?.secretRef, plannedReference);
+  assert.deepEqual({writes, validations, transitionAttempts}, {writes: 1, validations: 1, transitionAttempts: 2});
 });

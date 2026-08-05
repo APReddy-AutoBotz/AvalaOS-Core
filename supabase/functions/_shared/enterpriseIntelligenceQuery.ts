@@ -173,13 +173,14 @@ const latestBy = (rows: Row[], key: string) => {
   return result;
 };
 
-const projectProviders = (raw: EnterpriseIntelligenceRawProjection): EnterpriseProviderProjection[] => {
+const projectProviders = (raw: EnterpriseIntelligenceRawProjection, organizationAdmin: boolean): EnterpriseProviderProjection[] => {
   const routesByConfig = new Map<string, Row[]>();
   raw.providerRoutes.forEach(route => {
     const configId = text(route.provider_config_id);
     routesByConfig.set(configId, [...(routesByConfig.get(configId) || []), route]);
   });
   return raw.providerConfigs.flatMap(config => {
+    if (!organizationAdmin && !(routesByConfig.get(text(config.id)) || []).length) return [];
     if (!includes(ENTERPRISE_AI_PROVIDERS, config.provider)) return [];
     const status = includes(['pending_review', 'active', 'disabled', 'retired'] as const, config.status) ? config.status : 'disabled';
     const validated = typeof config.last_validated_at === 'string' && Number.isFinite(Date.parse(config.last_validated_at));
@@ -420,7 +421,7 @@ export const buildEnterpriseIntelligenceProjection = (
   raw: EnterpriseIntelligenceRawProjection,
   generatedAt = new Date(),
 ): EnterpriseIntelligenceProjection => {
-  const providers = projectProviders(raw);
+  const providers = projectProviders(raw, authority.capabilities.includes('org.admin'));
   const evidence = projectEvidence(raw, authority.userId);
   const assessDrafts = projectAssessDrafts(raw);
   const applications = projectApplications(raw);

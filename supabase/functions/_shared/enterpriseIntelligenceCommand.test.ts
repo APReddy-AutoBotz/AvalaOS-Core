@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EnterpriseCommandError, enterpriseCommandErrorBody, parseEnterpriseCommandEnvelope } from './enterpriseIntelligenceCommand';
+import { hashReceiptValue } from './enterpriseReceipt';
 
 const base = {
   commandType: 'evidence.candidate.review',
@@ -53,3 +54,10 @@ test('receipt finalization failure is explicit and fail-closed', () => {
     },
   });
 });
+
+const firstAttemptHash = await hashReceiptValue({ ...base, requestId: null });
+const replayAttemptHash = await hashReceiptValue({ ...base, requestId: null });
+const changedPayloadHash = await hashReceiptValue({ ...base, requestId: null, payload: { ...base.payload, status: 'rejected' } });
+assert.equal(firstAttemptHash, replayAttemptHash);
+assert.notEqual(firstAttemptHash, changedPayloadHash);
+console.log('ok - requestId is correlation-only while changed payloads conflict');

@@ -18,6 +18,7 @@ BEGIN
   FROM unnest(ARRAY[
     'enterprise_intelligence_runtime_control',
     'enterprise_ai_capability_routes', 'enterprise_ai_command_receipts',
+    'enterprise_ai_receipt_replay_requests', 'enterprise_ai_effect_journal',
     'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
     'enterprise_evidence_sources', 'enterprise_evidence_source_versions',
     'enterprise_evidence_candidates', 'enterprise_evidence_candidate_edits',
@@ -214,7 +215,7 @@ CREATE TABLE public.enterprise_ai_command_receipts (
   CONSTRAINT enterprise_ai_receipts_workspace_org_fkey
     FOREIGN KEY (workspace_id, org_id)
     REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
-  UNIQUE (org_id, actor_id, command_type, idempotency_key)
+  UNIQUE (org_id, workspace_id, actor_id, command_type, idempotency_key)
 );
 
 CREATE TABLE public.enterprise_ai_job_ledger (
@@ -275,8 +276,8 @@ LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog
 AS $$
 BEGIN
   CASE p_command_type
-    WHEN 'provider.register', 'provider.validate', 'provider.activate',
-         'provider.route.toggle', 'provider.revoke' THEN
+    WHEN 'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+         'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke' THEN
       IF p_resource_type IS NOT NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND_AREA'; END IF;
       RETURN 'provider';
     WHEN 'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
@@ -360,7 +361,7 @@ BEGIN
     p_org, p_workspace, p_actor, p_command_type, v_area, p_resource_type, p_key,
     p_request, p_hash, 'claimed', '{}'::jsonb
   )
-  ON CONFLICT (org_id, actor_id, command_type, idempotency_key) DO NOTHING
+  ON CONFLICT (org_id, workspace_id, actor_id, command_type, idempotency_key) DO NOTHING
   RETURNING * INTO v_row;
   IF v_row.id IS NULL THEN
     SELECT * INTO v_row
@@ -721,7 +722,7 @@ BEGIN
     org_id, workspace_id, actor_id, command_type, runtime_area, resource_type, idempotency_key,
     request_id, request_hash, status, response
   ) VALUES (p_org, p_workspace, p_actor, p_command_type, runtime_area, p_resource_type, p_key, p_request, p_hash, 'claimed', '{}'::jsonb)
-  ON CONFLICT (org_id, actor_id, command_type, idempotency_key) DO NOTHING
+  ON CONFLICT (org_id, workspace_id, actor_id, command_type, idempotency_key) DO NOTHING
   RETURNING * INTO receipt;
   IF receipt.id IS NULL THEN
     SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
@@ -2843,3 +2844,707 @@ COMMENT ON TABLE public.enterprise_intelligence_runtime_control IS 'Fail-closed 
 COMMENT ON TABLE public.enterprise_evidence_assess_promotions IS 'Immutable accepted-candidate provenance promoted into one immutable Assess V2 draft version.';
 COMMENT ON FUNCTION public.enterprise_evidence_source_projection(UUID, UUID, UUID) IS 'Capability-scoped source/candidate projection excluding bucket and object path authority.';
 COMMENT ON FUNCTION public.enterprise_delivery_package_projection(UUID, UUID, UUID) IS 'Capability-scoped canonical Delivery package projection with server-derived IDs and hashes.';
+
+-- Independent-review correction: one request identity, fenced recovery, and
+-- durable effect evidence. requestId is transport correlation only;
+-- idempotency identity is tenant/workspace/actor/operation/key/request hash.
+ALTER TABLE public.enterprise_ai_command_receipts RENAME COLUMN request_id TO initial_request_id;
+ALTER TABLE public.enterprise_ai_command_receipts
+  ADD COLUMN last_request_id UUID,
+  ADD COLUMN execution_token UUID NOT NULL DEFAULT gen_random_uuid(),
+  ADD COLUMN execution_fence BIGINT NOT NULL DEFAULT 1 CHECK (execution_fence > 0),
+  ADD COLUMN claim_started_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
+  ADD COLUMN lease_expires_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp() + interval '2 minutes',
+  ADD COLUMN reconciliation_count INTEGER NOT NULL DEFAULT 0 CHECK (reconciliation_count >= 0),
+  ADD COLUMN execution_plan JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (
+    jsonb_typeof(execution_plan) = 'object'
+    AND NOT (execution_plan ?| ARRAY['providerKey','provider_key','rawKey','raw_key','apiKey','api_key','secretValue','secret_value','authorization','bearerToken'])
+  ),
+  ADD COLUMN response_hash TEXT CHECK (response_hash IS NULL OR response_hash ~ '^[0-9a-f]{64}$');
+UPDATE public.enterprise_ai_command_receipts SET last_request_id = initial_request_id WHERE last_request_id IS NULL;
+ALTER TABLE public.enterprise_ai_command_receipts ALTER COLUMN last_request_id SET NOT NULL;
+
+CREATE TABLE public.enterprise_ai_receipt_replay_requests (
+  receipt_id UUID NOT NULL REFERENCES public.enterprise_ai_command_receipts(id) ON DELETE CASCADE,
+  request_id UUID NOT NULL,
+  observed_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
+  PRIMARY KEY (receipt_id, request_id)
+);
+
+CREATE TABLE public.enterprise_ai_effect_journal (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  receipt_id UUID NOT NULL REFERENCES public.enterprise_ai_command_receipts(id) ON DELETE RESTRICT,
+  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  workspace_id UUID NOT NULL,
+  operation_type TEXT NOT NULL CHECK (length(btrim(operation_type)) BETWEEN 1 AND 120),
+  effect_key TEXT NOT NULL CHECK (length(btrim(effect_key)) BETWEEN 1 AND 120),
+  resource_id UUID,
+  terminal_status TEXT NOT NULL CHECK (terminal_status IN ('committed','failed','blocked')),
+  safe_result JSONB NOT NULL CHECK (jsonb_typeof(safe_result) = 'object'),
+  result_hash TEXT NOT NULL CHECK (result_hash ~ '^[0-9a-f]{64}$'),
+  execution_fence BIGINT NOT NULL CHECK (execution_fence > 0),
+  committed_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
+  CONSTRAINT enterprise_ai_effect_workspace_org_fkey
+    FOREIGN KEY (workspace_id, org_id) REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE,
+  UNIQUE (receipt_id, effect_key)
+);
+
+ALTER TABLE public.enterprise_ai_receipt_replay_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.enterprise_ai_receipt_replay_requests FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.enterprise_ai_effect_journal ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.enterprise_ai_effect_journal FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.enterprise_ai_receipt_replay_requests, public.enterprise_ai_effect_journal FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON TABLE public.enterprise_ai_receipt_replay_requests, public.enterprise_ai_effect_journal TO service_role;
+
+CREATE OR REPLACE FUNCTION public.enterprise_receipt_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+BEGIN
+  IF TG_OP = 'DELETE' OR OLD.status <> 'claimed' THEN
+    RAISE EXCEPTION 'ENTERPRISE_RECEIPT_IMMUTABLE_OR_TRANSITION_INVALID';
+  END IF;
+  IF NEW.status = 'claimed' THEN
+    IF (to_jsonb(NEW) - ARRAY['last_request_id','execution_token','execution_fence','claim_started_at','lease_expires_at','reconciliation_count','execution_plan'])
+       IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['last_request_id','execution_token','execution_fence','claim_started_at','lease_expires_at','reconciliation_count','execution_plan'])
+       OR NEW.completed_at IS NOT NULL OR NEW.response_hash IS NOT NULL
+       OR NEW.execution_fence < OLD.execution_fence OR NEW.reconciliation_count < OLD.reconciliation_count THEN
+      RAISE EXCEPTION 'ENTERPRISE_RECEIPT_IMMUTABLE_OR_TRANSITION_INVALID';
+    END IF;
+  ELSIF NEW.status IN ('committed','failed','blocked') THEN
+    NEW.response_hash := COALESCE(NEW.response_hash, public.enterprise_sha256_jsonb(NEW.response));
+    IF (to_jsonb(NEW) - ARRAY['status','resource_id','response','response_hash','completed_at','reconciliation_count'])
+       IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['status','resource_id','response','response_hash','completed_at','reconciliation_count'])
+       OR NEW.reconciliation_count < OLD.reconciliation_count
+       OR NEW.completed_at IS NULL OR NEW.response_hash IS NULL OR jsonb_typeof(NEW.response) <> 'object' THEN
+      RAISE EXCEPTION 'ENTERPRISE_RECEIPT_IMMUTABLE_OR_TRANSITION_INVALID';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'ENTERPRISE_RECEIPT_IMMUTABLE_OR_TRANSITION_INVALID';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_record_effect(
+  p_receipt UUID, p_org UUID, p_workspace UUID, p_execution_token UUID,
+  p_execution_fence BIGINT, p_operation TEXT, p_effect_key TEXT,
+  p_resource_id UUID, p_result JSONB, p_terminal_status TEXT DEFAULT 'committed'
+)
+RETURNS public.enterprise_ai_effect_journal
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; effect public.enterprise_ai_effect_journal; result_hash TEXT;
+BEGIN
+  IF jsonb_typeof(COALESCE(p_result, '{}'::jsonb)) <> 'object' OR p_terminal_status NOT IN ('committed','failed','blocked') THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_INVALID';
+  END IF;
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_receipt AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL OR receipt.status <> 'claimed'
+     OR receipt.execution_token IS DISTINCT FROM p_execution_token
+     OR receipt.execution_fence IS DISTINCT FROM p_execution_fence THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_STALE_EXECUTION_FENCE';
+  END IF;
+  result_hash := public.enterprise_sha256_jsonb(p_result);
+  INSERT INTO public.enterprise_ai_effect_journal(
+    receipt_id,org_id,workspace_id,operation_type,effect_key,resource_id,
+    terminal_status,safe_result,result_hash,execution_fence
+  ) VALUES (
+    receipt.id,p_org,p_workspace,p_operation,p_effect_key,p_resource_id,
+    p_terminal_status,p_result,result_hash,p_execution_fence
+  ) ON CONFLICT (receipt_id,effect_key) DO NOTHING RETURNING * INTO effect;
+  IF effect.id IS NULL THEN
+    SELECT * INTO effect FROM public.enterprise_ai_effect_journal
+    WHERE receipt_id=receipt.id AND effect_key=p_effect_key FOR SHARE;
+    IF effect.operation_type IS DISTINCT FROM p_operation
+       OR effect.resource_id IS DISTINCT FROM p_resource_id
+       OR effect.terminal_status IS DISTINCT FROM p_terminal_status
+       OR effect.result_hash IS DISTINCT FROM result_hash
+       OR effect.safe_result IS DISTINCT FROM p_result THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+    END IF;
+  END IF;
+  RETURN effect;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_claim_command(
+  p_actor UUID, p_org UUID, p_workspace UUID, p_command_type TEXT,
+  p_key TEXT, p_request UUID, p_hash TEXT, p_resource_type TEXT,
+  p_execution_token UUID
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; runtime_area TEXT; effect public.enterprise_ai_effect_journal;
+BEGIN
+  IF p_actor IS NULL OR p_org IS NULL OR p_workspace IS NULL OR p_request IS NULL OR p_execution_token IS NULL
+     OR p_key IS NULL OR length(btrim(p_key)) NOT BETWEEN 8 AND 200
+     OR p_hash IS NULL OR p_hash !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'ENTERPRISE_AI_INVALID_COMMAND'; END IF;
+  runtime_area := public.enterprise_command_runtime_area(p_command_type,p_resource_type);
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE org_id=p_org AND workspace_id=p_workspace AND actor_id=p_actor AND command_type=p_command_type AND idempotency_key=p_key FOR UPDATE;
+  IF receipt.id IS NOT NULL THEN
+    IF receipt.workspace_id IS DISTINCT FROM p_workspace OR receipt.request_hash IS DISTINCT FROM p_hash
+       OR receipt.runtime_area IS DISTINCT FROM runtime_area OR receipt.resource_type IS DISTINCT FROM p_resource_type THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+    END IF;
+    INSERT INTO public.enterprise_ai_receipt_replay_requests(receipt_id,request_id)
+    VALUES(receipt.id,p_request) ON CONFLICT DO NOTHING;
+    IF receipt.status='claimed' THEN
+      SELECT * INTO effect FROM public.enterprise_ai_effect_journal
+      WHERE receipt_id=receipt.id AND effect_key='command' FOR SHARE;
+      IF effect.id IS NOT NULL THEN
+        UPDATE public.enterprise_ai_command_receipts SET
+          status=effect.terminal_status,response=effect.safe_result,response_hash=effect.result_hash,
+          resource_id=effect.resource_id,completed_at=effect.committed_at,
+          reconciliation_count=reconciliation_count+1
+        WHERE id=receipt.id RETURNING * INTO receipt;
+      ELSIF receipt.lease_expires_at <= statement_timestamp() THEN
+        UPDATE public.enterprise_ai_command_receipts SET
+          last_request_id=p_request,execution_token=p_execution_token,
+          execution_fence=execution_fence+1,claim_started_at=statement_timestamp(),
+          lease_expires_at=statement_timestamp()+interval '2 minutes',
+          reconciliation_count=reconciliation_count+1
+        WHERE id=receipt.id AND status='claimed' AND execution_fence=receipt.execution_fence
+        RETURNING * INTO receipt;
+      END IF;
+    END IF;
+    RETURN receipt;
+  END IF;
+  PERFORM public.enterprise_assert_writable(runtime_area);
+  INSERT INTO public.enterprise_ai_command_receipts(
+    org_id,workspace_id,actor_id,command_type,runtime_area,resource_type,
+    idempotency_key,initial_request_id,last_request_id,request_hash,status,
+    execution_token,execution_fence,claim_started_at,lease_expires_at,response
+  ) VALUES (
+    p_org,p_workspace,p_actor,p_command_type,runtime_area,p_resource_type,
+    p_key,p_request,p_request,p_hash,'claimed',p_execution_token,1,
+    statement_timestamp(),statement_timestamp()+interval '2 minutes','{}'::jsonb
+  ) ON CONFLICT (org_id,workspace_id,actor_id,command_type,idempotency_key) DO NOTHING RETURNING * INTO receipt;
+  IF receipt.id IS NULL THEN
+    SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+    WHERE org_id=p_org AND workspace_id=p_workspace AND actor_id=p_actor AND command_type=p_command_type AND idempotency_key=p_key FOR UPDATE;
+    IF receipt.id IS NULL OR receipt.workspace_id IS DISTINCT FROM p_workspace
+       OR receipt.request_hash IS DISTINCT FROM p_hash OR receipt.runtime_area IS DISTINCT FROM runtime_area
+       OR receipt.resource_type IS DISTINCT FROM p_resource_type THEN RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+  END IF;
+  INSERT INTO public.enterprise_ai_receipt_replay_requests(receipt_id,request_id)
+  VALUES(receipt.id,p_request) ON CONFLICT DO NOTHING;
+  RETURN receipt;
+END;
+$$;
+
+-- Compatibility overload for the internal candidate-promotion transaction.
+CREATE OR REPLACE FUNCTION public.enterprise_ai_claim_command(
+  p_actor UUID,p_org UUID,p_workspace UUID,p_command_type TEXT,p_key TEXT,
+  p_request UUID,p_hash TEXT,p_resource_type TEXT DEFAULT NULL
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  RETURN public.enterprise_ai_claim_command(
+    p_actor,p_org,p_workspace,p_command_type,p_key,p_request,p_hash,p_resource_type,p_request
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_plan_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_execution_token UUID,
+  p_execution_fence BIGINT,p_plan JSONB
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts;
+BEGIN
+  IF jsonb_typeof(COALESCE(p_plan,'{}'::jsonb)) <> 'object'
+     OR p_plan ?| ARRAY['providerKey','provider_key','rawKey','raw_key','apiKey','api_key','secretValue','secret_value','authorization','bearerToken'] THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_EXECUTION_PLAN_INVALID';
+  END IF;
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL OR receipt.status<>'claimed'
+     OR receipt.execution_token IS DISTINCT FROM p_execution_token
+     OR receipt.execution_fence IS DISTINCT FROM p_execution_fence THEN RAISE EXCEPTION 'ENTERPRISE_AI_STALE_EXECUTION_FENCE'; END IF;
+  IF receipt.execution_plan <> '{}'::jsonb AND NOT (p_plan @> receipt.execution_plan) THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT';
+  END IF;
+  UPDATE public.enterprise_ai_command_receipts SET execution_plan=p_plan
+  WHERE id=receipt.id RETURNING * INTO receipt;
+  RETURN receipt;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_complete_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_execution_token UUID,p_execution_fence BIGINT,
+  p_response JSONB,p_resource_id UUID DEFAULT NULL
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; effect public.enterprise_ai_effect_journal; result_hash TEXT;
+BEGIN
+  IF jsonb_typeof(COALESCE(p_response,'{}'::jsonb))<>'object' THEN RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_INVALID'; END IF;
+  result_hash:=public.enterprise_sha256_jsonb(p_response);
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  IF receipt.status='committed' THEN
+    IF receipt.response_hash IS DISTINCT FROM result_hash OR receipt.resource_id IS DISTINCT FROM p_resource_id
+       OR receipt.response IS DISTINCT FROM p_response THEN RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+    RETURN receipt;
+  END IF;
+  IF receipt.status<>'claimed' OR receipt.execution_token IS DISTINCT FROM p_execution_token
+     OR receipt.execution_fence IS DISTINCT FROM p_execution_fence THEN RAISE EXCEPTION 'ENTERPRISE_AI_STALE_EXECUTION_FENCE'; END IF;
+  SELECT * INTO effect FROM public.enterprise_ai_effect_journal WHERE receipt_id=receipt.id AND effect_key='command' FOR SHARE;
+  IF effect.id IS NULL THEN
+    effect:=public.enterprise_ai_record_effect(receipt.id,p_org,p_workspace,p_execution_token,p_execution_fence,
+      receipt.command_type,'command',p_resource_id,p_response,'committed');
+  ELSIF effect.terminal_status<>'committed' OR effect.result_hash IS DISTINCT FROM result_hash
+        OR effect.resource_id IS DISTINCT FROM p_resource_id OR effect.safe_result IS DISTINCT FROM p_response THEN
+    RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT';
+  END IF;
+  UPDATE public.enterprise_ai_command_receipts SET status='committed',response=effect.safe_result,
+    response_hash=effect.result_hash,resource_id=effect.resource_id,completed_at=effect.committed_at
+  WHERE id=receipt.id AND status='claimed' RETURNING * INTO receipt;
+  RETURN receipt;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_fail_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_execution_token UUID,p_execution_fence BIGINT,
+  p_response JSONB,p_blocked BOOLEAN DEFAULT false
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; effect public.enterprise_ai_effect_journal;
+  target_status TEXT:=CASE WHEN p_blocked THEN 'blocked' ELSE 'failed' END; result_hash TEXT;
+BEGIN
+  IF jsonb_typeof(COALESCE(p_response,'{}'::jsonb))<>'object' THEN RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_INVALID'; END IF;
+  result_hash:=public.enterprise_sha256_jsonb(p_response);
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  IF receipt.status=target_status THEN
+    IF receipt.response_hash IS DISTINCT FROM result_hash OR receipt.response IS DISTINCT FROM p_response THEN
+      RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+    RETURN receipt;
+  END IF;
+  IF receipt.status<>'claimed' OR receipt.execution_token IS DISTINCT FROM p_execution_token
+     OR receipt.execution_fence IS DISTINCT FROM p_execution_fence THEN RAISE EXCEPTION 'ENTERPRISE_AI_STALE_EXECUTION_FENCE'; END IF;
+  effect:=public.enterprise_ai_record_effect(receipt.id,p_org,p_workspace,p_execution_token,p_execution_fence,
+    receipt.command_type,'command',NULL,p_response,target_status);
+  UPDATE public.enterprise_ai_command_receipts SET status=target_status,response=effect.safe_result,
+    response_hash=effect.result_hash,completed_at=effect.committed_at
+  WHERE id=receipt.id AND status='claimed' RETURNING * INTO receipt;
+  RETURN receipt;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_reconcile_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_expected_response JSONB,p_expected_resource_id UUID DEFAULT NULL
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; effect public.enterprise_ai_effect_journal; expected_hash TEXT;
+BEGIN
+  IF jsonb_typeof(COALESCE(p_expected_response,'{}'::jsonb))<>'object' THEN RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_INVALID'; END IF;
+  expected_hash:=public.enterprise_sha256_jsonb(p_expected_response);
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  IF receipt.status IN ('committed','failed','blocked') THEN
+    IF receipt.response_hash IS DISTINCT FROM expected_hash OR receipt.response IS DISTINCT FROM p_expected_response
+       OR receipt.resource_id IS DISTINCT FROM p_expected_resource_id THEN RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+    RETURN receipt;
+  END IF;
+  SELECT * INTO effect FROM public.enterprise_ai_effect_journal
+  WHERE receipt_id=receipt.id AND effect_key='command' FOR SHARE;
+  IF effect.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_EVIDENCE_NOT_FOUND'; END IF;
+  IF effect.result_hash IS DISTINCT FROM expected_hash OR effect.safe_result IS DISTINCT FROM p_expected_response
+     OR effect.resource_id IS DISTINCT FROM p_expected_resource_id THEN RAISE EXCEPTION 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'; END IF;
+  UPDATE public.enterprise_ai_command_receipts SET status=effect.terminal_status,response=effect.safe_result,
+    response_hash=effect.result_hash,resource_id=effect.resource_id,completed_at=effect.committed_at,
+    reconciliation_count=reconciliation_count+1
+  WHERE id=receipt.id AND status='claimed' RETURNING * INTO receipt;
+  RETURN receipt;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_reload_command(
+  p_id UUID,p_org UUID,p_workspace UUID
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts; effect public.enterprise_ai_effect_journal;
+BEGIN
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  IF receipt.status<>'claimed' THEN RETURN receipt; END IF;
+  SELECT * INTO effect FROM public.enterprise_ai_effect_journal
+  WHERE receipt_id=receipt.id AND effect_key='command' FOR SHARE;
+  IF effect.id IS NOT NULL THEN
+    UPDATE public.enterprise_ai_command_receipts SET status=effect.terminal_status,
+      response=effect.safe_result,response_hash=effect.result_hash,resource_id=effect.resource_id,
+      completed_at=effect.committed_at,reconciliation_count=reconciliation_count+1
+    WHERE id=receipt.id AND status='claimed' RETURNING * INTO receipt;
+  END IF;
+  RETURN receipt;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_actor_has_organization_capability(
+  p_actor UUID,p_org UUID,p_capability TEXT,p_authorization_version BIGINT
+)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+  SELECT EXISTS(
+    SELECT 1 FROM public.profiles p
+    JOIN public.organization_members om ON om.user_id=p.id AND om.org_id=p_org AND om.status='active' AND om.deleted_at IS NULL
+    JOIN public.organizations o ON o.id=om.org_id AND o.status='active' AND o.deleted_at IS NULL
+    JOIN public.roles r ON r.id=om.role_id AND r.scope='organization' AND r.org_id=p_org
+      AND r.workspace_id IS NULL AND r.status='active' AND r.deleted_at IS NULL
+    JOIN public.role_capabilities rc ON rc.role_id=r.id AND rc.capability_key=p_capability
+    JOIN public.authorization_versions av ON av.org_id=p_org AND av.user_id=p.id AND av.version=p_authorization_version
+    WHERE p.id=p_actor AND p.status='active' AND p.deleted_at IS NULL
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_provider_lifecycle_transition(
+  p_operation TEXT,p_actor UUID,p_org UUID,p_workspace UUID,p_authorization_version BIGINT,p_payload JSONB,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE result JSONB; secret_operation BOOLEAN:=p_operation IN ('provider.secret.bind','provider.secret.rotate','provider.revoke');
+  organization_operation BOOLEAN:=p_operation<>'provider.route.toggle'; resource_id UUID;
+BEGIN
+  IF p_receipt IS NULL OR p_execution_token IS NULL OR p_execution_fence IS NULL OR jsonb_typeof(p_result)<>'object' THEN
+    RAISE EXCEPTION 'ENTERPRISE_PROVIDER_RECEIPT_REQUIRED';
+  END IF;
+  IF organization_operation THEN
+    IF NOT public.enterprise_actor_has_organization_capability(p_actor,p_org,'org.admin',p_authorization_version) THEN
+      IF secret_operation THEN
+        IF NOT public.enterprise_actor_has_organization_capability(p_actor,p_org,'byok.manage',p_authorization_version)
+           OR NOT public.enterprise_actor_has_organization_capability(p_actor,p_org,'security.manage',p_authorization_version) THEN
+          RAISE EXCEPTION 'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED';
+        END IF;
+      ELSIF NOT public.enterprise_actor_has_organization_capability(p_actor,p_org,'byok.manage',p_authorization_version)
+        AND NOT public.enterprise_actor_has_organization_capability(p_actor,p_org,'security.manage',p_authorization_version) THEN
+        RAISE EXCEPTION 'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED';
+      END IF;
+    END IF;
+  ELSE
+    BEGIN
+      PERFORM public.pr1b_assert_command_authority(p_actor,p_org,p_workspace,'org.admin',p_authorization_version);
+    EXCEPTION WHEN OTHERS THEN
+      BEGIN
+        PERFORM public.pr1b_assert_command_authority(p_actor,p_org,p_workspace,'byok.manage',p_authorization_version);
+      EXCEPTION WHEN OTHERS THEN
+        PERFORM public.pr1b_assert_command_authority(p_actor,p_org,p_workspace,'security.manage',p_authorization_version);
+      END;
+    END;
+  END IF;
+  result:=public.enterprise_provider_lifecycle_transition(
+    p_operation,p_actor,p_org,p_workspace,p_authorization_version,p_payload
+  );
+  resource_id:=NULLIF(p_result->>'providerConfigId','')::uuid;
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,p_operation,'command',resource_id,p_result,'committed'
+  );
+  RETURN p_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.enterprise_ai_claim_command(UUID,UUID,UUID,TEXT,TEXT,UUID,TEXT,TEXT,UUID),
+  public.enterprise_ai_plan_command(UUID,UUID,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_ai_complete_command(UUID,UUID,UUID,UUID,BIGINT,JSONB,UUID),
+  public.enterprise_ai_fail_command(UUID,UUID,UUID,UUID,BIGINT,JSONB,BOOLEAN),
+  public.enterprise_ai_reconcile_command(UUID,UUID,UUID,JSONB,UUID),
+  public.enterprise_ai_reload_command(UUID,UUID,UUID),
+  public.enterprise_ai_record_effect(UUID,UUID,UUID,UUID,BIGINT,TEXT,TEXT,UUID,JSONB,TEXT),
+  public.enterprise_actor_has_organization_capability(UUID,UUID,TEXT,BIGINT),
+  public.enterprise_provider_lifecycle_transition(TEXT,UUID,UUID,UUID,BIGINT,JSONB,UUID,UUID,BIGINT,JSONB)
+FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION
+  public.enterprise_ai_claim_command(UUID,UUID,UUID,TEXT,TEXT,UUID,TEXT,TEXT,UUID),
+  public.enterprise_ai_plan_command(UUID,UUID,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_ai_complete_command(UUID,UUID,UUID,UUID,BIGINT,JSONB,UUID),
+  public.enterprise_ai_fail_command(UUID,UUID,UUID,UUID,BIGINT,JSONB,BOOLEAN),
+  public.enterprise_ai_reconcile_command(UUID,UUID,UUID,JSONB,UUID),
+  public.enterprise_ai_reload_command(UUID,UUID,UUID),
+  public.enterprise_ai_record_effect(UUID,UUID,UUID,UUID,BIGINT,TEXT,TEXT,UUID,JSONB,TEXT),
+  public.enterprise_provider_lifecycle_transition(TEXT,UUID,UUID,UUID,BIGINT,JSONB,UUID,UUID,BIGINT,JSONB)
+TO service_role;
+REVOKE ALL ON FUNCTION public.enterprise_actor_has_organization_capability(UUID,UUID,TEXT,BIGINT) FROM service_role;
+
+COMMENT ON TABLE public.enterprise_ai_effect_journal IS 'Service-only durable receipt-to-effect linkage for idempotent response-loss reconciliation.';
+COMMENT ON COLUMN public.enterprise_ai_command_receipts.initial_request_id IS 'Immutable first transport correlation ID; excluded from logical command identity.';
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_complete_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_response JSONB,p_resource_id UUID DEFAULT NULL
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts;
+BEGIN
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  RETURN public.enterprise_ai_complete_command(
+    p_id,p_org,p_workspace,receipt.execution_token,receipt.execution_fence,p_response,p_resource_id
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_ai_fail_command(
+  p_id UUID,p_org UUID,p_workspace UUID,p_response JSONB,p_blocked BOOLEAN DEFAULT false
+)
+RETURNS public.enterprise_ai_command_receipts
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE receipt public.enterprise_ai_command_receipts;
+BEGIN
+  SELECT * INTO receipt FROM public.enterprise_ai_command_receipts
+  WHERE id=p_id AND org_id=p_org AND workspace_id=p_workspace FOR UPDATE;
+  IF receipt.id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_AI_RECEIPT_NOT_FOUND'; END IF;
+  RETURN public.enterprise_ai_fail_command(
+    p_id,p_org,p_workspace,receipt.execution_token,receipt.execution_fence,p_response,p_blocked
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION
+  public.enterprise_ai_complete_command(UUID,UUID,UUID,JSONB,UUID),
+  public.enterprise_ai_fail_command(UUID,UUID,UUID,JSONB,BOOLEAN)
+FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION
+  public.enterprise_ai_complete_command(UUID,UUID,UUID,JSONB,UUID),
+  public.enterprise_ai_fail_command(UUID,UUID,UUID,JSONB,BOOLEAN)
+TO service_role;
+
+-- Receipt-aware mutation overloads. Each overload executes the canonical
+-- mutation and writes its safe effect evidence in the same database
+-- transaction. The Edge runtime uses only these overloads.
+CREATE OR REPLACE FUNCTION public.enterprise_create_evidence_source(
+  p_source JSONB,p_version JSONB,p_receipt UUID,p_execution_token UUID,
+  p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_create_evidence_source(p_source,p_version);
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,(p_source->>'org_id')::uuid,(p_source->>'workspace_id')::uuid,
+    p_execution_token,p_execution_fence,'evidence.source.create','command',
+    (p_source->>'id')::uuid,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_evidence_extraction(
+  p_job_id UUID,p_source_id UUID,p_org UUID,p_workspace UUID,p_output_hash TEXT,
+  p_latency_ms INTEGER,p_provider_config_id UUID,p_provider TEXT,p_model TEXT,
+  p_token_input INTEGER,p_token_output INTEGER,p_candidates JSONB,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_evidence_extraction(
+    p_job_id,p_source_id,p_org,p_workspace,p_output_hash,p_latency_ms,
+    p_provider_config_id,p_provider,p_model,p_token_input,p_token_output,p_candidates
+  );
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'evidence.extract','command',p_job_id,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_review_evidence_candidate(
+  p_candidate_id UUID,p_org UUID,p_workspace UUID,p_value TEXT,p_excerpt_hash TEXT,
+  p_status TEXT,p_actor UUID,p_previous_value TEXT,p_reason TEXT,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_review_evidence_candidate(
+    p_candidate_id,p_org,p_workspace,p_value,p_excerpt_hash,p_status,p_actor,p_previous_value,p_reason
+  );
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'evidence.candidate.review','command',p_candidate_id,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_promote_evidence_to_assess_v2(
+  p_candidate UUID,p_case UUID,p_expected_version BIGINT,p_actor UUID,p_org UUID,p_workspace UUID,
+  p_request UUID,p_idempotency_key TEXT,p_authorization_version BIGINT,
+  p_outer_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB; promotion_id UUID;
+BEGIN
+  committed:=public.enterprise_promote_evidence_to_assess_v2(
+    p_candidate,p_case,p_expected_version,p_actor,p_org,p_workspace,
+    p_request,p_idempotency_key,p_authorization_version
+  );
+  promotion_id:=NULLIF(committed#>>'{resource,promotionId}','')::uuid;
+  PERFORM public.enterprise_ai_record_effect(
+    p_outer_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'evidence.assess.promote','promotion:'||p_candidate::text,promotion_id,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_modernization_assessment(
+  p_assessment JSONB,p_decision JSONB,p_receipt UUID,p_execution_token UUID,
+  p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_modernization_assessment(p_assessment,p_decision);
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,(p_assessment->>'org_id')::uuid,(p_assessment->>'workspace_id')::uuid,
+    p_execution_token,p_execution_fence,'modernization.evaluate','command',
+    (p_decision->>'id')::uuid,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_record_high_impact_review(
+  p_event JSONB,p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE event_id UUID:=(p_event->>'id')::uuid; org UUID:=(p_event->>'org_id')::uuid;
+  workspace UUID:=(p_event->>'workspace_id')::uuid;
+BEGIN
+  PERFORM public.enterprise_assert_writable(
+    CASE WHEN p_event->>'resource_type'='assemble_blueprint' THEN 'assemble' ELSE 'delivery' END
+  );
+  INSERT INTO public.enterprise_high_impact_review_events(
+    id,org_id,workspace_id,resource_type,resource_id,reviewer_id,
+    reviewer_authorization_version,resource_hash,rationale
+  ) VALUES (
+    event_id,org,workspace,p_event->>'resource_type',(p_event->>'resource_id')::uuid,
+    (p_event->>'reviewer_id')::uuid,(p_event->>'reviewer_authorization_version')::bigint,
+    p_event->>'resource_hash',p_event->>'rationale'
+  );
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,org,workspace,p_execution_token,p_execution_fence,
+    'approval.review.record','command',event_id,p_result,'committed'
+  );
+  RETURN p_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_high_impact_approval(
+  p_approval JSONB,p_resource_type TEXT,p_resource_id UUID,p_org UUID,p_workspace UUID,
+  p_next_status TEXT,p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_high_impact_approval(
+    p_approval,p_resource_type,p_resource_id,p_org,p_workspace,p_next_status
+  );
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'approval.record','command',p_resource_id,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_delivery_handoff(
+  p_handoff JSONB,p_package JSONB,p_version JSONB,p_items JSONB,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_delivery_handoff(p_handoff,p_package,p_version,p_items);
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,(p_handoff->>'org_id')::uuid,(p_handoff->>'workspace_id')::uuid,
+    p_execution_token,p_execution_fence,'studio.delivery.handoff','command',
+    (p_package->>'id')::uuid,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_monitor_baseline(
+  p_baseline JSONB,p_actor UUID,p_org UUID,p_workspace UUID,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_monitor_baseline(p_baseline,p_actor,p_org,p_workspace);
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'monitor.baseline.create','command',(p_baseline->>'id')::uuid,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_commit_assemble_blueprint(
+  p_blueprint JSONB,p_actor UUID,p_org UUID,p_workspace UUID,
+  p_receipt UUID,p_execution_token UUID,p_execution_fence BIGINT,p_result JSONB
+) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE committed JSONB;
+BEGIN
+  committed:=public.enterprise_commit_assemble_blueprint(p_blueprint,p_actor,p_org,p_workspace);
+  PERFORM public.enterprise_ai_record_effect(
+    p_receipt,p_org,p_workspace,p_execution_token,p_execution_fence,
+    'assemble.blueprint.create','command',(p_blueprint->>'id')::uuid,p_result,'committed'
+  );
+  RETURN committed;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enterprise_effect_journal_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN
+  RAISE EXCEPTION 'ENTERPRISE_AI_EFFECT_JOURNAL_IMMUTABLE';
+END;
+$$;
+CREATE TRIGGER enterprise_effect_journal_immutable
+BEFORE UPDATE OR DELETE ON public.enterprise_ai_effect_journal
+FOR EACH ROW EXECUTE FUNCTION public.enterprise_effect_journal_guard();
+
+REVOKE ALL ON FUNCTION
+  public.enterprise_create_evidence_source(JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_evidence_extraction(UUID,UUID,UUID,UUID,TEXT,INTEGER,UUID,TEXT,TEXT,INTEGER,INTEGER,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_review_evidence_candidate(UUID,UUID,UUID,TEXT,TEXT,TEXT,UUID,TEXT,TEXT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_promote_evidence_to_assess_v2(UUID,UUID,BIGINT,UUID,UUID,UUID,UUID,TEXT,BIGINT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_modernization_assessment(JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_record_high_impact_review(JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_high_impact_approval(JSONB,TEXT,UUID,UUID,UUID,TEXT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_delivery_handoff(JSONB,JSONB,JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_monitor_baseline(JSONB,UUID,UUID,UUID,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_assemble_blueprint(JSONB,UUID,UUID,UUID,UUID,UUID,BIGINT,JSONB)
+FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION
+  public.enterprise_create_evidence_source(JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_evidence_extraction(UUID,UUID,UUID,UUID,TEXT,INTEGER,UUID,TEXT,TEXT,INTEGER,INTEGER,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_review_evidence_candidate(UUID,UUID,UUID,TEXT,TEXT,TEXT,UUID,TEXT,TEXT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_promote_evidence_to_assess_v2(UUID,UUID,BIGINT,UUID,UUID,UUID,UUID,TEXT,BIGINT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_modernization_assessment(JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_record_high_impact_review(JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_high_impact_approval(JSONB,TEXT,UUID,UUID,UUID,TEXT,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_delivery_handoff(JSONB,JSONB,JSONB,JSONB,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_monitor_baseline(JSONB,UUID,UUID,UUID,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_commit_assemble_blueprint(JSONB,UUID,UUID,UUID,UUID,UUID,BIGINT,JSONB)
+TO service_role;
+
+-- The receipt-unaware implementations are private implementation details of
+-- the receipt-aware SECURITY DEFINER overloads and are not callable by Edge.
+REVOKE ALL ON FUNCTION
+  public.enterprise_provider_lifecycle_transition(TEXT,UUID,UUID,UUID,BIGINT,JSONB),
+  public.enterprise_create_evidence_source(JSONB,JSONB),
+  public.enterprise_commit_evidence_extraction(UUID,UUID,UUID,UUID,TEXT,INTEGER,UUID,TEXT,TEXT,INTEGER,INTEGER,JSONB),
+  public.enterprise_review_evidence_candidate(UUID,UUID,UUID,TEXT,TEXT,TEXT,UUID,TEXT,TEXT),
+  public.enterprise_promote_evidence_to_assess_v2(UUID,UUID,BIGINT,UUID,UUID,UUID,UUID,TEXT,BIGINT),
+  public.enterprise_commit_modernization_assessment(JSONB,JSONB),
+  public.enterprise_commit_high_impact_approval(JSONB,TEXT,UUID,UUID,UUID,TEXT),
+  public.enterprise_commit_delivery_handoff(JSONB,JSONB,JSONB,JSONB),
+  public.enterprise_commit_monitor_baseline(JSONB,UUID,UUID,UUID),
+  public.enterprise_commit_assemble_blueprint(JSONB,UUID,UUID,UUID)
+FROM service_role;

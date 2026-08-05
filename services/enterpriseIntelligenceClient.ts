@@ -52,16 +52,17 @@ const invokeCommand = async <T>(input: {
   idempotencyKey?: string;
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
-  const { data, error } = await supabase.functions.invoke('enterprise-intelligence-command', {
-    body: {
-      commandType: input.commandType,
-      requestId: createId(),
-      idempotencyKey: input.idempotencyKey || await createIdempotencyKey(input),
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      payload: input.payload,
-    },
-  });
+  const body = {
+    commandType: input.commandType,
+    requestId: createId(),
+    idempotencyKey: input.idempotencyKey || await createIdempotencyKey(input),
+    organizationId: input.organizationId,
+    workspaceId: input.workspaceId,
+    payload: input.payload,
+  };
+  let invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+  if (invocation.error) invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+  const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string; message?: string }; [key: string]: unknown } | null;
   if (error) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
   if (!response?.ok) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_BLOCKED');
@@ -76,7 +77,19 @@ const invokeProviderLifecycle = async <T>(input: {
   payload: Record<string, unknown>;
 }): Promise<T> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
-  const { data, error } = await supabase.functions.invoke('enterprise-provider-lifecycle', { body: input });
+  const body = {
+    ...input,
+    requestId: createId(),
+    idempotencyKey: await createIdempotencyKey({
+      commandType: input.operation,
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: input.payload,
+    }),
+  };
+  let invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
+  if (invocation.error) invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
+  const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string }; [key: string]: unknown } | null;
   if (error || !response?.ok) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
   return response as T;
