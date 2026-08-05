@@ -17,7 +17,7 @@ import {
   resolveProviderSecretForDecision,
   type ProviderSecretBackend,
 } from './providerSecretAdapter.ts';
-import { postgrest, rpc } from './supabase.ts';
+import { postgrest, rpc, supabaseRpcErrorHasSignal } from './supabase.ts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -187,6 +187,32 @@ const isFreshValidation = (value: string | null | undefined, now: Date) => {
     && now.getTime() - timestamp <= ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS;
 };
 
+export const mapProviderLifecycleRpcError = (error: unknown): ProviderLifecycleError => {
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE')) {
+    return new ProviderLifecycleError('AUTHORIZATION_STALE');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
+    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED',
+    'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
+  )) return new ProviderLifecycleError('PERMISSION_DENIED');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT',
+    'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
+  )) return new ProviderLifecycleError('IDEMPOTENCY_CONFLICT');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+    'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
+    'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED',
+  )) return new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED',
+    'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
+    'ENTERPRISE_PROVIDER_VALIDATION_STALE',
+  )) return new ProviderLifecycleError('PROVIDER_BLOCKED');
+  return new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+};
+
 const safeTransition = async (
   deps: ProviderLifecycleDeps,
   operation: ProviderLifecycleOperation,
@@ -211,15 +237,7 @@ const safeTransition = async (
     return transition;
   } catch (error) {
     if (error instanceof ProviderLifecycleError) throw error;
-    const message = String((error as { message?: unknown })?.message || error || '');
-    if (message.includes('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE')) {
-      throw new ProviderLifecycleError('AUTHORIZATION_STALE');
-    }
-    if (message.includes('ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED')
-      || message.includes('ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED')) {
-      throw new ProviderLifecycleError('PERMISSION_DENIED');
-    }
-    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    throw mapProviderLifecycleRpcError(error);
   }
 };
 

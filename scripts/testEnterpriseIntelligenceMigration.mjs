@@ -20,6 +20,10 @@ const atomicPromotionSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql'),
   'utf8',
 );
+const extractionRecoverySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -103,6 +107,30 @@ check(!/for\s*\([^)]*candidate[^)]*\)[\s\S]*?rpc\(['"]enterprise_promote_evidenc
 check((promotionCommand.match(/enterprise_promote_evidence_batch_to_assess_v2/gu) || []).length === 1, 'The command handler must make exactly one promotion RPC call.');
 check(atomicPromotionSql.indexOf('PERFORM public.enterprise_ai_record_effect') < atomicPromotionSql.indexOf('RETURN result;'), 'Batch success requires a durable receipt effect.');
 check(atomicPromotionSql.includes("'resourceId', assess_case.id"), 'Batch response must identify the Assess draft as its canonical resource.');
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job', 'enterprise_fail_evidence_extraction_job',
+  'enterprise_ai_job_attempts', 'attempt_lease_expires_at', 'execution_fence',
+  "'evidence.extract','command',p_job_id,p_result,'committed'",
+]) check(extractionRecoverySql.includes(required), `Extraction recovery migration is missing ${required}.`);
+check(extractionRecoverySql.includes("job.status IN ('succeeded','failed','blocked')"), 'Terminal extraction jobs must replay durable effect truth.');
+check(extractionRecoverySql.includes('p_execution_fence<=job.execution_fence'), 'Only a newer fence may resume an expired job.');
+check(extractionRecoverySql.includes("attempt_kind IN ('claimed','resumed')"), 'Every provider attempt requires append-only safe audit evidence.');
+const extractionClaimSql = extractionRecoverySql.slice(
+  extractionRecoverySql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_claim_or_resume_evidence_extraction_job'),
+  extractionRecoverySql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_fail_evidence_extraction_job'),
+);
+check(extractionClaimSql.includes('p_job_id,p_org,p_workspace,p_capability'), 'Recovery must insert the planned job ID, never a replacement.');
+check(!extractionClaimSql.includes('gen_random_uuid()'), 'Recovery must not generate a second job ID.');
+for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key', 'authorization']) {
+  check(!extractionRecoverySql.includes(forbidden), `Extraction ledgers must reject ${forbidden}.`);
+}
+const extractionCommand = commandSource.slice(
+  commandSource.indexOf('const commandEvidenceExtract'),
+  commandSource.indexOf('const commandEvidenceCandidateReview'),
+);
+check(!/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly insert its job row.');
+check(!/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly patch terminal job state.');
+check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
 const resourceResolver = commandSource.slice(
   commandSource.indexOf('export const resolveEnterpriseCommandResourceId'),
   commandSource.indexOf('const ensureExecutionPlan'),

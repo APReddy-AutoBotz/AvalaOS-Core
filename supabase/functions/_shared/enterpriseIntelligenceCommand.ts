@@ -46,11 +46,11 @@ import {
 import { handleOptions, jsonResponse } from './http.ts';
 import {
   getAuthUser,
-  insertRow,
+  isSupabaseRpcError,
   postgrest,
   rpc,
   resolveOrgId,
-  updateRows,
+  supabaseRpcErrorHasSignal,
 } from './supabase.ts';
 import {
   downloadStoredFile,
@@ -111,6 +111,37 @@ export class EnterpriseCommandError extends Error {
     this.name = 'EnterpriseCommandError';
   }
 }
+
+export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandError => {
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT', 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
+    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT',
+  )) return new EnterpriseCommandError('IDEMPOTENCY_CONFLICT');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE',
+  )) return new EnterpriseCommandError('AUTHORIZATION_STALE');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
+    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
+  )) return new EnterpriseCommandError('PERMISSION_DENIED');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_STALE_EXECUTION_FENCE', 'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
+    'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED', 'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
+    'ENTERPRISE_AI_JOB_IN_PROGRESS',
+  )) return new EnterpriseCommandError('COMMAND_IN_PROGRESS');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED', 'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
+    'ENTERPRISE_PROVIDER_VALIDATION_STALE', 'ENTERPRISE_PROVIDER_ROUTE_BLOCKED',
+  )) return new EnterpriseCommandError('COMMAND_BLOCKED');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_EVIDENCE_ASSESS_VERSION_CONFLICT', 'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
+    'ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED', 'ENTERPRISE_EVIDENCE_ALREADY_PROMOTED',
+    'ENTERPRISE_EVIDENCE_BATCH_DUPLICATE', 'ENTERPRISE_EVIDENCE_BATCH_INVALID',
+    'ENTERPRISE_EVIDENCE_CANDIDATE_NOT_ACCEPTED',
+    'ENTERPRISE_AI_JOB_RESOURCE_STALE',
+  )) return new EnterpriseCommandError('RESOURCE_STALE');
+  return new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+};
 
 const codeToStatus = (code: EnterpriseCommandError['code']) => {
   if (code === 'METHOD_NOT_ALLOWED') return 405;
@@ -624,6 +655,15 @@ type EvidenceVersionRow = {
   extracted_text_hash?: string | null;
 };
 
+type EvidenceExtractionClaim = {
+  state: 'owned' | 'running' | 'committed' | 'failed' | 'blocked';
+  ownsExecution: boolean;
+  jobId: string;
+  attemptCount: number;
+  recoveryCount: number;
+  safeResult?: JsonObject;
+};
+
 const commandEvidenceExtract = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.write');
   const sourceId = requireUuid(payload.sourceId);
@@ -646,25 +686,42 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
   if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   const route = await resolveRoute(authority, 'assess.evidence.extract', typeof payload.providerConfigId === 'string' ? payload.providerConfigId : undefined);
   const jobId = plannedUuid(receipt, 'jobId');
-  await ensureExecutionPlan(receipt, authority, { jobId, sourceId, sourceVersionId });
-  const requestStarted = Date.now();
-  await insertRow('enterprise_ai_job_ledger', {
-    id: jobId,
-    org_id: authority.organizationId,
-    workspace_id: authority.workspaceId,
-    capability: 'assess.evidence.extract',
-    provider_config_id: route.config.id,
+  const promptKey = 'assess.evidence.extract';
+  const promptVersion = 'enterprise-evidence-extract-1';
+  await ensureExecutionPlan(receipt, authority, {
+    jobId,
+    sourceId,
+    sourceVersionId,
+    providerConfigId: route.config.id,
     provider: route.config.provider,
+    capability: 'assess.evidence.extract',
     model: route.model,
-    prompt_key: 'assess.evidence.extract',
-    prompt_version: 'enterprise-evidence-extract-1',
-    source_refs: [sourceId, sourceVersionId],
-    actor_id: authority.actorId,
-    request_id: requireUuid(payload.requestId || crypto.randomUUID()),
-    idempotency_key: await sha256Json({ sourceVersionId, providerConfigId: route.config.id, capability: 'assess.evidence.extract' }),
-    status: 'running',
-    approval_state: 'review_required',
+    promptKey,
+    promptVersion,
+    requestHash: receipt.request_hash,
   });
+  const requestStarted = Date.now();
+  const claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job', {
+    p_job_id: jobId,
+    p_receipt: receipt.id,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    p_actor: authority.actorId,
+    p_source_id: sourceId,
+    p_source_version_id: sourceVersionId,
+    p_provider_config_id: route.config.id,
+    p_provider: route.config.provider,
+    p_capability: 'assess.evidence.extract',
+    p_model: route.model,
+    p_prompt_key: promptKey,
+    p_prompt_version: promptVersion,
+    p_request_hash: receipt.request_hash,
+    p_execution_token: receipt.execution_token,
+    p_execution_fence: receipt.execution_fence,
+  });
+  if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
+  if (claim.state === 'failed' || claim.state === 'blocked') throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  if (!claim.ownsExecution || claim.jobId !== jobId) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
   try {
     const result = await runGovernedProviderRequest({
       provider: route.config.provider,
@@ -711,7 +768,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
         sourceLocator: raw.sourceLocator.slice(0, 400),
         confidence,
         aiJobId: jobId,
-        promptVersion: 'enterprise-evidence-extract-1',
+        promptVersion,
         status: 'suggested',
         reviewedBy: undefined,
         reviewedAt: undefined,
@@ -756,14 +813,34 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
     });
     return safeResult;
   } catch (error) {
-    await updateRows('enterprise_ai_job_ledger', { id: `eq.${jobId}`, org_id: `eq.${authority.organizationId}`, workspace_id: `eq.${authority.workspaceId}`, status: 'eq.running' }, {
-      status: 'failed',
-      failure_class: error instanceof EnterpriseAiGatewayError ? error.code : 'PROVIDER_RESPONSE_INVALID',
-      latency_ms: Math.max(0, Date.now() - requestStarted),
-      completed_at: new Date().toISOString(),
-    }).catch(() => undefined);
-    if (error instanceof EnterpriseCommandError) throw error;
-    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+    // A commit RPC failure has an uncertain database outcome. Preserve the
+    // running job and claimed receipt for reconciliation or fenced recovery.
+    if (isSupabaseRpcError(error)) throw mapEnterpriseCommandRpcError(error);
+    const terminalError = error instanceof EnterpriseCommandError
+      ? error
+      : new EnterpriseCommandError('COMMAND_BLOCKED');
+    const failureClass = error instanceof EnterpriseAiGatewayError
+      ? error.code
+      : 'PROVIDER_RESPONSE_INVALID';
+    try {
+      await rpc('enterprise_fail_evidence_extraction_job', {
+        p_job_id: jobId,
+        p_receipt: receipt.id,
+        p_org: authority.organizationId,
+        p_workspace: authority.workspaceId,
+        p_execution_token: receipt.execution_token,
+        p_execution_fence: receipt.execution_fence,
+        p_failure_class: failureClass,
+        p_latency_ms: Math.max(0, Date.now() - requestStarted),
+        p_response: enterpriseCommandErrorBody(terminalError),
+        p_blocked: terminalError.code === 'COMMAND_BLOCKED',
+      });
+    } catch (failureError) {
+      throw isSupabaseRpcError(failureError)
+        ? mapEnterpriseCommandRpcError(failureError)
+        : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+    }
+    throw terminalError;
   }
 };
 
@@ -1435,7 +1512,9 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
       ? error
       : error instanceof EnterpriseReceiptError
         ? new EnterpriseCommandError(error.code)
-        : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+        : isSupabaseRpcError(error)
+          ? mapEnterpriseCommandRpcError(error)
+          : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
     if (claimedReceipt && claimedAuthority) {
       try {
         const recovered = await reloadEnterpriseReceipt(claimedReceipt, claimedAuthority);
@@ -1454,7 +1533,10 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
     if (claimedReceipt && claimedAuthority && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
       const recoverableStorageEffect = commandError.code === 'COMMAND_UNAVAILABLE'
         && claimedReceipt.execution_plan?.externalStorageWritten === true;
-      if (recoverableStorageEffect) {
+      const recoverableExtractionAttempt = (commandError.code === 'COMMAND_UNAVAILABLE'
+        || commandError.code === 'COMMAND_IN_PROGRESS')
+        && typeof claimedReceipt.execution_plan?.jobId === 'string';
+      if (recoverableStorageEffect || recoverableExtractionAttempt) {
         return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
       }
       try {

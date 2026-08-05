@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   executeProviderLifecycleCommand,
+  mapProviderLifecycleRpcError,
   ProviderLifecycleError,
   type ProviderLifecycleAuthority,
   type ProviderLifecycleConfig,
@@ -8,6 +9,7 @@ import {
   type ProviderLifecycleOperation,
 } from './providerLifecycle';
 import { fingerprintProviderSecret, type ProviderSecretBackend } from './providerSecretAdapter';
+import { SupabaseRpcError } from './supabase';
 import {
   parseProviderLifecycleEnvelope,
   providerLifecycleRequestHash,
@@ -46,6 +48,27 @@ const test = async (name: string, callback: () => Promise<void>) => {
   try { await callback(); console.log(`ok - ${name}`); }
   catch (error) { console.error(`not ok - ${name}`); throw error; }
 };
+
+await test('maps only structured provider RPC domain signals', async () => {
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  })).code, 'AUTHORIZATION_STALE');
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 403, databaseMessage: 'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
+  })).code, 'PERMISSION_DENIED');
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
+  })).code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  })).code, 'COMMAND_IN_PROGRESS');
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 503, databaseMessage: 'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED',
+  })).code, 'PROVIDER_BLOCKED');
+  assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
+    status: 500, databaseMessage: 'raw sql should not survive',
+  })).code, 'PERSISTENCE_UNAVAILABLE');
+});
 
 await test('executes the seven-step lifecycle without persisting raw secret material', async () => {
   let config: ProviderLifecycleConfig | null = null;
@@ -651,7 +674,10 @@ await test('retains one rotation plan across authorization-version recovery and 
     loadConfig: async () => structuredClone(config),
     transition: async input => {
       transitions += 1;
-      if (stale) throw new Error('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE');
+      if (stale) throw new SupabaseRpcError({
+        status: 409,
+        databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+      });
       config.keyRef = {
         id: String(input.payload.keyRefId), provider: 'openai', resolverType: 'server_reference',
         secretRef: String(input.payload.secretReference), status: 'active',
@@ -740,7 +766,10 @@ await test('reuses one bind secret and key-reference plan after authorization-ve
     loadConfig: async () => structuredClone(config),
     transition: async input => {
       transitions += 1;
-      if (stale) throw new Error('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE');
+      if (stale) throw new SupabaseRpcError({
+        status: 409,
+        databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+      });
       config.keyRef = {
         id: String(input.payload.keyRefId), provider: 'openai', resolverType: 'server_reference',
         secretRef: String(input.payload.secretReference), status: 'active',

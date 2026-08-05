@@ -70,6 +70,7 @@ const enterpriseTables = [
   'enterprise_intelligence_runtime_control', 'enterprise_ai_capability_routes',
   'enterprise_ai_command_receipts', 'enterprise_ai_receipt_replay_requests',
   'enterprise_ai_effect_journal', 'enterprise_ai_job_ledger', 'enterprise_ai_usage_ledger',
+  'enterprise_ai_job_attempts',
   'enterprise_evidence_sources', 'enterprise_evidence_source_versions', 'enterprise_evidence_candidates',
   'enterprise_evidence_candidate_edits', 'enterprise_evidence_questions', 'enterprise_evidence_assess_promotions',
   'enterprise_studio_delivery_handoffs', 'enterprise_delivery_work_packages',
@@ -148,6 +149,199 @@ try {
   });
 
   const fixture = await createEnterpriseIntelligenceFixture(authority);
+  await scenario('extraction job claim, fenced recovery, replay, and terminal failure are idempotent', async () => {
+    const trackedReceipts = [];
+    const trackedJobs = [];
+    const trackedCandidates = [];
+    let providerCalls = 0;
+    const provider = 'openai';
+    const capability = 'assess.evidence.extract';
+    const model = 'fixture-model';
+    const promptKey = 'assess.evidence.extract';
+    const promptVersion = 'enterprise-evidence-extract-1';
+    let sequence = 700;
+    const nextUuid = () => fixture.uuid(sequence++);
+    const createReceipt = async (source, label, client = authority) => {
+      const receiptIdempotency = `extraction-recovery-${label}`;
+      const requestHash = fixture.hash(String((sequence % 6) + 1));
+      const requestId = nextUuid();
+      const token = nextUuid();
+      const receipt = (await client.query(
+        `SELECT (public.enterprise_ai_claim_command(
+          $1,$2,$3,'evidence.extract',$4,$5,$6,NULL,$7
+        )).*`,
+        [fixture.requester, fixture.org, fixture.workspace, receiptIdempotency, requestId, requestHash, token],
+      )).rows[0];
+      const jobId = nextUuid();
+      const plan = {
+        jobId, sourceId: source.sourceId, sourceVersionId: source.sourceVersionId,
+        providerConfigId: fixture.provider, provider, capability, model,
+        promptKey, promptVersion, requestHash,
+      };
+      const planned = (await client.query(
+        'SELECT (public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)).*',
+        [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence, JSON.stringify(plan)],
+      )).rows[0];
+      trackedReceipts.push(receipt.id);
+      trackedJobs.push(jobId);
+      return {receipt: planned, jobId, source, requestHash, plan};
+    };
+    const claimJob = async (entry, token = entry.receipt.execution_token, fence = entry.receipt.execution_fence, overrides = {}, client = authority) => {
+      const values = {
+        sourceId: entry.source.sourceId, sourceVersionId: entry.source.sourceVersionId,
+        providerConfigId: fixture.provider, provider, capability, model, promptKey, promptVersion,
+        requestHash: entry.requestHash, ...overrides,
+      };
+      return (await client.query(
+        `SELECT public.enterprise_claim_or_resume_evidence_extraction_job(
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+        ) result`,
+        [entry.jobId, entry.receipt.id, fixture.org, fixture.workspace, fixture.requester,
+          values.sourceId, values.sourceVersionId, values.providerConfigId, values.provider,
+          values.capability, values.model, values.promptKey, values.promptVersion,
+          values.requestHash, token, fence],
+      )).rows[0].result;
+    };
+    const expire = async entry => {
+      await authority.query("UPDATE public.enterprise_ai_command_receipts SET lease_expires_at=statement_timestamp()-interval '1 second' WHERE id=$1", [entry.receipt.id]);
+      await authority.query('ALTER TABLE public.enterprise_ai_job_ledger DISABLE TRIGGER enterprise_job_guard_before_mutation');
+      try {
+        await authority.query("UPDATE public.enterprise_ai_job_ledger SET attempt_lease_expires_at=statement_timestamp()-interval '1 second' WHERE id=$1", [entry.jobId]);
+      } finally {
+        await authority.query('ALTER TABLE public.enterprise_ai_job_ledger ENABLE TRIGGER enterprise_job_guard_before_mutation');
+      }
+    };
+    const reclaimReceipt = async (entry, token, client = authority) => (
+      await client.query(
+        `SELECT (public.enterprise_ai_claim_command(
+          $1,$2,$3,'evidence.extract',$4,$5,$6,NULL,$7
+        )).*`,
+        [fixture.requester, fixture.org, fixture.workspace,
+          `extraction-recovery-${entry.label}`, nextUuid(), entry.requestHash, token],
+      )
+    ).rows[0];
+    const commit = async (entry, receipt, candidateId) => {
+      providerCalls += 1;
+      trackedCandidates.push(candidateId);
+      const safeResult = {
+        jobId: entry.jobId, sourceId: entry.source.sourceId,
+        sourceVersionId: entry.source.sourceVersionId, candidateCount: 1,
+        candidates: [{id: candidateId, field: 'process_objective'}],
+      };
+      const candidates = [{
+        id: candidateId, sourceVersionId: entry.source.sourceVersionId,
+        field: 'process_objective', value: `Recovered evidence ${candidateId}`,
+        safeExcerpt: 'Recovered evidence is governed and independently reviewed.',
+        excerptHash: fixture.hash('d'), sourceLocator: 'line:1-1', confidence: 0.9,
+        promptVersion, status: 'suggested', createdBy: fixture.requester,
+      }];
+      await authority.query(
+        `SELECT public.enterprise_commit_evidence_extraction(
+          $1,$2,$3,$4,$5,12,$6,$7,$8,20,10,$9::jsonb,$10,$11,$12,$13::jsonb
+        )`,
+        [entry.jobId, entry.source.sourceId, fixture.org, fixture.workspace, fixture.hash('e'),
+          fixture.provider, provider, model, JSON.stringify(candidates), receipt.id,
+          receipt.execution_token, receipt.execution_fence, JSON.stringify(safeResult)],
+      );
+      return safeResult;
+    };
+    const fail = async (entry, receipt, failureClass = 'PROVIDER_RESPONSE_INVALID') => {
+      const response = {ok:false,error:{code:'COMMAND_BLOCKED',message:'The Enterprise Intelligence command could not be completed.'}};
+      await authority.query(
+        `SELECT public.enterprise_fail_evidence_extraction_job(
+          $1,$2,$3,$4,$5,$6,$7,8,$8::jsonb,true
+        )`,
+        [entry.jobId, receipt.id, fixture.org, fixture.workspace, receipt.execution_token,
+          receipt.execution_fence, failureClass, JSON.stringify(response)],
+      );
+      return response;
+    };
+
+    // Crash after insert, before provider: recover one stable row with a newer fence.
+    const crashed = await createReceipt(fixture.sources[1], 'crashed'); crashed.label = 'crashed';
+    assert.equal((await claimJob(crashed)).ownsExecution, true);
+    await expire(crashed);
+    const recoveredToken = nextUuid();
+    const recoveredReceipt = await reclaimReceipt(crashed, recoveredToken);
+    assert.equal(recoveredReceipt.execution_token, recoveredToken);
+    const resumed = await claimJob(crashed, recoveredToken, recoveredReceipt.execution_fence);
+    assert.deepEqual([resumed.jobId, resumed.attemptCount, resumed.recoveryCount], [crashed.jobId, 2, 1]);
+    const crashedResult = await commit(crashed, recoveredReceipt, nextUuid());
+    // Simulate a lost commit response: reload reconciles the canonical effect.
+    const reconciled = (await authority.query(
+      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+      [crashed.receipt.id, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.deepEqual([reconciled.status, reconciled.response], ['committed', crashedResult]);
+    const succeededReplay = await claimJob({...crashed, receipt: reconciled}, recoveredToken, recoveredReceipt.execution_fence);
+    assert.deepEqual([succeededReplay.state, succeededReplay.ownsExecution, succeededReplay.safeResult], ['committed', false, crashedResult]);
+
+    // Two recovery contenders: the receipt fence admits one token; the other is stale.
+    const concurrent = await createReceipt(fixture.sources[2], 'concurrent'); concurrent.label = 'concurrent';
+    await claimJob(concurrent);
+    await expire(concurrent);
+    const contender = await connect(urlFor(names.authority));
+    const tokenA = nextUuid(); const tokenB = nextUuid();
+    const [receiptA, receiptB] = await Promise.all([
+      reclaimReceipt(concurrent, tokenA), reclaimReceipt(concurrent, tokenB, contender),
+    ]);
+    const winner = receiptA.execution_token === tokenA ? receiptA : receiptB;
+    const winnerToken = winner.execution_token;
+    const loserToken = winnerToken === tokenA ? tokenB : tokenA;
+    assert.equal([receiptA.execution_token === tokenA, receiptB.execution_token === tokenB].filter(Boolean).length, 1);
+    const concurrentResume = await claimJob(concurrent, winnerToken, winner.execution_fence);
+    assert.equal(concurrentResume.ownsExecution, true);
+    await assert.rejects(claimJob(concurrent, loserToken, winner.execution_fence), /ENTERPRISE_AI_STALE_EXECUTION_FENCE/);
+    await commit(concurrent, winner, nextUuid());
+    await authority.query('SELECT public.enterprise_ai_reload_command($1,$2,$3)', [concurrent.receipt.id, fixture.org, fixture.workspace]);
+
+    // A non-expired owner excludes a new worker; terminate the original attempt.
+    const active = await createReceipt(fixture.sources[3], 'active'); active.label = 'active';
+    await claimJob(active);
+    const activeContenderToken = nextUuid();
+    const activeReplay = await reclaimReceipt(active, activeContenderToken);
+    assert.notEqual(activeReplay.execution_token, activeContenderToken);
+    await assert.rejects(claimJob(active, activeContenderToken, activeReplay.execution_fence), /ENTERPRISE_AI_STALE_EXECUTION_FENCE/);
+    await fail(active, active.receipt, 'PROVIDER_TIMEOUT');
+
+    // Canonical mismatches fail without effects, then the original owner can finalize safely.
+    const mismatch = await createReceipt(fixture.sources[4], 'mismatch'); mismatch.label = 'mismatch';
+    await claimJob(mismatch);
+    const effectsBeforeMismatch = Number((await authority.query(
+      'SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [mismatch.receipt.id],
+    )).rows[0].n);
+    await assert.rejects(claimJob(mismatch, mismatch.receipt.execution_token, mismatch.receipt.execution_fence, {model:'changed-model'}), /ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT/);
+    assert.equal(Number((await authority.query(
+      'SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [mismatch.receipt.id],
+    )).rows[0].n), effectsBeforeMismatch);
+    await fail(mismatch, mismatch.receipt);
+
+    // Provider/decoding failure reaches one terminal job/receipt and exact replay.
+    const decoding = await createReceipt(fixture.sources[5], 'decoding'); decoding.label = 'decoding';
+    await claimJob(decoding);
+    providerCalls += 1;
+    const failedResult = await fail(decoding, decoding.receipt);
+    const failedReplay = await claimJob(decoding);
+    assert.deepEqual([failedReplay.state, failedReplay.ownsExecution, failedReplay.safeResult], ['blocked', false, failedResult]);
+
+    const counts = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.enterprise_ai_command_receipts WHERE id=ANY($1::uuid[]) AND status='claimed') claimed_receipts,
+      (SELECT count(*)::int FROM public.enterprise_ai_job_ledger WHERE id=ANY($2::uuid[]) AND status='running') running_jobs,
+      (SELECT count(*)::int FROM (SELECT receipt_id FROM public.enterprise_ai_job_ledger WHERE id=ANY($2::uuid[]) GROUP BY receipt_id HAVING count(*)>1) duplicates) duplicate_jobs,
+      (SELECT count(*)::int FROM public.enterprise_evidence_candidates WHERE id=ANY($3::uuid[])) candidates,
+      (SELECT count(*)::int FROM public.enterprise_ai_usage_ledger WHERE job_id=ANY($2::uuid[])) usage_rows,
+      (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($1::uuid[])) effects,
+      (SELECT count(*)::int FROM public.enterprise_ai_job_attempts WHERE job_id=ANY($2::uuid[])) attempts`,
+      [trackedReceipts, trackedJobs, trackedCandidates])).rows[0];
+    assert.deepEqual(counts, {
+      claimed_receipts:0, running_jobs:0, duplicate_jobs:0,
+      candidates:2, usage_rows:2, effects:5, attempts:7,
+    });
+    assert.equal(providerCalls, 3);
+    console.log(`EXTRACTION RECOVERY COUNTS ${JSON.stringify({...counts, providerCalls,
+      duplicateCandidates:0, duplicateUsageRows:0, recoveredJobId:crashed.jobId,
+      concurrentWinners:1, concurrentLosers:1})}`);
+  });
   await scenario('provider lifecycle is atomic, tenant-bound, freshness-gated, sanitized, and fail-closed', async () => {
     const rpc = async (operation, payload, version = authorizationVersion) => (
       await authority.query(

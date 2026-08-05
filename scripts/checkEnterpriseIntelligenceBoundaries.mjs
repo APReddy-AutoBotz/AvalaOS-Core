@@ -19,6 +19,7 @@ const requiredFiles = [
   'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql',
   'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql',
   'supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql',
+  'supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -38,7 +39,7 @@ const hits = forbidden.filter(pattern => pattern.test(featureText));
 if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: ${hits.map(String).join(', ')}`);
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
-for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_ai_job_ledger', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
+for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or_resume_evidence_extraction_job', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
   if (!command.includes(required)) throw new Error(`Enterprise command boundary is missing ${required}.`);
 }
 if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(command)) {
@@ -109,7 +110,52 @@ for (const required of [
 ]) {
   if (!readyReviewCorrection.includes(required)) throw new Error(`Ready-review correction is missing ${required}.`);
 }
+const extractionCommand = command.slice(
+  command.indexOf('const commandEvidenceExtract'),
+  command.indexOf('const commandEvidenceCandidateReview'),
+);
+if (/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand)) {
+  throw new Error('Evidence extraction jobs must be claimed or resumed through the fenced service RPC.');
+}
+if (/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand)) {
+  throw new Error('Evidence extraction terminal state must be receipt-atomic, not a direct table patch.');
+}
+if (!(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job')
+  < extractionCommand.indexOf('runGovernedProviderRequest'))) {
+  throw new Error('Evidence extraction must own the fenced job attempt before provider invocation.');
+}
+const supabaseTransport = read('supabase/functions/_shared/supabase.ts');
+if (!supabaseTransport.includes('class SupabaseRpcError') || !supabaseTransport.includes('await response.text()')) {
+  throw new Error('RPC failures require one typed, single-read internal error boundary.');
+}
+if (/message\.includes\(['"]ENTERPRISE_/u.test(command)
+  || /message\.includes\(['"]ENTERPRISE_/u.test(read('supabase/functions/_shared/enterpriseReceipt.ts'))
+  || /message\.includes\(['"]ENTERPRISE_/u.test(read('supabase/functions/_shared/providerLifecycle.ts'))) {
+  throw new Error('Domain errors must be mapped from structured RPC fields, not flattened message strings.');
+}
 const atomicPromotion = read('supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql');
+const extractionRecovery = read('supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql');
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job', 'enterprise_fail_evidence_extraction_job',
+  'receipt_id', 'source_version_id', 'request_hash', 'execution_token', 'execution_fence',
+  'attempt_lease_expires_at', 'attempt_count', 'recovery_count', 'enterprise_ai_job_attempts',
+  'does not claim exactly-once provider invocation',
+]) {
+  if (!extractionRecovery.includes(required)) throw new Error(`Extraction recovery contract is missing ${required}.`);
+}
+const extractionClaimSql = extractionRecovery.slice(
+  extractionRecovery.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_claim_or_resume_evidence_extraction_job'),
+  extractionRecovery.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_fail_evidence_extraction_job'),
+);
+if (!extractionClaimSql.includes('p_job_id,p_org,p_workspace,p_capability')) {
+  throw new Error('Extraction recovery must insert only the stable planned job ID.');
+}
+if (extractionClaimSql.includes('gen_random_uuid()')) {
+  throw new Error('Extraction recovery must never generate a replacement job ID.');
+}
+for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key', 'authorization']) {
+  if (extractionRecovery.includes(forbidden)) throw new Error(`Extraction job/attempt ledger contains forbidden field ${forbidden}.`);
+}
 const promotionCommand = command.slice(
   command.indexOf('const commandEvidenceAssessPromote'),
   command.indexOf('const assertApprovedApplicationAssessment'),

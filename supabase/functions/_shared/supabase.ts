@@ -9,6 +9,79 @@ type AuthUser = {
   email?: string;
 };
 
+const RPC_FIELD_MAX_LENGTH = 256;
+const rpcDomainSignalPattern = /^(?:ENTERPRISE|PR1[A-Z0-9]*)_[A-Z0-9_]+$/;
+const postgresCodePattern = /^[A-Z0-9]{5}$/;
+
+const boundedRpcField = (value: unknown, allowPostgresCode = false) => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > RPC_FIELD_MAX_LENGTH) return undefined;
+  if (rpcDomainSignalPattern.test(normalized)) return normalized;
+  if (allowPostgresCode && postgresCodePattern.test(normalized)) return normalized;
+  return undefined;
+};
+
+/**
+ * A server-internal, bounded representation of a PostgREST RPC failure.
+ * It deliberately never retains the request arguments, response body, SQL,
+ * auth material, paths, prompts, provider keys, or arbitrary database text.
+ */
+export class SupabaseRpcError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly databaseMessage?: string;
+  readonly details?: string;
+  readonly hint?: string;
+
+  constructor(input: {
+    status: number;
+    code?: string;
+    databaseMessage?: string;
+    details?: string;
+    hint?: string;
+  }) {
+    super('Supabase RPC failed.');
+    this.name = 'SupabaseRpcError';
+    this.status = Number.isSafeInteger(input.status) && input.status >= 400 && input.status <= 599
+      ? input.status
+      : 500;
+    this.code = boundedRpcField(input.code, true);
+    this.databaseMessage = boundedRpcField(input.databaseMessage);
+    this.details = boundedRpcField(input.details);
+    this.hint = boundedRpcField(input.hint);
+  }
+}
+
+export const isSupabaseRpcError = (error: unknown): error is SupabaseRpcError => (
+  error instanceof SupabaseRpcError
+);
+
+export const supabaseRpcErrorHasSignal = (error: unknown, ...signals: string[]) => {
+  if (!isSupabaseRpcError(error)) return false;
+  const available = new Set([error.code, error.databaseMessage, error.details, error.hint].filter(Boolean));
+  return signals.some(signal => available.has(signal));
+};
+
+const parseRpcFailure = (status: number, body: string) => {
+  let value: unknown;
+  try {
+    value = body ? JSON.parse(body) : null;
+  } catch {
+    value = null;
+  }
+  const record = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return new SupabaseRpcError({
+    status,
+    code: boundedRpcField(record.code, true),
+    databaseMessage: boundedRpcField(record.message),
+    details: boundedRpcField(record.details),
+    hint: boundedRpcField(record.hint),
+  });
+};
+
 const getRequiredEnv = (key: string) => {
   const value = Deno.env.get(key);
   if (!value) throw new Error(`${key} is required.`);
@@ -87,7 +160,11 @@ export const rpc = async <T>(name: string, args: Record<string, unknown>): Promi
     },
     body: JSON.stringify(args),
   });
-  if (!response.ok) throw new Error('Supabase RPC failed.');
+  if (!response.ok) {
+    // Consume the failure body once. Only allowlisted, bounded domain signals
+    // survive parsing; the raw body is never retained or logged.
+    throw parseRpcFailure(response.status, await response.text());
+  }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 };

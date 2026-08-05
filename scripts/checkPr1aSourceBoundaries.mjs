@@ -38,7 +38,10 @@ assert.doesNotMatch(storage, /Deno\.env\.get\('EXPORTS_BUCKET'\)|klarity-exports
 assert.match(storage, /assertTenantStoragePath\(input\.orgId, input\.artifact\.path\)/);
 
 const postgrest = read('supabase/functions/_shared/supabase.ts');
-assert.doesNotMatch(postgrest, /await response\.text\(\)/);
+assert.equal((postgrest.match(/await response\.text\(\)/g) || []).length, 1);
+assert.match(postgrest, /class SupabaseRpcError/);
+assert.match(postgrest, /throw parseRpcFailure\(response\.status, await response\.text\(\)\)/);
+assert.doesNotMatch(postgrest, /console\.(?:log|warn|error)\([^\n]*(?:response|body)/);
 
 for (const endpoint of [
   'supabase/functions/export-document/index.ts',

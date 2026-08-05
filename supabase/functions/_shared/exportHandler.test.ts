@@ -174,7 +174,10 @@ const main = async () => {
   await rejectsWith(() => run(removalFailureDependencies), 'EXPORT_AUDIT_UNAVAILABLE');
 
   const supabaseSource = readFileSync('supabase/functions/_shared/supabase.ts', 'utf8');
-  assert.doesNotMatch(supabaseSource, /await response\.text\(\)/);
+  assert.equal((supabaseSource.match(/await response\.text\(\)/g) || []).length, 1);
+  assert.match(supabaseSource, /class SupabaseRpcError/);
+  assert.match(supabaseSource, /throw parseRpcFailure\(response\.status, await response\.text\(\)\)/);
+  assert.doesNotMatch(supabaseSource, /console\.(?:log|warn|error)\([^\n]*(?:response|body)/);
   assert.doesNotMatch(supabaseSource, /Supabase REST request failed \(\$\{response\.status\}\)/);
 
   for (const endpoint of [

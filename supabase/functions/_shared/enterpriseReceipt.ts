@@ -1,5 +1,5 @@
 import { sha256Hex } from './enterpriseIntelligenceIngestion.ts';
-import { rpc } from './supabase.ts';
+import { rpc, supabaseRpcErrorHasSignal } from './supabase.ts';
 
 export type EnterpriseReceiptStatus = 'claimed' | 'committed' | 'failed' | 'blocked';
 
@@ -59,10 +59,19 @@ export const hashReceiptValue = (value: unknown) => sha256Hex(JSON.stringify(can
 
 const rowFrom = (value: EnterpriseReceiptRow | EnterpriseReceiptRow[]) => Array.isArray(value) ? value[0] : value;
 
-const mapRpcError = (error: unknown): EnterpriseReceiptError => {
-  const message = String((error as { message?: unknown })?.message || error || '');
-  if (message.includes('ENTERPRISE_AI_IDEMPOTENCY_CONFLICT')) return new EnterpriseReceiptError('IDEMPOTENCY_CONFLICT');
-  if (message.includes('ENTERPRISE_AI_COMMAND_IN_PROGRESS')) return new EnterpriseReceiptError('COMMAND_IN_PROGRESS');
+export const mapEnterpriseReceiptRpcError = (error: unknown): EnterpriseReceiptError => {
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT',
+    'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
+    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT',
+  )) return new EnterpriseReceiptError('IDEMPOTENCY_CONFLICT');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
+    'ENTERPRISE_AI_JOB_IN_PROGRESS',
+    'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+    'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
+    'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED',
+  )) return new EnterpriseReceiptError('COMMAND_IN_PROGRESS');
   return new EnterpriseReceiptError('COMMAND_UNAVAILABLE');
 };
 
@@ -90,7 +99,7 @@ export const claimEnterpriseReceipt = async (
     return { receipt, ownsExecution: receipt.status === 'claimed' && receipt.execution_token === executionToken };
   } catch (error) {
     if (error instanceof EnterpriseReceiptError) throw error;
-    throw mapRpcError(error);
+    throw mapEnterpriseReceiptRpcError(error);
   }
 };
 
@@ -111,8 +120,9 @@ export const persistEnterpriseExecutionPlan = async (
     const planned = rowFrom(value);
     if (!planned?.id) throw new Error('missing planned receipt');
     return planned;
-  } catch {
-    throw new EnterpriseReceiptError('COMMAND_UNAVAILABLE');
+  } catch (error) {
+    if (error instanceof EnterpriseReceiptError) throw error;
+    throw mapEnterpriseReceiptRpcError(error);
   }
 };
 
@@ -145,8 +155,9 @@ export const reloadEnterpriseReceipt = async (
     const reloaded = rowFrom(value);
     if (!reloaded?.id) throw new Error('missing receipt');
     return reloaded;
-  } catch {
-    throw new EnterpriseReceiptError('COMMAND_UNAVAILABLE');
+  } catch (error) {
+    if (error instanceof EnterpriseReceiptError) throw error;
+    throw mapEnterpriseReceiptRpcError(error);
   }
 };
 

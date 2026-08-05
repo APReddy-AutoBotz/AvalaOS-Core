@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import {
   EnterpriseCommandError,
   enterpriseCommandErrorBody,
+  mapEnterpriseCommandRpcError,
   parseEnterpriseCommandEnvelope,
   resolveEnterpriseCommandResourceId,
 } from './enterpriseIntelligenceCommand';
-import { hashReceiptValue } from './enterpriseReceipt';
+import { hashReceiptValue, mapEnterpriseReceiptRpcError } from './enterpriseReceipt';
+import { SupabaseRpcError } from './supabase';
 
 const base = {
   commandType: 'evidence.candidate.review',
@@ -58,6 +60,32 @@ test('receipt finalization failure is explicit and fail-closed', () => {
       message: 'The Enterprise Intelligence command could not be completed.',
     },
   });
+});
+
+test('structured RPC domain signals map without exposing database text', () => {
+  const idempotency = new SupabaseRpcError({ status: 409, databaseMessage: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT' });
+  assert.equal(mapEnterpriseCommandRpcError(idempotency).code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(mapEnterpriseReceiptRpcError(idempotency).code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  })).code, 'AUTHORIZATION_STALE');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 403, databaseMessage: 'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED',
+  })).code, 'PERMISSION_DENIED');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  })).code, 'COMMAND_IN_PROGRESS');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
+  })).code, 'RESOURCE_STALE');
+  const unavailable = mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 500, databaseMessage: 'arbitrary database text is discarded',
+  }));
+  assert.equal(unavailable.code, 'COMMAND_UNAVAILABLE');
+  const publicBody = JSON.stringify(enterpriseCommandErrorBody(unavailable));
+  assert.equal(publicBody.includes('arbitrary database text'), false);
+  assert.equal(publicBody.includes('Supabase RPC failed'), false);
+  assert.equal(publicBody, '{"ok":false,"error":{"code":"COMMAND_UNAVAILABLE","message":"The Enterprise Intelligence command could not be completed."}}');
 });
 
 test('promotion receipt identity is the explicit Assess draft resource', () => {
