@@ -266,6 +266,7 @@ const writeOrResolveSecret = async (
   payload: JsonObject,
   deps: ProviderLifecycleDeps,
   execution?: ProviderLifecycleExecutionContext,
+  protectedSecretReference?: string,
 ) => {
   const raw = typeof payload.providerKey === 'string' ? payload.providerKey : undefined;
   const preProvisioned = typeof payload.preProvisionedReference === 'string'
@@ -285,15 +286,41 @@ const writeOrResolveSecret = async (
       ? execution.plan.secretReference
       : createProviderSecretReference(provider, authority.organizationId, deps.randomId());
     const keyRefId = typeof execution?.plan.keyRefId === 'string' ? execution.plan.keyRefId : deps.randomId();
-    await persistExecutionPlan(execution, { provider, secretReference: secretRef, keyRefId, safeFingerprint: fingerprint });
+    if (!isAllowedProviderSecretRef(provider, secretRef, authority.organizationId)
+      || protectedSecretReference === secretRef
+      || (execution?.plan.secretOwnership !== undefined && execution.plan.secretOwnership !== 'managed_write')
+      || (execution?.plan.secretPlanReceiptId !== undefined && execution.plan.secretPlanReceiptId !== execution.receiptId)
+      || (execution?.plan.writeState !== undefined
+        && execution.plan.writeState !== 'planned'
+        && execution.plan.writeState !== 'written')) {
+      throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    }
+    const protectedSecretReferenceHash = protectedSecretReference
+      ? await fingerprintProviderSecret(protectedSecretReference)
+      : undefined;
+    if (execution?.plan.protectedSecretReferenceHash !== undefined
+      && execution.plan.protectedSecretReferenceHash !== protectedSecretReferenceHash) {
+      throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    }
+    await persistExecutionPlan(execution, {
+      secretOwnership: 'managed_write',
+      provider,
+      secretReference: secretRef,
+      secretPlanReceiptId: execution?.receiptId,
+      keyRefId,
+      safeFingerprint: fingerprint,
+      writeState: execution?.plan.writeState === 'written' ? 'written' : 'planned',
+      ...(protectedSecretReferenceHash ? { protectedSecretReferenceHash } : {}),
+    });
     const existing = await deps.secretBackend.resolve({ provider, secretRef, organizationId: authority.organizationId });
     if (existing) {
       if (await fingerprintProviderSecret(existing) !== fingerprint) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
-      return { secretRef, keyRefId, fingerprint, wrote: false, value: existing };
+      await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
+      return { provider, secretRef, keyRefId, fingerprint, wrote: false, managed: true, value: existing };
     }
     await deps.secretBackend.write({ provider, secretRef, organizationId: authority.organizationId, value: raw });
-    await persistExecutionPlan(execution, { externalSecretWritten: true });
-    return { secretRef, keyRefId, fingerprint, wrote: true, value: raw };
+    await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
+    return { provider, secretRef, keyRefId, fingerprint, wrote: true, managed: true, value: raw };
   }
   if (deps.secretBackend.writable) throw new ProviderLifecycleError('INVALID_REQUEST');
   if (!preProvisioned || !isAllowedProviderSecretRef(provider, preProvisioned, authority.organizationId)) {
@@ -307,7 +334,10 @@ const writeOrResolveSecret = async (
   await persistExecutionPlan(execution, { provider, keyRefId, preProvisionedReferenceHash: referenceHash });
   const value = await deps.secretBackend.resolve({ provider, secretRef: preProvisioned, organizationId: authority.organizationId });
   if (!value) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
-  return { secretRef: preProvisioned, keyRefId, fingerprint: await fingerprintProviderSecret(value), wrote: false, value };
+  return {
+    provider, secretRef: preProvisioned, keyRefId,
+    fingerprint: await fingerprintProviderSecret(value), wrote: false, managed: false, value,
+  };
 };
 
 const cleanupPlannedSecret = async (
@@ -315,17 +345,44 @@ const cleanupPlannedSecret = async (
   authority: ProviderLifecycleAuthority,
   execution: ProviderLifecycleExecutionContext | undefined,
   terminalCode: 'VALIDATION_FAILED' | 'PERMISSION_DENIED',
-  prepared?: { provider: EnterpriseAiProvider; secretRef: string; wrote: boolean },
+  prepared?: {
+    provider: EnterpriseAiProvider;
+    secretRef: string;
+    fingerprint: string;
+    wrote: boolean;
+    managed: boolean;
+  },
 ) => {
-  const managed = prepared?.wrote === true || execution?.plan.externalSecretWritten === true;
+  const plannedProvider = execution?.plan.provider;
+  const plannedReference = execution?.plan.secretReference;
+  const plannedFingerprint = execution?.plan.safeFingerprint;
+  const receiptOwnsPlan = Boolean(
+    execution
+      && execution.plan.secretOwnership === 'managed_write'
+      && execution.plan.secretPlanReceiptId === execution.receiptId
+      && (execution.plan.writeState === 'planned' || execution.plan.writeState === 'written'),
+  );
+  const preparedMatchesPlan = !prepared || !execution || (
+    prepared.managed === true
+      && prepared.provider === plannedProvider
+      && prepared.secretRef === plannedReference
+      && prepared.fingerprint === plannedFingerprint
+  );
+  const managed = execution
+    ? receiptOwnsPlan && preparedMatchesPlan
+    : prepared?.managed === true && prepared.wrote === true;
   if (!managed) return;
-  const providerValue = prepared?.provider || execution?.plan.provider;
-  const secretRefValue = prepared?.secretRef || execution?.plan.secretReference;
+  const providerValue = execution ? plannedProvider : prepared?.provider;
+  const secretRefValue = execution ? plannedReference : prepared?.secretRef;
+  const safeFingerprint = execution ? plannedFingerprint : prepared?.fingerprint;
   if (!ENTERPRISE_AI_PROVIDERS.includes(providerValue as EnterpriseAiProvider)
     || typeof secretRefValue !== 'string'
+    || typeof safeFingerprint !== 'string'
     || !isAllowedProviderSecretRef(providerValue as EnterpriseAiProvider, secretRefValue, authority.organizationId)
     || !deps.secretBackend.writable
-    || !deps.secretBackend.remove) {
+    || !deps.secretBackend.remove
+    || (execution?.plan.protectedSecretReferenceHash !== undefined
+      && execution.plan.protectedSecretReferenceHash === await fingerprintProviderSecret(secretRefValue))) {
     throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
   }
   if (execution?.plan.cleanupCompleted === true) return;
@@ -335,13 +392,27 @@ const cleanupPlannedSecret = async (
       cleanupTerminalCode: terminalCode,
     });
   }
+  let existing: string | undefined;
   try {
+    existing = await deps.secretBackend.resolve({
+      provider: providerValue as EnterpriseAiProvider,
+      secretRef: secretRefValue,
+      organizationId: authority.organizationId,
+    });
+    if (existing && await fingerprintProviderSecret(existing) !== safeFingerprint) {
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
+    if (!existing) {
+      if (execution) await persistExecutionPlan(execution, { cleanupCompleted: true });
+      return;
+    }
     await deps.secretBackend.remove({
       provider: providerValue as EnterpriseAiProvider,
       secretRef: secretRefValue,
       organizationId: authority.organizationId,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ProviderLifecycleError) throw error;
     throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
   }
   if (execution) {
@@ -440,7 +511,9 @@ export const executeProviderLifecycleCommand = async (
         await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
           provider: config.provider,
           secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
           wrote: prepared.wrote,
+          managed: prepared.managed,
         });
       }
       throw error;
@@ -530,7 +603,9 @@ export const executeProviderLifecycleCommand = async (
 
   if (operation === 'provider.secret.rotate') {
     if (!config.keyRef) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
-    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
+    const prepared = await writeOrResolveSecret(
+      config.provider, authority, payload, deps, execution, config.keyRef.secretRef,
+    );
     const keyRefId = prepared.keyRefId;
     let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
       ? execution.plan.lastValidatedAt
@@ -548,7 +623,9 @@ export const executeProviderLifecycleCommand = async (
         await cleanupPlannedSecret(deps, authority, execution, 'VALIDATION_FAILED', {
           provider: config.provider,
           secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
           wrote: prepared.wrote,
+          managed: prepared.managed,
         });
         throw new ProviderLifecycleError('VALIDATION_FAILED');
       }
@@ -580,7 +657,9 @@ export const executeProviderLifecycleCommand = async (
         await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
           provider: config.provider,
           secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
           wrote: prepared.wrote,
+          managed: prepared.managed,
         });
       }
       if (error instanceof ProviderLifecycleError) throw error;

@@ -281,7 +281,11 @@ export const handleProviderLifecycleRequest = async (
     if (claimedReceipt && claimedAuthority
       && safeError.code !== 'RECEIPT_FINALIZATION_FAILED'
       && safeError.code !== 'AUTHORIZATION_STALE') {
-      const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true;
+      const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true
+        || (claimedReceipt.execution_plan?.secretOwnership === 'managed_write'
+          && claimedReceipt.execution_plan?.secretPlanReceiptId === claimedReceipt.id
+          && (claimedReceipt.execution_plan?.writeState === 'planned'
+            || claimedReceipt.execution_plan?.writeState === 'written'));
       if (!(safeError.code === 'PERSISTENCE_UNAVAILABLE' && externalEffectPlanned)) {
         try {
           await failEnterpriseReceipt(

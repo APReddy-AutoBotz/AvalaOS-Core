@@ -366,12 +366,23 @@ try {
     const blockedPlan = {
       provider: 'openai', secretReference: 'AVALA_PROVIDER_SECRET_OPENAI_SERVER_ONLY_TEST_REFERENCE',
       keyRefId: fixture.uuid(681), safeFingerprint: `sha256:${'7'.repeat(24)}`,
-      externalSecretWritten: true, validationSucceeded: true,
+      secretOwnership: 'managed_write', secretPlanReceiptId: blocked.id,
+      writeState: 'planned', validationSucceeded: true,
     };
     await authority.query(
       'SELECT public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)',
       [blocked.id, fixture.org, fixture.workspace, blockedToken, blocked.execution_fence, JSON.stringify(blockedPlan)],
     );
+    const writtenBlockedPlan = {...blockedPlan, writeState: 'written', externalSecretWritten: true};
+    const writtenReceipt = (await authority.query(
+      'SELECT (public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)).*',
+      [blocked.id, fixture.org, fixture.workspace, blockedToken, blocked.execution_fence, JSON.stringify(writtenBlockedPlan)],
+    )).rows[0];
+    assert.deepEqual(writtenReceipt.execution_plan, writtenBlockedPlan);
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)',
+      [blocked.id, fixture.org, fixture.workspace, blockedToken, blocked.execution_fence, JSON.stringify(blockedPlan)],
+    ), /ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT/);
 
     await authority.query("DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key='security.manage'", [role]);
     const removedVersion = Number((await authority.query(

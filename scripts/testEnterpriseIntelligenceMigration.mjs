@@ -8,7 +8,13 @@ const authorizationAttemptSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql'),
   'utf8',
 );
+const secretWriteIntentSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
+const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
+const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
 const requiredTables = [
   'enterprise_intelligence_runtime_control',
   'enterprise_ai_capability_routes',
@@ -63,6 +69,14 @@ check(authorizationAttemptSql.includes('current_authorization IS DISTINCT FROM p
 check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE'), 'Stale-but-authorized provider attempts require a recoverable signal.');
 check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED'), 'Removed provider authority requires a terminal non-disclosing signal.');
 check(authorizationAttemptSql.includes('enterprise_ai_record_effect'), 'Corrected provider transitions must retain fenced effect evidence.');
+check(secretWriteIntentSql.includes("old_write_state='planned' AND new_write_state='written'"), 'Receipt plans must permit only the managed planned-to-written state advance.');
+check(secretWriteIntentSql.includes("p_plan @> (receipt.execution_plan - 'writeState')"), 'Write-state advancement must preserve every other receipt-plan field.');
+check(secretWriteIntentSql.includes('ENTERPRISE_AI_STALE_EXECUTION_FENCE'), 'Secret intent persistence must retain execution fencing.');
+check(providerLifecycleSource.indexOf("secretOwnership: 'managed_write'") < providerLifecycleSource.indexOf('await deps.secretBackend.write'), 'Managed secret ownership must be persisted before the external write.');
+check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === execution.receiptId"), 'Cleanup ownership must be bound to the current receipt plan.');
+check(providerLifecycleSource.includes('await fingerprintProviderSecret(existing) !== safeFingerprint'), 'Cleanup must verify the resolved secret fingerprint before deletion.');
+check(providerLifecycleSource.includes('protectedSecretReferenceHash'), 'Cleanup must protect the prior active secret reference.');
+check(providerLifecycleEndpointSource.includes("claimedReceipt.execution_plan?.secretOwnership === 'managed_write'"), 'A planned managed write must keep persistence failures claimed for reconciliation.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
