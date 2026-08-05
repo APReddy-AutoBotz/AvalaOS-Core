@@ -317,7 +317,116 @@ await test('replays terminal provider receipts with their stable non-disclosing 
     id: NONCE_ONE, request_hash: 'a'.repeat(64), initial_request_id: NONCE_ONE,
     last_request_id: NONCE_TWO, execution_token: NONCE_ONE, execution_fence: 1,
     lease_expires_at: now.toISOString(), status: 'blocked' as const,
-    response: {ok…1557 tokens truncated…-write marker fails and cleans it exactly once after rejection', async () => {
+    response: {ok: false, error: {code, message: 'The provider lifecycle request could not be completed.'}},
+  });
+  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('PERMISSION_DENIED')), 403);
+  assert.equal(providerLifecycleStatusForTerminalReceipt({...receipt('VALIDATION_FAILED'), status: 'failed'}), 422);
+  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('PROVIDER_BLOCKED')), 409);
+  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('UNKNOWN')), 409);
+});
+
+await test('reuses the planned rotation secret, key reference, and validation after persistence uncertainty', async () => {
+  const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD';
+  const config: ProviderLifecycleConfig = {
+    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: oldReference, status: 'active' },
+  };
+  let transitionAttempts = 0; let writes = 0; let validations = 0; let removals = 0;
+  const secrets = new Map([[oldReference, 'old-secret']]);
+  const database: ProviderLifecycleDatabase = {
+    loadConfig: async () => structuredClone(config),
+    transition: async input => {
+      transitionAttempts += 1;
+      if (transitionAttempts === 1) throw new Error('response lost after external effect');
+      config.keyRef = {
+        id: String(input.payload.keyRefId), provider: 'openai', resolverType: 'server_reference',
+        secretRef: String(input.payload.secretReference), status: 'active',
+      };
+      return input.execution?.result || {};
+    },
+  };
+  const secretBackend: ProviderSecretBackend = {
+    kind: 'vault', writable: true,
+    resolve: async input => secrets.get(input.secretRef),
+    write: async input => { writes += 1; secrets.set(input.secretRef, input.value); },
+    remove: async input => { removals += 1; secrets.delete(input.secretRef); },
+  };
+  const ids = [NONCE_ONE, KEY_TWO];
+  const execution = {
+    receiptId: NONCE_TWO,
+    executionToken: NONCE_ONE,
+    executionFence: 1,
+    plan: {} as Record<string, unknown>,
+    async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+  };
+  const deps = {
+    database, secretBackend, routeResolverDeps: {} as never,
+    validateConnection: async () => { validations += 1; return { validated: true as const }; },
+    now: () => now,
+    randomId: () => ids.shift() || crypto.randomUUID(),
+  };
+  await assert.rejects(
+    executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution),
+    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PERSISTENCE_UNAVAILABLE',
+  );
+  const plannedReference = String(execution.plan.secretReference);
+  const plannedKeyRef = String(execution.plan.keyRefId);
+  assert.equal(secrets.get(plannedReference), 'one-planned-new-secret');
+  assert.equal(removals, 0);
+  const replay = await executeProviderLifecycleCommand(
+    'provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution,
+  );
+  assert.equal(replay.keyRefId, plannedKeyRef);
+  assert.equal(config.keyRef?.secretRef, plannedReference);
+  assert.deepEqual({writes, validations, transitionAttempts, removals}, {writes: 1, validations: 1, transitionAttempts: 2, removals: 1});
+});
+
+await test('removes a newly written rotation secret before recording deterministic validation failure', async () => {
+  const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD_VALIDATION';
+  const config: ProviderLifecycleConfig = {
+    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: oldReference, status: 'active' },
+  };
+  let writes = 0; let removals = 0; let validations = 0; let transitions = 0;
+  const secrets = new Map([[oldReference, 'old-secret']]);
+  const execution = {
+    receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
+    plan: {} as Record<string, unknown>,
+    async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+  };
+  const deps = {
+    database: {
+      loadConfig: async () => structuredClone(config),
+      transition: async () => { transitions += 1; return {}; },
+    },
+    secretBackend: {
+      kind: 'vault', writable: true,
+      resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
+      write: async (input: { secretRef: string; value: string }) => { writes += 1; secrets.set(input.secretRef, input.value); },
+      remove: async (input: { secretRef: string }) => { removals += 1; secrets.delete(input.secretRef); },
+    } as ProviderSecretBackend,
+    routeResolverDeps: {} as never,
+    validateConnection: async () => { validations += 1; throw new Error('deterministic rejection'); },
+    now: () => now,
+    randomId: (() => { const ids = [NONCE_ONE, KEY_TWO]; return () => ids.shift() || crypto.randomUUID(); })(),
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await assert.rejects(
+      executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'rejected-new-secret' }, deps, execution),
+      (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'VALIDATION_FAILED',
+    );
+  }
+  assert.deepEqual({writes, removals, validations, transitions}, {writes: 1, removals: 1, validations: 1, transitions: 0});
+  assert.equal(secrets.get(oldReference), 'old-secret');
+  assert.equal(secrets.has(String(execution.plan.secretReference)), false);
+  assert.equal(execution.plan.cleanupRequired, true);
+  assert.equal(execution.plan.cleanupCompleted, true);
+  assert.doesNotMatch(JSON.stringify(execution.plan), /rejected-new-secret|old-secret/);
+});
+
+await test('recovers a managed write when the post-write marker fails and cleans it exactly once after rejection', async () => {
   const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD_CRASH';
   const config: ProviderLifecycleConfig = {
     id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
