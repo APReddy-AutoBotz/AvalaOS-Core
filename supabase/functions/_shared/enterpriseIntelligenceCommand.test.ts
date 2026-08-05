@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { EnterpriseCommandError, enterpriseCommandErrorBody, parseEnterpriseCommandEnvelope } from './enterpriseIntelligenceCommand';
+import {
+  EnterpriseCommandError,
+  enterpriseCommandErrorBody,
+  parseEnterpriseCommandEnvelope,
+  resolveEnterpriseCommandResourceId,
+} from './enterpriseIntelligenceCommand';
 import { hashReceiptValue } from './enterpriseReceipt';
 
 const base = {
@@ -53,6 +58,28 @@ test('receipt finalization failure is explicit and fail-closed', () => {
       message: 'The Enterprise Intelligence command could not be completed.',
     },
   });
+});
+
+test('promotion receipt identity is the explicit Assess draft resource', () => {
+  const assessDraftId = '55555555-5555-4555-8555-555555555555';
+  const sourceId = '66666666-6666-4666-8666-666666666666';
+  assert.equal(resolveEnterpriseCommandResourceId('evidence.assess.promote', {
+    resourceId: assessDraftId,
+    assessDraftId,
+    sourceId,
+  }), assessDraftId);
+  assert.throws(
+    () => resolveEnterpriseCommandResourceId('evidence.assess.promote', { assessDraftId, sourceId }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.throws(
+    () => resolveEnterpriseCommandResourceId('evidence.assess.promote', {
+      resourceId: sourceId,
+      assessDraftId,
+      sourceId,
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
 });
 
 const firstAttemptHash = await hashReceiptValue({ ...base, requestId: null });

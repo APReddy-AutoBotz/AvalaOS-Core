@@ -417,6 +417,37 @@ const receiptMutationArgs = (receipt: EnterpriseReceiptRow, result: JsonObject) 
   p_result: result,
 });
 
+export const resolveEnterpriseCommandResourceId = (
+  commandType: EnterpriseCommandType,
+  resultObject: JsonObject,
+) => {
+  const explicitResourceId = resultObject.resourceId;
+  if (explicitResourceId !== undefined) {
+    if (typeof explicitResourceId !== 'string' || !uuidPattern.test(explicitResourceId)) {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+    if (commandType === 'evidence.assess.promote'
+      && resultObject.assessDraftId !== explicitResourceId) {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+    return explicitResourceId;
+  }
+  if (commandType === 'evidence.assess.promote') {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  return typeof resultObject.id === 'string'
+    ? resultObject.id
+    : typeof resultObject.sourceId === 'string'
+      ? resultObject.sourceId
+      : typeof resultObject.providerConfigId === 'string'
+        ? resultObject.providerConfigId
+        : typeof resultObject.workPackageId === 'string'
+          ? resultObject.workPackageId
+          : typeof resultObject.decisionId === 'string'
+            ? resultObject.decisionId
+            : undefined;
+};
+
 const ensureExecutionPlan = async (
   receipt: EnterpriseReceiptRow,
   authority: Authority,
@@ -831,6 +862,7 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
     promotionCandidates,
   });
   const response = await rpc<{
+    resourceId?: string;
     sourceId?: string;
     assessDraftId?: string;
     startVersion?: number;
@@ -854,7 +886,8 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
     p_execution_fence: receipt.execution_fence,
   });
   const expectedFinalVersion = promotionStartVersion + promotionCandidates.length;
-  if (response?.sourceId !== sourceId || response?.assessDraftId !== assessDraftId
+  if (response?.resourceId !== assessDraftId
+    || response?.sourceId !== sourceId || response?.assessDraftId !== assessDraftId
     || response?.startVersion !== promotionStartVersion || response?.finalVersion !== expectedFinalVersion
     || response?.promotedCandidateCount !== promotionCandidates.length || response?.status !== 'promoted'
     || JSON.stringify(response?.candidateIds) !== JSON.stringify(candidateIds)
@@ -1394,17 +1427,7 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
     claimedAuthority = authority;
     const result = await executeEnterpriseCommand(authority, envelope, receipt);
     const resultObject: JsonObject = isRecord(result) ? result : { result };
-    const resourceId = typeof resultObject.id === 'string'
-      ? resultObject.id
-      : typeof resultObject.sourceId === 'string'
-        ? resultObject.sourceId
-        : typeof resultObject.providerConfigId === 'string'
-          ? resultObject.providerConfigId
-          : typeof resultObject.workPackageId === 'string'
-            ? resultObject.workPackageId
-            : typeof resultObject.decisionId === 'string'
-              ? resultObject.decisionId
-              : undefined;
+    const resourceId = resolveEnterpriseCommandResourceId(envelope.commandType, resultObject);
     const completed = await completeEnterpriseReceipt(receipt, authority, resultObject, resourceId);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {

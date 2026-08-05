@@ -102,6 +102,13 @@ const promotionCommand = commandSource.slice(
 check(!/for\s*\([^)]*candidate[^)]*\)[\s\S]*?rpc\(['"]enterprise_promote_evidence_to_assess_v2/iu.test(promotionCommand), 'The command handler must not loop over the single-candidate promotion RPC.');
 check((promotionCommand.match(/enterprise_promote_evidence_batch_to_assess_v2/gu) || []).length === 1, 'The command handler must make exactly one promotion RPC call.');
 check(atomicPromotionSql.indexOf('PERFORM public.enterprise_ai_record_effect') < atomicPromotionSql.indexOf('RETURN result;'), 'Batch success requires a durable receipt effect.');
+check(atomicPromotionSql.includes("'resourceId', assess_case.id"), 'Batch response must identify the Assess draft as its canonical resource.');
+const resourceResolver = commandSource.slice(
+  commandSource.indexOf('export const resolveEnterpriseCommandResourceId'),
+  commandSource.indexOf('const ensureExecutionPlan'),
+);
+check(resourceResolver.includes('resultObject.assessDraftId !== explicitResourceId'), 'Promotion finalization must bind explicit resourceId to assessDraftId.');
+check(resourceResolver.indexOf("commandType === 'evidence.assess.promote'") < resourceResolver.indexOf('typeof resultObject.sourceId'), 'Promotion must fail closed before the legacy sourceId fallback.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',

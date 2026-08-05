@@ -130,6 +130,19 @@ const batchReturn = atomicPromotion.indexOf('RETURN result;', batchEffect);
 if (!(batchEffect > firstPromotionMutation && batchReturn > batchEffect)) {
   throw new Error('Assess batch promotion must journal its one receipt effect before success.');
 }
+if (!atomicPromotion.includes("'resourceId', assess_case.id")) {
+  throw new Error('Assess batch promotion must return the Assess draft as its canonical resource ID.');
+}
+const resourceResolver = command.slice(
+  command.indexOf('export const resolveEnterpriseCommandResourceId'),
+  command.indexOf('const ensureExecutionPlan'),
+);
+const promotionResourceGuard = resourceResolver.indexOf("commandType === 'evidence.assess.promote'");
+const sourceIdFallback = resourceResolver.indexOf('typeof resultObject.sourceId');
+if (!(resourceResolver.includes('resultObject.assessDraftId !== explicitResourceId')
+  && promotionResourceGuard >= 0 && sourceIdFallback > promotionResourceGuard)) {
+  throw new Error('Assess promotion must fail closed before sourceId can become its receipt resource.');
+}
 const browserClient = read('services/enterpriseIntelligenceClient.ts');
 for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {
   if (!browserClient.includes(required)) throw new Error(`Browser retry contract is missing ${required}.`);

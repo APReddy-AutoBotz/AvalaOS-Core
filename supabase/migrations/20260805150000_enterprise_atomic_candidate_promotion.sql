@@ -298,6 +298,7 @@ BEGIN
   END LOOP;
 
   result := jsonb_build_object(
+    'resourceId', assess_case.id,
     'sourceId', p_source,
     'assessDraftId', assess_case.id,
     'startVersion', p_expected_version,

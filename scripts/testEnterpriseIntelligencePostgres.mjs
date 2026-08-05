@@ -872,6 +872,7 @@ try {
       successCase, 1, await candidatePlan(orderedSuccessIds), 'atomic-promotion-success-001',
     );
     const success = (await promote(successReceipt)).rows[0].result;
+    assert.equal(success.resourceId, successCase);
     assert.deepEqual(success.candidateIds, orderedSuccessIds);
     assert.equal(Number(success.startVersion), 1);
     assert.equal(Number(success.finalVersion), 4);
@@ -881,14 +882,39 @@ try {
       case_versions: 4, promotions: 3, audits: 3, effects: 1,
     });
 
+    const committedEffect = (await authority.query(
+      "SELECT resource_id,safe_result FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1 AND effect_key='command'",
+      [successReceipt.id],
+    )).rows[0];
+    assert.equal(committedEffect.resource_id, successCase);
+    assert.equal(committedEffect.safe_result.resourceId, successCase);
+
     // Simulate response loss: domain/effect committed while the outer receipt is still claimed.
     assert.equal((await authority.query('SELECT status FROM public.enterprise_ai_command_receipts WHERE id=$1', [successReceipt.id])).rows[0].status, 'claimed');
+    const mismatchedResponse = {...success, resourceId: source.sourceId};
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_ai_reconcile_command($1,$2,$3,$4::jsonb,$5)',
+      [successReceipt.id, fixture.org, fixture.workspace, JSON.stringify(mismatchedResponse), source.sourceId],
+    ), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+    assert.deepEqual(await caseCounts(successCase, [successReceipt.id]), {
+      case_versions: 4, promotions: 3, audits: 3, effects: 1,
+    });
     const recovered = (await authority.query(
-      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
-      [successReceipt.id, fixture.org, fixture.workspace],
+      'SELECT (public.enterprise_ai_reconcile_command($1,$2,$3,$4::jsonb,$5)).*',
+      [successReceipt.id, fixture.org, fixture.workspace, JSON.stringify(success), successCase],
     )).rows[0];
     assert.equal(recovered.status, 'committed');
+    assert.equal(recovered.resource_id, successCase);
+    assert.equal(recovered.response.resourceId, successCase);
     assert.deepEqual(recovered.response, success);
+    const finalized = (await authority.query(
+      'SELECT (public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)).*',
+      [successReceipt.id, fixture.org, fixture.workspace, successReceipt.execution_token,
+        Number(successReceipt.execution_fence), JSON.stringify(success), successCase],
+    )).rows[0];
+    assert.equal(finalized.id, successReceipt.id);
+    assert.equal(finalized.resource_id, successCase);
+    assert.deepEqual(finalized.response, success);
     const replay = (await authority.query(
       'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8,$9)).*',
       [fixture.requester, fixture.org, fixture.workspace, 'evidence.assess.promote', successReceipt.key,
@@ -965,7 +991,9 @@ try {
     console.log(`ATOMIC PROMOTION COUNTS ${JSON.stringify({
       committedCandidates:3, successCaseVersion:4, failureVersionDelta:0,
       failurePromotionDelta:0, failureAuditDelta:0, failureEffectDelta:0,
-      replayAdditionalWrites:0, concurrentWinners:1, concurrentLosers:1,
+      receiptResourceId:successCase, effectResourceId:committedEffect.resource_id,
+      mismatchedResourceRejections:1, replayAdditionalWrites:0,
+      concurrentWinners:1, concurrentLosers:1,
       concurrentFinalVersion:4, claimedFinal,
     })}`);
   });
