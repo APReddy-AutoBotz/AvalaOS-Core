@@ -8,6 +8,7 @@ export const IDS = {
   workspace: '30000000-0000-4000-8000-000000000003',
   provider: '40000000-0000-4000-8000-000000000004',
   route: '50000000-0000-4000-8000-000000000005',
+  routeRole: '51000000-0000-4000-8000-000000000015',
   source: '60000000-0000-4000-8000-000000000006',
   sourceVersion: '70000000-0000-4000-8000-000000000007',
   candidate: '80000000-0000-4000-8000-000000000008',
@@ -58,6 +59,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
     endpointState: 'first_party',
     validationState: 'validation_required',
     budgetState: 'configured',
+    eligibleRouteRoles: [{ id: IDS.routeRole, label: 'Workspace reviewer', scope: 'workspace' }],
     routes: [{
       id: IDS.route,
       capability: 'assess.evidence.extract',
@@ -65,6 +67,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
       enabled: false,
       availability: options.providerUnavailable ? 'provider_unavailable' : 'validation_required',
       allowedRoleCount: 1,
+      allowedRoleIds: [IDS.routeRole],
     }],
   }],
   evidenceSources: [],
@@ -133,6 +136,7 @@ const operationFrom = (request: Request) => {
 export const installEnterpriseIntelligenceFixture = async (page: Page, options: FixtureOptions = {}) => {
   const projection = baseProjection(options);
   const operations: string[] = [];
+  const commandPayloads: Array<Record<string, unknown>> = [];
   const unexpectedRequests: string[] = [];
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
@@ -164,6 +168,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     if (pathname.endsWith('/enterprise-intelligence-command') || pathname.endsWith('/enterprise-provider-lifecycle')) {
       const operation = operationFrom(request);
       operations.push(operation);
+      commandPayloads.push(request.postDataJSON() as Record<string, unknown>);
       if (nextCommandFailure?.operation === operation) {
         const failure = nextCommandFailure;
         nextCommandFailure = undefined;
@@ -280,6 +285,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
 
   return {
     operations,
+    commandPayloads,
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     recoverProjection() { projectionFailure = undefined; },

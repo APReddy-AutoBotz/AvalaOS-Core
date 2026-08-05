@@ -14,6 +14,7 @@ const ORG = '20000000-0000-4000-8000-000000000002';
 const WORKSPACE = '30000000-0000-4000-8000-000000000003';
 const CONFIG = '40000000-0000-4000-8000-000000000004';
 const ROUTE = '50000000-0000-4000-8000-000000000005';
+const ROUTE_ROLE = '51000000-0000-4000-8000-000000000015';
 const SOURCE = '60000000-0000-4000-8000-000000000006';
 const SOURCE_VERSION = '70000000-0000-4000-8000-000000000007';
 const CANDIDATE = '80000000-0000-4000-8000-000000000008';
@@ -43,7 +44,9 @@ const authority = (): TenantContext => ({
 
 const raw = (): EnterpriseIntelligenceRawProjection => ({
   providerConfigs: [{ id: CONFIG, provider: 'openai', display_name: 'Primary drafting', default_model: 'approved-model', status: 'active', key_ref_id: 'server-only-ref-id', budget_policy: { dailyRequests: 10 }, last_validated_at: '2026-08-04T08:00:00.000Z', secret_ref: 'must-never-project' }],
-  providerRoutes: [{ id: ROUTE, provider_config_id: CONFIG, capability: 'assess.evidence.extract', model: 'approved-model', enabled: true, allowed_roles: ['Reviewer'], updated_at: '2026-08-04T08:00:00.000Z' }],
+  providerRoutes: [{ id: ROUTE, provider_config_id: CONFIG, capability: 'assess.evidence.extract', model: 'approved-model', enabled: true, allowed_roles: [ROUTE_ROLE], updated_at: '2026-08-04T08:00:00.000Z' }],
+  providerRoleOptions: [{ id: ROUTE_ROLE, name: 'Workspace reviewer', slug: 'workspace-reviewer', scope: 'workspace', org_id: ORG, workspace_id: WORKSPACE }],
+  providerRoleCapabilities: [],
   evidenceSources: [{ id: SOURCE, display_name: 'Scanned intake.pdf', mime_type: 'application/pdf', current_version: 1, status: 'review', created_by: USER, created_at: '2026-08-04T08:00:00.000Z' }],
   evidenceVersions: [{ id: SOURCE_VERSION, source_id: SOURCE, version: 1, content_hash: 'a'.repeat(64), extracted_text_hash: 'b'.repeat(64), extracted_character_count: 0, created_at: '2026-08-04T08:00:00.000Z', storage_path: 'must-never-project' }],
   evidenceCandidates: [{ id: CANDIDATE, source_id: SOURCE, source_version_id: SOURCE_VERSION, field_key: 'process_objective', value: 'Review exceptions', safe_excerpt: 'Review exceptions', excerpt_hash: 'c'.repeat(64), source_locator: 'page:1', confidence: 0.9, prompt_version: 'evidence-1', suggestion_status: 'accepted', created_by: USER, reviewed_by: REVIEWER, reviewed_at: '2026-08-04T08:05:00.000Z', updated_at: '2026-08-04T08:05:00.000Z' }],
@@ -68,6 +71,8 @@ const raw = (): EnterpriseIntelligenceRawProjection => ({
 const projection = buildEnterpriseIntelligenceProjection(authority(), raw(), new Date('2026-08-04T09:00:00.000Z'));
 assert.equal(projection.providers[0].validationState, 'validated');
 assert.equal(projection.providers[0].routes[0].availability, 'ready');
+assert.deepEqual(projection.providers[0].routes[0].allowedRoleIds, [ROUTE_ROLE]);
+assert.deepEqual(projection.providers[0].eligibleRouteRoles, [{ id: ROUTE_ROLE, label: 'Workspace reviewer', scope: 'workspace' }]);
 assert.equal(projection.evidenceSources[0].extractionState, 'empty_text_layer');
 assert.equal(projection.evidenceCandidates[0].provenanceState, 'anchored');
 assert.equal(projection.assessDrafts[0].versionLabel, 'Draft version 2');

@@ -39,6 +39,9 @@ export type ProviderLifecycleAuthority = {
   workspaceCapabilities: Set<string>;
   organizationRoleNames: Set<string>;
   workspaceRoleNames: Set<string>;
+  organizationRoleIds: Set<string>;
+  workspaceRoleIds: Set<string>;
+  eligibleRouteRoleIds: Set<string>;
 };
 
 export type ProviderLifecycleExecutionContext = {
@@ -340,6 +343,24 @@ const writeOrResolveSecret = async (
   };
 };
 
+const requireEligibleRouteRoles = (value: unknown, authority: ProviderLifecycleAuthority) => {
+  const roles = requireRoles(value);
+  if (roles.some(role => !uuid.test(role) || !authority.eligibleRouteRoleIds.has(role))) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  return roles;
+};
+
+const seededRouteRoles = (authority: ProviderLifecycleAuthority) => {
+  const workspaceRole = [...authority.workspaceRoleIds].find(role => authority.eligibleRouteRoleIds.has(role));
+  if (workspaceRole) return [workspaceRole];
+  if (authority.organizationCapabilities.has('org.admin')) {
+    const organizationRole = [...authority.organizationRoleIds].find(role => authority.eligibleRouteRoleIds.has(role));
+    if (organizationRole) return [organizationRole];
+  }
+  throw new ProviderLifecycleError('PERMISSION_DENIED');
+};
+
 const cleanupPlannedSecret = async (
   deps: ProviderLifecycleDeps,
   authority: ProviderLifecycleAuthority,
@@ -471,7 +492,10 @@ export const executeProviderLifecycleCommand = async (
     const providerConfigId = plannedConfigId;
     const routeIds = plannedRouteIds.length ? plannedRouteIds : capabilities.map(() => deps.randomId());
     await persistExecutionPlan(execution, { providerConfigId, routeIds });
-    const routes = capabilities.map((capability, index) => ({ id: routeIds[index], capability, model: defaultModel }));
+    const allowedRoles = seededRouteRoles(authority);
+    const routes = capabilities.map((capability, index) => ({
+      id: routeIds[index], capability, model: defaultModel, allowedRoles,
+    }));
     const result = { providerConfigId, provider, status: 'pending_review', routes };
     await safeTransition(deps, operation, authority, {
       providerConfigId,
@@ -558,17 +582,25 @@ export const executeProviderLifecycleCommand = async (
     if (typeof payload.enabled !== 'boolean') throw new ProviderLifecycleError('INVALID_REQUEST');
     if (payload.enabled) {
       const capability = requireCapabilities([payload.capability])[0];
-      const allowedRoles = payload.allowedRoles === undefined ? undefined : requireRoles(payload.allowedRoles);
+      const allowedRoles = payload.allowedRoles === undefined
+        ? undefined
+        : requireEligibleRouteRoles(payload.allowedRoles, authority);
       const decision = await resolveEnterpriseProviderRoute({
         mode: 'pilot',
         capability,
         organizationId: authority.organizationId,
         workspaceId: authority.workspaceId,
         actorId: authority.actorId,
-        roleNames: [...authority.organizationRoleNames, ...authority.workspaceRoleNames],
+        roleNames: [
+          ...authority.organizationRoleNames, ...authority.workspaceRoleNames,
+          ...authority.organizationRoleIds, ...authority.workspaceRoleIds,
+        ],
         requestedProviderConfigId: config.id,
         includeDisabled: true,
         proposedAllowedRoles: allowedRoles,
+        // This command already proved byok.manage and validated each selected
+        // role against exact server-derived organization/workspace authority.
+        policyManagementAuthorized: true,
         scannerReference: 'supabase/functions/_shared/providerLifecycle.ts',
       }, deps.routeResolverDeps);
       if (decision.status !== 'allowed') throw new ProviderLifecycleError('PROVIDER_BLOCKED');

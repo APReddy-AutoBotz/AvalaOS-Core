@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { enterpriseDocumentFixtures } from '../fixtures/enterpriseIntelligenceDocuments';
-import { installEnterpriseIntelligenceFixture } from './enterpriseIntelligenceNetworkFixture';
+import { IDS, installEnterpriseIntelligenceFixture } from './enterpriseIntelligenceNetworkFixture';
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
 const DIGEST = /\b[0-9a-f]{64}\b/i;
@@ -40,6 +40,32 @@ const assertA11yAndOverflow = async (page: Page) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 };
 
+test('application startup removes only the historical browser provider key once', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate((seed) => {
+    for (const [name, value] of Object.entries(seed)) localStorage.setItem(name, value);
+  }, {
+    'avalaos-core-v1-api-key': 'historical-browser-secret',
+    'avalaos-core-v1-theme': JSON.stringify('dark'),
+  });
+  await page.addInitScript(() => {
+    const providerKey = 'avalaos-core-v1-api-key';
+    const original = Storage.prototype.removeItem;
+    (window as typeof window & { __legacyProviderRemovalCount?: number }).__legacyProviderRemovalCount = 0;
+    Storage.prototype.removeItem = function removeItem(key: string) {
+      if (key === providerKey) {
+        (window as typeof window & { __legacyProviderRemovalCount?: number }).__legacyProviderRemovalCount =
+          ((window as typeof window & { __legacyProviderRemovalCount?: number }).__legacyProviderRemovalCount || 0) + 1;
+      }
+      return original.call(this, key);
+    };
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('avalaos-core-v1-api-key'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('avalaos-core-v1-theme'))).toBe(JSON.stringify('dark'));
+  expect(await page.evaluate(() => (window as typeof window & { __legacyProviderRemovalCount?: number }).__legacyProviderRemovalCount)).toBe(1);
+});
+
 test('deterministic compressed PDF and DOCX fixtures are representative and stable', async () => {
   const [pdf, docx] = enterpriseDocumentFixtures.map(fixture => fixture.create());
   expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
@@ -63,6 +89,8 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
   await expect(workspace(page)).toContainText(/active/i);
   await controls.getByRole('button', { name: /enable.*route/i }).click();
   await expect(workspace(page)).toContainText(/ready/i);
+  const routeToggle = fixture.commandPayloads.find(request => request.operation === 'provider.route.toggle') as { payload?: { allowedRoles?: string[] } } | undefined;
+  expect(routeToggle?.payload?.allowedRoles).toEqual([IDS.routeRole]);
 
   await tab(page, 'Evidence Intake').click();
   const intake = activeSection(page);

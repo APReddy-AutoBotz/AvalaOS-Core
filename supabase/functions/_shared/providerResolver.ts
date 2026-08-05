@@ -651,9 +651,16 @@ export type EnterpriseProviderRouteResolverInput = {
   workspaceId: string;
   actorId: string;
   roleNames: string[];
+  roleIds?: string[];
   requestedProviderConfigId?: string;
   includeDisabled?: boolean;
   proposedAllowedRoles?: string[];
+  /**
+   * Lifecycle-only policy administration. The caller must first prove
+   * `byok.manage` and validate every proposed role against server-owned scope.
+   * Runtime callers must never set this flag.
+   */
+  policyManagementAuthorized?: true;
   correlationId?: string;
   evidenceRef?: string;
   scannerReference: string;
@@ -746,13 +753,16 @@ export const resolveEnterpriseProviderRoute = async (
       return block('route_disabled', { providerConfigId: route.provider_config_id });
     }
 
-    const normalizedRoles = new Set(input.roleNames.map(role => role.trim().toLowerCase()).filter(Boolean));
+    const normalizedRoles = new Set([...input.roleNames, ...(input.roleIds || [])].map(role => role.trim().toLowerCase()).filter(Boolean));
     const allowedRoles = (
       input.includeDisabled && input.proposedAllowedRoles
         ? input.proposedAllowedRoles
         : route.allowed_roles || []
     ).map(role => role.trim().toLowerCase()).filter(Boolean);
-    if (allowedRoles.length === 0 || !allowedRoles.some(role => normalizedRoles.has(role))) {
+    if (
+      input.policyManagementAuthorized !== true
+      && (allowedRoles.length === 0 || !allowedRoles.some(role => normalizedRoles.has(role)))
+    ) {
       return block('role_not_allowed', { providerConfigId: route.provider_config_id });
     }
 

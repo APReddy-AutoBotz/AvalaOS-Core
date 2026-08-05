@@ -22,6 +22,7 @@ import {
   type EnterpriseModernizationProjection,
   type EnterpriseMonitorProjection,
   type EnterpriseProviderProjection,
+  type EnterpriseProviderRoleOptionProjection,
   type EnterpriseStudioDocumentProjection,
   type EvidenceCandidateField,
   type EvidenceSourceStatus,
@@ -43,6 +44,8 @@ type Row = Record<string, unknown>;
 export interface EnterpriseIntelligenceRawProjection {
   providerConfigs: Row[];
   providerRoutes: Row[];
+  providerRoleOptions: Row[];
+  providerRoleCapabilities: Row[];
   evidenceSources: Row[];
   evidenceVersions: Row[];
   evidenceCandidates: Row[];
@@ -96,7 +99,7 @@ const byNewest = (left: Row, right: Row) => Date.parse(text(right.created_at)) -
 const hasAny = (authority: TenantContext, ...capabilities: string[]) => capabilities.some(capability => authority.capabilities.includes(capability));
 
 const emptyRawProjection = (): EnterpriseIntelligenceRawProjection => ({
-  providerConfigs: [], providerRoutes: [], evidenceSources: [], evidenceVersions: [], evidenceCandidates: [], assessDrafts: [],
+  providerConfigs: [], providerRoutes: [], providerRoleOptions: [], providerRoleCapabilities: [], evidenceSources: [], evidenceVersions: [], evidenceCandidates: [], assessDrafts: [],
   applications: [], applicationAssessments: [], studioAggregates: [], studioVersions: [], studioHandoffs: [],
   deliveryPackages: [], deliveryVersions: [], deliveryItems: [], monitorBaselines: [],
   modernizationAssessments: [], modernizationDecisions: [], blueprints: [], reviewEvents: [], approvals: [], commandReceipts: [],
@@ -125,10 +128,12 @@ export const createEnterpriseIntelligenceQueryDatabase = (): EnterpriseIntellige
     if (providerVisible) {
       load('providerConfigs', `ai_provider_configs?select=id,provider,display_name,default_model,status,key_ref_id,budget_policy,last_validated_at,created_at&org_id=eq.${encodeURIComponent(authority.organizationId)}&deleted_at=is.null&order=created_at.desc&limit=100`);
       load('providerRoutes', `enterprise_ai_capability_routes?select=id,provider_config_id,capability,model,enabled,allowed_roles,updated_at&${scope}&deleted_at=is.null&order=updated_at.desc&limit=200`);
+      load('providerRoleOptions', `roles?select=id,name,slug,scope,org_id,workspace_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&status=eq.active&deleted_at=is.null&or=(and(scope.eq.workspace,workspace_id.eq.${encodeURIComponent(authority.workspaceId)}),and(scope.eq.organization,workspace_id.is.null))&order=name.asc&limit=200`);
+      load('providerRoleCapabilities', 'role_capabilities?select=role_id,capability_key&capability_key=eq.org.admin&limit=200');
     }
     if (evidenceVisible) {
       load('evidenceSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_by,created_at&${scope}&deleted_at=is.null&order=created_at.desc&limit=100`);
-      load('evidenceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,created_at&${scope}&order=created_at.desc&limit=100`);
+      load('evidenceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=100`);
       load('evidenceCandidates', `enterprise_evidence_candidates?select=id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,source_locator,confidence,prompt_version,suggestion_status,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=400`);
       if (hasAny(authority, 'assessment.edit', 'assess.v2.read', 'assess.v2.draft.write')) {
         load('assessDrafts', `assess_v2_cases?select=id,version,status,updated_at&${scope}&status=eq.draft&deleted_at=is.null&order=updated_at.desc&limit=100`);
@@ -174,6 +179,20 @@ const latestBy = (rows: Row[], key: string) => {
 };
 
 const projectProviders = (raw: EnterpriseIntelligenceRawProjection, organizationAdmin: boolean): EnterpriseProviderProjection[] => {
+  const organizationAdminRoleIds = new Set(raw.providerRoleCapabilities
+    .filter(row => row.capability_key === 'org.admin')
+    .map(row => text(row.role_id)));
+  const eligibleRouteRoles = raw.providerRoleOptions.flatMap<EnterpriseProviderRoleOptionProjection>(role => {
+    const id = text(role.id);
+    if (!uuid.test(id)) return [];
+    if (role.scope === 'workspace' && text(role.workspace_id)) {
+      return [{ id, label: short(role.name || role.slug, 120), scope: 'workspace' as const }];
+    }
+    if (role.scope === 'organization' && !role.workspace_id && organizationAdminRoleIds.has(id)) {
+      return [{ id, label: short(role.name || role.slug, 120), scope: 'organization_admin' as const }];
+    }
+    return [];
+  });
   const routesByConfig = new Map<string, Row[]>();
   raw.providerRoutes.forEach(route => {
     const configId = text(route.provider_config_id);
@@ -196,6 +215,7 @@ const projectProviders = (raw: EnterpriseIntelligenceRawProjection, organization
         id: text(route.id), capability: route.capability as EnterpriseAiCapability,
         modelLabel: short(route.model, 200), enabled, availability,
         allowedRoleCount: strings(route.allowed_roles).length,
+        allowedRoleIds: strings(route.allowed_roles).filter(roleId => uuid.test(roleId)),
       }];
     });
     return [{
@@ -206,6 +226,7 @@ const projectProviders = (raw: EnterpriseIntelligenceRawProjection, organization
       validationState: validated ? 'validated' as const : 'validation_required' as const,
       lastValidatedAt: validated ? text(config.last_validated_at) : undefined,
       budgetState: Object.keys(object(config.budget_policy)).length ? 'configured' as const : 'not_configured' as const,
+      eligibleRouteRoles,
       routes,
     }];
   });
@@ -224,6 +245,9 @@ const projectEvidence = (raw: EnterpriseIntelligenceRawProjection, actorId: stri
       id: text(source.id), displayName: short(source.display_name, 240), mimeType: source.mime_type as SupportedEvidenceMimeType,
       status: source.status as EvidenceSourceStatus, versionLabel: `Source version ${number(version?.version, number(source.current_version, 1))}`,
       extractedCharacterCount: characterCount, extractionState,
+      failureCode: includes(['OCR_REQUIRED', 'UNSUPPORTED_FORMAT', 'MALFORMED_SOURCE'] as const, version?.extraction_failure_code)
+        ? version?.extraction_failure_code as 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE'
+        : undefined,
       sourceBytesAnchored: Boolean(version?.content_hash), extractedTextAnchored: Boolean(version?.extracted_text_hash),
       createdAt: text(source.created_at),
     }];

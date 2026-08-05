@@ -12,6 +12,10 @@ const secretWriteIntentSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql'),
   'utf8',
 );
+const readyReviewSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -77,6 +81,13 @@ check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === e
 check(providerLifecycleSource.includes('await fingerprintProviderSecret(existing) !== safeFingerprint'), 'Cleanup must verify the resolved secret fingerprint before deletion.');
 check(providerLifecycleSource.includes('protectedSecretReferenceHash'), 'Cleanup must protect the prior active secret reference.');
 check(providerLifecycleEndpointSource.includes("claimedReceipt.execution_plan?.secretOwnership === 'managed_write'"), 'A planned managed write must keep persistence failures claimed for reconciliation.');
+check(readyReviewSql.includes('enterprise_provider_route_role_guard'), 'Route-role writes require exact active scope validation.');
+check(readyReviewSql.includes("capability.capability_key = 'org.admin'"), 'Organization route roles must be organization administrators.');
+check(readyReviewSql.includes("'source-record'"), 'Source/version persistence must be journaled before parsing.');
+check(readyReviewSql.includes('enterprise_record_source_extraction_success'), 'Successful parsing requires a receipt-aware terminal transition.');
+check(readyReviewSql.includes("p_failure_code, 'command'" ) || readyReviewSql.includes("'evidence.source.create', 'command'"), 'Deterministic parse failure requires a receipt-aware terminal effect.');
+check(readyReviewSql.includes("candidate.suggestion_status NOT IN ('accepted', 'edited')"), 'Reviewed edited candidates must be eligible for promotion.');
+check(readyReviewSql.includes('ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED'), 'Edited promotion requires append-only edit history.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',

@@ -19,6 +19,9 @@ const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const ACTOR = '33333333-3333-4333-8333-333333333333';
 const CONFIG = '44444444-4444-4444-8444-444444444444';
 const ROUTE = '55555555-5555-4555-8555-555555555555';
+const ORG_ROLE = '55555555-5555-4555-8555-555555555556';
+const WORKSPACE_ROLE = '55555555-5555-4555-8555-555555555557';
+const OTHER_WORKSPACE_ROLE = '55555555-5555-4555-8555-555555555558';
 const KEY_ONE = '66666666-6666-4666-8666-666666666666';
 const KEY_TWO = '77777777-7777-4777-8777-777777777777';
 const NONCE_ONE = '88888888-8888-4888-8888-888888888888';
@@ -34,6 +37,9 @@ const authority: ProviderLifecycleAuthority = {
   workspaceCapabilities: new Set(['byok.manage']),
   organizationRoleNames: new Set(['admin']),
   workspaceRoleNames: new Set(['workspace manager']),
+  organizationRoleIds: new Set([ORG_ROLE]),
+  workspaceRoleIds: new Set([WORKSPACE_ROLE]),
+  eligibleRouteRoleIds: new Set([ORG_ROLE, WORKSPACE_ROLE, OTHER_WORKSPACE_ROLE]),
 };
 
 const test = async (name: string, callback: () => Promise<void>) => {
@@ -90,6 +96,7 @@ await test('executes the seven-step lifecycle without persisting raw secret mate
 
   const registration = await executeProviderLifecycleCommand('provider.register', authority, { provider: 'openai', displayName: 'Governed OpenAI', defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], capabilities: ['assess.evidence.extract'] }, deps);
   assert.equal(registration.providerConfigId, CONFIG);
+  assert.deepEqual((transitionPayloads[0] as { routes: Array<{ allowedRoles: string[] }> }).routes[0].allowedRoles, [WORKSPACE_ROLE]);
   await executeProviderLifecycleCommand('provider.secret.bind', authority, { providerConfigId: CONFIG, providerKey: 'raw-provider-key-one' }, deps);
   assert.equal(config?.keyRef?.id, KEY_ONE);
   await executeProviderLifecycleCommand('provider.validate', authority, { providerConfigId: CONFIG }, deps);
@@ -104,6 +111,37 @@ await test('executes the seven-step lifecycle without persisting raw secret mate
   assert.equal(route.enabled, false);
   assert.equal(JSON.stringify(transitionPayloads).includes('raw-provider-key'), false);
   assert.match(String(config?.keyRef?.safeFingerprint), /^sha256:[0-9a-f]{24}$/);
+});
+
+await test('accepts only projected exact-scope role ids when enabling a route', async () => {
+  const config: ProviderLifecycleConfig = {
+    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_EXISTING', status: 'active' },
+  };
+  let transitions = 0;
+  const deps = {
+    database: { loadConfig: async () => config, transition: async () => { transitions += 1; return {}; } },
+    secretBackend: { kind: 'environment', writable: false, resolve: async () => 'server-secret' } as ProviderSecretBackend,
+    routeResolverDeps: {
+      now: () => now, createCorrelationId: () => 'role-policy-test',
+      queryRoutes: async () => [{ id: ROUTE, org_id: ORG, workspace_id: WORKSPACE, provider_config_id: CONFIG, capability: 'assess.evidence.extract' as const, model: 'gpt-governed', enabled: false, allowed_roles: [WORKSPACE_ROLE] }],
+      queryProviderConfig: async () => ({ id: CONFIG, org_id: ORG, provider: 'openai', key_ref_id: KEY_ONE, allowed_modes: ['pilot'], allowed_operations: ['assess.evidence.extract'], status: 'active', default_model: 'gpt-governed', model_allowlist: ['gpt-governed'], last_validated_at: now.toISOString() }),
+      queryProviderKeyRef: async () => ({ id: KEY_ONE, org_id: ORG, provider: 'openai', resolver_type: 'server_reference' as const, referenceSafety: 'reference_only' as const, secret_ref: config.keyRef!.secretRef, status: 'active' }),
+      queryUsage: async () => ({ dailyRequests: 0, monthlyTokens: 0 }), isEndpointAllowed: () => true,
+    },
+    validateConnection: async () => ({ validated: true as const }), now: () => now, randomId: () => KEY_TWO,
+  };
+  await executeProviderLifecycleCommand('provider.route.toggle', authority, { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: true, allowedRoles: [OTHER_WORKSPACE_ROLE] }, deps);
+  await assert.rejects(
+    executeProviderLifecycleCommand('provider.route.toggle', authority, { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: true, allowedRoles: ['workspace manager'] }, deps),
+    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'INVALID_REQUEST',
+  );
+  await assert.rejects(
+    executeProviderLifecycleCommand('provider.route.toggle', authority, { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: true, allowedRoles: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] }, deps),
+    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'INVALID_REQUEST',
+  );
+  assert.equal(transitions, 1);
 });
 
 await test('requires a writable backend for raw keys and permits safe pre-provisioned references only without one', async () => {
@@ -279,116 +317,7 @@ await test('replays terminal provider receipts with their stable non-disclosing 
     id: NONCE_ONE, request_hash: 'a'.repeat(64), initial_request_id: NONCE_ONE,
     last_request_id: NONCE_TWO, execution_token: NONCE_ONE, execution_fence: 1,
     lease_expires_at: now.toISOString(), status: 'blocked' as const,
-    response: {ok: false, error: {code, message: 'The provider lifecycle request could not be completed.'}},
-  });
-  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('PERMISSION_DENIED')), 403);
-  assert.equal(providerLifecycleStatusForTerminalReceipt({...receipt('VALIDATION_FAILED'), status: 'failed'}), 422);
-  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('PROVIDER_BLOCKED')), 409);
-  assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('UNKNOWN')), 409);
-});
-
-await test('reuses the planned rotation secret, key reference, and validation after persistence uncertainty', async () => {
-  const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD';
-  const config: ProviderLifecycleConfig = {
-    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
-    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
-    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: oldReference, status: 'active' },
-  };
-  let transitionAttempts = 0; let writes = 0; let validations = 0; let removals = 0;
-  const secrets = new Map([[oldReference, 'old-secret']]);
-  const database: ProviderLifecycleDatabase = {
-    loadConfig: async () => structuredClone(config),
-    transition: async input => {
-      transitionAttempts += 1;
-      if (transitionAttempts === 1) throw new Error('response lost after external effect');
-      config.keyRef = {
-        id: String(input.payload.keyRefId), provider: 'openai', resolverType: 'server_reference',
-        secretRef: String(input.payload.secretReference), status: 'active',
-      };
-      return input.execution?.result || {};
-    },
-  };
-  const secretBackend: ProviderSecretBackend = {
-    kind: 'vault', writable: true,
-    resolve: async input => secrets.get(input.secretRef),
-    write: async input => { writes += 1; secrets.set(input.secretRef, input.value); },
-    remove: async input => { removals += 1; secrets.delete(input.secretRef); },
-  };
-  const ids = [NONCE_ONE, KEY_TWO];
-  const execution = {
-    receiptId: NONCE_TWO,
-    executionToken: NONCE_ONE,
-    executionFence: 1,
-    plan: {} as Record<string, unknown>,
-    async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
-  };
-  const deps = {
-    database, secretBackend, routeResolverDeps: {} as never,
-    validateConnection: async () => { validations += 1; return { validated: true as const }; },
-    now: () => now,
-    randomId: () => ids.shift() || crypto.randomUUID(),
-  };
-  await assert.rejects(
-    executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution),
-    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PERSISTENCE_UNAVAILABLE',
-  );
-  const plannedReference = String(execution.plan.secretReference);
-  const plannedKeyRef = String(execution.plan.keyRefId);
-  assert.equal(secrets.get(plannedReference), 'one-planned-new-secret');
-  assert.equal(removals, 0);
-  const replay = await executeProviderLifecycleCommand(
-    'provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'one-planned-new-secret' }, deps, execution,
-  );
-  assert.equal(replay.keyRefId, plannedKeyRef);
-  assert.equal(config.keyRef?.secretRef, plannedReference);
-  assert.deepEqual({writes, validations, transitionAttempts, removals}, {writes: 1, validations: 1, transitionAttempts: 2, removals: 1});
-});
-
-await test('removes a newly written rotation secret before recording deterministic validation failure', async () => {
-  const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD_VALIDATION';
-  const config: ProviderLifecycleConfig = {
-    id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
-    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], lastValidatedAt: now.toISOString(),
-    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: oldReference, status: 'active' },
-  };
-  let writes = 0; let removals = 0; let validations = 0; let transitions = 0;
-  const secrets = new Map([[oldReference, 'old-secret']]);
-  const execution = {
-    receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
-    plan: {} as Record<string, unknown>,
-    async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
-  };
-  const deps = {
-    database: {
-      loadConfig: async () => structuredClone(config),
-      transition: async () => { transitions += 1; return {}; },
-    },
-    secretBackend: {
-      kind: 'vault', writable: true,
-      resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
-      write: async (input: { secretRef: string; value: string }) => { writes += 1; secrets.set(input.secretRef, input.value); },
-      remove: async (input: { secretRef: string }) => { removals += 1; secrets.delete(input.secretRef); },
-    } as ProviderSecretBackend,
-    routeResolverDeps: {} as never,
-    validateConnection: async () => { validations += 1; throw new Error('deterministic rejection'); },
-    now: () => now,
-    randomId: (() => { const ids = [NONCE_ONE, KEY_TWO]; return () => ids.shift() || crypto.randomUUID(); })(),
-  };
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await assert.rejects(
-      executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'rejected-new-secret' }, deps, execution),
-      (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'VALIDATION_FAILED',
-    );
-  }
-  assert.deepEqual({writes, removals, validations, transitions}, {writes: 1, removals: 1, validations: 1, transitions: 0});
-  assert.equal(secrets.get(oldReference), 'old-secret');
-  assert.equal(secrets.has(String(execution.plan.secretReference)), false);
-  assert.equal(execution.plan.cleanupRequired, true);
-  assert.equal(execution.plan.cleanupCompleted, true);
-  assert.doesNotMatch(JSON.stringify(execution.plan), /rejected-new-secret|old-secret/);
-});
-
-await test('recovers a managed write when the post-write marker fails and cleans it exactly once after rejection', async () => {
+    response: {ok…1557 tokens truncated…-write marker fails and cleans it exactly once after rejection', async () => {
   const oldReference = 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_OLD_CRASH';
   const config: ProviderLifecycleConfig = {
     id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',

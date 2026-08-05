@@ -17,6 +17,17 @@ export async function createEnterpriseIntelligenceFixture(db) {
      SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING`,
     [studio.role, enterpriseCapabilities],
   );
+  const routeRole = uuid(3);
+  await db.query(
+    `INSERT INTO public.roles(id,org_id,workspace_id,name,slug,scope,permissions,status,created_by)
+     VALUES($1,$2,$3,'Enterprise route reviewer','enterprise-route-reviewer','workspace','[]','active',$4)`,
+    [routeRole, studio.org, studio.workspace, studio.requester],
+  );
+  await db.query(
+    `UPDATE public.workspace_memberships SET role_id=$1
+     WHERE org_id=$2 AND workspace_id=$3 AND user_id=$4 AND status='active' AND deleted_at IS NULL`,
+    [routeRole, studio.org, studio.workspace, studio.requester],
+  );
 
   const keyRef = uuid(1);
   const provider = uuid(2);
@@ -107,5 +118,5 @@ export async function createEnterpriseIntelligenceFixture(db) {
     }])],
   );
 
-  return { ...studio, keyRef, provider, sources, job, candidate, uuid, hash };
+  return { ...studio, routeRole, keyRef, provider, sources, job, candidate, uuid, hash };
 }

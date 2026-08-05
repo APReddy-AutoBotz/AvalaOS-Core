@@ -85,6 +85,13 @@ export interface EnterpriseProviderRouteProjection {
   enabled: boolean;
   availability: 'ready' | 'disabled' | 'validation_required' | 'provider_unavailable';
   allowedRoleCount: number;
+  allowedRoleIds: string[];
+}
+
+export interface EnterpriseProviderRoleOptionProjection {
+  id: string;
+  label: string;
+  scope: 'workspace' | 'organization_admin';
 }
 
 export interface EnterpriseProviderProjection {
@@ -98,6 +105,7 @@ export interface EnterpriseProviderProjection {
   validationState: 'validated' | 'validation_required';
   lastValidatedAt?: string;
   budgetState: 'configured' | 'not_configured';
+  eligibleRouteRoles: EnterpriseProviderRoleOptionProjection[];
   routes: EnterpriseProviderRouteProjection[];
 }
 
@@ -109,6 +117,7 @@ export interface EnterpriseEvidenceSourceProjection {
   versionLabel: string;
   extractedCharacterCount: number;
   extractionState: 'ready' | 'empty_text_layer' | 'pending' | 'failed';
+  failureCode?: 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE';
   sourceBytesAnchored: boolean;
   extractedTextAnchored: boolean;
   createdAt: string;

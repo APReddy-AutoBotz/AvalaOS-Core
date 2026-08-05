@@ -9,6 +9,26 @@ const MAX_DOCX_ENTRIES = 2_000;
 const MAX_DOCX_ENTRY_BYTES = 20_000_000;
 const MAX_PDF_STREAM_BYTES = 20_000_000;
 
+export type EvidenceExtractionFailureCode = 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE';
+
+export const classifyEvidenceExtractionFailure = (
+  error: unknown,
+  mimeType: string,
+): EvidenceExtractionFailureCode | null => {
+  const message = String((error as { message?: unknown })?.message || error || '');
+  if (message.includes('PDF_TEXT_LAYER_REQUIRED')) return 'OCR_REQUIRED';
+  if (message.includes('EVIDENCE_MIME_UNSUPPORTED')) return 'UNSUPPORTED_FORMAT';
+  if (
+    mimeType.startsWith('text/')
+    || mimeType === 'application/x-subrip'
+    || message.startsWith('PDF_')
+    || message.startsWith('DOCX_')
+    || message.startsWith('EVIDENCE_TEXT_')
+    || error instanceof TypeError
+  ) return 'MALFORMED_SOURCE';
+  return null;
+};
+
 export const decodeBase64 = (value: string) => {
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 !== 0) {
     throw new Error('INVALID_BASE64');

@@ -137,6 +137,22 @@ const authenticateProviderLifecycle = async (
     `role_capabilities?select=role_id,capability_key&role_id=in.(${roles.map(role => encodeURIComponent(role.id)).join(',')})`,
     { method: 'GET' },
   );
+  const eligibleRoles = await postgrest<Array<{ id: string; scope: string; org_id?: string | null; workspace_id?: string | null }>>(
+    `roles?select=id,scope,org_id,workspace_id&org_id=eq.${encodeURIComponent(context.organizationId)}&status=eq.active&deleted_at=is.null&or=(and(scope.eq.workspace,workspace_id.eq.${encodeURIComponent(context.workspaceId)}),and(scope.eq.organization,workspace_id.is.null))`,
+    { method: 'GET' },
+  );
+  const organizationEligibleIds = eligibleRoles.filter(role => role.scope === 'organization' && !role.workspace_id).map(role => role.id);
+  const organizationAdminCapabilities = organizationEligibleIds.length
+    ? await postgrest<Array<{ role_id: string }>>(
+      `role_capabilities?select=role_id&capability_key=eq.org.admin&role_id=in.(${organizationEligibleIds.map(encodeURIComponent).join(',')})`,
+      { method: 'GET' },
+    )
+    : [];
+  const organizationAdminRoleIds = new Set(organizationAdminCapabilities.map(row => row.role_id));
+  const eligibleRouteRoleIds = new Set(eligibleRoles.filter(role => (
+    (role.scope === 'workspace' && role.workspace_id === context.workspaceId)
+    || (role.scope === 'organization' && !role.workspace_id && organizationAdminRoleIds.has(role.id))
+  )).map(role => role.id));
   return {
     actorId: context.userId,
     organizationId: context.organizationId,
@@ -146,6 +162,9 @@ const authenticateProviderLifecycle = async (
     workspaceCapabilities: new Set(capabilities.filter(row => row.role_id === workspaceRole?.id).map(row => row.capability_key)),
     organizationRoleNames: new Set(organizationRole ? [String(organizationRole.name || '').trim().toLowerCase()].filter(Boolean) : []),
     workspaceRoleNames: new Set(workspaceRole ? [String(workspaceRole.name || '').trim().toLowerCase()].filter(Boolean) : []),
+    organizationRoleIds: new Set(organizationRole ? [organizationRole.id] : []),
+    workspaceRoleIds: new Set(workspaceRole ? [workspaceRole.id] : []),
+    eligibleRouteRoleIds,
   };
 };
 

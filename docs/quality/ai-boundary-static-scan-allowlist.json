@@ -32,6 +32,12 @@
       "futureAction": "Keep deterministic production-App PR 1G browser fixture setup confined to browser tests; do not treat it as runtime authority."
     },
     {
+      "pattern": "localStorage",
+      "pathPrefix": "tests/browser/enterpriseIntelligence.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep the one-way historical provider-key cleanup assertion confined to the Enterprise Intelligence browser test."
+    },
+    {
       "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
       "reason": "test/control documentation",
       "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
@@ -161,12 +167,30 @@
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
     },
     {
+      "pattern": "StorageKeys.API_KEY",
+      "path": "services/storage.ts",
+      "lines": [
+        38
+      ],
+      "reason": "deprecated cleanup-only path",
+      "futureAction": "Retain only this one-way startup removal; never read, write, or execute with the historical browser provider key."
+    },
+    {
       "pattern": "localStorage",
       "path": "services/storage.ts",
       "lines": [
-        34,
-        44,
-        51
+        38
+      ],
+      "reason": "deprecated cleanup-only path",
+      "futureAction": "Retain only this one-way startup removal; never read, write, or execute with the historical browser provider key."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "services/storage.ts",
+      "lines": [
+        47,
+        57,
+        64
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep generic storage classified separately from provider-key storage; do not add provider-key writes."

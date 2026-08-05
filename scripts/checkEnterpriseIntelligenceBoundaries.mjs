@@ -17,6 +17,7 @@ const requiredFiles = [
   'supabase/functions/enterprise-provider-lifecycle/index.ts',
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
   'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql',
+  'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -99,6 +100,13 @@ for (const required of [
   if (!providerAuthorizationCorrection.includes(required)) {
     throw new Error(`Provider authorization-attempt correction is missing ${required}.`);
   }
+}
+const readyReviewCorrection = read('supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql');
+for (const required of [
+  'enterprise_provider_route_role_guard', 'enterprise_create_evidence_source_record',
+  'enterprise_record_source_extraction_success', 'ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED',
+]) {
+  if (!readyReviewCorrection.includes(required)) throw new Error(`Ready-review correction is missing ${required}.`);
 }
 const browserClient = read('services/enterpriseIntelligenceClient.ts');
 for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {
