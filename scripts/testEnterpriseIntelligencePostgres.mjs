@@ -281,6 +281,139 @@ try {
     assert.equal((await authority.query("SELECT public.enterprise_actor_has_organization_capability($1,$2,'byok.manage',$3) allowed", [workspaceManager, fixture.org, managerVersion])).rows[0].allowed, false);
     console.log(`PROVIDER AUTHORITY MATRIX ${JSON.stringify({workspaceOnlyOrganizationMutationsDenied:5,crossWorkspaceRouteDenied:1,ownWorkspaceRouteTransitions:1,otherWorkspaceRouteChanges:0})}`);
   });
+  await scenario('provider authorization versions are attempt preconditions with distinct recovery outcomes', async () => {
+    const actor = fixture.uuid(670); const role = fixture.uuid(671);
+    await authority.query('INSERT INTO auth.users(id) VALUES($1)', [actor]);
+    await authority.query("INSERT INTO public.profiles(id,email) VALUES($1,'provider-attempt@fixture.invalid')", [actor]);
+    await authority.query("INSERT INTO public.roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Provider attempt manager','provider-attempt-manager','organization','[]')", [role, fixture.org]);
+    await authority.query("INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,'byok.manage'),($1,'security.manage')", [role]);
+    await authority.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [fixture.org, actor, role]);
+    await authority.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [fixture.org, fixture.workspace, actor]);
+    const authorizedVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, actor],
+    )).rows[0].version);
+    const claim = async ({key, request, hash, token, command}) => (
+      await authority.query(
+        'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,NULL,$8)).*',
+        [actor, fixture.org, fixture.workspace, command, key, request, hash, token],
+      )
+    ).rows[0];
+    const logicalHash = fixture.hash('8'); const firstToken = fixture.uuid(672);
+    const first = await claim({
+      key: 'provider-authorization-attempt-001', request: fixture.uuid(673), hash: logicalHash,
+      token: firstToken, command: 'provider.validate',
+    });
+    const stablePlan = {providerConfigId: fixture.provider, plannedValidationId: fixture.uuid(674)};
+    await authority.query(
+      'SELECT public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)',
+      [first.id, fixture.org, fixture.workspace, firstToken, first.execution_fence, JSON.stringify(stablePlan)],
+    );
+    await authority.query(
+      'UPDATE public.authorization_versions SET version=version+1 WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, actor],
+    );
+    const refreshedVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, actor],
+    )).rows[0].version);
+    assert.equal(refreshedVersion, authorizedVersion + 1);
+    const validationResult = {providerConfigId: fixture.provider, status: 'validated', lastValidatedAt: new Date().toISOString()};
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10::jsonb)',
+      ['provider.validate', actor, fixture.org, fixture.workspace, authorizedVersion,
+        JSON.stringify({providerConfigId: fixture.provider, lastValidatedAt: validationResult.lastValidatedAt}),
+        first.id, firstToken, first.execution_fence, JSON.stringify(validationResult)],
+    ), /ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE/);
+    assert.equal((await authority.query('SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [first.id])).rows[0].n, 0);
+
+    await authority.query("UPDATE public.enterprise_ai_command_receipts SET lease_expires_at=statement_timestamp()-interval '1 second' WHERE id=$1", [first.id]);
+    const recoveryToken = fixture.uuid(675);
+    const recovered = await claim({
+      key: 'provider-authorization-attempt-001', request: fixture.uuid(676), hash: logicalHash,
+      token: recoveryToken, command: 'provider.validate',
+    });
+    assert.equal(recovered.id, first.id);
+    assert.equal(Number(recovered.execution_fence), Number(first.execution_fence) + 1);
+    assert.deepEqual(recovered.execution_plan, stablePlan);
+    await assert.rejects(claim({
+      key: 'provider-authorization-attempt-001', request: fixture.uuid(677), hash: fixture.hash('9'),
+      token: fixture.uuid(678), command: 'provider.validate',
+    }), /ENTERPRISE_AI_IDEMPOTENCY_CONFLICT/);
+    await authority.query(
+      'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10::jsonb)',
+      ['provider.validate', actor, fixture.org, fixture.workspace, refreshedVersion,
+        JSON.stringify({providerConfigId: fixture.provider, lastValidatedAt: validationResult.lastValidatedAt}),
+        recovered.id, recoveryToken, recovered.execution_fence, JSON.stringify(validationResult)],
+    );
+    await authority.query(
+      'SELECT public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
+      [recovered.id, fixture.org, fixture.workspace, recoveryToken, recovered.execution_fence,
+        JSON.stringify(validationResult), fixture.provider],
+    );
+    assert.equal((await authority.query('SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [first.id])).rows[0].n, 1);
+
+    const beforeRemoval = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.ai_provider_key_refs WHERE org_id=$1) key_refs,
+      (SELECT count(*)::int FROM public.enterprise_ai_capability_routes WHERE org_id=$1) routes,
+      (SELECT concat_ws('|',status,key_ref_id::text,last_validated_at::text,default_model)
+       FROM public.ai_provider_configs WHERE id=$2) provider_state`, [fixture.org, fixture.provider])).rows[0];
+    const blockedToken = fixture.uuid(679); const blockedHash = fixture.hash('a');
+    const blocked = await claim({
+      key: 'provider-authority-removed-001', request: fixture.uuid(680), hash: blockedHash,
+      token: blockedToken, command: 'provider.secret.rotate',
+    });
+    const blockedPlan = {
+      provider: 'openai', secretReference: 'AVALA_PROVIDER_SECRET_OPENAI_SERVER_ONLY_TEST_REFERENCE',
+      keyRefId: fixture.uuid(681), safeFingerprint: `sha256:${'7'.repeat(24)}`,
+      externalSecretWritten: true, validationSucceeded: true,
+    };
+    await authority.query(
+      'SELECT public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)',
+      [blocked.id, fixture.org, fixture.workspace, blockedToken, blocked.execution_fence, JSON.stringify(blockedPlan)],
+    );
+
+    await authority.query("DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key='security.manage'", [role]);
+    const removedVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, actor],
+    )).rows[0].version);
+    assert.ok(removedVersion > refreshedVersion);
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_provider_lifecycle_transition($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10::jsonb)',
+      ['provider.secret.rotate', actor, fixture.org, fixture.workspace, refreshedVersion,
+        JSON.stringify({providerConfigId: fixture.provider}), blocked.id, blockedToken,
+        blocked.execution_fence, JSON.stringify({providerConfigId: fixture.provider})],
+    ), /ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED/);
+    const afterRemoval = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.ai_provider_key_refs WHERE org_id=$1) key_refs,
+      (SELECT count(*)::int FROM public.enterprise_ai_capability_routes WHERE org_id=$1) routes,
+      (SELECT concat_ws('|',status,key_ref_id::text,last_validated_at::text,default_model)
+       FROM public.ai_provider_configs WHERE id=$2) provider_state`, [fixture.org, fixture.provider])).rows[0];
+    assert.deepEqual(afterRemoval, beforeRemoval);
+    const blockedResult = {ok: false, error: {code: 'PERMISSION_DENIED', message: 'The provider lifecycle request could not be completed.'}};
+    await authority.query(
+      'SELECT public.enterprise_ai_fail_command($1,$2,$3,$4,$5,$6::jsonb,true)',
+      [blocked.id, fixture.org, fixture.workspace, blockedToken, blocked.execution_fence, JSON.stringify(blockedResult)],
+    );
+    const blockedReplay = await claim({
+      key: 'provider-authority-removed-001', request: fixture.uuid(682), hash: blockedHash,
+      token: fixture.uuid(683), command: 'provider.secret.rotate',
+    });
+    assert.equal(blockedReplay.id, blocked.id);
+    assert.equal(blockedReplay.status, 'blocked');
+    assert.deepEqual(blockedReplay.response, blockedResult);
+    assert.equal((await authority.query("SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE status='claimed'")).rows[0].n, 0);
+    assert.equal((await authority.query(`SELECT count(*)::int n FROM (
+      SELECT receipt_id,effect_key,count(*) FROM public.enterprise_ai_effect_journal
+      WHERE receipt_id=ANY($1::uuid[]) GROUP BY receipt_id,effect_key HAVING count(*)>1
+    ) duplicates`, [[first.id, blocked.id]])).rows[0].n, 0);
+    assert.doesNotMatch(JSON.stringify({blockedPlan, blockedResult}), /provider-attempt@|raw-provider-key|uncommitted-secret/i);
+    console.log(`PROVIDER AUTHORIZATION RECOVERY ${JSON.stringify({
+      receipts: 2, recoveryWinners: 1, fence: recovered.execution_fence,
+      canonicalEffects: 2, duplicateEffects: 0, claimedFinal: 0, removedAuthorityMutations: 0,
+    })}`);
+  });
   await scenario('text-native, CSV, transcript, text-PDF, and DOCX provenance', async () => {
     const expected = new Map([
       ['text/plain', 'text_native'], ['text/markdown', 'text_native'], ['text/csv', 'csv'],

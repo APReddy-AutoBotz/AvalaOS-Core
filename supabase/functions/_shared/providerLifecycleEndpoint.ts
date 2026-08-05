@@ -163,7 +163,6 @@ export const providerLifecycleRequestHash = async (envelope: ProviderLifecycleEn
     operation: envelope.operation,
     organizationId: envelope.organizationId,
     workspaceId: envelope.workspaceId,
-    expectedAuthorizationVersion: envelope.expectedAuthorizationVersion,
     payload,
   });
 };
@@ -173,10 +172,25 @@ const statusFor = (error: ProviderLifecycleError) => {
   if (error.code === 'RESOURCE_NOT_FOUND') return 404;
   if (error.code === 'RESOURCE_CONFLICT' || error.code === 'PROVIDER_BLOCKED') return 409;
   if (error.code === 'IDEMPOTENCY_CONFLICT' || error.code === 'COMMAND_IN_PROGRESS') return 409;
+  if (error.code === 'AUTHORIZATION_STALE') return 409;
   if (error.code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') return 503;
   if (error.code === 'VALIDATION_FAILED') return 422;
   return 400;
+};
+
+export const providerLifecycleStatusForTerminalReceipt = (receipt: EnterpriseReceiptRow) => {
+  const responseError = isRecord(receipt.response?.error) ? receipt.response.error.code : undefined;
+  if (typeof responseError !== 'string') return 409;
+  const known = new Set([
+    'INVALID_REQUEST', 'TENANT_ACCESS_DENIED', 'PERMISSION_DENIED', 'RESOURCE_NOT_FOUND',
+    'RESOURCE_CONFLICT', 'SECRET_BACKEND_REQUIRED', 'SECRET_UNAVAILABLE', 'VALIDATION_FAILED',
+    'PROVIDER_BLOCKED', 'PERSISTENCE_UNAVAILABLE', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT',
+    'COMMAND_IN_PROGRESS', 'RECEIPT_FINALIZATION_FAILED',
+  ]);
+  return known.has(responseError)
+    ? statusFor(new ProviderLifecycleError(responseError as ProviderLifecycleError['code']))
+    : 409;
 };
 
 export const providerLifecycleErrorBody = (error: ProviderLifecycleError) => ({
@@ -214,7 +228,10 @@ export const handleProviderLifecycleRequest = async (
     });
     if (receipt.status === 'committed') return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
     if (receipt.status === 'failed' || receipt.status === 'blocked') {
-      return jsonResponse({ ...(receipt.response || providerLifecycleErrorBody(new ProviderLifecycleError('PROVIDER_BLOCKED'))), replayed: true }, 409);
+      return jsonResponse(
+        { ...(receipt.response || providerLifecycleErrorBody(new ProviderLifecycleError('PROVIDER_BLOCKED'))), replayed: true },
+        providerLifecycleStatusForTerminalReceipt(receipt),
+      );
     }
     if (!ownsExecution) throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
     claimedReceipt = receipt;
@@ -250,7 +267,10 @@ export const handleProviderLifecycleRequest = async (
           return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
-          return jsonResponse({ ...(recovered.response || providerLifecycleErrorBody(safeError)), replayed: true }, 409);
+          return jsonResponse(
+            { ...(recovered.response || providerLifecycleErrorBody(safeError)), replayed: true },
+            providerLifecycleStatusForTerminalReceipt(recovered),
+          );
         }
       } catch {
         if (safeError.code === 'RECEIPT_FINALIZATION_FAILED') {
@@ -258,7 +278,9 @@ export const handleProviderLifecycleRequest = async (
         }
       }
     }
-    if (claimedReceipt && claimedAuthority && safeError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+    if (claimedReceipt && claimedAuthority
+      && safeError.code !== 'RECEIPT_FINALIZATION_FAILED'
+      && safeError.code !== 'AUTHORIZATION_STALE') {
       const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true;
       if (!(safeError.code === 'PERSISTENCE_UNAVAILABLE' && externalEffectPlanned)) {
         try {

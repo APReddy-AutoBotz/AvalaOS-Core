@@ -43,16 +43,18 @@ Assess scoring changes; OCR; audio transcription; remote URL or archive ingestio
 15. Organization provider/secret operations require organization-scoped authority; workspace-only authority may change only an exact route in its authorized workspace.
 16. Retried commands replay committed results or stable failures; concurrent/raced requests do not duplicate canonical or external effects.
 17. Browser clients receive minimized selectors and cannot invoke service-only mutation RPCs directly.
+18. Provider authorization version is an attempt precondition, not receipt identity: refreshed versions and request IDs reuse one receipt and stable plan, while changed business payloads conflict. The locked transition distinguishes retained authority from actual removal.
+19. A deterministically rejected writable rotation secret is removed before `VALIDATION_FAILED` is finalized. Failed cleanup remains claimed with server-only recovery state; uncertain or possibly committed transitions retain the planned secret for fenced reconciliation; read-only references are never deleted.
 
 ## Feature quality gates
 
 Executed in the isolated worktree:
 
 - `node scripts/checkEnterpriseIntelligenceBoundaries.mjs` and the feature CI contract passed.
-- `node scripts/testEnterpriseIntelligenceMigration.mjs` passed 137 strict assertions, including organization/workspace authority, request-ID-independent receipt identity, effect-journal immutability, receipt-aware mutation ACLs, lease/fence recovery, command-area, claim-order, ungated-finalizer, and explicit-finalization-failure guards.
-- Disposable PostgreSQL 16 passed fresh chain, accepted-main upgrade, populated upgrade, atomic dirty rejection, 19 Enterprise authority scenarios, read-only fallback, and cleanup. Receipt evidence includes the retained 17-command classifier/read-only matrix; exact organization-provider versus workspace-route authority; same-payload/different-request-ID convergence; changed-payload conflict; completion and failure response-loss replay; stranded-effect reconciliation; one-winner concurrent lease recovery; stale-fence rejection; 1 provider, 4 ingestion, 5 delivery, and 3 Assemble commands blocked before receipt/effect by their own area; zero duplicate effects; and zero final claimed receipts.
+- `node scripts/testEnterpriseIntelligenceMigration.mjs` passed 141 strict assertions, including organization/workspace authority, request-ID- and authorization-version-independent provider receipt identity, effect-journal immutability, receipt-aware mutation ACLs, lease/fence recovery, command-area, claim-order, ungated-finalizer, and explicit-finalization-failure guards.
+- Disposable PostgreSQL 16 passed fresh chain, accepted-main upgrade, populated upgrade, atomic dirty rejection, 20 Enterprise authority scenarios, read-only fallback, and cleanup. Receipt evidence includes the retained 17-command classifier/read-only matrix; exact organization-provider versus workspace-route authority; same-payload/different-request-ID convergence; same receipt and stable plan across authorization versions with one newer-fence winner and one canonical effect; changed-payload conflict; removed-authority blocked replay with zero provider mutation; completion and failure response-loss replay; stranded-effect reconciliation; stale-fence rejection; 1 provider, 4 ingestion, 5 delivery, and 3 Assemble commands blocked before receipt/effect by their own area; zero duplicate effects; and zero final claimed receipts.
 - The retained Studio PostgreSQL 16 harness passed fresh/upgrade/populated/dirty paths, 20 membership scenarios, 16 Studio scenarios, and cleanup.
-- `npm.cmd run test:enterprise-intelligence` passed the domain, AI, ingestion, five command, tenant-query, seven mocked lifecycle, CI-contract, and 137-assertion migration-contract groups.
+- `npm.cmd run test:enterprise-intelligence` passed the domain, AI, ingestion, five command, tenant-query, thirteen mocked lifecycle, CI-contract, and 141-assertion migration-contract groups.
 - `npm.cmd run typecheck` and `npm.cmd run typecheck:edge` passed.
 - `npm.cmd run test:ai-boundary-static` passed with 0 forbidden and 0 stale allowlist entries.
 - `npm.cmd run test:secret-hygiene` passed with 0 forbidden hits and 0 tracked `.env` files.

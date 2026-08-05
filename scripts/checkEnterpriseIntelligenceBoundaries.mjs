@@ -16,6 +16,7 @@ const requiredFiles = [
   'supabase/functions/enterprise-intelligence-query/index.ts',
   'supabase/functions/enterprise-provider-lifecycle/index.ts',
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
+  'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -79,6 +80,25 @@ if (!command.includes('reloadEnterpriseReceipt')) throw new Error('Command recov
 const providerEndpoint = read('supabase/functions/_shared/providerLifecycleEndpoint.ts');
 for (const required of ['requestId', 'idempotencyKey', 'providerLifecycleRequestHash', 'reloadEnterpriseReceipt']) {
   if (!providerEndpoint.includes(required)) throw new Error(`Provider lifecycle receipt boundary is missing ${required}.`);
+}
+const providerHash = providerEndpoint.match(/export const providerLifecycleRequestHash[\s\S]*?\n\};/u)?.[0] || '';
+if (providerHash.includes('expectedAuthorizationVersion') || providerHash.includes('requestId')) {
+  throw new Error('Provider receipt identity must exclude attempt authorization versions and request correlation IDs.');
+}
+const providerLifecycle = read('supabase/functions/_shared/providerLifecycle.ts');
+for (const required of ['cleanupRequired', 'cleanupCompleted', 'cleanupTerminalCode', 'AUTHORIZATION_STALE']) {
+  if (!providerLifecycle.includes(required)) throw new Error(`Provider cleanup/recovery boundary is missing ${required}.`);
+}
+const providerAuthorizationCorrection = read('supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql');
+for (const required of [
+  'current_authorization IS DISTINCT FROM p_authorization_version',
+  'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
+  'enterprise_ai_record_effect',
+]) {
+  if (!providerAuthorizationCorrection.includes(required)) {
+    throw new Error(`Provider authorization-attempt correction is missing ${required}.`);
+  }
 }
 const browserClient = read('services/enterpriseIntelligenceClient.ts');
 for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {

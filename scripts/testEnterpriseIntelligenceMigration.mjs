@@ -4,6 +4,10 @@ import path from 'node:path';
 
 const migrationPath = path.join(process.cwd(), 'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql');
 const sql = fs.readFileSync(migrationPath, 'utf8');
+const authorizationAttemptSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const requiredTables = [
   'enterprise_intelligence_runtime_control',
@@ -55,6 +59,10 @@ for (const signature of [
 check(sql.includes('enterprise_high_impact_approval_separation_check'), 'Three-person approval separation is required.');
 check(sql.includes('enterprise_evidence_assess_promotions'), 'Accepted evidence must have immutable Assess promotion lineage.');
 check(sql.includes('enterprise_provider_lifecycle_transition'), 'The service-only provider lifecycle transition RPC is required.');
+check(authorizationAttemptSql.includes('current_authorization IS DISTINCT FROM p_authorization_version'), 'Provider authorization version must be an attempt precondition.');
+check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE'), 'Stale-but-authorized provider attempts require a recoverable signal.');
+check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED'), 'Removed provider authority requires a terminal non-disclosing signal.');
+check(authorizationAttemptSql.includes('enterprise_ai_record_effect'), 'Corrected provider transitions must retain fenced effect evidence.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',

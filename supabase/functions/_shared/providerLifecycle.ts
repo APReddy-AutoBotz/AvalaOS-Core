@@ -1,7 +1,6 @@
 import type { EnterpriseAiProvider, EnterpriseAiCapability } from '../../../services/enterpriseIntelligence.ts';
 import { ENTERPRISE_AI_CAPABILITIES, ENTERPRISE_AI_PROVIDERS } from '../../../services/enterpriseIntelligence.ts';
 import {
-  EnterpriseAiGatewayError,
   isAllowedProviderEndpoint,
   validateProviderConnection,
 } from './enterpriseIntelligenceAi.ts';
@@ -103,6 +102,7 @@ export class ProviderLifecycleError extends Error {
     | 'VALIDATION_FAILED'
     | 'PROVIDER_BLOCKED'
     | 'PERSISTENCE_UNAVAILABLE'
+    | 'AUTHORIZATION_STALE'
     | 'IDEMPOTENCY_CONFLICT'
     | 'COMMAND_IN_PROGRESS'
     | 'RECEIPT_FINALIZATION_FAILED') {
@@ -208,6 +208,14 @@ const safeTransition = async (
     return transition;
   } catch (error) {
     if (error instanceof ProviderLifecycleError) throw error;
+    const message = String((error as { message?: unknown })?.message || error || '');
+    if (message.includes('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE')) {
+      throw new ProviderLifecycleError('AUTHORIZATION_STALE');
+    }
+    if (message.includes('ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED')
+      || message.includes('ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED')) {
+      throw new ProviderLifecycleError('PERMISSION_DENIED');
+    }
     throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
   }
 };
@@ -302,15 +310,42 @@ const writeOrResolveSecret = async (
   return { secretRef: preProvisioned, keyRefId, fingerprint: await fingerprintProviderSecret(value), wrote: false, value };
 };
 
-const cleanupNewSecret = async (
+const cleanupPlannedSecret = async (
   deps: ProviderLifecycleDeps,
   authority: ProviderLifecycleAuthority,
-  provider: EnterpriseAiProvider,
-  secretRef: string,
-  wrote: boolean,
+  execution: ProviderLifecycleExecutionContext | undefined,
+  terminalCode: 'VALIDATION_FAILED' | 'PERMISSION_DENIED',
+  prepared?: { provider: EnterpriseAiProvider; secretRef: string; wrote: boolean },
 ) => {
-  if (wrote && deps.secretBackend.remove) {
-    await deps.secretBackend.remove({ provider, secretRef, organizationId: authority.organizationId }).catch(() => undefined);
+  const managed = prepared?.wrote === true || execution?.plan.externalSecretWritten === true;
+  if (!managed) return;
+  const providerValue = prepared?.provider || execution?.plan.provider;
+  const secretRefValue = prepared?.secretRef || execution?.plan.secretReference;
+  if (!ENTERPRISE_AI_PROVIDERS.includes(providerValue as EnterpriseAiProvider)
+    || typeof secretRefValue !== 'string'
+    || !isAllowedProviderSecretRef(providerValue as EnterpriseAiProvider, secretRefValue, authority.organizationId)
+    || !deps.secretBackend.writable
+    || !deps.secretBackend.remove) {
+    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+  }
+  if (execution?.plan.cleanupCompleted === true) return;
+  if (execution) {
+    await persistExecutionPlan(execution, {
+      cleanupRequired: true,
+      cleanupTerminalCode: terminalCode,
+    });
+  }
+  try {
+    await deps.secretBackend.remove({
+      provider: providerValue as EnterpriseAiProvider,
+      secretRef: secretRefValue,
+      organizationId: authority.organizationId,
+    });
+  } catch {
+    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+  }
+  if (execution) {
+    await persistExecutionPlan(execution, { cleanupCompleted: true });
   }
 };
 
@@ -322,10 +357,25 @@ export const executeProviderLifecycleCommand = async (
   execution?: ProviderLifecycleExecutionContext,
 ): Promise<JsonObject> => {
   const payload = isRecord(payloadValue) ? payloadValue : (() => { throw new ProviderLifecycleError('INVALID_REQUEST'); })();
-  if (operation === 'provider.route.toggle') requireWorkspaceManager(authority);
-  else requireManager(authority, operation === 'provider.secret.bind' || operation === 'provider.secret.rotate' || operation === 'provider.revoke');
-  if (authority.organizationRoleNames.size === 0 && authority.workspaceRoleNames.size === 0) {
-    throw new ProviderLifecycleError('PERMISSION_DENIED');
+  if (execution?.plan.cleanupRequired === true) {
+    const terminalCode = execution.plan.cleanupTerminalCode === 'PERMISSION_DENIED'
+      ? 'PERMISSION_DENIED'
+      : 'VALIDATION_FAILED';
+    await cleanupPlannedSecret(deps, authority, execution, terminalCode);
+    throw new ProviderLifecycleError(terminalCode);
+  }
+  try {
+    if (operation === 'provider.route.toggle') requireWorkspaceManager(authority);
+    else requireManager(authority, operation === 'provider.secret.bind' || operation === 'provider.secret.rotate' || operation === 'provider.revoke');
+    if (authority.organizationRoleNames.size === 0 && authority.workspaceRoleNames.size === 0) {
+      throw new ProviderLifecycleError('PERMISSION_DENIED');
+    }
+  } catch (error) {
+    if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED'
+      && (operation === 'provider.secret.bind' || operation === 'provider.secret.rotate')) {
+      await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED');
+    }
+    throw error;
   }
 
   if (operation === 'provider.register') {
@@ -386,7 +436,13 @@ export const executeProviderLifecycleCommand = async (
       }, result, execution);
       return result;
     } catch (error) {
-      if (!execution) await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
+      if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED') {
+        await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          wrote: prepared.wrote,
+        });
+      }
       throw error;
     }
   }
@@ -476,11 +532,11 @@ export const executeProviderLifecycleCommand = async (
     if (!config.keyRef) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
     const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
     const keyRefId = prepared.keyRefId;
-    try {
-      let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
-        ? execution.plan.lastValidatedAt
-        : undefined;
-      if (!lastValidatedAt) {
+    let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
+      ? execution.plan.lastValidatedAt
+      : undefined;
+    if (!lastValidatedAt) {
+      try {
         await deps.validateConnection({
           provider: config.provider,
           endpoint: config.endpoint,
@@ -488,10 +544,19 @@ export const executeProviderLifecycleCommand = async (
           model: config.defaultModel,
           apiKey: prepared.value,
         });
-        lastValidatedAt = deps.now().toISOString();
-        await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
+      } catch {
+        await cleanupPlannedSecret(deps, authority, execution, 'VALIDATION_FAILED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          wrote: prepared.wrote,
+        });
+        throw new ProviderLifecycleError('VALIDATION_FAILED');
       }
-      const result = { providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
+      lastValidatedAt = deps.now().toISOString();
+      await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
+    }
+    const result = { providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
+    try {
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
         provider: config.provider,
@@ -511,10 +576,15 @@ export const executeProviderLifecycleCommand = async (
       }
       return result;
     } catch (error) {
-      if (!execution) await cleanupNewSecret(deps, authority, config.provider, prepared.secretRef, prepared.wrote);
+      if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED') {
+        await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          wrote: prepared.wrote,
+        });
+      }
       if (error instanceof ProviderLifecycleError) throw error;
-      if (error instanceof EnterpriseAiGatewayError) throw new ProviderLifecycleError('VALIDATION_FAILED');
-      throw new ProviderLifecycleError('VALIDATION_FAILED');
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
     }
   }
 
