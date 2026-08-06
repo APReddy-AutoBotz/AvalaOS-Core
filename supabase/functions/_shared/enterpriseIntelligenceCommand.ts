@@ -47,6 +47,7 @@ import { handleOptions, jsonResponse } from './http.ts';
 import {
   getAuthUser,
   isSupabaseRpcError,
+  isSupabaseRpcTransportError,
   postgrest,
   rpc,
   resolveOrgId,
@@ -111,6 +112,28 @@ export class EnterpriseCommandError extends Error {
     this.name = 'EnterpriseCommandError';
   }
 }
+
+export class RecoverableEnterpriseCommandError extends EnterpriseCommandError {
+  readonly disposition = 'preserve_claimed_receipt';
+
+  constructor(code: 'COMMAND_UNAVAILABLE' | 'COMMAND_IN_PROGRESS') {
+    super(code);
+    this.name = 'RecoverableEnterpriseCommandError';
+  }
+}
+
+export const isRecoverableEnterpriseCommandError = (error: unknown): error is RecoverableEnterpriseCommandError => (
+  error instanceof RecoverableEnterpriseCommandError
+  && error.disposition === 'preserve_claimed_receipt'
+);
+
+export const shouldPreserveClaimedEnterpriseReceipt = (
+  error: unknown,
+  executionPlan?: JsonObject | null,
+) => isRecoverableEnterpriseCommandError(error)
+  || (error instanceof EnterpriseCommandError
+    && error.code === 'COMMAND_UNAVAILABLE'
+    && executionPlan?.externalStorageWritten === true);
 
 export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandError => {
   if (supabaseRpcErrorHasSignal(error,
@@ -755,11 +778,16 @@ export const extractionRouteMatchesPlan = (
   && planned.endpointIdentity === (resolved.endpointIdentity || null)
   && planned.deploymentIdentity === (resolved.deploymentIdentity || null);
 
-export const mapExtractionPersistenceError = (error: unknown) => (
-  isSupabaseRpcError(error)
-    ? mapEnterpriseCommandRpcError(error)
-    : new EnterpriseCommandError('COMMAND_UNAVAILABLE')
-);
+export const mapExtractionPersistenceError = (error: unknown) => {
+  if (isSupabaseRpcTransportError(error)) return new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+  if (isSupabaseRpcError(error)) {
+    const mapped = mapEnterpriseCommandRpcError(error);
+    return mapped.code === 'COMMAND_IN_PROGRESS'
+      ? new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS')
+      : mapped;
+  }
+  return new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+};
 
 const failEvidenceExtractionAttempt = async (
   authority: Authority,
@@ -864,30 +892,40 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
     if (!routePlan) throw new EnterpriseCommandError('RESOURCE_STALE');
   }
   const claimStarted = Date.now();
-  const claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', {
-    p_job_id: jobId,
-    p_receipt: receipt.id,
-    p_org: authority.organizationId,
-    p_workspace: authority.workspaceId,
-    p_actor: authority.actorId,
-    p_source_id: sourceId,
-    p_source_version_id: sourceVersionId,
-    p_route_id: routePlan.routeId,
-    p_provider_config_id: routePlan.providerConfigId,
-    p_provider: routePlan.provider,
-    p_capability: 'assess.evidence.extract',
-    p_model: routePlan.model,
-    p_endpoint_identity: routePlan.endpointIdentity,
-    p_deployment_identity: routePlan.deploymentIdentity,
-    p_prompt_key: promptKey,
-    p_prompt_version: promptVersion,
-    p_request_hash: receipt.request_hash,
-    p_execution_token: receipt.execution_token,
-    p_execution_fence: receipt.execution_fence,
-  });
+  let claim: EvidenceExtractionClaim;
+  try {
+    claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', {
+      p_job_id: jobId,
+      p_receipt: receipt.id,
+      p_org: authority.organizationId,
+      p_workspace: authority.workspaceId,
+      p_actor: authority.actorId,
+      p_source_id: sourceId,
+      p_source_version_id: sourceVersionId,
+      p_route_id: routePlan.routeId,
+      p_provider_config_id: routePlan.providerConfigId,
+      p_provider: routePlan.provider,
+      p_capability: 'assess.evidence.extract',
+      p_model: routePlan.model,
+      p_endpoint_identity: routePlan.endpointIdentity,
+      p_deployment_identity: routePlan.deploymentIdentity,
+      p_prompt_key: promptKey,
+      p_prompt_version: promptVersion,
+      p_request_hash: receipt.request_hash,
+      p_execution_token: receipt.execution_token,
+      p_execution_fence: receipt.execution_fence,
+    });
+  } catch (error) {
+    if (isSupabaseRpcTransportError(error)) throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    const mapped = isSupabaseRpcError(error)
+      ? mapEnterpriseCommandRpcError(error)
+      : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+    if (mapped.code === 'COMMAND_IN_PROGRESS') throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+    throw mapped;
+  }
   if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
   if (claim.state === 'failed' || claim.state === 'blocked') throw new EnterpriseCommandError('COMMAND_BLOCKED');
-  if (!claim.ownsExecution || claim.jobId !== jobId) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
+  if (!claim.ownsExecution || claim.jobId !== jobId) throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
   if (claim.state === 'staged') {
     if (!isRecord(claim.safeResult)) throw new EnterpriseCommandError('RESOURCE_STALE');
     await commitStagedEvidenceExtraction(authority, receipt, jobId);
@@ -1002,7 +1040,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
     await failEvidenceExtractionAttempt(authority, receipt, jobId, requestStarted, terminalError, 'PROVIDER_RESPONSE_INVALID');
     throw terminalError;
   }
-  const safeResult = { jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
+  const safeResult = { resourceId: jobId, jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
   const outputHash = await sha256Hex(providerResult.output);
   const tokenInput = Math.max(1, Math.ceil(text.length / 4));
   const tokenOutput = Math.max(1, Math.ceil(providerResult.output.length / 4));
@@ -1746,12 +1784,7 @@ export const handleEnterpriseIntelligenceRequest = async (request: Request) => {
       }
     }
     if (claimedReceipt && claimedAuthority && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
-      const recoverableStorageEffect = commandError.code === 'COMMAND_UNAVAILABLE'
-        && claimedReceipt.execution_plan?.externalStorageWritten === true;
-      const recoverableExtractionAttempt = (commandError.code === 'COMMAND_UNAVAILABLE'
-        || commandError.code === 'COMMAND_IN_PROGRESS')
-        && typeof claimedReceipt.execution_plan?.jobId === 'string';
-      if (recoverableStorageEffect || recoverableExtractionAttempt) {
+      if (shouldPreserveClaimedEnterpriseReceipt(error, claimedReceipt.execution_plan)) {
         return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
       }
       try {

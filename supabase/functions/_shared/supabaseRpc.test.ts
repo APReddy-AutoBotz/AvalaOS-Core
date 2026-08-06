@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { rpc, SupabaseRpcError, supabaseRpcErrorHasSignal } from './supabase';
+import {
+  rpc,
+  SupabaseRpcError,
+  SupabaseRpcTransportError,
+  supabaseRpcErrorHasSignal,
+} from './supabase';
 
 const secrets = {
   SUPABASE_URL: 'https://supabase.invalid',
@@ -55,4 +60,30 @@ for (const forbidden of ['raw-token', 'storage.invalid', 'private_table', 'must-
   assert.equal(serialized.includes(forbidden), false);
 }
 assert.equal(unsafe.message, 'Supabase RPC failed.');
-console.log('Supabase RPC error tests: bounded structured domain signals preserved; unsafe and malformed bodies discarded.');
+
+globalThis.fetch = async () => { throw new TypeError('raw relay secret must not survive'); };
+let fetchFailure: unknown;
+try { await rpc('test_transport_failure', { secret: 'must-not-survive' }); }
+catch (error) { fetchFailure = error; }
+assert.ok(fetchFailure instanceof SupabaseRpcTransportError);
+assert.deepEqual({
+  operation: fetchFailure.operation,
+  classification: fetchFailure.classification,
+  responseReceived: fetchFailure.responseReceived,
+}, { operation: 'rpc', classification: 'connection_failed', responseReceived: false });
+assert.equal(JSON.stringify(fetchFailure).includes('raw relay secret'), false);
+
+globalThis.fetch = async () => ({
+  ok: true,
+  status: 200,
+  json: async () => { throw new SyntaxError('raw response must not survive'); },
+} as unknown as Response);
+let decodeFailure: unknown;
+try { await rpc('test_decode_failure', {}); }
+catch (error) { decodeFailure = error; }
+assert.ok(decodeFailure instanceof SupabaseRpcTransportError);
+assert.equal(decodeFailure.classification, 'response_decode_failed');
+assert.equal(decodeFailure.responseReceived, true);
+assert.equal(JSON.stringify(decodeFailure).includes('raw response'), false);
+
+console.log('Supabase RPC error tests: bounded domain and typed transport dispositions preserve no raw failure data.');

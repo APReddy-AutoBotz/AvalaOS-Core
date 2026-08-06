@@ -40,7 +40,9 @@ assert.match(storage, /assertTenantStoragePath\(input\.orgId, input\.artifact\.p
 const postgrest = read('supabase/functions/_shared/supabase.ts');
 assert.equal((postgrest.match(/await response\.text\(\)/g) || []).length, 1);
 assert.match(postgrest, /class SupabaseRpcError/);
-assert.match(postgrest, /throw parseRpcFailure\(response\.status, await response\.text\(\)\)/);
+assert.match(postgrest, /body = await response\.text\(\)/);
+assert.match(postgrest, /throw parseRpcFailure\(response\.status, body\)/);
+assert.match(postgrest, /class SupabaseRpcTransportError/);
 assert.doesNotMatch(postgrest, /console\.(?:log|warn|error)\([^\n]*(?:response|body)/);
 
 for (const endpoint of [

@@ -236,6 +236,13 @@ const main = async () => {
       [extractionRouteId, extractionConfigId, 'openai', 'original-extraction-model', originalExtractionKeyRefId],
     );
   }
+  extractionRoute.model = 'new-default-model';
+  const changedExactRouteModel = await resolveEnterpriseProviderRoute(recoveryInput, enterpriseDeps);
+  assert.equal(changedExactRouteModel.status, 'blocked');
+  if (changedExactRouteModel.status === 'blocked') {
+    assert.equal(changedExactRouteModel.failureClass, 'model_not_allowed');
+  }
+  extractionRoute.model = 'original-extraction-model';
   activeExtractionKeyRefId = rotatedExtractionKeyRefId;
   const rotatedSecretRecovery = await resolveEnterpriseProviderRoute(recoveryInput, enterpriseDeps);
   assert.equal(rotatedSecretRecovery.status, 'allowed');

@@ -163,6 +163,10 @@ check(!/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Ex
 check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job_v2') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
 check(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('), 'Recovery must read the immutable route plan before any default route resolution.');
 check(extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }'), 'Recovery must request the exact planned route and model.');
+check(extractionRouteStagingSql.includes("p_result->>'resourceId' IS DISTINCT FROM p_job_id::text"), 'Staging must bind response resourceId to the planned extraction job.');
+check(extractionCommand.includes('const safeResult = { resourceId: jobId, jobId,'), 'Extraction must return an explicit canonical job resourceId.');
+check(commandSource.includes("disposition = 'preserve_claimed_receipt'"), 'Transport uncertainty must carry an explicit internal recoverable disposition.');
+check(!commandSource.includes("typeof claimedReceipt.execution_plan?.jobId === 'string'"), 'Receipt recovery must not infer transport uncertainty from execution-plan shape.');
 check(extractionCommand.indexOf('enterprise_stage_evidence_extraction_result') < extractionCommand.lastIndexOf('commitStagedEvidenceExtraction'), 'Sanitized staging must precede canonical commit.');
 const uncertainCommit = commandSource.slice(
   commandSource.indexOf('const commitStagedEvidenceExtraction'),

@@ -157,6 +157,7 @@ try {
     const trackedJobs = [];
     const trackedCandidates = [];
     let providerCalls = 0;
+    const extractionFailureCalls = {};
     const provider = 'openai';
     const capability = 'assess.evidence.extract';
     const model = 'fixture-model';
@@ -236,7 +237,7 @@ try {
       if (countProvider) providerCalls += 1;
       trackedCandidates.push(candidateId);
       const safeResult = {
-        jobId: entry.jobId, sourceId: entry.source.sourceId,
+        resourceId: entry.jobId, jobId: entry.jobId, sourceId: entry.source.sourceId,
         sourceVersionId: entry.source.sourceVersionId, candidateCount: 1,
         candidates: [{id: candidateId, field: 'process_objective'}],
       };
@@ -275,6 +276,7 @@ try {
       return safeResult;
     };
     const fail = async (entry, receipt, failureClass = 'PROVIDER_RESPONSE_INVALID') => {
+      extractionFailureCalls[failureClass] = (extractionFailureCalls[failureClass] || 0) + 1;
       const response = {ok:false,error:{code:'COMMAND_BLOCKED',message:'The Enterprise Intelligence command could not be completed.'}};
       await authority.query(
         `SELECT public.enterprise_fail_evidence_extraction_job(
@@ -322,7 +324,8 @@ try {
     )).rows[0].execution_plan;
     assert.deepEqual([persistedModelPlan.routeId, persistedModelPlan.providerConfigId, persistedModelPlan.model],
       [routeId, fixture.provider, model]);
-    await fail(modelChange, modelReceipt, 'EXTRACTION_ROUTE_BLOCKED');
+    const modelChangeResult = await commit(modelChange, modelReceipt, nextUuid());
+    assert.equal(modelChangeResult.resourceId, modelChange.jobId);
 
     // Provider success before staging remains recoverable; the later attempt
     // reuses the same job and one durable candidate/effect set.
@@ -388,7 +391,10 @@ try {
     const activeReplay = await reclaimReceipt(active, activeContenderToken);
     assert.notEqual(activeReplay.execution_token, activeContenderToken);
     await assert.rejects(claimJob(active, activeContenderToken, activeReplay.execution_fence), /ENTERPRISE_AI_STALE_EXECUTION_FENCE/);
-    await fail(active, active.receipt, 'PROVIDER_TIMEOUT');
+    providerCalls += 1;
+    const activeFailedResult = await fail(active, active.receipt, 'PROVIDER_TIMEOUT');
+    const activeFailedReplay = await claimJob(active);
+    assert.deepEqual([activeFailedReplay.state, activeFailedReplay.safeResult], ['blocked', activeFailedResult]);
 
     // Canonical mismatches fail without effects, then the original owner can finalize safely.
     const mismatch = await createReceipt(fixture.sources[1], 'mismatch'); mismatch.label = 'mismatch';
@@ -400,7 +406,7 @@ try {
     assert.equal(Number((await authority.query(
       'SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1', [mismatch.receipt.id],
     )).rows[0].n), effectsBeforeMismatch);
-    await fail(mismatch, mismatch.receipt);
+    await fail(mismatch, mismatch.receipt, 'EXTRACTION_IDENTITY_CONFLICT');
 
     // Provider/decoding failure reaches one terminal job/receipt and exact replay.
     const decoding = await createReceipt(fixture.sources[2], 'decoding'); decoding.label = 'decoding';
@@ -409,6 +415,19 @@ try {
     const failedResult = await fail(decoding, decoding.receipt);
     const failedReplay = await claimJob(decoding);
     assert.deepEqual([failedReplay.state, failedReplay.ownsExecution, failedReplay.safeResult], ['blocked', false, failedResult]);
+
+    // A changed exact route model is terminal for this receipt even when both
+    // models remain allowlisted. Restoring the route cannot revive the plan.
+    const routeModelChanged = await createReceipt(fixture.sources[4], 'route-model-changed'); routeModelChanged.label = 'route-model-changed';
+    await claimJob(routeModelChanged);
+    const providerCallsBeforeRouteModelChange = providerCalls;
+    await authority.query("UPDATE public.enterprise_ai_capability_routes SET model='new-default-model' WHERE id=$1", [routeId]);
+    assert.equal((await authority.query('SELECT model FROM public.enterprise_ai_capability_routes WHERE id=$1', [routeId])).rows[0].model, 'new-default-model');
+    const routeModelChangedResult = await fail(routeModelChanged, routeModelChanged.receipt, 'EXTRACTION_ROUTE_BLOCKED');
+    assert.equal(providerCalls, providerCallsBeforeRouteModelChange);
+    await authority.query('UPDATE public.enterprise_ai_capability_routes SET model=$2 WHERE id=$1', [routeId, model]);
+    const routeModelChangedReplay = await claimJob(routeModelChanged);
+    assert.deepEqual([routeModelChangedReplay.state, routeModelChangedReplay.safeResult], ['blocked', routeModelChangedResult]);
 
     // A revoked planned route is terminal and never falls back to another
     // provider configuration or model.
@@ -429,16 +448,18 @@ try {
       (SELECT count(*)::int FROM public.enterprise_evidence_candidates WHERE id=ANY($3::uuid[])) candidates,
       (SELECT count(*)::int FROM public.enterprise_ai_usage_ledger WHERE job_id=ANY($2::uuid[])) usage_rows,
       (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($1::uuid[])) effects,
-      (SELECT count(*)::int FROM public.enterprise_ai_job_attempts WHERE job_id=ANY($2::uuid[])) attempts`,
+      (SELECT count(*)::int FROM public.enterprise_ai_job_attempts WHERE job_id=ANY($2::uuid[])) attempts,
+      (SELECT count(*)::int FROM (SELECT job_id,count(*) FROM public.enterprise_ai_extraction_staged_results WHERE job_id=ANY($2::uuid[]) GROUP BY job_id HAVING count(*)>1) duplicate) duplicate_staged_results`,
       [trackedReceipts, trackedJobs, trackedCandidates])).rows[0];
     assert.deepEqual(counts, {
       claimed_receipts:0, running_jobs:0, duplicate_jobs:0,
-      candidates:5, usage_rows:5, effects:10, attempts:16,
+      candidates:6, usage_rows:6, effects:11, attempts:17, duplicate_staged_results:0,
     });
-    assert.equal(providerCalls, 7);
+    assert.equal(providerCalls, 9);
     console.log(`EXTRACTION RECOVERY COUNTS ${JSON.stringify({...counts, providerCalls,
       duplicateCandidates:0, duplicateUsageRows:0, duplicateEffects:0,
-      planConflictCount:0, newDefaultProviderCalls:0, extractionFailureCallsForTransport:0,
+      planConflictCount:1, newDefaultProviderCalls:0, fallbackProviderCalls:0,
+      extractionFailureCalls, extractionFailureCallsForTransport:0,
       stagedRecoveries:2, recoveredJobId:crashed.jobId,
       concurrentWinners:1, concurrentLosers:1})}`);
   });

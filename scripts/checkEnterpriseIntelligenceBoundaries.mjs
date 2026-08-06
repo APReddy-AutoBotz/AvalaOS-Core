@@ -39,6 +39,8 @@ const hits = forbidden.filter(pattern => pattern.test(featureText));
 if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: ${hits.map(String).join(', ')}`);
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
+const providerResolver = read('supabase/functions/_shared/providerResolver.ts');
+const supabaseRpc = read('supabase/functions/_shared/supabase.ts');
 for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or_resume_evidence_extraction_job', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
   if (!command.includes(required)) throw new Error(`Enterprise command boundary is missing ${required}.`);
 }
@@ -172,6 +174,31 @@ if (!(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionC
 }
 if (!extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }')) {
   throw new Error('Recovered extraction must revalidate the exact planned route and model.');
+}
+if (!providerResolver.includes('validateEnterpriseExactRouteModel')
+  || !providerResolver.includes('plannedModel !== currentRouteModel')) {
+  throw new Error('A planned extraction model must equal the exact route current model.');
+}
+const exactRouteModelValidation = providerResolver.slice(
+  providerResolver.indexOf('export const validateEnterpriseExactRouteModel'),
+  providerResolver.indexOf('const normalizeProvider'),
+);
+if (exactRouteModelValidation.includes('default_model')) {
+  throw new Error('Exact-route validation must not substitute the provider-config default model.');
+}
+if (!supabaseRpc.includes('class SupabaseRpcTransportError')
+  || !supabaseRpc.includes("'response_decode_failed'")) {
+  throw new Error('RPC transport and response-decode uncertainty must remain typed and bounded.');
+}
+if (!command.includes("disposition = 'preserve_claimed_receipt'")
+  || command.includes("typeof claimedReceipt.execution_plan?.jobId === 'string'")) {
+  throw new Error('Extraction uncertainty must use an explicit internal disposition, not receipt-shape inference.');
+}
+if (!extractionCommand.includes('const safeResult = { resourceId: jobId, jobId,')) {
+  throw new Error('Extraction responses must identify the job as the canonical receipt resource.');
+}
+if (!extractionRouteStaging.includes("p_result->>'resourceId' IS DISTINCT FROM p_job_id::text")) {
+  throw new Error('Staging must bind the sanitized response resource to the extraction job.');
 }
 if (!(extractionCommand.indexOf('enterprise_stage_evidence_extraction_result')
   < extractionCommand.lastIndexOf('commitStagedEvidenceExtraction'))) {

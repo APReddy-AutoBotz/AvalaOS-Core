@@ -232,6 +232,17 @@ const operations: ProviderResolverOperation[] = [
 
 const normalizeString = (value?: string | null) => value?.trim() || undefined;
 
+export const validateEnterpriseExactRouteModel = (input: {
+  plannedModel?: string | null;
+  currentRouteModel?: string | null;
+  modelAllowlist: string[];
+}) => {
+  const plannedModel = normalizeString(input.plannedModel);
+  const currentRouteModel = normalizeString(input.currentRouteModel);
+  if (!currentRouteModel || (plannedModel && plannedModel !== currentRouteModel)) return undefined;
+  return input.modelAllowlist.includes(currentRouteModel) ? currentRouteModel : undefined;
+};
+
 const normalizeProvider = (value?: string | null): ProviderResolverProvider | undefined => {
   const normalized = normalizeString(value)?.toLowerCase();
   return providers.includes(normalized as ProviderResolverProvider)
@@ -791,8 +802,12 @@ export const resolveEnterpriseProviderRoute = async (
     if (endpoint && !deps.isEndpointAllowed(provider as EnterpriseProviderResolverProvider, endpoint)) {
       return block('provider_config_ineligible', { provider, providerConfigId: config.id });
     }
-    const model = requestedModel || route.model?.trim() || config.default_model?.trim();
-    if (!model || !(config.model_allowlist || []).includes(model)) {
+    const model = validateEnterpriseExactRouteModel({
+      plannedModel: requestedModel,
+      currentRouteModel: route.model,
+      modelAllowlist: config.model_allowlist || [],
+    });
+    if (!model) {
       return block('model_not_allowed', { provider, providerConfigId: config.id });
     }
     if (!config.key_ref_id) return block('key_reference_missing', { provider, providerConfigId: config.id });

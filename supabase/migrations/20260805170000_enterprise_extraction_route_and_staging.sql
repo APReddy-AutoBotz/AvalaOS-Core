@@ -255,6 +255,7 @@ BEGIN
      OR p_staged_payload_hash!~'^[0-9a-f]{64}$' OR p_latency_ms<0
      OR p_token_input<0 OR p_token_output<0 OR jsonb_typeof(p_candidates)<>'array'
      OR jsonb_array_length(p_candidates)>200 OR jsonb_typeof(p_result)<>'object'
+     OR p_result->>'resourceId' IS DISTINCT FROM p_job_id::text
      OR p_result->>'jobId' IS DISTINCT FROM p_job_id::text
      OR p_result->>'sourceId' IS DISTINCT FROM p_source_id::text
      OR p_result->>'sourceVersionId' IS DISTINCT FROM p_source_version_id::text THEN

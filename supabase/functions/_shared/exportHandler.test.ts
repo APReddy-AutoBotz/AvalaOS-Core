@@ -176,7 +176,9 @@ const main = async () => {
   const supabaseSource = readFileSync('supabase/functions/_shared/supabase.ts', 'utf8');
   assert.equal((supabaseSource.match(/await response\.text\(\)/g) || []).length, 1);
   assert.match(supabaseSource, /class SupabaseRpcError/);
-  assert.match(supabaseSource, /throw parseRpcFailure\(response\.status, await response\.text\(\)\)/);
+  assert.match(supabaseSource, /body = await response\.text\(\)/);
+  assert.match(supabaseSource, /throw parseRpcFailure\(response\.status, body\)/);
+  assert.match(supabaseSource, /class SupabaseRpcTransportError/);
   assert.doesNotMatch(supabaseSource, /console\.(?:log|warn|error)\([^\n]*(?:response|body)/);
   assert.doesNotMatch(supabaseSource, /Supabase REST request failed \(\$\{response\.status\}\)/);
 

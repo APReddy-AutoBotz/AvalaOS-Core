@@ -57,6 +57,43 @@ export const isSupabaseRpcError = (error: unknown): error is SupabaseRpcError =>
   error instanceof SupabaseRpcError
 );
 
+export type SupabaseRpcTransportClassification =
+  | 'aborted'
+  | 'timed_out'
+  | 'fetch_failed'
+  | 'relay_failed'
+  | 'connection_failed'
+  | 'response_decode_failed'
+  | 'unknown_transport_failure';
+
+/** A bounded server-only transport disposition. Raw failures are discarded. */
+export class SupabaseRpcTransportError extends Error {
+  readonly operation = 'rpc';
+  readonly classification: SupabaseRpcTransportClassification;
+  readonly responseReceived: boolean;
+
+  constructor(classification: SupabaseRpcTransportClassification, responseReceived: boolean) {
+    super('Supabase RPC transport failed.');
+    this.name = 'SupabaseRpcTransportError';
+    this.classification = classification;
+    this.responseReceived = responseReceived;
+  }
+}
+
+export const isSupabaseRpcTransportError = (error: unknown): error is SupabaseRpcTransportError => (
+  error instanceof SupabaseRpcTransportError
+);
+
+const classifyRpcTransportFailure = (error: unknown): SupabaseRpcTransportClassification => {
+  const name = error instanceof Error ? error.name : '';
+  if (name === 'AbortError') return 'aborted';
+  if (name === 'TimeoutError') return 'timed_out';
+  if (name === 'FetchError' || name === 'FunctionsFetchError') return 'fetch_failed';
+  if (name === 'FunctionsRelayError') return 'relay_failed';
+  if (name === 'TypeError') return 'connection_failed';
+  return 'unknown_transport_failure';
+};
+
 export const supabaseRpcErrorHasSignal = (error: unknown, ...signals: string[]) => {
   if (!isSupabaseRpcError(error)) return false;
   const available = new Set([error.code, error.databaseMessage, error.details, error.hint].filter(Boolean));
@@ -150,23 +187,34 @@ export const postgrest = async <T>(
  */
 export const rpc = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
   const { url, serviceRoleKey } = supabaseEnv();
-  const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
-    method: 'POST',
-    redirect: 'error',
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(args),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+    });
+  } catch (error) {
+    throw new SupabaseRpcTransportError(classifyRpcTransportFailure(error), false);
+  }
   if (!response.ok) {
     // Consume the failure body once. Only allowlisted, bounded domain signals
     // survive parsing; the raw body is never retained or logged.
-    throw parseRpcFailure(response.status, await response.text());
+    let body = '';
+    try { body = await response.text(); } catch { /* discard unreadable response bodies */ }
+    throw parseRpcFailure(response.status, body);
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new SupabaseRpcTransportError('response_decode_failed', true);
+  }
 };
 
 type Membership = {

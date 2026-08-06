@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   EnterpriseCommandError,
+  RecoverableEnterpriseCommandError,
   enterpriseCommandErrorBody,
   extractionRouteMatchesPlan,
   mapEnterpriseCommandRpcError,
@@ -8,9 +9,10 @@ import {
   parseEnterpriseCommandEnvelope,
   readEvidenceExtractionRoutePlan,
   resolveEnterpriseCommandResourceId,
+  shouldPreserveClaimedEnterpriseReceipt,
 } from './enterpriseIntelligenceCommand';
 import { hashReceiptValue, mapEnterpriseReceiptRpcError } from './enterpriseReceipt';
-import { SupabaseRpcError } from './supabase';
+import { SupabaseRpcError, SupabaseRpcTransportError } from './supabase';
 
 const base = {
   commandType: 'evidence.candidate.review',
@@ -138,12 +140,31 @@ test('recovery retains the immutable planned route and model', () => {
   }), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE');
 });
 
-test('generic staging and commit transport uncertainty remains recoverable', () => {
-  assert.equal(mapExtractionPersistenceError(new TypeError('relay unavailable')).code, 'COMMAND_UNAVAILABLE');
+test('only typed staging and commit transport uncertainty preserves the claimed receipt', () => {
+  const uncertain = mapExtractionPersistenceError(new SupabaseRpcTransportError('connection_failed', false));
+  assert.ok(uncertain instanceof RecoverableEnterpriseCommandError);
+  assert.equal(uncertain.code, 'COMMAND_UNAVAILABLE');
+  assert.equal(uncertain.disposition, 'preserve_claimed_receipt');
+  assert.equal(shouldPreserveClaimedEnterpriseReceipt(uncertain, { jobId: base.requestId }), true);
+  assert.equal(shouldPreserveClaimedEnterpriseReceipt(
+    new EnterpriseCommandError('COMMAND_UNAVAILABLE'),
+    { jobId: base.requestId },
+  ), false);
+  assert.equal(mapExtractionPersistenceError(new TypeError('unexpected implementation failure')) instanceof RecoverableEnterpriseCommandError, false);
   assert.equal(mapExtractionPersistenceError(new SupabaseRpcError({
     status: 409,
     databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
   })).code, 'COMMAND_IN_PROGRESS');
+});
+
+test('extraction receipt identity is the explicit extraction job resource', () => {
+  const jobId = '77777777-7777-4777-8777-777777777777';
+  const sourceId = '88888888-8888-4888-8888-888888888888';
+  assert.equal(resolveEnterpriseCommandResourceId('evidence.extract', {
+    resourceId: jobId,
+    jobId,
+    sourceId,
+  }), jobId);
 });
 
 test('promotion receipt identity is the explicit Assess draft resource', () => {
