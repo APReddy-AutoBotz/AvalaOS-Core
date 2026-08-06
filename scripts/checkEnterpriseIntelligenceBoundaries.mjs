@@ -187,8 +187,21 @@ if (exactRouteModelValidation.includes('default_model')) {
   throw new Error('Exact-route validation must not substitute the provider-config default model.');
 }
 if (!supabaseRpc.includes('class SupabaseRpcTransportError')
-  || !supabaseRpc.includes("'response_decode_failed'")) {
+  || !supabaseRpc.includes("'response_decode_failed'")
+  || !supabaseRpc.includes("'response_read_failed'")
+  || !supabaseRpc.includes("'transient_http_502'")
+  || !supabaseRpc.includes("'transient_http_503'")
+  || !supabaseRpc.includes("'transient_http_504'")) {
   throw new Error('RPC transport and response-decode uncertainty must remain typed and bounded.');
+}
+if (!supabaseRpc.includes('governedRpcDomainSignals')
+  || !supabaseRpc.includes('rpcErrorHasGovernedDomainSignal')
+  || !supabaseRpc.includes('transientRpcHttpClassification(response.status)')) {
+  throw new Error('Transient RPC responses require exact governed-domain classification.');
+}
+if (/catch\s*\{\s*\/\* discard unreadable response bodies \*\/\s*\}/u.test(supabaseRpc)
+  || /throw parseRpcFailure\(response\.status, body\)/u.test(supabaseRpc)) {
+  throw new Error('Unreadable or transient RPC responses must not become unconditional database failures.');
 }
 if (!command.includes("disposition = 'preserve_claimed_receipt'")
   || command.includes("typeof claimedReceipt.execution_plan?.jobId === 'string'")) {
@@ -210,6 +223,17 @@ const uncertainCommit = command.slice(
 );
 if (uncertainCommit.includes('enterprise_fail_evidence_extraction_job')) {
   throw new Error('Generic staging/commit uncertainty must not terminalize the extraction job.');
+}
+if (!uncertainCommit.includes('throw mapExtractionPersistenceError(error)')) {
+  throw new Error('Canonical extraction commit uncertainty must preserve the claimed receipt.');
+}
+const stageUncertainty = extractionCommand.slice(
+  extractionCommand.indexOf("rpc('enterprise_stage_evidence_extraction_result'"),
+  extractionCommand.lastIndexOf('await commitStagedEvidenceExtraction'),
+);
+if (!stageUncertainty.includes('throw mapExtractionPersistenceError(error)')
+  || stageUncertainty.includes('failEvidenceExtractionAttempt')) {
+  throw new Error('Extraction staging uncertainty must preserve the receipt without failure authority.');
 }
 const promotionCommand = command.slice(
   command.indexOf('const commandEvidenceAssessPromote'),

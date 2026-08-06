@@ -15,51 +15,126 @@ const secrets = {
   env: { get: (key: keyof typeof secrets) => secrets[key] },
 };
 
-const runFailure = async (body: string, status = 409) => {
+const captureFailure = async (input: {
+  body?: string;
+  status: number;
+  readError?: Error;
+}) => {
   let textReads = 0;
   globalThis.fetch = async () => ({
     ok: false,
-    status,
-    text: async () => { textReads += 1; return body; },
+    status: input.status,
+    text: async () => {
+      textReads += 1;
+      if (input.readError) throw input.readError;
+      return input.body || '';
+    },
   } as Response);
   let captured: unknown;
   try { await rpc('test_domain_failure', { secret: 'must-not-survive' }); }
   catch (error) { captured = error; }
   assert.equal(textReads, 1);
-  assert.ok(captured instanceof SupabaseRpcError);
+  assert.ok(captured instanceof Error);
   return captured;
 };
 
-const domain = await runFailure(JSON.stringify({
-  code: 'P0001',
-  message: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT',
-  details: 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
-  hint: 'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
-}));
+const domain = await captureFailure({
+  status: 409,
+  body: JSON.stringify({
+    code: 'P0001',
+    message: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT',
+    details: 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
+    hint: 'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
+  }),
+});
+assert.ok(domain instanceof SupabaseRpcError);
 assert.equal(domain.status, 409);
 assert.equal(domain.code, 'P0001');
 assert.equal(domain.databaseMessage, 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT');
 assert.equal(supabaseRpcErrorHasSignal(domain, 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'), true);
 
-const malformed = await runFailure('<html>gateway failure</html>', 502);
-assert.equal(malformed.status, 502);
-assert.equal(malformed.databaseMessage, undefined);
+const transientCases = [
+  { status: 502, body: '', classification: 'transient_http_502' },
+  { status: 502, body: JSON.stringify({ code: 'PGRST003', message: 'upstream unavailable' }), classification: 'transient_http_502' },
+  { status: 503, body: '<html>proxy unavailable</html>', classification: 'transient_http_503' },
+  { status: 504, body: '{malformed-json', classification: 'transient_http_504' },
+] as const;
+for (const testCase of transientCases) {
+  const error = await captureFailure(testCase);
+  assert.ok(error instanceof SupabaseRpcTransportError);
+  assert.deepEqual({
+    classification: error.classification,
+    responseReceived: error.responseReceived,
+  }, {
+    classification: testCase.classification,
+    responseReceived: true,
+  });
+}
 
-const unsafe = await runFailure(JSON.stringify({
-  code: '23505',
-  message: 'duplicate key value violates unique constraint enterprise_secret_raw_key',
-  details: 'Bearer raw-token https://storage.invalid/customer/object',
-  hint: 'select * from private_table',
-}));
-assert.equal(unsafe.code, '23505');
-assert.equal(unsafe.databaseMessage, undefined);
-assert.equal(unsafe.details, undefined);
-assert.equal(unsafe.hint, undefined);
-const serialized = JSON.stringify(unsafe);
-for (const forbidden of ['raw-token', 'storage.invalid', 'private_table', 'must-not-survive', 'service-role-test-value']) {
+const readFailure = await captureFailure({
+  status: 409,
+  readError: new Error('raw unreadable response secret must not survive'),
+});
+assert.ok(readFailure instanceof SupabaseRpcTransportError);
+assert.equal(readFailure.classification, 'response_read_failed');
+assert.equal(readFailure.responseReceived, true);
+assert.equal(JSON.stringify(readFailure).includes('raw unreadable response secret'), false);
+
+const governedSignals = [
+  'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT',
+  'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
+  'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
+  'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
+  'ENTERPRISE_PROVIDER_ROUTE_BLOCKED',
+] as const;
+for (const [index, signal] of governedSignals.entries()) {
+  const status = [502, 503, 504][index % 3];
+  const error = await captureFailure({ status, body: JSON.stringify({ code: 'P0001', message: signal }) });
+  assert.ok(error instanceof SupabaseRpcError);
+  assert.equal(error.status, status);
+  assert.equal(supabaseRpcErrorHasSignal(error, signal), true);
+}
+
+const governed500 = await captureFailure({
+  status: 500,
+  body: JSON.stringify({ code: 'P0001', message: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT' }),
+});
+assert.ok(governed500 instanceof SupabaseRpcError);
+assert.equal(supabaseRpcErrorHasSignal(governed500, 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT'), true);
+
+const ordinary4xx = await captureFailure({
+  status: 403,
+  body: JSON.stringify({ code: '42501', message: 'ENTERPRISE_PROVIDER_PERMISSION_DENIED' }),
+});
+assert.ok(ordinary4xx instanceof SupabaseRpcError);
+assert.equal(ordinary4xx.code, '42501');
+assert.equal(supabaseRpcErrorHasSignal(ordinary4xx, 'ENTERPRISE_PROVIDER_PERMISSION_DENIED'), true);
+
+const arbitraryToken = await captureFailure({
+  status: 400,
+  body: JSON.stringify({
+    code: '23505',
+    message: 'ENTERPRISE_PROXY_UNAVAILABLE',
+    details: 'duplicate key value violates unique constraint enterprise_secret_raw_key',
+    hint: 'select * from private_table',
+  }),
+});
+assert.ok(arbitraryToken instanceof SupabaseRpcError);
+assert.equal(arbitraryToken.code, '23505');
+assert.equal(arbitraryToken.databaseMessage, undefined);
+assert.equal(arbitraryToken.details, undefined);
+assert.equal(arbitraryToken.hint, undefined);
+
+const serialized = JSON.stringify(arbitraryToken);
+for (const forbidden of [
+  'ENTERPRISE_PROXY_UNAVAILABLE', 'enterprise_secret_raw_key', 'private_table',
+  'must-not-survive', 'service-role-test-value', 'supabase.invalid', 'Authorization',
+]) {
   assert.equal(serialized.includes(forbidden), false);
 }
-assert.equal(unsafe.message, 'Supabase RPC failed.');
+assert.equal(arbitraryToken.message, 'Supabase RPC failed.');
 
 globalThis.fetch = async () => { throw new TypeError('raw relay secret must not survive'); };
 let fetchFailure: unknown;
@@ -86,4 +161,4 @@ assert.equal(decodeFailure.classification, 'response_decode_failed');
 assert.equal(decodeFailure.responseReceived, true);
 assert.equal(JSON.stringify(decodeFailure).includes('raw response'), false);
 
-console.log('Supabase RPC error tests: bounded domain and typed transport dispositions preserve no raw failure data.');
+console.log('Supabase RPC error tests: governed domain signals and transient response uncertainty remain bounded.');

@@ -91,6 +91,22 @@ test('structured RPC domain signals map without exposing database text', () => {
   assert.equal(publicBody.includes('arbitrary database text'), false);
   assert.equal(publicBody.includes('Supabase RPC failed'), false);
   assert.equal(publicBody, '{"ok":false,"error":{"code":"COMMAND_UNAVAILABLE","message":"The Enterprise Intelligence command could not be completed."}}');
+
+  const governed5xxMappings = [
+    ['ENTERPRISE_AI_IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_CONFLICT'],
+    ['ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'AUTHORIZATION_STALE'],
+    ['ENTERPRISE_AI_STALE_EXECUTION_FENCE', 'COMMAND_IN_PROGRESS'],
+    ['ENTERPRISE_PROVIDER_PERMISSION_DENIED', 'PERMISSION_DENIED'],
+    ['ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE', 'COMMAND_IN_PROGRESS'],
+    ['ENTERPRISE_EVIDENCE_CANDIDATE_STALE', 'RESOURCE_STALE'],
+    ['ENTERPRISE_PROVIDER_ROUTE_BLOCKED', 'COMMAND_BLOCKED'],
+  ] as const;
+  for (const [signal, expectedCode] of governed5xxMappings) {
+    assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+      status: 503,
+      databaseMessage: signal,
+    })).code, expectedCode);
+  }
 });
 
 test('recovery retains the immutable planned route and model', () => {
@@ -141,11 +157,19 @@ test('recovery retains the immutable planned route and model', () => {
 });
 
 test('only typed staging and commit transport uncertainty preserves the claimed receipt', () => {
-  const uncertain = mapExtractionPersistenceError(new SupabaseRpcTransportError('connection_failed', false));
-  assert.ok(uncertain instanceof RecoverableEnterpriseCommandError);
-  assert.equal(uncertain.code, 'COMMAND_UNAVAILABLE');
-  assert.equal(uncertain.disposition, 'preserve_claimed_receipt');
-  assert.equal(shouldPreserveClaimedEnterpriseReceipt(uncertain, { jobId: base.requestId }), true);
+  for (const [classification, responseReceived] of [
+    ['connection_failed', false],
+    ['transient_http_502', true],
+    ['transient_http_503', true],
+    ['transient_http_504', true],
+    ['response_read_failed', true],
+  ] as const) {
+    const uncertain = mapExtractionPersistenceError(new SupabaseRpcTransportError(classification, responseReceived));
+    assert.ok(uncertain instanceof RecoverableEnterpriseCommandError);
+    assert.equal(uncertain.code, 'COMMAND_UNAVAILABLE');
+    assert.equal(uncertain.disposition, 'preserve_claimed_receipt');
+    assert.equal(shouldPreserveClaimedEnterpriseReceipt(uncertain, { jobId: base.requestId }), true);
+  }
   assert.equal(shouldPreserveClaimedEnterpriseReceipt(
     new EnterpriseCommandError('COMMAND_UNAVAILABLE'),
     { jobId: base.requestId },
