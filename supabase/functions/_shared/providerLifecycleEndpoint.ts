@@ -5,6 +5,7 @@ import {
   createProviderLifecycleDeps,
   executeProviderLifecycleCommand,
   ProviderLifecycleError,
+  recoverProviderLifecycleManagedSecret,
   type ProviderLifecycleAuthority,
   type ProviderLifecycleDeps,
   type ProviderLifecycleOperation,
@@ -20,8 +21,9 @@ import {
   persistEnterpriseExecutionPlan,
   reloadEnterpriseReceipt,
   type EnterpriseReceiptRow,
+  type EnterpriseReceiptScope,
 } from './enterpriseReceipt.ts';
-import { getAuthUser, postgrest } from './supabase.ts';
+import { getAuthUser, postgrest, rpc, supabaseRpcErrorHasSignal } from './supabase.ts';
 import { resolveTenantAuthority, TenantAuthorityError } from './tenantAuthority.ts';
 import { createTenantAuthorityDatabase } from './tenantAuthorityDb.ts';
 
@@ -63,6 +65,15 @@ export type ProviderLifecycleAuthorityRecheckEnvelope = {
   workspaceId: string;
   providerConfigId?: string;
   routeId?: string;
+};
+
+export type ProviderLifecycleRecoveryEnvelope = {
+  operation: 'provider.secret.bind' | 'provider.secret.rotate';
+  organizationId: string;
+  workspaceId: string;
+  providerConfigId: string;
+  requestId: string;
+  idempotencyKey: string;
 };
 
 const isRecord = (value: unknown): value is JsonObject => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -137,6 +148,30 @@ export const parseProviderLifecycleAuthorityRecheckEnvelope = (
     workspaceId: value.workspaceId,
     ...(operation === 'provider.register' ? {} : { providerConfigId: value.providerConfigId as string }),
     ...(operation === 'provider.route.toggle' ? { routeId: value.routeId as string } : {}),
+  };
+};
+
+export const parseProviderLifecycleRecoveryEnvelope = (value: unknown): ProviderLifecycleRecoveryEnvelope => {
+  const allowedKeys = new Set([
+    'operation', 'organizationId', 'workspaceId', 'providerConfigId', 'requestId', 'idempotencyKey',
+  ]);
+  if (!isRecord(value)
+    || (value.operation !== 'provider.secret.bind' && value.operation !== 'provider.secret.rotate')
+    || Object.keys(value).some(key => !allowedKeys.has(key))
+    || typeof value.organizationId !== 'string' || !uuid.test(value.organizationId)
+    || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)
+    || typeof value.providerConfigId !== 'string' || !uuid.test(value.providerConfigId)
+    || typeof value.requestId !== 'string' || !uuid.test(value.requestId)
+    || typeof value.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,200}$/.test(value.idempotencyKey)) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  return {
+    operation: value.operation,
+    organizationId: value.organizationId,
+    workspaceId: value.workspaceId,
+    providerConfigId: value.providerConfigId,
+    requestId: value.requestId,
+    idempotencyKey: value.idempotencyKey,
   };
 };
 
@@ -251,286 +286,4 @@ const statusFor = (error: ProviderLifecycleError) => {
   if (error.code === 'IDEMPOTENCY_CONFLICT' || error.code === 'COMMAND_IN_PROGRESS') return 409;
   if (error.code === 'AUTHORIZATION_STALE') return 409;
   if (error.code === 'RECEIPT_FINALIZATION_FAILED') return 503;
-  if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') return 503;
-  if (error.code === 'VALIDATION_FAILED') return 422;
-  return 400;
-};
-
-export const handleProviderLifecycleAuthorityRecheckRequest = async (
-  request: Request,
-  overrides: {
-    authenticate?: (
-      request: Request,
-      envelope: ProviderLifecycleAuthorityRecheckEnvelope,
-    ) => Promise<ProviderLifecycleAuthority>;
-  } = {},
-) => {
-  const options = handleOptions(request);
-  if (options) return options;
-  if (request.method !== 'POST') {
-    return jsonResponse({ authorized: false, authorizationVersion: null }, 405);
-  }
-  let envelope: ProviderLifecycleAuthorityRecheckEnvelope;
-  try {
-    envelope = parseProviderLifecycleAuthorityRecheckEnvelope(await request.json());
-  } catch {
-    return jsonResponse({ authorized: false, authorizationVersion: null }, 400);
-  }
-  let authority: ProviderLifecycleAuthority;
-  try {
-    authority = overrides.authenticate
-      ? await overrides.authenticate(request, envelope)
-      : await authenticateProviderLifecycle(request, envelope, false);
-  } catch (error) {
-    if ((error instanceof ProviderLifecycleError
-      && (error.code === 'TENANT_ACCESS_DENIED' || error.code === 'PERMISSION_DENIED'))
-      || (error instanceof TenantAuthorityError && error.code === 'TENANT_ACCESS_DENIED')) {
-      return jsonResponse({ authorized: false, authorizationVersion: null }, 200);
-    }
-    return jsonResponse({ authorized: false, authorizationVersion: null }, 503);
-  }
-  try {
-    assertProviderLifecycleOperationAuthority(envelope.operation, authority);
-    return jsonResponse({ authorized: true, authorizationVersion: authority.authorizationVersion }, 200);
-  } catch {
-    return jsonResponse({ authorized: false, authorizationVersion: authority.authorizationVersion }, 200);
-  }
-};
-
-export const providerLifecycleStatusForTerminalReceipt = (receipt: EnterpriseReceiptRow) => {
-  const responseError = isRecord(receipt.response?.error) ? receipt.response.error.code : undefined;
-  if (typeof responseError !== 'string') return 409;
-  const known = new Set([
-    'INVALID_REQUEST', 'TENANT_ACCESS_DENIED', 'PERMISSION_DENIED', 'RESOURCE_NOT_FOUND',
-    'RESOURCE_CONFLICT', 'SECRET_BACKEND_REQUIRED', 'SECRET_UNAVAILABLE', 'VALIDATION_FAILED',
-    'PROVIDER_BLOCKED', 'PERSISTENCE_UNAVAILABLE', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT',
-    'COMMAND_IN_PROGRESS', 'RECEIPT_FINALIZATION_FAILED',
-  ]);
-  return known.has(responseError)
-    ? statusFor(new ProviderLifecycleError(responseError as ProviderLifecycleError['code']))
-    : 409;
-};
-
-export const providerLifecycleErrorBody = (error: ProviderLifecycleError) => ({
-  ok: false,
-  error: {
-    code: error.code,
-    message: 'The provider lifecycle request could not be completed.',
-  },
-});
-
-const providerLifecycleResourceId = (result: JsonObject) => {
-  if (typeof result.resourceId !== 'string' || !uuid.test(result.resourceId)
-    || result.providerConfigId !== result.resourceId) {
-    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
-  }
-  return result.resourceId;
-};
-
-const assertCommittedProviderReceiptIdentity = (receipt: EnterpriseReceiptRow) => {
-  if (receipt.status !== 'committed' || !isRecord(receipt.response)) {
-    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
-  }
-  const resourceId = providerLifecycleResourceId(receipt.response);
-  if (receipt.resource_id !== resourceId) {
-    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
-  }
-  return resourceId;
-};
-
-export const handleProviderLifecycleRequest = async (
-  request: Request,
-  overrides: {
-    authenticate?: (request: Request, envelope: ProviderLifecycleEnvelope) => Promise<ProviderLifecycleAuthority>;
-    deps?: ProviderLifecycleDeps;
-    claimReceipt?: typeof claimEnterpriseReceipt;
-    reloadReceipt?: typeof reloadEnterpriseReceipt;
-    completeReceipt?: typeof completeEnterpriseReceipt;
-    failReceipt?: typeof failEnterpriseReceipt;
-    executeCommand?: typeof executeProviderLifecycleCommand;
-  } = {},
-) => {
-  const options = handleOptions(request);
-  if (options) return options;
-  if (request.method !== 'POST') {
-    const error = new ProviderLifecycleError('INVALID_REQUEST');
-    return jsonResponse(providerLifecycleErrorBody(error), 405);
-  }
-  let claimedReceipt: EnterpriseReceiptRow | null = null;
-  let claimedAuthority: ProviderLifecycleAuthority | null = null;
-  let claimedOperation: ProviderLifecycleOperation | null = null;
-  let claimedEnvelope: ProviderLifecycleEnvelope | null = null;
-  try {
-    const envelope = parseProviderLifecycleEnvelope(await request.json());
-    const authenticate = overrides.authenticate || authenticateProviderLifecycle;
-    const authority = await authenticate(request, envelope);
-    assertProviderLifecycleOperationAuthority(envelope.operation, authority);
-    const requestHash = await providerLifecycleRequestHash(envelope);
-    const { receipt, ownsExecution } = await (overrides.claimReceipt || claimEnterpriseReceipt)(authority, {
-      commandType: envelope.operation,
-      idempotencyKey: envelope.idempotencyKey,
-      requestId: envelope.requestId,
-      requestHash,
-    });
-    if (receipt.status === 'committed') {
-      await reauthorizeProviderLifecycle(request, envelope, authenticate);
-      assertCommittedProviderReceiptIdentity(receipt);
-      return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
-    }
-    if (receipt.status === 'failed' || receipt.status === 'blocked') {
-      await reauthorizeProviderLifecycle(request, envelope, authenticate);
-      return jsonResponse(
-        { ...(receipt.response || providerLifecycleErrorBody(new ProviderLifecycleError('PROVIDER_BLOCKED'))), replayed: true },
-        providerLifecycleStatusForTerminalReceipt(receipt),
-      );
-    }
-    if (!ownsExecution) {
-      await reauthorizeProviderLifecycle(request, envelope, authenticate);
-      throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
-    }
-    claimedReceipt = receipt;
-    claimedAuthority = authority;
-    claimedOperation = envelope.operation;
-    claimedEnvelope = envelope;
-    const deps = overrides.deps || createProviderLifecycleDeps(
-      buildEnterpriseProviderRouteDbDeps(isAllowedProviderEndpoint),
-    );
-    const execution = {
-      receiptId: receipt.id,
-      executionToken: receipt.execution_token,
-      executionFence: receipt.execution_fence,
-      plan: receipt.execution_plan || {},
-      async persistPlan(plan: JsonObject) {
-        const planned = await persistEnterpriseExecutionPlan(receipt, authority, plan);
-        receipt.execution_plan = planned.execution_plan || {};
-        return receipt.execution_plan;
-      },
-    };
-    const result = await (overrides.executeCommand || executeProviderLifecycleCommand)(
-      envelope.operation, authority, envelope.payload, deps, execution,
-    );
-    const resourceId = providerLifecycleResourceId(result);
-    const finalAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
-    claimedAuthority = finalAuthority;
-    const completed = await (overrides.completeReceipt || completeEnterpriseReceipt)(
-      receipt,
-      finalAuthority,
-      result,
-      resourceId,
-      async () => {
-        const reconciliationAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
-        claimedAuthority = reconciliationAuthority;
-        return reconciliationAuthority;
-      },
-    );
-    assertCommittedProviderReceiptIdentity(completed);
-    claimedAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
-    return jsonResponse({ ok: true, replayed: false, ...(completed.response || result) }, 200);
-  } catch (error) {
-    const safeError = error instanceof ProviderLifecycleError ? error
-      : error instanceof EnterpriseReceiptError ? new ProviderLifecycleError(
-        error.code === 'COMMAND_UNAVAILABLE' ? 'PERSISTENCE_UNAVAILABLE' : error.code,
-      )
-        : new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
-    if (claimedReceipt && claimedAuthority && claimedOperation && claimedEnvelope) {
-      try {
-        claimedAuthority = await reauthorizeProviderLifecycle(
-          request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-        );
-        const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
-        if (recovered.status === 'committed') {
-          claimedAuthority = await reauthorizeProviderLifecycle(
-            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-          );
-          assertCommittedProviderReceiptIdentity(recovered);
-          return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
-        }
-        if (recovered.status === 'failed' || recovered.status === 'blocked') {
-          claimedAuthority = await reauthorizeProviderLifecycle(
-            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-          );
-          return jsonResponse(
-            { ...(recovered.response || providerLifecycleErrorBody(safeError)), replayed: true },
-            providerLifecycleStatusForTerminalReceipt(recovered),
-          );
-        }
-      } catch (recoveryError) {
-        if (recoveryError instanceof ProviderLifecycleError && recoveryError.code === 'PERMISSION_DENIED') {
-          const denied = new ProviderLifecycleError('PERMISSION_DENIED');
-          return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
-        }
-        if (safeError.code === 'RECEIPT_FINALIZATION_FAILED') {
-          try {
-            claimedAuthority = await reauthorizeProviderLifecycle(
-              request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-            );
-          } catch {
-            const denied = new ProviderLifecycleError('PERMISSION_DENIED');
-            return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
-          }
-          return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
-        }
-      }
-    }
-    if (claimedReceipt && claimedAuthority && claimedEnvelope
-      && safeError.code !== 'RECEIPT_FINALIZATION_FAILED'
-      && safeError.code !== 'AUTHORIZATION_STALE') {
-      const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true
-        || (claimedReceipt.execution_plan?.secretOwnership === 'managed_write'
-          && claimedReceipt.execution_plan?.secretPlanReceiptId === claimedReceipt.id
-          && (claimedReceipt.execution_plan?.writeState === 'planned'
-            || claimedReceipt.execution_plan?.writeState === 'written'));
-      if (!(safeError.code === 'PERSISTENCE_UNAVAILABLE' && externalEffectPlanned)) {
-        try {
-          claimedAuthority = await reauthorizeProviderLifecycle(
-            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-          );
-          await (overrides.failReceipt || failEnterpriseReceipt)(
-            claimedReceipt,
-            claimedAuthority,
-            providerLifecycleErrorBody(safeError),
-            safeError.code === 'PERMISSION_DENIED' || safeError.code === 'TENANT_ACCESS_DENIED' || safeError.code === 'PROVIDER_BLOCKED',
-            async () => {
-              const reconciliationAuthority = await reauthorizeProviderLifecycle(
-                request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-              );
-              claimedAuthority = reconciliationAuthority;
-              return reconciliationAuthority;
-            },
-          );
-          claimedAuthority = await reauthorizeProviderLifecycle(
-            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-          );
-        } catch (finalizationError) {
-          if (finalizationError instanceof ProviderLifecycleError
-            && finalizationError.code === 'PERMISSION_DENIED') {
-            const denied = new ProviderLifecycleError('PERMISSION_DENIED');
-            return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
-          }
-          const finalization = new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
-          return jsonResponse(providerLifecycleErrorBody(finalization), statusFor(finalization));
-        }
-      } else {
-        try {
-          claimedAuthority = await reauthorizeProviderLifecycle(
-            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-          );
-        } catch {
-          const denied = new ProviderLifecycleError('PERMISSION_DENIED');
-          return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
-        }
-      }
-    }
-    if (claimedReceipt && claimedAuthority && claimedEnvelope) {
-      try {
-        claimedAuthority = await reauthorizeProviderLifecycle(
-          request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
-        );
-      } catch {
-        const denied = new ProviderLifecycleError('PERMISSION_DENIED');
-        return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
-      }
-    }
-    return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
-  }
-};
+  if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code ×]÷¶‰žËkºwµçI•½Ù•ÉåQ•Éµ¥¹…°€ô€¡É••¥ÁÐè¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Ü¤€ôøì(€½¹ÍÐÉ•ÍÁ½¹Í•ÉÉ½È€ô¥ÍI•½É¡É••¥ÁÐ¹É•ÍÁ½¹Í”ü¹•ÉÉ½È¤€üÉ••¥ÁÐ¹É•ÍÁ½¹Í”ü¹•ÉÉ½È¹½‘”€èÕ¹‘•™¥¹•ì(€¥˜€¡É••¥ÁÐ¹ÍÑ…ÑÕÌ€„ôô€‰±½­•œñðÉ•ÍÁ½¹Í•ÉÉ½È€„ôô€AI5%MM%=9}9%œ(€€€ñðÉ••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹±•…¹ÕÁ½µÁ±•Ñ•€„ôôÑÉÕ”¤ì(€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AIM%MQ9}U9Y%1	1œ¤ì(€ô)ôì()•áÁ½ÉÐ½¹ÍÐ¡…¹‘±•AÉ½Ù¥‘•É1¥™•å±•I•½Ù•ÉåI•ÅÕ•ÍÐ€ô…Íå¹Œ€ (€É•ÅÕ•ÍÐèI•ÅÕ•ÍÐ°(€½Ù•ÉÉ¥‘•Ìèì(€€€…ÕÑ¡•¹Ñ¥…Ñ•Ñ½Èüè€¡É•ÅÕ•ÍÐèI•ÅÕ•ÍÐ¤€ôøAÉ½µ¥Í”ñì¥èÍÑÉ¥¹œôøì(€€€±…¥µI•½Ù•ÉåI••¥ÁÐüèÑåÁ•½˜±…¥µAÉ½Ù¥‘•É1¥™•å±•I•½Ù•ÉåI••¥ÁÐì(€€€Á•ÉÍ¥ÍÑA±…¸üèÑåÁ•½˜Á•ÉÍ¥ÍÑ¹Ñ•ÉÁÉ¥Í•á•ÕÑ¥½¹A±…¸ì(€€€™…¥±I••¥ÁÐüèÑåÁ•½˜™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁÐì(€€€‘•ÁÌüèAÉ½Ù¥‘•É1¥™•å±••ÁÌì(€ô€ôíô°(¤€ôøì(€½¹ÍÐ½ÁÑ¥½¹Ì€ô¡…¹‘±•=ÁÑ¥½¹Ì¡É•ÅÕ•ÍÐ¤ì(€¥˜€¡½ÁÑ¥½¹Ì¤É•ÑÕÉ¸½ÁÑ¥½¹Ìì(€¥˜€¡É•ÅÕ•ÍÐ¹µ•Ñ¡½€„ôô€A=MPœ¤ì(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤¤°€ÐÀÔ¤ì(€ô(€±•Ð•¹Ù•±½Á”èAÉ½Ù¥‘•É1¥™•å±•I•½Ù•Éå¹Ù•±½Á”ì(€ÑÉäì(€€€•¹Ù•±½Á”€ôÁ…ÉÍ•AÉ½Ù¥‘•É1¥™•å±•I•½Ù•Éå¹Ù•±½Á”¡…Ý…¥ÐÉ•ÅÕ•ÍÐ¹©Í½¸ ¤¤ì(€ô…Ñ ì(€€€½¹ÍÐ¥¹Ù…±¥€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡¥¹Ù…±¥¤°ÍÑ…ÑÕÍ½È¡¥¹Ù…±¥¤¤ì(€ô(€ÑÉäì(€€€½¹ÍÐ…Ñ½È€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ•Ñ½Èñð•ÑÕÑ¡UÍ•È¤¡É•ÅÕ•ÍÐ¤ì(€€€½¹ÍÐÍ½Á”è¹Ñ•ÉÁÉ¥Í•I••¥ÁÑM½Á”€ôì(€€€€€…Ñ½É%è…Ñ½È¹¥°(€€€€€½É…¹¥é…Ñ¥½¹%è•¹Ù•±½Á”¹½É…¹¥é…Ñ¥½¹%°(€€€€€Ý½É­ÍÁ…•%è•¹Ù•±½Á”¹Ý½É­ÍÁ…•%°(€€€ôì(€€€½¹ÍÐìÉ••¥ÁÐ°½Ý¹Íá•ÕÑ¥½¸ô€ô…Ý…¥Ð€ (€€€€€½Ù•ÉÉ¥‘•Ì¹±…¥µI•½Ù•ÉåI••¥ÁÐñð±…¥µAÉ½Ù¥‘•É1¥™•å±•I•½Ù•ÉåI••¥ÁÐ(€€€€¤¡Í½Á”°•¹Ù•±½Á”¤ì(€€€¥˜€¡É••¥ÁÐ¹ÍÑ…ÑÕÌ€ôôô€‰±½­•œ¤ì(€€€€€…ÍÍ•ÉÑAÉ½Ù¥‘•ÉI•½Ù•ÉåQ•Éµ¥¹…°¡É••¥ÁÐ¤ì(€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ì½¬èÑÉÕ”°Ñ•Éµ¥¹…°èÑÉÕ”ô°€ÈÀÀ¤ì(€€€ô(€€€¥˜€ …½Ý¹Íá•ÕÑ¥½¸¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È =559}%9}AI=IMLœ¤ì((€€€½¹ÍÐ‘•ÁÌ€ô½Ù•ÉÉ¥‘•Ì¹‘•ÁÌñðÉ•…Ñ•AÉ½Ù¥‘•É1¥™•å±••ÁÌ (€€€€€‰Õ¥±‘¹Ñ•ÉÁÉ¥Í•AÉ½Ù¥‘•ÉI½ÕÑ•‰•ÁÌ¡¥Í±±½Ý•‘AÉ½Ù¥‘•É¹‘Á½¥¹Ð¤°(€€€€¤ì(€€€½¹ÍÐÁ•ÉÍ¥ÍÑA±…¸€ô½Ù•ÉÉ¥‘•Ì¹Á•ÉÍ¥ÍÑA±…¸ñðÁ•ÉÍ¥ÍÑ¹Ñ•ÉÁÉ¥Í•á•ÕÑ¥½¹A±…¸ì(€€€½¹ÍÐ•á•ÕÑ¥½¸€ôì(€€€€€É••¥ÁÑ%èÉ••¥ÁÐ¹¥°(€€€€€•á•ÕÑ¥½¹Q½­•¸èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}Ñ½­•¸°(€€€€€•á•ÕÑ¥½¹•¹”èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}™•¹”°(€€€€€Á±…¸èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ñðíô°(€€€€€…Íå¹ŒÁ•ÉÍ¥ÍÑA±…¸¡Á±…¸è)Í½¹=‰©•Ð¤ì(€€€€€€€½¹ÍÐÁ±…¹¹•€ô…Ý…¥ÐÁ•ÉÍ¥ÍÑA±…¸¡É••¥ÁÐ°Í½Á”°Á±…¸¤ì(€€€€€€€É••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸€ôÁ±…¹¹•¹•á•ÕÑ¥½¹}Á±…¸ñðíôì(€€€€€€€É•ÑÕÉ¸É••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ì(€€€€€ô°(€€€ôì(€€€…Ý…¥ÐÉ•½Ù•ÉAÉ½Ù¥‘•É1¥™•å±•5…¹…•‘M•É•Ð¡‘•ÁÌ°Í½Á”°•á•ÕÑ¥½¸¤ì(€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€½¹ÍÐÑ•Éµ¥¹…°€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹™…¥±I••¥ÁÐñð™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¤ (€€€€€É••¥ÁÐ°(€€€€€Í½Á”°(€€€€€ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°(€€€€€ÑÉÕ”°(€€€€€…Íå¹Œ€ ¤€ôøÍ½Á”°(€€€€¤ì(€€€…ÍÍ•ÉÑAÉ½Ù¥‘•ÉI•½Ù•ÉåQ•Éµ¥¹…°¡Ñ•Éµ¥¹…°¤ì(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ì½¬èÑÉÕ”°Ñ•Éµ¥¹…°èÑÉÕ”ô°€ÈÀÀ¤ì(€ô…Ñ €¡•ÉÉ½È¤ì(€€€½¹ÍÐÍ…™•ÉÉ½È€ô•ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È(€€€€€€ü•ÉÉ½È(€€€€€€è•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•I••¥ÁÑÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€=559}%9}AI=IMLœ(€€€€€€€€ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È =559}%9}AI=IMLœ¤(€€€€€€€€è¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AIM%MQ9}U9Y%1	1œ¤ì(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡Í…™•ÉÉ½È¤°ÍÑ…ÑÕÍ½È¡Í…™•ÉÉ½È¤¤ì(€ô)ôì()•áÁ½ÉÐ½¹ÍÐÁÉ½Ù¥‘•É1¥™•å±•MÑ…ÑÕÍ½ÉQ•Éµ¥¹…±I••¥ÁÐ€ô€¡É••¥ÁÐè¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Ü¤€ôøì(€½¹ÍÐÉ•ÍÁ½¹Í•ÉÉ½È€ô¥ÍI•½É¡É••¥ÁÐ¹É•ÍÁ½¹Í”ü¹•ÉÉ½È¤€üÉ••¥ÁÐ¹É•ÍÁ½¹Í”¹•ÉÉ½È¹½‘”€èÕ¹‘•™¥¹•ì4(€¥˜€¡ÑåÁ•½˜É•ÍÁ½¹Í•ÉÉ½È€„ôô€ÍÑÉ¥¹œœ¤É•ÑÕÉ¸€ÐÀäì4(€½¹ÍÐ­¹½Ý¸€ô¹•ÜM•Ð¡l4(€€€€%9Y1%}IEUMPœ°€Q99Q}MM}9%œ°€AI5%MM%=9}9%œ°€IM=UI}9=Q}=U9œ°4(€€€€IM=UI}=91%Pœ°€MIQ}	-9}IEU%Iœ°€MIQ}U9Y%1	1œ°€Y1%Q%=9}%1œ°4(€€€€AI=Y%I}	1=-œ°€AIM%MQ9}U9Y%1	1œ°€UQ!=I%iQ%=9}MQ1œ°€%5A=Q9e}=91%Pœ°4(€€€€=559}%9}AI=IMLœ°€I%AQ}%91%iQ%=9}%1œ°4(€t¤ì4(€É•ÑÕÉ¸­¹½Ý¸¹¡…Ì¡É•ÍÁ½¹Í•ÉÉ½È¤4(€€€€üÍÑ…ÑÕÍ½È¡¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È¡É•ÍÁ½¹Í•ÉÉ½È…ÌAÉ½Ù¥‘•É1¥™•å±•ÉÉ½Él½‘”t¤¤4(€€€€è€ÐÀäì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä€ô€¡•ÉÉ½ÈèAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È¤€ôø€¡ì(€½¬è™…±Í”°4(€•ÉÉ½Èèì4(€€€½‘”è•ÉÉ½È¹½‘”°4(€€€µ•ÍÍ…”è€Q¡”ÁÉ½Ù¥‘•È±¥™•å±”É•ÅÕ•ÍÐ½Õ±¹½Ð‰”½µÁ±•Ñ•¸œ°4(€ô°4)ô¤ì()½¹ÍÐÁÉ½Ù¥‘•É1¥™•å±•I•Í½ÕÉ•%€ô€¡É•ÍÕ±Ðè)Í½¹=‰©•Ð¤€ôøì(€¥˜€¡ÑåÁ•½˜É•ÍÕ±Ð¹É•Í½ÕÉ•%€„ôô€ÍÑÉ¥¹œœñð€…ÕÕ¥¹Ñ•ÍÐ¡É•ÍÕ±Ð¹É•Í½ÕÉ•%¤(€€€ñðÉ•ÍÕ±Ð¹ÁÉ½Ù¥‘•É½¹™¥%€„ôôÉ•ÍÕ±Ð¹É•Í½ÕÉ•%¤ì(€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È I%AQ}%91%iQ%=9}%1œ¤ì(€ô(€É•ÑÕÉ¸É•ÍÕ±Ð¹É•Í½ÕÉ•%ì)ôì()½¹ÍÐ…ÍÍ•ÉÑ½µµ¥ÑÑ•‘AÉ½Ù¥‘•ÉI••¥ÁÑ%‘•¹Ñ¥Ñä€ô€¡É••¥ÁÐè¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Ü¤€ôøì(€¥˜€¡É••¥ÁÐ¹ÍÑ…ÑÕÌ€„ôô€½µµ¥ÑÑ•œñð€…¥ÍI•½É¡É••¥ÁÐ¹É•ÍÁ½¹Í”¤¤ì(€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È I%AQ}%91%iQ%=9}%1œ¤ì(€ô(€½¹ÍÐÉ•Í½ÕÉ•%€ôÁÉ½Ù¥‘•É1¥™•å±•I•Í½ÕÉ•%¡É••¥ÁÐ¹É•ÍÁ½¹Í”¤ì(€¥˜€¡É••¥ÁÐ¹É•Í½ÕÉ•}¥€„ôôÉ•Í½ÕÉ•%¤ì(€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È I%AQ}%91%iQ%=9}%1œ¤ì(€ô(€É•ÑÕÉ¸É•Í½ÕÉ•%ì)ôì(4)•áÁ½ÉÐ½¹ÍÐ¡…¹‘±•AÉ½Ù¥‘•É1¥™•å±•I•ÅÕ•ÍÐ€ô…Íå¹Œ€ 4(€É•ÅÕ•ÍÐèI•ÅÕ•ÍÐ°4(€½Ù•ÉÉ¥‘•Ìèì4(€€€…ÕÑ¡•¹Ñ¥…Ñ”üè€¡É•ÅÕ•ÍÐèI•ÅÕ•ÍÐ°•¹Ù•±½Á”èAÉ½Ù¥‘•É1¥™•å±•¹Ù•±½Á”¤€ôøAÉ½µ¥Í”ñAÉ½Ù¥‘•É1¥™•å±•ÕÑ¡½É¥Ñäøì4(€€€‘•ÁÌüèAÉ½Ù¥‘•É1¥™•å±••ÁÌì(€€€±…¥µI••¥ÁÐüèÑåÁ•½˜±…¥µ¹Ñ•ÉÁÉ¥Í•I••¥ÁÐì(€€€É•±½…‘I••¥ÁÐüèÑåÁ•½˜É•±½…‘¹Ñ•ÉÁÉ¥Í•I••¥ÁÐì(€€€½µÁ±•Ñ•I••¥ÁÐüèÑåÁ•½˜½µÁ±•Ñ•¹Ñ•ÉÁÉ¥Í•I••¥ÁÐì(€€€™…¥±I••¥ÁÐüèÑåÁ•½˜™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁÐì(€€€•á•ÕÑ•½µµ…¹üèÑåÁ•½˜•á•ÕÑ•AÉ½Ù¥‘•É1¥™•å±•½µµ…¹ì(€ô€ôíô°(¤€ôøì(€½¹ÍÐ½ÁÑ¥½¹Ì€ô¡…¹‘±•=ÁÑ¥½¹Ì¡É•ÅÕ•ÍÐ¤ì4(€¥˜€¡½ÁÑ¥½¹Ì¤É•ÑÕÉ¸½ÁÑ¥½¹Ìì4(€¥˜€¡É•ÅÕ•ÍÐ¹µ•Ñ¡½€„ôô€A=MPœ¤ì4(€€€½¹ÍÐ•ÉÉ½È€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡•ÉÉ½È¤°€ÐÀÔ¤ì4(€ô4(€±•Ð±…¥µ•‘I••¥ÁÐè¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Üð¹Õ±°€ô¹Õ±°ì4(€±•Ð±…¥µ•‘ÕÑ¡½É¥ÑäèAÉ½Ù¥‘•É1¥™•å±•ÕÑ¡½É¥Ñäð¹Õ±°€ô¹Õ±°ì4(€±•Ð±…¥µ•‘=Á•É…Ñ¥½¸èAÉ½Ù¥‘•É1¥™•å±•=Á•É…Ñ¥½¸ð¹Õ±°€ô¹Õ±°ì4(€±•Ð±…¥µ•‘¹Ù•±½Á”èAÉ½Ù¥‘•É1¥™•å±•¹Ù•±½Á”ð¹Õ±°€ô¹Õ±°ì4(€ÑÉäì4(€€€½¹ÍÐ•¹Ù•±½Á”€ôÁ…ÉÍ•AÉ½Ù¥‘•É1¥™•å±•¹Ù•±½Á”¡…Ý…¥ÐÉ•ÅÕ•ÍÐ¹©Í½¸ ¤¤ì4(€€€½¹ÍÐ…ÕÑ¡•¹Ñ¥…Ñ”€ô½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”ì(€€€½¹ÍÐ…ÕÑ¡½É¥Ñä€ô…Ý…¥Ð…ÕÑ¡•¹Ñ¥…Ñ”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”¤ì(€€€…ÍÍ•ÉÑAÉ½Ù¥‘•É1¥™•å±•=Á•É…Ñ¥½¹ÕÑ¡½É¥Ñä¡•¹Ù•±½Á”¹½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä¤ì(€€€½¹ÍÐÉ•ÅÕ•ÍÑ!…Í €ô…Ý…¥ÐÁÉ½Ù¥‘•É1¥™•å±•I•ÅÕ•ÍÑ!…Í ¡•¹Ù•±½Á”¤ì4(€€€½¹ÍÐìÉ••¥ÁÐ°½Ý¹Íá•ÕÑ¥½¸ô€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹±…¥µI••¥ÁÐñð±…¥µ¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¤¡…ÕÑ¡½É¥Ñä°ì(€€€€€½µµ…¹‘QåÁ”è•¹Ù•±½Á”¹½Á•É…Ñ¥½¸°4(€€€€€¥‘•µÁ½Ñ•¹å-•äè•¹Ù•±½Á”¹¥‘•µÁ½Ñ•¹å-•ä°4(€€€€€É•ÅÕ•ÍÑ%è•¹Ù•±½Á”¹É•ÅÕ•ÍÑ%°4(€€€€€É•ÅÕ•ÍÑ!…Í °4(€€€ô¤ì(€€€¥˜€¡É••¥ÁÐ¹ÍÑ…ÑÕÌ€ôôô€½µµ¥ÑÑ•œ¤ì(€€€€€…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì(€€€€€…ÍÍ•ÉÑ½µµ¥ÑÑ•‘AÉ½Ù¥‘•ÉI••¥ÁÑ%‘•¹Ñ¥Ñä¡É••¥ÁÐ¤ì(€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ì½¬èÑÉÕ”°É•Á±…å•èÑÉÕ”°€¸¸¸¡É••¥ÁÐ¹É•ÍÁ½¹Í”ñðíô¤ô°€ÈÀÀ¤ì(€€€ô4(€€€¥˜€¡É••¥ÁÐ¹ÍÑ…ÑÕÌ€ôôô€™…¥±•œñðÉ••¥ÁÐ¹ÍÑ…ÑÕÌ€ôôô€‰±½­•œ¤ì4(€€€€€…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì4(€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í” 4(€€€€€€€ì€¸¸¸¡É••¥ÁÐ¹É•ÍÁ½¹Í”ñðÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI=Y%I}	1=-œ¤¤¤°É•Á±…å•èÑÉÕ”ô°4(€€€€€€€ÁÉ½Ù¥‘•É1¥™•å±•MÑ…ÑÕÍ½ÉQ•Éµ¥¹…±I••¥ÁÐ¡É••¥ÁÐ¤°4(€€€€€€¤ì4(€€€ô4(€€€¥˜€ …½Ý¹Íá•ÕÑ¥½¸¤ì4(€€€€€…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì4(€€€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È =559}%9}AI=IMLœ¤ì4(€€€ô4(€€€±…¥µ•‘I••¥ÁÐ€ôÉ••¥ÁÐì4(€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…ÕÑ¡½É¥Ñäì4(€€€±…¥µ•‘=Á•É…Ñ¥½¸€ô•¹Ù•±½Á”¹½Á•É…Ñ¥½¸ì4(€€€±…¥µ•‘¹Ù•±½Á”€ô•¹Ù•±½Á”ì4(€€€½¹ÍÐ‘•ÁÌ€ô½Ù•ÉÉ¥‘•Ì¹‘•ÁÌñðÉ•…Ñ•AÉ½Ù¥‘•É1¥™•å±••ÁÌ 4(€€€€€‰Õ¥±‘¹Ñ•ÉÁÉ¥Í•AÉ½Ù¥‘•ÉI½ÕÑ•‰•ÁÌ¡¥Í±±½Ý•‘AÉ½Ù¥‘•É¹‘Á½¥¹Ð¤°4(€€€€¤ì4(€€€½¹ÍÐ•á•ÕÑ¥½¸€ôì4(€€€€€É••¥ÁÑ%èÉ••¥ÁÐ¹¥°4(€€€€€•á•ÕÑ¥½¹Q½­•¸èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}Ñ½­•¸°4(€€€€€•á•ÕÑ¥½¹•¹”èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}™•¹”°4(€€€€€Á±…¸èÉ••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ñðíô°4(€€€€€…Íå¹ŒÁ•ÉÍ¥ÍÑA±…¸¡Á±…¸è)Í½¹=‰©•Ð¤ì4(€€€€€€€½¹ÍÐÁ±…¹¹•€ô…Ý…¥ÐÁ•ÉÍ¥ÍÑ¹Ñ•ÉÁÉ¥Í•á•ÕÑ¥½¹A±…¸¡É••¥ÁÐ°…ÕÑ¡½É¥Ñä°Á±…¸¤ì4(€€€€€€€É••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸€ôÁ±…¹¹•¹•á•ÕÑ¥½¹}Á±…¸ñðíôì4(€€€€€€€É•ÑÕÉ¸É••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ì4(€€€€€ô°4(€€€ôì4(€€€½¹ÍÐÉ•ÍÕ±Ð€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹•á•ÕÑ•½µµ…¹ñð•á•ÕÑ•AÉ½Ù¥‘•É1¥™•å±•½µµ…¹¤ (€€€€€•¹Ù•±½Á”¹½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°•¹Ù•±½Á”¹Á…å±½…°‘•ÁÌ°•á•ÕÑ¥½¸°(€€€€¤ì(€€€½¹ÍÐÉ•Í½ÕÉ•%€ôÁÉ½Ù¥‘•É1¥™•å±•I•Í½ÕÉ•%¡É•ÍÕ±Ð¤ì(€€€½¹ÍÐ™¥¹…±ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì(€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô™¥¹…±ÕÑ¡½É¥Ñäì(€€€½¹ÍÐ½µÁ±•Ñ•€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹½µÁ±•Ñ•I••¥ÁÐñð½µÁ±•Ñ•¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¤ (€€€€€É••¥ÁÐ°(€€€€€™¥¹…±ÕÑ¡½É¥Ñä°(€€€€€É•ÍÕ±Ð°(€€€€€É•Í½ÕÉ•%°(€€€€€…Íå¹Œ€ ¤€ôøì(€€€€€€€½¹ÍÐÉ•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì(€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ôÉ•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñäì(€€€€€€€É•ÑÕÉ¸É•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñäì(€€€€€ô°(€€€€¤ì(€€€…ÍÍ•ÉÑ½µµ¥ÑÑ•‘AÉ½Ù¥‘•ÉI••¥ÁÑ%‘•¹Ñ¥Ñä¡½µÁ±•Ñ•¤ì(€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍÐ°•¹Ù•±½Á”°…ÕÑ¡•¹Ñ¥…Ñ”¤ì(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ì½¬èÑÉÕ”°É•Á±…å•è™…±Í”°€¸¸¸¡½µÁ±•Ñ•¹É•ÍÁ½¹Í”ñðÉ•ÍÕ±Ð¤ô°€ÈÀÀ¤ì(€ô…Ñ €¡•ÉÉ½È¤ì4(€€€½¹ÍÐÍ…™•ÉÉ½È€ô•ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È€ü•ÉÉ½È4(€€€€€€è•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•I••¥ÁÑÉÉ½È€ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È 4(€€€€€€€•ÉÉ½È¹½‘”€ôôô€=559}U9Y%1	1œ€ü€AIM%MQ9}U9Y%1	1œ€è•ÉÉ½È¹½‘”°4(€€€€€€¤4(€€€€€€€€è¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AIM%MQ9}U9Y%1	1œ¤ì4(€€€¥˜€¡±…¥µ•‘I••¥ÁÐ€˜˜±…¥µ•‘ÕÑ¡½É¥Ñä€˜˜±…¥µ•‘=Á•É…Ñ¥½¸€˜˜±…¥µ•‘¹Ù•±½Á”¤ì(€€€€€ÑÉäì(€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€¤ì(€€€€€€€½¹ÍÐÉ•½Ù•É•€ô…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹É•±½…‘I••¥ÁÐñðÉ•±½…‘¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¤¡±…¥µ•‘I••¥ÁÐ°±…¥µ•‘ÕÑ¡½É¥Ñä¤ì(€€€€€€€¥˜€¡É•½Ù•É•¹ÍÑ…ÑÕÌ€ôôô€½µµ¥ÑÑ•œ¤ì(€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€¤ì(€€€€€€€€€…ÍÍ•ÉÑ½µµ¥ÑÑ•‘AÉ½Ù¥‘•ÉI••¥ÁÑ%‘•¹Ñ¥Ñä¡É•½Ù•É•¤ì(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ì½¬èÑÉÕ”°É•Á±…å•èÑÉÕ”°€¸¸¸¡É•½Ù•É•¹É•ÍÁ½¹Í”ñðíô¤ô°€ÈÀÀ¤ì(€€€€€€€ô4(€€€€€€€¥˜€¡É•½Ù•É•¹ÍÑ…ÑÕÌ€ôôô€™…¥±•œñðÉ•½Ù•É•¹ÍÑ…ÑÕÌ€ôôô€‰±½­•œ¤ì(€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€¤ì(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í” (€€€€€€€€€€€ì€¸¸¸¡É•½Ù•É•¹É•ÍÁ½¹Í”ñðÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡Í…™•ÉÉ½È¤¤°É•Á±…å•èÑÉÕ”ô°4(€€€€€€€€€€€ÁÉ½Ù¥‘•É1¥™•å±•MÑ…ÑÕÍ½ÉQ•Éµ¥¹…±I••¥ÁÐ¡É•½Ù•É•¤°4(€€€€€€€€€€¤ì4(€€€€€€€ô4(€€€€€ô…Ñ €¡É•½Ù•ÉåÉÉ½È¤ì4(€€€€€€€¥˜€¡É•½Ù•ÉåÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È€˜˜É•½Ù•ÉåÉÉ½È¹½‘”€ôôô€AI5%MM%=9}9%œ¤ì4(€€€€€€€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì4(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°ÍÑ…ÑÕÍ½È¡‘•¹¥•¤¤ì4(€€€€€€€ô(€€€€€€€¥˜€¡Í…™•ÉÉ½È¹½‘”€ôôô€I%AQ}%91%iQ%=9}%1œ¤ì(€€€€€€€€€ÑÉäì(€€€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€€€¤ì(€€€€€€€€€ô…Ñ ì(€€€€€€€€€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°ÍÑ…ÑÕÍ½È¡‘•¹¥•¤¤ì(€€€€€€€€€ô(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡Í…™•ÉÉ½È¤°ÍÑ…ÑÕÍ½È¡Í…™•ÉÉ½È¤¤ì(€€€€€€€ô(€€€€€ô4(€€€ô4(€€€¥˜€¡±…¥µ•‘I••¥ÁÐ€˜˜±…¥µ•‘ÕÑ¡½É¥Ñä€˜˜±…¥µ•‘¹Ù•±½Á”(€€€€€€˜˜Í…™•ÉÉ½È¹½‘”€„ôô€I%AQ}%91%iQ%=9}%1œ(€€€€€€˜˜Í…™•ÉÉ½È¹½‘”€„ôô€UQ!=I%iQ%=9}MQ1œ¤ì(€€€€€½¹ÍÐ•áÑ•É¹…±™™•ÑA±…¹¹•€ô±…¥µ•‘I••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹•áÑ•É¹…±M•É•Ñ]É¥ÑÑ•¸€ôôôÑÉÕ”4(€€€€€€€ñð€¡±…¥µ•‘I••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹Í•É•Ñ=Ý¹•ÉÍ¡¥À€ôôô€µ…¹…•‘}ÝÉ¥Ñ”œ4(€€€€€€€€€€˜˜±…¥µ•‘I••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹Í•É•ÑA±…¹I••¥ÁÑ%€ôôô±…¥µ•‘I••¥ÁÐ¹¥4(€€€€€€€€€€˜˜€¡±…¥µ•‘I••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹ÝÉ¥Ñ•MÑ…Ñ”€ôôô€Á±…¹¹•œ4(€€€€€€€€€€€ñð±…¥µ•‘I••¥ÁÐ¹•á•ÕÑ¥½¹}Á±…¸ü¹ÝÉ¥Ñ•MÑ…Ñ”€ôôô€ÝÉ¥ÑÑ•¸œ¤¤ì4(€€€€€¥˜€ „¡Í…™•ÉÉ½È¹½‘”€ôôô€AIM%MQ9}U9Y%1	1œ€˜˜•áÑ•É¹…±™™•ÑA±…¹¹•¤¤ì(€€€€€€€ÑÉäì(€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€¤ì(€€€€€€€€€…Ý…¥Ð€¡½Ù•ÉÉ¥‘•Ì¹™…¥±I••¥ÁÐñð™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¤ (€€€€€€€€€€€±…¥µ•‘I••¥ÁÐ°(€€€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä°(€€€€€€€€€€€ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡Í…™•ÉÉ½È¤°(€€€€€€€€€€€Í…™•ÉÉ½È¹½‘”€ôôô€AI5%MM%=9}9%œñðÍ…™•ÉÉ½È¹½‘”€ôôô€Q99Q}MM}9%œñðÍ…™•ÉÉ½È¹½‘”€ôôô€AI=Y%I}	1=-œ°(€€€€€€€€€€€…Íå¹Œ€ ¤€ôøì(€€€€€€€€€€€€€½¹ÍÐÉ•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ôÉ•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñäì(€€€€€€€€€€€€€É•ÑÕÉ¸É•½¹¥±¥…Ñ¥½¹ÕÑ¡½É¥Ñäì(€€€€€€€€€€€ô°(€€€€€€€€€€¤ì(€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€¤ì(€€€€€€€ô…Ñ €¡™¥¹…±¥é…Ñ¥½¹ÉÉ½È¤ì(€€€€€€€€€¥˜€¡™¥¹…±¥é…Ñ¥½¹ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È(€€€€€€€€€€€€˜˜™¥¹…±¥é…Ñ¥½¹ÉÉ½È¹½‘”€ôôô€AI5%MM%=9}9%œ¤ì(€€€€€€€€€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°ÍÑ…ÑÕÍ½È¡‘•¹¥•¤¤ì(€€€€€€€€€ô(€€€€€€€€€½¹ÍÐ™¥¹…±¥é…Ñ¥½¸€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È I%AQ}%91%iQ%=9}%1œ¤ì(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡™¥¹…±¥é…Ñ¥½¸¤°ÍÑ…ÑÕÍ½È¡™¥¹…±¥é…Ñ¥½¸¤¤ì(€€€€€€€ô(€€€€€ô•±Í”ì(€€€€€€€ÑÉäì(€€€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€€€¤ì(€€€€€€€ô…Ñ ì(€€€€€€€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°ÍÑ…ÑÕÍ½È¡‘•¹¥•¤¤ì(€€€€€€€ô(€€€€€ô(€€€ô(€€€¥˜€¡±…¥µ•‘I••¥ÁÐ€˜˜±…¥µ•‘ÕÑ¡½É¥Ñä€˜˜±…¥µ•‘¹Ù•±½Á”¤ì(€€€€€ÑÉäì(€€€€€€€±…¥µ•‘ÕÑ¡½É¥Ñä€ô…Ý…¥ÐÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±” (€€€€€€€€€É•ÅÕ•ÍÐ°±…¥µ•‘¹Ù•±½Á”°½Ù•ÉÉ¥‘•Ì¹…ÕÑ¡•¹Ñ¥…Ñ”ñð…ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”°(€€€€€€€€¤ì(€€€€€ô…Ñ ì(€€€€€€€½¹ÍÐ‘•¹¥•€ô¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡‘•¹¥•¤°ÍÑ…ÑÕÍ½È¡‘•¹¥•¤¤ì(€€€€€ô(€€€ô(€€€É•ÑÕÉ¸©Í½¹I•ÍÁ½¹Í”¡ÁÉ½Ù¥‘•É1¥™•å±•ÉÉ½É	½‘ä¡Í…™•ÉÉ½È¤°ÍÑ…ÑÕÍ½È¡Í…™•ÉÉ½È¤¤ì(€ô4)ôì4

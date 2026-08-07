@@ -217,9 +217,11 @@ test('provider secret actions recover stale authority as the same in-memory brow
 
   expect(fixture.providerRecoveryCounts()).toEqual({
     managedSecretWrites: 2,
+    managedSecretCleanups: 0,
     providerValidations: 2,
     providerEffects: 2,
     strandedManagedSecrets: 0,
+    claimedReceipts: 0,
   });
 
   fixture.revokeProviderAuthorityOnStaleNext('provider.validate');
@@ -229,6 +231,41 @@ test('provider secret actions recover stale authority as the same in-memory brow
   expect(fixture.commandPayloads.filter(body => body.operation === 'provider.validate')).toHaveLength(validationCount + 1);
   expect(fixture.authorityRecheckPayloads.filter(body => body.operation === 'provider.validate')).toHaveLength(1);
   fixture.restoreProviderAuthority();
+
+  for (const action of [
+    { operation: 'provider.secret.bind' as const, button: /bind key securely/i, key: 'sk-private-browser-revoked-bind' },
+    { operation: 'provider.secret.rotate' as const, button: /rotate key/i, key: 'sk-private-browser-revoked-rotate' },
+  ]) {
+    const before = fixture.providerRecoveryCounts();
+    fixture.revokeProviderAuthorityOnStaleNext(action.operation);
+    fixture.transportFailProviderRecoveryNext();
+    await keyInput.fill(action.key);
+    await controls.getByRole('button', { name: action.button }).click();
+    await expect(workspace(page).getByRole('alert')).toContainText(/do not have.*capability|permission/i);
+    await expect(keyInput).toHaveValue('');
+    const mutations = fixture.commandPayloads.filter(body => body.operation === action.operation);
+    const recoveries = fixture.recoveryPayloads.filter(body => body.operation === action.operation);
+    expect(mutations.slice(-1)).toHaveLength(1);
+    expect(recoveries.slice(-2)).toHaveLength(2);
+    expect(recoveries.at(-1)).toEqual(recoveries.at(-2));
+    expect(recoveries.at(-1)).toEqual({
+      operation: action.operation,
+      organizationId: IDS.organization,
+      workspaceId: IDS.workspace,
+      providerConfigId: IDS.provider,
+      requestId: mutations.at(-1)?.requestId,
+      idempotencyKey: mutations.at(-1)?.idempotencyKey,
+    });
+    expect(JSON.stringify(recoveries.slice(-2))).not.toMatch(PRIVATE_VALUE);
+    const after = fixture.providerRecoveryCounts();
+    expect(after.managedSecretWrites - before.managedSecretWrites).toBe(1);
+    expect(after.managedSecretCleanups - before.managedSecretCleanups).toBe(1);
+    expect(after.providerValidations - before.providerValidations).toBe(0);
+    expect(after.providerEffects - before.providerEffects).toBe(0);
+    expect(after.strandedManagedSecrets).toBe(0);
+    expect(after.claimedReceipts).toBe(0);
+    fixture.restoreProviderAuthority();
+  }
 
   const persisted = await page.evaluate(() => ({
     local: Object.entries(localStorage),

@@ -138,6 +138,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   const operations: string[] = [];
   const commandPayloads: Array<Record<string, unknown>> = [];
   const authorityRecheckPayloads: Array<Record<string, unknown>> = [];
+  const recoveryPayloads: Array<Record<string, unknown>> = [];
   const unexpectedRequests: string[] = [];
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
@@ -145,8 +146,11 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   let nextProviderStale: { operation: string; revokeAuthority: boolean } | undefined;
   let providerAuthorityRevoked = false;
   let authorityRecheckTransportFailures = 0;
+  let recoveryTransportFailures = 0;
   const managedSecretPlans = new Set<string>();
+  const terminalizedSecretPlans = new Set<string>();
   let managedSecretWrites = 0;
+  let managedSecretCleanups = 0;
   let providerValidations = 0;
   let providerEffects = 0;
 
@@ -161,6 +165,26 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     const request = route.request();
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith('/enterprise-provider-lifecycle-recovery')) {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      recoveryPayloads.push(body);
+      const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : '';
+      if (managedSecretPlans.delete(key)) {
+        managedSecretCleanups += 1;
+        terminalizedSecretPlans.add(key);
+      }
+      if (recoveryTransportFailures > 0) {
+        recoveryTransportFailures -= 1;
+        return route.abort('failed');
+      }
+      return route.fulfill({
+        status: terminalizedSecretPlans.has(key) ? 200 : 503,
+        headers,
+        body: JSON.stringify(terminalizedSecretPlans.has(key)
+          ? { ok: true, terminal: true }
+          : { ok: false, error: { code: 'COMMAND_IN_PROGRESS' } }),
+      });
+    }
     if (pathname.endsWith('/enterprise-provider-lifecycle-authority')) {
       authorityRecheckPayloads.push(request.postDataJSON() as Record<string, unknown>);
       if (authorityRecheckTransportFailures > 0) {
@@ -344,6 +368,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     operations,
     commandPayloads,
     authorityRecheckPayloads,
+    recoveryPayloads,
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     transportFailNext(operation: string) { nextTransportFailure = operation; },
@@ -356,13 +381,18 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     transportFailProviderAuthorityRecheckNext(count = 1) {
       authorityRecheckTransportFailures = count;
     },
+    transportFailProviderRecoveryNext(count = 1) {
+      recoveryTransportFailures = count;
+    },
     restoreProviderAuthority() { providerAuthorityRevoked = false; },
     providerRecoveryCounts() {
       return {
         managedSecretWrites,
+        managedSecretCleanups,
         providerValidations,
         providerEffects,
         strandedManagedSecrets: managedSecretPlans.size,
+        claimedReceipts: managedSecretPlans.size,
       };
     },
     recoverProjection() { projectionFailure = undefined; },

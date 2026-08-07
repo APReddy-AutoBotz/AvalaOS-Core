@@ -32,6 +32,10 @@ const reviewActionReplaySql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql'),
   'utf8',
 );
+const providerCleanupRecoverySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260807130000_provider_secret_cleanup_recovery.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -92,6 +96,23 @@ check(authorizationAttemptSql.includes('enterprise_ai_record_effect'), 'Correcte
 check(secretWriteIntentSql.includes("old_write_state='planned' AND new_write_state='written'"), 'Receipt plans must permit only the managed planned-to-written state advance.');
 check(secretWriteIntentSql.includes("p_plan @> (receipt.execution_plan - 'writeState')"), 'Write-state advancement must preserve every other receipt-plan field.');
 check(secretWriteIntentSql.includes('ENTERPRISE_AI_STALE_EXECUTION_FENCE'), 'Secret intent persistence must retain execution fencing.');
+for (const required of [
+  'enterprise_ai_claim_provider_secret_cleanup',
+  "p_operation NOT IN ('provider.secret.bind','provider.secret.rotate')",
+  'actor_id=p_actor',
+  'initial_request_id IS DISTINCT FROM p_request',
+  "plan->>'secretOwnership' IS DISTINCT FROM 'managed_write'",
+  "plan->>'secretPlanReceiptId' IS DISTINCT FROM receipt.id::text",
+  "plan->>'providerConfigId' IS DISTINCT FROM p_provider_config_id::text",
+  "secret_ref=plan->>'secretReference' AND status='active'",
+  "effect_key='command'",
+  'execution_fence=execution_fence+1',
+  "'cleanupTerminalCode','PERMISSION_DENIED'",
+  "receipt.response#>>'{error,code}' IS DISTINCT FROM 'PERMISSION_DENIED'",
+]) check(providerCleanupRecoverySql.includes(required), `Provider cleanup recovery is missing ${required}.`);
+check(providerCleanupRecoverySql.includes('FROM PUBLIC,anon,authenticated'), 'Provider cleanup recovery must reject browser roles.');
+check(providerCleanupRecoverySql.includes('TO service_role'), 'Provider cleanup recovery must remain service-only.');
+check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupRecoverySql), 'Provider cleanup recovery must not accept raw key material.');
 check(providerLifecycleSource.indexOf("secretOwnership: 'managed_write'") < providerLifecycleSource.indexOf('await deps.secretBackend.write'), 'Managed secret ownership must be persisted before the external write.');
 check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === execution.receiptId"), 'Cleanup ownership must be bound to the current receipt plan.');
 check(providerLifecycleSource.includes('await fingerprintProviderSecret(existing) !== safeFingerprint'), 'Cleanup must verify the resolved secret fingerprint before deletion.');
@@ -165,9 +186,7 @@ const extractionCommand = commandSource.slice(
 check(!/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly insert its job row.');
 check(!/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly patch terminal job state.');
 check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job_v2') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
-check(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('), 'Recovery must read the immutable route plan before any default route resolution.');
-check(extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }'), 'Recovery must request the exact planned route and model.');
-check(extractionRouteStagingSql.includes("p_result->>'resourceId' IS DISTINCT FROM p_job_id::text"), 'Staging must bind response resourceId to the planned extraction job.');
+check(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('), 'Recovery must read×_-¢G§²ÚîÆ­yÓourceId to the planned extraction job.');
 check(extractionCommand.includes('const safeResult = { resourceId: jobId, jobId,'), 'Extraction must return an explicit canonical job resourceId.');
 check(commandSource.includes("disposition = 'preserve_claimed_receipt'"), 'Transport uncertainty must carry an explicit internal recoverable disposition.');
 check(!commandSource.includes("typeof claimedReceipt.execution_plan?.jobId === 'string'"), 'Receipt recovery must not infer transport uncertainty from execution-plan shape.');

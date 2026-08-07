@@ -194,6 +194,28 @@ const invokeProviderLifecycle = async <T>(input: {
           throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
         }
         if (!authorityData.authorized) {
+          if ((input.operation === 'provider.secret.bind' || input.operation === 'provider.secret.rotate')
+            && providerConfigId) {
+            const recoveryBody = {
+              operation: input.operation,
+              organizationId: input.organizationId,
+              workspaceId: input.workspaceId,
+              providerConfigId,
+              requestId,
+              idempotencyKey,
+            };
+            let recoveryAttempt = 0;
+            for (;;) {
+              const recoveryInvocation = await supabase.functions.invoke(
+                'enterprise-provider-lifecycle-recovery',
+                { body: recoveryBody },
+              );
+              const recoveryData = recoveryInvocation.data as { ok?: unknown; terminal?: unknown } | null;
+              if (!recoveryInvocation.error && recoveryData?.ok === true && recoveryData.terminal === true) break;
+              recoveryAttempt += 1;
+              await waitForProviderAuthorityRetry(Math.min(1_000, 50 * (2 ** Math.min(recoveryAttempt, 5))));
+            }
+          }
           throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
         }
         refreshedAuthorizationVersion = Number(authorityData.authorizationVersion);
