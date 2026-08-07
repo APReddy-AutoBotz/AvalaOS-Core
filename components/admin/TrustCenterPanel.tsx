@@ -14,6 +14,7 @@ import {
 } from '../../services/trustCenterPresentation';
 import { resolveRuntimeMode } from '../../services/runtimeMode';
 import { TrustAssuranceWorkspace } from './trust-assurance/TrustAssuranceWorkspace';
+import { TrustAssuranceConnectedWorkspace } from './trust-assurance/TrustAssuranceConnectedWorkspace';
 
 const statusStyles: Record<ProofStatus, string> = {
   demo: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200',
@@ -58,7 +59,7 @@ const TrustCenterPanel: React.FC = () => {
   const claimGroups = useMemo(() => groupClaimControlsByDomain(snapshot), [snapshot]);
   const blockedClaims = useMemo(() => getEvidenceRequiredOrBlockedClaims(snapshot), [snapshot]);
   if (runtime.status === 'blocked' || runtime.requiresServerAuthority) {
-    return <TrustAssuranceWorkspace state={{ kind: 'blocked' }} />;
+    return runtime.status === 'blocked' ? <TrustAssuranceWorkspace state={{ kind: 'blocked' }} /> : <TrustAssuranceConnectedWorkspace />;
   }
 
   return (

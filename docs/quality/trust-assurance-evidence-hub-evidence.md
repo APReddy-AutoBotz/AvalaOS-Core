@@ -31,3 +31,11 @@ No PR #221-owned file is changed. The AP-supplied publication audit finds zero m
 ## Unsupported boundaries
 
 No cloud, product, security, compliance, hosted, production, pilot, buyer, release-candidate, certification, incident, backup/restore, or deployment readiness is asserted. No live operation occurred.
+
+## Systemic hardening audit
+
+The pre-correction audit found the same browser-authority defect family across command payloads, reviews, snapshots, and publication: callers supplied canonical hashes or arbitrary selection JSON; the query endpoint always failed; the Admin surface had no server journey; the PostgreSQL script lacked Supabase bootstrap and executable domain scenarios; concurrent receipt claim lacked a logical-action lock; PostgREST errors could escape as generic failures; and browser tests rendered hand-authored HTML rather than the bounded component/client.
+
+The correction removes canonical/resource/snapshot hashes from accepted payloads, strictly decodes every operation, derives hashes/selections/review targets in PostgreSQL, re-resolves current evidence at publication, serializes receipt claims with an advisory transaction lock, exposes private fresh-authority internal and buyer projections, connects the Admin surface through strict clients, and replaces the static browser test with a real React/client harness. Deterministic pre-effect failures roll back and do not persist receipts; this is safe because no canonical effect occurred, current authority is rechecked before every attempt/replay, and a committed receipt remains the only replay authority.
+
+The disposable PostgreSQL harness now bootstraps roles plus `auth.users`/`auth.uid()`, creates and cleans five databases, and covers the full chain, accepted-main upgrade, populated upgrade, dirty rollback, executable Trust authority, server hashes, exact reviews, publication, replay/conflict, revocation/staleness, buyer projection, and audit rollback. Local PostgreSQL and Chromium remain blocked/not run; GitHub Actions is execution authority.

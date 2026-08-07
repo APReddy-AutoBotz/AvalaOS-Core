@@ -58,8 +58,9 @@ export interface InternalAssuranceProjection {
   readOnly: boolean;
   claims: readonly ClaimVersionProjection[];
   evidence: readonly EvidenceVersionProjection[];
+  relationships: readonly { claimVersionId: string; evidenceVersionId: string; relationship: EvidenceRelationship; rationale: string }[];
   reviewQueueCount: number;
-  snapshotHistory: readonly { snapshotId: string; snapshotHash: string; lifecycle: AssuranceLifecycle; createdAt: string }[];
+  snapshotHistory: readonly { snapshotId: string; snapshotHash: string; version: number; lifecycle: AssuranceLifecycle; createdAt: string }[];
   currentPublication: null | { publicationId: string; snapshotId: string; snapshotHash: string; publishedAt: string };
 }
 
@@ -89,4 +90,4 @@ export interface TrustCommandRequest {
 }
 
 export type TrustCommandResponse = { ok: true; replayed: boolean; resourceId: string; version: number; body: Record<string, unknown> } |
-  { ok: false; code: 'ACCESS_DENIED' | 'AUTHORIZATION_STALE' | 'VALIDATION_FAILED' | 'VERSION_CONFLICT' | 'IDEMPOTENCY_CONFLICT' | 'REVIEW_REQUIRED' | 'PUBLICATION_BLOCKED' | 'FEATURE_DISABLED'; message: string };
+  { ok: false; code: 'ACCESS_DENIED' | 'PERMISSION_DENIED' | 'AUTHORIZATION_STALE' | 'VALIDATION_FAILED' | 'VERSION_CONFLICT' | 'IDEMPOTENCY_CONFLICT' | 'REVIEW_REQUIRED' | 'PUBLICATION_BLOCKED' | 'FEATURE_DISABLED' | 'PERSISTENCE_UNAVAILABLE'; message: string };
