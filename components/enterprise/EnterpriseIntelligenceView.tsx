@@ -10,7 +10,7 @@ import {
   type EnterpriseApprovalResourceType,
   type EnterpriseIntelligenceProjection,
 } from '../../services/enterpriseIntelligence';
-import { bytesToBase64, enterpriseIntelligenceClient } from '../../services/enterpriseIntelligenceClient';
+import { bytesToBase64, enterpriseIntelligenceClient, getProviderLifecycleAuthorizationVersion } from '../../services/enterpriseIntelligenceClient';
 
 type TabId = 'controls' | 'intake' | 'review' | 'modernization' | 'handoff' | 'delivery' | 'monitor' | 'assemble';
 const tabs: Array<{ id: TabId; label: string; eyebrow: string }> = [
@@ -90,9 +90,13 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     setError('');
     setStatus('Submitting one server-authorized command.');
     try {
-      await action();
+      const result = await action();
       try {
-        const next = await enterpriseIntelligenceClient.loadProjection({ organizationId, workspaceId, expectedAuthorizationVersion: projection.authorizationVersion });
+        const next = await enterpriseIntelligenceClient.loadProjection({
+          organizationId,
+          workspaceId,
+          expectedAuthorizationVersion: getProviderLifecycleAuthorizationVersion(result) || projection.authorizationVersion,
+        });
         setProjection(next);
         setStatus(success);
       } catch (reloadError) {

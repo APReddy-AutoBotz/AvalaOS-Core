@@ -41,6 +41,7 @@ if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: 
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
 const client = read('services/enterpriseIntelligenceClient.ts');
+const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
 const providerResolver = read('supabase/functions/_shared/providerResolver.ts');
 const supabaseRpc = read('supabase/functions/_shared/supabase.ts');
 for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or_resume_evidence_extraction_job', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
@@ -66,9 +67,43 @@ for (const required of [
 if (client.includes('stableFingerprint(material)') || client.includes("subtle.digest('SHA-256'")) {
   throw new Error('Browser action idempotency keys must not be deterministic payload hashes.');
 }
+for (const pattern of [/localStorage/u, /sessionStorage/u, /indexedDB/u, /console\.(?:log|info|debug|warn|error)/u]) {
+  if (pattern.test(`${client}\n${view}`)) {
+    throw new Error(`Provider browser action code may not persist or log raw key material: ${pattern}.`);
+  }
+}
 if (!client.includes('createEnterpriseActionIdempotencyKey(input.commandType)')
   || !client.includes('createEnterpriseActionIdempotencyKey(input.operation)')) {
   throw new Error('Both command surfaces require fresh cryptographic per-action keys.');
+}
+const providerLifecycleClient = client.slice(
+  client.indexOf('const invokeProviderLifecycle'),
+  client.indexOf('const loadProjection'),
+);
+for (const required of [
+  'const requestId = createId()',
+  'const idempotencyKey = createEnterpriseActionIdempotencyKey(input.operation)',
+  'staleRecoveryAttempt <= 1',
+  "errorCode !== 'AUTHORIZATION_STALE'",
+  "refreshed.capabilities.includes('byok.manage')",
+  'expectedAuthorizationVersion = refreshed.authorizationVersion',
+  'activePayload.providerKey = undefined',
+]) {
+  if (!providerLifecycleClient.includes(required)) {
+    throw new Error(`Provider browser stale-authority recovery is missing ${required}.`);
+  }
+}
+if (!(providerLifecycleClient.indexOf('const requestId = createId()') < providerLifecycleClient.indexOf('for (let staleRecoveryAttempt')
+  && providerLifecycleClient.indexOf('const idempotencyKey = createEnterpriseActionIdempotencyKey(input.operation)') < providerLifecycleClient.indexOf('for (let staleRecoveryAttempt'))) {
+  throw new Error('Provider stale-authority recovery must retain one request ID and idempotency key for the logical browser action.');
+}
+for (const operation of [
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+  'provider.secret.rotate', 'provider.revoke', 'provider.route.toggle',
+]) {
+  if (!client.includes(`operation: '${operation}'`)) {
+    throw new Error(`Provider lifecycle browser action is not routed through shared stale-authority recovery: ${operation}.`);
+  }
 }
 for (const invocation of ['enterprise-intelligence-command', 'enterprise-provider-lifecycle']) {
   const start = client.indexOf(`supabase.functions.invoke('${invocation}'`);
@@ -136,7 +171,6 @@ if (!command.includes("new RecoverableEnterpriseCommandError('AUTHORIZATION_STAL
   throw new Error('Authorization-stale Enterprise receipts must retain the recoverable claimed disposition.');
 }
 
-const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
 for (const pattern of [/placeholder=["'`]UUID/iu, /\b(?:studioContentHash|studioVersion|assessmentVersionId|packageVersionId|approvedItemIds|secretReference)\b/u]) {
   if (pattern.test(view)) throw new Error(`Enterprise UI exposes a raw authority input: ${pattern}.`);
 }

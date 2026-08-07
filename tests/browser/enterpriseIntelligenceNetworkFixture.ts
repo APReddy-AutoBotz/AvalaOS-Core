@@ -141,6 +141,12 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
   let nextTransportFailure: string | undefined;
+  let nextProviderStale: { operation: string; revokeAuthority: boolean } | undefined;
+  let providerAuthorityRevoked = false;
+  const managedSecretPlans = new Set<string>();
+  let managedSecretWrites = 0;
+  let providerValidations = 0;
+  let providerEffects = 0;
 
   page.on('request', request => {
     const url = new URL(request.url());
@@ -154,6 +160,9 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const pathname = new URL(request.url()).pathname;
     if (pathname.endsWith('/enterprise-intelligence-query')) {
+      if (providerAuthorityRevoked) {
+        return route.fulfill({ status: 403, headers, body: JSON.stringify({ code: 'TENANT_ACCESS_DENIED' }) });
+      }
       if (projectionFailure) {
         const failures = {
           stale: { status: 409, code: 'AUTHORIZATION_STALE' },
@@ -178,6 +187,30 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         const failure = nextCommandFailure;
         nextCommandFailure = undefined;
         return route.fulfill({ status: 409, headers, body: JSON.stringify({ ok: false, error: { code: failure.code } }) });
+      }
+      if (nextProviderStale?.operation === operation) {
+        const stale = nextProviderStale;
+        nextProviderStale = undefined;
+        const body = request.postDataJSON() as { idempotencyKey?: string };
+        if ((operation === 'provider.secret.bind' || operation === 'provider.secret.rotate') && body.idempotencyKey) {
+          managedSecretPlans.add(body.idempotencyKey);
+          managedSecretWrites += 1;
+        }
+        projection.authorizationVersion += 1;
+        providerAuthorityRevoked = stale.revokeAuthority;
+        return route.fulfill({ status: 409, headers, body: JSON.stringify({ ok: false, error: { code: 'AUTHORIZATION_STALE' } }) });
+      }
+
+      if (operation === 'provider.secret.bind' || operation === 'provider.secret.rotate') {
+        const body = request.postDataJSON() as { idempotencyKey?: string };
+        if (body.idempotencyKey && managedSecretPlans.delete(body.idempotencyKey)) {
+          providerValidations += 1;
+          providerEffects += 1;
+        } else {
+          managedSecretWrites += 1;
+          providerValidations += 1;
+          providerEffects += 1;
+        }
       }
 
       if (operation === 'provider.validate' && projection.providers[0]) {
@@ -299,6 +332,21 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     transportFailNext(operation: string) { nextTransportFailure = operation; },
+    staleProviderAfterManagedWriteNext(operation: 'provider.secret.bind' | 'provider.secret.rotate') {
+      nextProviderStale = { operation, revokeAuthority: false };
+    },
+    revokeProviderAuthorityOnStaleNext(operation: string) {
+      nextProviderStale = { operation, revokeAuthority: true };
+    },
+    restoreProviderAuthority() { providerAuthorityRevoked = false; },
+    providerRecoveryCounts() {
+      return {
+        managedSecretWrites,
+        providerValidations,
+        providerEffects,
+        strandedManagedSecrets: managedSecretPlans.size,
+      };
+    },
     recoverProjection() { projectionFailure = undefined; },
   };
 };

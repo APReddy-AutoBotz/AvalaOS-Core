@@ -172,6 +172,60 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
   expect(fixture.unexpectedRequests).toEqual([]);
 });
 
+test('provider secret actions recover stale authority as the same in-memory browser action', async ({ page }) => {
+  const fixture = await installEnterpriseIntelligenceFixture(page);
+  const browserMessages: string[] = [];
+  page.on('console', message => browserMessages.push(message.text()));
+  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  const controls = activeSection(page);
+  const keyInput = controls.getByLabel('Provider key (sent once)');
+
+  for (const action of [
+    { operation: 'provider.secret.bind' as const, button: /bind key securely/i, key: 'sk-private-browser-fixture-bind' },
+    { operation: 'provider.secret.rotate' as const, button: /rotate key/i, key: 'sk-private-browser-fixture-rotate' },
+  ]) {
+    fixture.staleProviderAfterManagedWriteNext(action.operation);
+    await keyInput.fill(action.key);
+    await controls.getByRole('button', { name: action.button }).click();
+    await expect(workspace(page).getByRole('status')).toContainText(action.operation.endsWith('bind') ? /secret bound/i : /key rotated/i);
+    await expect(keyInput).toHaveValue('');
+
+    const bodies = fixture.commandPayloads.filter(body => body.operation === action.operation) as Array<{
+      expectedAuthorizationVersion: number;
+      idempotencyKey: string;
+      requestId: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].idempotencyKey).toBe(bodies[0].idempotencyKey);
+    expect(bodies[1].requestId).toBe(bodies[0].requestId);
+    expect(bodies[1].payload).toEqual(bodies[0].payload);
+    expect(bodies[1].expectedAuthorizationVersion).toBe(bodies[0].expectedAuthorizationVersion + 1);
+    expect(Object.keys(bodies[1]).filter(key => JSON.stringify(bodies[1][key as keyof typeof bodies[number]]) !== JSON.stringify(bodies[0][key as keyof typeof bodies[number]]))).toEqual(['expectedAuthorizationVersion']);
+  }
+
+  expect(fixture.providerRecoveryCounts()).toEqual({
+    managedSecretWrites: 2,
+    providerValidations: 2,
+    providerEffects: 2,
+    strandedManagedSecrets: 0,
+  });
+
+  fixture.revokeProviderAuthorityOnStaleNext('provider.validate');
+  const validationCount = fixture.commandPayloads.filter(body => body.operation === 'provider.validate').length;
+  await controls.getByRole('button', { name: /^Validate$/i }).click();
+  await expect(workspace(page).getByRole('alert')).toContainText(/do not have.*capability|permission/i);
+  expect(fixture.commandPayloads.filter(body => body.operation === 'provider.validate')).toHaveLength(validationCount + 1);
+  fixture.restoreProviderAuthority();
+
+  const persisted = await page.evaluate(() => ({
+    local: Object.entries(localStorage),
+    session: Object.entries(sessionStorage),
+  }));
+  expect(JSON.stringify(persisted)).not.toMatch(PRIVATE_VALUE);
+  expect(browserMessages.join('\n')).not.toMatch(PRIVATE_VALUE);
+});
+
 test('keyboard navigation, DOCX intake, and command failure never show false success', async ({ page }) => {
   const fixture = await installEnterpriseIntelligenceFixture(page);
   await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
