@@ -24,6 +24,8 @@ export type EnterpriseReceiptScope = {
   workspaceId: string;
 };
 
+export type EnterpriseReceiptReconciliationAuthorizer = () => Promise<EnterpriseReceiptScope>;
+
 export type EnterpriseReceiptClaim = {
   commandType: string;
   idempotencyKey: string;
@@ -165,7 +167,8 @@ export const completeEnterpriseReceipt = async (
   receipt: EnterpriseReceiptRow,
   scope: EnterpriseReceiptScope,
   response: Record<string, unknown>,
-  resourceId?: string,
+  resourceId: string | undefined,
+  authorizeReconciliation: EnterpriseReceiptReconciliationAuthorizer,
 ): Promise<EnterpriseReceiptRow> => {
   const canonicalResponse = canonicalizeReceiptValue(response) as Record<string, unknown>;
   const responseHash = await hashReceiptValue(canonicalResponse);
@@ -181,8 +184,9 @@ export const completeEnterpriseReceipt = async (
     });
     return rowFrom(value);
   } catch {
+    const reconciliationScope = await authorizeReconciliation();
     try {
-      const reconciled = await reconcileEnterpriseReceipt(receipt, scope, canonicalResponse, resourceId);
+      const reconciled = await reconcileEnterpriseReceipt(receipt, reconciliationScope, canonicalResponse, resourceId);
       if (reconciled?.status === 'committed'
         && await hashReceiptValue(reconciled.response || {}) === responseHash
         && (reconciled.resource_id || null) === (resourceId || null)) return reconciled;
@@ -198,6 +202,7 @@ export const failEnterpriseReceipt = async (
   scope: EnterpriseReceiptScope,
   response: Record<string, unknown>,
   blocked: boolean,
+  authorizeReconciliation: EnterpriseReceiptReconciliationAuthorizer,
 ): Promise<EnterpriseReceiptRow> => {
   const canonicalResponse = canonicalizeReceiptValue(response) as Record<string, unknown>;
   const responseHash = await hashReceiptValue(canonicalResponse);
@@ -213,8 +218,9 @@ export const failEnterpriseReceipt = async (
     });
     return rowFrom(value);
   } catch {
+    const reconciliationScope = await authorizeReconciliation();
     try {
-      const reconciled = await reconcileEnterpriseReceipt(receipt, scope, canonicalResponse);
+      const reconciled = await reconcileEnterpriseReceipt(receipt, reconciliationScope, canonicalResponse);
       const expected = blocked ? 'blocked' : 'failed';
       if (reconciled?.status === expected && await hashReceiptValue(reconciled.response || {}) === responseHash) return reconciled;
     } catch {

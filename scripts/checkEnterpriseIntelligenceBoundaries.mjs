@@ -118,6 +118,23 @@ if (!(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
     > enterpriseFailureFinalization.indexOf('await failReceipt'))) {
   throw new Error('Enterprise failure finalization requires current authority both before commit and before disclosure.');
 }
+const enterpriseRecovery = command.slice(
+  command.indexOf('if (claimedReceipt && claimedAuthority && claimedCommandType) {'),
+  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+);
+if (!(enterpriseRecovery.indexOf('await assertCurrentAuthority') >= 0
+  && enterpriseRecovery.indexOf('await assertCurrentAuthority') < enterpriseRecovery.indexOf('reloadEnterpriseReceipt')
+  && enterpriseRecovery.lastIndexOf('await assertCurrentAuthority') > enterpriseRecovery.indexOf('reloadEnterpriseReceipt'))) {
+  throw new Error('Enterprise effect recovery requires exact current authority before reconciliation and again before disclosure.');
+}
+if (!command.includes('enterpriseCommandStatusForTerminalReceipt(receipt)')
+  || !command.includes('enterpriseCommandStatusForTerminalReceipt(recovered)')) {
+  throw new Error('Enterprise terminal replay must derive HTTP status from the persisted stable product error.');
+}
+if (!command.includes("new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE')")
+  || !command.includes("error.code === 'AUTHORIZATION_STALE'")) {
+  throw new Error('Authorization-stale Enterprise receipts must retain the recoverable claimed disposition.');
+}
 
 const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
 for (const pattern of [/placeholder=["'`]UUID/iu, /\b(?:studioContentHash|studioVersion|assessmentVersionId|packageVersionId|approvedItemIds|secretReference)\b/u]) {
@@ -154,6 +171,7 @@ if (/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(
 if (!command.includes('RECEIPT_FINALIZATION_FAILED')) throw new Error('Receipt finalization failure requires explicit sanitized evidence.');
 if (!command.includes('reloadEnterpriseReceipt')) throw new Error('Command recovery must reload terminal receipts and durable effect evidence.');
 const providerEndpoint = read('supabase/functions/_shared/providerLifecycleEndpoint.ts');
+const receiptHelper = read('supabase/functions/_shared/enterpriseReceipt.ts');
 for (const required of ['requestId', 'idempotencyKey', 'providerLifecycleRequestHash', 'reloadEnterpriseReceipt']) {
   if (!providerEndpoint.includes(required)) throw new Error(`Provider lifecycle receipt boundary is missing ${required}.`);
 }
@@ -164,6 +182,28 @@ if (providerHash.includes('expectedAuthorizationVersion') || providerHash.includ
 if (!providerEndpoint.includes('authenticateProviderLifecycle(request, envelope, false)')
   || !providerEndpoint.includes('enforceAttemptAuthorizationVersion')) {
   throw new Error('Provider replay/finalization must resolve current authority without pinning the original attempt version.');
+}
+const providerClaimIndex = providerEndpoint.indexOf('const { receipt, ownsExecution }');
+if (!(providerEndpoint.lastIndexOf('assertProviderLifecycleOperationAuthority(envelope.operation, authority)', providerClaimIndex)
+  < providerClaimIndex
+  && providerEndpoint.lastIndexOf('assertProviderLifecycleOperationAuthority(envelope.operation, authority)', providerClaimIndex) >= 0)) {
+  throw new Error('Provider claim-time effect reconciliation requires exact operation authority before the claim RPC.');
+}
+const providerRecovery = providerEndpoint.slice(
+  providerEndpoint.indexOf('if (claimedReceipt && claimedAuthority && claimedOperation && claimedEnvelope) {'),
+  providerEndpoint.indexOf("safeError.code !== 'RECEIPT_FINALIZATION_FAILED'"),
+);
+if (!(providerRecovery.indexOf('await reauthorizeProviderLifecycle') >= 0
+  && providerRecovery.indexOf('await reauthorizeProviderLifecycle') < providerRecovery.indexOf('reloadEnterpriseReceipt')
+  && providerRecovery.lastIndexOf('await reauthorizeProviderLifecycle') > providerRecovery.indexOf('reloadEnterpriseReceipt'))) {
+  throw new Error('Provider effect recovery requires exact operation authority before reconciliation and again before disclosure.');
+}
+for (const helper of ['completeEnterpriseReceipt', 'failEnterpriseReceipt']) {
+  const body = receiptHelper.slice(receiptHelper.indexOf(`export const ${helper}`), receiptHelper.indexOf('\n};', receiptHelper.indexOf(`export const ${helper}`)) + 3);
+  if (!(body.includes('authorizeReconciliation: EnterpriseReceiptReconciliationAuthorizer')
+    && body.indexOf('await authorizeReconciliation()') < body.indexOf('reconcileEnterpriseReceipt('))) {
+    throw new Error(`${helper} must reauthorize before any effect-journal reconciliation.`);
+  }
 }
 const providerSuccessFinalization = providerEndpoint.slice(
   providerEndpoint.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)'),

@@ -117,7 +117,7 @@ export class EnterpriseCommandError extends Error {
 export class RecoverableEnterpriseCommandError extends EnterpriseCommandError {
   readonly disposition = 'preserve_claimed_receipt';
 
-  constructor(code: 'COMMAND_UNAVAILABLE' | 'COMMAND_IN_PROGRESS') {
+  constructor(code: 'AUTHORIZATION_STALE' | 'COMMAND_UNAVAILABLE' | 'COMMAND_IN_PROGRESS') {
     super(code);
     this.name = 'RecoverableEnterpriseCommandError';
   }
@@ -132,6 +132,7 @@ export const shouldPreserveClaimedEnterpriseReceipt = (
   error: unknown,
   executionPlan?: JsonObject | null,
 ) => isRecoverableEnterpriseCommandError(error)
+  || (error instanceof EnterpriseCommandError && error.code === 'AUTHORIZATION_STALE')
   || (error instanceof EnterpriseCommandError
     && error.code === 'COMMAND_UNAVAILABLE'
     && executionPlan?.externalStorageWritten === true);
@@ -143,7 +144,7 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
   )) return new EnterpriseCommandError('IDEMPOTENCY_CONFLICT');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE',
-  )) return new EnterpriseCommandError('AUTHORIZATION_STALE');
+  )) return new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
     'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
@@ -519,6 +520,20 @@ export const resolveEnterpriseCommandResourceId = (
   return explicitResourceId;
 };
 
+export const enterpriseCommandStatusForTerminalReceipt = (receipt: EnterpriseReceiptRow) => {
+  const responseError = isRecord(receipt.response?.error) ? receipt.response.error.code : undefined;
+  if (typeof responseError !== 'string') return 409;
+  const known = new Set<EnterpriseCommandError['code']>([
+    'METHOD_NOT_ALLOWED', 'INVALID_COMMAND', 'AUTHENTICATION_REQUIRED', 'TENANT_ACCESS_DENIED',
+    'PERMISSION_DENIED', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT', 'COMMAND_IN_PROGRESS',
+    'RESOURCE_NOT_FOUND', 'RESOURCE_STALE', 'INVALID_PAYLOAD', 'COMMAND_BLOCKED',
+    'COMMAND_UNAVAILABLE', 'RECEIPT_FINALIZATION_FAILED',
+  ]);
+  return known.has(responseError as EnterpriseCommandError['code'])
+    ? codeToStatus(responseError as EnterpriseCommandError['code'])
+    : 409;
+};
+
 type EnterpriseDomainCommandType = Exclude<EnterpriseCommandType, ProviderLifecycleOperation>;
 
 const enterpriseProviderOperations: Partial<Record<EnterpriseCommandType, ProviderLifecycleOperation>> = {
@@ -626,17 +641,22 @@ const commandProviderLifecycle = async (
       execution,
     );
   } catch (error) {
-    if (error instanceof ProviderLifecycleError) {
-      if (error.code === 'PERMISSION_DENIED' || error.code === 'TENANT_ACCESS_DENIED') throw new EnterpriseCommandError('PERMISSION_DENIED');
-      if (error.code === 'RESOURCE_NOT_FOUND') throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
-      if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') {
-        throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-      }
-      if (error.code === 'INVALID_REQUEST') throw new EnterpriseCommandError('INVALID_PAYLOAD');
-    }
-    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+    throw mapProviderLifecycleCommandError(error);
   }
 };
+
+export function mapProviderLifecycleCommandError(error: unknown): EnterpriseCommandError {
+  if (error instanceof ProviderLifecycleError) {
+    if (error.code === 'AUTHORIZATION_STALE') return new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
+    if (error.code === 'PERMISSION_DENIED' || error.code === 'TENANT_ACCESS_DENIED') return new EnterpriseCommandError('PERMISSION_DENIED');
+    if (error.code === 'RESOURCE_NOT_FOUND') return new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') {
+      return new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+    }
+    if (error.code === 'INVALID_REQUEST') return new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  return new EnterpriseCommandError('COMMAND_BLOCKED');
+}
 
 const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.write');
@@ -1883,7 +1903,10 @@ export const handleEnterpriseIntelligenceRequest = async (
       return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) });
     }
     if (receipt.status === 'failed' || receipt.status === 'blocked') {
-      return jsonResponse({ ...(receipt.response || enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED'))), replayed: true }, 409);
+      return jsonResponse(
+        { ...(receipt.response || enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED'))), replayed: true },
+        enterpriseCommandStatusForTerminalReceipt(receipt),
+      );
     }
     if (receipt.status !== 'claimed' || !ownsExecution) throw new EnterpriseCommandError('COMMAND_IN_PROGRESS');
     claimedReceipt = receipt;
@@ -1894,7 +1917,17 @@ export const handleEnterpriseIntelligenceRequest = async (
     const resourceId = resolveEnterpriseCommandResourceId(envelope.commandType, resultObject);
     const finalAuthority = await assertCurrentAuthority(disclosureAuthority, envelope.commandType);
     claimedAuthority = finalAuthority;
-    const completed = await completeReceipt(receipt, finalAuthority, resultObject, resourceId);
+    const completed = await completeReceipt(
+      receipt,
+      finalAuthority,
+      resultObject,
+      resourceId,
+      async () => {
+        const reconciliationAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType);
+        claimedAuthority = reconciliationAuthority;
+        return reconciliationAuthority;
+      },
+    );
     assertCommittedEnterpriseReceiptIdentity(completed, envelope.commandType);
     claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
@@ -1908,6 +1941,7 @@ export const handleEnterpriseIntelligenceRequest = async (
           : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
     if (claimedReceipt && claimedAuthority && claimedCommandType) {
       try {
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
         const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
         if (recovered.status === 'committed') {
           claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
@@ -1916,7 +1950,10 @@ export const handleEnterpriseIntelligenceRequest = async (
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
           claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
-          return jsonResponse({ ...(recovered.response || enterpriseCommandErrorBody(commandError)), replayed: true }, 409);
+          return jsonResponse(
+            { ...(recovered.response || enterpriseCommandErrorBody(commandError)), replayed: true },
+            enterpriseCommandStatusForTerminalReceipt(recovered),
+          );
         }
       } catch (recoveryError) {
         if (recoveryError instanceof EnterpriseCommandError && recoveryError.code === 'PERMISSION_DENIED') {
@@ -1950,6 +1987,11 @@ export const handleEnterpriseIntelligenceRequest = async (
           claimedAuthority,
           enterpriseCommandErrorBody(commandError),
           commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED',
+          async () => {
+            const reconciliationAuthority = await assertCurrentAuthority(claimedAuthority!, claimedCommandType);
+            claimedAuthority = reconciliationAuthority;
+            return reconciliationAuthority;
+          },
         );
         claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
       } catch (finalizationError) {

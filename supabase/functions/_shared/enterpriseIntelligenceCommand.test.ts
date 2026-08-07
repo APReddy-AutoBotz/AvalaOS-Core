@@ -4,9 +4,12 @@ import {
   EnterpriseCommandError,
   RecoverableEnterpriseCommandError,
   enterpriseCommandErrorBody,
+  enterpriseCommandStatusForTerminalReceipt,
   extractionRouteMatchesPlan,
   handleEnterpriseIntelligenceRequest,
+  isRecoverableEnterpriseCommandError,
   mapEnterpriseCommandRpcError,
+  mapProviderLifecycleCommandError,
   mapExtractionPersistenceError,
   parseEnterpriseCommandEnvelope,
   readEvidenceExtractionRoutePlan,
@@ -15,6 +18,7 @@ import {
   shouldPreserveClaimedEnterpriseReceipt,
   type Authority,
 } from './enterpriseIntelligenceCommand';
+import { ProviderLifecycleError } from './providerLifecycle';
 import {
   EnterpriseReceiptError,
   hashReceiptValue,
@@ -125,6 +129,24 @@ const replayCommands = [
 
 type ReplayCommand = typeof replayCommands[number];
 
+const enterpriseTerminalStatusMatrix = [
+  ['INVALID_PAYLOAD', 400],
+  ['PERMISSION_DENIED', 403],
+  ['RESOURCE_NOT_FOUND', 404],
+  ['RESOURCE_STALE', 409],
+  ['COMMAND_UNAVAILABLE', 503],
+] as const;
+
+test('derives the exact terminal Enterprise HTTP status from the persisted product error', () => {
+  for (const [code, status] of enterpriseTerminalStatusMatrix) {
+    const receipt = {
+      status: code === 'PERMISSION_DENIED' ? 'blocked' : 'failed',
+      response: enterpriseCommandErrorBody(new EnterpriseCommandError(code)),
+    } as unknown as EnterpriseReceiptRow;
+    assert.equal(enterpriseCommandStatusForTerminalReceipt(receipt), status);
+  }
+});
+
 const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => {
   const result: Record<string, unknown> = { resourceId };
   const lineageKey = commandType === 'evidence.source.create' ? 'sourceId'
@@ -139,6 +161,134 @@ const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => 
   if (lineageKey) result[lineageKey] = resourceId;
   return result;
 };
+
+test('generic provider stale authority preserves the plan and recovers once under a newer fence', async () => {
+  const envelope = {
+    commandType: 'provider.validate' as const,
+    requestId: '54000000-0000-4000-8000-000000000001',
+    idempotencyKey: 'provider-stale-recovery',
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: { providerConfigId: '55000000-0000-4000-8000-000000000001' },
+  };
+  const plan = { providerConfigId: envelope.payload.providerConfigId, planMarker: 'preserved' };
+  const claimed: EnterpriseReceiptRow = {
+    id: '56000000-0000-4000-8000-000000000001', request_hash: 'f'.repeat(64),
+    initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: '57000000-0000-4000-8000-000000000001', execution_fence: 1,
+    lease_expires_at: '2026-08-07T00:00:00.000Z', status: 'claimed', execution_plan: plan,
+  };
+  const refreshed: EnterpriseReceiptRow = {
+    ...claimed, execution_token: '57000000-0000-4000-8000-000000000002', execution_fence: 2,
+  };
+  const result = { resourceId: envelope.payload.providerConfigId, providerConfigId: envelope.payload.providerConfigId };
+  const committed: EnterpriseReceiptRow = {
+    ...refreshed, status: 'committed', resource_id: envelope.payload.providerConfigId, response: result,
+  };
+  let attempt = 0;
+  let failures = 0;
+  let effects = 0;
+  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+  const common = {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => ({
+      ...replayAuthority,
+      permissions: new Set(['byok.manage']),
+      organizationPermissions: new Set(['byok.manage']),
+    }),
+    assertCurrentAuthority: async (current: Authority) => current,
+  };
+  const stale = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    executeCommand: async () => { attempt += 1; throw new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE'); },
+    reloadReceipt: async () => claimed,
+    failReceipt: async () => { failures += 1; throw new Error('must not finalize stale authority'); },
+  });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json() as { error?: { code?: string } }).error?.code, 'AUTHORIZATION_STALE');
+  assert.deepEqual(claimed.execution_plan, plan);
+  assert.equal(claimed.status, 'claimed');
+  assert.equal(failures, 0);
+
+  const recovered = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: refreshed, ownsExecution: true }),
+    executeCommand: async (_authority, _envelope, receipt) => {
+      attempt += 1;
+      assert.equal(receipt.execution_fence, 2);
+      assert.deepEqual(receipt.execution_plan, plan);
+      effects += 1;
+      return result;
+    },
+    completeReceipt: async () => committed,
+  });
+  assert.equal(recovered.status, 200);
+  assert.equal((await recovered.json() as { providerConfigId?: string }).providerConfigId, envelope.payload.providerConfigId);
+
+  const replay = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
+    executeCommand: async () => { effects += 1; return result; },
+  });
+  assert.equal(replay.status, 200);
+  assert.deepEqual({ attempt, effects, failures }, { attempt: 2, effects: 1, failures: 0 });
+});
+
+for (const [index, commandType] of replayCommands.entries()) {
+  const resourceId = `58000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+  const envelope = {
+    commandType,
+    requestId: `59000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    idempotencyKey: `reconcile-authority-${index + 1}`,
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+  };
+  const effectResult = { ...enterpriseResultFor(commandType, resourceId), effectMarker: true };
+  const claimed: EnterpriseReceiptRow = {
+    id: `5a000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    request_hash: '1'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: `5b000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z', status: 'claimed',
+  };
+  const committed: EnterpriseReceiptRow = { ...claimed, status: 'committed', resource_id: resourceId, response: effectResult };
+  let checks = 0;
+  let reloads = 0;
+  let effects = 0;
+  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+  const denied = await handleEnterpriseIntelligenceRequest(request(), {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => replayAuthority,
+    assertCurrentAuthority: async current => {
+      checks += 1;
+      if (checks >= 3) throw new EnterpriseCommandError('PERMISSION_DENIED');
+      return current;
+    },
+    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    executeCommand: async () => { effects += 1; throw new EnterpriseCommandError('COMMAND_UNAVAILABLE'); },
+    reloadReceipt: async () => { reloads += 1; return committed; },
+  });
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.text()).includes('effectMarker'), false);
+  assert.equal(reloads, 0);
+  assert.equal(claimed.status, 'claimed');
+
+  const restored = await handleEnterpriseIntelligenceRequest(request(), {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => replayAuthority,
+    assertCurrentAuthority: async current => current,
+    claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
+    executeCommand: async () => { effects += 1; return effectResult; },
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await restored.json() as { effectMarker?: boolean }).effectMarker, true);
+  assert.deepEqual({ effects, reloads }, { effects: 1, reloads: 0 });
+}
+console.log('ok - all ten command classes leave effect-backed receipts untouched while revoked and reconcile once after restore');
 
 for (const [index, commandType] of replayCommands.entries()) {
   const envelope = {
@@ -213,6 +363,43 @@ for (const [index, commandType] of replayCommands.entries()) {
 }
 console.log('ok - all ten command classes deny revoked replay without receipt mutation and disclose after authority restoration');
 
+for (const [commandIndex, commandType] of replayCommands.entries()) {
+  for (const [statusIndex, [code, expectedStatus]] of enterpriseTerminalStatusMatrix.entries()) {
+    const envelope = {
+      commandType,
+      requestId: `51000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      idempotencyKey: `terminal-http-${commandIndex + 1}-${statusIndex + 1}`,
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+    };
+    const persistedBody = enterpriseCommandErrorBody(new EnterpriseCommandError(code));
+    const receipt: EnterpriseReceiptRow = {
+      id: `52000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      request_hash: 'e'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+      execution_token: `53000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z',
+      status: code === 'PERMISSION_DENIED' ? 'blocked' : 'failed', response: persistedBody,
+    };
+    let executions = 0;
+    const response = await handleEnterpriseIntelligenceRequest(
+      new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+      {
+        authenticate: async () => ({ id: replayAuthority.actorId }),
+        resolveOrganization: async () => replayAuthority.organizationId,
+        resolveCommandAuthority: async () => replayAuthority,
+        assertCurrentAuthority: async current => current,
+        claimReceipt: async () => ({ receipt, ownsExecution: false }),
+        executeCommand: async () => { executions += 1; return {}; },
+      },
+    );
+    assert.equal(response.status, expectedStatus);
+    assert.deepEqual((await response.json() as { error?: unknown }).error, persistedBody.error);
+    assert.equal(executions, 0);
+  }
+}
+console.log('ok - all ten command classes replay persisted 400/403/404/409/503 HTTP contracts exactly');
+
 test('generic provider commands enforce provider-specific organization and workspace authority', () => {
   const providerAuthority = (organization: string[], workspace: string[]): Authority => ({
     ...replayAuthority,
@@ -238,6 +425,20 @@ test('generic provider commands enforce provider-specific organization and works
   );
   const organizationSecurity = providerAuthority(['byok.manage', 'security.manage'], []);
   assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(organizationSecurity, 'provider.revoke'));
+});
+
+test('generic provider authorization staleness remains explicitly recoverable', () => {
+  const mapped = mapProviderLifecycleCommandError(new (class extends Error {})());
+  assert.equal(mapped.code, 'COMMAND_BLOCKED');
+  const stale = mapProviderLifecycleCommandError(new ProviderLifecycleError('AUTHORIZATION_STALE'));
+  assert.equal(stale.code, 'AUTHORIZATION_STALE');
+  assert.equal(isRecoverableEnterpriseCommandError(stale), true);
+  const rpcStale = mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  }));
+  assert.equal(rpcStale.code, 'AUTHORIZATION_STALE');
+  assert.equal(isRecoverableEnterpriseCommandError(rpcStale), true);
+  assert.equal(shouldPreserveClaimedEnterpriseReceipt(rpcStale, { providerConfigId: base.organizationId }), true);
 });
 
 for (const [index, commandType] of replayCommands.entries()) {
@@ -304,7 +505,7 @@ for (const [index, commandType] of replayCommands.entries()) {
     });
     assert.equal(response.status, 403);
     assert.equal((await response.text()).includes('COMMAND_BLOCKED'), false);
-    assert.equal(failures, denyAt === 3 ? 0 : 1);
+    assert.equal(failures, 0);
   }
 
   let executions = 0;

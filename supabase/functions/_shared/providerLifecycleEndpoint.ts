@@ -285,6 +285,7 @@ export const handleProviderLifecycleRequest = async (
     const envelope = parseProviderLifecycleEnvelope(await request.json());
     const authenticate = overrides.authenticate || authenticateProviderLifecycle;
     const authority = await authenticate(request, envelope);
+    assertProviderLifecycleOperationAuthority(envelope.operation, authority);
     const requestHash = await providerLifecycleRequestHash(envelope);
     const { receipt, ownsExecution } = await (overrides.claimReceipt || claimEnterpriseReceipt)(authority, {
       commandType: envelope.operation,
@@ -333,7 +334,15 @@ export const handleProviderLifecycleRequest = async (
     const finalAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
     claimedAuthority = finalAuthority;
     const completed = await (overrides.completeReceipt || completeEnterpriseReceipt)(
-      receipt, finalAuthority, result, resourceId,
+      receipt,
+      finalAuthority,
+      result,
+      resourceId,
+      async () => {
+        const reconciliationAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
+        claimedAuthority = reconciliationAuthority;
+        return reconciliationAuthority;
+      },
     );
     assertCommittedProviderReceiptIdentity(completed);
     claimedAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
@@ -346,16 +355,19 @@ export const handleProviderLifecycleRequest = async (
         : new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
     if (claimedReceipt && claimedAuthority && claimedOperation && claimedEnvelope) {
       try {
+        claimedAuthority = await reauthorizeProviderLifecycle(
+          request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+        );
         const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
         if (recovered.status === 'committed') {
-          await reauthorizeProviderLifecycle(
+          claimedAuthority = await reauthorizeProviderLifecycle(
             request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
           );
           assertCommittedProviderReceiptIdentity(recovered);
           return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
-          await reauthorizeProviderLifecycle(
+          claimedAuthority = await reauthorizeProviderLifecycle(
             request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
           );
           return jsonResponse(
@@ -399,6 +411,13 @@ export const handleProviderLifecycleRequest = async (
             claimedAuthority,
             providerLifecycleErrorBody(safeError),
             safeError.code === 'PERMISSION_DENIED' || safeError.code === 'TENANT_ACCESS_DENIED' || safeError.code === 'PROVIDER_BLOCKED',
+            async () => {
+              const reconciliationAuthority = await reauthorizeProviderLifecycle(
+                request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+              );
+              claimedAuthority = reconciliationAuthority;
+              return reconciliationAuthority;
+            },
           );
           claimedAuthority = await reauthorizeProviderLifecycle(
             request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
