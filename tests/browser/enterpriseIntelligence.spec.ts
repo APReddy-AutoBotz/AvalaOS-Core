@@ -267,6 +267,30 @@ test('provider secret actions recover stale authority as the same in-memory brow
     fixture.restoreProviderAuthority();
   }
 
+  for (const action of [
+    { operation: 'provider.secret.bind' as const, button: /bind key securely/i, key: ['sk', 'private-browser-no-receipt-bind'].join('-') },
+    { operation: 'provider.secret.rotate' as const, button: /rotate key/i, key: ['sk', 'private-browser-no-receipt-rotate'].join('-') },
+  ]) {
+    const mutationCount = fixture.commandPayloads.filter(body => body.operation === action.operation).length;
+    const recoveryCount = fixture.recoveryPayloads.filter(body => body.operation === action.operation).length;
+    const before = fixture.providerRecoveryCounts();
+    fixture.revokeProviderAuthorityBeforeReceiptNext(action.operation);
+    await keyInput.fill(action.key);
+    await controls.getByRole('button', { name: action.button }).click();
+    await expect(workspace(page).getByRole('alert')).toContainText(/do not have.*capability|permission/i);
+    await expect(keyInput).toHaveValue('');
+    expect(fixture.commandPayloads.filter(body => body.operation === action.operation)).toHaveLength(mutationCount + 1);
+    expect(fixture.recoveryPayloads.filter(body => body.operation === action.operation)).toHaveLength(recoveryCount + 1);
+    const after = fixture.providerRecoveryCounts();
+    expect(after.managedSecretWrites - before.managedSecretWrites).toBe(0);
+    expect(after.managedSecretCleanups - before.managedSecretCleanups).toBe(0);
+    expect(after.providerValidations - before.providerValidations).toBe(0);
+    expect(after.providerEffects - before.providerEffects).toBe(0);
+    expect(after.strandedManagedSecrets).toBe(0);
+    expect(after.claimedReceipts).toBe(0);
+    fixture.restoreProviderAuthority();
+  }
+
   const persisted = await page.evaluate(() => ({
     local: Object.entries(localStorage),
     session: Object.entries(sessionStorage),

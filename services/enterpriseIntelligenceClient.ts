@@ -212,6 +212,18 @@ const invokeProviderLifecycle = async <T>(input: {
               );
               const recoveryData = recoveryInvocation.data as { ok?: unknown; terminal?: unknown } | null;
               if (!recoveryInvocation.error && recoveryData?.ok === true && recoveryData.terminal === true) break;
+              const recoveryErrorCode = await responseErrorCode(
+                recoveryInvocation.data,
+                recoveryInvocation.error,
+              );
+              if (recoveryErrorCode === 'PERMISSION_DENIED') {
+                throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
+              }
+              if (recoveryErrorCode !== 'COMMAND_IN_PROGRESS'
+                && recoveryErrorCode !== 'PERSISTENCE_UNAVAILABLE'
+                && !isRetryableTransportError(recoveryInvocation.error)) {
+                throw new EnterpriseIntelligenceClientError(recoveryErrorCode || 'COMMAND_UNAVAILABLE');
+              }
               recoveryAttempt += 1;
               await waitForProviderAuthorityRetry(Math.min(1_000, 50 * (2 ** Math.min(recoveryAttempt, 5))));
             }

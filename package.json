@@ -163,7 +163,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.13",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

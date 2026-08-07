@@ -339,7 +339,7 @@ export const claimProviderLifecycleRecoveryReceipt = async (
   const executionToken = crypto.randomUUID();
   try {
     const value = await rpc<EnterpriseReceiptRow | EnterpriseReceiptRow[]>(
-      'enterprise_ai_claim_provider_secret_cleanup',
+      'enterprise_ai_claim_provider_secret_cleanup_v2',
       {
         p_actor: scope.actorId,
         p_org: scope.organizationId,
@@ -372,6 +372,39 @@ export const claimProviderLifecycleRecoveryReceipt = async (
   }
 };
 
+export const renewProviderLifecycleCleanupLease = async (
+  receipt: EnterpriseReceiptRow,
+  scope: EnterpriseReceiptScope,
+) => {
+  try {
+    const value = await rpc<EnterpriseReceiptRow | EnterpriseReceiptRow[]>(
+      'enterprise_ai_renew_provider_secret_cleanup_lease',
+      {
+        p_receipt: receipt.id,
+        p_actor: scope.actorId,
+        p_org: scope.organizationId,
+        p_workspace: scope.workspaceId,
+        p_execution_token: receipt.execution_token,
+        p_execution_fence: receipt.execution_fence,
+      },
+    );
+    const renewed = Array.isArray(value) ? value[0] : value;
+    if (!renewed?.id
+      || renewed.id !== receipt.id
+      || renewed.execution_token !== receipt.execution_token
+      || renewed.execution_fence !== receipt.execution_fence) {
+      throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+    }
+    receipt.lease_expires_at = renewed.lease_expires_at;
+  } catch (error) {
+    if (error instanceof ProviderLifecycleError) throw error;
+    if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_AI_STALE_EXECUTION_FENCE')) {
+      throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+    }
+    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+  }
+};
+
 const assertProviderRecoveryTerminal = (receipt: EnterpriseReceiptRow) => {
   const responseError = isRecord(receipt.response?.error) ? receipt.response?.error.code : undefined;
   if (receipt.status !== 'blocked' || responseError !== 'PERMISSION_DENIED'
@@ -385,6 +418,7 @@ export const handleProviderLifecycleRecoveryRequest = async (
   overrides: {
     authenticateActor?: (request: Request) => Promise<{ id: string }>;
     claimRecoveryReceipt?: typeof claimProviderLifecycleRecoveryReceipt;
+    renewCleanupLease?: typeof renewProviderLifecycleCleanupLease;
     persistPlan?: typeof persistEnterpriseExecutionPlan;
     failReceipt?: typeof failEnterpriseReceipt;
     deps?: ProviderLifecycleDeps;
@@ -431,6 +465,9 @@ export const handleProviderLifecycleRecoveryRequest = async (
         const planned = await persistPlan(receipt, scope, plan);
         receipt.execution_plan = planned.execution_plan || {};
         return receipt.execution_plan;
+      },
+      async renewCleanupLease() {
+        await (overrides.renewCleanupLease || renewProviderLifecycleCleanupLease)(receipt, scope);
       },
     };
     await recoverProviderLifecycleManagedSecret(deps, scope, execution);
@@ -561,6 +598,9 @@ export const handleProviderLifecycleRequest = async (
         const planned = await persistEnterpriseExecutionPlan(receipt, authority, plan);
         receipt.execution_plan = planned.execution_plan || {};
         return receipt.execution_plan;
+      },
+      async renewCleanupLease() {
+        await renewProviderLifecycleCleanupLease(receipt, authority);
       },
     };
     const result = await (overrides.executeCommand || executeProviderLifecycleCommand)(

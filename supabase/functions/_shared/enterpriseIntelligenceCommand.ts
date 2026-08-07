@@ -632,6 +632,10 @@ const commandProviderLifecycle = async (
         receipt.execution_plan = planned.execution_plan || {};
         return receipt.execution_plan;
       },
+      async renewCleanupLease() {
+        // Raw-key bind and rotate are not accepted on this generic command surface.
+        throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+      },
     };
     return await executeProviderLifecycleCommand(
       operation,

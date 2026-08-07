@@ -36,9 +36,14 @@ const providerCleanupRecoverySql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260807130000_provider_secret_cleanup_recovery.sql'),
   'utf8',
 );
+const providerCleanupDeadlineSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260807140000_provider_secret_cleanup_deadline.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
+const providerSecretAdapterSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerSecretAdapter.ts'), 'utf8');
 const requiredTables = [
   'enterprise_intelligence_runtime_control',
   'enterprise_ai_capability_routes',
@@ -113,10 +118,31 @@ for (const required of [
 check(providerCleanupRecoverySql.includes('FROM PUBLIC,anon,authenticated'), 'Provider cleanup recovery must reject browser roles.');
 check(providerCleanupRecoverySql.includes('TO service_role'), 'Provider cleanup recovery must remain service-only.');
 check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupRecoverySql), 'Provider cleanup recovery must not accept raw key material.');
+for (const required of [
+  'enterprise_ai_claim_provider_secret_cleanup_v2',
+  "lease_expires_at=statement_timestamp()+interval '45 seconds'",
+  'enterprise_ai_renew_provider_secret_cleanup_lease',
+  'execution_token=p_execution_token AND execution_fence=p_execution_fence',
+  "command_type IN ('provider.secret.bind','provider.secret.rotate')",
+  "execution_plan->>'secretOwnership'='managed_write'",
+  "execution_plan->>'secretPlanReceiptId'=id::text",
+  "COALESCE((execution_plan->>'cleanupRequired')::boolean,false)",
+  'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+]) check(providerCleanupDeadlineSql.includes(required), `Provider cleanup deadline migration is missing ${required}.`);
+check(providerCleanupDeadlineSql.includes('FROM PUBLIC,anon,authenticated'), 'Cleanup deadline functions must reject browser roles.');
+check(providerCleanupDeadlineSql.match(/TO service_role/g)?.length === 2, 'Both cleanup deadline functions must remain service-only.');
+check(providerCleanupDeadlineSql.includes('enterprise_ai_claim_provider_secret_cleanup(\n  UUID,UUID,UUID,TEXT,TEXT,UUID,UUID,UUID\n) FROM service_role'), 'The superseded one-second cleanup claim must no longer be executable.');
+check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupDeadlineSql), 'Cleanup deadline functions must not accept raw key material.');
 check(providerLifecycleSource.indexOf("secretOwnership: 'managed_write'") < providerLifecycleSource.indexOf('await deps.secretBackend.write'), 'Managed secret ownership must be persisted before the external write.');
 check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === execution.receiptId"), 'Cleanup ownership must be bound to the current receipt plan.');
 check(providerLifecycleSource.includes('await fingerprintProviderSecret(existing) !== safeFingerprint'), 'Cleanup must verify the resolved secret fingerprint before deletion.');
 check(providerLifecycleSource.includes('protectedSecretReferenceHash'), 'Cleanup must protect the prior active secret reference.');
+check(providerLifecycleSource.includes('PROVIDER_SECRET_DELETE_TIMEOUT_MS = 10_000'), 'Managed cleanup requires a bounded external-delete deadline.');
+check(providerLifecycleSource.includes('await execution.renewCleanupLease()'), 'Managed cleanup must renew its fenced lease immediately before delete.');
+check(providerLifecycleSource.includes('controller.abort()') && providerLifecycleSource.includes('await removePromise.catch'), 'Timed-out cleanup must abort and settle the old delete before releasing ownership.');
+check(providerSecretAdapterSource.includes('signal: AbortSignal') && providerSecretAdapterSource.includes('signal: input.signal'), 'The writable secret backend must honor cleanup cancellation.');
+check(providerLifecycleEndpointSource.includes("'enterprise_ai_claim_provider_secret_cleanup_v2'"), 'The recovery endpoint must use the long-lease cleanup claim.');
+check(providerLifecycleEndpointSource.includes("'enterprise_ai_renew_provider_secret_cleanup_lease'"), 'The recovery endpoint must renew the exact cleanup fence.');
 check(providerLifecycleEndpointSource.includes("claimedReceipt.execution_plan?.secretOwnership === 'managed_write'"), 'A planned managed write must keep persistence failures claimed for reconciliation.');
 check(readyReviewSql.includes('enterprise_provider_route_role_guard'), 'Route-role writes require exact active scope validation.');
 check(readyReviewSql.includes("capability.capability_key = 'org.admin'"), 'Organization route roles must be organization administrators.');

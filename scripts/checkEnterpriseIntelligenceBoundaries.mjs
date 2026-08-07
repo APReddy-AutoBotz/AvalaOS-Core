@@ -24,6 +24,7 @@ const requiredFiles = [
   'supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql',
   'supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql',
   'supabase/migrations/20260807130000_provider_secret_cleanup_recovery.sql',
+  'supabase/migrations/20260807140000_provider_secret_cleanup_deadline.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -95,6 +96,9 @@ for (const required of [
   'authorityData.authorized',
   "'enterprise-provider-lifecycle-recovery'",
   'recoveryData.terminal === true',
+  "recoveryErrorCode === 'PERMISSION_DENIED'",
+  "recoveryErrorCode !== 'COMMAND_IN_PROGRESS'",
+  "recoveryErrorCode !== 'PERSISTENCE_UNAVAILABLE'",
   'expectedAuthorizationVersion = refreshedAuthorizationVersion',
   'activePayload.providerKey = undefined',
 ]) {
@@ -125,7 +129,8 @@ for (const required of [
 }
 for (const required of [
   'parseProviderLifecycleRecoveryEnvelope',
-  'enterprise_ai_claim_provider_secret_cleanup',
+  'enterprise_ai_claim_provider_secret_cleanup_v2',
+  'enterprise_ai_renew_provider_secret_cleanup_lease',
   'recoverProviderLifecycleManagedSecret',
   "new ProviderLifecycleError('PERMISSION_DENIED')",
   'assertProviderRecoveryTerminal',

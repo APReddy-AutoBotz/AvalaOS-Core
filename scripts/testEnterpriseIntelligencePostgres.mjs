@@ -780,7 +780,7 @@ try {
 
       const cleanupToken = fixture.uuid(seed++);
       const claimed = (await authority.query(
-        'SELECT (public.enterprise_ai_claim_provider_secret_cleanup($1,$2,$3,$4,$5,$6,$7,$8)).*',
+        'SELECT (public.enterprise_ai_claim_provider_secret_cleanup_v2($1,$2,$3,$4,$5,$6,$7,$8)).*',
         [fixture.requester, fixture.org, fixture.workspace, operation, idempotencyKey,
           requestId, fixture.provider, cleanupToken],
       )).rows[0];
@@ -788,13 +788,31 @@ try {
       assert.equal(Number(claimed.execution_fence), Number(receipt.execution_fence) + 1);
       assert.equal(claimed.execution_plan.cleanupRequired, true);
       assert.equal(claimed.execution_plan.cleanupTerminalCode, 'PERMISSION_DENIED');
+      assert.ok(Date.parse(claimed.lease_expires_at) - Date.now() > 40_000);
+      const liveClaim = (await authority.query(
+        'SELECT (public.enterprise_ai_claim_provider_secret_cleanup_v2($1,$2,$3,$4,$5,$6,$7,$8)).*',
+        [fixture.requester, fixture.org, fixture.workspace, operation, idempotencyKey,
+          requestId, fixture.provider, fixture.uuid(seed++)],
+      )).rows[0];
+      assert.deepEqual(
+        [liveClaim.id, liveClaim.execution_token, liveClaim.execution_fence],
+        [claimed.id, claimed.execution_token, claimed.execution_fence],
+      );
+      const renewed = (await authority.query(
+        'SELECT (public.enterprise_ai_renew_provider_secret_cleanup_lease($1,$2,$3,$4,$5,$6)).*',
+        [claimed.id, fixture.requester, fixture.org, fixture.workspace, cleanupToken, claimed.execution_fence],
+      )).rows[0];
+      assert.deepEqual(
+        [renewed.id, renewed.execution_token, renewed.execution_fence],
+        [claimed.id, claimed.execution_token, claimed.execution_fence],
+      );
       await assert.rejects(authority.query(
-        'SELECT public.enterprise_ai_claim_provider_secret_cleanup($1,$2,$3,$4,$5,$6,$7,$8)',
+        'SELECT public.enterprise_ai_claim_provider_secret_cleanup_v2($1,$2,$3,$4,$5,$6,$7,$8)',
         [fixture.reviewer, fixture.org, fixture.workspace, operation, idempotencyKey,
           requestId, fixture.provider, fixture.uuid(seed++)],
       ), /ENTERPRISE_AI_RECEIPT_NOT_FOUND/);
       await assert.rejects(authority.query(
-        'SELECT public.enterprise_ai_claim_provider_secret_cleanup($1,$2,$3,$4,$5,$6,$7,$8)',
+        'SELECT public.enterprise_ai_claim_provider_secret_cleanup_v2($1,$2,$3,$4,$5,$6,$7,$8)',
         [fixture.requester, fixture.org, fixture.workspace, operation, idempotencyKey,
           requestId, fixture.uuid(seed++), fixture.uuid(seed++)],
       ), /ENTERPRISE_PROVIDER_CLEANUP_NOT_ALLOWED/);
@@ -813,7 +831,7 @@ try {
       assert.equal(terminal.status, 'blocked');
       assert.deepEqual(terminal.response, denied);
       const replay = (await authority.query(
-        'SELECT (public.enterprise_ai_claim_provider_secret_cleanup($1,$2,$3,$4,$5,$6,$7,$8)).*',
+        'SELECT (public.enterprise_ai_claim_provider_secret_cleanup_v2($1,$2,$3,$4,$5,$6,$7,$8)).*',
         [fixture.requester, fixture.org, fixture.workspace, operation, idempotencyKey,
           requestId, fixture.provider, fixture.uuid(seed++)],
       )).rows[0];

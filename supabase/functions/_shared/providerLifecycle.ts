@@ -50,6 +50,7 @@ export type ProviderLifecycleExecutionContext = {
   executionFence: number;
   plan: JsonObject;
   persistPlan(plan: JsonObject): Promise<JsonObject>;
+  renewCleanupLease(): Promise<void>;
 };
 
 export type ProviderLifecycleKeyRef = {
@@ -91,7 +92,10 @@ export type ProviderLifecycleDeps = {
   validateConnection: typeof validateProviderConnection;
   now: () => Date;
   randomId: () => string;
+  secretDeleteTimeoutMs?: number;
 };
+
+export const PROVIDER_SECRET_DELETE_TIMEOUT_MS = 10_000;
 
 export class ProviderLifecycleError extends Error {
   constructor(public readonly code:
@@ -461,11 +465,37 @@ const cleanupPlannedSecret = async (
       if (execution) await persistExecutionPlan(execution, { cleanupCompleted: true });
       return;
     }
-    await deps.secretBackend.remove({
+    if (!execution) throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    await execution.renewCleanupLease();
+    const controller = new AbortController();
+    const timeoutMs = deps.secretDeleteTimeoutMs ?? PROVIDER_SECRET_DELETE_TIMEOUT_MS;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > PROVIDER_SECRET_DELETE_TIMEOUT_MS) {
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const removePromise = deps.secretBackend.remove({
       provider: providerValue as EnterpriseAiProvider,
       secretRef: secretRefValue,
       organizationId: authority.organizationId,
+      signal: controller.signal,
     });
+    const outcome = await Promise.race([
+      removePromise.then(() => 'removed' as const),
+      new Promise<'timeout'>(resolve => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          resolve('timeout');
+        }, timeoutMs);
+      }),
+    ]).finally(() => {
+      if (timeout !== undefined) clearTimeout(timeout);
+    });
+    if (outcome === 'timeout') {
+      // Do not release the fenced owner until the abort-aware backend confirms
+      // that its external request has settled.
+      await removePromise.catch(() => undefined);
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
   } catch (error) {
     if (error instanceof ProviderLifecycleError) throw error;
     throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
@@ -715,10 +745,12 @@ export const executeProviderLifecycleCommand = async (
         lastValidatedAt,
       }, result, execution);
       if (deps.secretBackend.writable && deps.secretBackend.remove) {
+        const controller = new AbortController();
         await deps.secretBackend.remove({
           provider: config.provider,
           secretRef: config.keyRef.secretRef,
           organizationId: authority.organizationId,
+          signal: controller.signal,
         }).catch(() => undefined);
       }
       return result;
@@ -745,10 +777,12 @@ export const executeProviderLifecycleCommand = async (
       disableAllRoutes: true,
     }, result, execution);
     if (config.keyRef && deps.secretBackend.writable && deps.secretBackend.remove) {
+      const controller = new AbortController();
       await deps.secretBackend.remove({
         provider: config.provider,
         secretRef: config.keyRef.secretRef,
         organizationId: authority.organizationId,
+        signal: controller.signal,
       }).catch(() => undefined);
     }
     return result;

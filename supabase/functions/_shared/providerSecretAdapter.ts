@@ -64,7 +64,12 @@ export type ProviderSecretBackend = {
   writable: boolean;
   resolve(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string }): Promise<string | undefined>;
   write?(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string; value: string }): Promise<void>;
-  remove?(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string }): Promise<void>;
+  remove?(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }): Promise<void>;
 };
 
 const containsProhibitedSecretReferenceKey = (value: unknown): boolean => {
@@ -252,11 +257,17 @@ export class VaultProviderSecretBackend implements ProviderSecretBackend {
     if (!response.ok) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
   }
 
-  async remove(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string }) {
+  async remove(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    signal: AbortSignal;
+  }) {
     const response = await this.fetchImpl(this.endpoint(input), {
       method: 'DELETE',
       redirect: 'error',
       headers: this.headers(),
+      signal: input.signal,
     });
     if (!response.ok && response.status !== 404) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
   }

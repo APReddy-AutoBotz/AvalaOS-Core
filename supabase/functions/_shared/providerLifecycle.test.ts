@@ -9,7 +9,11 @@ import {
   type ProviderLifecycleDatabase,
   type ProviderLifecycleOperation,
 } from './providerLifecycle';
-import { fingerprintProviderSecret, type ProviderSecretBackend } from './providerSecretAdapter';
+import {
+  fingerprintProviderSecret,
+  VaultProviderSecretBackend,
+  type ProviderSecretBackend,
+} from './providerSecretAdapter';
 import { SupabaseRpcError } from './supabase';
 import {
   handleProviderLifecycleAuthorityRecheckRequest,
@@ -60,6 +64,27 @@ const test = async (name: string, callback: () => Promise<void>) => {
   try { await callback(); console.log(`ok - ${name}`); }
   catch (error) { console.error(`not ok - ${name}`); throw error; }
 };
+
+await test('Vault managed-secret deletion forwards the cleanup abort signal', async () => {
+  const controller = new AbortController();
+  let observedSignal: AbortSignal | null | undefined;
+  const backend = new VaultProviderSecretBackend(
+    'https://vault.example.test',
+    'fixture-token',
+    'secret/data/avala/provider-secrets',
+    async (_input, init) => {
+      observedSignal = init?.signal;
+      return new Response(null, { status: 204 });
+    },
+  );
+  await backend.remove({
+    provider: 'openai',
+    secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_ABORT_SIGNAL',
+    organizationId: ORG,
+    signal: controller.signal,
+  });
+  assert.equal(observedSignal, controller.signal);
+});
 
 await test('maps only structured provider RPC domain signals', async () => {
   assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
@@ -566,6 +591,7 @@ await test('revoked bind and rotate recover managed writes once without a raw-ke
         receipt.execution_plan = structuredClone(plan);
         return receipt;
       },
+      renewCleanupLease: async () => undefined,
       failReceipt: async (_receipt: EnterpriseReceiptRow, _scope: unknown, response: Record<string, unknown>) => {
         finalizations += 1;
         receipt.status = 'blocked';
@@ -589,6 +615,173 @@ await test('revoked bind and rotate recover managed writes once without a raw-ke
     assert.equal(receipt.status, 'blocked');
     assert.equal(receipt.execution_plan?.cleanupCompleted, true);
     assert.equal(JSON.stringify({ envelope, response: receipt.response }).includes(secretValue), false);
+  }
+});
+
+await test('slow bind and rotate cleanup keeps one fenced delete owner beyond one second', async () => {
+  for (const [index, operation] of (['provider.secret.bind', 'provider.secret.rotate'] as const).entries()) {
+    const receiptId = index === 0 ? NONCE_ONE : NONCE_TWO;
+    const secretReference = `AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_SLOW_${index}`;
+    const secretValue = `slow-cleanup-secret-${index}`;
+    const secrets = new Map([[secretReference, secretValue]]);
+    let deleteCalls = 0;
+    let releaseDelete = () => undefined;
+    let deleteStarted = () => undefined;
+    const started = new Promise<void>(resolve => { deleteStarted = resolve; });
+    const blockedDelete = new Promise<void>(resolve => { releaseDelete = resolve; });
+    const receipt: EnterpriseReceiptRow = {
+      id: receiptId, request_hash: 'a'.repeat(64), initial_request_id: NONCE_ONE,
+      last_request_id: NONCE_ONE, execution_token: KEY_ONE, execution_fence: 2,
+      lease_expires_at: new Date(now.getTime() + 45_000).toISOString(), status: 'claimed',
+      execution_plan: {
+        providerConfigId: CONFIG, provider: 'openai', secretOwnership: 'managed_write',
+        secretPlanReceiptId: receiptId, secretReference,
+        safeFingerprint: await fingerprintProviderSecret(secretValue), keyRefId: KEY_TWO,
+        writeState: 'written', cleanupRequired: true, cleanupTerminalCode: 'PERMISSION_DENIED',
+        ...(operation === 'provider.secret.rotate'
+          ? { protectedSecretReferenceHash: await fingerprintProviderSecret('prior-active-reference') }
+          : {}),
+      },
+    };
+    const envelope = {
+      operation, organizationId: ORG, workspaceId: WORKSPACE, providerConfigId: CONFIG,
+      requestId: NONCE_ONE, idempotencyKey: `slow-cleanup-${index + 1}`,
+    };
+    const request = () => new Request('https://example.test/recovery', { method: 'POST', body: JSON.stringify(envelope) });
+    let claimCalls = 0;
+    const overrides = {
+      authenticateActor: async () => ({ id: ACTOR }),
+      claimRecoveryReceipt: async () => {
+        claimCalls += 1;
+        return { receipt, ownsExecution: receipt.status === 'claimed' && claimCalls === 1 };
+      },
+      persistPlan: async (_receipt: EnterpriseReceiptRow, _scope: unknown, plan: Record<string, unknown>) => {
+        receipt.execution_plan = structuredClone(plan);
+        return receipt;
+      },
+      renewCleanupLease: async () => {
+        receipt.lease_expires_at = new Date(Date.now() + 45_000).toISOString();
+      },
+      failReceipt: async (_receipt: EnterpriseReceiptRow, _scope: unknown, response: Record<string, unknown>) => {
+        receipt.status = 'blocked'; receipt.response = structuredClone(response); return receipt;
+      },
+      deps: {
+        database: { loadConfig: async () => null, transition: async () => ({}) },
+        secretBackend: {
+          kind: 'vault', writable: true,
+          resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
+          remove: async (input: { secretRef: string; signal: AbortSignal }) => {
+            deleteCalls += 1; deleteStarted();
+            await blockedDelete;
+            if (input.signal.aborted) throw new Error('aborted');
+            secrets.delete(input.secretRef);
+          },
+        } as ProviderSecretBackend,
+        routeResolverDeps: {} as never,
+        validateConnection: async () => ({ validated: true as const }),
+        now: () => now, randomId: () => crypto.randomUUID(), secretDeleteTimeoutMs: 5_000,
+      },
+    };
+    const first = handleProviderLifecycleRecoveryRequest(request(), overrides);
+    await started;
+    await new Promise(resolve => setTimeout(resolve, 1_100));
+    const concurrent = await handleProviderLifecycleRecoveryRequest(request(), overrides);
+    assert.equal(concurrent.status, 409);
+    assert.equal((await concurrent.json() as { error: { code: string } }).error.code, 'COMMAND_IN_PROGRESS');
+    assert.equal(deleteCalls, 1);
+    releaseDelete();
+    assert.equal((await first).status, 200);
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(secrets.size, 0);
+    assert.equal(deleteCalls, 1);
+  }
+});
+
+await test('timed-out cleanup aborts before fenced takeover and terminal replay adds no delete', async () => {
+  for (const [index, operation] of (['provider.secret.bind', 'provider.secret.rotate'] as const).entries()) {
+    const receiptId = index === 0 ? NONCE_ONE : NONCE_TWO;
+    const secretReference = `AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_TIMEOUT_${index}`;
+    const secretValue = `timeout-cleanup-secret-${index}`;
+    const secrets = new Map([[secretReference, secretValue]]);
+    let deleteAttempts = 0;
+    let successfulDeletes = 0;
+    let abortedDeletes = 0;
+    const receipt: EnterpriseReceiptRow = {
+      id: receiptId, request_hash: 'b'.repeat(64), initial_request_id: NONCE_ONE,
+      last_request_id: NONCE_ONE, execution_token: KEY_ONE, execution_fence: 2,
+      lease_expires_at: new Date(now.getTime() + 45_000).toISOString(), status: 'claimed',
+      execution_plan: {
+        providerConfigId: CONFIG, provider: 'openai', secretOwnership: 'managed_write',
+        secretPlanReceiptId: receiptId, secretReference,
+        safeFingerprint: await fingerprintProviderSecret(secretValue), keyRefId: KEY_TWO,
+        writeState: 'written', cleanupRequired: true, cleanupTerminalCode: 'PERMISSION_DENIED',
+        ...(operation === 'provider.secret.rotate'
+          ? { protectedSecretReferenceHash: await fingerprintProviderSecret('prior-active-reference') }
+          : {}),
+      },
+    };
+    const envelope = {
+      operation, organizationId: ORG, workspaceId: WORKSPACE, providerConfigId: CONFIG,
+      requestId: NONCE_ONE, idempotencyKey: `timeout-cleanup-${index + 1}`,
+    };
+    const request = () => new Request('https://example.test/recovery', { method: 'POST', body: JSON.stringify(envelope) });
+    let claims = 0;
+    const overrides = {
+      authenticateActor: async () => ({ id: ACTOR }),
+      claimRecoveryReceipt: async () => {
+        claims += 1;
+        if (receipt.status === 'blocked') return { receipt, ownsExecution: false };
+        if (claims > 1) {
+          receipt.execution_token = KEY_TWO;
+          receipt.execution_fence += 1;
+        }
+        return { receipt, ownsExecution: true };
+      },
+      persistPlan: async (_receipt: EnterpriseReceiptRow, _scope: unknown, plan: Record<string, unknown>) => {
+        receipt.execution_plan = structuredClone(plan);
+        return receipt;
+      },
+      renewCleanupLease: async () => {
+        receipt.lease_expires_at = new Date(Date.now() + 45_000).toISOString();
+      },
+      failReceipt: async (_receipt: EnterpriseReceiptRow, _scope: unknown, response: Record<string, unknown>) => {
+        receipt.status = 'blocked'; receipt.response = structuredClone(response); return receipt;
+      },
+      deps: {
+        database: { loadConfig: async () => null, transition: async () => ({}) },
+        secretBackend: {
+          kind: 'vault', writable: true,
+          resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
+          remove: async (input: { secretRef: string; signal: AbortSignal }) => {
+            deleteAttempts += 1;
+            if (deleteAttempts === 1) {
+              await new Promise<void>((_resolve, reject) => {
+                input.signal.addEventListener('abort', () => { abortedDeletes += 1; reject(new Error('aborted')); }, { once: true });
+              });
+              return;
+            }
+            if (input.signal.aborted) throw new Error('aborted');
+            if (secrets.delete(input.secretRef)) successfulDeletes += 1;
+          },
+        } as ProviderSecretBackend,
+        routeResolverDeps: {} as never,
+        validateConnection: async () => ({ validated: true as const }),
+        now: () => now, randomId: () => crypto.randomUUID(), secretDeleteTimeoutMs: 20,
+      },
+    };
+    const timedOut = await handleProviderLifecycleRecoveryRequest(request(), overrides);
+    assert.equal(timedOut.status, 503);
+    assert.deepEqual({ deleteAttempts, abortedDeletes, successfulDeletes },
+      { deleteAttempts: 1, abortedDeletes: 1, successfulDeletes: 0 });
+    assert.equal(secrets.size, 1);
+    const recovered = await handleProviderLifecycleRecoveryRequest(request(), overrides);
+    assert.equal(recovered.status, 200);
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(secrets.size, 0);
+    const replay = await handleProviderLifecycleRecoveryRequest(request(), overrides);
+    assert.equal(replay.status, 200);
+    assert.deepEqual({ deleteAttempts, abortedDeletes, successfulDeletes },
+      { deleteAttempts: 2, abortedDeletes: 1, successfulDeletes: 1 });
   }
 });
 
@@ -954,6 +1147,7 @@ await test('reuses the planned rotation secret, key reference, and validation af
     executionFence: 1,
     plan: {} as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   const deps = {
     database, secretBackend, routeResolverDeps: {} as never,
@@ -990,6 +1184,7 @@ await test('removes a newly written rotation secret before recording determinist
     receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
     plan: {} as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   const deps = {
     database: {
@@ -1041,6 +1236,7 @@ await test('recovers a managed write when the post-write marker fails and cleans
       this.plan = structuredClone(plan);
       return this.plan;
     },
+    async renewCleanupLease() {},
   };
   const deps = {
     database: {
@@ -1114,6 +1310,7 @@ await test('refuses cleanup for mismatched, pre-provisioned, active, or foreign 
   const createExecution = (plan: Record<string, unknown>) => ({
     receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1, plan,
     async persistPlan(next: Record<string, unknown>) { this.plan = structuredClone(next); return this.plan; },
+    async renewCleanupLease() {},
   });
   const plannedFingerprint = await fingerprintProviderSecret('planned-secret');
   const oldReferenceHash = await fingerprintProviderSecret(oldReference);
@@ -1180,6 +1377,7 @@ await test('allows one fenced cleanup recovery worker and rejects a concurrent s
     receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
     plan: {} as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   const deps = {
     database: {
@@ -1261,6 +1459,7 @@ await test('retains one rotation plan across authorization-version recovery and 
     receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
     plan: {} as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   const deps = {
     database,
@@ -1303,6 +1502,7 @@ await test('retains one rotation plan across authorization-version recovery and 
       validationSucceeded: true, lastValidatedAt: now.toISOString(),
     } as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   removedExecution.plan.secretPlanReceiptId = removedExecution.receiptId;
   const noAuthority = {
@@ -1353,6 +1553,7 @@ await test('reuses one bind secret and key-reference plan after authorization-ve
     receiptId: NONCE_TWO, executionToken: NONCE_ONE, executionFence: 1,
     plan: {} as Record<string, unknown>,
     async persistPlan(plan: Record<string, unknown>) { this.plan = structuredClone(plan); return this.plan; },
+    async renewCleanupLease() {},
   };
   const deps = {
     database,

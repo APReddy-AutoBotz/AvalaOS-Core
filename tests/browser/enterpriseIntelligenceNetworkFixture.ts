@@ -143,7 +143,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
   let nextTransportFailure: string | undefined;
-  let nextProviderStale: { operation: string; revokeAuthority: boolean } | undefined;
+  let nextProviderStale: { operation: string; revokeAuthority: boolean; managedWrite: boolean } | undefined;
   let providerAuthorityRevoked = false;
   let authorityRecheckTransportFailures = 0;
   let recoveryTransportFailures = 0;
@@ -178,11 +178,11 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         return route.abort('failed');
       }
       return route.fulfill({
-        status: terminalizedSecretPlans.has(key) ? 200 : 503,
+        status: terminalizedSecretPlans.has(key) ? 200 : 403,
         headers,
         body: JSON.stringify(terminalizedSecretPlans.has(key)
           ? { ok: true, terminal: true }
-          : { ok: false, error: { code: 'COMMAND_IN_PROGRESS' } }),
+          : { ok: false, error: { code: 'PERMISSION_DENIED' } }),
       });
     }
     if (pathname.endsWith('/enterprise-provider-lifecycle-authority')) {
@@ -230,7 +230,9 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         const stale = nextProviderStale;
         nextProviderStale = undefined;
         const body = request.postDataJSON() as { idempotencyKey?: string };
-        if ((operation === 'provider.secret.bind' || operation === 'provider.secret.rotate') && body.idempotencyKey) {
+        if (stale.managedWrite
+          && (operation === 'provider.secret.bind' || operation === 'provider.secret.rotate')
+          && body.idempotencyKey) {
           managedSecretPlans.add(body.idempotencyKey);
           managedSecretWrites += 1;
         }
@@ -373,10 +375,13 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     transportFailNext(operation: string) { nextTransportFailure = operation; },
     staleProviderAfterManagedWriteNext(operation: 'provider.secret.bind' | 'provider.secret.rotate') {
-      nextProviderStale = { operation, revokeAuthority: false };
+      nextProviderStale = { operation, revokeAuthority: false, managedWrite: true };
     },
     revokeProviderAuthorityOnStaleNext(operation: string) {
-      nextProviderStale = { operation, revokeAuthority: true };
+      nextProviderStale = { operation, revokeAuthority: true, managedWrite: true };
+    },
+    revokeProviderAuthorityBeforeReceiptNext(operation: 'provider.secret.bind' | 'provider.secret.rotate') {
+      nextProviderStale = { operation, revokeAuthority: true, managedWrite: false };
     },
     transportFailProviderAuthorityRecheckNext(count = 1) {
       authorityRecheckTransportFailures = count;
