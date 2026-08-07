@@ -34,6 +34,10 @@ const isRetryableTransportError = (error: unknown) => {
   return name === 'FunctionsFetchError' || name === 'FunctionsRelayError';
 };
 
+const waitForProviderAuthorityRetry = (milliseconds: number) => new Promise<void>(resolve => {
+  globalThis.setTimeout(resolve, milliseconds);
+});
+
 const lifecycleAuthorizationVersion = Symbol('enterprise-provider-lifecycle-authorization-version');
 
 type LifecycleResult = Record<string, unknown> & {
@@ -154,27 +158,51 @@ const invokeProviderLifecycle = async <T>(input: {
         throw new EnterpriseIntelligenceClientError(errorCode || 'COMMAND_UNAVAILABLE');
       }
 
-      let refreshed: EnterpriseIntelligenceProjection;
-      try {
-        refreshed = await loadProjection({
-          organizationId: input.organizationId,
-          workspaceId: input.workspaceId,
-        }, true);
-      } catch (cause) {
-        if (cause instanceof EnterpriseIntelligenceClientError &&
-          (cause.code === 'TENANT_ACCESS_DENIED' || cause.code === 'PERMISSION_DENIED')) {
-          throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
-        }
-        throw cause;
-      }
       const providerConfigId = typeof activePayload?.providerConfigId === 'string'
         ? activePayload.providerConfigId
         : undefined;
-      if (!refreshed.capabilities.includes('byok.manage') ||
-        (providerConfigId && !refreshed.providers.some(provider => provider.id === providerConfigId))) {
-        throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
+      const routeId = typeof activePayload?.routeId === 'string' ? activePayload.routeId : undefined;
+      const authorityBody = {
+        operation: input.operation,
+        organizationId: input.organizationId,
+        workspaceId: input.workspaceId,
+        ...(providerConfigId ? { providerConfigId } : {}),
+        ...(routeId ? { routeId } : {}),
+      };
+      let refreshedAuthorizationVersion: number | undefined;
+      for (let recheckAttempt = 0; recheckAttempt < 3; recheckAttempt += 1) {
+        const authorityInvocation = await supabase.functions.invoke(
+          'enterprise-provider-lifecycle-authority',
+          { body: authorityBody },
+        );
+        if (isRetryableTransportError(authorityInvocation.error)) {
+          if (recheckAttempt < 2) {
+            await waitForProviderAuthorityRetry(25 * (recheckAttempt + 1));
+            continue;
+          }
+          throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+        }
+        const authorityData = authorityInvocation.data as {
+          authorized?: unknown;
+          authorizationVersion?: unknown;
+        } | null;
+        if (authorityInvocation.error
+          || typeof authorityData?.authorized !== 'boolean'
+          || (authorityData.authorized
+            && (!Number.isSafeInteger(authorityData.authorizationVersion)
+              || Number(authorityData.authorizationVersion) < 1))) {
+          throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+        }
+        if (!authorityData.authorized) {
+          throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
+        }
+        refreshedAuthorizationVersion = Number(authorityData.authorizationVersion);
+        break;
       }
-      expectedAuthorizationVersion = refreshed.authorizationVersion;
+      if (!refreshedAuthorizationVersion) {
+        throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+      }
+      expectedAuthorizationVersion = refreshedAuthorizationVersion;
     }
     throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
   } finally {
@@ -189,15 +217,11 @@ const loadProjection = async (input: {
   organizationId: string;
   workspaceId: string;
   expectedAuthorizationVersion?: number;
-}, surfaceAuthorizationError = false): Promise<EnterpriseIntelligenceProjection> => {
+}): Promise<EnterpriseIntelligenceProjection> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', { body: input });
   const response = data as { projection?: unknown; code?: string } | null;
   if (error) {
-    const code = await responseErrorCode(data, error);
-    if (surfaceAuthorizationError && (code === 'TENANT_ACCESS_DENIED' || code === 'PERMISSION_DENIED')) {
-      throw new EnterpriseIntelligenceClientError(code);
-    }
     throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   }
   if (!response?.projection) throw new EnterpriseIntelligenceClientError(response?.code || 'ENTERPRISE_PROJECTION_UNAVAILABLE');

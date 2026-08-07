@@ -137,12 +137,14 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   const projection = baseProjection(options);
   const operations: string[] = [];
   const commandPayloads: Array<Record<string, unknown>> = [];
+  const authorityRecheckPayloads: Array<Record<string, unknown>> = [];
   const unexpectedRequests: string[] = [];
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
   let nextTransportFailure: string | undefined;
   let nextProviderStale: { operation: string; revokeAuthority: boolean } | undefined;
   let providerAuthorityRevoked = false;
+  let authorityRecheckTransportFailures = 0;
   const managedSecretPlans = new Set<string>();
   let managedSecretWrites = 0;
   let providerValidations = 0;
@@ -159,10 +161,22 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     const request = route.request();
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const pathname = new URL(request.url()).pathname;
-    if (pathname.endsWith('/enterprise-intelligence-query')) {
-      if (providerAuthorityRevoked) {
-        return route.fulfill({ status: 403, headers, body: JSON.stringify({ code: 'TENANT_ACCESS_DENIED' }) });
+    if (pathname.endsWith('/enterprise-provider-lifecycle-authority')) {
+      authorityRecheckPayloads.push(request.postDataJSON() as Record<string, unknown>);
+      if (authorityRecheckTransportFailures > 0) {
+        authorityRecheckTransportFailures -= 1;
+        return route.abort('failed');
       }
+      return route.fulfill({
+        status: 200,
+        headers,
+        body: JSON.stringify({
+          authorized: !providerAuthorityRevoked,
+          authorizationVersion: projection.authorizationVersion,
+        }),
+      });
+    }
+    if (pathname.endsWith('/enterprise-intelligence-query')) {
       if (projectionFailure) {
         const failures = {
           stale: { status: 409, code: 'AUTHORIZATION_STALE' },
@@ -329,6 +343,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   return {
     operations,
     commandPayloads,
+    authorityRecheckPayloads,
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     transportFailNext(operation: string) { nextTransportFailure = operation; },
@@ -337,6 +352,9 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     },
     revokeProviderAuthorityOnStaleNext(operation: string) {
       nextProviderStale = { operation, revokeAuthority: true };
+    },
+    transportFailProviderAuthorityRecheckNext(count = 1) {
+      authorityRecheckTransportFailures = count;
     },
     restoreProviderAuthority() { providerAuthorityRevoked = false; },
     providerRecoveryCounts() {

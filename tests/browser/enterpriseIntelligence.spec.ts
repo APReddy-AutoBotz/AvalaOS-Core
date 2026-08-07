@@ -185,6 +185,7 @@ test('provider secret actions recover stale authority as the same in-memory brow
     { operation: 'provider.secret.rotate' as const, button: /rotate key/i, key: 'sk-private-browser-fixture-rotate' },
   ]) {
     fixture.staleProviderAfterManagedWriteNext(action.operation);
+    fixture.transportFailProviderAuthorityRecheckNext();
     await keyInput.fill(action.key);
     await controls.getByRole('button', { name: action.button }).click();
     await expect(workspace(page).getByRole('status')).toContainText(action.operation.endsWith('bind') ? /secret bound/i : /key rotated/i);
@@ -202,6 +203,16 @@ test('provider secret actions recover stale authority as the same in-memory brow
     expect(bodies[1].payload).toEqual(bodies[0].payload);
     expect(bodies[1].expectedAuthorizationVersion).toBe(bodies[0].expectedAuthorizationVersion + 1);
     expect(Object.keys(bodies[1]).filter(key => JSON.stringify(bodies[1][key as keyof typeof bodies[number]]) !== JSON.stringify(bodies[0][key as keyof typeof bodies[number]]))).toEqual(['expectedAuthorizationVersion']);
+    const rechecks = fixture.authorityRecheckPayloads.filter(body => body.operation === action.operation);
+    expect(rechecks).toHaveLength(2);
+    expect(rechecks[0]).toEqual(rechecks[1]);
+    expect(rechecks[0]).toEqual({
+      operation: action.operation,
+      organizationId: IDS.organization,
+      workspaceId: IDS.workspace,
+      providerConfigId: IDS.provider,
+    });
+    expect(JSON.stringify(rechecks)).not.toMatch(PRIVATE_VALUE);
   }
 
   expect(fixture.providerRecoveryCounts()).toEqual({
@@ -216,6 +227,7 @@ test('provider secret actions recover stale authority as the same in-memory brow
   await controls.getByRole('button', { name: /^Validate$/i }).click();
   await expect(workspace(page).getByRole('alert')).toContainText(/do not have.*capability|permission/i);
   expect(fixture.commandPayloads.filter(body => body.operation === 'provider.validate')).toHaveLength(validationCount + 1);
+  expect(fixture.authorityRecheckPayloads.filter(body => body.operation === 'provider.validate')).toHaveLength(1);
   fixture.restoreProviderAuthority();
 
   const persisted = await page.evaluate(() => ({

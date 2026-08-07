@@ -15,6 +15,7 @@ const requiredFiles = [
   'supabase/functions/enterprise-intelligence-command/index.ts',
   'supabase/functions/enterprise-intelligence-query/index.ts',
   'supabase/functions/enterprise-provider-lifecycle/index.ts',
+  'supabase/functions/enterprise-provider-lifecycle-authority/index.ts',
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
   'supabase/migrations/20260805120000_provider_lifecycle_authorization_attempts.sql',
   'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql',
@@ -85,17 +86,44 @@ for (const required of [
   'const idempotencyKey = createEnterpriseActionIdempotencyKey(input.operation)',
   'staleRecoveryAttempt <= 1',
   "errorCode !== 'AUTHORIZATION_STALE'",
-  "refreshed.capabilities.includes('byok.manage')",
-  'expectedAuthorizationVersion = refreshed.authorizationVersion',
+  "'enterprise-provider-lifecycle-authority'",
+  'recheckAttempt < 3',
+  'isRetryableTransportError(authorityInvocation.error)',
+  'waitForProviderAuthorityRetry',
+  'authorityData.authorized',
+  'expectedAuthorizationVersion = refreshedAuthorizationVersion',
   'activePayload.providerKey = undefined',
 ]) {
   if (!providerLifecycleClient.includes(required)) {
     throw new Error(`Provider browser stale-authority recovery is missing ${required}.`);
   }
 }
+if (providerLifecycleClient.includes("capabilities.includes('")
+  || providerLifecycleClient.includes('loadProjection(')) {
+  throw new Error('The browser must not infer lifecycle authority from a projected capability set.');
+}
 if (!(providerLifecycleClient.indexOf('const requestId = createId()') < providerLifecycleClient.indexOf('for (let staleRecoveryAttempt')
   && providerLifecycleClient.indexOf('const idempotencyKey = createEnterpriseActionIdempotencyKey(input.operation)') < providerLifecycleClient.indexOf('for (let staleRecoveryAttempt'))) {
   throw new Error('Provider stale-authority recovery must retain one request ID and idempotency key for the logical browser action.');
+}
+const providerLifecycleEndpoint = read('supabase/functions/_shared/providerLifecycleEndpoint.ts');
+for (const required of [
+  'parseProviderLifecycleAuthorityRecheckEnvelope',
+  'authenticateProviderLifecycle(request, envelope, false)',
+  'assertProviderLifecycleOperationAuthority(envelope.operation, authority)',
+  "new Set(['operation', 'organizationId', 'workspaceId'])",
+  "new Set(['operation', 'organizationId', 'workspaceId', 'providerConfigId', 'routeId'])",
+  'return jsonResponse({ authorized: true, authorizationVersion: authority.authorizationVersion }, 200)',
+]) {
+  if (!providerLifecycleEndpoint.includes(required)) {
+    throw new Error(`Provider authority recheck is missing ${required}.`);
+  }
+}
+if (providerLifecycleEndpoint.slice(
+  providerLifecycleEndpoint.indexOf('parseProviderLifecycleAuthorityRecheckEnvelope'),
+  providerLifecycleEndpoint.indexOf('export const authenticateProviderLifecycle'),
+).includes('providerKey')) {
+  throw new Error('Provider authority recheck selectors may not accept raw provider keys.');
 }
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',

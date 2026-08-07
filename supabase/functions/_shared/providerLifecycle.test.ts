@@ -12,7 +12,9 @@ import {
 import { fingerprintProviderSecret, type ProviderSecretBackend } from './providerSecretAdapter';
 import { SupabaseRpcError } from './supabase';
 import {
+  handleProviderLifecycleAuthorityRecheckRequest,
   handleProviderLifecycleRequest,
+  parseProviderLifecycleAuthorityRecheckEnvelope,
   parseProviderLifecycleEnvelope,
   providerLifecycleRequestHash,
   providerLifecycleStatusForTerminalReceipt,
@@ -384,6 +386,92 @@ await test('replays terminal provider receipts with their stable non-disclosing 
     ['RESOURCE_CONFLICT', 409], ['PERSISTENCE_UNAVAILABLE', 503],
   ] as const;
   for (const [code, status] of exact) assert.equal(providerLifecycleStatusForTerminalReceipt(receipt(code)), status);
+});
+
+await test('provider lifecycle authority recheck uses exact operation and scope authority', async () => {
+  const organizationSecurityOnly: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(['security.manage']),
+    workspaceCapabilities: new Set(),
+  };
+  const organizationByokOnly: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(['byok.manage']),
+    workspaceCapabilities: new Set(),
+  };
+  const organizationCombined: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(['byok.manage', 'security.manage']),
+    workspaceCapabilities: new Set(),
+  };
+  const workspaceSecurityOnly: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(),
+    workspaceCapabilities: new Set(['security.manage']),
+  };
+  const organizationAdmin: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(['org.admin']),
+    workspaceCapabilities: new Set(),
+  };
+  const expected = new Map<ProviderLifecycleOperation, Array<[ProviderLifecycleAuthority, boolean]>>([
+    ['provider.register', [[organizationSecurityOnly, true], [organizationByokOnly, true], [workspaceSecurityOnly, false]]],
+    ['provider.validate', [[organizationSecurityOnly, true], [organizationByokOnly, true], [workspaceSecurityOnly, false]]],
+    ['provider.activate', [[organizationSecurityOnly, true], [organizationByokOnly, true], [workspaceSecurityOnly, false]]],
+    ['provider.route.toggle', [[organizationSecurityOnly, false], [organizationByokOnly, false], [workspaceSecurityOnly, true]]],
+    ['provider.secret.bind', [[organizationSecurityOnly, false], [organizationByokOnly, false], [organizationCombined, true]]],
+    ['provider.secret.rotate', [[organizationSecurityOnly, false], [organizationByokOnly, false], [organizationCombined, true]]],
+    ['provider.revoke', [[organizationSecurityOnly, false], [organizationByokOnly, false], [organizationCombined, true]]],
+  ]);
+  const selector = (operation: ProviderLifecycleOperation) => ({
+    operation,
+    organizationId: ORG,
+    workspaceId: WORKSPACE,
+    ...(operation === 'provider.register' ? {} : { providerConfigId: CONFIG }),
+    ...(operation === 'provider.route.toggle' ? { routeId: ROUTE } : {}),
+  });
+  for (const operation of systemicProviderOperations) {
+    for (const [current, authorized] of expected.get(operation) || []) {
+      const response = await handleProviderLifecycleAuthorityRecheckRequest(
+        new Request('https://example.test/enterprise-provider-lifecycle-authority', {
+          method: 'POST',
+          body: JSON.stringify(selector(operation)),
+        }),
+        { authenticate: async () => current },
+      );
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { authorized, authorizationVersion: current.authorizationVersion });
+    }
+    const adminResponse = await handleProviderLifecycleAuthorityRecheckRequest(
+      new Request('https://example.test/enterprise-provider-lifecycle-authority', {
+        method: 'POST',
+        body: JSON.stringify(selector(operation)),
+      }),
+      { authenticate: async () => organizationAdmin },
+    );
+    assert.deepEqual(await adminResponse.json(), { authorized: true, authorizationVersion: organizationAdmin.authorizationVersion });
+  }
+});
+
+await test('provider lifecycle authority recheck accepts safe selectors only', async () => {
+  assert.deepEqual(parseProviderLifecycleAuthorityRecheckEnvelope({
+    operation: 'provider.route.toggle', organizationId: ORG, workspaceId: WORKSPACE,
+    providerConfigId: CONFIG, routeId: ROUTE,
+  }), {
+    operation: 'provider.route.toggle', organizationId: ORG, workspaceId: WORKSPACE,
+    providerConfigId: CONFIG, routeId: ROUTE,
+  });
+  for (const invalid of [
+    { operation: 'provider.secret.bind', organizationId: ORG, workspaceId: WORKSPACE, providerConfigId: CONFIG, providerKey: 'must-not-enter-recheck' },
+    { operation: 'provider.register', organizationId: ORG, workspaceId: WORKSPACE, providerConfigId: CONFIG },
+    { operation: 'provider.route.toggle', organizationId: ORG, workspaceId: WORKSPACE, providerConfigId: CONFIG },
+    { operation: 'provider.validate', organizationId: ORG, workspaceId: WORKSPACE },
+  ]) {
+    assert.throws(
+      () => parseProviderLifecycleAuthorityRecheckEnvelope(invalid),
+      (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'INVALID_REQUEST',
+    );
+  }
 });
 
 await test('all provider operations replay persisted 400/403/404/409/503 HTTP contracts exactly', async () => {

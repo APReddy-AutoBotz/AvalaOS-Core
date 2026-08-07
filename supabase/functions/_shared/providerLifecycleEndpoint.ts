@@ -22,7 +22,7 @@ import {
   type EnterpriseReceiptRow,
 } from './enterpriseReceipt.ts';
 import { getAuthUser, postgrest } from './supabase.ts';
-import { resolveTenantAuthority } from './tenantAuthority.ts';
+import { resolveTenantAuthority, TenantAuthorityError } from './tenantAuthority.ts';
 import { createTenantAuthorityDatabase } from './tenantAuthorityDb.ts';
 
 type JsonObject = Record<string, unknown>;
@@ -55,6 +55,14 @@ export type ProviderLifecycleEnvelope = {
   workspaceId: string;
   expectedAuthorizationVersion: number;
   payload: JsonObject;
+};
+
+export type ProviderLifecycleAuthorityRecheckEnvelope = {
+  operation: ProviderLifecycleOperation;
+  organizationId: string;
+  workspaceId: string;
+  providerConfigId?: string;
+  routeId?: string;
 };
 
 const isRecord = (value: unknown): value is JsonObject => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -102,9 +110,39 @@ export const parseProviderLifecycleEnvelope = (value: unknown): ProviderLifecycl
   };
 };
 
-const authenticateProviderLifecycle = async (
+export const parseProviderLifecycleAuthorityRecheckEnvelope = (
+  value: unknown,
+): ProviderLifecycleAuthorityRecheckEnvelope => {
+  if (!isRecord(value) || !operations.has(value.operation as ProviderLifecycleOperation)) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  const operation = value.operation as ProviderLifecycleOperation;
+  const allowedKeys = operation === 'provider.register'
+    ? new Set(['operation', 'organizationId', 'workspaceId'])
+    : operation === 'provider.route.toggle'
+      ? new Set(['operation', 'organizationId', 'workspaceId', 'providerConfigId', 'routeId'])
+      : new Set(['operation', 'organizationId', 'workspaceId', 'providerConfigId']);
+  if (Object.keys(value).some(key => !allowedKeys.has(key))
+    || typeof value.organizationId !== 'string' || !uuid.test(value.organizationId)
+    || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)
+    || (operation !== 'provider.register'
+      && (typeof value.providerConfigId !== 'string' || !uuid.test(value.providerConfigId)))
+    || (operation === 'provider.route.toggle'
+      && (typeof value.routeId !== 'string' || !uuid.test(value.routeId)))) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  return {
+    operation,
+    organizationId: value.organizationId,
+    workspaceId: value.workspaceId,
+    ...(operation === 'provider.register' ? {} : { providerConfigId: value.providerConfigId as string }),
+    ...(operation === 'provider.route.toggle' ? { routeId: value.routeId as string } : {}),
+  };
+};
+
+export const authenticateProviderLifecycle = async (
   request: Request,
-  envelope: ProviderLifecycleEnvelope,
+  envelope: Pick<ProviderLifecycleEnvelope, 'organizationId' | 'workspaceId'> & { expectedAuthorizationVersion?: number },
   enforceAttemptAuthorizationVersion = true,
 ): Promise<ProviderLifecycleAuthority> => {
   const user = await getAuthUser(request);
@@ -216,6 +254,47 @@ const statusFor = (error: ProviderLifecycleError) => {
   if (error.code === 'PERSISTENCE_UNAVAILABLE' || error.code === 'SECRET_BACKEND_REQUIRED' || error.code === 'SECRET_UNAVAILABLE') return 503;
   if (error.code === 'VALIDATION_FAILED') return 422;
   return 400;
+};
+
+export const handleProviderLifecycleAuthorityRecheckRequest = async (
+  request: Request,
+  overrides: {
+    authenticate?: (
+      request: Request,
+      envelope: ProviderLifecycleAuthorityRecheckEnvelope,
+    ) => Promise<ProviderLifecycleAuthority>;
+  } = {},
+) => {
+  const options = handleOptions(request);
+  if (options) return options;
+  if (request.method !== 'POST') {
+    return jsonResponse({ authorized: false, authorizationVersion: null }, 405);
+  }
+  let envelope: ProviderLifecycleAuthorityRecheckEnvelope;
+  try {
+    envelope = parseProviderLifecycleAuthorityRecheckEnvelope(await request.json());
+  } catch {
+    return jsonResponse({ authorized: false, authorizationVersion: null }, 400);
+  }
+  let authority: ProviderLifecycleAuthority;
+  try {
+    authority = overrides.authenticate
+      ? await overrides.authenticate(request, envelope)
+      : await authenticateProviderLifecycle(request, envelope, false);
+  } catch (error) {
+    if ((error instanceof ProviderLifecycleError
+      && (error.code === 'TENANT_ACCESS_DENIED' || error.code === 'PERMISSION_DENIED'))
+      || (error instanceof TenantAuthorityError && error.code === 'TENANT_ACCESS_DENIED')) {
+      return jsonResponse({ authorized: false, authorizationVersion: null }, 200);
+    }
+    return jsonResponse({ authorized: false, authorizationVersion: null }, 503);
+  }
+  try {
+    assertProviderLifecycleOperationAuthority(envelope.operation, authority);
+    return jsonResponse({ authorized: true, authorizationVersion: authority.authorizationVersion }, 200);
+  } catch {
+    return jsonResponse({ authorized: false, authorizationVersion: authority.authorizationVersion }, 200);
+  }
 };
 
 export const providerLifecycleStatusForTerminalReceipt = (receipt: EnterpriseReceiptRow) => {
