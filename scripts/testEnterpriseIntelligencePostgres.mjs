@@ -1428,7 +1428,18 @@ try {
       [reviewReceipt.id, fixture.org, fixture.workspace],
     )).rows[0];
     assert.equal(recoveredReview.status, 'committed');
+    assert.equal(recoveredReview.resource_id, workPackage);
     assert.deepEqual(recoveredReview.response, canonicalReview);
+    const reviewEffect = (await authority.query(
+      "SELECT resource_id,safe_result FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1 AND effect_key='command'",
+      [reviewReceipt.id],
+    )).rows[0];
+    assert.equal(reviewEffect.resource_id, workPackage);
+    assert.equal(reviewEffect.safe_result.resourceId, workPackage);
+    assert.deepEqual(
+      [recoveredReview.resource_id, reviewEffect.resource_id, recoveredReview.response.resourceId, canonicalReview.resourceId],
+      [workPackage, workPackage, workPackage, workPackage],
+    );
 
     const resolved = (await authority.query(
       'SELECT public.enterprise_resolve_high_impact_review_authority($1,$2,$3,$4,$5,$6) authority',
@@ -1486,6 +1497,8 @@ try {
     )).rows[0].n);
     assert.equal(claimedReceipts, 0);
     console.log(`CANONICAL APPROVAL COUNTS ${JSON.stringify({
+      reviewReceiptResourceId:recoveredReview.resource_id, reviewEffectResourceId:reviewEffect.resource_id,
+      reviewResponseResourceId:recoveredReview.response.resourceId,
       reviewResourceHash:canonicalReview.resourceHash, reviewResourceVersion:canonicalReview.resourceVersion,
       approvalResourceHash:canonicalApproval.resourceHash, approvalResourceVersion:canonicalApproval.resourceVersion,
       duplicateReviews:0, duplicateApprovals:0, duplicateEffects:0, replayAdditionalWrites:0, claimedReceipts,

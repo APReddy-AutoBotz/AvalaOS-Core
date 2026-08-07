@@ -181,8 +181,12 @@ const resourceResolver = commandSource.slice(
   commandSource.indexOf('export const resolveEnterpriseCommandResourceId'),
   commandSource.indexOf('const ensureExecutionPlan'),
 );
-check(resourceResolver.includes('resultObject.assessDraftId !== explicitResourceId'), 'Promotion finalization must bind explicit resourceId to assessDraftId.');
-check(resourceResolver.indexOf("commandType === 'evidence.assess.promote'") < resourceResolver.indexOf('typeof resultObject.sourceId'), 'Promotion must fail closed before the legacy sourceId fallback.');
+check(resourceResolver.includes("commandType === 'evidence.assess.promote'")
+  && resourceResolver.includes('? resultObject.assessDraftId'),
+'Promotion finalization must bind explicit resourceId to assessDraftId.');
+check(resourceResolver.includes('lineageResourceId !== explicitResourceId')
+  && !/return\s+resultObject\.sourceId/u.test(resourceResolver),
+'Every Enterprise result must fail closed unless explicit resourceId equals command lineage.');
 for (const operation of [
   'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
   'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
@@ -260,6 +264,8 @@ for (const required of [
 ]) check(reviewActionReplaySql.includes(required), `Review/action/replay correction is missing ${required}.`);
 check(reviewActionReplaySql.includes('FROM PUBLIC, anon, authenticated'), 'Canonical review authority RPCs must reject browser roles.');
 check(reviewActionReplaySql.includes('FROM service_role'), 'Legacy hash-accepting Edge wrappers must be revoked.');
+check(reviewActionReplaySql.includes("'approval.review.record', 'command', p_resource_id, result, 'committed'"),
+  'Review effect identity must be the reviewed canonical resource.');
 const approvalCommandSource = commandSource.slice(
   commandSource.indexOf('const approvalResourceTypes'),
   commandSource.indexOf('type StudioAggregateRow'),
@@ -268,6 +274,47 @@ check(!approvalCommandSource.includes('sha256Json'), 'Edge approval commands mus
 check(!approvalCommandSource.includes('resource_hash=eq.'), 'Edge approval commands must not select reviews by an application hash.');
 check(commandSource.includes('requiredCapabilitiesForEnterpriseCommand'), 'Replay authority requires one command-capability map.');
 check(commandSource.includes('assertCurrentEnterpriseCommandAuthority'), 'Receipt disclosure requires current operation authority.');
+check(commandSource.includes('assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current))'),
+  'Generic provider commands require provider-specific scope and capability authority.');
 check(providerLifecycleEndpointSource.includes('assertProviderLifecycleOperationAuthority'), 'Provider terminal receipt disclosure requires current lifecycle authority.');
+check(providerLifecycleEndpointSource.includes('authenticateProviderLifecycle(request, envelope, false)')
+  && providerLifecycleEndpointSource.includes('enforceAttemptAuthorizationVersion'),
+'Provider replay and finalization must use current authority after authorization-version changes.');
+const enterpriseSuccessFinalization = commandSource.slice(
+  commandSource.indexOf('const result = await executeCommand'),
+  commandSource.indexOf('} catch (error)', commandSource.indexOf('const result = await executeCommand')),
+);
+check(enterpriseSuccessFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseSuccessFinalization.indexOf('await completeReceipt')
+  && enterpriseSuccessFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseSuccessFinalization.indexOf('await completeReceipt'),
+'Enterprise success finalization must reauthorize before commit and disclosure.');
+const enterpriseFailureFinalization = commandSource.slice(
+  commandSource.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  commandSource.indexOf('export const handleEnterpriseIntelligenceOptions'),
+);
+check(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseFailureFinalization.indexOf('await failReceipt')
+  && enterpriseFailureFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseFailureFinalization.indexOf('await failReceipt'),
+'Enterprise failure finalization must reauthorize before commit and disclosure.');
+const providerSuccessFinalization = providerLifecycleEndpointSource.slice(
+  providerLifecycleEndpointSource.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)'),
+  providerLifecycleEndpointSource.indexOf('} catch (error)', providerLifecycleEndpointSource.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)')),
+);
+check(providerSuccessFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt')
+  && providerSuccessFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt'),
+'Provider success finalization must reauthorize before commit and disclosure.');
+const providerFailureFinalization = providerLifecycleEndpointSource.slice(
+  providerLifecycleEndpointSource.indexOf("safeError.code !== 'AUTHORIZATION_STALE'"),
+  providerLifecycleEndpointSource.indexOf('if (claimedReceipt && claimedAuthority && claimedEnvelope) {', providerLifecycleEndpointSource.indexOf("safeError.code !== 'AUTHORIZATION_STALE'")),
+);
+check(providerFailureFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt')
+  && providerFailureFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt'),
+'Provider failure finalization must reauthorize before commit and disclosure.');
 
 console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);

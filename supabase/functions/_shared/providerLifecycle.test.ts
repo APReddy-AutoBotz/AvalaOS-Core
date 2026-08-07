@@ -17,7 +17,7 @@ import {
   providerLifecycleRequestHash,
   providerLifecycleStatusForTerminalReceipt,
 } from './providerLifecycleEndpoint';
-import type { EnterpriseReceiptRow } from './enterpriseReceipt';
+import { EnterpriseReceiptError, type EnterpriseReceiptRow } from './enterpriseReceipt';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -46,6 +46,11 @@ const authority: ProviderLifecycleAuthority = {
   workspaceRoleIds: new Set([WORKSPACE_ROLE]),
   eligibleRouteRoleIds: new Set([ORG_ROLE, WORKSPACE_ROLE, OTHER_WORKSPACE_ROLE]),
 };
+
+const systemicProviderOperations: ProviderLifecycleOperation[] = [
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+  'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+];
 
 const test = async (name: string, callback: () => Promise<void>) => {
   try { await callback(); console.log(`ok - ${name}`); }
@@ -139,23 +144,29 @@ await test('executes the seven-step lifecycle without persisting raw secret mate
     randomId: () => ids.shift() || crypto.randomUUID(),
   };
 
+  const results: Array<Record<string, unknown>> = [];
   const registration = await executeProviderLifecycleCommand('provider.register', authority, { provider: 'openai', displayName: 'Governed OpenAI', defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], capabilities: ['assess.evidence.extract'] }, deps);
+  results.push(registration);
   assert.equal(registration.providerConfigId, CONFIG);
   assert.deepEqual((transitionPayloads[0] as { routes: Array<{ allowedRoles: string[] }> }).routes[0].allowedRoles, [WORKSPACE_ROLE]);
-  await executeProviderLifecycleCommand('provider.secret.bind', authority, { providerConfigId: CONFIG, providerKey: 'raw-provider-key-one' }, deps);
+  results.push(await executeProviderLifecycleCommand('provider.secret.bind', authority, { providerConfigId: CONFIG, providerKey: 'raw-provider-key-one' }, deps));
   assert.equal(config?.keyRef?.id, KEY_ONE);
-  await executeProviderLifecycleCommand('provider.validate', authority, { providerConfigId: CONFIG }, deps);
-  await executeProviderLifecycleCommand('provider.activate', authority, { providerConfigId: CONFIG }, deps);
-  await executeProviderLifecycleCommand('provider.route.toggle', authority, { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: true }, deps);
+  results.push(await executeProviderLifecycleCommand('provider.validate', authority, { providerConfigId: CONFIG }, deps));
+  results.push(await executeProviderLifecycleCommand('provider.activate', authority, { providerConfigId: CONFIG }, deps));
+  results.push(await executeProviderLifecycleCommand('provider.route.toggle', authority, { providerConfigId: CONFIG, routeId: ROUTE, capability: 'assess.evidence.extract', enabled: true }, deps));
   assert.equal(route.enabled, true);
-  await executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'raw-provider-key-two' }, deps);
+  results.push(await executeProviderLifecycleCommand('provider.secret.rotate', authority, { providerConfigId: CONFIG, providerKey: 'raw-provider-key-two' }, deps));
   assert.equal(config?.keyRef?.id, KEY_TWO);
   assert.equal(removed.length, 1);
-  await executeProviderLifecycleCommand('provider.revoke', authority, { providerConfigId: CONFIG }, deps);
+  results.push(await executeProviderLifecycleCommand('provider.revoke', authority, { providerConfigId: CONFIG }, deps));
   assert.equal(config?.status, 'retired');
   assert.equal(route.enabled, false);
   assert.equal(JSON.stringify(transitionPayloads).includes('raw-provider-key'), false);
   assert.match(String(config?.keyRef?.safeFingerprint), /^sha256:[0-9a-f]{24}$/);
+  for (const result of results) {
+    assert.equal(result.resourceId, CONFIG);
+    assert.equal(result.providerConfigId, CONFIG);
+  }
 });
 
 await test('accepts only projected exact-scope role ids when enabling a route', async () => {
@@ -371,11 +382,7 @@ await test('replays terminal provider receipts with their stable non-disclosing 
 });
 
 await test('terminal provider replays require current operation authority across all lifecycle operations', async () => {
-  const operations: ProviderLifecycleOperation[] = [
-    'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
-    'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
-  ];
-  for (const [index, operation] of operations.entries()) {
+  for (const [index, operation] of systemicProviderOperations.entries()) {
     const envelope = {
       operation,
       requestId: NONCE_ONE,
@@ -395,7 +402,7 @@ await test('terminal provider replays require current operation authority across
       lease_expires_at: now.toISOString(),
       status: 'committed',
       resource_id: CONFIG,
-      response: { historicalProviderMarker: true },
+      response: { resourceId: CONFIG, providerConfigId: CONFIG, historicalProviderMarker: true },
     };
     const revoked: ProviderLifecycleAuthority = {
       ...authority,
@@ -420,7 +427,7 @@ await test('terminal provider replays require current operation authority across
     const restored = await handleProviderLifecycleRequest(
       new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) }),
       {
-        authenticate: async () => { authCalls += 1; return authority; },
+        authenticate: async () => { authCalls += 1; return { ...authority, authorizationVersion: authority.authorizationVersion + 1 }; },
         claimReceipt: async () => { claims += 1; return { receipt, ownsExecution: false }; },
       },
     );
@@ -428,6 +435,136 @@ await test('terminal provider replays require current operation authority across
     assert.equal((await restored.json() as { historicalProviderMarker?: boolean }).historicalProviderMarker, true);
     assert.deepEqual({ authCalls, claims }, { authCalls: 2, claims: 1 });
   }
+});
+
+await test('all provider operations protect every terminal and in-progress replay state', async () => {
+  for (const [index, operation] of systemicProviderOperations.entries()) {
+    for (const status of ['committed', 'failed', 'blocked', 'claimed'] as const) {
+      const envelope = {
+        operation, requestId: NONCE_ONE,
+        idempotencyKey: `provider-state-${status}-${index + 1}`,
+        organizationId: ORG, workspaceId: WORKSPACE,
+        expectedAuthorizationVersion: authority.authorizationVersion, payload: {},
+      };
+      const response = status === 'committed'
+        ? { resourceId: CONFIG, providerConfigId: CONFIG, providerStateMarker: true }
+        : status === 'claimed' ? undefined
+          : { ok: false, error: { code: status === 'failed' ? 'VALIDATION_FAILED' : 'PROVIDER_BLOCKED', message: 'providerStateMarker' } };
+      const receipt: EnterpriseReceiptRow = {
+        id: NONCE_TWO, request_hash: 'd'.repeat(64), initial_request_id: NONCE_ONE,
+        last_request_id: NONCE_ONE, execution_token: NONCE_TWO, execution_fence: 1,
+        lease_expires_at: now.toISOString(), status, resource_id: status === 'committed' ? CONFIG : undefined,
+        response,
+      };
+      const snapshot = JSON.stringify(receipt);
+      const request = () => new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) });
+      let authCalls = 0;
+      const revoked = { ...authority, organizationCapabilities: new Set<string>(), workspaceCapabilities: new Set<string>() };
+      const denied = await handleProviderLifecycleRequest(request(), {
+        authenticate: async () => (++authCalls === 1 ? authority : revoked),
+        claimReceipt: async () => ({ receipt, ownsExecution: false }),
+      });
+      assert.equal(denied.status, 403);
+      assert.equal((await denied.text()).includes('providerStateMarker'), false);
+      assert.equal(JSON.stringify(receipt), snapshot);
+
+      const restored = await handleProviderLifecycleRequest(request(), {
+        authenticate: async () => ({ ...authority, authorizationVersion: authority.authorizationVersion + 1 }),
+        claimReceipt: async () => ({ receipt, ownsExecution: false }),
+      });
+      assert.equal(restored.status, status === 'committed' ? 200 : status === 'failed' ? 422 : 409);
+      assert.equal(JSON.stringify(receipt), snapshot);
+      if (status !== 'claimed') assert.equal((await restored.text()).includes('providerStateMarker'), true);
+    }
+  }
+});
+
+await test('all provider operations reauthorize success and failure finalization and reconcile response loss', async () => {
+  for (const [index, operation] of systemicProviderOperations.entries()) {
+    const envelope = {
+      operation, requestId: NONCE_ONE, idempotencyKey: `provider-finalization-${index + 1}`,
+      organizationId: ORG, workspaceId: WORKSPACE,
+      expectedAuthorizationVersion: authority.authorizationVersion, payload: {},
+    };
+    const claimed: EnterpriseReceiptRow = {
+      id: NONCE_TWO, request_hash: 'e'.repeat(64), initial_request_id: NONCE_ONE,
+      last_request_id: NONCE_ONE, execution_token: NONCE_TWO, execution_fence: 1,
+      lease_expires_at: now.toISOString(), status: 'claimed',
+    };
+    const result = { resourceId: CONFIG, providerConfigId: CONFIG, operation };
+    const committed: EnterpriseReceiptRow = {
+      ...claimed, status: 'committed', resource_id: CONFIG, response: result,
+    };
+    const request = () => new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) });
+
+    for (const denyAt of [2, 3]) {
+      let authCalls = 0;
+      let completions = 0;
+      const revoked = { ...authority, organizationCapabilities: new Set<string>(), workspaceCapabilities: new Set<string>() };
+      const denied = await handleProviderLifecycleRequest(request(), {
+        authenticate: async () => (++authCalls >= denyAt ? revoked : authority),
+        claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+        executeCommand: async () => result,
+        completeReceipt: async () => { completions += 1; return committed; },
+        reloadReceipt: async () => claimed,
+      });
+      assert.equal(denied.status, 403);
+      assert.equal((await denied.text()).includes(CONFIG), false);
+      assert.equal(completions, denyAt === 2 ? 0 : 1);
+    }
+
+    for (const denyAt of [2, 3]) {
+      let authCalls = 0;
+      let failures = 0;
+      const revoked = { ...authority, organizationCapabilities: new Set<string>(), workspaceCapabilities: new Set<string>() };
+      const denied = await handleProviderLifecycleRequest(request(), {
+        authenticate: async () => (++authCalls >= denyAt ? revoked : authority),
+        claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+        executeCommand: async () => { throw new ProviderLifecycleError('PROVIDER_BLOCKED'); },
+        reloadReceipt: async () => claimed,
+        failReceipt: async () => {
+          failures += 1;
+          return { ...claimed, status: 'blocked', response: { ok: false, error: { code: 'PROVIDER_BLOCKED', message: 'blocked' } } };
+        },
+      });
+      assert.equal(denied.status, 403);
+      assert.equal((await denied.text()).includes('PROVIDER_BLOCKED'), false);
+      assert.equal(failures, denyAt === 2 ? 0 : 1);
+    }
+
+    let executions = 0;
+    let completions = 0;
+    const reconciled = await handleProviderLifecycleRequest(request(), {
+      authenticate: async () => authority,
+      claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+      executeCommand: async () => { executions += 1; return result; },
+      completeReceipt: async () => { completions += 1; throw new EnterpriseReceiptError('RECEIPT_FINALIZATION_FAILED'); },
+      reloadReceipt: async () => committed,
+    });
+    assert.equal(reconciled.status, 200);
+    assert.equal((await reconciled.json() as { resourceId?: string }).resourceId, CONFIG);
+    assert.deepEqual({ executions, completions }, { executions: 1, completions: 1 });
+  }
+});
+
+await test('provider replay rejects a mismatched canonical receipt resource without disclosure', async () => {
+  const envelope = {
+    operation: 'provider.validate', requestId: NONCE_ONE, idempotencyKey: 'provider-resource-mismatch',
+    organizationId: ORG, workspaceId: WORKSPACE,
+    expectedAuthorizationVersion: authority.authorizationVersion, payload: {},
+  };
+  const receipt: EnterpriseReceiptRow = {
+    id: NONCE_TWO, request_hash: 'f'.repeat(64), initial_request_id: NONCE_ONE,
+    last_request_id: NONCE_ONE, execution_token: NONCE_TWO, execution_fence: 1,
+    lease_expires_at: now.toISOString(), status: 'committed', resource_id: CONFIG,
+    response: { resourceId: ROUTE, providerConfigId: ROUTE, mismatchedMarker: true },
+  };
+  const response = await handleProviderLifecycleRequest(
+    new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) }),
+    { authenticate: async () => authority, claimReceipt: async () => ({ receipt, ownsExecution: false }) },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.text()).includes('mismatchedMarker'), false);
 });
 
 await test('reuses the planned rotation secret, key reference, and validation after persistence uncertainty', async () => {

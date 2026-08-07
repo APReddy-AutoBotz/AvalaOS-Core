@@ -24,6 +24,7 @@ import {
   runGovernedProviderRequest,
 } from './enterpriseIntelligenceAi.ts';
 import {
+  assertProviderLifecycleOperationAuthority,
   createProviderLifecycleDeps,
   executeProviderLifecycleCommand,
   ProviderLifecycleError,
@@ -494,38 +495,41 @@ export const resolveEnterpriseCommandResourceId = (
   resultObject: JsonObject,
 ) => {
   const explicitResourceId = resultObject.resourceId;
-  if (explicitResourceId !== undefined) {
-    if (typeof explicitResourceId !== 'string' || !uuidPattern.test(explicitResourceId)) {
-      throw new EnterpriseCommandError('RESOURCE_STALE');
-    }
-    if (commandType === 'evidence.assess.promote'
-      && resultObject.assessDraftId !== explicitResourceId) {
-      throw new EnterpriseCommandError('RESOURCE_STALE');
-    }
-    return explicitResourceId;
-  }
-  if (commandType === 'evidence.assess.promote') {
+  if (typeof explicitResourceId !== 'string' || !uuidPattern.test(explicitResourceId)) {
     throw new EnterpriseCommandError('RESOURCE_STALE');
   }
-  return typeof resultObject.id === 'string'
-    ? resultObject.id
-    : typeof resultObject.sourceId === 'string'
+  const lineageResourceId = commandType.startsWith('provider.')
+    ? resultObject.providerConfigId
+    : commandType === 'evidence.source.create'
       ? resultObject.sourceId
-      : typeof resultObject.providerConfigId === 'string'
-        ? resultObject.providerConfigId
-        : typeof resultObject.workPackageId === 'string'
-          ? resultObject.workPackageId
-          : typeof resultObject.decisionId === 'string'
-            ? resultObject.decisionId
-            : undefined;
+      : commandType === 'evidence.extract'
+        ? resultObject.jobId
+        : commandType === 'evidence.candidate.review'
+          ? resultObject.candidateId
+          : commandType === 'evidence.assess.promote'
+            ? resultObject.assessDraftId
+            : commandType === 'modernization.evaluate'
+              ? resultObject.decisionId
+              : commandType === 'studio.delivery.handoff'
+                ? resultObject.workPackageId
+                : commandType === 'monitor.baseline.create' || commandType === 'assemble.blueprint.create'
+                  ? resultObject.id
+                  : explicitResourceId;
+  if (lineageResourceId !== explicitResourceId) throw new EnterpriseCommandError('RESOURCE_STALE');
+  return explicitResourceId;
 };
 
-const enterpriseCommandCapabilities: Record<EnterpriseCommandType, readonly string[]> = {
-  'provider.register': ['byok.manage', 'security.manage'],
-  'provider.validate': ['byok.manage', 'security.manage'],
-  'provider.activate': ['byok.manage', 'security.manage'],
-  'provider.route.toggle': ['byok.manage', 'security.manage'],
-  'provider.revoke': ['byok.manage', 'security.manage'],
+type EnterpriseDomainCommandType = Exclude<EnterpriseCommandType, ProviderLifecycleOperation>;
+
+const enterpriseProviderOperations: Partial<Record<EnterpriseCommandType, ProviderLifecycleOperation>> = {
+  'provider.register': 'provider.register',
+  'provider.validate': 'provider.validate',
+  'provider.activate': 'provider.activate',
+  'provider.route.toggle': 'provider.route.toggle',
+  'provider.revoke': 'provider.revoke',
+};
+
+const enterpriseCommandCapabilities: Record<EnterpriseDomainCommandType, readonly string[]> = {
   'evidence.source.create': ['evidence.write'],
   'evidence.extract': ['evidence.write'],
   'evidence.candidate.review': ['evidence.review'],
@@ -539,8 +543,25 @@ const enterpriseCommandCapabilities: Record<EnterpriseCommandType, readonly stri
 };
 
 export const requiredCapabilitiesForEnterpriseCommand = (commandType: EnterpriseCommandType) => (
-  [...enterpriseCommandCapabilities[commandType]]
+  [...(enterpriseCommandCapabilities[commandType as EnterpriseDomainCommandType]
+    || (() => { throw new EnterpriseCommandError('INVALID_COMMAND'); })())]
 );
+
+export const assertEnterpriseCommandOperationAuthority = (
+  authority: Authority,
+  commandType: EnterpriseCommandType,
+) => {
+  const providerOperation = enterpriseProviderOperations[commandType];
+  if (providerOperation) {
+    try {
+      assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(authority));
+      return;
+    } catch {
+      throw new EnterpriseCommandError('PERMISSION_DENIED');
+    }
+  }
+  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand(commandType));
+};
 
 export const assertCurrentEnterpriseCommandAuthority = async (
   authority: Authority,
@@ -550,7 +571,12 @@ export const assertCurrentEnterpriseCommandAuthority = async (
     const current = await resolveAuthority(
       authority.actorId, authority.organizationId, authority.workspaceId,
     );
-    await assertFreshAuthority(current, requiredCapabilitiesForEnterpriseCommand(commandType));
+    const providerOperation = enterpriseProviderOperations[commandType];
+    if (providerOperation) {
+      assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current));
+    } else {
+      await assertFreshAuthority(current, requiredCapabilitiesForEnterpriseCommand(commandType));
+    }
     return current;
   } catch {
     throw new EnterpriseCommandError('PERMISSION_DENIED');
@@ -655,6 +681,7 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
       || existingVersion.extraction_status !== 'pending'
     )) throw new EnterpriseCommandError('RESOURCE_STALE');
     const pendingResult = {
+      resourceId: sourceId,
       sourceId,
       sourceVersionId: versionId,
       version: 1,
@@ -689,7 +716,7 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
       const failureCode = classifyEvidenceExtractionFailure(parseError, mimeType);
       if (!failureCode) throw parseError;
       const failedResult = {
-        sourceId, sourceVersionId: versionId, version: 1, displayName, mimeType,
+        resourceId: sourceId, sourceId, sourceVersionId: versionId, version: 1, displayName, mimeType,
         status: 'failed', failureCode, extractedCharacterCount: 0, ingestion: 'server_managed',
       };
       await rpc('enterprise_record_source_extraction_failure', {
@@ -703,7 +730,7 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
     }
     const extractedTextHash = await sha256Hex(text);
     const result = {
-      sourceId, sourceVersionId: versionId, version: 1, displayName, mimeType,
+      resourceId: sourceId, sourceId, sourceVersionId: versionId, version: 1, displayName, mimeType,
       status: 'review', contentHash, extractedCharacterCount: text.length, ingestion: 'server_managed',
     };
     await rpc('enterprise_record_source_extraction_success', {
@@ -1168,7 +1195,7 @@ const commandEvidenceCandidateReview = async (authority: Authority, payload: Jso
     safeExcerpt: current.safe_excerpt || null,
     value: nextValue,
   }));
-  const result = { candidateId, status, reviewedBy: authority.actorId };
+  const result = { resourceId: candidateId, candidateId, status, reviewedBy: authority.actorId };
   await rpc('enterprise_review_evidence_candidate', {
     p_candidate_id: candidateId,
     p_org: authority.organizationId,
@@ -1361,7 +1388,7 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
   const modernizationAssessmentId = plannedUuid(receipt, 'modernizationAssessmentId');
   const decisionId = plannedUuid(receipt, 'modernizationDecisionId');
   await ensureExecutionPlan(receipt, authority, { modernizationAssessmentId, modernizationDecisionId: decisionId });
-  const result = { modernizationAssessmentId, decisionId, decision };
+  const result = { resourceId: decisionId, modernizationAssessmentId, decisionId, decision };
   await rpc('enterprise_commit_modernization_assessment', {
     p_assessment: {
       id: modernizationAssessmentId,
@@ -1640,7 +1667,7 @@ const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonO
     status: draft.status,
     created_by: authority.actorId,
   };
-  const result = { handoffId, workPackageId, packageVersionId, itemIds: Array.from(itemIds.values()), source: approvedDocument, status: draft.status, itemCount: draft.items.length, requiresHumanReview: true };
+  const result = { resourceId: workPackageId, handoffId, workPackageId, packageVersionId, itemIds: Array.from(itemIds.values()), source: approvedDocument, status: draft.status, itemCount: draft.items.length, requiresHumanReview: true };
   await rpc('enterprise_commit_delivery_handoff', {
     p_handoff: handoffRecord,
     p_package: packageRecord,
@@ -1713,6 +1740,7 @@ const commandMonitorBaselineCreate = async (authority: Authority, payload: JsonO
   const baselineId = plannedUuid(receipt, 'monitorBaselineId');
   await ensureExecutionPlan(receipt, authority, { monitorBaselineId: baselineId, workPackageId, packageVersionId });
   const baseline = buildMonitorBaseline({ id: baselineId, workPackageId: version.work_package_id, workPackage: workPackageDraft, approvedItemIds: itemRows.map(item => item.id) });
+  const result = { ...baseline, resourceId: baseline.id };
   await rpc('enterprise_commit_monitor_baseline', {
     p_baseline: {
       id: baseline.id,
@@ -1726,12 +1754,12 @@ const commandMonitorBaselineCreate = async (authority: Authority, payload: JsonO
     p_actor: authority.actorId,
     p_org: authority.organizationId,
     p_workspace: authority.workspaceId,
-    ...receiptMutationArgs(receipt, baseline as unknown as JsonObject),
+    ...receiptMutationArgs(receipt, result as unknown as JsonObject),
   });
-  return baseline;
+  return result;
 };
 
-const commandAssembleBlueprintCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow): Promise<AssembleBlueprintDraft> => {
+const commandAssembleBlueprintCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow): Promise<AssembleBlueprintDraft & { resourceId: string }> => {
   requirePermission(authority, 'assemble.manage');
   const decisionId = requireUuid(payload.modernizationDecisionId);
   const decision = await findOne<{ id: string; primary_disposition: ModernizationDisposition; status: string }>(
@@ -1747,18 +1775,24 @@ const commandAssembleBlueprintCreate = async (authority: Authority, payload: Jso
     disposition: decision.primary_disposition,
     name: requireString(payload.name, 240),
   });
+  const result = { ...blueprint, resourceId: blueprint.id };
   await rpc('enterprise_commit_assemble_blueprint', {
     p_blueprint: { ...blueprint, structuredContent: blueprint },
     p_actor: authority.actorId,
     p_org: authority.organizationId,
     p_workspace: authority.workspaceId,
-    ...receiptMutationArgs(receipt, blueprint as unknown as JsonObject),
+    ...receiptMutationArgs(receipt, result as unknown as JsonObject),
   });
-  return blueprint;
+  return result;
 };
 
 const executeEnterpriseCommand = async (authority: Authority, envelope: EnterpriseCommandEnvelope, receipt: EnterpriseReceiptRow) => {
-  await assertFreshAuthority(authority, requiredCapabilitiesForEnterpriseCommand(envelope.commandType));
+  const providerOperation = enterpriseProviderOperations[envelope.commandType];
+  if (providerOperation) {
+    assertEnterpriseCommandOperationAuthority(authority, envelope.commandType);
+  } else {
+    await assertFreshAuthority(authority, requiredCapabilitiesForEnterpriseCommand(envelope.commandType));
+  }
   switch (envelope.commandType) {
     case 'provider.register': return commandProviderLifecycle('provider.register', authority, envelope.payload, receipt);
     case 'provider.validate': return commandProviderLifecycle('provider.validate', authority, envelope.payload, receipt);
@@ -1790,6 +1824,23 @@ export type EnterpriseIntelligenceHandlerOverrides = {
   assertCurrentAuthority?: typeof assertCurrentEnterpriseCommandAuthority;
   claimReceipt?: typeof claimEnterpriseReceipt;
   reloadReceipt?: typeof reloadEnterpriseReceipt;
+  completeReceipt?: typeof completeEnterpriseReceipt;
+  failReceipt?: typeof failEnterpriseReceipt;
+  executeCommand?: typeof executeEnterpriseCommand;
+};
+
+const assertCommittedEnterpriseReceiptIdentity = (
+  receipt: EnterpriseReceiptRow,
+  commandType: EnterpriseCommandType,
+) => {
+  if (receipt.status !== 'committed' || !isRecord(receipt.response)) {
+    throw new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+  }
+  const resourceId = resolveEnterpriseCommandResourceId(commandType, receipt.response);
+  if (receipt.resource_id !== resourceId) {
+    throw new EnterpriseCommandError('RECEIPT_FINALIZATION_FAILED');
+  }
+  return resourceId;
 };
 
 export const handleEnterpriseIntelligenceRequest = async (
@@ -1797,6 +1848,10 @@ export const handleEnterpriseIntelligenceRequest = async (
   overrides: EnterpriseIntelligenceHandlerOverrides = {},
 ) => {
   if (request.method !== 'POST') return jsonResponse(enterpriseCommandErrorBody(new EnterpriseCommandError('METHOD_NOT_ALLOWED')), 405);
+  const assertCurrentAuthority = overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority;
+  const executeCommand = overrides.executeCommand || executeEnterpriseCommand;
+  const completeReceipt = overrides.completeReceipt || completeEnterpriseReceipt;
+  const failReceipt = overrides.failReceipt || failEnterpriseReceipt;
   let claimedReceipt: EnterpriseReceiptRow | null = null;
   let claimedAuthority: Authority | null = null;
   let claimedCommandType: EnterpriseCommandType | null = null;
@@ -1809,7 +1864,6 @@ export const handleEnterpriseIntelligenceRequest = async (
     const resolvedAuthority = await (overrides.resolveCommandAuthority || resolveAuthority)(
       user.id, organizationId, envelope.workspaceId,
     );
-    const assertCurrentAuthority = overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority;
     const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType);
     const { requestId: _transportRequestId, ...canonicalEnvelope } = envelope;
     const requestHash = await hashReceiptValue(canonicalEnvelope);
@@ -1825,7 +1879,8 @@ export const handleEnterpriseIntelligenceRequest = async (
     });
     const disclosureAuthority = await assertCurrentAuthority(authority, envelope.commandType);
     if (receipt.status === 'committed') {
-      return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}), resourceId: receipt.resource_id || undefined });
+      assertCommittedEnterpriseReceiptIdentity(receipt, envelope.commandType);
+      return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) });
     }
     if (receipt.status === 'failed' || receipt.status === 'blocked') {
       return jsonResponse({ ...(receipt.response || enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED'))), replayed: true }, 409);
@@ -1834,12 +1889,14 @@ export const handleEnterpriseIntelligenceRequest = async (
     claimedReceipt = receipt;
     claimedAuthority = disclosureAuthority;
     claimedCommandType = envelope.commandType;
-    const result = await executeEnterpriseCommand(disclosureAuthority, envelope, receipt);
+    const result = await executeCommand(disclosureAuthority, envelope, receipt);
     const resultObject: JsonObject = isRecord(result) ? result : { result };
     const resourceId = resolveEnterpriseCommandResourceId(envelope.commandType, resultObject);
     const finalAuthority = await assertCurrentAuthority(disclosureAuthority, envelope.commandType);
     claimedAuthority = finalAuthority;
-    const completed = await completeEnterpriseReceipt(receipt, finalAuthority, resultObject, resourceId);
+    const completed = await completeReceipt(receipt, finalAuthority, resultObject, resourceId);
+    assertCommittedEnterpriseReceiptIdentity(completed, envelope.commandType);
+    claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {
     const commandError = error instanceof EnterpriseCommandError
@@ -1853,11 +1910,12 @@ export const handleEnterpriseIntelligenceRequest = async (
       try {
         const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
         if (recovered.status === 'committed') {
-          await (overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority)(claimedAuthority, claimedCommandType);
-          return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}), resourceId: recovered.resource_id || undefined });
+          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+          assertCommittedEnterpriseReceiptIdentity(recovered, claimedCommandType);
+          return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) });
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
-          await (overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority)(claimedAuthority, claimedCommandType);
+          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
           return jsonResponse({ ...(recovered.response || enterpriseCommandErrorBody(commandError)), replayed: true }, 409);
         }
       } catch (recoveryError) {
@@ -1866,32 +1924,40 @@ export const handleEnterpriseIntelligenceRequest = async (
           return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
         }
         if (commandError.code === 'RECEIPT_FINALIZATION_FAILED') {
+          try {
+            claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+          } catch {
+            const denied = new EnterpriseCommandError('PERMISSION_DENIED');
+            return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
+          }
           return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
         }
       }
     }
     if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
-      if (commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED') {
-        try {
-          claimedAuthority = await (overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority)(
-            claimedAuthority, claimedCommandType,
-          );
-        } catch {
-          const denied = new EnterpriseCommandError('PERMISSION_DENIED');
-          return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
-        }
+      try {
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+      } catch {
+        const denied = new EnterpriseCommandError('PERMISSION_DENIED');
+        return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
       }
       if (shouldPreserveClaimedEnterpriseReceipt(error, claimedReceipt.execution_plan)) {
         return jsonResponse(enterpriseCommandErrorBody(commandError), commandError.status);
       }
       try {
-        await failEnterpriseReceipt(
+        await failReceipt(
           claimedReceipt,
           claimedAuthority,
           enterpriseCommandErrorBody(commandError),
           commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED',
         );
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
       } catch (finalizationError) {
+        if (finalizationError instanceof EnterpriseCommandError
+          && finalizationError.code === 'PERMISSION_DENIED') {
+          const denied = new EnterpriseCommandError('PERMISSION_DENIED');
+          return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
+        }
         const explicitFailure = new EnterpriseCommandError(
           finalizationError instanceof EnterpriseReceiptError ? finalizationError.code : 'RECEIPT_FINALIZATION_FAILED',
         );

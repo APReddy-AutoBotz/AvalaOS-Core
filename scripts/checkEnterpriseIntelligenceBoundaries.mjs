@@ -81,6 +81,10 @@ if (!command.includes('requiredCapabilitiesForEnterpriseCommand')
   || !command.includes('assertCurrentEnterpriseCommandAuthority')) {
   throw new Error('Enterprise receipt replay requires one reusable operation-specific authority mapping.');
 }
+if (!command.includes('assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current))')
+  || !command.includes('const enterpriseProviderOperations')) {
+  throw new Error('Generic provider commands must use exact provider lifecycle authority.');
+}
 const claimIndex = command.indexOf('const { receipt, ownsExecution } = await (overrides.claimReceipt || claimEnterpriseReceipt)');
 const authorityAlias = command.lastIndexOf(
   'const assertCurrentAuthority = overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority',
@@ -93,6 +97,26 @@ if (!(authorityAlias >= 0 && authorityAlias < preclaimAuthority
   && preclaimAuthority >= 0 && preclaimAuthority < claimIndex
   && postclaimAuthority > claimIndex && postclaimAuthority < committedReturn)) {
   throw new Error('Current operation authority must be checked before claim and before terminal receipt disclosure.');
+}
+const enterpriseSuccessFinalization = command.slice(
+  command.indexOf('const result = await executeCommand'),
+  command.indexOf('} catch (error)', command.indexOf('const result = await executeCommand')),
+);
+if (!(enterpriseSuccessFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseSuccessFinalization.indexOf('await completeReceipt')
+  && enterpriseSuccessFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseSuccessFinalization.indexOf('await completeReceipt'))) {
+  throw new Error('Enterprise success finalization requires current authority both before commit and before disclosure.');
+}
+const enterpriseFailureFinalization = command.slice(
+  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  command.indexOf('export const handleEnterpriseIntelligenceOptions'),
+);
+if (!(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseFailureFinalization.indexOf('await failReceipt')
+  && enterpriseFailureFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseFailureFinalization.indexOf('await failReceipt'))) {
+  throw new Error('Enterprise failure finalization requires current authority both before commit and before disclosure.');
 }
 
 const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
@@ -136,6 +160,30 @@ for (const required of ['requestId', 'idempotencyKey', 'providerLifecycleRequest
 const providerHash = providerEndpoint.match(/export const providerLifecycleRequestHash[\s\S]*?\n\};/u)?.[0] || '';
 if (providerHash.includes('expectedAuthorizationVersion') || providerHash.includes('requestId')) {
   throw new Error('Provider receipt identity must exclude attempt authorization versions and request correlation IDs.');
+}
+if (!providerEndpoint.includes('authenticateProviderLifecycle(request, envelope, false)')
+  || !providerEndpoint.includes('enforceAttemptAuthorizationVersion')) {
+  throw new Error('Provider replay/finalization must resolve current authority without pinning the original attempt version.');
+}
+const providerSuccessFinalization = providerEndpoint.slice(
+  providerEndpoint.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)'),
+  providerEndpoint.indexOf('} catch (error)', providerEndpoint.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)')),
+);
+if (!(providerSuccessFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt')
+  && providerSuccessFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt'))) {
+  throw new Error('Provider success finalization requires operation authority both before commit and before disclosure.');
+}
+const providerFailureFinalization = providerEndpoint.slice(
+  providerEndpoint.indexOf("safeError.code !== 'AUTHORIZATION_STALE'"),
+  providerEndpoint.indexOf('if (claimedReceipt && claimedAuthority && claimedEnvelope) {', providerEndpoint.indexOf("safeError.code !== 'AUTHORIZATION_STALE'")),
+);
+if (!(providerFailureFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt')
+  && providerFailureFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt'))) {
+  throw new Error('Provider failure finalization requires operation authority both before commit and before disclosure.');
 }
 const providerLifecycle = read('supabase/functions/_shared/providerLifecycle.ts');
 for (const required of ['cleanupRequired', 'cleanupCompleted', 'cleanupTerminalCode', 'AUTHORIZATION_STALE']) {
@@ -332,11 +380,14 @@ const resourceResolver = command.slice(
   command.indexOf('export const resolveEnterpriseCommandResourceId'),
   command.indexOf('const ensureExecutionPlan'),
 );
-const promotionResourceGuard = resourceResolver.indexOf("commandType === 'evidence.assess.promote'");
-const sourceIdFallback = resourceResolver.indexOf('typeof resultObject.sourceId');
-if (!(resourceResolver.includes('resultObject.assessDraftId !== explicitResourceId')
-  && promotionResourceGuard >= 0 && sourceIdFallback > promotionResourceGuard)) {
-  throw new Error('Assess promotion must fail closed before sourceId can become its receipt resource.');
+if (!resourceResolver.includes("commandType === 'evidence.assess.promote'")
+  || !resourceResolver.includes('? resultObject.assessDraftId')
+  || !resourceResolver.includes('lineageResourceId !== explicitResourceId')
+  || /return\s+resultObject\.sourceId/u.test(resourceResolver)) {
+  throw new Error('Every Enterprise command must require explicit canonical resource identity and exact lineage equality.');
+}
+if (!reviewAuthorityCorrection.includes("'approval.review.record', 'command', p_resource_id, result, 'committed'")) {
+  throw new Error('Review effects must journal the reviewed resource, not the review-event row.');
 }
 const browserClient = read('services/enterpriseIntelligenceClient.ts');
 for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryableTransportError(invocation.error)']) {

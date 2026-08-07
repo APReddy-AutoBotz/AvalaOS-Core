@@ -129,7 +129,7 @@ BEGIN
 
   PERFORM public.enterprise_ai_record_effect(
     p_receipt, p_org, p_workspace, p_execution_token, p_execution_fence,
-    'approval.review.record', 'command', event.id, result, 'committed'
+    'approval.review.record', 'command', p_resource_id, result, 'committed'
   );
   RETURN result;
 END;

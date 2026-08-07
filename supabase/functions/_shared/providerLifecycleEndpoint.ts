@@ -105,12 +105,15 @@ export const parseProviderLifecycleEnvelope = (value: unknown): ProviderLifecycl
 const authenticateProviderLifecycle = async (
   request: Request,
   envelope: ProviderLifecycleEnvelope,
+  enforceAttemptAuthorizationVersion = true,
 ): Promise<ProviderLifecycleAuthority> => {
   const user = await getAuthUser(request);
   const context = await resolveTenantAuthority(user.id, {
     organizationId: envelope.organizationId,
     workspaceId: envelope.workspaceId,
-    expectedAuthorizationVersion: envelope.expectedAuthorizationVersion,
+    expectedAuthorizationVersion: enforceAttemptAuthorizationVersion
+      ? envelope.expectedAuthorizationVersion
+      : undefined,
   }, createTenantAuthorityDatabase(request));
   const [orgMemberships, workspaceMemberships] = await Promise.all([
     postgrest<Array<{ role_id?: string | null }>>(
@@ -175,7 +178,9 @@ const reauthorizeProviderLifecycle = async (
   authenticate: (request: Request, envelope: ProviderLifecycleEnvelope) => Promise<ProviderLifecycleAuthority>,
 ) => {
   try {
-    const current = await authenticate(request, envelope);
+    const current = authenticate === authenticateProviderLifecycle
+      ? await authenticateProviderLifecycle(request, envelope, false)
+      : await authenticate(request, envelope);
     assertProviderLifecycleOperationAuthority(envelope.operation, current);
     return current;
   } catch {
@@ -235,6 +240,25 @@ export const providerLifecycleErrorBody = (error: ProviderLifecycleError) => ({
   },
 });
 
+const providerLifecycleResourceId = (result: JsonObject) => {
+  if (typeof result.resourceId !== 'string' || !uuid.test(result.resourceId)
+    || result.providerConfigId !== result.resourceId) {
+    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
+  }
+  return result.resourceId;
+};
+
+const assertCommittedProviderReceiptIdentity = (receipt: EnterpriseReceiptRow) => {
+  if (receipt.status !== 'committed' || !isRecord(receipt.response)) {
+    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
+  }
+  const resourceId = providerLifecycleResourceId(receipt.response);
+  if (receipt.resource_id !== resourceId) {
+    throw new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
+  }
+  return resourceId;
+};
+
 export const handleProviderLifecycleRequest = async (
   request: Request,
   overrides: {
@@ -242,6 +266,9 @@ export const handleProviderLifecycleRequest = async (
     deps?: ProviderLifecycleDeps;
     claimReceipt?: typeof claimEnterpriseReceipt;
     reloadReceipt?: typeof reloadEnterpriseReceipt;
+    completeReceipt?: typeof completeEnterpriseReceipt;
+    failReceipt?: typeof failEnterpriseReceipt;
+    executeCommand?: typeof executeProviderLifecycleCommand;
   } = {},
 ) => {
   const options = handleOptions(request);
@@ -267,6 +294,7 @@ export const handleProviderLifecycleRequest = async (
     });
     if (receipt.status === 'committed') {
       await reauthorizeProviderLifecycle(request, envelope, authenticate);
+      assertCommittedProviderReceiptIdentity(receipt);
       return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
     }
     if (receipt.status === 'failed' || receipt.status === 'blocked') {
@@ -298,11 +326,17 @@ export const handleProviderLifecycleRequest = async (
         return receipt.execution_plan;
       },
     };
-    const result = await executeProviderLifecycleCommand(envelope.operation, authority, envelope.payload, deps, execution);
-    const resourceId = typeof result.providerConfigId === 'string' ? result.providerConfigId : undefined;
+    const result = await (overrides.executeCommand || executeProviderLifecycleCommand)(
+      envelope.operation, authority, envelope.payload, deps, execution,
+    );
+    const resourceId = providerLifecycleResourceId(result);
     const finalAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
     claimedAuthority = finalAuthority;
-    const completed = await completeEnterpriseReceipt(receipt, finalAuthority, result, resourceId);
+    const completed = await (overrides.completeReceipt || completeEnterpriseReceipt)(
+      receipt, finalAuthority, result, resourceId,
+    );
+    assertCommittedProviderReceiptIdentity(completed);
+    claimedAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || result) }, 200);
   } catch (error) {
     const safeError = error instanceof ProviderLifecycleError ? error
@@ -317,6 +351,7 @@ export const handleProviderLifecycleRequest = async (
           await reauthorizeProviderLifecycle(
             request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
           );
+          assertCommittedProviderReceiptIdentity(recovered);
           return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
@@ -334,11 +369,19 @@ export const handleProviderLifecycleRequest = async (
           return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
         }
         if (safeError.code === 'RECEIPT_FINALIZATION_FAILED') {
+          try {
+            claimedAuthority = await reauthorizeProviderLifecycle(
+              request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+            );
+          } catch {
+            const denied = new ProviderLifecycleError('PERMISSION_DENIED');
+            return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
+          }
           return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
         }
       }
     }
-    if (claimedReceipt && claimedAuthority
+    if (claimedReceipt && claimedAuthority && claimedEnvelope
       && safeError.code !== 'RECEIPT_FINALIZATION_FAILED'
       && safeError.code !== 'AUTHORIZATION_STALE') {
       const externalEffectPlanned = claimedReceipt.execution_plan?.externalSecretWritten === true
@@ -348,16 +391,46 @@ export const handleProviderLifecycleRequest = async (
             || claimedReceipt.execution_plan?.writeState === 'written'));
       if (!(safeError.code === 'PERSISTENCE_UNAVAILABLE' && externalEffectPlanned)) {
         try {
-          await failEnterpriseReceipt(
+          claimedAuthority = await reauthorizeProviderLifecycle(
+            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+          );
+          await (overrides.failReceipt || failEnterpriseReceipt)(
             claimedReceipt,
             claimedAuthority,
             providerLifecycleErrorBody(safeError),
             safeError.code === 'PERMISSION_DENIED' || safeError.code === 'TENANT_ACCESS_DENIED' || safeError.code === 'PROVIDER_BLOCKED',
           );
-        } catch {
+          claimedAuthority = await reauthorizeProviderLifecycle(
+            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+          );
+        } catch (finalizationError) {
+          if (finalizationError instanceof ProviderLifecycleError
+            && finalizationError.code === 'PERMISSION_DENIED') {
+            const denied = new ProviderLifecycleError('PERMISSION_DENIED');
+            return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
+          }
           const finalization = new ProviderLifecycleError('RECEIPT_FINALIZATION_FAILED');
           return jsonResponse(providerLifecycleErrorBody(finalization), statusFor(finalization));
         }
+      } else {
+        try {
+          claimedAuthority = await reauthorizeProviderLifecycle(
+            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+          );
+        } catch {
+          const denied = new ProviderLifecycleError('PERMISSION_DENIED');
+          return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
+        }
+      }
+    }
+    if (claimedReceipt && claimedAuthority && claimedEnvelope) {
+      try {
+        claimedAuthority = await reauthorizeProviderLifecycle(
+          request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+        );
+      } catch {
+        const denied = new ProviderLifecycleError('PERMISSION_DENIED');
+        return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
       }
     }
     return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));

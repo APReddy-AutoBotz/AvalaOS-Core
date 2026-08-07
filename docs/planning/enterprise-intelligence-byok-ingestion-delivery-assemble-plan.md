@@ -49,10 +49,16 @@ Assess scoring changes; OCR; audio transcription; remote URL or archive ingestio
 21. The database is the sole canonical high-impact review authority: review and approval responses, receipt effects, and final transitions use the exact `enterprise_resource_snapshot` version/hash and persisted review identity; a changed resource requires a new review.
 22. Every distinct browser action creates a fresh cryptographically strong action key, while all transport retries of that action reuse one exact body, request ID, and key. No secret, raw evidence, selector hash, or payload digest becomes action identity.
 23. Every receipt state is disclosed only after current operation-specific authorization. Revocation returns non-disclosing `PERMISSION_DENIED` without mutating historical receipt truth; restored authority permits exact replay.
+24. Success and failure finalization each re-resolve current operation authority before durable finalization and again before disclosure. Provider commands use exact organization/workspace lifecycle authority, and replay checks current authority independently of the historical attempt version.
+25. Every successful command has one explicit canonical `resourceId` shared by the command lineage, receipt, same-transaction effect journal, returned response, and reconciliation. An identity mismatch fails closed without repeating or partially committing effects.
 
 ## Feature quality gates
 
 Executed in the isolated worktree:
+
+- The systemic pre-review matrix passed all 10 Enterprise command classes and all 7 provider lifecycle operations across committed, failed, blocked, and in-progress replay; revoke/restore; authority loss before/after success and failure finalization; response loss; and canonical resource-ID mismatch. Revoked actors received no success/failure markers, restored actors replayed immutable historical truth, and every simulated response-loss path executed and finalized exactly once.
+- Enterprise source/migration guards passed 233 assertions. The local PostgreSQL command was invoked, but database scenarios were not run because no disposable database URL or Docker daemon was available; the exact-head Enterprise Intelligence workflow remains the required PostgreSQL 16 proof.
+- The complete retained `npm.cmd test` suite passed in 340 seconds, including type checks, PR1A-PR1E, scoring, provider resolver/integration, supplemental policy gates, and the full Enterprise Intelligence tail.
 
 - The Ready-review correction passed 226 migration/source contract assertions and a disposable PostgreSQL 16 chain with 24 Enterprise scenarios. Canonical review and approval resource hashes/versions matched exactly; changed-resource review was rejected until a new review; response-loss reconciliation returned the original result; and replay added zero reviews, approvals, effects, or claimed receipts.
 - Chromium desktop and Pixel 7 passed all 18 Enterprise browser journeys. One forced transport failure reused the exact request body/key/request ID, a later identical validation used a fresh key, and enable-disable-enable produced three intended transitions with three distinct keys.

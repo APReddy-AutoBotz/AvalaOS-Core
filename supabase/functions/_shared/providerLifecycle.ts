@@ -526,7 +526,7 @@ export const executeProviderLifecycleCommand = async (
     const routes = capabilities.map((capability, index) => ({
       id: routeIds[index], capability, model: defaultModel, allowedRoles,
     }));
-    const result = { providerConfigId, provider, status: 'pending_review', routes };
+    const result = { resourceId: providerConfigId, providerConfigId, provider, status: 'pending_review', routes };
     await safeTransition(deps, operation, authority, {
       providerConfigId,
       provider,
@@ -549,7 +549,7 @@ export const executeProviderLifecycleCommand = async (
     if (config.keyRef) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
     const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
     const keyRefId = prepared.keyRefId;
-    const result = { providerConfigId: config.id, keyRefId, status: 'pending_review', safeFingerprint: prepared.fingerprint };
+    const result = { resourceId: config.id, providerConfigId: config.id, keyRefId, status: 'pending_review', safeFingerprint: prepared.fingerprint };
     try {
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
@@ -594,7 +594,7 @@ export const executeProviderLifecycleCommand = async (
       lastValidatedAt = deps.now().toISOString();
       await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
     }
-    const result = { providerConfigId: config.id, status: 'validated', lastValidatedAt };
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'validated', lastValidatedAt };
     await safeTransition(deps, operation, authority, { providerConfigId: config.id, lastValidatedAt }, result, execution);
     return result;
   }
@@ -602,7 +602,7 @@ export const executeProviderLifecycleCommand = async (
   if (operation === 'provider.activate') {
     if (!config.keyRef || !isFreshValidation(config.lastValidatedAt, deps.now())) throw new ProviderLifecycleError('PROVIDER_BLOCKED');
     await resolveBoundSecret(config, authority, deps);
-    const result = { providerConfigId: config.id, status: 'active' };
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'active' };
     await safeTransition(deps, operation, authority, { providerConfigId: config.id, keyRefId: config.keyRef.id }, result, execution);
     return result;
   }
@@ -648,7 +648,7 @@ export const executeProviderLifecycleCommand = async (
           : null,
       });
       if (secret.status !== 'resolved') throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
-      const result = { providerConfigId: config.id, routeId, enabled: true, capability, allowedRolePolicy: allowedRoles ? 'updated' : 'preserved' };
+      const result = { resourceId: config.id, providerConfigId: config.id, routeId, enabled: true, capability, allowedRolePolicy: allowedRoles ? 'updated' : 'preserved' };
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
         routeId,
@@ -658,7 +658,7 @@ export const executeProviderLifecycleCommand = async (
       }, result, execution);
       return result;
     }
-    const result = { providerConfigId: config.id, routeId, enabled: false };
+    const result = { resourceId: config.id, providerConfigId: config.id, routeId, enabled: false };
     await safeTransition(deps, operation, authority, { providerConfigId: config.id, routeId, enabled: false }, result, execution);
     return result;
   }
@@ -694,7 +694,7 @@ export const executeProviderLifecycleCommand = async (
       lastValidatedAt = deps.now().toISOString();
       await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
     }
-    const result = { providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
+    const result = { resourceId: config.id, providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
     try {
       await safeTransition(deps, operation, authority, {
         providerConfigId: config.id,
@@ -730,7 +730,7 @@ export const executeProviderLifecycleCommand = async (
   }
 
   if (operation === 'provider.revoke') {
-    const result = { providerConfigId: config.id, status: 'retired', routesEnabled: false };
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'retired', routesEnabled: false };
     await safeTransition(deps, operation, authority, {
       providerConfigId: config.id,
       keyRefId: config.keyRef?.id || null,
