@@ -3,7 +3,6 @@ import {
   buildEnterpriseSelectorPayloads,
   decodeEnterpriseIntelligenceProjection,
   ENTERPRISE_AI_CAPABILITIES,
-  stableFingerprint,
   type EnterpriseAiCapability,
   type EnterpriseAiProvider,
   type EnterpriseApprovalResourceType,
@@ -12,7 +11,23 @@ import {
 
 const commandEnabled = () => getRuntimeDataAccess() === 'server' && isSupabaseConfigured();
 
-const createId = () => globalThis.crypto?.randomUUID?.() || `ei-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const createCryptographicUuid = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  }
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+const createId = () => createCryptographicUuid();
+
+export const createEnterpriseActionIdempotencyKey = (operation: string) => (
+  `ei:${operation}:${createCryptographicUuid()}`
+);
 
 const isRetryableTransportError = (error: unknown) => {
   const name = typeof error === 'object' && error && 'name' in error ? String(error.name) : '';
@@ -40,27 +55,17 @@ export class EnterpriseIntelligenceClientError extends Error {
   }
 }
 
-const createIdempotencyKey = async (input: { commandType: string; organizationId: string; workspaceId: string; payload: Record<string, unknown> }) => {
-  const material = JSON.stringify({ commandType: input.commandType, organizationId: input.organizationId, workspaceId: input.workspaceId, payload: input.payload });
-  if (globalThis.crypto?.subtle) {
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
-    return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, '0')).join('');
-  }
-  return stableFingerprint(material);
-};
-
 const invokeCommand = async <T>(input: {
   commandType: string;
   organizationId: string;
   workspaceId: string;
   payload: Record<string, unknown>;
-  idempotencyKey?: string;
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
   const body = {
     commandType: input.commandType,
     requestId: createId(),
-    idempotencyKey: input.idempotencyKey || await createIdempotencyKey(input),
+    idempotencyKey: createEnterpriseActionIdempotencyKey(input.commandType),
     organizationId: input.organizationId,
     workspaceId: input.workspaceId,
     payload: input.payload,
@@ -87,12 +92,7 @@ const invokeProviderLifecycle = async <T>(input: {
   const body = {
     ...input,
     requestId: createId(),
-    idempotencyKey: await createIdempotencyKey({
-      commandType: input.operation,
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      payload: input.payload,
-    }),
+    idempotencyKey: createEnterpriseActionIdempotencyKey(input.operation),
   };
   let invocation = await supabase.functions.invoke('enterprise-provider-lifecycle', { body });
   if (isRetryableTransportError(invocation.error)) {

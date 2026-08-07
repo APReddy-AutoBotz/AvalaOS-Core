@@ -140,6 +140,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   const unexpectedRequests: string[] = [];
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
+  let nextTransportFailure: string | undefined;
 
   page.on('request', request => {
     const url = new URL(request.url());
@@ -169,6 +170,10 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
       const operation = operationFrom(request);
       operations.push(operation);
       commandPayloads.push(request.postDataJSON() as Record<string, unknown>);
+      if (nextTransportFailure === operation) {
+        nextTransportFailure = undefined;
+        return route.abort('failed');
+      }
       if (nextCommandFailure?.operation === operation) {
         const failure = nextCommandFailure;
         nextCommandFailure = undefined;
@@ -182,7 +187,12 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
       }
       if (operation === 'provider.activate' && projection.providers[0]) projection.providers[0].status = 'active';
       if (operation === 'provider.route.toggle' && projection.providers[0]) {
-        projection.providers[0].routes.forEach(item => { item.enabled = true; item.availability = 'ready'; });
+        const payload = request.postDataJSON() as { payload?: { enabled?: boolean } };
+        const enabled = payload.payload?.enabled === true;
+        projection.providers[0].routes.forEach(item => {
+          item.enabled = enabled;
+          item.availability = enabled ? 'ready' : 'disabled';
+        });
       }
       if (operation === 'evidence.source.create') {
         projection.evidenceSources = [{
@@ -288,6 +298,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     commandPayloads,
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
+    transportFailNext(operation: string) { nextTransportFailure = operation; },
     recoverProjection() { projectionFailure = undefined; },
   };
 };

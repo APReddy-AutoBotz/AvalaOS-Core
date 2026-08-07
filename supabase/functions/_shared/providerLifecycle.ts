@@ -187,6 +187,22 @@ const isFreshValidation = (value: string | null | undefined, now: Date) => {
     && now.getTime() - timestamp <= ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS;
 };
 
+export const assertProviderLifecycleOperationAuthority = (
+  operation: ProviderLifecycleOperation,
+  authority: ProviderLifecycleAuthority,
+) => {
+  if (operation === 'provider.route.toggle') requireWorkspaceManager(authority);
+  else requireManager(
+    authority,
+    operation === 'provider.secret.bind'
+      || operation === 'provider.secret.rotate'
+      || operation === 'provider.revoke',
+  );
+  if (authority.organizationRoleNames.size === 0 && authority.workspaceRoleNames.size === 0) {
+    throw new ProviderLifecycleError('PERMISSION_DENIED');
+  }
+};
+
 export const mapProviderLifecycleRpcError = (error: unknown): ProviderLifecycleError => {
   if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE')) {
     return new ProviderLifecycleError('AUTHORIZATION_STALE');
@@ -475,11 +491,7 @@ export const executeProviderLifecycleCommand = async (
     throw new ProviderLifecycleError(terminalCode);
   }
   try {
-    if (operation === 'provider.route.toggle') requireWorkspaceManager(authority);
-    else requireManager(authority, operation === 'provider.secret.bind' || operation === 'provider.secret.rotate' || operation === 'provider.revoke');
-    if (authority.organizationRoleNames.size === 0 && authority.workspaceRoleNames.size === 0) {
-      throw new ProviderLifecycleError('PERMISSION_DENIED');
-    }
+    assertProviderLifecycleOperationAuthority(operation, authority);
   } catch (error) {
     if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED'
       && (operation === 'provider.secret.bind' || operation === 'provider.secret.rotate')) {

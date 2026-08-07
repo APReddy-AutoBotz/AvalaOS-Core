@@ -20,6 +20,7 @@ const requiredFiles = [
   'supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql',
   'supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql',
   'supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql',
+  'supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -39,6 +40,7 @@ const hits = forbidden.filter(pattern => pattern.test(featureText));
 if (hits.length) throw new Error(`Enterprise Intelligence boundary scan failed: ${hits.map(String).join(', ')}`);
 
 const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.ts');
+const client = read('services/enterpriseIntelligenceClient.ts');
 const providerResolver = read('supabase/functions/_shared/providerResolver.ts');
 const supabaseRpc = read('supabase/functions/_shared/supabase.ts');
 for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or_resume_evidence_extraction_job', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
@@ -46,6 +48,51 @@ for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or
 }
 if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(command)) {
   throw new Error('Enterprise commands may not accept browser-supplied authoritative versions, hashes, or item identifiers.');
+}
+const approvalCommands = command.slice(
+  command.indexOf('const approvalResourceTypes'),
+  command.indexOf('type StudioAggregateRow'),
+);
+if (approvalCommands.includes('sha256Json') || approvalCommands.includes('resource_hash=eq.')) {
+  throw new Error('Approval authority must not use an application-computed hash or an Edge hash-filtered review lookup.');
+}
+for (const required of [
+  'enterprise_resolve_high_impact_review_authority',
+  'enterprise_record_high_impact_review_v2',
+  'enterprise_commit_high_impact_approval_v2',
+]) {
+  if (!approvalCommands.includes(required)) throw new Error(`Canonical approval command flow is missing ${required}.`);
+}
+if (client.includes('stableFingerprint(material)') || client.includes("subtle.digest('SHA-256'")) {
+  throw new Error('Browser action idempotency keys must not be deterministic payload hashes.');
+}
+if (!client.includes('createEnterpriseActionIdempotencyKey(input.commandType)')
+  || !client.includes('createEnterpriseActionIdempotencyKey(input.operation)')) {
+  throw new Error('Both command surfaces require fresh cryptographic per-action keys.');
+}
+for (const invocation of ['enterprise-intelligence-command', 'enterprise-provider-lifecycle']) {
+  const start = client.indexOf(`supabase.functions.invoke('${invocation}'`);
+  const retry = client.indexOf(`supabase.functions.invoke('${invocation}'`, start + 1);
+  if (start < 0 || retry < 0 || !client.slice(start, retry + 120).includes('{ body }')) {
+    throw new Error(`${invocation} transport retry must reuse the exact constructed body.`);
+  }
+}
+if (!command.includes('requiredCapabilitiesForEnterpriseCommand')
+  || !command.includes('assertCurrentEnterpriseCommandAuthority')) {
+  throw new Error('Enterprise receipt replay requires one reusable operation-specific authority mapping.');
+}
+const claimIndex = command.indexOf('const { receipt, ownsExecution } = await (overrides.claimReceipt || claimEnterpriseReceipt)');
+const authorityAlias = command.lastIndexOf(
+  'const assertCurrentAuthority = overrides.assertCurrentAuthority || assertCurrentEnterpriseCommandAuthority',
+  claimIndex,
+);
+const preclaimAuthority = command.lastIndexOf('await assertCurrentAuthority', claimIndex);
+const committedReturn = command.indexOf("if (receipt.status === 'committed')", claimIndex);
+const postclaimAuthority = command.indexOf('await assertCurrentAuthority', claimIndex);
+if (!(authorityAlias >= 0 && authorityAlias < preclaimAuthority
+  && preclaimAuthority >= 0 && preclaimAuthority < claimIndex
+  && postclaimAuthority > claimIndex && postclaimAuthority < committedReturn)) {
+  throw new Error('Current operation authority must be checked before claim and before terminal receipt disclosure.');
 }
 
 const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
@@ -112,6 +159,16 @@ for (const required of [
 ]) {
   if (!readyReviewCorrection.includes(required)) throw new Error(`Ready-review correction is missing ${required}.`);
 }
+const providerCommittedReturn = providerEndpoint.indexOf("if (receipt.status === 'committed')");
+const providerReplayAuthority = providerEndpoint.indexOf('reauthorizeProviderLifecycle', providerCommittedReturn);
+const providerReauthorizeHelper = providerEndpoint.slice(
+  providerEndpoint.indexOf('const reauthorizeProviderLifecycle'),
+  providerEndpoint.indexOf('export const providerLifecycleRequestHash'),
+);
+if (!(providerCommittedReturn >= 0 && providerReplayAuthority > providerCommittedReturn)
+  || !providerReauthorizeHelper.includes('assertProviderLifecycleOperationAuthority')) {
+  throw new Error('Provider terminal receipt disclosure requires operation-specific authorization.');
+}
 const extractionCommand = command.slice(
   command.indexOf('const commandEvidenceExtract'),
   command.indexOf('const commandEvidenceCandidateReview'),
@@ -137,6 +194,19 @@ if (/message\.includes\(['"]ENTERPRISE_/u.test(command)
 }
 const atomicPromotion = read('supabase/migrations/20260805150000_enterprise_atomic_candidate_promotion.sql');
 const extractionRecovery = read('supabase/migrations/20260805160000_enterprise_rpc_error_and_extraction_recovery.sql');
+const reviewAuthorityCorrection = read('supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql');
+for (const required of [
+  'enterprise_resource_snapshot', 'enterprise_resolve_high_impact_review_authority',
+  'enterprise_record_high_impact_review_v2', 'enterprise_commit_high_impact_approval_v2',
+  'FROM PUBLIC, anon, authenticated', 'TO service_role',
+]) {
+  if (!reviewAuthorityCorrection.includes(required)) {
+    throw new Error(`Canonical review authority correction is missing ${required}.`);
+  }
+}
+if (!reviewAuthorityCorrection.includes('FROM service_role')) {
+  throw new Error('Legacy Edge hash/review-identity wrappers must be revoked from service_role.');
+}
 const extractionRouteStaging = read('supabase/migrations/20260805170000_enterprise_extraction_route_and_staging.sql');
 for (const required of [
   'enterprise_claim_or_resume_evidence_extraction_job', 'enterprise_fail_evidence_extraction_job',

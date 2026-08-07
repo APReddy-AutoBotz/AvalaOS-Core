@@ -83,12 +83,16 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
   await assertSafeBrowserProjection(page);
 
   const controls = activeSection(page);
+  fixture.transportFailNext('provider.validate');
   await controls.getByRole('button', { name: /^Validate$/i }).click();
   await expect(workspace(page)).toContainText(/validated/i);
+  await controls.getByRole('button', { name: /^Validate$/i }).click();
   await controls.getByRole('button', { name: /^Activate$/i }).click();
   await expect(workspace(page)).toContainText(/active/i);
   await controls.getByRole('button', { name: /enable.*route/i }).click();
   await expect(workspace(page)).toContainText(/ready/i);
+  await controls.getByRole('button', { name: /disable.*route/i }).click();
+  await controls.getByRole('button', { name: /enable.*route/i }).click();
   const routeToggle = fixture.commandPayloads.find(request => request.operation === 'provider.route.toggle') as { payload?: { allowedRoles?: string[] } } | undefined;
   expect(routeToggle?.payload?.allowedRoles).toEqual([IDS.routeRole]);
 
@@ -146,6 +150,25 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
     'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
     'studio.delivery.handoff', 'monitor.baseline.create', 'assemble.blueprint.create',
   ]));
+  const actionBodies = fixture.commandPayloads as Array<{
+    operation?: string;
+    commandType?: string;
+    requestId?: string;
+    idempotencyKey?: string;
+    payload?: Record<string, unknown>;
+  }>;
+  const validationBodies = actionBodies.filter(body => body.operation === 'provider.validate');
+  expect(validationBodies).toHaveLength(3);
+  expect(validationBodies[0]).toEqual(validationBodies[1]);
+  expect(validationBodies[2].idempotencyKey).not.toBe(validationBodies[1].idempotencyKey);
+  expect(validationBodies[2].requestId).not.toBe(validationBodies[1].requestId);
+  const routeBodies = actionBodies.filter(body => body.operation === 'provider.route.toggle');
+  expect(routeBodies.map(body => body.payload?.enabled)).toEqual([true, false, true]);
+  expect(new Set(routeBodies.map(body => body.idempotencyKey)).size).toBe(3);
+  for (const body of actionBodies) {
+    const operation = body.operation || body.commandType;
+    expect(body.idempotencyKey).toMatch(new RegExp(`^ei:${String(operation).replaceAll('.', '\\.')}:`));
+  }
   expect(fixture.unexpectedRequests).toEqual([]);
 });
 

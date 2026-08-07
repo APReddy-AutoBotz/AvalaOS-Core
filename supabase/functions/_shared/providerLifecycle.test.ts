@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  assertProviderLifecycleOperationAuthority,
   executeProviderLifecycleCommand,
   mapProviderLifecycleRpcError,
   ProviderLifecycleError,
@@ -11,10 +12,12 @@ import {
 import { fingerprintProviderSecret, type ProviderSecretBackend } from './providerSecretAdapter';
 import { SupabaseRpcError } from './supabase';
 import {
+  handleProviderLifecycleRequest,
   parseProviderLifecycleEnvelope,
   providerLifecycleRequestHash,
   providerLifecycleStatusForTerminalReceipt,
 } from './providerLifecycleEndpoint';
+import type { EnterpriseReceiptRow } from './enterpriseReceipt';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -68,6 +71,25 @@ await test('maps only structured provider RPC domain signals', async () => {
   assert.equal(mapProviderLifecycleRpcError(new SupabaseRpcError({
     status: 500, databaseMessage: 'raw sql should not survive',
   })).code, 'PERSISTENCE_UNAVAILABLE');
+});
+
+await test('reauthorizes provider receipt disclosure with operation-specific authority', async () => {
+  assert.doesNotThrow(() => assertProviderLifecycleOperationAuthority('provider.route.toggle', authority));
+  assert.doesNotThrow(() => assertProviderLifecycleOperationAuthority('provider.secret.rotate', authority));
+  const revoked: ProviderLifecycleAuthority = {
+    ...authority,
+    organizationCapabilities: new Set(),
+    workspaceCapabilities: new Set(),
+  };
+  for (const operation of [
+    'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+    'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+  ] as ProviderLifecycleOperation[]) {
+    assert.throws(
+      () => assertProviderLifecycleOperationAuthority(operation, revoked),
+      (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED',
+    );
+  }
 });
 
 await test('executes the seven-step lifecycle without persisting raw secret material', async () => {
@@ -346,6 +368,66 @@ await test('replays terminal provider receipts with their stable non-disclosing 
   assert.equal(providerLifecycleStatusForTerminalReceipt({...receipt('VALIDATION_FAILED'), status: 'failed'}), 422);
   assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('PROVIDER_BLOCKED')), 409);
   assert.equal(providerLifecycleStatusForTerminalReceipt(receipt('UNKNOWN')), 409);
+});
+
+await test('terminal provider replays require current operation authority across all lifecycle operations', async () => {
+  const operations: ProviderLifecycleOperation[] = [
+    'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+    'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+  ];
+  for (const [index, operation] of operations.entries()) {
+    const envelope = {
+      operation,
+      requestId: NONCE_ONE,
+      idempotencyKey: `provider-replay-${index + 1}`,
+      organizationId: ORG,
+      workspaceId: WORKSPACE,
+      expectedAuthorizationVersion: authority.authorizationVersion,
+      payload: {},
+    };
+    const receipt: EnterpriseReceiptRow = {
+      id: NONCE_TWO,
+      request_hash: 'a'.repeat(64),
+      initial_request_id: NONCE_ONE,
+      last_request_id: NONCE_ONE,
+      execution_token: NONCE_TWO,
+      execution_fence: 1,
+      lease_expires_at: now.toISOString(),
+      status: 'committed',
+      resource_id: CONFIG,
+      response: { historicalProviderMarker: true },
+    };
+    const revoked: ProviderLifecycleAuthority = {
+      ...authority,
+      organizationCapabilities: new Set(),
+      workspaceCapabilities: new Set(),
+    };
+    let authCalls = 0;
+    let claims = 0;
+    const denied = await handleProviderLifecycleRequest(
+      new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) }),
+      {
+        authenticate: async () => (++authCalls === 1 ? authority : revoked),
+        claimReceipt: async () => { claims += 1; return { receipt, ownsExecution: false }; },
+      },
+    );
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.text()).includes('historicalProviderMarker'), false);
+    assert.deepEqual({ authCalls, claims }, { authCalls: 2, claims: 1 });
+
+    authCalls = 0;
+    claims = 0;
+    const restored = await handleProviderLifecycleRequest(
+      new Request('http://local/provider', { method: 'POST', body: JSON.stringify(envelope) }),
+      {
+        authenticate: async () => { authCalls += 1; return authority; },
+        claimReceipt: async () => { claims += 1; return { receipt, ownsExecution: false }; },
+      },
+    );
+    assert.equal(restored.status, 200);
+    assert.equal((await restored.json() as { historicalProviderMarker?: boolean }).historicalProviderMarker, true);
+    assert.deepEqual({ authCalls, claims }, { authCalls: 2, claims: 1 });
+  }
 });
 
 await test('reuses the planned rotation secret, key reference, and validation after persistence uncertainty', async () => {

@@ -1312,6 +1312,59 @@ try {
       concurrentFinalVersion:4, claimedFinal,
     })}`);
   });
+  await scenario('changed resources invalidate canonical reviews until a new independent review', async () => {
+    const candidate = fixture.uuid(730);
+    const source = fixture.sources[0];
+    const initialHash = fixture.hash('8');
+    await authority.query(`INSERT INTO public.enterprise_evidence_candidates(
+      id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
+      excerpt_hash,provenance_hash,version,source_locator,confidence,suggestion_status,created_by
+    ) VALUES($1,$2,$3,$4,$5,'process_objective','Initial governed value','Initial governed value',$6,$6,1,'line:1-1',0.9,'suggested',$7)`,
+    [candidate, source.sourceId, source.sourceVersionId, fixture.org, fixture.workspace, initialHash, fixture.requester]);
+    const reviewerVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, fixture.reviewer],
+    )).rows[0].version);
+    const approverVersion = Number((await authority.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [fixture.org, fixture.approver],
+    )).rows[0].version);
+    const recordReview = async (eventId, key, seed) => {
+      const token = fixture.uuid(seed);
+      const receipt = (await authority.query(
+        "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'approval.review.record',$4,$5,$6,'evidence_candidate',$7)).*",
+        [fixture.reviewer, fixture.org, fixture.workspace, key, fixture.uuid(seed + 1), fixture.hash(String(seed % 10)), token],
+      )).rows[0];
+      const result = (await authority.query(
+        'SELECT public.enterprise_record_high_impact_review_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
+        [eventId, 'evidence_candidate', candidate, fixture.reviewer, fixture.org, fixture.workspace,
+          reviewerVersion, 'Independent current-state review', receipt.id, token, receipt.execution_fence],
+      )).rows[0].result;
+      await authority.query('SELECT public.enterprise_ai_reload_command($1,$2,$3)', [receipt.id, fixture.org, fixture.workspace]);
+      return result;
+    };
+    const firstReview = await recordReview(fixture.uuid(731), 'stale-review-001', 732);
+    const edited = (await authority.query(
+      'SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9) result',
+      [candidate, fixture.org, fixture.workspace, 'Changed governed value', initialHash, 'edited',
+        fixture.approver, 'Initial governed value', 'Changed after first review'],
+    )).rows[0].result;
+    assert.notEqual(edited.provenanceHash, firstReview.resourceHash);
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_resolve_high_impact_review_authority($1,$2,$3,$4,$5,$6)',
+      ['evidence_candidate', candidate, fixture.approver, fixture.org, fixture.workspace, approverVersion],
+    ), /ENTERPRISE_APPROVAL_REVIEW_REQUIRED/);
+    const secondReview = await recordReview(fixture.uuid(734), 'stale-review-002', 735);
+    const resolved = (await authority.query(
+      'SELECT public.enterprise_resolve_high_impact_review_authority($1,$2,$3,$4,$5,$6) authority',
+      ['evidence_candidate', candidate, fixture.approver, fixture.org, fixture.workspace, approverVersion],
+    )).rows[0].authority;
+    assert.deepEqual(
+      [resolved.reviewEventId, resolved.resourceVersion, resolved.resourceHash],
+      [secondReview.reviewEventId, secondReview.resourceVersion, secondReview.resourceHash],
+    );
+    assert.notEqual(firstReview.resourceHash, secondReview.resourceHash);
+  });
   await scenario('candidate lineage, stale edit rejection, and edited Assess draft promotion', async () => {
     const initial = (await authority.query('SELECT value,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
     const edited = (await authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.org, fixture.workspace, 'Govern the reviewed fixture process', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'Corrected against source'])).rows[0].result;
@@ -1349,11 +1402,94 @@ try {
     const child = (await authority.query("SELECT parent_item_id FROM public.enterprise_delivery_work_items WHERE package_version_id=$1 AND title='Child'", [version])).rows[0];
     assert.equal(child.parent_item_id, result.itemIds[0]);
     const reviewerVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.reviewer])).rows[0].version);
+    const approverVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.approver])).rows[0].version);
     const reviewEvent = fixture.uuid(345);
-    await authority.query(`INSERT INTO public.enterprise_high_impact_review_events(id,org_id,workspace_id,resource_type,resource_id,reviewer_id,reviewer_authorization_version,resource_version,resource_hash,outcome,rationale)
-      VALUES($1,$2,$3,'delivery_work_package',$4,$5,$6,999,$7,'approved','Independent fixture review')`, [reviewEvent, fixture.org, fixture.workspace, workPackage, fixture.reviewer, reviewerVersion, fixture.hash('0')]);
-    await assert.rejects(authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.reviewer, review_event_id: reviewEvent, outcome: 'approved', rationale: 'invalid same actor'}), 'delivery_work_package', workPackage, fixture.org, fixture.workspace, 'approved']), /ENTERPRISE_APPROVAL_SEPARATION/);
-    await authority.query('SELECT public.enterprise_commit_high_impact_approval($1::jsonb,$2,$3,$4,$5,$6)', [JSON.stringify({created_by: fixture.requester, reviewed_by: fixture.reviewer, approved_by: fixture.approver, review_event_id: reviewEvent, outcome: 'approved', rationale: 'Independent approval'}), 'delivery_work_package', workPackage, fixture.org, fixture.workspace, 'approved']);
+    const reviewToken = fixture.uuid(720);
+    const reviewHash = fixture.hash('6');
+    const reviewReceipt = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'approval.review.record',$4,$5,$6,'delivery_work_package',$7)).*",
+      [fixture.reviewer, fixture.org, fixture.workspace, 'canonical-review-001', fixture.uuid(721), reviewHash, reviewToken],
+    )).rows[0];
+    const canonicalReview = (await authority.query(
+      'SELECT public.enterprise_record_high_impact_review_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
+      [reviewEvent, 'delivery_work_package', workPackage, fixture.reviewer, fixture.org, fixture.workspace,
+        reviewerVersion, 'Independent fixture review', reviewReceipt.id, reviewToken, reviewReceipt.execution_fence],
+    )).rows[0].result;
+    const packageSnapshot = (await authority.query(
+      "SELECT * FROM public.enterprise_resource_snapshot('delivery_work_package',$1,$2,$3)",
+      [workPackage, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.deepEqual(
+      [canonicalReview.resourceId, Number(canonicalReview.resourceVersion), canonicalReview.resourceHash],
+      [workPackage, Number(packageSnapshot.resource_version), packageSnapshot.resource_hash],
+    );
+    const recoveredReview = (await authority.query(
+      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+      [reviewReceipt.id, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.equal(recoveredReview.status, 'committed');
+    assert.deepEqual(recoveredReview.response, canonicalReview);
+
+    const resolved = (await authority.query(
+      'SELECT public.enterprise_resolve_high_impact_review_authority($1,$2,$3,$4,$5,$6) authority',
+      ['delivery_work_package', workPackage, fixture.approver, fixture.org, fixture.workspace, approverVersion],
+    )).rows[0].authority;
+    assert.deepEqual(
+      [resolved.reviewEventId, resolved.resourceVersion, resolved.resourceHash],
+      [reviewEvent, canonicalReview.resourceVersion, canonicalReview.resourceHash],
+    );
+    const approvalToken = fixture.uuid(722);
+    const approvalHash = fixture.hash('7');
+    const approvalReceipt = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'approval.record',$4,$5,$6,'delivery_work_package',$7)).*",
+      [fixture.approver, fixture.org, fixture.workspace, 'canonical-approval-001', fixture.uuid(723), approvalHash, approvalToken],
+    )).rows[0];
+    const canonicalApproval = (await authority.query(
+      'SELECT public.enterprise_commit_high_impact_approval_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) result',
+      ['delivery_work_package', workPackage, fixture.approver, fixture.org, fixture.workspace,
+        approverVersion, reviewEvent, 'approved', 'Independent approval', approvalReceipt.id,
+        approvalToken, approvalReceipt.execution_fence],
+    )).rows[0].result;
+    assert.deepEqual(
+      [canonicalApproval.resourceId, canonicalApproval.reviewEventId, canonicalApproval.resourceHash],
+      [workPackage, reviewEvent, canonicalReview.resourceHash],
+    );
+    const recoveredApproval = (await authority.query(
+      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+      [approvalReceipt.id, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.equal(recoveredApproval.status, 'committed');
+    assert.deepEqual(recoveredApproval.response, canonicalApproval);
+    const beforeReplay = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.enterprise_high_impact_review_events WHERE resource_id=$1) reviews,
+      (SELECT count(*)::int FROM public.enterprise_high_impact_approvals WHERE resource_id=$1) approvals,
+      (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($2::uuid[])) effects`,
+    [workPackage, [reviewReceipt.id, approvalReceipt.id]])).rows[0];
+    const exactReviewReplay = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'approval.review.record',$4,$5,$6,'delivery_work_package',$7)).*",
+      [fixture.reviewer, fixture.org, fixture.workspace, 'canonical-review-001', fixture.uuid(724), reviewHash, fixture.uuid(725)],
+    )).rows[0];
+    const exactApprovalReplay = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'approval.record',$4,$5,$6,'delivery_work_package',$7)).*",
+      [fixture.approver, fixture.org, fixture.workspace, 'canonical-approval-001', fixture.uuid(726), approvalHash, fixture.uuid(727)],
+    )).rows[0];
+    assert.deepEqual([exactReviewReplay.status, exactApprovalReplay.status], ['committed', 'committed']);
+    const afterReplay = (await authority.query(`SELECT
+      (SELECT count(*)::int FROM public.enterprise_high_impact_review_events WHERE resource_id=$1) reviews,
+      (SELECT count(*)::int FROM public.enterprise_high_impact_approvals WHERE resource_id=$1) approvals,
+      (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=ANY($2::uuid[])) effects`,
+    [workPackage, [reviewReceipt.id, approvalReceipt.id]])).rows[0];
+    assert.deepEqual(afterReplay, beforeReplay);
+    const claimedReceipts = Number((await authority.query(
+      "SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE id=ANY($1::uuid[]) AND status='claimed'",
+      [[reviewReceipt.id, approvalReceipt.id]],
+    )).rows[0].n);
+    assert.equal(claimedReceipts, 0);
+    console.log(`CANONICAL APPROVAL COUNTS ${JSON.stringify({
+      reviewResourceHash:canonicalReview.resourceHash, reviewResourceVersion:canonicalReview.resourceVersion,
+      approvalResourceHash:canonicalApproval.resourceHash, approvalResourceVersion:canonicalApproval.resourceVersion,
+      duplicateReviews:0, duplicateApprovals:0, duplicateEffects:0, replayAdditionalWrites:0, claimedReceipts,
+    })}`);
     const baselineId = fixture.uuid(346);
     const monitor = (await authority.query('SELECT public.enterprise_commit_monitor_baseline($1::jsonb,$2,$3,$4) result', [JSON.stringify({id: baselineId, workPackageVersionId: version, approvedItemIds: result.itemIds, milestones: [], dependencies: [], blockers: [], risks: []}), fixture.requester, fixture.org, fixture.workspace])).rows[0].result;
     assert.deepEqual([monitor.status, monitor.readiness], ['approval_required', 'review_required']);

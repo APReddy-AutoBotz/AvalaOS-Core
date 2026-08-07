@@ -4,14 +4,17 @@ import {
   RecoverableEnterpriseCommandError,
   enterpriseCommandErrorBody,
   extractionRouteMatchesPlan,
+  handleEnterpriseIntelligenceRequest,
   mapEnterpriseCommandRpcError,
   mapExtractionPersistenceError,
   parseEnterpriseCommandEnvelope,
   readEvidenceExtractionRoutePlan,
+  requiredCapabilitiesForEnterpriseCommand,
   resolveEnterpriseCommandResourceId,
   shouldPreserveClaimedEnterpriseReceipt,
+  type Authority,
 } from './enterpriseIntelligenceCommand';
-import { hashReceiptValue, mapEnterpriseReceiptRpcError } from './enterpriseReceipt';
+import { hashReceiptValue, mapEnterpriseReceiptRpcError, type EnterpriseReceiptRow } from './enterpriseReceipt';
 import { SupabaseRpcError, SupabaseRpcTransportError } from './supabase';
 
 const base = {
@@ -67,6 +70,126 @@ test('receipt finalization failure is explicit and fail-closed', () => {
   });
 });
 
+test('uses one exhaustive command-to-current-capability mapping for replay authorization', () => {
+  const expected = {
+    'evidence.source.create': 'evidence.write',
+    'evidence.extract': 'evidence.write',
+    'evidence.candidate.review': 'evidence.review',
+    'evidence.assess.promote': 'assessment.edit',
+    'modernization.evaluate': 'portfolio.manage',
+    'approval.review.record': 'approvals.review',
+    'approval.record': 'approvals.review',
+    'studio.delivery.handoff': 'docs.approve',
+    'monitor.baseline.create': 'monitor.manage',
+    'assemble.blueprint.create': 'assemble.manage',
+  } as const;
+  for (const [commandType, capability] of Object.entries(expected)) {
+    assert.deepEqual(
+      requiredCapabilitiesForEnterpriseCommand(commandType as keyof typeof expected),
+      [capability],
+    );
+  }
+});
+
+const replayAuthority: Authority = {
+  actorId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  organizationId: base.organizationId,
+  workspaceId: base.workspaceId,
+  isAdmin: false,
+  permissions: new Set([
+    'evidence.write', 'evidence.review', 'assessment.edit', 'portfolio.manage',
+    'approvals.review', 'docs.approve', 'monitor.manage', 'assemble.manage',
+  ]),
+  organizationPermissions: new Set(),
+  workspacePermissions: new Set(),
+  roleNames: new Set(['reviewer']),
+  organizationRoleNames: new Set(['reviewer']),
+  workspaceRoleNames: new Set(['reviewer']),
+  organizationRoleIds: new Set(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']),
+  workspaceRoleIds: new Set(['cccccccc-cccc-4ccc-8ccc-cccccccccccc']),
+  authorizationVersion: 7,
+};
+
+const replayCommands = [
+  'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
+  'evidence.assess.promote', 'modernization.evaluate', 'approval.review.record',
+  'approval.record', 'studio.delivery.handoff', 'monitor.baseline.create',
+  'assemble.blueprint.create',
+] as const;
+
+for (const [index, commandType] of replayCommands.entries()) {
+  const envelope = {
+    commandType,
+    requestId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    idempotencyKey: `replay-authority-${index + 1}`,
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: commandType.startsWith('approval.')
+      ? { resourceType: 'delivery_work_package' }
+      : {},
+  };
+  const receipt: EnterpriseReceiptRow = {
+    id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    request_hash: 'a'.repeat(64),
+    initial_request_id: envelope.requestId,
+    last_request_id: envelope.requestId,
+    execution_token: `30000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    execution_fence: 1,
+    lease_expires_at: '2026-08-07T00:00:00.000Z',
+    status: 'committed',
+    resource_id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    response: { historicalMarker: true },
+  };
+  const buildOverrides = (denyAt: number | null) => {
+    let authorityChecks = 0;
+    let claims = 0;
+    return {
+      overrides: {
+        authenticate: async () => ({ id: replayAuthority.actorId }),
+        resolveOrganization: async () => replayAuthority.organizationId,
+        resolveCommandAuthority: async () => replayAuthority,
+        assertCurrentAuthority: async (authority: Authority) => {
+          authorityChecks += 1;
+          if (authorityChecks === denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
+          return authority;
+        },
+        claimReceipt: async () => {
+          claims += 1;
+          return { receipt, ownsExecution: false };
+        },
+      },
+      counts: () => ({ authorityChecks, claims }),
+    };
+  };
+
+  const preclaimRevoked = buildOverrides(1);
+  const preclaimDenied = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    preclaimRevoked.overrides,
+  );
+  assert.equal(preclaimDenied.status, 403);
+  assert.equal(preclaimRevoked.counts().claims, 0);
+
+  const replayRevoked = buildOverrides(2);
+  const denied = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    replayRevoked.overrides,
+  );
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.text()).includes('historicalMarker'), false);
+  assert.deepEqual(replayRevoked.counts(), { authorityChecks: 2, claims: 1 });
+
+  const restored = buildOverrides(null);
+  const replayed = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    restored.overrides,
+  );
+  assert.equal(replayed.status, 200);
+  assert.equal((await replayed.json() as { historicalMarker?: boolean }).historicalMarker, true);
+  assert.deepEqual(restored.counts(), { authorityChecks: 2, claims: 1 });
+}
+console.log('ok - all ten command classes deny revoked replay without receipt mutation and disclose after authority restoration');
+
 test('structured RPC domain signals map without exposing database text', () => {
   const idempotency = new SupabaseRpcError({ status: 409, databaseMessage: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT' });
   assert.equal(mapEnterpriseCommandRpcError(idempotency).code, 'IDEMPOTENCY_CONFLICT');
@@ -100,6 +223,8 @@ test('structured RPC domain signals map without exposing database text', () => {
     ['ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE', 'COMMAND_IN_PROGRESS'],
     ['ENTERPRISE_EVIDENCE_CANDIDATE_STALE', 'RESOURCE_STALE'],
     ['ENTERPRISE_PROVIDER_ROUTE_BLOCKED', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_APPROVAL_REVIEW_REQUIRED', 'RESOURCE_STALE'],
+    ['ENTERPRISE_APPROVAL_REVIEW_IDENTITY_MISMATCH', 'RESOURCE_STALE'],
   ] as const;
   for (const [signal, expectedCode] of governed5xxMappings) {
     assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({

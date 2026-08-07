@@ -1,6 +1,7 @@
 import { isAllowedProviderEndpoint } from './enterpriseIntelligenceAi.ts';
 import { handleOptions, jsonResponse } from './http.ts';
 import {
+  assertProviderLifecycleOperationAuthority,
   createProviderLifecycleDeps,
   executeProviderLifecycleCommand,
   ProviderLifecycleError,
@@ -168,6 +169,20 @@ const authenticateProviderLifecycle = async (
   };
 };
 
+const reauthorizeProviderLifecycle = async (
+  request: Request,
+  envelope: ProviderLifecycleEnvelope,
+  authenticate: (request: Request, envelope: ProviderLifecycleEnvelope) => Promise<ProviderLifecycleAuthority>,
+) => {
+  try {
+    const current = await authenticate(request, envelope);
+    assertProviderLifecycleOperationAuthority(envelope.operation, current);
+    return current;
+  } catch {
+    throw new ProviderLifecycleError('PERMISSION_DENIED');
+  }
+};
+
 export const providerLifecycleRequestHash = async (envelope: ProviderLifecycleEnvelope) => {
   const payload = { ...envelope.payload };
   if (typeof payload.providerKey === 'string') {
@@ -225,6 +240,8 @@ export const handleProviderLifecycleRequest = async (
   overrides: {
     authenticate?: (request: Request, envelope: ProviderLifecycleEnvelope) => Promise<ProviderLifecycleAuthority>;
     deps?: ProviderLifecycleDeps;
+    claimReceipt?: typeof claimEnterpriseReceipt;
+    reloadReceipt?: typeof reloadEnterpriseReceipt;
   } = {},
 ) => {
   const options = handleOptions(request);
@@ -235,26 +252,38 @@ export const handleProviderLifecycleRequest = async (
   }
   let claimedReceipt: EnterpriseReceiptRow | null = null;
   let claimedAuthority: ProviderLifecycleAuthority | null = null;
+  let claimedOperation: ProviderLifecycleOperation | null = null;
+  let claimedEnvelope: ProviderLifecycleEnvelope | null = null;
   try {
     const envelope = parseProviderLifecycleEnvelope(await request.json());
-    const authority = await (overrides.authenticate || authenticateProviderLifecycle)(request, envelope);
+    const authenticate = overrides.authenticate || authenticateProviderLifecycle;
+    const authority = await authenticate(request, envelope);
     const requestHash = await providerLifecycleRequestHash(envelope);
-    const { receipt, ownsExecution } = await claimEnterpriseReceipt(authority, {
+    const { receipt, ownsExecution } = await (overrides.claimReceipt || claimEnterpriseReceipt)(authority, {
       commandType: envelope.operation,
       idempotencyKey: envelope.idempotencyKey,
       requestId: envelope.requestId,
       requestHash,
     });
-    if (receipt.status === 'committed') return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
+    if (receipt.status === 'committed') {
+      await reauthorizeProviderLifecycle(request, envelope, authenticate);
+      return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) }, 200);
+    }
     if (receipt.status === 'failed' || receipt.status === 'blocked') {
+      await reauthorizeProviderLifecycle(request, envelope, authenticate);
       return jsonResponse(
         { ...(receipt.response || providerLifecycleErrorBody(new ProviderLifecycleError('PROVIDER_BLOCKED'))), replayed: true },
         providerLifecycleStatusForTerminalReceipt(receipt),
       );
     }
-    if (!ownsExecution) throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+    if (!ownsExecution) {
+      await reauthorizeProviderLifecycle(request, envelope, authenticate);
+      throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
+    }
     claimedReceipt = receipt;
     claimedAuthority = authority;
+    claimedOperation = envelope.operation;
+    claimedEnvelope = envelope;
     const deps = overrides.deps || createProviderLifecycleDeps(
       buildEnterpriseProviderRouteDbDeps(isAllowedProviderEndpoint),
     );
@@ -271,7 +300,9 @@ export const handleProviderLifecycleRequest = async (
     };
     const result = await executeProviderLifecycleCommand(envelope.operation, authority, envelope.payload, deps, execution);
     const resourceId = typeof result.providerConfigId === 'string' ? result.providerConfigId : undefined;
-    const completed = await completeEnterpriseReceipt(receipt, authority, result, resourceId);
+    const finalAuthority = await reauthorizeProviderLifecycle(request, envelope, authenticate);
+    claimedAuthority = finalAuthority;
+    const completed = await completeEnterpriseReceipt(receipt, finalAuthority, result, resourceId);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || result) }, 200);
   } catch (error) {
     const safeError = error instanceof ProviderLifecycleError ? error
@@ -279,19 +310,29 @@ export const handleProviderLifecycleRequest = async (
         error.code === 'COMMAND_UNAVAILABLE' ? 'PERSISTENCE_UNAVAILABLE' : error.code,
       )
         : new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
-    if (claimedReceipt && claimedAuthority) {
+    if (claimedReceipt && claimedAuthority && claimedOperation && claimedEnvelope) {
       try {
-        const recovered = await reloadEnterpriseReceipt(claimedReceipt, claimedAuthority);
+        const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
         if (recovered.status === 'committed') {
+          await reauthorizeProviderLifecycle(
+            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+          );
           return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) }, 200);
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
+          await reauthorizeProviderLifecycle(
+            request, claimedEnvelope, overrides.authenticate || authenticateProviderLifecycle,
+          );
           return jsonResponse(
             { ...(recovered.response || providerLifecycleErrorBody(safeError)), replayed: true },
             providerLifecycleStatusForTerminalReceipt(recovered),
           );
         }
-      } catch {
+      } catch (recoveryError) {
+        if (recoveryError instanceof ProviderLifecycleError && recoveryError.code === 'PERMISSION_DENIED') {
+          const denied = new ProviderLifecycleError('PERMISSION_DENIED');
+          return jsonResponse(providerLifecycleErrorBody(denied), statusFor(denied));
+        }
         if (safeError.code === 'RECEIPT_FINALIZATION_FAILED') {
           return jsonResponse(providerLifecycleErrorBody(safeError), statusFor(safeError));
         }

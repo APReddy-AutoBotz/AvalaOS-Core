@@ -28,6 +28,10 @@ const extractionRouteStagingSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260805170000_enterprise_extraction_route_and_staging.sql'),
   'utf8',
 );
+const reviewActionReplaySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
@@ -248,5 +252,22 @@ for (const mutation of [
   'enterprise_commit_monitor_baseline', 'enterprise_commit_assemble_blueprint',
 ]) check(sql.includes(`FUNCTION public.${mutation}`), `Receipt-aware mutation RPC is missing ${mutation}.`);
 check(sql.includes('receipt-unaware implementations are private implementation details'), 'Receipt-unaware mutation overloads must be revoked from Edge service authority.');
+for (const required of [
+  'enterprise_resolve_high_impact_review_authority', 'enterprise_resource_snapshot',
+  'enterprise_record_high_impact_review_v2', 'enterprise_commit_high_impact_approval_v2',
+  "authority->>'reviewEventId' IS DISTINCT FROM p_review_event_id::text",
+  "'resourceHash', event.resource_hash", "'resourceVersion', event.resource_version",
+]) check(reviewActionReplaySql.includes(required), `Review/action/replay correction is missing ${required}.`);
+check(reviewActionReplaySql.includes('FROM PUBLIC, anon, authenticated'), 'Canonical review authority RPCs must reject browser roles.');
+check(reviewActionReplaySql.includes('FROM service_role'), 'Legacy hash-accepting Edge wrappers must be revoked.');
+const approvalCommandSource = commandSource.slice(
+  commandSource.indexOf('const approvalResourceTypes'),
+  commandSource.indexOf('type StudioAggregateRow'),
+);
+check(!approvalCommandSource.includes('sha256Json'), 'Edge approval commands must not compute canonical resource hashes.');
+check(!approvalCommandSource.includes('resource_hash=eq.'), 'Edge approval commands must not select reviews by an application hash.');
+check(commandSource.includes('requiredCapabilitiesForEnterpriseCommand'), 'Replay authority requires one command-capability map.');
+check(commandSource.includes('assertCurrentEnterpriseCommandAuthority'), 'Receipt disclosure requires current operation authority.');
+check(providerLifecycleEndpointSource.includes('assertProviderLifecycleOperationAuthority'), 'Provider terminal receipt disclosure requires current lifecycle authority.');
 
 console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);
