@@ -355,4 +355,483 @@ const writeOrResolveSecret = async (
       await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
       return { provider, secretRef, keyRefId, fingerprint, wrote: false, managed: true, value: existing };
     }
-    await deps.secretBackendÛŽ½¶‰žËkºwµçA…Ñ¥‰±”œ¤€˜˜€…•¹‘Á½¥¹Ð¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€¥˜€¡•¹‘Á½¥¹Ð€˜˜€…¥Í±±½Ý•‘AÉ½Ù¥‘•É¹‘Á½¥¹Ð¡ÁÉ½Ù¥‘•È°•¹‘Á½¥¹Ð¤¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€½¹ÍÐ‘•Á±½åµ•¹Ð€ôÁ…å±½…¹‘•Á±½åµ•¹Ð€ôôôÕ¹‘•™¥¹•ñðÁ…å±½…¹‘•Á±½åµ•¹Ð€ôôô€œœ€üÕ¹‘•™¥¹•€èÉ•ÅÕ¥É•MÑÉ¥¹œ¡Á…å±½…¹‘•Á±½åµ•¹Ð°€ÈÐÀ¤ì4(€€€¥˜€¡ÁÉ½Ù¥‘•È€ôôô€…éÕÉ•}½Á•¹…¤œ€˜˜€…‘•Á±½åµ•¹Ð¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€½¹ÍÐ…Á…‰¥±¥Ñ¥•Ì€ôÉ•ÅÕ¥É•…Á…‰¥±¥Ñ¥•Ì¡Á…å±½…¹…Á…‰¥±¥Ñ¥•Ì¤ì4(€€€½¹ÍÐµ½‘•±±±½Ý±¥ÍÐ€ôÉÉ…ä¹¥ÍÉÉ…ä¡Á…å±½…¹µ½‘•±±±½Ý±¥ÍÐ¤4(€€€€€€ül¸¸¹¹•ÜM•Ð¡Á…å±½…¹µ½‘•±±±½Ý±¥ÍÐ¹µ…À¡¥Ñ•´€ôøÉ•ÅÕ¥É•MÑÉ¥¹œ¡¥Ñ•´°€ÈÀÀ¤¤¥t4(€€€€€€èm‘•™…Õ±Ñ5½‘•±tì4(€€€¥˜€¡µ½‘•±±±½Ý±¥ÍÐ¹±•¹Ñ €ø€ØÐñð€…µ½‘•±±±½Ý±¥ÍÐ¹¥¹±Õ‘•Ì¡‘•™…Õ±Ñ5½‘•°¤¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€½¹ÍÐÁ±…¹¹•‘½¹™¥%€ôÑåÁ•½˜•á•ÕÑ¥½¸ü¹Á±…¸¹ÁÉ½Ù¥‘•É½¹™¥%€ôôô€ÍÑÉ¥¹œœ€ü•á•ÕÑ¥½¸¹Á±…¸¹ÁÉ½Ù¥‘•É½¹™¥%€è‘•ÁÌ¹É…¹‘½µ% ¤ì4(€€€½¹ÍÐÁ±…¹¹•‘I½ÕÑ•%‘Ì€ôÉÉ…ä¹¥ÍÉÉ…ä¡•á•ÕÑ¥½¸ü¹Á±…¸¹É½ÕÑ•%‘Ì¤4(€€€€€€ü•á•ÕÑ¥½¸¹Á±…¸¹É½ÕÑ•%‘Ì¹™¥±Ñ•È ¡Ù…±Õ”¤èÙ…±Õ”¥ÌÍÑÉ¥¹œ€ôøÑåÁ•½˜Ù…±Õ”€ôôô€ÍÑÉ¥¹œœ¤4(€€€€€€èmtì4(€€€¥˜€¡Á±…¹¹•‘I½ÕÑ•%‘Ì¹±•¹Ñ €˜˜Á±…¹¹•‘I½ÕÑ•%‘Ì¹±•¹Ñ €„ôô…Á…‰¥±¥Ñ¥•Ì¹±•¹Ñ ¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È IM=UI}=91%Pœ¤ì4(€€€½¹ÍÐÁÉ½Ù¥‘•É½¹™¥%€ôÁ±…¹¹•‘½¹™¥%ì4(€€€½¹ÍÐÉ½ÕÑ•%‘Ì€ôÁ±…¹¹•‘I½ÕÑ•%‘Ì¹±•¹Ñ €üÁ±…¹¹•‘I½ÕÑ•%‘Ì€è…Á…‰¥±¥Ñ¥•Ì¹µ…À  ¤€ôø‘•ÁÌ¹É…¹‘½µ% ¤¤ì4(€€€…Ý…¥ÐÁ•ÉÍ¥ÍÑá•ÕÑ¥½¹A±…¸¡•á•ÕÑ¥½¸°ìÁÉ½Ù¥‘•É½¹™¥%°É½ÕÑ•%‘Ìô¤ì4(€€€½¹ÍÐ…±±½Ý•‘I½±•Ì€ôÍ••‘•‘I½ÕÑ•I½±•Ì¡…ÕÑ¡½É¥Ñä¤ì4(€€€½¹ÍÐÉ½ÕÑ•Ì€ô…Á…‰¥±¥Ñ¥•Ì¹µ…À ¡…Á…‰¥±¥Ñä°¥¹‘•à¤€ôø€¡ì4(€€€€€¥èÉ½ÕÑ•%‘Ím¥¹‘•át°…Á…‰¥±¥Ñä°µ½‘•°è‘•™…Õ±Ñ5½‘•°°…±±½Ý•‘I½±•Ì°4(€€€ô¤¤ì4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%èÁÉ½Ù¥‘•É½¹™¥%°ÁÉ½Ù¥‘•É½¹™¥%°ÁÉ½Ù¥‘•È°ÍÑ…ÑÕÌè€Á•¹‘¥¹}É•Ù¥•Üœ°É½ÕÑ•Ìôì(€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ì4(€€€€€ÁÉ½Ù¥‘•É½¹™¥%°4(€€€€€ÁÉ½Ù¥‘•È°4(€€€€€‘¥ÍÁ±…å9…µ”°4(€€€€€•¹‘Á½¥¹Ðè•¹‘Á½¥¹Ðñð¹Õ±°°4(€€€€€‘•Á±½åµ•¹Ðè‘•Á±½åµ•¹Ðñð¹Õ±°°4(€€€€€‘•™…Õ±Ñ5½‘•°°4(€€€€€µ½‘•±±±½Ý±¥ÍÐ°4(€€€€€…Á…‰¥±¥Ñ¥•Ì°4(€€€€€É½ÕÑ•Ì°4(€€€€€‰Õ‘•ÐèÉ•ÅÕ¥É•	Õ‘•Ð¡Á…å±½…¹‰Õ‘•Ð¤°4(€€€ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô4(4(€½¹ÍÐ½¹™¥œ€ô…Ý…¥Ð±½…‘½¹™¥œ¡‘•ÁÌ°…ÕÑ¡½É¥Ñä°Á…å±½…¹ÁÉ½Ù¥‘•É½¹™¥%¤ì4(€¥˜€¡½¹™¥œ¹ÍÑ…ÑÕÌ€ôôô€É•Ñ¥É•œñð½¹™¥œ¹ÍÑ…ÑÕÌ€ôôô€É•Ù½­•œ¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI=Y%I}	1=-œ¤ì4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹Í•É•Ð¹‰¥¹œ¤ì(€€€¥˜€¡½¹™¥œ¹­•åI•˜¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È IM=UI}=91%Pœ¤ì(€€€…Ý…¥ÐÁ•ÉÍ¥ÍÑá•ÕÑ¥½¹A±…¸¡•á•ÕÑ¥½¸°ìÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥ô¤ì(€€€½¹ÍÐÁÉ•Á…É•€ô…Ý…¥ÐÝÉ¥Ñ•=ÉI•Í½±Ù•M•É•Ð¡½¹™¥œ¹ÁÉ½Ù¥‘•È°…ÕÑ¡½É¥Ñä°Á…å±½…°‘•ÁÌ°•á•ÕÑ¥½¸¤ì(€€€½¹ÍÐ­•åI•™%€ôÁÉ•Á…É•¹­•åI•™%ì4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°­•åI•™%°ÍÑ…ÑÕÌè€Á•¹‘¥¹}É•Ù¥•Üœ°Í…™•¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ðôì(€€€ÑÉäì4(€€€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ì4(€€€€€€€ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°4(€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€­•åI•™%°4(€€€€€€€Í•É•ÑI•™•É•¹”èÁÉ•Á…É•¹Í•É•ÑI•˜°4(€€€€€€€Í…™•¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€‰…­•¹è‘•ÁÌ¹Í•É•Ñ	…­•¹¹­¥¹°4(€€€€€ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€¥˜€¡•ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€AI5%MM%=9}9%œ¤ì4(€€€€€€€…Ý…¥Ð±•…¹ÕÁA±…¹¹•‘M•É•Ð¡‘•ÁÌ°…ÕÑ¡½É¥Ñä°•á•ÕÑ¥½¸°€AI5%MM%=9}9%œ°ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€Í•É•ÑI•˜èÁÉ•Á…É•¹Í•É•ÑI•˜°4(€€€€€€€€€™¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€€€ÝÉ½Ñ”èÁÉ•Á…É•¹ÝÉ½Ñ”°4(€€€€€€€€€µ…¹…•èÁÉ•Á…É•¹µ…¹…•°4(€€€€€€€ô¤ì4(€€€€€ô4(€€€€€Ñ¡É½Ü•ÉÉ½Èì4(€€€ô4(€ô4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹Ù…±¥‘…Ñ”œ¤ì4(€€€±•Ð±…ÍÑY…±¥‘…Ñ•‘Ð€ôÑåÁ•½˜•á•ÕÑ¥½¸ü¹Á±…¸¹±…ÍÑY…±¥‘…Ñ•‘Ð€ôôô€ÍÑÉ¥¹œœ€˜˜•á•ÕÑ¥½¸¹Á±…¸¹Ù…±¥‘…Ñ¥½¹MÕ••‘•€ôôôÑÉÕ”4(€€€€€€ü•á•ÕÑ¥½¸¹Á±…¸¹±…ÍÑY…±¥‘…Ñ•‘Ð4(€€€€€€èÕ¹‘•™¥¹•ì4(€€€¥˜€ …±…ÍÑY…±¥‘…Ñ•‘Ð¤ì4(€€€€€½¹ÍÐÁÉ½Ù¥‘•É-•ä€ô…Ý…¥ÐÉ•Í½±Ù•	½Õ¹‘M•É•Ð¡½¹™¥œ°…ÕÑ¡½É¥Ñä°‘•ÁÌ¤ì4(€€€€€ÑÉäì4(€€€€€€€…Ý…¥Ð‘•ÁÌ¹Ù…±¥‘…Ñ•½¹¹•Ñ¥½¸¡ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€•¹‘Á½¥¹Ðè½¹™¥œ¹•¹‘Á½¥¹Ð°4(€€€€€€€€€‘•Á±½åµ•¹Ðè½¹™¥œ¹‘•Á±½åµ•¹Ð°4(€€€€€€€€€µ½‘•°è½¹™¥œ¹‘•™…Õ±Ñ5½‘•°°4(€€€€€€€€€…Á¥-•äèÁÉ½Ù¥‘•É-•ä°4(€€€€€€€ô¤ì4(€€€€€ô…Ñ ì4(€€€€€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È Y1%Q%=9}%1œ¤ì4(€€€€€ô4(€€€€€±…ÍÑY…±¥‘…Ñ•‘Ð€ô‘•ÁÌ¹¹½Ü ¤¹Ñ½%M=MÑÉ¥¹œ ¤ì4(€€€€€…Ý…¥ÐÁ•ÉÍ¥ÍÑá•ÕÑ¥½¹A±…¸¡•á•ÕÑ¥½¸°ìÙ…±¥‘…Ñ¥½¹MÕ••‘•èÑÉÕ”°±…ÍÑY…±¥‘…Ñ•‘Ðô¤ì4(€€€ô4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°ÍÑ…ÑÕÌè€Ù…±¥‘…Ñ•œ°±…ÍÑY…±¥‘…Ñ•‘Ðôì(€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ìÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°±…ÍÑY…±¥‘…Ñ•‘Ðô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹…Ñ¥Ù…Ñ”œ¤ì4(€€€¥˜€ …½¹™¥œ¹­•åI•˜ñð€…¥ÍÉ•Í¡Y…±¥‘…Ñ¥½¸¡½¹™¥œ¹±…ÍÑY…±¥‘…Ñ•‘Ð°‘•ÁÌ¹¹½Ü ¤¤¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI=Y%I}	1=-œ¤ì4(€€€…Ý…¥ÐÉ•Í½±Ù•	½Õ¹‘M•É•Ð¡½¹™¥œ°…ÕÑ¡½É¥Ñä°‘•ÁÌ¤ì4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°ÍÑ…ÑÕÌè€…Ñ¥Ù”œôì(€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ìÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°­•åI•™%è½¹™¥œ¹­•åI•˜¹¥ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹É½ÕÑ”¹Ñ½±”œ¤ì4(€€€½¹ÍÐÉ½ÕÑ•%€ôÉ•ÅÕ¥É•UÕ¥¡Á…å±½…¹É½ÕÑ•%¤ì4(€€€¥˜€¡ÑåÁ•½˜Á…å±½…¹•¹…‰±•€„ôô€‰½½±•…¸œ¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4(€€€¥˜€¡Á…å±½…¹•¹…‰±•¤ì4(€€€€€½¹ÍÐ…Á…‰¥±¥Ñä€ôÉ•ÅÕ¥É•…Á…‰¥±¥Ñ¥•Ì¡mÁ…å±½…¹…Á…‰¥±¥Ñåt¥lÁtì4(€€€€€½¹ÍÐ…±±½Ý•‘I½±•Ì€ôÁ…å±½…¹…±±½Ý•‘I½±•Ì€ôôôÕ¹‘•™¥¹•4(€€€€€€€€üÕ¹‘•™¥¹•4(€€€€€€€€èÉ•ÅÕ¥É•±¥¥‰±•I½ÕÑ•I½±•Ì¡Á…å±½…¹…±±½Ý•‘I½±•Ì°…ÕÑ¡½É¥Ñä¤ì4(€€€€€½¹ÍÐ‘•¥Í¥½¸€ô…Ý…¥ÐÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•AÉ½Ù¥‘•ÉI½ÕÑ”¡ì4(€€€€€€€µ½‘”è€Á¥±½Ðœ°4(€€€€€€€…Á…‰¥±¥Ñä°4(€€€€€€€½É…¹¥é…Ñ¥½¹%è…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°4(€€€€€€€Ý½É­ÍÁ…•%è…ÕÑ¡½É¥Ñä¹Ý½É­ÍÁ…•%°4(€€€€€€€…Ñ½É%è…ÕÑ¡½É¥Ñä¹…Ñ½É%°4(€€€€€€€É½±•9…µ•Ìèl4(€€€€€€€€€€¸¸¹…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹I½±•9…µ•Ì°€¸¸¹…ÕÑ¡½É¥Ñä¹Ý½É­ÍÁ…•I½±•9…µ•Ì°4(€€€€€€€€€€¸¸¹…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹I½±•%‘Ì°€¸¸¹…ÕÑ¡½É¥Ñä¹Ý½É­ÍÁ…•I½±•%‘Ì°4(€€€€€€€t°4(€€€€€€€É•ÅÕ•ÍÑ•‘AÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°4(€€€€€€€¥¹±Õ‘•¥Í…‰±•èÑÉÕ”°4(€€€€€€€ÁÉ½Á½Í•‘±±½Ý•‘I½±•Ìè…±±½Ý•‘I½±•Ì°4(€€€€€€€€¼¼Q¡¥Ì½µµ…¹…±É•…‘äÁÉ½Ù•‰å½¬¹µ…¹…”…¹Ù…±¥‘…Ñ••… Í•±•Ñ•4(€€€€€€€€¼¼É½±”……¥¹ÍÐ•á…ÐÍ•ÉÙ•Èµ‘•É¥Ù•½É…¹¥é…Ñ¥½¸½Ý½É­ÍÁ…”…ÕÑ¡½É¥Ñä¸4(€€€€€€€Á½±¥å5…¹…•µ•¹ÑÕÑ¡½É¥é•èÑÉÕ”°4(€€€€€€€Í…¹¹•ÉI•™•É•¹”è€ÍÕÁ…‰…Í”½™Õ¹Ñ¥½¹Ì½}Í¡…É•½ÁÉ½Ù¥‘•É1¥™•å±”¹ÑÌœ°4(€€€€€ô°‘•ÁÌ¹É½ÕÑ•I•Í½±Ù•É•ÁÌ¤ì4(€€€€€¥˜€¡‘•¥Í¥½¸¹ÍÑ…ÑÕÌ€„ôô€…±±½Ý•œ¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AI=Y%I}	1=-œ¤ì4(€€€€€½¹ÍÐÍ•É•Ð€ô…Ý…¥ÐÉ•Í½±Ù•AÉ½Ù¥‘•ÉM•É•Ñ½É•¥Í¥½¸¡‘•¥Í¥½¸°ì4(€€€€€€€‰…­•¹è‘•ÁÌ¹Í•É•Ñ	…­•¹°4(€€€€€€€±½½­ÕÁ-•åI•˜è…Íå¹Œ…±±½Ý•€ôø½¹™¥œ¹­•åI•˜€˜˜½¹™¥œ¹­•åI•˜¹¥€ôôô…±±½Ý•¹­•åI•™%4(€€€€€€€€€€üì4(€€€€€€€€€€€€€¥è½¹™¥œ¹­•åI•˜¹¥°4(€€€€€€€€€€€€€½É}¥è½¹™¥œ¹½É…¹¥é…Ñ¥½¹%°4(€€€€€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹­•åI•˜¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€€€€€É•Í½±Ù•É}ÑåÁ”è½¹™¥œ¹­•åI•˜¹É•Í½±Ù•ÉQåÁ”°4(€€€€€€€€€€€€€Í•É•Ñ}É•˜è½¹™¥œ¹­•åI•˜¹Í•É•ÑI•˜°4(€€€€€€€€€€€€€ÍÑ…ÑÕÌè½¹™¥œ¹­•åI•˜¹ÍÑ…ÑÕÌ°4(€€€€€€€€€€€ô4(€€€€€€€€€€è¹Õ±°°4(€€€€€ô¤ì4(€€€€€¥˜€¡Í•É•Ð¹ÍÑ…ÑÕÌ€„ôô€É•Í½±Ù•œ¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È MIQ}U9Y%1	1œ¤ì4(€€€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°É½ÕÑ•%°•¹…‰±•èÑÉÕ”°…Á…‰¥±¥Ñä°…±±½Ý•‘I½±•A½±¥äè…±±½Ý•‘I½±•Ì€ü€ÕÁ‘…Ñ•œ€è€ÁÉ•Í•ÉÙ•œôì(€€€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ì4(€€€€€€€ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°4(€€€€€€€É½ÕÑ•%°4(€€€€€€€…Á…‰¥±¥Ñä°4(€€€€€€€•¹…‰±•èÑÉÕ”°4(€€€€€€€€¸¸¸¡…±±½Ý•‘I½±•Ì€üì…±±½Ý•‘I½±•Ìô€èíô¤°4(€€€€€ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€€€ô4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°É½ÕÑ•%°•¹…‰±•è™…±Í”ôì(€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ìÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°É½ÕÑ•%°•¹…‰±•è™…±Í”ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹Í•É•Ð¹É½Ñ…Ñ”œ¤ì(€€€¥˜€ …½¹™¥œ¹­•åI•˜¤Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È MIQ}U9Y%1	1œ¤ì(€€€…Ý…¥ÐÁ•ÉÍ¥ÍÑá•ÕÑ¥½¹A±…¸¡•á•ÕÑ¥½¸°ìÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥ô¤ì(€€€½¹ÍÐÁÉ•Á…É•€ô…Ý…¥ÐÝÉ¥Ñ•=ÉI•Í½±Ù•M•É•Ð (€€€€€½¹™¥œ¹ÁÉ½Ù¥‘•È°…ÕÑ¡½É¥Ñä°Á…å±½…°‘•ÁÌ°•á•ÕÑ¥½¸°½¹™¥œ¹­•åI•˜¹Í•É•ÑI•˜°4(€€€€¤ì4(€€€½¹ÍÐ­•åI•™%€ôÁÉ•Á…É•¹­•åI•™%ì4(€€€±•Ð±…ÍÑY…±¥‘…Ñ•‘Ð€ôÑåÁ•½˜•á•ÕÑ¥½¸ü¹Á±…¸¹±…ÍÑY…±¥‘…Ñ•‘Ð€ôôô€ÍÑÉ¥¹œœ€˜˜•á•ÕÑ¥½¸¹Á±…¸¹Ù…±¥‘…Ñ¥½¹MÕ••‘•€ôôôÑÉÕ”4(€€€€€€ü•á•ÕÑ¥½¸¹Á±…¸¹±…ÍÑY…±¥‘…Ñ•‘Ð4(€€€€€€èÕ¹‘•™¥¹•ì4(€€€¥˜€ …±…ÍÑY…±¥‘…Ñ•‘Ð¤ì4(€€€€€ÑÉäì4(€€€€€€€…Ý…¥Ð‘•ÁÌ¹Ù…±¥‘…Ñ•½¹¹•Ñ¥½¸¡ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€•¹‘Á½¥¹Ðè½¹™¥œ¹•¹‘Á½¥¹Ð°4(€€€€€€€€€‘•Á±½åµ•¹Ðè½¹™¥œ¹‘•Á±½åµ•¹Ð°4(€€€€€€€€€µ½‘•°è½¹™¥œ¹‘•™…Õ±Ñ5½‘•°°4(€€€€€€€€€…Á¥-•äèÁÉ•Á…É•¹Ù…±Õ”°4(€€€€€€€ô¤ì4(€€€€€ô…Ñ ì4(€€€€€€€…Ý…¥Ð±•…¹ÕÁA±…¹¹•‘M•É•Ð¡‘•ÁÌ°…ÕÑ¡½É¥Ñä°•á•ÕÑ¥½¸°€Y1%Q%=9}%1œ°ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€Í•É•ÑI•˜èÁÉ•Á…É•¹Í•É•ÑI•˜°4(€€€€€€€€€™¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€€€ÝÉ½Ñ”èÁÉ•Á…É•¹ÝÉ½Ñ”°4(€€€€€€€€€µ…¹…•èÁÉ•Á…É•¹µ…¹…•°4(€€€€€€€ô¤ì4(€€€€€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È Y1%Q%=9}%1œ¤ì4(€€€€€ô4(€€€€€±…ÍÑY…±¥‘…Ñ•‘Ð€ô‘•ÁÌ¹¹½Ü ¤¹Ñ½%M=MÑÉ¥¹œ ¤ì4(€€€€€…Ý…¥ÐÁ•ÉÍ¥ÍÑá•ÕÑ¥½¹A±…¸¡•á•ÕÑ¥½¸°ìÙ…±¥‘…Ñ¥½¹MÕ••‘•èÑÉÕ”°±…ÍÑY…±¥‘…Ñ•‘Ðô¤ì4(€€€ô4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°­•åI•™%°ÍÑ…ÑÕÌè€…Ñ¥Ù”œ°Í…™•¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°±…ÍÑY…±¥‘…Ñ•‘Ðôì(€€€ÑÉäì4(€€€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ì4(€€€€€€€ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°4(€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€ÁÉ•Ù¥½ÕÍ-•åI•™%è½¹™¥œ¹­•åI•˜¹¥°4(€€€€€€€­•åI•™%°4(€€€€€€€Í•É•ÑI•™•É•¹”èÁÉ•Á…É•¹Í•É•ÑI•˜°4(€€€€€€€Í…™•¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€‰…­•¹è‘•ÁÌ¹Í•É•Ñ	…­•¹¹­¥¹°4(€€€€€€€±…ÍÑY…±¥‘…Ñ•‘Ð°4(€€€€€ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€€€¥˜€¡‘•ÁÌ¹Í•É•Ñ	…­•¹¹ÝÉ¥Ñ…‰±”€˜˜‘•ÁÌ¹Í•É•Ñ	…­•¹¹É•µ½Ù”¤ì4(€€€€€€€…Ý…¥Ð‘•ÁÌ¹Í•É•Ñ	…­•¹¹É•µ½Ù”¡ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€Í•É•ÑI•˜è½¹™¥œ¹­•åI•˜¹Í•É•ÑI•˜°4(€€€€€€€€€½É…¹¥é…Ñ¥½¹%è…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°4(€€€€€€€ô¤¹…Ñ   ¤€ôøÕ¹‘•™¥¹•¤ì4(€€€€€ô4(€€€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€¥˜€¡•ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€AI5%MM%=9}9%œ¤ì4(€€€€€€€…Ý…¥Ð±•…¹ÕÁA±…¹¹•‘M•É•Ð¡‘•ÁÌ°…ÕÑ¡½É¥Ñä°•á•ÕÑ¥½¸°€AI5%MM%=9}9%œ°ì4(€€€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€Í•É•ÑI•˜èÁÉ•Á…É•¹Í•É•ÑI•˜°4(€€€€€€€€€™¥¹•ÉÁÉ¥¹ÐèÁÉ•Á…É•¹™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€€€ÝÉ½Ñ”èÁÉ•Á…É•¹ÝÉ½Ñ”°4(€€€€€€€€€µ…¹…•èÁÉ•Á…É•¹µ…¹…•°4(€€€€€€€ô¤ì4(€€€€€ô4(€€€€€¥˜€¡•ÉÉ½È¥¹ÍÑ…¹•½˜AÉ½Ù¥‘•É1¥™•å±•ÉÉ½È¤Ñ¡É½Ü•ÉÉ½Èì4(€€€€€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È AIM%MQ9}U9Y%1	1œ¤ì4(€€€ô4(€ô4(4(€¥˜€¡½Á•É…Ñ¥½¸€ôôô€ÁÉ½Ù¥‘•È¹É•Ù½­”œ¤ì4(€€€½¹ÍÐÉ•ÍÕ±Ð€ôìÉ•Í½ÕÉ•%è½¹™¥œ¹¥°ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°ÍÑ…ÑÕÌè€É•Ñ¥É•œ°É½ÕÑ•Í¹…‰±•è™…±Í”ôì(€€€…Ý…¥ÐÍ…™•QÉ…¹Í¥Ñ¥½¸¡‘•ÁÌ°½Á•É…Ñ¥½¸°…ÕÑ¡½É¥Ñä°ì4(€€€€€ÁÉ½Ù¥‘•É½¹™¥%è½¹™¥œ¹¥°4(€€€€€­•åI•™%è½¹™¥œ¹­•åI•˜ü¹¥ñð¹Õ±°°4(€€€€€‘¥Í…‰±•±±I½ÕÑ•ÌèÑÉÕ”°4(€€€ô°É•ÍÕ±Ð°•á•ÕÑ¥½¸¤ì4(€€€¥˜€¡½¹™¥œ¹­•åI•˜€˜˜‘•ÁÌ¹Í•É•Ñ	…­•¹¹ÝÉ¥Ñ…‰±”€˜˜‘•ÁÌ¹Í•É•Ñ	…­•¹¹É•µ½Ù”¤ì4(€€€€€…Ý…¥Ð‘•ÁÌ¹Í•É•Ñ	…­•¹¹É•µ½Ù”¡ì4(€€€€€€€ÁÉ½Ù¥‘•Èè½¹™¥œ¹ÁÉ½Ù¥‘•È°4(€€€€€€€Í•É•ÑI•˜è½¹™¥œ¹­•åI•˜¹Í•É•ÑI•˜°4(€€€€€€€½É…¹¥é…Ñ¥½¹%è…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°4(€€€€€ô¤¹…Ñ   ¤€ôøÕ¹‘•™¥¹•¤ì4(€€€ô4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô4(4(€Ñ¡É½Ü¹•ÜAÉ½Ù¥‘•É1¥™•å±•ÉÉ½È %9Y1%}IEUMPœ¤ì4)ôì4(4)ÑåÁ”AÉ½Ù¥‘•É½¹™¥‰I½Ü€ôì4(€¥èÍÑÉ¥¹œì4(€½É}¥èÍÑÉ¥¹œì4(€ÁÉ½Ù¥‘•Èè¹Ñ•ÉÁÉ¥Í•¥AÉ½Ù¥‘•Èì4(€ÍÑ…ÑÕÌèÍÑÉ¥¹œì4(€•¹‘Á½¥¹Ñ}ÕÉ°üèÍÑÉ¥¹œð¹Õ±°ì4(€‘•Á±½åµ•¹Ñ}¹…µ”üèÍÑÉ¥¹œð¹Õ±°ì4(€‘•™…Õ±Ñ}µ½‘•°üèÍÑÉ¥¹œð¹Õ±°ì4(€µ½‘•±}…±±½Ý±¥ÍÐüèÍÑÉ¥¹mtð¹Õ±°ì4(€±…ÍÑ}Ù…±¥‘…Ñ•‘}…ÐüèÍÑÉ¥¹œð¹Õ±°ì4(€­•å}É•™}¥üèÍÑÉ¥¹œð¹Õ±°ì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐÉ•…Ñ•AÉ½Ù¥‘•É1¥™•å±•…Ñ…‰…Í”€ô€ ¤èAÉ½Ù¥‘•É1¥™•å±•…Ñ…‰…Í”€ôø€¡ì4(€…Íå¹Œ±½…‘½¹™¥œ¡¥¹ÁÕÐ¤ì4(€€€½¹ÍÐ½¹™¥Ì€ô…Ý…¥ÐÁ½ÍÑÉ•ÍÐñAÉ½Ù¥‘•É½¹™¥‰I½Ýmtø 4(€€€€€…¥}ÁÉ½Ù¥‘•É}½¹™¥ÌýÍ•±•Ðõ¥±½É}¥±ÁÉ½Ù¥‘•È±ÍÑ…ÑÕÌ±•¹‘Á½¥¹Ñ}ÕÉ°±‘•Á±½åµ•¹Ñ}¹…µ”±‘•™…Õ±Ñ}µ½‘•°±µ½‘•±}…±±½Ý±¥ÍÐ±±…ÍÑ}Ù…±¥‘…Ñ•‘}…Ð±­•å}É•™}¥™¥õ•Ä¸‘í•¹½‘•UI%½µÁ½¹•¹Ð¡¥¹ÁÕÐ¹ÁÉ½Ù¥‘•É½¹™¥%¥ô™½É}¥õ•Ä¸‘í•¹½‘•UI%½µÁ½¹•¹Ð¡¥¹ÁÕÐ¹½É…¹¥é…Ñ¥½¹%¥ô™±¥µ¥ÐôÅ€°4(€€€€€ìµ•Ñ¡½è€Pœô°4(€€€€¤ì4(€€€½¹ÍÐÉ½Ü€ô½¹™¥ÍlÁtì4(€€€¥˜€ …É½Üñð€…9QIAI%M}%}AI=Y%IL¹¥¹±Õ‘•Ì¡É½Ü¹ÁÉ½Ù¥‘•È¤ñð€…É½Ü¹‘•™…Õ±Ñ}µ½‘•°¤É•ÑÕÉ¸¹Õ±°ì4(€€€½¹ÍÐ­•åI½ÝÌ€ôÉ½Ü¹­•å}É•™}¥4(€€€€€€ü…Ý…¥ÐÁ½ÍÑÉ•ÍÐñÉÉ…äñì¥èÍÑÉ¥¹œìÁÉ½Ù¥‘•Èè¹Ñ•ÉÁÉ¥Í•¥AÉ½Ù¥‘•ÈìÉ•Í½±Ù•É}ÑåÁ”èÍÑÉ¥¹œìÍ•É•Ñ}É•˜èÍÑÉ¥¹œìÍ…™•}™¥¹•ÉÁÉ¥¹ÐüèÍÑÉ¥¹œð¹Õ±°ìÍÑ…ÑÕÌèÍÑÉ¥¹œôøø 4(€€€€€€€…¥}ÁÉ½Ù¥‘•É}­•å}É•™ÌýÍ•±•Ðõ¥±ÁÉ½Ù¥‘•È±É•Í½±Ù•É}ÑåÁ”±Í•É•Ñ}É•˜±Í…™•}™¥¹•ÉÁÉ¥¹Ð±ÍÑ…ÑÕÌ™¥õ•Ä¸‘í•¹½‘•UI%½µÁ½¹•¹Ð¡É½Ü¹­•å}É•™}¥¥ô™½É}¥õ•Ä¸‘í•¹½‘•UI%½µÁ½¹•¹Ð¡¥¹ÁÕÐ¹½É…¹¥é…Ñ¥½¹%¥ô™ÁÉ½Ù¥‘•Èõ•Ä¸‘í•¹½‘•UI%½µÁ½¹•¹Ð¡É½Ü¹ÁÉ½Ù¥‘•È¥ô™‘•±•Ñ•‘}…Ðõ¥Ì¹¹Õ±°™±¥µ¥ÐôÅ€°4(€€€€€€€ìµ•Ñ¡½è€Pœô°4(€€€€€€¤4(€€€€€€èmtì4(€€€½¹ÍÐ­•ä€ô­•åI½ÝÍlÁtì4(€€€É•ÑÕÉ¸ì4(€€€€€¥èÉ½Ü¹¥°4(€€€€€½É…¹¥é…Ñ¥½¹%èÉ½Ü¹½É}¥°4(€€€€€ÁÉ½Ù¥‘•ÈèÉ½Ü¹ÁÉ½Ù¥‘•È°4(€€€€€ÍÑ…ÑÕÌèÉ½Ü¹ÍÑ…ÑÕÌ°4(€€€€€•¹‘Á½¥¹ÐèÉ½Ü¹•¹‘Á½¥¹Ñ}ÕÉ°ñðÕ¹‘•™¥¹•°4(€€€€€‘•Á±½åµ•¹ÐèÉ½Ü¹‘•Á±½åµ•¹Ñ}¹…µ”ñðÕ¹‘•™¥¹•°4(€€€€€‘•™…Õ±Ñ5½‘•°èÉ½Ü¹‘•™…Õ±Ñ}µ½‘•°°4(€€€€€µ½‘•±±±½Ý±¥ÍÐèÉ½Ü¹µ½‘•±}…±±½Ý±¥ÍÐñðmt°4(€€€€€±…ÍÑY…±¥‘…Ñ•‘ÐèÉ½Ü¹±…ÍÑ}Ù…±¥‘…Ñ•‘}…Ð°4(€€€€€­•åI•˜è­•ä€˜˜­•ä¹É•Í½±Ù•É}ÑåÁ”€ôôô€Í•ÉÙ•É}É•™•É•¹”œ4(€€€€€€€€üì4(€€€€€€€€€€€¥è­•ä¹¥°4(€€€€€€€€€€€ÁÉ½Ù¥‘•Èè­•ä¹ÁÉ½Ù¥‘•È°4(€€€€€€€€€€€É•Í½±Ù•ÉQåÁ”è€Í•ÉÙ•É}É•™•É•¹”œ°4(€€€€€€€€€€€Í•É•ÑI•˜è­•ä¹Í•É•Ñ}É•˜°4(€€€€€€€€€€€Í…™•¥¹•ÉÁÉ¥¹Ðè­•ä¹Í…™•}™¥¹•ÉÁÉ¥¹Ð°4(€€€€€€€€€€€ÍÑ…ÑÕÌè­•ä¹ÍÑ…ÑÕÌ°4(€€€€€€€€€ô4(€€€€€€€€è¹Õ±°°4(€€€ôì4(€ô°4(€…Íå¹ŒÑÉ…¹Í¥Ñ¥½¸¡¥¹ÁÕÐ¤ì4(€€€½¹ÍÐÙ…±Õ”€ô…Ý…¥ÐÉÁŒñÕ¹­¹½Ý¸ø •¹Ñ•ÉÁÉ¥Í•}ÁÉ½Ù¥‘•É}±¥™•å±•}ÑÉ…¹Í¥Ñ¥½¸œ°ì4(€€€€€Á}½Á•É…Ñ¥½¸è¥¹ÁÕÐ¹½Á•É…Ñ¥½¸°4(€€€€€Á}…Ñ½Èè¥¹ÁÕÐ¹…ÕÑ¡½É¥Ñä¹…Ñ½É%°4(€€€€€Á}½Éœè¥¹ÁÕÐ¹…ÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°4(€€€€€Á}Ý½É­ÍÁ…”è¥¹ÁÕÐ¹…ÕÑ¡½É¥Ñä¹Ý½É­ÍÁ…•%°4(€€€€€Á}…ÕÑ¡½É¥é…Ñ¥½¹}Ù•ÉÍ¥½¸è¥¹ÁÕÐ¹…ÕÑ¡½É¥Ñä¹…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸°4(€€€€€Á}Á…å±½…è¥¹ÁÕÐ¹Á…å±½…°4(€€€€€Á}É••¥ÁÐè¥¹ÁÕÐ¹•á•ÕÑ¥½¸ü¹É••¥ÁÑ%ñð¹Õ±°°4(€€€€€Á}•á•ÕÑ¥½¹}Ñ½­•¸è¥¹ÁÕÐ¹•á•ÕÑ¥½¸ü¹•á•ÕÑ¥½¹Q½­•¸ñð¹Õ±°°4(€€€€€Á}•á•ÕÑ¥½¹}™•¹”è¥¹ÁÕÐ¹•á•ÕÑ¥½¸ü¹•á•ÕÑ¥½¹•¹”ñð¹Õ±°°4(€€€€€Á}É•ÍÕ±Ðè¥¹ÁÕÐ¹•á•ÕÑ¥½¸ü¹É•ÍÕ±Ðñð¹Õ±°°4(€€€ô¤ì4(€€€¥˜€ …¥ÍI•½É¡Ù…±Õ”¤¤Ñ¡É½Ü¹•ÜÉÉ½È AÉ½Ù¥‘•È±¥™•å±”ÑÉ…¹Í¥Ñ¥½¸™…¥±•¸œ¤ì4(€€€É•ÑÕÉ¸Ù…±Õ”ì4(€ô°4)ô¤ì4(4)•áÁ½ÉÐ½¹ÍÐÉ•…Ñ•AÉ½Ù¥‘•É1¥™•å±••ÁÌ€ô€ 4(€É½ÕÑ•I•Í½±Ù•É•ÁÌè¹Ñ•ÉÁÉ¥Í•AÉ½Ù¥‘•ÉI½ÕÑ•I•Í½±Ù•É•ÁÌ°4(¤èAÉ½Ù¥‘•É1¥™•å±••ÁÌ€ôø€¡ì4(€‘…Ñ…‰…Í”èÉ•…Ñ•AÉ½Ù¥‘•É1¥™•å±•…Ñ…‰…Í” ¤°4(€Í•É•Ñ	…­•¹èÉ•…Ñ•AÉ½Ù¥‘•ÉM•É•Ñ	…­•¹ ¤°4(€É½ÕÑ•I•Í½±Ù•É•ÁÌ°4(€Ù…±¥‘…Ñ•½¹¹•Ñ¥½¸èÙ…±¥‘…Ñ•AÉ½Ù¥‘•É½¹¹•Ñ¥½¸°4(€¹½Üè€ ¤€ôø¹•Ü…Ñ” ¤°4(€É…¹‘½µ%è€ ¤€ôøÉåÁÑ¼¹É…¹‘½µUU% ¤°4)ô¤ì4(
+    await deps.secretBackend.write({ provider, secretRef, organizationId: authority.organizationId, value: raw });
+    await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
+    return { provider, secretRef, keyRefId, fingerprint, wrote: true, managed: true, value: raw };
+  }
+  if (deps.secretBackend.writable) throw new ProviderLifecycleError('INVALID_REQUEST');
+  if (!preProvisioned || !isAllowedProviderSecretRef(provider, preProvisioned, authority.organizationId)) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  const referenceHash = await fingerprintProviderSecret(preProvisioned);
+  if (execution?.plan.preProvisionedReferenceHash && execution.plan.preProvisionedReferenceHash !== referenceHash) {
+    throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+  }
+  const keyRefId = typeof execution?.plan.keyRefId === 'string' ? execution.plan.keyRefId : deps.randomId();
+  await persistExecutionPlan(execution, { provider, keyRefId, preProvisionedReferenceHash: referenceHash });
+  const value = await deps.secretBackend.resolve({ provider, secretRef: preProvisioned, organizationId: authority.organizationId });
+  if (!value) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
+  return {
+    provider, secretRef: preProvisioned, keyRefId,
+    fingerprint: await fingerprintProviderSecret(value), wrote: false, managed: false, value,
+  };
+};
+
+const requireEligibleRouteRoles = (value: unknown, authority: ProviderLifecycleAuthority) => {
+  const roles = requireRoles(value);
+  if (roles.some(role => !uuid.test(role) || !authority.eligibleRouteRoleIds.has(role))) {
+    throw new ProviderLifecycleError('INVALID_REQUEST');
+  }
+  return roles;
+};
+
+const seededRouteRoles = (authority: ProviderLifecycleAuthority) => {
+  const workspaceRole = [...authority.workspaceRoleIds].find(role => authority.eligibleRouteRoleIds.has(role));
+  if (workspaceRole) return [workspaceRole];
+  if (authority.organizationCapabilities.has('org.admin')) {
+    const organizationRole = [...authority.organizationRoleIds].find(role => authority.eligibleRouteRoleIds.has(role));
+    if (organizationRole) return [organizationRole];
+  }
+  throw new ProviderLifecycleError('PERMISSION_DENIED');
+};
+
+const cleanupPlannedSecret = async (
+  deps: ProviderLifecycleDeps,
+  authority: Pick<ProviderLifecycleAuthority, 'organizationId'>,
+  execution: ProviderLifecycleExecutionContext | undefined,
+  terminalCode: 'VALIDATION_FAILED' | 'PERMISSION_DENIED',
+  prepared?: {
+    provider: EnterpriseAiProvider;
+    secretRef: string;
+    fingerprint: string;
+    wrote: boolean;
+    managed: boolean;
+  },
+) => {
+  const plannedProvider = execution?.plan.provider;
+  const plannedReference = execution?.plan.secretReference;
+  const plannedFingerprint = execution?.plan.safeFingerprint;
+  const receiptOwnsPlan = Boolean(
+    execution
+      && execution.plan.secretOwnership === 'managed_write'
+      && execution.plan.secretPlanReceiptId === execution.receiptId
+      && (execution.plan.writeState === 'planned' || execution.plan.writeState === 'written'),
+  );
+  const preparedMatchesPlan = !prepared || !execution || (
+    prepared.managed === true
+      && prepared.provider === plannedProvider
+      && prepared.secretRef === plannedReference
+      && prepared.fingerprint === plannedFingerprint
+  );
+  const managed = execution
+    ? receiptOwnsPlan && preparedMatchesPlan
+    : prepared?.managed === true && prepared.wrote === true;
+  if (!managed) return;
+  const providerValue = execution ? plannedProvider : prepared?.provider;
+  const secretRefValue = execution ? plannedReference : prepared?.secretRef;
+  const safeFingerprint = execution ? plannedFingerprint : prepared?.fingerprint;
+  if (!ENTERPRISE_AI_PROVIDERS.includes(providerValue as EnterpriseAiProvider)
+    || typeof secretRefValue !== 'string'
+    || typeof safeFingerprint !== 'string'
+    || !isAllowedProviderSecretRef(providerValue as EnterpriseAiProvider, secretRefValue, authority.organizationId)
+    || !deps.secretBackend.writable
+    || !deps.secretBackend.remove
+    || (execution?.plan.protectedSecretReferenceHash !== undefined
+      && execution.plan.protectedSecretReferenceHash === await fingerprintProviderSecret(secretRefValue))) {
+    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+  }
+  if (execution?.plan.cleanupCompleted === true) return;
+  if (execution) {
+    await persistExecutionPlan(execution, {
+      cleanupRequired: true,
+      cleanupTerminalCode: terminalCode,
+    });
+  }
+  let existing: string | undefined;
+  try {
+    existing = await deps.secretBackend.resolve({
+      provider: providerValue as EnterpriseAiProvider,
+      secretRef: secretRefValue,
+      organizationId: authority.organizationId,
+    });
+    if (existing && await fingerprintProviderSecret(existing) !== safeFingerprint) {
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
+    if (!existing) {
+      if (execution) await persistExecutionPlan(execution, { cleanupCompleted: true });
+      return;
+    }
+    await deps.secretBackend.remove({
+      provider: providerValue as EnterpriseAiProvider,
+      secretRef: secretRefValue,
+      organizationId: authority.organizationId,
+    });
+  } catch (error) {
+    if (error instanceof ProviderLifecycleError) throw error;
+    throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+  }
+  if (execution) {
+    await persistExecutionPlan(execution, { cleanupCompleted: true });
+  }
+};
+
+export const recoverProviderLifecycleManagedSecret = async (
+  deps: ProviderLifecycleDeps,
+  scope: Pick<ProviderLifecycleAuthority, 'organizationId'>,
+  execution: ProviderLifecycleExecutionContext,
+) => cleanupPlannedSecret(deps, scope, execution, 'PERMISSION_DENIED');
+
+export const executeProviderLifecycleCommand = async (
+  operation: ProviderLifecycleOperation,
+  authority: ProviderLifecycleAuthority,
+  payloadValue: unknown,
+  deps: ProviderLifecycleDeps,
+  execution?: ProviderLifecycleExecutionContext,
+): Promise<JsonObject> => {
+  const payload = isRecord(payloadValue) ? payloadValue : (() => { throw new ProviderLifecycleError('INVALID_REQUEST'); })();
+  if (execution?.plan.cleanupRequired === true) {
+    const terminalCode = execution.plan.cleanupTerminalCode === 'PERMISSION_DENIED'
+      ? 'PERMISSION_DENIED'
+      : 'VALIDATION_FAILED';
+    await cleanupPlannedSecret(deps, authority, execution, terminalCode);
+    throw new ProviderLifecycleError(terminalCode);
+  }
+  try {
+    assertProviderLifecycleOperationAuthority(operation, authority);
+  } catch (error) {
+    if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED'
+      && (operation === 'provider.secret.bind' || operation === 'provider.secret.rotate')) {
+      await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED');
+    }
+    throw error;
+  }
+
+  if (operation === 'provider.register') {
+    const provider = requireProvider(payload.provider);
+    const displayName = requireString(payload.displayName, 240);
+    const defaultModel = requireString(payload.defaultModel, 200);
+    const endpoint = payload.endpoint === undefined || payload.endpoint === '' ? undefined : requireString(payload.endpoint, 500);
+    if ((provider === 'azure_openai' || provider === 'openai_compatible') && !endpoint) throw new ProviderLifecycleError('INVALID_REQUEST');
+    if (endpoint && !isAllowedProviderEndpoint(provider, endpoint)) throw new ProviderLifecycleError('INVALID_REQUEST');
+    const deployment = payload.deployment === undefined || payload.deployment === '' ? undefined : requireString(payload.deployment, 240);
+    if (provider === 'azure_openai' && !deployment) throw new ProviderLifecycleError('INVALID_REQUEST');
+    const capabilities = requireCapabilities(payload.capabilities);
+    const modelAllowlist = Array.isArray(payload.modelAllowlist)
+      ? [...new Set(payload.modelAllowlist.map(item => requireString(item, 200)))]
+      : [defaultModel];
+    if (modelAllowlist.length > 64 || !modelAllowlist.includes(defaultModel)) throw new ProviderLifecycleError('INVALID_REQUEST');
+    const plannedConfigId = typeof execution?.plan.providerConfigId === 'string' ? execution.plan.providerConfigId : deps.randomId();
+    const plannedRouteIds = Array.isArray(execution?.plan.routeIds)
+      ? execution.plan.routeIds.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (plannedRouteIds.length && plannedRouteIds.length !== capabilities.length) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    const providerConfigId = plannedConfigId;
+    const routeIds = plannedRouteIds.length ? plannedRouteIds : capabilities.map(() => deps.randomId());
+    await persistExecutionPlan(execution, { providerConfigId, routeIds });
+    const allowedRoles = seededRouteRoles(authority);
+    const routes = capabilities.map((capability, index) => ({
+      id: routeIds[index], capability, model: defaultModel, allowedRoles,
+    }));
+    const result = { resourceId: providerConfigId, providerConfigId, provider, status: 'pending_review', routes };
+    await safeTransition(deps, operation, authority, {
+      providerConfigId,
+      provider,
+      displayName,
+      endpoint: endpoint || null,
+      deployment: deployment || null,
+      defaultModel,
+      modelAllowlist,
+      capabilities,
+      routes,
+      budget: requireBudget(payload.budget),
+    }, result, execution);
+    return result;
+  }
+
+  const config = await loadConfig(deps, authority, payload.providerConfigId);
+  if (config.status === 'retired' || config.status === 'revoked') throw new ProviderLifecycleError('PROVIDER_BLOCKED');
+
+  if (operation === 'provider.secret.bind') {
+    if (config.keyRef) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    await persistExecutionPlan(execution, { providerConfigId: config.id });
+    const prepared = await writeOrResolveSecret(config.provider, authority, payload, deps, execution);
+    const keyRefId = prepared.keyRefId;
+    const result = { resourceId: config.id, providerConfigId: config.id, keyRefId, status: 'pending_review', safeFingerprint: prepared.fingerprint };
+    try {
+      await safeTransition(deps, operation, authority, {
+        providerConfigId: config.id,
+        provider: config.provider,
+        keyRefId,
+        secretReference: prepared.secretRef,
+        safeFingerprint: prepared.fingerprint,
+        backend: deps.secretBackend.kind,
+      }, result, execution);
+      return result;
+    } catch (error) {
+      if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED') {
+        await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
+          wrote: prepared.wrote,
+          managed: prepared.managed,
+        });
+      }
+      throw error;
+    }
+  }
+
+  if (operation === 'provider.validate') {
+    let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
+      ? execution.plan.lastValidatedAt
+      : undefined;
+    if (!lastValidatedAt) {
+      const providerKey = await resolveBoundSecret(config, authority, deps);
+      try {
+        await deps.validateConnection({
+          provider: config.provider,
+          endpoint: config.endpoint,
+          deployment: config.deployment,
+          model: config.defaultModel,
+          apiKey: providerKey,
+        });
+      } catch {
+        throw new ProviderLifecycleError('VALIDATION_FAILED');
+      }
+      lastValidatedAt = deps.now().toISOString();
+      await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
+    }
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'validated', lastValidatedAt };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, lastValidatedAt }, result, execution);
+    return result;
+  }
+
+  if (operation === 'provider.activate') {
+    if (!config.keyRef || !isFreshValidation(config.lastValidatedAt, deps.now())) throw new ProviderLifecycleError('PROVIDER_BLOCKED');
+    await resolveBoundSecret(config, authority, deps);
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'active' };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, keyRefId: config.keyRef.id }, result, execution);
+    return result;
+  }
+
+  if (operation === 'provider.route.toggle') {
+    const routeId = requireUuid(payload.routeId);
+    if (typeof payload.enabled !== 'boolean') throw new ProviderLifecycleError('INVALID_REQUEST');
+    if (payload.enabled) {
+      const capability = requireCapabilities([payload.capability])[0];
+      const allowedRoles = payload.allowedRoles === undefined
+        ? undefined
+        : requireEligibleRouteRoles(payload.allowedRoles, authority);
+      const decision = await resolveEnterpriseProviderRoute({
+        mode: 'pilot',
+        capability,
+        organizationId: authority.organizationId,
+        workspaceId: authority.workspaceId,
+        actorId: authority.actorId,
+        roleNames: [
+          ...authority.organizationRoleNames, ...authority.workspaceRoleNames,
+          ...authority.organizationRoleIds, ...authority.workspaceRoleIds,
+        ],
+        requestedProviderConfigId: config.id,
+        includeDisabled: true,
+        proposedAllowedRoles: allowedRoles,
+        // This command already proved byok.manage and validated each selected
+        // role against exact server-derived organization/workspace authority.
+        policyManagementAuthorized: true,
+        scannerReference: 'supabase/functions/_shared/providerLifecycle.ts',
+      }, deps.routeResolverDeps);
+      if (decision.status !== 'allowed') throw new ProviderLifecycleError('PROVIDER_BLOCKED');
+      const secret = await resolveProviderSecretForDecision(decision, {
+        backend: deps.secretBackend,
+        lookupKeyRef: async allowed => config.keyRef && config.keyRef.id === allowed.keyRefId
+          ? {
+              id: config.keyRef.id,
+              org_id: config.organizationId,
+              provider: config.keyRef.provider,
+              resolver_type: config.keyRef.resolverType,
+              secret_ref: config.keyRef.secretRef,
+              status: config.keyRef.status,
+            }
+          : null,
+      });
+      if (secret.status !== 'resolved') throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
+      const result = { resourceId: config.id, providerConfigId: config.id, routeId, enabled: true, capability, allowedRolePolicy: allowedRoles ? 'updated' : 'preserved' };
+      await safeTransition(deps, operation, authority, {
+        providerConfigId: config.id,
+        routeId,
+        capability,
+        enabled: true,
+        ...(allowedRoles ? { allowedRoles } : {}),
+      }, result, execution);
+      return result;
+    }
+    const result = { resourceId: config.id, providerConfigId: config.id, routeId, enabled: false };
+    await safeTransition(deps, operation, authority, { providerConfigId: config.id, routeId, enabled: false }, result, execution);
+    return result;
+  }
+
+  if (operation === 'provider.secret.rotate') {
+    if (!config.keyRef) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
+    await persistExecutionPlan(execution, { providerConfigId: config.id });
+    const prepared = await writeOrResolveSecret(
+      config.provider, authority, payload, deps, execution, config.keyRef.secretRef,
+    );
+    const keyRefId = prepared.keyRefId;
+    let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
+      ? execution.plan.lastValidatedAt
+      : undefined;
+    if (!lastValidatedAt) {
+      try {
+        await deps.validateConnection({
+          provider: config.provider,
+          endpoint: config.endpoint,
+          deployment: config.deployment,
+          model: config.defaultModel,
+          apiKey: prepared.value,
+        });
+      } catch {
+        await cleanupPlannedSecret(deps, authority, execution, 'VALIDATION_FAILED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
+          wrote: prepared.wrote,
+          managed: prepared.managed,
+        });
+        throw new ProviderLifecycleError('VALIDATION_FAILED');
+      }
+      lastValidatedAt = deps.now().toISOString();
+      await persistExecutionPlan(execution, { validationSucceeded: true, lastValidatedAt });
+    }
+    const result = { resourceId: config.id, providerConfigId: config.id, keyRefId, status: 'active', safeFingerprint: prepared.fingerprint, lastValidatedAt };
+    try {
+      await safeTransition(deps, operation, authority, {
+        providerConfigId: config.id,
+        provider: config.provider,
+        previousKeyRefId: config.keyRef.id,
+        keyRefId,
+        secretReference: prepared.secretRef,
+        safeFingerprint: prepared.fingerprint,
+        backend: deps.secretBackend.kind,
+        lastValidatedAt,
+      }, result, execution);
+      if (deps.secretBackend.writable && deps.secretBackend.remove) {
+        await deps.secretBackend.remove({
+          provider: config.provider,
+          secretRef: config.keyRef.secretRef,
+          organizationId: authority.organizationId,
+        }).catch(() => undefined);
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof ProviderLifecycleError && error.code === 'PERMISSION_DENIED') {
+        await cleanupPlannedSecret(deps, authority, execution, 'PERMISSION_DENIED', {
+          provider: config.provider,
+          secretRef: prepared.secretRef,
+          fingerprint: prepared.fingerprint,
+          wrote: prepared.wrote,
+          managed: prepared.managed,
+        });
+      }
+      if (error instanceof ProviderLifecycleError) throw error;
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
+  }
+
+  if (operation === 'provider.revoke') {
+    const result = { resourceId: config.id, providerConfigId: config.id, status: 'retired', routesEnabled: false };
+    await safeTransition(deps, operation, authority, {
+      providerConfigId: config.id,
+      keyRefId: config.keyRef?.id || null,
+      disableAllRoutes: true,
+    }, result, execution);
+    if (config.keyRef && deps.secretBackend.writable && deps.secretBackend.remove) {
+      await deps.secretBackend.remove({
+        provider: config.provider,
+        secretRef: config.keyRef.secretRef,
+        organizationId: authority.organizationId,
+      }).catch(() => undefined);
+    }
+    return result;
+  }
+
+  throw new ProviderLifecycleError('INVALID_REQUEST');
+};
+
+type ProviderConfigDbRow = {
+  id: string;
+  org_id: string;
+  provider: EnterpriseAiProvider;
+  status: string;
+  endpoint_url?: string | null;
+  deployment_name?: string | null;
+  default_model?: string | null;
+  model_allowlist?: string[] | null;
+  last_validated_at?: string | null;
+  key_ref_id?: string | null;
+};
+
+export const createProviderLifecycleDatabase = (): ProviderLifecycleDatabase => ({
+  async loadConfig(input) {
+    const configs = await postgrest<ProviderConfigDbRow[]>(
+      `ai_provider_configs?select=id,org_id,provider,status,endpoint_url,deployment_name,default_model,model_allowlist,last_validated_at,key_ref_id&id=eq.${encodeURIComponent(input.providerConfigId)}&org_id=eq.${encodeURIComponent(input.organizationId)}&limit=1`,
+      { method: 'GET' },
+    );
+    const row = configs[0];
+    if (!row || !ENTERPRISE_AI_PROVIDERS.includes(row.provider) || !row.default_model) return null;
+    const keyRows = row.key_ref_id
+      ? await postgrest<Array<{ id: string; provider: EnterpriseAiProvider; resolver_type: string; secret_ref: string; safe_fingerprint?: string | null; status: string }>>(
+        `ai_provider_key_refs?select=id,provider,resolver_type,secret_ref,safe_fingerprint,status&id=eq.${encodeURIComponent(row.key_ref_id)}&org_id=eq.${encodeURIComponent(input.organizationId)}&provider=eq.${encodeURIComponent(row.provider)}&deleted_at=is.null&limit=1`,
+        { method: 'GET' },
+      )
+      : [];
+    const key = keyRows[0];
+    return {
+      id: row.id,
+      organizationId: row.org_id,
+      provider: row.provider,
+      status: row.status,
+      endpoint: row.endpoint_url || undefined,
+      deployment: row.deployment_name || undefined,
+      defaultModel: row.default_model,
+      modelAllowlist: row.model_allowlist || [],
+      lastValidatedAt: row.last_validated_at,
+      keyRef: key && key.resolver_type === 'server_reference'
+        ? {
+            id: key.id,
+            provider: key.provider,
+            resolverType: 'server_reference',
+            secretRef: key.secret_ref,
+            safeFingerprint: key.safe_fingerprint,
+            status: key.status,
+          }
+        : null,
+    };
+  },
+  async transition(input) {
+    const value = await rpc<unknown>('enterprise_provider_lifecycle_transition', {
+      p_operation: input.operation,
+      p_actor: input.authority.actorId,
+      p_org: input.authority.organizationId,
+      p_workspace: input.authority.workspaceId,
+      p_authorization_version: input.authority.authorizationVersion,
+      p_payload: input.payload,
+      p_receipt: input.execution?.receiptId || null,
+      p_execution_token: input.execution?.executionToken || null,
+      p_execution_fence: input.execution?.executionFence || null,
+      p_result: input.execution?.result || null,
+    });
+    if (!isRecord(value)) throw new Error('Provider lifecycle transition failed.');
+    return value;
+  },
+});
+
+export const createProviderLifecycleDeps = (
+  routeResolverDeps: EnterpriseProviderRouteResolverDeps,
+): ProviderLifecycleDeps => ({
+  database: createProviderLifecycleDatabase(),
+  secretBackend: createProviderSecretBackend(),
+  routeResolverDeps,
+  validateConnection: validateProviderConnection,
+  now: () => new Date(),
+  randomId: () => crypto.randomUUID(),
+});
