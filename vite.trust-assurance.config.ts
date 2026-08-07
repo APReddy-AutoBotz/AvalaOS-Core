@@ -1,0 +1,1 @@
+import{defineConfig}from'vite';import react from'@vitejs/plugin-react';import{resolve}from'node:path';export default defineConfig({plugins:[react()],build:{outDir:'dist-trust-assurance',emptyOutDir:true,rollupOptions:{input:{trustAssuranceHarness:resolve(__dirname,'tests/trust-assurance/browser/trustAssuranceHarness.html')}}}});

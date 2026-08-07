@@ -3,7 +3,7 @@ on:
   push:
     branches: ['codex/implement-enterprise-trust-hub']
   pull_request:
-    paths: ['services/trustAssurance/**','components/admin/trust-assurance/**','components/admin/TrustCenterPanel.tsx','supabase/functions/**/trustAssurance*','supabase/functions/trust-assurance-*/**','supabase/migrations/*_trust_assurance_evidence_hub.sql','scripts/*TrustAssurance*','tests/trust-assurance/**','tests/browser/trustAssurance.spec.ts','playwright.trust-assurance.config.ts','.github/workflows/trust-assurance.yml']
+    paths: ['services/trustAssurance/**','components/admin/trust-assurance/**','components/admin/TrustCenterPanel.tsx','supabase/functions/**/trustAssurance*','supabase/functions/trust-assurance-*/**','supabase/migrations/*_trust_assurance_evidence_hub.sql','scripts/*TrustAssurance*','tests/trust-assurance/**','tests/trust-assurance/browser/**','playwright.trust-assurance.config.ts','vite.trust-assurance.config.ts','.github/workflows/trust-assurance.yml']
 jobs:
   source:
     runs-on: ubuntu-latest
@@ -43,4 +43,6 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
+      - run: npx vite build --config vite.trust-assurance.config.ts
+        env: {VITE_RUNTIME_MODE: automated_test}
       - run: npx playwright test --config=playwright.trust-assurance.config.ts

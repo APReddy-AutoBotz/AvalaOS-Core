@@ -136,7 +136,7 @@ DECLARE r public.trust_command_receipts; actual bigint; cap text; selection_valu
    INSERT INTO public.trust_review_events(org_id,workspace_id,resource_type,resource_id,resource_hash,reviewer_id,decision,rationale,authorization_version) VALUES(p_org_id,p_workspace_id,p_payload->>'resourceType',(p_payload->>'resourceId')::uuid,resource_hash,p_actor_id,p_payload->>'decision',p_payload->>'rationale',p_authorization_version) RETURNING id INTO r.resource_id; actual:=1;
  ELSIF p_operation='snapshot.withdraw' THEN
    SELECT s.id,s.version INTO r.resource_id,actual FROM public.trust_snapshots s WHERE s.id=(p_payload->>'snapshotId')::uuid AND s.org_id=p_org_id AND s.workspace_id IS NOT DISTINCT FROM p_workspace_id AND s.lifecycle='published' FOR UPDATE;
-   IF actual IS NULL THEN RAISE EXCEPTION 'VERSION_CONFLICT'; END IF;
+   IF actual IS NULL OR actual<>p_expected_version THEN RAISE EXCEPTION 'VERSION_CONFLICT'; END IF;
    INSERT INTO public.trust_publication_events(org_id,workspace_id,snapshot_id,snapshot_hash,event_type,publisher_id,supersedes_publication_id,is_current) SELECT p_org_id,p_workspace_id,s.id,s.canonical_hash,'withdrawn',p_actor_id,cp.publication_id,false FROM public.trust_snapshots s JOIN public.trust_current_publications cp ON cp.org_id=p_org_id AND cp.workspace_scope=COALESCE(p_workspace_id,'00000000-0000-0000-0000-000000000000') WHERE s.id=r.resource_id;
    DELETE FROM public.trust_current_publications WHERE org_id=p_org_id AND workspace_scope=COALESCE(p_workspace_id,'00000000-0000-0000-0000-000000000000'); UPDATE public.trust_snapshots SET lifecycle='withdrawn',version=version+1,updated_at=now() WHERE id=r.resource_id RETURNING version INTO actual;
  ELSE RAISE EXCEPTION 'VALIDATION_FAILED'; END IF;
