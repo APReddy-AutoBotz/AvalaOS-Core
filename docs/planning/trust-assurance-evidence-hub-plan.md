@@ -4,6 +4,10 @@
 
 The AP-authorized continuation supplies these read-only GitHub facts: repository `APReddy-AutoBotz/AvalaOS-Core`; live `main` and local checkout `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5`; PR #221 is open, Draft, unmerged on `codex/enterprise-intelligence-byok-ingestion-delivery-assemble` at `07d2cfee5a4116c0d2acbf71758f9f71636ae1df`. Local execution confirmed `/workspace/AvalaOS-Core`, a clean worktree, Node `v22.22.2`, and no local branch named `codex/enterprise-trust-assurance-evidence-hub`. Shell GitHub authentication is intentionally absent and is not an authority gate. The PR #221 changed-file list and open-PR collision search require managed publishing review before publication; no PR #221 implementation is imported.
 
+## PR #222 publication correction — 2026-08-07 UTC
+
+GitHub authority supplied by the AP records Draft PR #222 on `codex/implement-enterprise-trust-hub` at head `f4cb52f8f5b90a21cdf708722a4909d7481eb7a3`. PR #221 remains separate, open, Draft, and unmerged. Its migration namespace already uses `20260807120000` and extends through at least `20260807130000`; therefore the published Trust migration timestamp collides even though the Trust schema and domain files do not materially overlap PR #221. This correction aligns the workflow with the published branch and makes scripts/workflow migration references suffix-based. The migration itself is not renamed while PR #221 is moving.
+
 ## Objective and buyer outcome
 
 Replace static Trust Center authority in pilot/production with a normalized, server-authoritative evidence metadata, review, snapshot, and publication boundary. Authorized internal users receive honest effective proof states; buyer-safe consumers receive only the current published, sanitized snapshot. This source candidate proves neither hosted behavior nor readiness or certification.
@@ -51,7 +55,7 @@ Feature tests cover deterministic status/freshness/hash/publication law, strict 
 
 ## PR #221 boundary and deferred convergence
 
-This branch does not edit prohibited shared/Enterprise Intelligence files or depend on PR #221 migrations. Before managed publication, refresh PR #221 and compare changed files; any material overlap stops publication. After human merge of PR #221 only: verify new main, rebase once, recheck migration order/shared contracts, add deferred package/default-chain and global authority/status/roadmap/risk/task-ledger/navigation integrations, rerun exact-head CI/review, fix P1/P2 items, then and only then mark Ready. Human merge only.
+This branch does not edit prohibited shared/Enterprise Intelligence files or depend on PR #221 migrations. The supplied PR #222/PR #221 file audit identifies no material file overlap other than the migration timestamp namespace collision. After human merge of PR #221 only: verify new main, rebase once, determine the final accepted migration maximum, rename the Trust migration to a unique timestamp strictly later than that maximum, recheck shared contracts, add deferred package/default-chain and global authority/status/roadmap/risk/task-ledger/navigation integrations, rerun exact-head CI/review, fix P1/P2 items, then and only then mark Ready. Human merge only.
 
 ## Unsupported claims
 

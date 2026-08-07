@@ -26,7 +26,7 @@ Malformed/stale/revoked/cross-tenant requests fail without existence disclosure.
 
 ## PR #221 and deferred convergence
 
-No PR #221-owned file is intentionally changed. Refresh its head/file list and compare before publication. After its human merge, perform the single rebase and deferred shared package/default-chain, authority-map, status, risk, roadmap, task-ledger, source-of-truth, and navigation integrations; rerun exact-head CI/review before Ready. This Draft must remain Draft meanwhile.
+No PR #221-owned file is changed. The AP-supplied publication audit finds zero material changed-file overlap between PR #222 and PR #221 except the migration timestamp namespace: both currently use `20260807120000`, and PR #221 extends through at least `20260807130000`. The Trust migration rename is therefore a mandatory post-#221 convergence blocker. After PR #221 is human-merged, perform the single rebase, rename the Trust migration to a unique timestamp strictly later than the final accepted migration maximum, and complete the deferred shared package/default-chain, authority-map, status, risk, roadmap, task-ledger, source-of-truth, and navigation integrations. Rerun exact-head CI/review before Ready. This PR must remain Draft meanwhile.
 
 ## Unsupported boundaries
 

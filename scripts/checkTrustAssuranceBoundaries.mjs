@@ -1,5 +1,7 @@
 import fs from 'node:fs';
-const migration=fs.readFileSync('supabase/migrations/20260807120000_trust_assurance_evidence_hub.sql','utf8');
+const candidates=fs.readdirSync('supabase/migrations').filter(name=>/^\d{14}_trust_assurance_evidence_hub\.sql$/.test(name));
+if(candidates.length!==1){console.error(`Expected exactly one Trust Assurance migration, found ${candidates.length}`);process.exit(1)}
+const migration=fs.readFileSync(`supabase/migrations/${candidates[0]}`,'utf8');
 const required=['FORCE ROW LEVEL SECURITY','trust_assurance_immutable','trust_assurance_command','IDEMPOTENCY_CONFLICT','trust_one_current_publication','REVOKE ALL','service_role','trust_audit'];
 const missing=required.filter(value=>!migration.includes(value));
 if(missing.length){console.error(`Missing Trust Assurance boundaries: ${missing.join(', ')}`);process.exit(1)}
