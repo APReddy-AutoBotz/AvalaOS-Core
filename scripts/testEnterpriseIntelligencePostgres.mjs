@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {readFile, readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
@@ -79,6 +80,9 @@ const enterpriseTables = [
   'enterprise_modernization_decisions', 'enterprise_assemble_blueprints',
   'enterprise_high_impact_review_events', 'enterprise_high_impact_approvals',
 ];
+const evidenceAnchorHash = values => createHash('sha256').update(
+  `evidence-excerpt-anchor-v1|${values.map(value => `${Buffer.byteLength(value, 'utf8')}:${value}`).join('|')}`,
+).digest('hex');
 
 let admin;
 try {
@@ -149,9 +153,59 @@ try {
     assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_stage_evidence_extraction_result(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,jsonb,text,uuid,bigint)','EXECUTE') allowed")).rows[0].allowed, false);
     assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_stage_evidence_extraction_result(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,jsonb,text,uuid,bigint)','EXECUTE') allowed")).rows[0].allowed, true);
     assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_commit_evidence_extraction(uuid,uuid,uuid,uuid,text,integer,uuid,text,text,integer,integer,jsonb)','EXECUTE') allowed")).rows[0].allowed, false);
+    assert.equal((await authority.query("SELECT has_function_privilege('authenticated','public.enterprise_evidence_source_locator_is_canonical(text)','EXECUTE') allowed")).rows[0].allowed, false);
+    assert.equal((await authority.query("SELECT has_function_privilege('service_role','public.enterprise_evidence_source_locator_is_canonical(text)','EXECUTE') allowed")).rows[0].allowed, true);
   });
 
   const fixture = await createEnterpriseIntelligenceFixture(authority);
+  await scenario('canonical evidence bucket and server locator authority cannot drift', async () => {
+    const anchor = (await authority.query(`SELECT
+      c.source_version_id,c.source_locator,c.safe_excerpt,c.value,c.excerpt_hash,c.provenance_hash,
+      v.content_hash,v.extracted_text_hash,v.storage_bucket,v.source_locator_schema
+      FROM public.enterprise_evidence_candidates c
+      JOIN public.enterprise_evidence_source_versions v ON v.id=c.source_version_id
+      WHERE c.id=$1`, [fixture.candidate])).rows[0];
+    assert.equal(anchor.storage_bucket, 'source-uploads');
+    assert.equal(anchor.source_locator_schema, 'normalized-text-char-range-1');
+    assert.equal(anchor.source_locator, 'normalized-text:v1:chars:0-64');
+    assert.equal(anchor.excerpt_hash, evidenceAnchorHash([
+      anchor.source_version_id, anchor.content_hash, anchor.extracted_text_hash,
+      anchor.source_locator, anchor.safe_excerpt, anchor.value,
+    ]));
+    assert.match(anchor.provenance_hash, /^[0-9a-f]{64}$/);
+    assert.equal((await authority.query(
+      "SELECT public.enterprise_evidence_source_locator_is_canonical('normalized-text:v1:chars:0-64') valid",
+    )).rows[0].valid, true);
+    assert.equal((await authority.query(
+      "SELECT public.enterprise_evidence_source_locator_is_canonical('page:999') valid",
+    )).rows[0].valid, false);
+    const before = Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_evidence_candidates')).rows[0].n);
+    await assert.rejects(authority.query(`INSERT INTO public.enterprise_evidence_candidates(
+      id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
+      excerpt_hash,provenance_hash,source_locator,confidence,ai_job_id,prompt_version,suggestion_status,created_by
+    ) VALUES($1,$2,$3,$4,$5,'process_objective','Ignored provider locator','Govern the fixture process',
+      $6,$6,'page:999',0.8,$7,'fixture-1','suggested',$8)`, [
+      fixture.uuid(699), fixture.sources[0].sourceId, fixture.sources[0].sourceVersionId,
+      fixture.org, fixture.workspace, fixture.hash('0'), fixture.job, fixture.requester,
+    ]), /ENTERPRISE_EVIDENCE_LOCATOR_INVALID|enterprise_evidence_candidates_canonical_locator/);
+    const counts = (await authority.query(`SELECT
+      count(*) FILTER (WHERE storage_bucket<>'source-uploads')::int bucket_mismatches,
+      count(*) FILTER (WHERE source_locator_schema<>'normalized-text-char-range-1')::int locator_schema_mismatches
+      FROM public.enterprise_evidence_source_versions`)).rows[0];
+    const persistedProviderLocators = Number((await authority.query(
+      "SELECT count(*)::int n FROM public.enterprise_evidence_candidates WHERE NOT public.enterprise_evidence_source_locator_is_canonical(source_locator)",
+    )).rows[0].n);
+    const after = Number((await authority.query('SELECT count(*)::int n FROM public.enterprise_evidence_candidates')).rows[0].n);
+    assert.deepEqual(counts, {bucket_mismatches:0,locator_schema_mismatches:0});
+    assert.equal(persistedProviderLocators, 0);
+    assert.equal(after, before);
+    console.log(`EVIDENCE AUTHORITY ${JSON.stringify({
+      canonicalBucketMismatches:counts.bucket_mismatches,
+      locatorSchemaMismatches:counts.locator_schema_mismatches,
+      providerLocatorPersistence:persistedProviderLocators,
+      rejectedProviderLocators:1,duplicateCandidates:after-before,
+    })}`);
+  });
   await scenario('extraction job claim, fenced recovery, replay, and terminal failure are idempotent', async () => {
     const trackedReceipts = [];
     const trackedJobs = [];
@@ -236,18 +290,30 @@ try {
     const stage = async (entry, receipt, candidateId, {countProvider = true, stageHash = fixture.hash('f')} = {}) => {
       if (countProvider) providerCalls += 1;
       trackedCandidates.push(candidateId);
+      const sourceVersion = (await authority.query(
+        `SELECT content_hash,extracted_text_hash
+         FROM public.enterprise_evidence_source_versions
+         WHERE id=$1 AND source_id=$2 AND org_id=$3 AND workspace_id=$4`,
+        [entry.source.sourceVersionId, entry.source.sourceId, fixture.org, fixture.workspace],
+      )).rows[0];
+      const value = `Recovered evidence ${candidateId}`;
+      const safeExcerpt = 'Recovered evidence is governed and independently reviewed.';
+      const sourceLocator = 'normalized-text:v1:chars:0-58';
+      const excerptHash = evidenceAnchorHash([
+        entry.source.sourceVersionId, sourceVersion.content_hash, sourceVersion.extracted_text_hash,
+        sourceLocator, safeExcerpt, value,
+      ]);
+      const safeCandidate = {
+        id: candidateId, sourceVersionId: entry.source.sourceVersionId,
+        field: 'process_objective', value, safeExcerpt, excerptHash, sourceLocator,
+        confidence: 0.9, promptVersion, status: 'suggested',
+      };
       const safeResult = {
         resourceId: entry.jobId, jobId: entry.jobId, sourceId: entry.source.sourceId,
         sourceVersionId: entry.source.sourceVersionId, candidateCount: 1,
-        candidates: [{id: candidateId, field: 'process_objective'}],
+        candidates: [safeCandidate],
       };
-      const candidates = [{
-        id: candidateId, sourceVersionId: entry.source.sourceVersionId,
-        field: 'process_objective', value: `Recovered evidence ${candidateId}`,
-        safeExcerpt: 'Recovered evidence is governed and independently reviewed.',
-        excerptHash: fixture.hash('d'), sourceLocator: 'line:1-1', confidence: 0.9,
-        promptVersion, status: 'suggested', createdBy: fixture.requester,
-      }];
+      const candidates = [{...safeCandidate, createdBy: fixture.requester}];
       await authority.query(
         `SELECT public.enterprise_stage_evidence_extraction_result(
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,12,20,10,$13::jsonb,$14::jsonb,$15,$16,$17
@@ -348,9 +414,19 @@ try {
     const stageLostToken = nextUuid();
     const stageLostReceipt = await reclaimReceipt(stageLost, stageLostToken);
     const stagedRecovery = await claimJob(stageLost, stageLostToken, stageLostReceipt.execution_fence);
-    assert.deepEqual([stagedRecovery.state, stagedRecovery.safeResult], ['staged', stageLostResult]);
-    assert.equal(providerCalls, providerCallsAfterStage);
-    await commitStaged(stageLost, stageLostReceipt);
+      assert.deepEqual([stagedRecovery.state, stagedRecovery.safeResult], ['staged', stageLostResult]);
+      assert.equal(providerCalls, providerCallsAfterStage);
+      await commitStaged(stageLost, stageLostReceipt);
+      const stageLostCandidate = (await authority.query(
+        `SELECT source_locator,excerpt_hash,provenance_hash
+         FROM public.enterprise_evidence_candidates WHERE id=$1`,
+        [stageLostResult.candidates[0].id],
+      )).rows[0];
+      assert.deepEqual(
+        [stageLostCandidate.source_locator, stageLostCandidate.excerpt_hash],
+        [stageLostResult.candidates[0].sourceLocator, stageLostResult.candidates[0].excerptHash],
+      );
+      assert.match(stageLostCandidate.provenance_hash, /^[0-9a-f]{64}$/);
 
     // Commit transport failure before database execution leaves the staged
     // result and running ownership recoverable without a provider replay.
@@ -1274,9 +1350,10 @@ try {
            id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
            excerpt_hash,provenance_hash,version,source_locator,confidence,suggestion_status,
            created_by,reviewed_by,reviewed_at
-         ) VALUES($1,$2,$3,$4,$5,'process_objective',$6,$7,$8,$8,$9,'line:1-1',0.95,$10,$11,$12,statement_timestamp())`,
+      ) VALUES($1,$2,$3,$4,$5,'process_objective',$6,$7,$8,$8,$9,$13,0.95,$10,$11,$12,statement_timestamp())`,
         [id, selectedSource.sourceId, selectedSource.sourceVersionId, fixture.org, fixture.workspace,
-          `Atomic candidate ${id}`, safeExcerpt, fixture.hash('0'), version, status, fixture.requester, fixture.reviewer],
+          `Atomic candidate ${id}`, safeExcerpt, fixture.hash('0'), version, status, fixture.requester, fixture.reviewer,
+          `normalized-text:v1:chars:0-${Array.from(safeExcerpt.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim()).length}`],
       );
       return id;
     };
@@ -1472,7 +1549,7 @@ try {
     await authority.query(`INSERT INTO public.enterprise_evidence_candidates(
       id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
       excerpt_hash,provenance_hash,version,source_locator,confidence,suggestion_status,created_by
-    ) VALUES($1,$2,$3,$4,$5,'process_objective','Initial governed value','Initial governed value',$6,$6,1,'line:1-1',0.9,'suggested',$7)`,
+      ) VALUES($1,$2,$3,$4,$5,'process_objective','Initial governed value','Initial governed value',$6,$6,1,'normalized-text:v1:chars:0-22',0.9,'suggested',$7)`,
     [candidate, source.sourceId, source.sourceVersionId, fixture.org, fixture.workspace, initialHash, fixture.requester]);
     const reviewerVersion = Number((await authority.query(
       'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
@@ -1519,10 +1596,24 @@ try {
     assert.notEqual(firstReview.resourceHash, secondReview.resourceHash);
   });
   await scenario('candidate lineage, stale edit rejection, and edited Assess draft promotion', async () => {
-    const initial = (await authority.query('SELECT value,version,provenance_hash FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
+    const initial = (await authority.query(
+      `SELECT value,version,source_locator,excerpt_hash,provenance_hash
+       FROM public.enterprise_evidence_candidates WHERE id=$1`,
+      [fixture.candidate],
+    )).rows[0];
     const edited = (await authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.org, fixture.workspace, 'Govern the reviewed fixture process', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'Corrected against source'])).rows[0].result;
     assert.equal(Number(edited.version), 2);
+    assert.notEqual(edited.excerptHash, initial.excerpt_hash);
     assert.notEqual(edited.provenanceHash, initial.provenance_hash);
+    const reviewed = (await authority.query(
+      `SELECT source_locator,excerpt_hash,provenance_hash
+       FROM public.enterprise_evidence_candidates WHERE id=$1`,
+      [fixture.candidate],
+    )).rows[0];
+    assert.deepEqual(
+      [reviewed.source_locator, reviewed.excerpt_hash, reviewed.provenance_hash],
+      [initial.source_locator, edited.excerptHash, edited.provenanceHash],
+    );
     await assert.rejects(authority.query('SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9)', [fixture.candidate, fixture.org, fixture.workspace, 'stale', fixture.hash('e'), 'edited', fixture.reviewer, initial.value, 'stale']), /ENTERPRISE_EVIDENCE_VERSION_CONFLICT/);
     const editHistory = (await authority.query('SELECT actor_id,next_value,resulting_version,resulting_provenance_hash FROM public.enterprise_evidence_candidate_edits WHERE candidate_id=$1', [fixture.candidate])).rows;
     assert.equal(editHistory.length, 1);
@@ -1534,6 +1625,24 @@ try {
     assert.equal(promoted.outcome, 'committed');
     assert.equal(Number(promoted.resource.caseVersion), 3);
     assert.equal((await authority.query('SELECT suggestion_status FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0].suggestion_status, 'edited');
+    const promotedLineage = (await authority.query(
+      `SELECT p.candidate_version,p.candidate_provenance_hash,
+              c.source_locator,c.excerpt_hash,c.provenance_hash,l.payload
+       FROM public.enterprise_evidence_assess_promotions p
+       JOIN public.enterprise_evidence_candidates c ON c.id=p.candidate_id
+       JOIN public.assess_v2_evidence_links l
+         ON l.version_id=p.assess_case_version_id
+        AND l.payload->>'candidateId'=p.candidate_id::text
+       WHERE p.candidate_id=$1`,
+      [fixture.candidate],
+    )).rows[0];
+    assert.deepEqual(
+      [Number(promotedLineage.candidate_version), promotedLineage.candidate_provenance_hash,
+        promotedLineage.source_locator, promotedLineage.excerpt_hash, promotedLineage.provenance_hash,
+        promotedLineage.payload.sourceLocator, promotedLineage.payload.provenanceHash],
+      [2, edited.provenanceHash, initial.source_locator, edited.excerptHash, edited.provenanceHash,
+        initial.source_locator, edited.provenanceHash],
+    );
     const replay = (await authority.query('SELECT public.enterprise_promote_evidence_to_assess_v2($1,$2,$3,$4,$5,$6,$7,$8,$9) result', [fixture.candidate, fixture.caseId, 2, fixture.requester, fixture.org, fixture.workspace, request, 'fixture-promotion-001', authorizationVersion])).rows[0].result;
     assert.equal(replay.outcome, 'replayed');
     await assert.rejects(authority.query('UPDATE public.enterprise_evidence_assess_promotions SET field_key=$1 WHERE candidate_id=$2', ['outcome', fixture.candidate]), /ENTERPRISE_APPEND_ONLY/);

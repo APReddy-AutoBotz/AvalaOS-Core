@@ -5,6 +5,7 @@ import {
   assertWorkspaceStoragePath,
   buildStorageObjectUrl,
   buildStorageRemovalUrl,
+  EVIDENCE_SOURCE_BUCKET,
   selectSourceUploadsBucket,
 } from './storageBoundary.ts';
 
@@ -37,14 +38,15 @@ const fetchStorageWithDeadline = async (
   }
 };
 
-export const resolveSourceUploadsBucket = () => selectSourceUploadsBucket(
+export const resolveSourceUploadsBucket = (): typeof EVIDENCE_SOURCE_BUCKET => selectSourceUploadsBucket(
   Deno.env.get('SOURCE_UPLOADS_BUCKET'),
   Deno.env.get('SOURCE_UPLOADS_BUCKET_ALLOWLIST'),
 );
 
 export const assertSourceUploadsBucket = (bucket: string) => {
-  if (bucket !== resolveSourceUploadsBucket()) throw new Error('Source uploads bucket is not server-authorized.');
-  return bucket;
+  resolveSourceUploadsBucket();
+  if (bucket !== EVIDENCE_SOURCE_BUCKET) throw new Error('Source uploads bucket is not server-authorized.');
+  return EVIDENCE_SOURCE_BUCKET;
 };
 
 export const prepareTextArtifact = (input: {

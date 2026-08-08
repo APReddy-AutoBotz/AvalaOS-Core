@@ -28,8 +28,8 @@ Assess scoring changes; OCR; audio transcription; remote URL or archive ingestio
 
 1. A provider route cannot execute unless the server confirms tenant/workspace scope, capability, model allowlist, active tenant-bound key reference, allowed endpoint, fresh validation, actor role, and budget.
 2. Raw key material is accepted only by the dedicated authenticated bind/rotate endpoint and never enters application tables, receipts, audit metadata, browser storage, URLs, logs, or evidence.
-3. A source is size-bounded, stored privately under a canonical tenant path, hash-anchored, extracted without executing source instructions, and committed atomically with its first version.
-4. A candidate cannot be accepted or promoted unless its excerpt and provenance are anchored to the current source version; edits and conflicts retain immutable history.
+3. A source is size-bounded, stored privately in the one canonical `source-uploads` bucket under a canonical tenant path, hash-anchored, extracted without executing source instructions, and committed atomically with its first version. Inconsistent source-bucket configuration fails before upload intent or external I/O.
+4. A candidate cannot be accepted or promoted unless its exact excerpt and server-derived normalized-text character-range locator are anchored to the current source version; provider locators are ignored, while edits and conflicts retain the immutable source anchor and history.
 5. Promotion requires a server-projected editable Assess draft and explicitly selected accepted/edited candidates; the server derives current versions and never silently overwrites human values.
 6. Modernization uses only current approved PR1G ancestry and server-derived factors; unknown high-impact factors hard-stop the disposition; Assess scoring remains unchanged.
 7. Studio handoff rejects stale or non-approved artifacts and atomically creates the Delivery package, version, and canonical item rows.

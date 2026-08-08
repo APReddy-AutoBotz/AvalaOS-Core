@@ -67,6 +67,7 @@ import {
   StorageArtifactError,
   uploadBinaryArtifact,
 } from './storage.ts';
+import { EVIDENCE_SOURCE_BUCKET } from './storageBoundary.ts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -680,7 +681,7 @@ export type EvidenceSourceUploadPlan = {
   storageWriteReceiptId: string;
   sourceId: string;
   sourceVersionId: string;
-  storageBucket: string;
+  storageBucket: typeof EVIDENCE_SOURCE_BUCKET;
   storagePath: string;
   contentHash: string;
   contentBytes: number;
@@ -699,6 +700,7 @@ const readEvidenceSourceUploadPlan = (
   plan: JsonObject,
   expected: EvidenceSourceUploadPlanIdentity,
 ): EvidenceSourceUploadPlan | null => {
+  if (expected.storageBucket !== EVIDENCE_SOURCE_BUCKET) throw new EnterpriseCommandError('RESOURCE_STALE');
   const hasManagedIntent = plan.storageWriteOwnership !== undefined
     || plan.storageWriteReceiptId !== undefined
     || plan.contentHash !== undefined
@@ -718,6 +720,7 @@ export const ensureEvidenceSourceUploadPlan = async (
   expected: EvidenceSourceUploadPlanIdentity,
   persistPlan: (plan: JsonObject) => Promise<JsonObject>,
 ): Promise<EvidenceSourceUploadPlan> => {
+  if (expected.storageBucket !== EVIDENCE_SOURCE_BUCKET) throw new EnterpriseCommandError('RESOURCE_STALE');
   const current = receipt.execution_plan || {};
   const existing = readEvidenceSourceUploadPlan(current, expected);
   if (existing) return existing;
@@ -746,6 +749,7 @@ export const reconcileEvidenceSourceUpload = async (
     persistWritten: (plan: EvidenceSourceUploadPlan) => Promise<void>;
   },
 ) => {
+  if (plan.storageBucket !== EVIDENCE_SOURCE_BUCKET) throw new EnterpriseCommandError('RESOURCE_STALE');
   if (plan.writeState === 'written') return 'written' as const;
 
   const inspectOwnedObject = async () => {
@@ -776,6 +780,47 @@ const normalizeEvidenceGroundingText = (value: string) => value
   .replace(/\s+/gu, ' ')
   .trim();
 
+export const EVIDENCE_SOURCE_LOCATOR_PREFIX = 'normalized-text:v1:chars' as const;
+
+/**
+ * Canonical evidence locators are zero-based, half-open Unicode code-point
+ * ranges in NFKC/lowercase/whitespace-collapsed source text. The first
+ * normalized occurrence wins, so replay never depends on provider position.
+ */
+export const deriveCanonicalEvidenceSourceLocator = (sourceText: string, persistedExcerpt: string) => {
+  const normalizedSource = normalizeEvidenceGroundingText(sourceText);
+  const normalizedExcerpt = normalizeEvidenceGroundingText(persistedExcerpt);
+  if (!normalizedExcerpt) return null;
+  const utf16Start = normalizedSource.indexOf(normalizedExcerpt);
+  if (utf16Start < 0) return null;
+  const start = Array.from(normalizedSource.slice(0, utf16Start)).length;
+  const end = start + Array.from(normalizedExcerpt).length;
+  return `${EVIDENCE_SOURCE_LOCATOR_PREFIX}:${start}-${end}` as const;
+};
+
+const frameEvidenceAnchorValue = (value: string) => `${new TextEncoder().encode(value).length}:${value}`;
+
+export const hashEvidenceExcerptAnchor = (input: {
+  sourceVersionId: string;
+  sourceContentHash: string;
+  extractedTextHash: string;
+  sourceLocator: string;
+  safeExcerpt: string;
+  value: string;
+}) => sha256Hex(`evidence-excerpt-anchor-v1|${[
+  input.sourceVersionId,
+  input.sourceContentHash,
+  input.extractedTextHash,
+  input.sourceLocator,
+  input.safeExcerpt,
+  input.value,
+].map(frameEvidenceAnchorValue).join('|')}`);
+
+export type GroundedEvidenceCandidateInput = Omit<
+  Parameters<typeof buildEvidenceCandidate>[0],
+  'field' | 'sourceLocator'
+> & { field: EvidenceCandidateField; sourceLocator?: never };
+
 export const buildGroundedEvidenceCandidate = async (input: {
   source: {
     sourceId: string;
@@ -784,26 +829,31 @@ export const buildGroundedEvidenceCandidate = async (input: {
     extractedTextHash: string;
     text: string;
   };
-  candidate: Omit<Parameters<typeof buildEvidenceCandidate>[0], 'field'> & { field: EvidenceCandidateField };
+  candidate: GroundedEvidenceCandidateInput;
 }) => {
   if (input.candidate.sourceId !== input.source.sourceId
     || input.candidate.sourceVersionId !== input.source.sourceVersionId) return null;
   const persistedExcerpt = typeof input.candidate.safeExcerpt === 'string'
     ? sanitizeEvidenceExcerpt(input.candidate.safeExcerpt)
     : '';
-  const normalizedExcerpt = normalizeEvidenceGroundingText(persistedExcerpt);
-  if (!normalizedExcerpt
-    || !normalizeEvidenceGroundingText(input.source.text).includes(normalizedExcerpt)) return null;
-  const candidate = buildEvidenceCandidate({ ...input.candidate, safeExcerpt: persistedExcerpt });
+  const sourceLocator = deriveCanonicalEvidenceSourceLocator(input.source.text, persistedExcerpt);
+  if (!sourceLocator) return null;
+  const candidate = buildEvidenceCandidate({
+    ...input.candidate,
+    safeExcerpt: persistedExcerpt,
+    // Runtime excess properties are ignored as well: this final assignment is
+    // the only locator authority even if an older provider still emits one.
+    sourceLocator,
+  });
   if (candidate.safeExcerpt !== persistedExcerpt) throw new EnterpriseCommandError('RESOURCE_STALE');
-  candidate.excerptHash = await sha256Hex(JSON.stringify({
+  candidate.excerptHash = await hashEvidenceExcerptAnchor({
     sourceVersionId: input.source.sourceVersionId,
     sourceContentHash: input.source.contentHash,
     extractedTextHash: input.source.extractedTextHash,
     sourceLocator: candidate.sourceLocator,
     safeExcerpt: candidate.safeExcerpt,
     value: candidate.value,
-  }));
+  });
   return candidate;
 };
 
@@ -1278,7 +1328,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       deployment: route.config.deployment_name || undefined,
       model: routePlan.model,
       capability: 'assess.evidence.extract',
-      taskInstruction: `Extract candidate evidence as JSON with a candidates array. Each item must have fieldKey from ${EVIDENCE_CANDIDATE_FIELDS.join(', ')}, value, sourceLocator, confidence between 0 and 1, and safeExcerpt. Do not infer missing facts; use unresolved_questions or assumptions when needed.`,
+      taskInstruction: `Extract candidate evidence as JSON with a candidates array. Each item must have fieldKey from ${EVIDENCE_CANDIDATE_FIELDS.join(', ')}, value, confidence between 0 and 1, and safeExcerpt. Do not infer missing facts; use unresolved_questions or assumptions when needed. AvalaOS derives source positions server-side.`,
       untrustedSource: text,
       authorization: {
         organizationId: authority.organizationId,
@@ -1307,7 +1357,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       if (!isRecord(raw)) continue;
       const field = raw.fieldKey;
       if (typeof field !== 'string' || !EVIDENCE_CANDIDATE_FIELDS.includes(field as any)) continue;
-      if (typeof raw.value !== 'string' || !raw.value.trim() || typeof raw.sourceLocator !== 'string') continue;
+      if (typeof raw.value !== 'string' || !raw.value.trim()) continue;
       const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0;
       if (confidence < 0 || confidence > 1) continue;
       const candidate = await buildGroundedEvidenceCandidate({
@@ -1325,7 +1375,6 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
           field: field as EvidenceCandidateField,
           value: raw.value.slice(0, 12_000),
           safeExcerpt: typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined,
-          sourceLocator: raw.sourceLocator.slice(0, 400),
           confidence,
           aiJobId: jobId,
           promptVersion,
@@ -1413,17 +1462,17 @@ const commandEvidenceCandidateReview = async (authority: Authority, payload: Jso
     'enterprise_evidence_source_versions',
     `select=content_hash,extracted_text_hash&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(current.source_version_id)}`,
   );
-  if (!sourceVersion) throw new EnterpriseCommandError('RESOURCE_STALE');
+  if (!sourceVersion || !sourceVersion.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
   const nextValue = status === 'edited' ? requireString(payload.value, 12_000) : current.value;
   const reason = status === 'edited' ? requireString(payload.reason, 2_000) : 'review decision recorded';
-  const nextExcerptHash = await sha256Hex(JSON.stringify({
+  const nextExcerptHash = await hashEvidenceExcerptAnchor({
     sourceVersionId: current.source_version_id,
     sourceContentHash: sourceVersion.content_hash,
-    extractedTextHash: sourceVersion.extracted_text_hash || null,
+    extractedTextHash: sourceVersion.extracted_text_hash,
     sourceLocator: current.source_locator,
-    safeExcerpt: current.safe_excerpt || null,
+    safeExcerpt: current.safe_excerpt || '',
     value: nextValue,
-  }));
+  });
   const result = { resourceId: candidateId, candidateId, status, reviewedBy: authority.actorId };
   await rpc('enterprise_review_evidence_candidate', {
     p_candidate_id: candidateId,

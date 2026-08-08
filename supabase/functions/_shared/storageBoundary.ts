@@ -1,4 +1,4 @@
-export const DEFAULT_SOURCE_UPLOADS_BUCKET = 'source-uploads';
+export const EVIDENCE_SOURCE_BUCKET = 'source-uploads' as const;
 export const STUDIO_PRIVATE_ARTIFACTS_BUCKET = 'studio-private-artifacts';
 
 export const STORAGE_CONFIGURATION_ERROR = 'Storage configuration is invalid.';
@@ -41,10 +41,17 @@ const selectAllowlistedBucket = (
 export const selectSourceUploadsBucket = (
   configuredBucket?: string,
   configuredAllowlist?: string,
-) => selectAllowlistedBucket(
-  configuredBucket ?? DEFAULT_SOURCE_UPLOADS_BUCKET,
-  configuredAllowlist ?? DEFAULT_SOURCE_UPLOADS_BUCKET,
-);
+) => {
+  if (configuredBucket !== undefined) {
+    assertStorageBucketName(configuredBucket);
+    if (configuredBucket !== EVIDENCE_SOURCE_BUCKET) configurationError();
+  }
+  if (configuredAllowlist !== undefined) {
+    assertStorageBucketName(configuredAllowlist);
+    if (configuredAllowlist !== EVIDENCE_SOURCE_BUCKET) configurationError();
+  }
+  return EVIDENCE_SOURCE_BUCKET;
+};
 
 export const selectExportsBucket = (
   configuredBucket?: string,

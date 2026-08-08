@@ -52,8 +52,13 @@ const sourceUploadRecoverySql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260808140000_enterprise_source_upload_recovery.sql'),
   'utf8',
 );
+const evidenceLocatorAuthoritySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808150000_enterprise_evidence_locator_authority.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const storageSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/storage.ts'), 'utf8');
+const storageBoundarySource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/storageBoundary.ts'), 'utf8');
 const ingestionSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceIngestion.ts'), 'utf8');
 const querySource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceQuery.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
@@ -205,6 +210,20 @@ check(sql.indexOf('ENTERPRISE_INTELLIGENCE_DIRTY_SCHEMA') < sql.indexOf('INSERT 
 check(sql.includes("ON DELETE SET NULL (provider_config_id)"), 'Provider deletion must retain the job and null only its provider reference.');
 check(sql.includes("ON DELETE SET NULL (key_ref_id)"), 'Key deletion must retain provider configuration lineage.');
 check(sql.includes("content_bytes <= 12582912"), 'The 12 MiB source authority limit is required.');
+check(storageBoundarySource.includes("export const EVIDENCE_SOURCE_BUCKET = 'source-uploads' as const;"),
+  'Edge evidence Storage must export one canonical source-uploads bucket constant.');
+const sourceBucketSelector = storageBoundarySource.slice(
+  storageBoundarySource.indexOf('export const selectSourceUploadsBucket'),
+  storageBoundarySource.indexOf('export const selectExportsBucket'),
+);
+check(sourceBucketSelector.includes('configuredBucket !== EVIDENCE_SOURCE_BUCKET')
+  && sourceBucketSelector.includes('configuredAllowlist !== EVIDENCE_SOURCE_BUCKET')
+  && sourceBucketSelector.includes('return EVIDENCE_SOURCE_BUCKET')
+  && !sourceBucketSelector.includes('selectAllowlistedBucket'),
+  'Evidence source bucket selection must fail closed on every noncanonical configuration.');
+check(sql.includes("storage_bucket TEXT NOT NULL DEFAULT 'source-uploads' CHECK (storage_bucket = 'source-uploads')")
+  && sql.includes("IF NEW.storage_bucket <> 'source-uploads'"),
+  'PostgreSQL source-version defaults, constraints, and derive authority must match the Edge canonical bucket.');
 for (const token of [
   "'text/plain'", "'text/markdown'", "'text/csv'", "'text/vtt'", "'application/x-subrip'",
   "'application/pdf'", "'application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
@@ -240,6 +259,9 @@ check(sourceUploadRecoverySql.includes('TO service_role'), 'Source upload lease 
 check(commandSource.includes('storageWriteOwnership: \'receipt_managed_write\'')
   && commandSource.indexOf('ensureEvidenceSourceUploadPlan') < commandSource.indexOf('uploadBinaryArtifact({'),
 'Evidence source upload intent must be persisted before the external write.');
+check(commandSource.includes('storageBucket: typeof EVIDENCE_SOURCE_BUCKET')
+  && commandSource.includes("if (plan.storageBucket !== EVIDENCE_SOURCE_BUCKET) throw new EnterpriseCommandError('RESOURCE_STALE')"),
+  'Receipt plans and recovery must reject noncanonical evidence buckets before external I/O.');
 check(commandSource.includes("writeState: 'planned'") && commandSource.includes("writeState: 'written'"),
   'Evidence source upload recovery requires a monotonic planned-to-written marker.');
 check(storageSource.includes('STORAGE_EXTERNAL_OPERATION_TIMEOUT_MS = 15_000')
@@ -248,9 +270,37 @@ check(storageSource.includes('STORAGE_EXTERNAL_OPERATION_TIMEOUT_MS = 15_000')
 'Storage inspection and upload require a hard abortable deadline that settles before ownership release.');
 check(commandSource.includes('buildGroundedEvidenceCandidate')
   && commandSource.includes('sanitizeEvidenceExcerpt(input.candidate.safeExcerpt)')
-  && commandSource.includes('normalizeEvidenceGroundingText(input.source.text).includes(normalizedExcerpt)'),
+  && commandSource.includes('deriveCanonicalEvidenceSourceLocator(input.source.text, persistedExcerpt)'),
 'Candidate provenance must validate the exact sanitized persisted excerpt against the governed source.');
 check(!commandSource.includes('normalizedValue'), 'Candidate values must never substitute for excerpt provenance.');
+check(commandSource.includes("EVIDENCE_SOURCE_LOCATOR_PREFIX = 'normalized-text:v1:chars'")
+  && commandSource.includes('sourceLocator?: never')
+  && !commandSource.includes('raw.sourceLocator'),
+  'Provider output must have no source-locator authority or static assignment path.');
+for (const required of [
+  'enterprise_evidence_source_locator_is_canonical',
+  "^normalized-text:v1:chars:",
+  'enterprise_evidence_candidate_locators_are_canonical',
+  'enterprise_evidence_excerpt_anchor_hash',
+  'enterprise_evidence_candidates_canonical_locator',
+  'enterprise_ai_extraction_stage_canonical_locators',
+  "source_locator_schema = 'normalized-text-char-range-1'",
+  'NEW.excerpt_hash := public.enterprise_evidence_excerpt_anchor_hash(',
+  'CREATE OR REPLACE FUNCTION public.enterprise_candidate_guard()',
+  'NEW.excerpt_hash IS DISTINCT FROM expected_excerpt_hash',
+  'NEW.excerpt_hash IS DISTINCT FROM OLD.excerpt_hash',
+  'CREATE OR REPLACE FUNCTION public.enterprise_review_evidence_candidate(',
+  'next_excerpt_hash := public.enterprise_evidence_excerpt_anchor_hash(',
+  'excerpt_hash = next_excerpt_hash',
+  'enterprise_promote_evidence_to_assess_v2(uuid,uuid,bigint,uuid,uuid,uuid,uuid,text,bigint)',
+  'enterprise_promote_evidence_batch_to_assess_v2(uuid,jsonb,uuid,bigint,uuid,uuid,uuid,bigint,uuid,uuid,bigint)',
+  'FOREACH promotion_function IN ARRAY',
+  'current_excerpt := public.enterprise_evidence_excerpt_anchor_hash(',
+  'ENTERPRISE_EVIDENCE_PROMOTION_ANCHOR_CONTRACT_DRIFT',
+]) check(evidenceLocatorAuthoritySql.includes(required), `Evidence locator authority is missing ${required}.`);
+check(evidenceLocatorAuthoritySql.includes('FROM PUBLIC, anon, authenticated')
+  && evidenceLocatorAuthoritySql.includes('TO service_role'),
+  'Evidence locator validation/hash helpers must remain service-only.');
 for (const required of [
   'enterprise_ai_claim_provider_secret_cleanup',
   "p_operation NOT IN ('provider.secret.bind','provider.secret.rotate')",

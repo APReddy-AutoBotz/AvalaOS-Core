@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  DEFAULT_SOURCE_UPLOADS_BUCKET,
+  EVIDENCE_SOURCE_BUCKET,
   STORAGE_CONFIGURATION_ERROR,
   STORAGE_PATH_INVALID_ERROR,
   STORAGE_PATH_SCOPE_ERROR,
@@ -26,19 +26,24 @@ const assertErrorMessage = (operation: () => unknown, expectedMessage: string) =
 };
 
 const main = () => {
-  assert.equal(selectSourceUploadsBucket(), DEFAULT_SOURCE_UPLOADS_BUCKET);
+  assert.equal(selectSourceUploadsBucket(), EVIDENCE_SOURCE_BUCKET);
+  assert.equal(selectSourceUploadsBucket(EVIDENCE_SOURCE_BUCKET), EVIDENCE_SOURCE_BUCKET);
+  assert.equal(selectSourceUploadsBucket(undefined, EVIDENCE_SOURCE_BUCKET), EVIDENCE_SOURCE_BUCKET);
   assert.equal(
-    selectSourceUploadsBucket('tenant-source', 'source-uploads,tenant-source'),
-    'tenant-source',
+    selectSourceUploadsBucket(EVIDENCE_SOURCE_BUCKET, EVIDENCE_SOURCE_BUCKET),
+    EVIDENCE_SOURCE_BUCKET,
   );
 
   for (const [bucket, allowlist] of [
     ['attacker-bucket', 'source-uploads'],
+    ['tenant-source', 'source-uploads,tenant-source'],
+    ['source-uploads', 'source-uploads,tenant-source'],
+    [undefined, 'source-uploads,tenant-source'],
     ['source-uploads/escape', 'source-uploads/escape'],
     ['https://attacker.invalid', 'https://attacker.invalid'],
     [' source-uploads', ' source-uploads'],
     ['', 'source-uploads'],
-  ]) {
+  ] as const) {
     assertErrorMessage(
       () => selectSourceUploadsBucket(bucket, allowlist),
       STORAGE_CONFIGURATION_ERROR,

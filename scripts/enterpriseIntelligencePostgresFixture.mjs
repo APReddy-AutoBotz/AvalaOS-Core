@@ -111,7 +111,7 @@ export async function createEnterpriseIntelligenceFixture(db) {
       field: 'process_objective',
       value: 'Govern the fixture process',
       safeExcerpt: 'Govern the fixture process with independently reviewed evidence.',
-      sourceLocator: 'line:1-1',
+      sourceLocator: 'normalized-text:v1:chars:0-64',
       confidence: 0.95,
       promptVersion: 'fixture-1',
       createdBy: studio.requester,

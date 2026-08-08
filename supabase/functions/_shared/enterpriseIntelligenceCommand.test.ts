@@ -6,6 +6,7 @@ import {
   enterpriseCommandErrorBody,
   enterpriseCommandStatusForTerminalReceipt,
   buildGroundedEvidenceCandidate,
+  hashEvidenceExcerptAnchor,
   ensureEvidenceSourceUploadPlan,
   extractionRouteMatchesPlan,
   handleEnterpriseIntelligenceRequest,
@@ -21,8 +22,8 @@ import {
   shouldPreserveClaimedEnterpriseReceipt,
   type Authority,
 } from './enterpriseIntelligenceCommand';
-import { sha256Hex } from './enterpriseIntelligenceIngestion';
 import { inspectBinaryArtifact, StorageArtifactError, uploadBinaryArtifact } from './storage';
+import { EVIDENCE_SOURCE_BUCKET } from './storageBoundary';
 import { ProviderLifecycleError } from './providerLifecycle';
 import {
   EnterpriseReceiptError,
@@ -182,7 +183,6 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
   field: 'actors' as const,
   value: 'Jane Doe (normalized owner)',
   safeExcerpt: 'Approved control owner: Jane Doe.',
-  sourceLocator: 'page:1',
   confidence: 0.92,
   aiJobId: '64000000-0000-4000-8000-000000000004',
   promptVersion: 'enterprise-evidence-extract-1',
@@ -200,12 +200,33 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
   assert.ok(accepted);
   assert.equal(accepted.safeExcerpt, 'Approved control owner: Jane Doe.');
   assert.equal(accepted.value, 'Jane Doe (normalized owner)');
+  assert.equal(accepted.sourceLocator, 'normalized-text:v1:chars:0-33');
+
+  const fabricatedProviderLocator = await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: { ...provenanceCandidate(), sourceLocator: 'page:999' } as any,
+  });
+  assert.equal(fabricatedProviderLocator?.sourceLocator, accepted.sourceLocator);
+  assert.equal(JSON.stringify(fabricatedProviderLocator).includes('page:999'), false);
 
   const whitespace = await buildGroundedEvidenceCandidate({
     source: { ...provenanceSource, text: 'Approved\tcontrol\nowner:   Jane Doe.' },
     candidate: provenanceCandidate({ safeExcerpt: '  Approved   control owner: Jane Doe.  ' }),
   });
   assert.equal(whitespace?.safeExcerpt, 'Approved control owner: Jane Doe.');
+  assert.equal(whitespace?.sourceLocator, accepted.sourceLocator);
+
+  const nfkc = await buildGroundedEvidenceCandidate({
+    source: { ...provenanceSource, text: '\uff21pproved control owner: Jane Doe.' },
+    candidate: provenanceCandidate(),
+  });
+  assert.equal(nfkc?.sourceLocator, accepted.sourceLocator);
+
+  const repeated = await buildGroundedEvidenceCandidate({
+    source: { ...provenanceSource, text: 'Evidence anchor. Other. Evidence anchor.' },
+    candidate: provenanceCandidate({ safeExcerpt: 'Evidence anchor.', value: 'derived' }),
+  });
+  assert.equal(repeated?.sourceLocator, 'normalized-text:v1:chars:0-16');
 
   const truncatedText = `Evidence ${'x'.repeat(480)} remains governed.`;
   const truncated = await buildGroundedEvidenceCandidate({
@@ -215,14 +236,14 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
   assert.equal(truncated?.safeExcerpt, 'x'.repeat(480));
   assert.equal(truncated?.safeExcerpt?.includes('secret-after-bound'), false);
 
-  const expectedExcerptHash = await sha256Hex(JSON.stringify({
+  const expectedExcerptHash = await hashEvidenceExcerptAnchor({
     sourceVersionId: provenanceSource.sourceVersionId,
     sourceContentHash: provenanceSource.contentHash,
     extractedTextHash: provenanceSource.extractedTextHash,
-    sourceLocator: accepted.sourceLocator,
+    sourceLocator: 'normalized-text:v1:chars:0-33',
     safeExcerpt: accepted.safeExcerpt,
     value: accepted.value,
-  }));
+  });
   assert.equal(accepted.excerptHash, expectedExcerptHash);
 
   for (const rejected of [
@@ -235,7 +256,10 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
   ]) {
     assert.equal(await buildGroundedEvidenceCandidate({ source: provenanceSource, candidate: rejected as any }), null);
   }
-  console.log('ok - governed evidence excerpts are sanitized first, source-grounded, and hashed exactly');
+  assert.equal(accepted.excerptHash, fabricatedProviderLocator?.excerptHash);
+  assert.equal(accepted.excerptHash, nfkc?.excerptHash);
+  assert.equal(JSON.stringify([accepted, fabricatedProviderLocator, nfkc, repeated]).includes('page:999'), false);
+  console.log('ok - governed evidence excerpts use deterministic server-derived locators and exact hashes');
 }
 
 {
@@ -248,7 +272,7 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
     storageWriteReceiptId: receipt.id,
     sourceId: '65000000-0000-4000-8000-000000000002',
     sourceVersionId: '65000000-0000-4000-8000-000000000003',
-    storageBucket: 'source-uploads',
+    storageBucket: EVIDENCE_SOURCE_BUCKET,
     storagePath: `${base.organizationId}/${base.workspaceId}/enterprise-evidence/65000000-0000-4000-8000-000000000002.bin`,
     contentHash: 'c'.repeat(64),
     contentBytes: 128,
@@ -325,6 +349,28 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
     persistWritten: async () => { replayExternalCalls += 1; },
   });
   assert.equal(replayExternalCalls, 0);
+
+  let noncanonicalPlanCalls = 0;
+  const noncanonicalPlan = { ...planned, storageBucket: 'tenant-source', writeState: 'planned' } as any;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload(noncanonicalPlan, {
+      renewLease: async () => { noncanonicalPlanCalls += 1; },
+      inspect: async () => { noncanonicalPlanCalls += 1; return 'absent'; },
+      upload: async () => { noncanonicalPlanCalls += 1; return 'written'; },
+      persistWritten: async () => { noncanonicalPlanCalls += 1; },
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  let noncanonicalPlanPersists = 0;
+  await assert.rejects(
+    ensureEvidenceSourceUploadPlan(
+      { ...receipt, execution_plan: {} },
+      { ...expectedPlan, storageBucket: 'tenant-source' } as any,
+      async plan => { noncanonicalPlanPersists += 1; return plan; },
+    ),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.deepEqual({ noncanonicalPlanCalls, noncanonicalPlanPersists }, { noncanonicalPlanCalls: 0, noncanonicalPlanPersists: 0 });
 
   let preIntentUploads = 0;
   await assert.rejects(
@@ -471,7 +517,8 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
 
   console.log(`ok - source upload recovery matrix ${JSON.stringify({
     preIntentUploads, responseLossUploads, markerLossUploads, concurrentUploads,
-    deadlineAborts:aborted, orphanObjects:0, duplicateObjects:0, claimedReceipts:0,
+    deadlineAborts:aborted, alternateBucketExternalIo:noncanonicalPlanCalls,
+    orphanObjects:0, duplicateObjects:0, claimedReceipts:0,
   })}`);
 }
 
