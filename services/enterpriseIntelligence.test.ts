@@ -11,6 +11,8 @@ import {
   decodeEnterpriseIntelligenceProjection,
   ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
   evaluateModernizationDecision,
+  isUnicodeScalarString,
+  sanitizeEvidenceExcerpt,
   type ModernizationFactors,
 } from './enterpriseIntelligence';
 
@@ -87,6 +89,28 @@ test('candidate excerpts are sanitized and retain source provenance', () => {
   assert.equal(candidate.safeExcerpt, 'Define the objective');
   assert.equal(candidate.editCount, 0);
   assert.equal(candidate.excerptHash.length, 64);
+});
+
+test('candidate excerpt limits count Unicode code points and reject malformed UTF-16', () => {
+  const emoji = '\u{1f680}';
+  const retainedBoundary = sanitizeEvidenceExcerpt(`${'a'.repeat(479)}${emoji}discarded`);
+  assert.equal(retainedBoundary, `${'a'.repeat(479)}${emoji}`);
+  assert.equal(Array.from(retainedBoundary).length, 480);
+  assert.equal(isUnicodeScalarString(retainedBoundary), true);
+
+  const truncatedBeforeAstral = sanitizeEvidenceExcerpt(`${'b'.repeat(480)}${emoji}`);
+  assert.equal(truncatedBeforeAstral, 'b'.repeat(480));
+  assert.equal(Array.from(truncatedBeforeAstral).length, 480);
+
+  const multipleAstral = sanitizeEvidenceExcerpt(`${'c'.repeat(478)}${emoji}\u{1f4a1}${emoji}`);
+  assert.equal(multipleAstral, `${'c'.repeat(478)}${emoji}\u{1f4a1}`);
+  assert.equal(Array.from(multipleAstral).length, 480);
+  assert.equal(isUnicodeScalarString(multipleAstral), true);
+
+  assert.equal(isUnicodeScalarString(`valid ${emoji}`), true);
+  assert.equal(isUnicodeScalarString(`invalid \ud83d`), false);
+  assert.equal(isUnicodeScalarString(`invalid \ude80`), false);
+  assert.throws(() => sanitizeEvidenceExcerpt(`invalid \ud83d`), /ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE/);
 });
 
 test('delivery handoff becomes stale when the approved Studio version changes', () => {
