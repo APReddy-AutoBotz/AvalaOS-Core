@@ -116,8 +116,13 @@ for (const operation of [
   'application.assessment.review.resolve', 'application.assessment.revision.start',
 ]) check(modernizationCurrentSql.includes(`'${operation}'`),
   `Canonical PR1G operation ${operation} must lock before its first row lock.`);
-check(modernizationCurrentSql.includes("'pr1g-assessment:' || org_id::text"),
+check(modernizationCurrentSql.includes("'pr1g-assessment:' || v_org_id::text"),
   'Modernization must take the same application lock before selecting current truth.');
+check(modernizationCurrentSql.includes('candidate.application_id = v_application_id')
+  && modernizationCurrentSql.includes('candidate.org_id = v_org_id')
+  && modernizationCurrentSql.includes('candidate.workspace_id = v_workspace_id')
+  && !/candidate\.(?:application_id|org_id|workspace_id)\s*=\s*(?:application_id|org_id|workspace_id)\b/u.test(modernizationCurrentSql),
+  'Modernization current-truth selectors must use unambiguous PL/pgSQL variable names.');
 check(modernizationCurrentSql.indexOf('pg_advisory_xact_lock')
   < modernizationCurrentSql.indexOf('ORDER BY candidate.version DESC'),
   'Modernization must lock before selecting the latest assessment across all lifecycle states.');

@@ -123,23 +123,23 @@ DECLARE
   assessment RECORD;
   decision RECORD;
   decision_hash TEXT;
-  org_id UUID := (p_assessment->>'org_id')::uuid;
-  workspace_id UUID := (p_assessment->>'workspace_id')::uuid;
-  application_id UUID := (p_assessment->>'application_ref')::uuid;
+  v_org_id UUID := (p_assessment->>'org_id')::uuid;
+  v_workspace_id UUID := (p_assessment->>'workspace_id')::uuid;
+  v_application_id UUID := (p_assessment->>'application_ref')::uuid;
   requested_source_id UUID := (p_assessment->>'source_assessment_id')::uuid;
   requested_metadata_id UUID := (p_assessment->>'source_metadata_version_id')::uuid;
 BEGIN
   PERFORM public.enterprise_assert_writable('delivery');
   PERFORM pg_advisory_xact_lock(hashtextextended(
-    'pr1g-assessment:' || org_id::text || ':' || workspace_id::text || ':' || application_id::text,
+    'pr1g-assessment:' || v_org_id::text || ':' || v_workspace_id::text || ':' || v_application_id::text,
     0
   ));
 
   SELECT candidate.* INTO source
   FROM public.assess_application_assessment_versions candidate
-  WHERE candidate.application_id = application_id
-    AND candidate.org_id = org_id
-    AND candidate.workspace_id = workspace_id
+  WHERE candidate.application_id = v_application_id
+    AND candidate.org_id = v_org_id
+    AND candidate.workspace_id = v_workspace_id
   ORDER BY candidate.version DESC
   LIMIT 1
   FOR SHARE;
