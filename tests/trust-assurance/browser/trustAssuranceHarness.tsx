@@ -149,6 +149,20 @@ const Harness: React.FC = () => {
         lifecycle: 'draft', createdAt: '2026-08-07T00:00:00Z',
       }] });
     }
+    if (request.operation === 'claim.revise' && request.workspaceId) {
+      const projection = projections.get(request.workspaceId)!;
+      const claimId = request.payload.claimId;
+      projections.set(request.workspaceId, {
+        ...projection,
+        claims: projection.claims.map(claim => claim.claimId === claimId ? {
+          ...claim,
+          claimVersionId: '40000000-0000-4000-8000-000000000024',
+          version: claim.version + 1,
+          lifecycle: 'draft',
+          canonicalHash: '9'.repeat(64),
+        } : claim),
+      });
+    }
     return { ok: true as const, replayed: false, resourceId: '80000000-0000-4000-8000-000000000008', version: 1, body: {} };
   };
   const connected = useMemo(() => <TrustAssuranceConnectedWorkspace
@@ -168,7 +182,7 @@ const Harness: React.FC = () => {
       <button type="button" onClick={() => setCalls([])}>Clear call log</button>
       <button type="button" onClick={() => setSelectionState('read_only')}>Enter global read-only</button>
     </section>}
-    {(matrix || responseLoss || featureDisabled || featureMismatch || params.has('conflict') || params.has('global-readonly')) && <section aria-label="Harness evidence" hidden>
+    {(matrix || multipleClaims || responseLoss || featureDisabled || featureMismatch || params.has('conflict') || params.has('global-readonly')) && <section aria-label="Harness evidence" hidden>
       <output data-testid="trust-call-log">{calls.join('\n')}</output>
       <output data-testid="trust-effect-counts">{JSON.stringify(effectCounts)}</output>
     </section>}

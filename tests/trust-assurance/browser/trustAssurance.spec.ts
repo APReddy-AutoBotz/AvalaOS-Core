@@ -220,7 +220,7 @@ test('retired evidence remains history while only actionable evidence is targete
 });
 
 test('explicit claim selection binds every claim action and snapshot selection', async ({ page }) => {
-  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?multiple-claims=1&tenant-context=1');
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?multiple-claims=1');
   const log=page.getByTestId('trust-call-log');
   for(const label of ['Revise claim','Review claim','Link support','Build snapshot']) {
     const action=page.getByRole('button',{name:label,exact:true});
@@ -235,9 +235,9 @@ test('explicit claim selection binds every claim action and snapshot selection',
   await page.getByRole('button',{name:'Revise claim',exact:true}).click();
   await expect(log).toContainText('target:claim.revise:{"claimId":"50000000-0000-4000-8000-000000000015"');
   await page.getByRole('button',{name:'Review claim',exact:true}).click();
-  await expect(log).toContainText('target:resource.review:{"resourceType":"claim_version","resourceId":"40000000-0000-4000-8000-000000000014"');
+  await expect(log).toContainText('target:resource.review:{"resourceType":"claim_version","resourceId":"40000000-0000-4000-8000-000000000024"');
   await page.getByRole('button',{name:'Link support',exact:true}).click();
-  await expect(log).toContainText('target:evidence.link:{"claimVersionId":"40000000-0000-4000-8000-000000000014"');
+  await expect(log).toContainText('target:evidence.link:{"claimVersionId":"40000000-0000-4000-8000-000000000024"');
   await page.getByRole('button',{name:'Build snapshot',exact:true}).click();
   await expect(log).toContainText('target:snapshot.create:{"claimIds":["50000000-0000-4000-8000-000000000015"]}');
   await expect(log).not.toContainText('target:snapshot.create:{"claimIds":["50000000-0000-4000-8000-000000000005"]}');
