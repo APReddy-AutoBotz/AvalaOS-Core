@@ -6,12 +6,17 @@ export const EVIDENCE_LIFECYCLES = ['active', 'superseded', 'withdrawn', 'blocke
 export const EVIDENCE_FRESHNESS = ['current', 'review_due', 'expired'] as const;
 export const ASSURANCE_LIFECYCLES = ['draft', 'under_review', 'changes_requested', 'reviewed', 'approved', 'published', 'withdrawn'] as const;
 export const TRUST_OPERATIONS = ['claim.create', 'claim.revise', 'evidence.register', 'evidence.supersede', 'evidence.withdraw', 'evidence.link', 'resource.review', 'snapshot.create', 'snapshot.review', 'snapshot.publish', 'snapshot.withdraw'] as const;
+export const TRUST_VERSION_FENCED_OPERATIONS = ['claim.revise', 'evidence.supersede', 'evidence.withdraw', 'snapshot.review', 'snapshot.publish', 'snapshot.withdraw'] as const;
 
 export type EvidenceRelationship = typeof EVIDENCE_RELATIONSHIPS[number];
 export type EvidenceLifecycle = typeof EVIDENCE_LIFECYCLES[number];
 export type EvidenceFreshness = typeof EVIDENCE_FRESHNESS[number];
 export type AssuranceLifecycle = typeof ASSURANCE_LIFECYCLES[number];
 export type TrustOperation = typeof TRUST_OPERATIONS[number];
+export type TrustVersionFencedOperation = typeof TRUST_VERSION_FENCED_OPERATIONS[number];
+
+export const trustOperationRequiresExpectedVersion = (operation: TrustOperation): operation is TrustVersionFencedOperation =>
+  (TRUST_VERSION_FENCED_OPERATIONS as readonly TrustOperation[]).includes(operation);
 
 export interface ClaimVersionProjection {
   claimVersionId: string;

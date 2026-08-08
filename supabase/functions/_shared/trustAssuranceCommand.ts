@@ -1,4 +1,4 @@
-import { TRUST_OPERATIONS, type TrustCommandRequest, type TrustCommandResponse } from '../../../services/trustAssurance/contracts.ts';
+import { TRUST_OPERATIONS, trustOperationRequiresExpectedVersion, type TrustCommandRequest, type TrustCommandResponse } from '../../../services/trustAssurance/contracts.ts';
 import { sha256Hex } from '../../../services/trustAssurance/domain.ts';
 import type { TenantContext } from './tenantAuthority.ts';
 
@@ -27,7 +27,7 @@ const payloadSchemas:Record<TrustCommandRequest['operation'],(row:Record<string,
 export const decodeTrustCommandRequest=(value:unknown):TrustCommandRequest=>{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('VALIDATION_FAILED');const row=value as Record<string,unknown>;if(Object.keys(row).some(key=>!allowed.includes(key))||['requestId','idempotencyKey','operation','organizationId','workspaceId','expectedAuthorizationVersion','payload'].some(key=>!(key in row)))throw new Error('VALIDATION_FAILED');
  if(typeof row.requestId!=='string'||!uuid.test(row.requestId)||typeof row.idempotencyKey!=='string'||row.idempotencyKey.length<1||row.idempotencyKey.length>200||typeof row.operation!=='string'||!TRUST_OPERATIONS.includes(row.operation as TrustCommandRequest['operation'])||typeof row.organizationId!=='string'||!uuid.test(row.organizationId)||typeof row.workspaceId!=='string'||!uuid.test(row.workspaceId)||!Number.isSafeInteger(row.expectedAuthorizationVersion)||(row.expectedAuthorizationVersion as number)<1||(row.expectedVersion!==undefined&&(!Number.isSafeInteger(row.expectedVersion)||(row.expectedVersion as number)<1))||!row.payload||typeof row.payload!=='object'||Array.isArray(row.payload))throw new Error('VALIDATION_FAILED');
- const operation=row.operation as TrustCommandRequest['operation'];return{...row,operation,payload:payloadSchemas[operation](row.payload as Record<string,unknown>)} as TrustCommandRequest;
+ const operation=row.operation as TrustCommandRequest['operation'];if(trustOperationRequiresExpectedVersion(operation)&&(!Number.isSafeInteger(row.expectedVersion)||(row.expectedVersion as number)<1))throw new Error('VALIDATION_FAILED');return{...row,operation,payload:payloadSchemas[operation](row.payload as Record<string,unknown>)} as TrustCommandRequest;
 };
 export const canonicalTrustRequestHash=(request:TrustCommandRequest)=>sha256Hex({operation:request.operation,organizationId:request.organizationId,workspaceId:request.workspaceId,expectedVersion:request.expectedVersion??null,payload:request.payload});
 export type TrustCommandDependencies={resolveAuthority:(request:TrustCommandRequest)=>Promise<TenantContext>;execute:(input:TrustCommandRequest&{actorId:string;requestHash:string})=>Promise<TrustCommandResponse>;featureEnabled:boolean;readOnly:boolean};

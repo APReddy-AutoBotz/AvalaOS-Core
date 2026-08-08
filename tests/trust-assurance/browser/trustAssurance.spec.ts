@@ -28,3 +28,12 @@ test('revoked and version conflict remain explicit', async ({ page }) => {
   await expect(page.getByText('VERSION_CONFLICT', { exact: true })).toBeVisible();
   await expect(page.getByText(/No publication/)).toBeVisible();
 });
+
+test('server-projected read-only mode disables every governed mutation', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?readonly=1');
+  await expect(page.getByRole('status')).toContainText('Read-only mode');
+  const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
+  await expect(controls).toHaveCount(9);
+  for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
