@@ -67,9 +67,13 @@ const main = async () => {
 
   globalThis.__trustInvoke = async () => httpError(409, { code: 'AUTHORIZATION_STALE', message: 'bounded' });
   await assert.rejects(queryTrustAssurance(scope, 'internal'), /AUTHORIZATION_STALE/);
+  globalThis.__trustInvoke = async () => httpError(404, { code: 'ACCESS_DENIED', message: 'bounded' });
+  await assert.rejects(queryTrustAssurance(scope, 'internal'), /ACCESS_DENIED/);
   globalThis.__trustInvoke = async () => httpError(404, { code: 'NO_PUBLICATION', message: 'bounded' });
   assert.equal(await queryTrustAssurance(scope, 'buyer'), null);
   globalThis.__trustInvoke = async () => httpError(500, { message: 'unclassified' });
+  await assert.rejects(queryTrustAssurance(scope, 'internal'), /PERSISTENCE_UNAVAILABLE/);
+  globalThis.__trustInvoke = async () => ({ data: { ...internal, workspaceId: resourceId }, error: null });
   await assert.rejects(queryTrustAssurance(scope, 'internal'), /PERSISTENCE_UNAVAILABLE/);
 
   globalThis.__trustInvoke = async () => ({ data: { ok: true, resourceId, version: 2 }, error: null });

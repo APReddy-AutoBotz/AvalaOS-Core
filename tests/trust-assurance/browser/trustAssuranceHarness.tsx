@@ -10,6 +10,10 @@ const params = new URLSearchParams(location.search);
 const matrix = params.has('tenant-context');
 const responseLoss = params.has('response-loss');
 const featureDisabled = params.has('feature-disabled');
+const featureMismatch = params.has('feature-mismatch');
+const evidenceHistory = params.has('evidence-history');
+const evidenceWithdrawn = params.has('evidence-withdrawn');
+const snapshotMixed = params.has('snapshot-mixed');
 const contextA: TenantContextProjection = {
   userId: '10000000-0000-4000-8000-000000000001',
   organizationId: '20000000-0000-4000-8000-000000000002',
@@ -43,19 +47,20 @@ const projectionFor = (context: TenantContextProjection, published: boolean): In
   evidence: [{
     evidenceVersionId: '60000000-0000-4000-8000-000000000006', evidenceId: '70000000-0000-4000-8000-000000000007', version: 1,
     evidenceType: 'test_report', referenceType: 'test_report', referenceValue: 'tests/trust-assurance', summary: 'Expired focused evidence.',
-    evidenceBoundary: 'verified_with_evidence', lifecycle: 'active', freshness: 'expired', observedAt: '2026-08-01T00:00:00Z',
+    evidenceBoundary: 'verified_with_evidence', freshness: 'expired', observedAt: '2026-08-01T00:00:00Z',
     reviewDueAt: null, expiresAt: '2026-08-02T00:00:00Z', canonicalHash: 'b'.repeat(64), approved: true, ownerDisplayName: 'Assigned owner',
-  }],
+    lifecycle: evidenceHistory ? 'superseded' : 'active',
+  }, ...(evidenceHistory ? [{evidenceVersionId:'60000000-0000-4000-8000-000000000016',evidenceId:'70000000-0000-4000-8000-000000000017',version:1,evidenceType:'test_report',referenceType:'test_report' as const,referenceValue:'tests/trust-new',summary:'New actionable evidence.',evidenceBoundary:'docs_only' as const,lifecycle:evidenceWithdrawn?'withdrawn' as const:'active' as const,freshness:'current' as const,observedAt:'2026-08-08T00:00:00Z',reviewDueAt:null,expiresAt:null,canonicalHash:'e'.repeat(64),approved:true,ownerDisplayName:'Assigned owner'}] : [])],
   relationships: [{
     claimVersionId: '40000000-0000-4000-8000-000000000004', evidenceVersionId: '60000000-0000-4000-8000-000000000006',
     relationship: 'contradicts', rationale: 'Current contradiction.',
   }],
   reviewQueueCount: 1,
-  snapshotHistory: featureDisabled ? [{
+  snapshotHistory: snapshotMixed ? [{snapshotId:'80000000-0000-4000-8000-000000000018',snapshotHash:'f'.repeat(64),version:2,lifecycle:'changes_requested',createdAt:'2026-08-08T00:00:00Z'},{snapshotId:'80000000-0000-4000-8000-000000000008',snapshotHash:'c'.repeat(64),version:3,lifecycle:'published',createdAt:'2026-08-07T00:00:00Z'}] : featureDisabled ? [{
     snapshotId: '80000000-0000-4000-8000-000000000008', snapshotHash: 'c'.repeat(64), version: 3,
     lifecycle: 'published', createdAt: '2026-08-07T00:00:00Z',
   }] : [],
-  currentPublication: published ? {
+  currentPublication: (published || snapshotMixed) ? {
     publicationId: '81000000-0000-4000-8000-000000000008', snapshotId: '80000000-0000-4000-8000-000000000008',
     snapshotHash: 'c'.repeat(64), publishedAt: '2026-08-07T00:00:00Z',
   } : null,
@@ -81,6 +86,7 @@ const waitForWorkspaceBCommand = () => new Promise<void>(resolve => { releaseWor
 
 const Harness: React.FC = () => {
   const [selected, setSelected] = useState<TenantContextProjection | null>(params.has('revoked') ? null : matrix ? contextB : contextA);
+  const [selectionState, setSelectionState] = useState(params.has('global-readonly') ? 'read_only' as const : selected ? 'ready' as const : 'revoked' as const);
   const [calls, setCalls] = useState<string[]>([]);
   const [effectCounts, setEffectCounts] = useState<Record<'claim.create' | 'evidence.register' | 'snapshot.create', number>>({ 'claim.create': 0, 'evidence.register': 0, 'snapshot.create': 0 });
   const log = (value: string) => setCalls(previous => [...previous, value]);
@@ -88,15 +94,19 @@ const Harness: React.FC = () => {
     log(`query:${view}:${scope.workspaceId}:auth=${scope.authorizationVersion ?? 'unknown'}`);
     if (matrix && !responseLoss && view === 'internal' && scope.workspaceId === contextA.workspaceId) await waitForWorkspaceAQuery();
     const context = scope.workspaceId === contextB.workspaceId ? contextB : contextA;
+    if (view === 'buyer' && params.has('buyer-transient')) throw new Error('PERSISTENCE_UNAVAILABLE');
+    if (view === 'buyer' && params.has('buyer-stale')) throw new Error('AUTHORIZATION_STALE');
+    if (view === 'buyer' && params.has('buyer-denied')) throw new Error('ACCESS_DENIED');
     return view === 'buyer' ? buyerFor(context) : projections.get(scope.workspaceId)!;
   };
   const command = async (request: TrustCommandRequest) => {
     log(`command:${request.operation}:${request.workspaceId}:request=${request.requestId}:key=${request.idempotencyKey}:auth=${request.expectedAuthorizationVersion}`);
+    log(`target:${request.operation}:${JSON.stringify(request.payload)}`);
     if (matrix && !responseLoss && request.workspaceId === contextB.workspaceId) await waitForWorkspaceBCommand();
     else await delay(500);
     log(`command-complete:${request.operation}:${request.workspaceId}`);
     if (params.has('conflict')) return { ok: false as const, code: 'VERSION_CONFLICT' as const, message: 'Conflict' };
-    if (featureDisabled) return { ok: false as const, code: 'FEATURE_DISABLED' as const, message: 'Disabled' };
+    if (featureDisabled || featureMismatch) return { ok: false as const, code: 'FEATURE_DISABLED' as const, message: 'Disabled' };
     const createOperations = ['claim.create', 'evidence.register', 'snapshot.create'] as const;
     if (responseLoss && createOperations.includes(request.operation as typeof createOperations[number])) {
       const operation = request.operation as typeof createOperations[number];
@@ -136,10 +146,10 @@ const Harness: React.FC = () => {
   };
   const connected = useMemo(() => <TrustAssuranceConnectedWorkspace
     tenantContext={selected}
-    selectionState={selected ? 'ready' : 'revoked'}
+    selectionState={selectionState}
     query={query as never}
     command={command}
-  />, [selected]);
+  />, [selected, selectionState]);
   return <>
     {matrix && <section aria-label="Tenant context controls" className="m-4 flex flex-wrap gap-2">
       <button type="button" onClick={() => setSelected(contextB)}>Select workspace B</button>
@@ -149,8 +159,9 @@ const Harness: React.FC = () => {
       <button type="button" onClick={() => { releaseWorkspaceAQuery?.(); releaseWorkspaceAQuery = null; }}>Release workspace A query</button>
       <button type="button" onClick={() => { releaseWorkspaceBCommand?.(); releaseWorkspaceBCommand = null; }}>Release workspace B command</button>
       <button type="button" onClick={() => setCalls([])}>Clear call log</button>
+      <button type="button" onClick={() => setSelectionState('read_only')}>Enter global read-only</button>
     </section>}
-    {(matrix || responseLoss || featureDisabled || params.has('conflict')) && <section aria-label="Harness evidence" hidden>
+    {(matrix || responseLoss || featureDisabled || featureMismatch || params.has('conflict') || params.has('global-readonly')) && <section aria-label="Harness evidence" hidden>
       <output data-testid="trust-call-log">{calls.join('\n')}</output>
       <output data-testid="trust-effect-counts">{JSON.stringify(effectCounts)}</output>
     </section>}

@@ -109,7 +109,7 @@ export const queryTrustAssurance = async (
     throw new Error(code ?? 'PERSISTENCE_UNAVAILABLE');
   }
   try {
-    return view === 'internal' ? decodeInternalProjection(result.data) : decodeBuyerSafeProjection(result.data);
+    return view === 'internal' ? decodeInternalProjection(result.data, scope) : decodeBuyerSafeProjection(result.data);
   } catch {
     throw new Error('PERSISTENCE_UNAVAILABLE');
   }
