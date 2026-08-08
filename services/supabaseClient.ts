@@ -1,13 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   RuntimeBoundaryError,
+  isValidServerConfiguration,
   resolveRuntimeAuthority,
   resolveRuntimeMode,
 } from './runtimeMode';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const serverConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const serverConfigured = isValidServerConfiguration(supabaseUrl, supabaseAnonKey);
 
 const runtimeModeResolution = resolveRuntimeMode({
   configuredMode: import.meta.env.VITE_AVALA_RUNTIME_MODE,
@@ -19,8 +20,8 @@ const runtimeModeResolution = resolveRuntimeMode({
 // This inert client preserves the existing import surface. Every call site
 // resolves the runtime data boundary before use; it is never authority.
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder',
+  serverConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  serverConfigured ? supabaseAnonKey : 'placeholder',
 );
 
 export const isSupabaseConfigured = () => serverConfigured;

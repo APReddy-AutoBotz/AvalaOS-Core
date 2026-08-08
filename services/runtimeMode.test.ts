@@ -4,12 +4,16 @@ import {
   RUNTIME_BOUNDARY_USER_MESSAGE,
   RUNTIME_MODES,
   RuntimeBoundaryError,
+  isValidServerConfiguration,
   resolveRuntimeAuthority,
   resolveRuntimeDataAccess,
   resolveRuntimeMode,
 } from './runtimeMode';
 
 console.log('Starting runtime mode boundary regression suite...');
+
+assert.equal(isValidServerConfiguration('https://tenant.supabase.co','anon-key'),true);
+for(const [url,key] of [[undefined,'key'],['https://tenant.supabase.co',undefined],['junk','key'],['ftp://tenant.invalid','key'],[' https://tenant.supabase.co','key'],['https://tenant.supabase.co',' ']])assert.equal(isValidServerConfiguration(url,key),false);
 
 for (const mode of RUNTIME_MODES) {
   const resolution = resolveRuntimeMode({

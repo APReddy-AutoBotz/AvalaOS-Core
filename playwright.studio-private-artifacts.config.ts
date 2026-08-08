@@ -24,7 +24,7 @@ export default defineConfig({
       ...process.env,
       STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD: 'true',
       VITE_AVALA_RUNTIME_MODE: 'pilot',
-      VITE_SUPABASE_URL: 'http://127.0.0.1:59999',
+      VITE_SUPABASE_URL: 'https://127.0.0.1:59999',
       VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
       VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
     },

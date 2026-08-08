@@ -12,6 +12,10 @@ import {
   groupClaimControlsByDomain,
   summarizeProofStatuses,
 } from '../../services/trustCenterPresentation';
+import { getRuntimeBoundaryError, getRuntimeModeResolution } from '../../services/supabaseClient';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
+import { TrustAssuranceWorkspace } from './trust-assurance/TrustAssuranceWorkspace';
+import { TrustAssuranceConnectedWorkspace } from './trust-assurance/TrustAssuranceConnectedWorkspace';
 
 const statusStyles: Record<ProofStatus, string> = {
   demo: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200',
@@ -49,11 +53,23 @@ const BoundaryPill: React.FC<{ boundary: Parameters<typeof getProofBoundaryLabel
   </span>
 );
 
-const TrustCenterPanel: React.FC = () => {
+const GovernedTrustAssuranceWorkspace: React.FC = () => {
+  const { tenantContext, sessionState } = useOrganizationContext();
+  return <TrustAssuranceConnectedWorkspace tenantContext={tenantContext} selectionState={sessionState} />;
+};
+
+const TrustCenterPanel: React.FC<{ connectedWorkspace?: React.ReactNode }> = ({ connectedWorkspace }) => {
+  const runtime = getRuntimeModeResolution();
+  const runtimeBoundaryError = getRuntimeBoundaryError();
   const snapshot = useMemo(() => buildCurrentTrustCenterSnapshot(), []);
   const statusSummary = useMemo(() => summarizeProofStatuses(snapshot), [snapshot]);
   const claimGroups = useMemo(() => groupClaimControlsByDomain(snapshot), [snapshot]);
   const blockedClaims = useMemo(() => getEvidenceRequiredOrBlockedClaims(snapshot), [snapshot]);
+  if (runtime.status === 'blocked' || runtime.requiresServerAuthority) {
+    return runtime.status === 'blocked' || runtimeBoundaryError
+      ? <TrustAssuranceWorkspace state={{ kind: 'blocked' }} />
+      : <>{connectedWorkspace ?? <GovernedTrustAssuranceWorkspace />}</>;
+  }
 
   return (
     <section className="premium-surface overflow-hidden rounded-3xl border border-[#002C4B]/10">
@@ -63,7 +79,7 @@ const TrustCenterPanel: React.FC = () => {
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Admin</p>
             <h2 className="mt-2 text-2xl font-black text-[#002C4B] dark:text-white">Trust Center</h2>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
-              Read-only proof-status view for current claim controls, module capability states, evidence references, buyer artifacts, blocked claims, and limitation disclosures.
+              Explicit noncanonical {runtime.mode} fixture for claim controls and evidence references. Pilot and production authority comes only from the governed Evidence Hub.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
