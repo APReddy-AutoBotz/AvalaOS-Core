@@ -10,6 +10,7 @@ const params = new URLSearchParams(location.search);
 const matrix = params.has('tenant-context');
 const responseLoss = params.has('response-loss');
 const featureDisabled = params.has('feature-disabled');
+const featureMismatch = params.has('feature-mismatch');
 const contextA: TenantContextProjection = {
   userId: '10000000-0000-4000-8000-000000000001',
   organizationId: '20000000-0000-4000-8000-000000000002',
@@ -81,6 +82,7 @@ const waitForWorkspaceBCommand = () => new Promise<void>(resolve => { releaseWor
 
 const Harness: React.FC = () => {
   const [selected, setSelected] = useState<TenantContextProjection | null>(params.has('revoked') ? null : matrix ? contextB : contextA);
+  const [selectionState, setSelectionState] = useState(params.has('global-readonly') ? 'read_only' as const : selected ? 'ready' as const : 'revoked' as const);
   const [calls, setCalls] = useState<string[]>([]);
   const [effectCounts, setEffectCounts] = useState<Record<'claim.create' | 'evidence.register' | 'snapshot.create', number>>({ 'claim.create': 0, 'evidence.register': 0, 'snapshot.create': 0 });
   const log = (value: string) => setCalls(previous => [...previous, value]);
@@ -88,6 +90,9 @@ const Harness: React.FC = () => {
     log(`query:${view}:${scope.workspaceId}:auth=${scope.authorizationVersion ?? 'unknown'}`);
     if (matrix && !responseLoss && view === 'internal' && scope.workspaceId === contextA.workspaceId) await waitForWorkspaceAQuery();
     const context = scope.workspaceId === contextB.workspaceId ? contextB : contextA;
+    if (view === 'buyer' && params.has('buyer-transient')) throw new Error('PERSISTENCE_UNAVAILABLE');
+    if (view === 'buyer' && params.has('buyer-stale')) throw new Error('AUTHORIZATION_STALE');
+    if (view === 'buyer' && params.has('buyer-denied')) throw new Error('ACCESS_DENIED');
     return view === 'buyer' ? buyerFor(context) : projections.get(scope.workspaceId)!;
   };
   const command = async (request: TrustCommandRequest) => {
@@ -96,7 +101,7 @@ const Harness: React.FC = () => {
     else await delay(500);
     log(`command-complete:${request.operation}:${request.workspaceId}`);
     if (params.has('conflict')) return { ok: false as const, code: 'VERSION_CONFLICT' as const, message: 'Conflict' };
-    if (featureDisabled) return { ok: false as const, code: 'FEATURE_DISABLED' as const, message: 'Disabled' };
+    if (featureDisabled || featureMismatch) return { ok: false as const, code: 'FEATURE_DISABLED' as const, message: 'Disabled' };
     const createOperations = ['claim.create', 'evidence.register', 'snapshot.create'] as const;
     if (responseLoss && createOperations.includes(request.operation as typeof createOperations[number])) {
       const operation = request.operation as typeof createOperations[number];
@@ -136,10 +141,10 @@ const Harness: React.FC = () => {
   };
   const connected = useMemo(() => <TrustAssuranceConnectedWorkspace
     tenantContext={selected}
-    selectionState={selected ? 'ready' : 'revoked'}
+    selectionState={selectionState}
     query={query as never}
     command={command}
-  />, [selected]);
+  />, [selected, selectionState]);
   return <>
     {matrix && <section aria-label="Tenant context controls" className="m-4 flex flex-wrap gap-2">
       <button type="button" onClick={() => setSelected(contextB)}>Select workspace B</button>
@@ -149,8 +154,9 @@ const Harness: React.FC = () => {
       <button type="button" onClick={() => { releaseWorkspaceAQuery?.(); releaseWorkspaceAQuery = null; }}>Release workspace A query</button>
       <button type="button" onClick={() => { releaseWorkspaceBCommand?.(); releaseWorkspaceBCommand = null; }}>Release workspace B command</button>
       <button type="button" onClick={() => setCalls([])}>Clear call log</button>
+      <button type="button" onClick={() => setSelectionState('read_only')}>Enter global read-only</button>
     </section>}
-    {(matrix || responseLoss || featureDisabled || params.has('conflict')) && <section aria-label="Harness evidence" hidden>
+    {(matrix || responseLoss || featureDisabled || featureMismatch || params.has('conflict') || params.has('global-readonly')) && <section aria-label="Harness evidence" hidden>
       <output data-testid="trust-call-log">{calls.join('\n')}</output>
       <output data-testid="trust-effect-counts">{JSON.stringify(effectCounts)}</output>
     </section>}

@@ -76,6 +76,41 @@ test('server-projected read-only mode disables every governed mutation', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
 });
 
+test('global application read-only preserves projections and dispatches no mutation', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?global-readonly=1');
+  await expect(page.getByText(/^Read-only mode:/)).toBeVisible();
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
+  for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
+  await controls.first().evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('trust-call-log')).not.toContainText('command:');
+});
+
+test('global read-only transition blocks rapid dispatch and unresolved retry', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?response-loss=1&tenant-context=1');
+  const log = page.getByTestId('trust-call-log');
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Enter global read-only', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeDisabled();
+  const before = (await log.textContent())!.split('\n').filter(line => line.startsWith('command:')).length;
+  await page.getByRole('button', { name: 'Retry unresolved command', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  const after = (await log.textContent())!.split('\n').filter(line => line.startsWith('command:')).length;
+  expect(after).toBe(before);
+});
+
+test('optional buyer outage preserves ready internal projection while authority failures fail closed', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1&buyer-transient=1');
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Buyer-safe preview is temporarily unavailable/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Trust Assurance commands' })).toBeVisible();
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1&buyer-stale=1');
+  await expect(page.getByRole('alert')).toContainText('authorization is stale');
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1&buyer-denied=1');
+  await expect(page.getByRole('alert')).toContainText('revoked');
+});
+
 test('response loss preserves exact create identities, scope, and refreshed authority replay', async ({ page }) => {
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?response-loss=1');
   const log = page.getByTestId('trust-call-log');
@@ -149,4 +184,15 @@ test('feature-disabled rollback preserves authorized internal and buyer reads', 
   expect(callLog).toContain('query:buyer:');
   expect(callLog).not.toContain('command:');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
+
+test('feature-disable disagreement latches the ready workspace read-only', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-mismatch=1');
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  await expect(page.getByText('FEATURE_DISABLED', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Read-only mode:/)).toBeVisible();
+  const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
+  for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
+  const commands = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:'));
+  expect(commands).toHaveLength(1);
 });

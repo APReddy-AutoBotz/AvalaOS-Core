@@ -23,25 +23,39 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
 }> = ({ tenantContext, selectionState = 'ready', query: queryProjection = queryTrustAssurance, command: sendCommand = commandTrustAssurance }) => {
   const [state, setState] = useState<TrustAssuranceState>({ kind: 'loading' });
   const [buyer, setBuyer] = useState<BuyerSafeProjection | null>(null);
+  const [buyerWarning, setBuyerWarning] = useState('');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [unresolved, setUnresolved] = useState<TrustCommandRequest | null>(null);
   const generation = useRef(0);
   const inFlight = useRef(false);
   const unresolvedByScope = useRef(new Map<string, TrustCommandRequest>());
+  const mutationBlocked = useRef(false);
+  const globalReadOnly = selectionState === 'read_only';
 
   const loadSelected = useCallback(async (selected: TenantContextProjection, requestGeneration: number) => {
     if (generation.current !== requestGeneration) return;
     setState({ kind: 'loading' });
     setBuyer(null);
+    setBuyerWarning('');
     try {
       const scope = { organizationId: selected.organizationId, workspaceId: selected.workspaceId, authorizationVersion: selected.authorizationVersion };
       const projection = await queryProjection(scope, 'internal') as InternalAssuranceProjection;
       if (generation.current !== requestGeneration) return;
       setState({ kind: 'ready', projection });
       if (!projection.currentPublication) return;
-      const buyerProjection = await queryProjection(scope, 'buyer') as BuyerSafeProjection;
-      if (generation.current === requestGeneration) setBuyer(buyerProjection);
+      try {
+        const buyerProjection = await queryProjection(scope, 'buyer') as BuyerSafeProjection;
+        if (generation.current === requestGeneration) setBuyer(buyerProjection);
+      } catch (error) {
+        if (generation.current !== requestGeneration) return;
+        if (error instanceof Error && (error.message === 'AUTHORIZATION_STALE' || error.message === 'ACCESS_DENIED')) {
+          setBuyer(null);
+          setState(errorState(error));
+        } else {
+          setBuyerWarning('Buyer-safe preview is temporarily unavailable. Internal assurance data remains available.');
+        }
+      }
     } catch (error) {
       if (generation.current === requestGeneration) setState(errorState(error));
     }
@@ -54,7 +68,9 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   useLayoutEffect(() => {
     const requestGeneration = ++generation.current;
     setBuyer(null);
+    setBuyerWarning('');
     setNotice('');
+    mutationBlocked.current = false;
     setPending(inFlight.current);
     setUnresolved(tenantContext ? unresolvedByScope.current.get(attemptScopeKey(tenantContext)) ?? null : null);
     if (selectionState === 'loading') setState({ kind: 'loading' });
@@ -96,6 +112,8 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
         } else if (result.code === 'ACCESS_DENIED' || result.code === 'PERMISSION_DENIED') {
           setBuyer(null);
           setState({ kind: 'revoked' });
+        } else if (result.code === 'FEATURE_DISABLED') {
+          mutationBlocked.current = true;
         }
         return;
       }
@@ -114,7 +132,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   };
 
   const execute = async (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => {
-    if (!tenantContext || !selectedScopeKey || inFlight.current || unresolvedByScope.current.has(selectedScopeKey) || state.kind !== 'ready' || state.projection.readOnly) return;
+    if (globalReadOnly || mutationBlocked.current || !tenantContext || !selectedScopeKey || inFlight.current || unresolvedByScope.current.has(selectedScopeKey) || state.kind !== 'ready' || state.projection.readOnly) return;
     const requestGeneration = generation.current;
     const selected = tenantContext;
     const request: TrustCommandRequest = {
@@ -127,7 +145,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   };
 
   const retryUnresolved = async () => {
-    if (!tenantContext || !selectedScopeKey || inFlight.current) return;
+    if (globalReadOnly || mutationBlocked.current || state.kind !== 'ready' || state.projection.readOnly || !tenantContext || !selectedScopeKey || inFlight.current) return;
     const request = unresolvedByScope.current.get(selectedScopeKey);
     if (!request) return;
     await submitAttempt(request, tenantContext, generation.current);
@@ -135,14 +153,15 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
 
   return <div className="space-y-4">
     <TrustAssuranceWorkspace state={state} buyerProjection={buyer} />
-    {state.kind === 'ready' && state.projection.readOnly && state.projection.claims.length === 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">Read-only mode: history and projections remain available; mutations are disabled.</p>}
+    {state.kind === 'ready' && (globalReadOnly || mutationBlocked.current || state.projection.readOnly) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">Read-only mode: history and projections remain available; mutations are disabled.</p>}
     {state.kind === 'ready' && unresolved && <section role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold">
       <p>Outcome unknown for {unresolved.operation}. Retry the same governed command.</p>
-      <button type="button" disabled={pending} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
+      <button type="button" disabled={pending || globalReadOnly || mutationBlocked.current || state.projection.readOnly} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
     </section>}
-    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} execute={execute} />}
+    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} readOnly={globalReadOnly || mutationBlocked.current || state.projection.readOnly} execute={execute} />}
     <div aria-live="polite" className="text-sm font-bold text-slate-600">{notice}</div>
-    {!buyer && state.kind === 'ready' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">No publication: buyer-safe preview remains unavailable.</p>}
+    {buyerWarning && state.kind === 'ready' && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">{buyerWarning}</p>}
+    {!buyer && !buyerWarning && state.kind === 'ready' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">No publication: buyer-safe preview remains unavailable.</p>}
   </div>;
 };
 
@@ -150,10 +169,11 @@ const CommandBar: React.FC<{
   projection: InternalAssuranceProjection;
   pending: boolean;
   unresolved: boolean;
+  readOnly: boolean;
   execute: (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => Promise<void>;
-}> = ({ projection, pending, unresolved, execute }) => {
+}> = ({ projection, pending, unresolved, readOnly, execute }) => {
   const claim = projection.claims[0], evidence = projection.evidence[0], snapshot = projection.snapshotHistory[0];
-  const disabled = pending || unresolved || projection.readOnly;
+  const disabled = pending || unresolved || readOnly;
   return <section aria-label="Trust Assurance commands" className="rounded-2xl border bg-white p-4">
     <h3 className="font-black">Governed actions</h3>
     <p className="mt-1 text-xs text-slate-500">Actions refresh only after a durable server response. The first current item is used for bounded review/build actions.</p>
