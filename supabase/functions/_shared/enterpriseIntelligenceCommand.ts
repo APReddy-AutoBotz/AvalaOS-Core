@@ -3,6 +3,7 @@ import {
   ENTERPRISE_AI_CAPABILITIES,
   ENTERPRISE_AI_PROVIDERS,
   EVIDENCE_CANDIDATE_FIELDS,
+  MODERNIZATION_DISPOSITIONS,
   buildAssembleBlueprintDraft,
   buildDeliveryWorkPackageDraft,
   buildEvidenceCandidate,
@@ -157,6 +158,9 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED', 'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
     'ENTERPRISE_PROVIDER_VALIDATION_STALE', 'ENTERPRISE_PROVIDER_ROUTE_BLOCKED',
+    'ENTERPRISE_MODERNIZATION_SOURCE_NOT_APPROVED',
+    'ENTERPRISE_MODERNIZATION_INCOMPLETE_FACTORS',
+    'ENTERPRISE_MODERNIZATION_RECOMMENDATION_INVALID',
   )) return new EnterpriseCommandError('COMMAND_BLOCKED');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_EVIDENCE_ASSESS_VERSION_CONFLICT', 'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
@@ -164,6 +168,8 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
     'ENTERPRISE_EVIDENCE_BATCH_DUPLICATE', 'ENTERPRISE_EVIDENCE_BATCH_INVALID',
     'ENTERPRISE_EVIDENCE_CANDIDATE_NOT_ACCEPTED',
     'ENTERPRISE_AI_JOB_RESOURCE_STALE',
+    'ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT',
+    'ENTERPRISE_MODERNIZATION_RESULT_IDENTITY_MISMATCH',
   )) return new EnterpriseCommandError('RESOURCE_STALE');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_APPROVAL_AUTHORIZATION_STALE', 'ENTERPRISE_APPROVAL_REVIEWER_AUTHORIZATION_STALE',
@@ -1327,16 +1333,29 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
 
 const assertApprovedApplicationAssessment = async (authority: Authority, payload: JsonObject) => {
   const applicationId = requireUuid(payload.applicationId);
-  const row = await findOne<{ id: string; application_id: string; metadata_version_id: string; version: number; lifecycle: string }>(
+  const row = await findOne<{
+    id: string;
+    application_id: string;
+    metadata_version_id: string;
+    version: number;
+    lifecycle: string;
+    reviewer_id?: string | null;
+    receipt_id?: string | null;
+    audit_event_id?: string | null;
+  }>(
     'assess_application_assessment_versions',
-    `select=id,application_id,metadata_version_id,version,lifecycle&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&application_id=eq.${encodeURIComponent(applicationId)}&lifecycle=eq.approved&order=version.desc`,
+    `select=id,application_id,metadata_version_id,version,lifecycle,reviewer_id,receipt_id,audit_event_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&application_id=eq.${encodeURIComponent(applicationId)}&order=version.desc`,
   );
-  if (!row) throw new EnterpriseCommandError('COMMAND_BLOCKED');
-  const review = await findOne<{ reviewer_id: string; resolution: string }>(
+  if (!row || row.lifecycle !== 'approved' || !row.reviewer_id || !row.receipt_id || !row.audit_event_id) {
+    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
+  const review = await findOne<{ reviewer_id: string; resolution: string; receipt_id: string; audit_event_id: string }>(
     'assess_application_review_resolutions',
-    `select=reviewer_id,resolution&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&application_id=eq.${encodeURIComponent(applicationId)}&metadata_version_id=eq.${encodeURIComponent(row.metadata_version_id)}&assessment_version_id=eq.${encodeURIComponent(row.id)}&resolution=eq.approved`,
+    `select=reviewer_id,resolution,receipt_id,audit_event_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&application_id=eq.${encodeURIComponent(applicationId)}&metadata_version_id=eq.${encodeURIComponent(row.metadata_version_id)}&reviewer_id=eq.${encodeURIComponent(row.reviewer_id)}&receipt_id=eq.${encodeURIComponent(row.receipt_id)}&audit_event_id=eq.${encodeURIComponent(row.audit_event_id)}&resolution=eq.approved`,
   );
-  if (!review || review.reviewer_id === authority.actorId) throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  if (!review || review.reviewer_id !== row.reviewer_id || review.reviewer_id === authority.actorId) {
+    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
   const reviewer = await resolveAuthority(review.reviewer_id, authority.organizationId, authority.workspaceId);
   if (!reviewer.permissions.has('assess.applications.review') && !reviewer.isAdmin) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   return row;
@@ -1412,8 +1431,8 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
   const modernizationAssessmentId = plannedUuid(receipt, 'modernizationAssessmentId');
   const decisionId = plannedUuid(receipt, 'modernizationDecisionId');
   await ensureExecutionPlan(receipt, authority, { modernizationAssessmentId, modernizationDecisionId: decisionId });
-  const result = { resourceId: decisionId, modernizationAssessmentId, decisionId, decision };
-  await rpc('enterprise_commit_modernization_assessment', {
+  const proposedResult = { resourceId: decisionId, modernizationAssessmentId, decisionId, decision };
+  const result = await rpc<JsonObject>('enterprise_commit_modernization_assessment', {
     p_assessment: {
       id: modernizationAssessmentId,
       org_id: authority.organizationId,
@@ -1441,8 +1460,22 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
       status: 'review',
       created_by: authority.actorId,
     },
-    ...receiptMutationArgs(receipt, result),
+    ...receiptMutationArgs(receipt, proposedResult),
   });
+  const canonicalDecision = isRecord(result?.decision) ? result.decision : null;
+  if (result?.resourceId !== decisionId
+    || result?.decisionId !== decisionId
+    || result?.modernizationAssessmentId !== modernizationAssessmentId
+    || !canonicalDecision
+    || canonicalDecision.assessmentId !== assessment.id
+    || canonicalDecision.assessmentVersion !== String(assessment.version)
+    || canonicalDecision.modelVersion !== 'modernization-disposition-1'
+    || typeof canonicalDecision.primaryDisposition !== 'string'
+    || !MODERNIZATION_DISPOSITIONS.includes(canonicalDecision.primaryDisposition as ModernizationDisposition)
+    || !Array.isArray(canonicalDecision.eligibleDispositions)
+    || !canonicalDecision.eligibleDispositions.includes(canonicalDecision.primaryDisposition)) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
   return result;
 };
 

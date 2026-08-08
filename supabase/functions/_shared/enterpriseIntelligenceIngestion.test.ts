@@ -1,6 +1,65 @@
 import assert from 'node:assert/strict';
-import { deflateSync } from 'node:zlib';
-import { classifyEvidenceExtractionFailure, decodeBase64, extractEvidenceText, sha256Hex } from './enterpriseIntelligenceIngestion';
+import { deflateRawSync, deflateSync } from 'node:zlib';
+import {
+  classifyEvidenceExtractionFailure,
+  decodeBase64,
+  extractEvidenceText,
+  readBoundedStream,
+  sha256Hex,
+} from './enterpriseIntelligenceIngestion';
+
+const joinBytes = (...parts: Uint8Array[]) => {
+  const result = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+};
+
+const compressedPdf = (expanded: Uint8Array) => {
+  const compressed = new Uint8Array(deflateSync(expanded));
+  return joinBytes(
+    new TextEncoder().encode(`%PDF-1.4\n1 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`),
+    compressed,
+    new TextEncoder().encode('\nendstream\nendobj\n%%EOF'),
+  );
+};
+
+const compressedDocx = (expanded: Uint8Array, advertisedExpandedBytes = expanded.byteLength) => {
+  const name = new TextEncoder().encode('word/document.xml');
+  const compressed = new Uint8Array(deflateRawSync(expanded));
+  const local = new Uint8Array(30 + name.byteLength);
+  const localView = new DataView(local.buffer);
+  localView.setUint32(0, 0x04034b50, true);
+  localView.setUint16(4, 20, true);
+  localView.setUint16(8, 8, true);
+  localView.setUint32(18, compressed.byteLength, true);
+  localView.setUint32(22, advertisedExpandedBytes, true);
+  localView.setUint16(26, name.byteLength, true);
+  local.set(name, 30);
+
+  const central = new Uint8Array(46 + name.byteLength);
+  const centralView = new DataView(central.buffer);
+  centralView.setUint32(0, 0x02014b50, true);
+  centralView.setUint16(4, 20, true);
+  centralView.setUint16(6, 20, true);
+  centralView.setUint16(10, 8, true);
+  centralView.setUint32(20, compressed.byteLength, true);
+  centralView.setUint32(24, advertisedExpandedBytes, true);
+  centralView.setUint16(28, name.byteLength, true);
+  central.set(name, 46);
+
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, 1, true);
+  endView.setUint16(10, 1, true);
+  endView.setUint32(12, central.byteLength, true);
+  endView.setUint32(16, local.byteLength + compressed.byteLength, true);
+  return joinBytes(local, compressed, central, end);
+};
 
 const test = async (name: string, callback: () => Promise<void> | void) => {
   try {
@@ -29,14 +88,51 @@ await test('extracts text PDF literals without treating embedded content as inst
 });
 
 await test('extracts a compressed PDF text stream', async () => {
-  const compressed = deflateSync(new TextEncoder().encode('BT (Compressed governed evidence) Tj ET'));
-  const prefix = new TextEncoder().encode(`%PDF-1.4\n1 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`);
-  const suffix = new TextEncoder().encode('\nendstream\nendobj\n%%EOF');
-  const bytes = new Uint8Array(prefix.length + compressed.length + suffix.length);
-  bytes.set(prefix, 0);
-  bytes.set(compressed, prefix.length);
-  bytes.set(suffix, prefix.length + compressed.length);
+  const bytes = compressedPdf(new TextEncoder().encode('BT (Compressed governed evidence) Tj ET'));
   assert.equal(await extractEvidenceText(bytes, 'application/pdf'), 'Compressed governed evidence');
+});
+
+await test('cancels bounded decompression before an oversized stream is fully materialized', async () => {
+  let pulls = 0;
+  let cancellations = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(4));
+      if (pulls === 10) controller.close();
+    },
+    cancel() { cancellations += 1; },
+  });
+  await assert.rejects(readBoundedStream(stream, 8, 'PDF_STREAM_TOO_LARGE'), /PDF_STREAM_TOO_LARGE/);
+  assert.equal(cancellations, 1);
+  assert.ok(pulls < 10, `bounded reader consumed ${pulls} chunks`);
+});
+
+await test('rejects a small PDF decompression bomb while a valid near-limit stream succeeds', async () => {
+  const bomb = compressedPdf(new Uint8Array(20_000_001).fill(0x20));
+  assert.ok(bomb.byteLength < 12_000_000);
+  await assert.rejects(extractEvidenceText(bomb, 'application/pdf'), /PDF_STREAM_TOO_LARGE/);
+
+  const literal = new TextEncoder().encode('BT (Near limit governed PDF evidence) Tj ET');
+  const expanded = joinBytes(new Uint8Array(19_999_900).fill(0x20), literal);
+  assert.equal(await extractEvidenceText(compressedPdf(expanded), 'application/pdf'), 'Near limit governed PDF evidence');
+});
+
+await test('rejects a lying DOCX decompression bomb while a valid near-limit entry succeeds', async () => {
+  const bomb = compressedDocx(new Uint8Array(20_000_001).fill(0x20), 1);
+  assert.ok(bomb.byteLength < 12_000_000);
+  await assert.rejects(
+    extractEvidenceText(bomb, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    /DOCX_ENTRY_TOO_LARGE/,
+  );
+
+  const prefix = new TextEncoder().encode('<w:document><w:body><!--');
+  const suffix = new TextEncoder().encode('--><w:p><w:t>Near limit governed DOCX evidence</w:t></w:p></w:body></w:document>');
+  const expanded = joinBytes(prefix, new Uint8Array(19_999_800).fill(0x78), suffix);
+  assert.equal(
+    await extractEvidenceText(compressedDocx(expanded), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    'Near limit governed DOCX evidence',
+  );
 });
 
 await test('fails truthfully when a scanned PDF has no text layer and OCR is unavailable', async () => {

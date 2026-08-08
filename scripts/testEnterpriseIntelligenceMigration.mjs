@@ -40,7 +40,12 @@ const providerCleanupDeadlineSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260807140000_provider_secret_cleanup_deadline.sql'),
   'utf8',
 );
+const modernizationCurrentSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808120000_enterprise_modernization_current_assessment.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
+const ingestionSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceIngestion.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
 const providerSecretAdapterSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerSecretAdapter.ts'), 'utf8');
@@ -72,6 +77,72 @@ const requiredTables = [
 
 let assertions = 0;
 const check = (condition, message) => { assert.ok(condition, message); assertions += 1; };
+const canonicalModernizationTranslations = new Map([
+  ['Retain and monitor', 'retain'],
+  ['Enable native API/event integration', 'integrate'],
+  ['Add API façade and semantic translation', 'api_enable_wrap'],
+  ['Add event or CDC bridge', 'integrate'],
+  ['Use governed workflow/RPA bridge', 'automate_around'],
+  ['Use governed UI/vision bridge', 'automate_around'],
+  ['Refactor through strangler or modular decomposition', 'refactor'],
+  ['Replatform', 'replatform'],
+  ['Replace with supported product or SaaS', 'replace'],
+  ['Rebuild through controlled AI-assisted delivery', 'rebuild'],
+  ['Consolidate duplicate applications', 'optimize'],
+  ['Retire', 'retire'],
+  ['Insufficient evidence', 'insufficient_evidence'],
+  ['Blocked pending prerequisite', 'blocked'],
+]);
+for (const [recommendation, disposition] of canonicalModernizationTranslations) {
+  check(
+    modernizationCurrentSql.includes(`WHEN '${recommendation}' THEN '${disposition}'`),
+    `Missing canonical PR1G modernization translation: ${recommendation}`,
+  );
+}
+check(modernizationCurrentSql.includes('ENTERPRISE_MODERNIZATION_RECOMMENDATION_INVALID'),
+  'Unknown PR1G recommendation values must fail closed.');
+check(!/\blower\s*\(|\bILIKE\b|\bposition\s*\(/iu.test(
+  modernizationCurrentSql.slice(
+    modernizationCurrentSql.indexOf('enterprise_translate_pr1g_modernization_disposition'),
+    modernizationCurrentSql.indexOf('$$;', modernizationCurrentSql.indexOf('enterprise_translate_pr1g_modernization_disposition')),
+  ),
+), 'PR1G recommendation translation must not use fuzzy or normalized matching.');
+check(modernizationCurrentSql.includes("'pr1g-assessment:' || NEW.org_id::text"),
+  'All PR1G assessment inserts must take the canonical application lock.');
+check(modernizationCurrentSql.includes('BEFORE INSERT ON public.assess_application_assessment_versions'),
+  'The current-assessment lock must cover every lifecycle insert.');
+for (const operation of [
+  'application.assessment.save', 'application.assessment.finalize',
+  'application.assessment.review.resolve', 'application.assessment.revision.start',
+]) check(modernizationCurrentSql.includes(`'${operation}'`),
+  `Canonical PR1G operation ${operation} must lock before its first row lock.`);
+check(modernizationCurrentSql.includes("'pr1g-assessment:' || org_id::text"),
+  'Modernization must take the same application lock before selecting current truth.');
+check(modernizationCurrentSql.indexOf('pg_advisory_xact_lock')
+  < modernizationCurrentSql.indexOf('ORDER BY candidate.version DESC'),
+  'Modernization must lock before selecting the latest assessment across all lifecycle states.');
+check(modernizationCurrentSql.includes('ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT'),
+  'A superseded source assessment must fail closed.');
+const currentAssessmentSelection = commandSource.slice(
+  commandSource.indexOf('const assertApprovedApplicationAssessment'),
+  commandSource.indexOf('type CanonicalDimensionRow'),
+);
+check(currentAssessmentSelection.includes('&order=version.desc')
+  && !currentAssessmentSelection.includes('&lifecycle=eq.approved'),
+'Edge modernization selection must inspect the actual latest assessment before checking approval.');
+check(currentAssessmentSelection.includes('row.lifecycle !== \'approved\''),
+  'The actual latest assessment must be approved.');
+check(currentAssessmentSelection.includes('&receipt_id=eq.')
+  && currentAssessmentSelection.includes('&audit_event_id=eq.'),
+'Approved lifecycle must bind its canonical predecessor review transition.');
+check(commandSource.includes("const result = await rpc<JsonObject>('enterprise_commit_modernization_assessment'"),
+  'Modernization must return the database-canonicalized response/effect result.');
+check(ingestionSource.includes('export const readBoundedStream')
+  && ingestionSource.includes('await reader.cancel(')
+  && ingestionSource.includes('chunk.byteLength > maxBytes - totalBytes'),
+'Untrusted decompression must enforce and cancel on an incremental byte bound.');
+check(!/new Response\([^)]*\)\.arrayBuffer\(\)/u.test(ingestionSource),
+  'PDF and DOCX decompression must never materialize an unchecked Response arrayBuffer.');
 for (const table of requiredTables) {
   check(sql.includes(`CREATE TABLE public.${table}`), `Missing strict table creation for ${table}`);
 }

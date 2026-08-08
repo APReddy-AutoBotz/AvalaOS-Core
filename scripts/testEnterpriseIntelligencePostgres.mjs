@@ -1618,6 +1618,201 @@ try {
     assert.equal(persisted.resource_hash, monitor.resourceHash);
     await assert.rejects(authority.query("UPDATE public.enterprise_delivery_work_items SET title='mutated' WHERE package_version_id=$1", [version]), /ENTERPRISE_APPEND_ONLY/);
   });
+  await scenario('canonical PR1G recommendations translate exhaustively and unknown vocabulary fails closed', async () => {
+    const expected = new Map([
+      ['Retain and monitor', 'retain'],
+      ['Enable native API/event integration', 'integrate'],
+      ['Add API façade and semantic translation', 'api_enable_wrap'],
+      ['Add event or CDC bridge', 'integrate'],
+      ['Use governed workflow/RPA bridge', 'automate_around'],
+      ['Use governed UI/vision bridge', 'automate_around'],
+      ['Refactor through strangler or modular decomposition', 'refactor'],
+      ['Replatform', 'replatform'],
+      ['Replace with supported product or SaaS', 'replace'],
+      ['Rebuild through controlled AI-assisted delivery', 'rebuild'],
+      ['Consolidate duplicate applications', 'optimize'],
+      ['Retire', 'retire'],
+      ['Insufficient evidence', 'insufficient_evidence'],
+      ['Blocked pending prerequisite', 'blocked'],
+    ]);
+    const translated = (await authority.query(
+      `SELECT recommendation, public.enterprise_translate_pr1g_modernization_disposition(recommendation) disposition
+       FROM unnest($1::text[]) recommendation`,
+      [[...expected.keys()]],
+    )).rows;
+    assert.deepEqual(new Map(translated.map(row => [row.recommendation, row.disposition])), expected);
+    await assert.rejects(
+      authority.query("SELECT public.enterprise_translate_pr1g_modernization_disposition('noncanonical')"),
+      /ENTERPRISE_MODERNIZATION_RECOMMENDATION_INVALID/,
+    );
+  });
+
+  await scenario('modernization commits only the actual latest assessment and serializes concurrent PR1G inserts', async () => {
+    const dimensions = [
+      'integration_accessibility', 'semantic_and_data_clarity', 'state_and_execution',
+      'security_and_control', 'architecture_changeability', 'ui_automation_readiness',
+      'ai_assisted_engineering_readiness',
+    ];
+    let sequence = 800;
+    const nextUuid = () => fixture.uuid(sequence++);
+    const createApplication = async label => {
+      const application = nextUuid();
+      const metadata = nextUuid();
+      await authority.query(`INSERT INTO public.assess_application_assets(
+        id,org_id,workspace_id,name,normalized_name,created_by
+      ) VALUES($1,$2,$3,$4,$5,$6)`,
+      [application, fixture.org, fixture.workspace, label, label.toLowerCase(), fixture.requester]);
+      await authority.query(`INSERT INTO public.assess_application_metadata_versions(
+        id,org_id,workspace_id,application_id,version,lifecycle,metadata,author_id
+      ) VALUES($1,$2,$3,$4,1,'approved','{}'::jsonb,$5)`,
+      [metadata, fixture.org, fixture.workspace, application, fixture.requester]);
+      return {application, metadata};
+    };
+    const addAssessment = async (entry, version, lifecycle, withDecisions = false, disposition = 'Retain and monitor', client = authority) => {
+      const assessment = nextUuid();
+      await client.query(`INSERT INTO public.assess_application_assessment_versions(
+        id,org_id,workspace_id,application_id,metadata_version_id,version,
+        decision_model_version,lifecycle,author_id,authorization_version
+      ) VALUES($1,$2,$3,$4,$5,$6,'assess-v2-application-portfolio-2026-07',$7,$8,1)`,
+      [assessment, fixture.org, fixture.workspace, entry.application, entry.metadata,
+        version, lifecycle, fixture.requester]);
+      if (withDecisions) {
+        await client.query(`INSERT INTO public.assess_application_dimension_results(
+          org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,dimension,
+          readiness_band,evidence_confidence,hard_gates,evidence_refs,missing_evidence,rationale,
+          contradictions,remediation_requirements,what_would_change
+        ) SELECT $1,$2,$3,$4,$5,dimension,'Ready','Verified','{}'::text[],'[]'::jsonb,
+          '{}'::text[],ARRAY['verified'],'{}'::text[],'{}'::text[],ARRAY['new evidence']
+          FROM unnest($6::text[]) dimension`,
+        [fixture.org, fixture.workspace, entry.application, entry.metadata, assessment, dimensions]);
+        await client.query(`INSERT INTO public.assess_application_modernization_recommendations(
+          org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,
+          migration_boundary,rollback_strategy,evidence_confidence
+        ) VALUES($1,$2,$3,$4,$5,$6,'governed boundary','retain current system','Verified')`,
+        [fixture.org, fixture.workspace, entry.application, entry.metadata, assessment, disposition]);
+      }
+      return {...entry, assessment, version, lifecycle};
+    };
+    const commitSource = async (source, label, receiptAware = false) => {
+      const modernizationAssessmentId = nextUuid();
+      const decisionId = nextUuid();
+      const assessmentPayload = {
+        id: modernizationAssessmentId, org_id: fixture.org, workspace_id: fixture.workspace,
+        application_ref: source.application, source_assessment_id: source.assessment,
+        source_assessment_version: source.version, source_metadata_version_id: source.metadata,
+        created_by: fixture.requester,
+      };
+      const decisionPayload = {id: decisionId, created_by: fixture.requester};
+      if (!receiptAware) {
+        return (await authority.query(
+          'SELECT public.enterprise_commit_modernization_assessment($1::jsonb,$2::jsonb) result',
+          [JSON.stringify(assessmentPayload), JSON.stringify(decisionPayload)],
+        )).rows[0].result;
+      }
+      const token = nextUuid();
+      const requestHash = fixture.hash('8');
+      const receipt = (await authority.query(
+        `SELECT (public.enterprise_ai_claim_command(
+          $1,$2,$3,'modernization.evaluate',$4,$5,$6,'modernization_decision',$7
+        )).*`,
+        [fixture.requester, fixture.org, fixture.workspace, `modernization-current-${label}`,
+          nextUuid(), requestHash, token],
+      )).rows[0];
+      const proposed = {
+        resourceId: decisionId, modernizationAssessmentId, decisionId,
+        decision: {
+          assessmentId: source.assessment, assessmentVersion: String(source.version),
+          modelVersion: 'modernization-disposition-1', primaryDisposition: 'optimize',
+          eligibleDispositions: ['optimize'], blockers: [], conflicts: [], factorBands: {},
+          requiresHumanApproval: true, aiRationaleStatus: 'not_requested',
+        },
+      };
+      const result = (await authority.query(
+        `SELECT public.enterprise_commit_modernization_assessment(
+          $1::jsonb,$2::jsonb,$3,$4,$5,$6::jsonb
+        ) result`,
+        [JSON.stringify(assessmentPayload), JSON.stringify(decisionPayload), receipt.id,
+          token, receipt.execution_fence, JSON.stringify(proposed)],
+      )).rows[0].result;
+      const reconciled = (await authority.query(
+        'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+        [receipt.id, fixture.org, fixture.workspace],
+      )).rows[0];
+      assert.deepEqual([reconciled.status, reconciled.response], ['committed', result]);
+      const exactReplay = (await authority.query(
+        `SELECT (public.enterprise_ai_claim_command(
+          $1,$2,$3,'modernization.evaluate',$4,$5,$6,'modernization_decision',$7
+        )).*`,
+        [fixture.requester, fixture.org, fixture.workspace, `modernization-current-${label}`,
+          nextUuid(), requestHash, nextUuid()],
+      )).rows[0];
+      assert.deepEqual([exactReplay.status, exactReplay.response], ['committed', result]);
+      assert.equal(Number((await authority.query(
+        "SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1 AND effect_key='command'",
+        [receipt.id],
+      )).rows[0].n), 1);
+      return result;
+    };
+
+    const approvedOnly = await addAssessment(await createApplication('Modernization approved only'), 1, 'approved', true);
+    const approvedResult = await commitSource(approvedOnly, 'approved-only', true);
+    assert.equal(approvedResult.decision.primaryDisposition, 'retain');
+
+    for (const lifecycle of ['draft', 'reviewer_ready', 'rejected', 'superseded']) {
+      const source = await addAssessment(await createApplication(`Modernization newer ${lifecycle}`), 1, 'approved', true);
+      await addAssessment(source, 2, lifecycle);
+      await assert.rejects(commitSource(source, `newer-${lifecycle}`), /ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT/);
+      assert.equal(Number((await authority.query(
+        'SELECT count(*)::int n FROM public.enterprise_modernization_assessments WHERE application_ref=$1',
+        [source.application],
+      )).rows[0].n), 0);
+    }
+
+    const latestV2Base = await addAssessment(await createApplication('Modernization latest approved V2'), 1, 'approved');
+    const latestV2 = await addAssessment(latestV2Base, 2, 'approved', true, 'Add API façade and semantic translation');
+    const latestV2Result = await commitSource(latestV2, 'latest-v2');
+    assert.equal(latestV2Result.primaryDisposition, 'api_enable_wrap');
+
+    const unknown = await addAssessment(await createApplication('Modernization unknown recommendation'), 1, 'approved', true, 'unknown recommendation');
+    await assert.rejects(commitSource(unknown, 'unknown'), /ENTERPRISE_MODERNIZATION_RECOMMENDATION_INVALID/);
+    assert.equal(Number((await authority.query(
+      'SELECT count(*)::int n FROM public.enterprise_modernization_assessments WHERE application_ref=$1',
+      [unknown.application],
+    )).rows[0].n), 0);
+
+    const concurrentSource = await addAssessment(await createApplication('Modernization concurrent assessment'), 1, 'approved', true);
+    const contender = await connect(urlFor(names.authority));
+    let transactionOpen = false;
+    let pending;
+    try {
+      await contender.query('BEGIN');
+      transactionOpen = true;
+      await addAssessment(concurrentSource, 2, 'draft', false, 'Retain and monitor', contender);
+      let settled = false;
+      pending = commitSource(concurrentSource, 'concurrent').finally(() => { settled = true; });
+      await new Promise(resolve => setTimeout(resolve, 75));
+      assert.equal(settled, false, 'modernization must wait behind the current-assessment insert lock');
+      await contender.query('COMMIT');
+      transactionOpen = false;
+      await assert.rejects(pending, /ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT/);
+    } finally {
+      if (transactionOpen) await contender.query('ROLLBACK');
+    }
+    assert.equal(Number((await authority.query(
+      'SELECT count(*)::int n FROM public.enterprise_modernization_assessments WHERE application_ref=$1',
+      [concurrentSource.application],
+    )).rows[0].n), 0);
+    const finalClaimed = Number((await authority.query(
+      "SELECT count(*)::int n FROM public.enterprise_ai_command_receipts WHERE status='claimed'",
+    )).rows[0].n);
+    assert.equal(finalClaimed, 0);
+    console.log(`MODERNIZATION CURRENT-ASSESSMENT ${JSON.stringify({
+      approvedV1:'succeeded', newerDraft:'rejected', newerReviewerReady:'rejected',
+      newerRejected:'rejected', newerSuperseded:'rejected', latestApprovedV2:'succeeded',
+      concurrentStaleLosers:1, obsoleteDecisions:0, replayAdditionalEffects:0, finalClaimed,
+    })}`);
+  });
+
   await scenario('Modernization ancestry derives a governed decision and Assemble remains draft-only until approval', async () => {
     const application = fixture.uuid(360); const metadata = fixture.uuid(361); const sourceAssessment = fixture.uuid(362);
     await authority.query(`INSERT INTO public.assess_application_assets(id,org_id,workspace_id,name,normalized_name,created_by)
@@ -1644,14 +1839,14 @@ try {
     await authority.query(`INSERT INTO public.assess_application_modernization_recommendations(
       org_id,workspace_id,application_id,metadata_version_id,assessment_version_id,disposition,
       migration_boundary,rollback_strategy,evidence_confidence)
-      VALUES($1,$2,$3,$4,$5,'assemble','draft-only boundary','retain current system','Verified')`,
+      VALUES($1,$2,$3,$4,$5,'Rebuild through controlled AI-assisted delivery','draft-only boundary','retain current system','Verified')`,
     [fixture.org, fixture.workspace, application, metadata, sourceAssessment]);
     const enterpriseAssessment = fixture.uuid(363); const decision = fixture.uuid(364);
     const committed = (await authority.query('SELECT public.enterprise_commit_modernization_assessment($1::jsonb,$2::jsonb) result', [
       JSON.stringify({id: enterpriseAssessment, org_id: fixture.org, workspace_id: fixture.workspace, application_ref: application, source_assessment_id: sourceAssessment, source_metadata_version_id: metadata, created_by: fixture.requester}),
       JSON.stringify({id: decision, created_by: fixture.requester}),
     ])).rows[0].result;
-    assert.equal(committed.primaryDisposition, 'assemble');
+    assert.equal(committed.primaryDisposition, 'rebuild');
     assert.match(committed.resourceHash, /^[0-9a-f]{64}$/);
     const reviewerVersion = Number((await authority.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.reviewer])).rows[0].version);
     const decisionReview = fixture.uuid(365);

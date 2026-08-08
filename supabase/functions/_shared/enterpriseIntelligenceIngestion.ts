@@ -7,6 +7,7 @@ export const MAX_EVIDENCE_BYTES = 12_000_000;
 export const MAX_EXTRACTED_EVIDENCE_CHARACTERS = 500_000;
 const MAX_DOCX_ENTRIES = 2_000;
 const MAX_DOCX_ENTRY_BYTES = 20_000_000;
+const MAX_DOCX_TOTAL_EXPANDED_BYTES = 20_000_000;
 const MAX_PDF_STREAM_BYTES = 20_000_000;
 
 export type EvidenceExtractionFailureCode = 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE';
@@ -68,13 +69,55 @@ const extractPdfFragments = (raw: string) => {
   return fragments;
 };
 
+export const readBoundedStream = async (
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  limitError: 'PDF_STREAM_TOO_LARGE' | 'DOCX_ENTRY_TOO_LARGE',
+) => {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let completed = false;
+  let cancelled = false;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) {
+        completed = true;
+        break;
+      }
+      const chunk = next.value;
+      if (chunk.byteLength > maxBytes - totalBytes) {
+        cancelled = true;
+        try { await reader.cancel(limitError); } catch { /* preserve the stable size error */ }
+        throw new Error(limitError);
+      }
+      totalBytes += chunk.byteLength;
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    if (!completed && !cancelled) {
+      try { await reader.cancel(error); } catch { /* the original parser error remains authoritative */ }
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bounded = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bounded.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bounded;
+};
+
 const inflatePdfStream = async (bytes: Uint8Array) => {
   if (bytes.byteLength > MAX_PDF_STREAM_BYTES) throw new Error('PDF_STREAM_TOO_LARGE');
   if (typeof DecompressionStream === 'undefined') throw new Error('PDF_DECOMPRESSION_UNAVAILABLE');
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
-  const inflated = new Uint8Array(await new Response(stream).arrayBuffer());
-  if (inflated.byteLength > MAX_PDF_STREAM_BYTES) throw new Error('PDF_STREAM_TOO_LARGE');
-  return inflated;
+  return readBoundedStream(stream, MAX_PDF_STREAM_BYTES, 'PDF_STREAM_TOO_LARGE');
 };
 
 const extractPdfText = async (bytes: Uint8Array) => {
@@ -102,19 +145,18 @@ const extractPdfText = async (bytes: Uint8Array) => {
 const readUInt32 = (view: DataView, offset: number) => view.getUint32(offset, true);
 const readUInt16 = (view: DataView, offset: number) => view.getUint16(offset, true);
 
-const inflateRaw = async (bytes: Uint8Array) => {
+const inflateRaw = async (bytes: Uint8Array, maxExpandedBytes: number) => {
   if (bytes.byteLength > MAX_DOCX_ENTRY_BYTES) throw new Error('DOCX_ENTRY_TOO_LARGE');
   if (typeof DecompressionStream === 'undefined') throw new Error('DOCX_DECOMPRESSION_UNAVAILABLE');
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  const inflated = new Uint8Array(await new Response(stream).arrayBuffer());
-  if (inflated.byteLength > MAX_DOCX_ENTRY_BYTES) throw new Error('DOCX_ENTRY_TOO_LARGE');
-  return inflated;
+  return readBoundedStream(stream, Math.min(MAX_DOCX_ENTRY_BYTES, maxExpandedBytes), 'DOCX_ENTRY_TOO_LARGE');
 };
 
 const extractDocxXml = async (bytes: Uint8Array) => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let centralDirectoryOffset = -1;
   let entryCount = 0;
+  let totalExpandedBytes = 0;
   for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65_557); offset -= 1) {
     if (readUInt32(view, offset) === 0x06054b50) {
       entryCount = readUInt16(view, offset + 10);
@@ -152,8 +194,16 @@ const extractDocxXml = async (bytes: Uint8Array) => {
       const contentStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
       if (contentStart < 0 || contentStart + compressedSize > bytes.length) throw new Error('DOCX_ZIP_ENTRY_INVALID');
       const compressed = bytes.slice(contentStart, contentStart + compressedSize);
-      const content = method === 0 ? compressed : method === 8 ? await inflateRaw(compressed) : null;
+      const remainingExpandedBytes = MAX_DOCX_TOTAL_EXPANDED_BYTES - totalExpandedBytes;
+      if (remainingExpandedBytes < 0) throw new Error('DOCX_ENTRY_TOO_LARGE');
+      const content = method === 0
+        ? compressed
+        : method === 8
+          ? await inflateRaw(compressed, remainingExpandedBytes)
+          : null;
       if (!content) throw new Error('DOCX_COMPRESSION_UNSUPPORTED');
+      if (content.byteLength > remainingExpandedBytes) throw new Error('DOCX_ENTRY_TOO_LARGE');
+      totalExpandedBytes += content.byteLength;
       return new TextDecoder().decode(content);
     }
     offset += 46 + nameLength + extraLength + commentLength;
