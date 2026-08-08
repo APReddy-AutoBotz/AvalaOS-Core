@@ -45,5 +45,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npx vite build --config vite.trust-assurance.config.ts
-        env: {VITE_RUNTIME_MODE: automated_test}
+        env: {VITE_AVALA_RUNTIME_MODE: pilot}
       - run: npx playwright test --config=playwright.trust-assurance.config.ts

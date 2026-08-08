@@ -16,8 +16,8 @@ The candidate adds deterministic proof/freshness/hash/publication law, strict in
 | Typed command/authority | executed evidence | `node scripts/runEdgeTypeScriptTest.mjs …trustAssuranceCommand.test.ts`: command suite passed |
 | Boundary/migration scan | executed evidence | migration contract: 11 governed tables; boundary scan passed |
 | Typecheck/default regression/build/static security/audit | executed evidence | `npm run typecheck`, `npm run typecheck:edge`, `npm test`, `npm run build`, AI-boundary, secret-hygiene, audit, and diff checks passed; build emitted only the retained Browserslist-age warning |
-| Disposable PostgreSQL 16 | blocked / not run locally | `psql` is unavailable; dedicated GitHub Actions service job is final authority |
-| Chromium desktop/Pixel 7/accessibility | blocked / not run locally | Required browser libraries unavailable; do not install OS packages. GitHub Actions final authority |
+| Disposable PostgreSQL 16 | executed evidence | 28/28 scenarios passed against a loopback-only disposable PostgreSQL 16 container; the configured non-loopback `DATABASE_URL` was not used |
+| Chromium Desktop Chrome/Pixel 7 | executed evidence | dedicated canonical-pilot Trust harness passed 6/6, including real journey, revoked/version conflict, read-only, and horizontal-overflow assertions |
 | Hosted/live Supabase, deployment, Storage, providers | not run | Explicitly outside authority |
 
 ## Failure modes and rollback
@@ -38,7 +38,7 @@ The pre-correction audit found the same browser-authority defect family across c
 
 The correction removes canonical/resource/snapshot hashes from accepted payloads, strictly decodes every operation, derives hashes/selections/review targets in PostgreSQL, re-resolves current evidence at publication, serializes receipt claims with an advisory transaction lock, exposes private fresh-authority internal and buyer projections, connects the Admin surface through strict clients, and replaces the static browser test with a real React/client harness. Deterministic pre-effect failures roll back and do not persist receipts; this is safe because no canonical effect occurred, current authority is rechecked before every attempt/replay, and a committed receipt remains the only replay authority.
 
-The disposable PostgreSQL harness now bootstraps roles plus `auth.users`/`auth.uid()`, creates and cleans five databases, and covers the full chain, accepted-main upgrade, populated upgrade, dirty rollback, executable Trust authority, server hashes, exact reviews, publication, replay/conflict, revocation/staleness, buyer projection, and audit rollback. Local PostgreSQL and Chromium remain blocked/not run; GitHub Actions is execution authority.
+The disposable PostgreSQL harness now bootstraps roles plus `auth.users`/`auth.uid()`, creates and cleans five databases, and covers the full chain, accepted-main upgrade, populated upgrade, dirty rollback, executable Trust authority, server hashes, exact reviews, publication, replay/conflict, revocation/staleness, buyer projection, and audit rollback. Local PostgreSQL 16 passed 28/28 and the dedicated local Chromium matrix passed 6/6; exact-head GitHub Actions remains publication authority.
 
 ## Exact-head focused correction
 
@@ -47,3 +47,11 @@ Snapshot withdrawal now locks the exact published tenant/workspace snapshot and 
 The Trust browser spec and harness moved to `tests/trust-assurance/browser/`, outside the retained default Playwright `tests/browser` directory. Its dedicated configuration uses a prebuilt feature harness, `vite preview` on fixed loopback port `4417`, a 180-second server timeout, CI-safe server reuse, and Desktop Chrome plus Pixel 7 projects.
 
 **DEFERRED POST-#221 CONVERGENCE:** the accepted Studio PR #217 checker assumes its migration is the chronological repository tip, which the later Trust migration invalidates; the old-main dependency tree also retains the moderate `dompurify` advisory. Shared Studio/package files are collision-controlled and were not weakened or edited. The Trust migration timestamp collision also remains deferred until PR #221 is merged and the final migration maximum is known.
+
+## Runtime, authenticated transport, and participant authority closure
+
+Trust Center now consumes the single canonical `getRuntimeModeResolution()` authority. The feature workflow/config uses `VITE_AVALA_RUNTIME_MODE=pilot`, obsolete Trust-owned `VITE_RUNTIME_MODE` usage is rejected by the boundary scan, and the browser harness mounts `TrustCenterPanel` with component-layer injected transport. This proves the canonical pilot route selects the governed connected Hub without requiring live Supabase.
+
+Both browser query and command defaults use the configured canonical Supabase client's authenticated `functions.invoke` transport. Query is a strict POST contract containing only organization, workspace, authorization version, and the exact `internal|buyer` view. The client recovers bounded Trust envelopes from Supabase HTTP error contexts, strictly decodes success, preserves `AUTHORIZATION_STALE`, `VERSION_CONFLICT`, `IDEMPOTENCY_CONFLICT`, `REVIEW_REQUIRED`, `PUBLICATION_BLOCKED`, `ACCESS_DENIED`, and buyer `NO_PUBLICATION`, and converts malformed/unavailable transport to `PERSISTENCE_UNAVAILABLE`. No relative fetch, caller bearer, localStorage token read, second Supabase client, or hard-coded URL exists.
+
+Publication now calls one private Trust helper for each stored creator and reviewer inside the publishing transaction. The helper follows PR1B authority semantics exactly and share-locks active/non-deleted profile, exact organization membership, exact workspace membership, organization, and workspace rows. It grants no capability and does not mutate authorization state; publisher capability/version remain independently fenced. Six independent profile/membership revocations rejected with zero Trust effects, restoration yielded one exact publication, and a deterministic transaction-lock race proved revocation prevents buyer exposure. Resource and snapshot review continue to fresh-authorize the current reviewer; withdrawal intentionally does not revalidate historical participants.

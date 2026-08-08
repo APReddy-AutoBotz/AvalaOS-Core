@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('real bounded Trust journey', async ({ page }) => {
+test('canonical pilot runtime mounts the governed real journey', async ({ page }) => {
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html');
   await expect(page.getByRole('heading', { name: 'Trust and Assurance Evidence Hub', exact: true })).toBeVisible();
   const views = page.getByRole('navigation', { name: 'Trust Assurance views', exact: true });

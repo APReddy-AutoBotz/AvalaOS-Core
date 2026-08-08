@@ -12,7 +12,7 @@ import {
   groupClaimControlsByDomain,
   summarizeProofStatuses,
 } from '../../services/trustCenterPresentation';
-import { resolveRuntimeMode } from '../../services/runtimeMode';
+import { getRuntimeModeResolution } from '../../services/supabaseClient';
 import { TrustAssuranceWorkspace } from './trust-assurance/TrustAssuranceWorkspace';
 import { TrustAssuranceConnectedWorkspace } from './trust-assurance/TrustAssuranceConnectedWorkspace';
 
@@ -52,14 +52,16 @@ const BoundaryPill: React.FC<{ boundary: Parameters<typeof getProofBoundaryLabel
   </span>
 );
 
-const TrustCenterPanel: React.FC = () => {
-  const runtime = resolveRuntimeMode({ configuredMode: import.meta.env.VITE_RUNTIME_MODE, isAutomatedTestContext: import.meta.env.MODE === 'test' });
+const TrustCenterPanel: React.FC<{ connectedWorkspace?: React.ReactNode }> = ({ connectedWorkspace }) => {
+  const runtime = getRuntimeModeResolution();
   const snapshot = useMemo(() => buildCurrentTrustCenterSnapshot(), []);
   const statusSummary = useMemo(() => summarizeProofStatuses(snapshot), [snapshot]);
   const claimGroups = useMemo(() => groupClaimControlsByDomain(snapshot), [snapshot]);
   const blockedClaims = useMemo(() => getEvidenceRequiredOrBlockedClaims(snapshot), [snapshot]);
   if (runtime.status === 'blocked' || runtime.requiresServerAuthority) {
-    return runtime.status === 'blocked' ? <TrustAssuranceWorkspace state={{ kind: 'blocked' }} /> : <TrustAssuranceConnectedWorkspace />;
+    return runtime.status === 'blocked'
+      ? <TrustAssuranceWorkspace state={{ kind: 'blocked' }} />
+      : <>{connectedWorkspace ?? <TrustAssuranceConnectedWorkspace />}</>;
   }
 
   return (
