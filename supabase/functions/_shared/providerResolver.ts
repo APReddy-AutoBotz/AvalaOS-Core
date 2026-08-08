@@ -5,12 +5,25 @@ import {
   buildProviderResolverAuditEventShell,
 } from './providerResolverAudit.ts';
 
+export type EnterpriseProviderResolverProvider =
+  | 'openai'
+  | 'azure_openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'openai_compatible';
 export type ProviderResolverProvider = 'gemini' | 'groq';
+export type ProviderResolverSupportedProvider = ProviderResolverProvider | EnterpriseProviderResolverProvider;
 export type ProviderResolverMode = 'pilot' | 'production';
 export type ProviderResolverOperation =
   | 'generate_document'
   | 'refine_section'
-  | 'test_provider_connection';
+  | 'test_provider_connection'
+  | 'assess.evidence.extract'
+  | 'assess.evidence.summarize'
+  | 'delivery.work_items.draft'
+  | 'modernization.rationale.draft'
+  | 'assemble.blueprint.draft'
+  | 'studio.document.generate';
 
 export type ProviderResolverFailureClass =
   | 'mode_not_allowed'
@@ -24,9 +37,19 @@ export type ProviderResolverFailureClass =
   | 'provider_policy_ambiguous'
   | 'provider_config_missing'
   | 'provider_config_ineligible'
+  | 'provider_disabled'
+  | 'provider_revoked'
+  | 'provider_unvalidated'
+  | 'provider_validation_stale'
+  | 'provider_unavailable'
   | 'key_reference_missing'
   | 'key_reference_ineligible'
   | 'secret_reference_unsafe'
+  | 'route_missing'
+  | 'route_disabled'
+  | 'model_not_allowed'
+  | 'budget_exhausted'
+  | 'wrong_tenant'
   | 'audit_context_unsafe'
   | 'scanner_classification_missing'
   | 'provider_call_blocked';
@@ -90,6 +113,12 @@ export type ProviderConfigRow = {
   allowed_modes: string[];
   allowed_operations: string[];
   status: string;
+  endpoint_url?: string | null;
+  deployment_name?: string | null;
+  default_model?: string | null;
+  model_allowlist?: string[] | null;
+  budget_policy?: Record<string, unknown> | null;
+  last_validated_at?: string | null;
   deleted_at?: string | null;
 };
 
@@ -118,7 +147,7 @@ export type ConfigLookupInput = {
 
 export type KeyRefLookupInput = {
   orgId: string;
-  provider: ProviderResolverProvider;
+  provider: ProviderResolverSupportedProvider;
   keyRefId: string;
 };
 
@@ -146,7 +175,21 @@ export type AllowedProviderResolverDecision = {
   correlationId: string;
   evidenceRef?: string;
   policyResult: 'allowed';
+  capability?: ProviderResolverOperation;
+  model?: string;
+  endpoint?: string;
+  deployment?: string;
   auditEvent: ProviderResolverAuditEventShell;
+};
+
+export type AllowedEnterpriseProviderResolverDecision = Omit<
+  AllowedProviderResolverDecision,
+  'provider' | 'operation' | 'capability'
+> & {
+  provider: EnterpriseProviderResolverProvider;
+  routeId: string;
+  operation: ProviderResolverOperation;
+  capability: ProviderResolverOperation;
 };
 
 export type BlockedProviderResolverDecision = {
@@ -155,7 +198,7 @@ export type BlockedProviderResolverDecision = {
   failureClass: ProviderResolverFailureClass;
   safeUiMessageCategory: ProviderResolverSafeUiCategory;
   retryCategory: ProviderResolverRetryCategory;
-  provider?: ProviderResolverProvider;
+  provider?: ProviderResolverSupportedProvider;
   providerConfigId?: string;
   keyRefId?: string;
   operation?: ProviderResolverOperation;
@@ -169,7 +212,9 @@ export type BlockedProviderResolverDecision = {
   auditEvent: ProviderResolverAuditEventShell;
 };
 
-export type ProviderResolverDecision = AllowedProviderResolverDecision | BlockedProviderResolverDecision;
+export type ProviderResolverDecision = AllowedProviderResolverDecision | AllowedEnterpriseProviderResolverDecision | BlockedProviderResolverDecision;
+export type LegacyProviderResolverDecision = AllowedProviderResolverDecision | BlockedProviderResolverDecision;
+export type EnterpriseProviderResolverDecision = AllowedEnterpriseProviderResolverDecision | BlockedProviderResolverDecision;
 
 const providers: ProviderResolverProvider[] = ['gemini', 'groq'];
 const modes: ProviderResolverMode[] = ['pilot', 'production'];
@@ -177,14 +222,38 @@ const operations: ProviderResolverOperation[] = [
   'generate_document',
   'refine_section',
   'test_provider_connection',
+  'assess.evidence.extract',
+  'assess.evidence.summarize',
+  'delivery.work_items.draft',
+  'modernization.rationale.draft',
+  'assemble.blueprint.draft',
+  'studio.document.generate',
 ];
 
 const normalizeString = (value?: string | null) => value?.trim() || undefined;
+
+export const validateEnterpriseExactRouteModel = (input: {
+  plannedModel?: string | null;
+  currentRouteModel?: string | null;
+  modelAllowlist: string[];
+}) => {
+  const plannedModel = normalizeString(input.plannedModel);
+  const currentRouteModel = normalizeString(input.currentRouteModel);
+  if (!currentRouteModel || (plannedModel && plannedModel !== currentRouteModel)) return undefined;
+  return input.modelAllowlist.includes(currentRouteModel) ? currentRouteModel : undefined;
+};
 
 const normalizeProvider = (value?: string | null): ProviderResolverProvider | undefined => {
   const normalized = normalizeString(value)?.toLowerCase();
   return providers.includes(normalized as ProviderResolverProvider)
     ? normalized as ProviderResolverProvider
+    : undefined;
+};
+
+const normalizeEnterpriseProvider = (value?: string | null): EnterpriseProviderResolverProvider | undefined => {
+  const normalized = normalizeString(value)?.toLowerCase();
+  return enterpriseProviders.has(normalized as EnterpriseProviderResolverProvider)
+    ? normalized as EnterpriseProviderResolverProvider
     : undefined;
 };
 
@@ -221,9 +290,19 @@ const failureUiCategory: Record<ProviderResolverFailureClass, ProviderResolverSa
   provider_policy_ambiguous: 'provider_controls_required',
   provider_config_missing: 'provider_controls_required',
   provider_config_ineligible: 'provider_controls_required',
+  provider_disabled: 'provider_controls_required',
+  provider_revoked: 'provider_controls_required',
+  provider_unvalidated: 'provider_controls_required',
+  provider_validation_stale: 'provider_controls_required',
+  provider_unavailable: 'provider_controls_required',
   key_reference_missing: 'provider_controls_required',
   key_reference_ineligible: 'provider_controls_required',
   secret_reference_unsafe: 'provider_controls_required',
+  route_missing: 'provider_controls_required',
+  route_disabled: 'provider_controls_required',
+  model_not_allowed: 'provider_controls_required',
+  budget_exhausted: 'provider_controls_required',
+  wrong_tenant: 'authorization_required',
   audit_context_unsafe: 'audit_controls_required',
   scanner_classification_missing: 'implementation_control_required',
   provider_call_blocked: 'provider_controls_required',
@@ -241,9 +320,19 @@ const failureRetryCategory: Record<ProviderResolverFailureClass, ProviderResolve
   provider_policy_ambiguous: 'retry_after_configuration_change',
   provider_config_missing: 'retry_after_configuration_change',
   provider_config_ineligible: 'retry_after_configuration_change',
+  provider_disabled: 'retry_after_configuration_change',
+  provider_revoked: 'do_not_retry',
+  provider_unvalidated: 'retry_after_configuration_change',
+  provider_validation_stale: 'retry_after_configuration_change',
+  provider_unavailable: 'retry_after_configuration_change',
   key_reference_missing: 'retry_after_configuration_change',
   key_reference_ineligible: 'retry_after_configuration_change',
   secret_reference_unsafe: 'retry_after_configuration_change',
+  route_missing: 'retry_after_configuration_change',
+  route_disabled: 'retry_after_configuration_change',
+  model_not_allowed: 'retry_after_configuration_change',
+  budget_exhausted: 'retry_after_configuration_change',
+  wrong_tenant: 'retry_after_access_change',
   audit_context_unsafe: 'retry_after_configuration_change',
   scanner_classification_missing: 'do_not_retry',
   provider_call_blocked: 'retry_after_configuration_change',
@@ -252,7 +341,7 @@ const failureRetryCategory: Record<ProviderResolverFailureClass, ProviderResolve
 const buildBlockedDecision = (input: {
   failureClass: ProviderResolverFailureClass;
   correlationId: string;
-  provider?: ProviderResolverProvider;
+  provider?: ProviderResolverSupportedProvider;
   providerConfigId?: string;
   keyRefId?: string;
   operation?: ProviderResolverOperation;
@@ -328,7 +417,7 @@ const isPolicyActiveForRequest = (
 const isConfigEligible = (
   config: ProviderConfigRow,
   orgId: string,
-  provider: ProviderResolverProvider,
+  provider: ProviderResolverSupportedProvider,
   operation: ProviderResolverOperation,
   mode: ProviderResolverMode,
 ) =>
@@ -345,7 +434,7 @@ const isExpired = (expiresAt: string | null | undefined, now: Date) =>
 const classifyKeyRefFailure = (
   keyRef: ProviderKeyRefRow,
   orgId: string,
-  provider: ProviderResolverProvider,
+  provider: ProviderResolverSupportedProvider,
   now: Date,
 ): ProviderResolverFailureClass | null => {
   if (
@@ -370,7 +459,7 @@ const classifyKeyRefFailure = (
 export const resolveProviderForOperation = async (
   input: ProviderResolverInput,
   deps: ProviderResolverDeps,
-): Promise<ProviderResolverDecision> => {
+): Promise<LegacyProviderResolverDecision> => {
   const correlationId = resolveCorrelationId(input, deps);
   const evidenceRef = normalizeString(input.evidenceRef);
   const workspaceId = normalizeString(input.workspaceId);
@@ -524,5 +613,262 @@ export const resolveProviderForOperation = async (
       });
     }
     throw error;
+  }
+};
+
+export const ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export type EnterpriseProviderRouteRow = {
+  id: string;
+  org_id: string;
+  workspace_id: string;
+  provider_config_id: string;
+  capability: ProviderResolverOperation;
+  model: string;
+  enabled: boolean;
+  allowed_roles: string[];
+  deleted_at?: string | null;
+};
+
+export type EnterpriseProviderUsage = {
+  dailyRequests: number;
+  monthlyTokens: number;
+};
+
+export type EnterpriseProviderRouteResolverDeps = {
+  now: () => Date;
+  createCorrelationId: () => string;
+  queryRoutes: (input: {
+    orgId: string;
+    workspaceId: string;
+    capability: ProviderResolverOperation;
+    requestedProviderConfigId?: string;
+    requestedRouteId?: string;
+    includeDisabled: boolean;
+  }) => Promise<EnterpriseProviderRouteRow[]>;
+  queryProviderConfig: (input: ConfigLookupInput) => Promise<ProviderConfigRow | null>;
+  queryProviderKeyRef: (input: KeyRefLookupInput) => Promise<ProviderKeyRefRow | null>;
+  queryUsage: (input: {
+    orgId: string;
+    workspaceId: string;
+    providerConfigId: string;
+    now: Date;
+  }) => Promise<EnterpriseProviderUsage>;
+  isEndpointAllowed: (provider: EnterpriseProviderResolverProvider, endpoint: string) => boolean;
+};
+
+export type EnterpriseProviderRouteResolverInput = {
+  mode: ProviderResolverMode;
+  capability: ProviderResolverOperation;
+  organizationId: string;
+  workspaceId: string;
+  actorId: string;
+  roleNames: string[];
+  roleIds?: string[];
+  requestedProviderConfigId?: string;
+  requestedRouteId?: string;
+  requestedModel?: string;
+  includeDisabled?: boolean;
+  proposedAllowedRoles?: string[];
+  /**
+   * Lifecycle-only policy administration. The caller must first prove
+   * `byok.manage` and validate every proposed role against server-owned scope.
+   * Runtime callers must never set this flag.
+   */
+  policyManagementAuthorized?: true;
+  correlationId?: string;
+  evidenceRef?: string;
+  scannerReference: string;
+};
+
+const enterpriseProviders = new Set<EnterpriseProviderResolverProvider>([
+  'openai',
+  'azure_openai',
+  'anthropic',
+  'gemini',
+  'openai_compatible',
+]);
+
+const classifyEnterpriseConfig = (
+  config: ProviderConfigRow,
+  input: EnterpriseProviderRouteResolverInput,
+  now: Date,
+): ProviderResolverFailureClass | null => {
+  if (config.org_id !== input.organizationId) return 'wrong_tenant';
+  if (config.deleted_at || config.status === 'retired' || config.status === 'revoked') return 'provider_revoked';
+  if (config.status === 'disabled') return 'provider_disabled';
+  if (config.status !== 'active') return 'provider_config_ineligible';
+  if (!enterpriseProviders.has(config.provider as EnterpriseProviderResolverProvider)) return 'provider_not_supported';
+  if (!config.last_validated_at) return 'provider_unvalidated';
+  const validatedAt = new Date(config.last_validated_at).getTime();
+  if (!Number.isFinite(validatedAt) || validatedAt > now.getTime() || now.getTime() - validatedAt > ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS) {
+    return 'provider_validation_stale';
+  }
+  return null;
+};
+
+const configuredBudget = (config: ProviderConfigRow) => {
+  const policy = config.budget_policy || {};
+  const readLimit = (key: 'dailyRequests' | 'monthlyTokens') => {
+    const value = policy[key];
+    return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : undefined;
+  };
+  return { dailyRequests: readLimit('dailyRequests'), monthlyTokens: readLimit('monthlyTokens') };
+};
+
+/**
+ * Canonical Enterprise Intelligence route authority. It intentionally returns
+ * no secret reference or key material; the secret adapter re-loads the exact
+ * tenant/provider-bound key reference only after this decision is allowed.
+ */
+export const resolveEnterpriseProviderRoute = async (
+  input: EnterpriseProviderRouteResolverInput,
+  deps: EnterpriseProviderRouteResolverDeps,
+): Promise<EnterpriseProviderResolverDecision> => {
+  const correlationId = normalizeString(input.correlationId) || deps.createCorrelationId();
+  const orgId = normalizeString(input.organizationId);
+  const workspaceId = normalizeString(input.workspaceId);
+  const actorId = normalizeString(input.actorId);
+  const capability = normalizeOperation(input.capability);
+  const requestedProviderConfigId = normalizeString(input.requestedProviderConfigId);
+  const requestedRouteId = normalizeString(input.requestedRouteId);
+  const requestedModel = normalizeString(input.requestedModel);
+  const block = (
+    failureClass: ProviderResolverFailureClass,
+    extra: { provider?: ProviderResolverSupportedProvider; providerConfigId?: string; keyRefId?: string } = {},
+  ) => buildBlockedDecision({
+    failureClass,
+    correlationId,
+    provider: extra.provider,
+    providerConfigId: extra.providerConfigId,
+    keyRefId: extra.keyRefId,
+    operation: capability,
+    mode: input.mode,
+    orgId,
+    workspaceId,
+    actorId,
+    evidenceRef: normalizeString(input.evidenceRef),
+  });
+
+  if (!orgId || !workspaceId || !actorId) return block('wrong_tenant');
+  if (!capability || !capability.includes('.')) return block('operation_not_allowed');
+  if (!input.scannerReference?.trim()) return block('scanner_classification_missing');
+
+  try {
+    const routes = await deps.queryRoutes({
+      orgId,
+      workspaceId,
+      capability,
+      requestedProviderConfigId,
+      requestedRouteId,
+      includeDisabled: input.includeDisabled === true,
+    });
+    if (routes.length === 0) return block('route_missing');
+    if (routes.length > 1) return block('provider_policy_ambiguous');
+    const route = routes[0];
+    if (route.org_id !== orgId || route.workspace_id !== workspaceId) return block('wrong_tenant');
+    if (route.deleted_at || (!route.enabled && input.includeDisabled !== true)) {
+      return block('route_disabled', { providerConfigId: route.provider_config_id });
+    }
+
+    const normalizedRoles = new Set([...input.roleNames, ...(input.roleIds || [])].map(role => role.trim().toLowerCase()).filter(Boolean));
+    const allowedRoles = (
+      input.includeDisabled && input.proposedAllowedRoles
+        ? input.proposedAllowedRoles
+        : route.allowed_roles || []
+    ).map(role => role.trim().toLowerCase()).filter(Boolean);
+    if (
+      input.policyManagementAuthorized !== true
+      && (allowedRoles.length === 0 || !allowedRoles.some(role => normalizedRoles.has(role)))
+    ) {
+      return block('role_not_allowed', { providerConfigId: route.provider_config_id });
+    }
+
+    const config = await deps.queryProviderConfig({ orgId, providerConfigId: route.provider_config_id });
+    if (!config) return block('provider_config_missing', { providerConfigId: route.provider_config_id });
+    const provider = normalizeEnterpriseProvider(config.provider);
+    const configFailure = classifyEnterpriseConfig(config, input, deps.now());
+    if (!provider || configFailure) {
+      return block(configFailure || 'provider_not_supported', {
+        provider,
+        providerConfigId: config.id,
+      });
+    }
+
+    const endpoint = config.endpoint_url?.trim();
+    if ((provider === 'azure_openai' || provider === 'openai_compatible') && !endpoint) {
+      return block('provider_config_ineligible', { provider, providerConfigId: config.id });
+    }
+    if (endpoint && !deps.isEndpointAllowed(provider as EnterpriseProviderResolverProvider, endpoint)) {
+      return block('provider_config_ineligible', { provider, providerConfigId: config.id });
+    }
+    const model = validateEnterpriseExactRouteModel({
+      plannedModel: requestedModel,
+      currentRouteModel: route.model,
+      modelAllowlist: config.model_allowlist || [],
+    });
+    if (!model) {
+      return block('model_not_allowed', { provider, providerConfigId: config.id });
+    }
+    if (!config.key_ref_id) return block('key_reference_missing', { provider, providerConfigId: config.id });
+    const keyRef = await deps.queryProviderKeyRef({ orgId, provider, keyRefId: config.key_ref_id });
+    if (!keyRef) return block('key_reference_missing', { provider, providerConfigId: config.id, keyRefId: config.key_ref_id });
+    const keyFailure = classifyKeyRefFailure(keyRef, orgId, provider, deps.now());
+    if (keyFailure) return block(keyFailure, { provider, providerConfigId: config.id, keyRefId: keyRef.id });
+
+    const budget = configuredBudget(config);
+    if (budget.dailyRequests !== undefined || budget.monthlyTokens !== undefined) {
+      const usage = await deps.queryUsage({ orgId, workspaceId, providerConfigId: config.id, now: deps.now() });
+      if (
+        (budget.dailyRequests !== undefined && usage.dailyRequests >= budget.dailyRequests)
+        || (budget.monthlyTokens !== undefined && usage.monthlyTokens >= budget.monthlyTokens)
+      ) return block('budget_exhausted', { provider, providerConfigId: config.id, keyRefId: keyRef.id });
+    }
+
+    const auditEvent = buildProviderResolverAuditEventShell({
+      orgId,
+      workspaceId,
+      provider,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      operation: capability,
+      mode: input.mode,
+      policyResult: 'allowed',
+      status: 'allowed',
+      actorId,
+      correlationId,
+      evidenceRef: normalizeString(input.evidenceRef),
+      metadata: {
+        membership: 'active',
+        route: 'eligible',
+        providerConfig: 'active_and_validated',
+        keyReference: 'eligible_for_lookup',
+        scannerClassification: input.scannerReference,
+      },
+    });
+    return {
+      status: 'allowed',
+      futureSecretLookupEligible: true,
+      provider,
+      routeId: route.id,
+      providerConfigId: config.id,
+      keyRefId: keyRef.id,
+      keyRefResolverType: 'server_reference',
+      operation: capability,
+      capability,
+      mode: input.mode,
+      orgId,
+      workspaceId,
+      actorId,
+      correlationId,
+      evidenceRef: normalizeString(input.evidenceRef),
+      policyResult: 'allowed',
+      model,
+      endpoint,
+      deployment: config.deployment_name?.trim() || undefined,
+      auditEvent,
+    };
+  } catch {
+    return block('provider_unavailable', { providerConfigId: requestedProviderConfigId });
   }
 };

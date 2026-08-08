@@ -8,7 +8,9 @@ import {
   ProviderResolverDeps,
   ProviderResolverFailureClass,
   ProviderResolverInput,
+  EnterpriseProviderRouteResolverDeps,
   resolveProviderForOperation,
+  resolveEnterpriseProviderRoute,
 } from './providerResolver';
 import {
   ProviderResolverAuditMetadataError,
@@ -154,6 +156,104 @@ const main = async () => {
     assert.equal(allowed.auditEvent.metadata.keyReference, 'eligible_for_future_lookup');
   }
   assertNoSecretLeak(allowed);
+
+  const extractionRouteId = '77777777-7777-4777-8777-777777777777';
+  const replacementRouteId = '88888888-8888-4888-8888-888888888888';
+  const extractionConfigId = '99999999-9999-4999-8999-999999999999';
+  const originalExtractionKeyRefId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const rotatedExtractionKeyRefId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  let activeExtractionKeyRefId = originalExtractionKeyRefId;
+  let observedRequestedRouteId: string | undefined;
+  const extractionRoute = {
+    id: extractionRouteId,
+    org_id: orgId,
+    workspace_id: '66666666-6666-4666-8666-666666666666',
+    provider_config_id: extractionConfigId,
+    capability: 'assess.evidence.extract' as const,
+    model: 'original-extraction-model',
+    enabled: true,
+    allowed_roles: ['Admin'],
+    deleted_at: null,
+  };
+  const replacementRoute = {
+    ...extractionRoute,
+    id: replacementRouteId,
+    model: 'new-default-model',
+  };
+  const enterpriseDeps: EnterpriseProviderRouteResolverDeps = {
+    now: () => now,
+    createCorrelationId: () => 'enterprise-extraction-recovery',
+    queryRoutes: async input => {
+      observedRequestedRouteId = input.requestedRouteId;
+      const routes = [extractionRoute, replacementRoute];
+      return input.requestedRouteId
+        ? routes.filter(route => route.id === input.requestedRouteId)
+        : [replacementRoute];
+    },
+    queryProviderConfig: async () => ({
+      id: extractionConfigId,
+      org_id: orgId,
+      provider: 'openai',
+      key_ref_id: activeExtractionKeyRefId,
+      allowed_modes: ['pilot'],
+      allowed_operations: ['assess.evidence.extract'],
+      status: 'active',
+      deleted_at: null,
+      default_model: 'new-default-model',
+      model_allowlist: ['original-extraction-model', 'new-default-model'],
+      last_validated_at: '2026-06-07T23:00:00.000Z',
+    }),
+    queryProviderKeyRef: async input => ({
+      id: input.keyRefId,
+      org_id: orgId,
+      provider: 'openai',
+      resolver_type: 'server_reference',
+      referenceSafety: 'reference_only',
+      status: 'active',
+      expires_at: '2026-12-31T00:00:00.000Z',
+      deleted_at: null,
+    }),
+    queryUsage: async () => ({ dailyRequests: 0, monthlyTokens: 0 }),
+    isEndpointAllowed: () => true,
+  };
+  const recoveryInput = {
+    mode: 'pilot' as const,
+    capability: 'assess.evidence.extract' as const,
+    organizationId: orgId,
+    workspaceId: extractionRoute.workspace_id,
+    actorId,
+    roleNames: ['Admin'],
+    requestedProviderConfigId: extractionConfigId,
+    requestedRouteId: extractionRouteId,
+    requestedModel: 'original-extraction-model',
+    scannerReference: 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
+  };
+  const originalRecovery = await resolveEnterpriseProviderRoute(recoveryInput, enterpriseDeps);
+  assert.equal(originalRecovery.status, 'allowed');
+  if (originalRecovery.status === 'allowed') {
+    assert.deepEqual(
+      [originalRecovery.routeId, originalRecovery.providerConfigId, originalRecovery.provider, originalRecovery.model, originalRecovery.keyRefId],
+      [extractionRouteId, extractionConfigId, 'openai', 'original-extraction-model', originalExtractionKeyRefId],
+    );
+  }
+  extractionRoute.model = 'new-default-model';
+  const changedExactRouteModel = await resolveEnterpriseProviderRoute(recoveryInput, enterpriseDeps);
+  assert.equal(changedExactRouteModel.status, 'blocked');
+  if (changedExactRouteModel.status === 'blocked') {
+    assert.equal(changedExactRouteModel.failureClass, 'model_not_allowed');
+  }
+  extractionRoute.model = 'original-extraction-model';
+  activeExtractionKeyRefId = rotatedExtractionKeyRefId;
+  const rotatedSecretRecovery = await resolveEnterpriseProviderRoute(recoveryInput, enterpriseDeps);
+  assert.equal(rotatedSecretRecovery.status, 'allowed');
+  if (rotatedSecretRecovery.status === 'allowed') {
+    assert.deepEqual(
+      [rotatedSecretRecovery.routeId, rotatedSecretRecovery.providerConfigId, rotatedSecretRecovery.provider, rotatedSecretRecovery.model, rotatedSecretRecovery.keyRefId],
+      [extractionRouteId, extractionConfigId, 'openai', 'original-extraction-model', rotatedExtractionKeyRefId],
+    );
+  }
+  assert.equal(observedRequestedRouteId, extractionRouteId);
+  assertNoSecretLeak(rotatedSecretRecovery);
 
   await expectBlocked({ mode: 'local-demo' }, {}, 'mode_not_allowed');
   await expectBlocked({ actorId: '' }, {}, 'unauthenticated');

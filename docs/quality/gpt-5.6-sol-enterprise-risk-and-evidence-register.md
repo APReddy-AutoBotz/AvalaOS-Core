@@ -25,6 +25,22 @@ This is the active source for enterprise security, reliability, quality, migrati
 
 Evidence must never include secrets, tokens, raw logs, signed URLs, customer data, storage object identifiers, or production infrastructure identifiers.
 
+## Enterprise Intelligence Draft PR risk boundary
+
+This section records the active source-level boundary for the Draft PR on branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`, based on required source baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5`. It is an executed source evidence record, not deployment or readiness proof.
+
+| Risk | Current classification | Executed evidence | Planned verification / closure |
+| --- | --- | --- | --- |
+| Hosted schema, Edge deployment, Storage configuration, and tenant isolation | Deployment status unknown | No live infrastructure or hosted environment was accessed. Disposable PostgreSQL 16 tenant/RLS/ACL proof is not hosted proof. | Approved hosted Storage, Edge, and tenant-isolation checks. |
+| Enterprise Intelligence migration and service-only RPCs | Executed evidence with hosted state unproven | 111 strict assertions plus fresh, accepted-main upgrade, populated upgrade, atomic dirty rejection, 17 authority scenarios, read-only fallback, and cleanup passed on disposable PostgreSQL 16. | Exact-head CI and separately authorized hosted-schema verification. |
+| Receipt/runtime-control truthfulness | Confirmed source defect corrected in the Draft candidate | The global finalizers previously applied the provider gate and a new claim could precede runtime validation. The correction uses one exhaustive command-area classifier, validates only new claims before insert/effect, permits exact replay before current controls, removes runtime gates from claimed receipt finalization, and makes handler finalization failure explicit. Executable PG16 evidence blocked 1 provider, 4 ingestion, 5 delivery, and 3 Assemble commands in only their disabled area with zero blocked effects; read-only blocked all 17 new command/resource cases with zero receipts; post-effect disablement produced one committed receipt and zero duplicate effects; terminal failure finalized while disabled; changed hash conflicted; final claimed count was zero. | Exact-head CI and one independent exact-head review; hosted state remains unproven. |
+| Provider secret stores, endpoint allowlists, validation freshness, and budgets | Executed mocked evidence with live backend unproven | Seven-step lifecycle, writable-backend requirement, tenant-bound pre-provisioned references, header-only mocked calls, validation freshness, budget and role gates, rotation, and cross-workspace atomic revocation passed without raw-secret persistence. | Separately approved live backend/provider validation without recording secrets. |
+| Evidence provenance and ingestion limits | Executed source and disposable-database evidence with private Storage unproven | Native text/transcript, compressed text-PDF and DOCX provenance, truthful OCR-required failure, source/extracted hashes, candidate ancestry, selected-draft promotion, conflict, stale, and tenant rejection passed. | Browser completion and separately authorized hosted private-bucket verification. |
+| Delivery/Monitor and Assemble safety | Executed source/browser evidence with hosted behavior unproven | Exact approved/stale lineage, three-person approval, Monitor gating, draft-only blueprint contracts, and 16/16 Desktop Chrome/Pixel 7 journeys with axe and fail-closed states passed. | Separately authorized hosted projection checks; no live execution or telemetry claim. |
+| Provider calls, telemetry, and operational outcomes | Not run | No real provider call, live telemetry, task execution, deployment, or infrastructure action occurred. | Separate approved runtime validation; no readiness claim may be inferred from source tests. |
+
+Rollback remains route disablement and command stop with read-only committed projections; schema correction is additive forward migration. No secrets, raw source, signed URLs, customer data, object identifiers, raw logs, or production identifiers belong in evidence.
+
 ## P0 Stop Gate
 
 ### P0-001 - Service-role Storage URL escape

@@ -3,9 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
-  // PR 1D, PR 1E, and governed Studio artifacts use dedicated fixtures,
+  // PR 1D, PR 1E, governed Studio artifacts, and Enterprise Intelligence use dedicated fixtures,
   // runtime modes, and server ports; the retained suite must not own them.
-  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts'],
+  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts', 'enterpriseIntelligence.spec.ts'],
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,

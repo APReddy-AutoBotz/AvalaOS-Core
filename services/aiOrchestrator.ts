@@ -1,51 +1,8 @@
-import { getAiProvider, getAiProviderApiKey } from './geminiService';
+import { getAiProvider } from './geminiService';
 import { aiEdgeClient, isAiEdgeEnabled } from './aiEdgeClient';
 import { getAiExecutionPolicy, resolveAiMode } from './aiMode';
 import { getRuntimeDataAccess } from './supabaseClient';
 import { AiProviderType, ProjectDetails, GeneratedArtifacts } from '../types';
-
-const providerLabel: Record<AiProviderType, string> = {
-  gemini: 'Google Gemini',
-  groq: 'Groq',
-  openai: 'OpenAI',
-};
-
-const isTransientProviderError = (error: any) => {
-  const message = String(error?.message || error || '').toLowerCase();
-  return [
-    '503',
-    '502',
-    '504',
-    '500',
-    '429',
-    'unavailable',
-    'high demand',
-    'rate limit',
-    'temporarily',
-    'timeout',
-    'failed to fetch',
-    'networkerror',
-  ].some(token => message.includes(token));
-};
-
-const fallbackOrder = (providerType: AiProviderType): AiProviderType[] => {
-  const preferred: AiProviderType[] = ['groq', 'gemini'];
-  return preferred.filter(provider => provider !== providerType);
-};
-
-const appendFallbackNote = (artifacts: GeneratedArtifacts, attemptedProvider: AiProviderType, fallbackProvider: AiProviderType, originalError: any): GeneratedArtifacts => {
-  const reason = String(originalError?.message || originalError || 'Provider unavailable');
-  return {
-    ...artifacts,
-    qualityGate: {
-      ...artifacts.qualityGate,
-      gapPoints: [
-        ...(artifacts.qualityGate?.gapPoints || []),
-        `${providerLabel[attemptedProvider]} was unavailable, so generation completed with ${providerLabel[fallbackProvider]}. Original provider error: ${reason.slice(0, 220)}`
-      ],
-    },
-  };
-};
 
 const getCurrentAiExecutionPolicy = () =>
   getAiExecutionPolicy({
@@ -83,29 +40,10 @@ export const aiOrchestrator = {
 
     console.warn(`Avala AI is using ${aiPolicy.fallbackLabel}. Pilot and production require server-side Edge AI.`);
     const provider = getAiProvider(providerType, aiPolicy);
-    try {
-      return await provider.generateProjectArtifacts(projectDetails, fileContent, fileName);
-    } catch (error) {
-      if (!isTransientProviderError(error)) {
-        throw error;
-      }
-
-      for (const fallbackProviderType of fallbackOrder(providerType)) {
-        const fallbackKey = getAiProviderApiKey(fallbackProviderType, aiPolicy);
-        if (!fallbackKey) continue;
-
-        try {
-          console.warn(`${providerLabel[providerType]} generation failed. Falling back to ${providerLabel[fallbackProviderType]}.`, error);
-          const fallbackProvider = getAiProvider(fallbackProviderType, aiPolicy);
-          const artifacts = await fallbackProvider.generateProjectArtifacts(projectDetails, fileContent, fileName);
-          return appendFallbackNote(artifacts, providerType, fallbackProviderType, error);
-        } catch (fallbackError) {
-          console.warn(`${providerLabel[fallbackProviderType]} fallback generation failed.`, fallbackError);
-        }
-      }
-
-      throw error;
-    }
+    // A governed request is bound to the selected provider. A transient
+    // failure is surfaced for review; it must never silently switch tenants,
+    // models, or provider credentials.
+    return await provider.generateProjectArtifacts(projectDetails, fileContent, fileName);
   },
 
   async refineSection(

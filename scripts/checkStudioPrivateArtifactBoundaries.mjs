@@ -122,7 +122,7 @@ for (const capability of [
   );
 }
 
-const handler = sources.get('supabase/functions/_shared/studioPrivateArtifactHandler.ts');
+const handler = sources.get('supabase/functions/_shared/studioPrivateArtifactHandler.ts').replace(/\r\n/g, '\n');
 assert(
   handler.indexOf('loadFreshAuthority') < handler.indexOf('executeAtomicCommand'),
   'fresh command authority must precede receipt/resource inspection',

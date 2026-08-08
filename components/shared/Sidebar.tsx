@@ -63,6 +63,7 @@ const lifecycleItems: NavItem[] = [
 const assessSubnav: NavItem[] = [
   { view: View.PROCESS_CATALOG, icon: ClipboardListIcon, label: 'Process Catalog' },
   { view: View.TEMPLATE_LIBRARY, icon: DocumentDuplicateIcon, label: 'Assessment Templates' },
+  { view: View.ENTERPRISE_INTELLIGENCE, icon: CogIcon, label: 'Enterprise Intelligence' },
 ];
 
 const studioSubnav: NavItem[] = [
@@ -182,7 +183,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const activeSubnav = !collapsed && !governOpen
-    ? currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY ? assessSubnav
+    ? currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY || currentView === View.ENTERPRISE_INTELLIGENCE ? assessSubnav
       : currentView === View.DOCS_FORGE || currentView === View.DOCS || currentView === View.TEMPLATE_STUDIO || currentView === View.WORKSPACE ? studioSubnav
         : deliveryViews.has(currentView) ? deliverySubnav
           : monitorViews.has(currentView) ? []
@@ -207,12 +208,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           {lifecycleItems.slice(1).map(item => renderNavItem(item))}
         </div>
 
-        {activeSubnav.length > 0 && <div className="mt-4 border-l border-[var(--av-color-border-strong)] pl-2"><p className="nav-section-label px-3 pb-2">{currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY ? 'Assess' : currentView === View.DOCS_FORGE || currentView === View.DOCS || currentView === View.TEMPLATE_STUDIO || currentView === View.WORKSPACE ? 'Studio' : 'Delivery'}</p><div className="space-y-0.5">{activeSubnav.map(item => renderNavItem(item, { subnav: true }))}</div></div>}
+        {activeSubnav.length > 0 && <div className="mt-4 border-l border-[var(--av-color-border-strong)] pl-2"><p className="nav-section-label px-3 pb-2">{currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY || currentView === View.ENTERPRISE_INTELLIGENCE ? 'Assess' : currentView === View.DOCS_FORGE || currentView === View.DOCS || currentView === View.TEMPLATE_STUDIO || currentView === View.WORKSPACE ? 'Studio' : 'Delivery'}</p><div className="space-y-0.5">{activeSubnav.map(item => renderNavItem(item, { subnav: true }))}</div></div>}
       </nav>
 
       <div className="border-t border-[var(--av-color-border)] px-3 py-3">
         {!collapsed && <p className="nav-section-label px-3 pb-2">Administration</p>}
-        {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.WORKSPACE); onMobileClose?.(); }} aria-current={currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Admin</span>}</button>}
+        {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.ENTERPRISE_INTELLIGENCE); onMobileClose?.(); }} aria-current={currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Admin / Intelligence</span>}</button>}
       </div>
     </aside>
   </>;
