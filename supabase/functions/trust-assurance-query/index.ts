@@ -5,6 +5,7 @@ import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
 import {
   applyTrustAssuranceRuntimeConfiguration,
+  classifyTrustPersistenceError,
   decodeTrustAssuranceQueryRequest,
   trustAssuranceMutationsReadOnly,
 } from '../_shared/trustAssuranceQuery.ts';
@@ -74,7 +75,10 @@ Deno.serve(async request => {
   } catch {
     return response({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Trust Assurance is unavailable.' }, 503);
   }
-  if (!result.ok) return response({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Trust Assurance is unavailable.' }, 503);
+  if (!result.ok) {
+    const code = classifyTrustPersistenceError(await result.text().catch(() => ''));
+    return response({ code, message: code === 'PERSISTENCE_UNAVAILABLE' ? 'Trust Assurance is unavailable.' : 'The requested resource is unavailable.' }, code === 'AUTHORIZATION_STALE' ? 409 : code === 'ACCESS_DENIED' ? 404 : 503);
+  }
 
   const body = await result.json().catch(() => undefined);
   if (body === undefined) return response({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Trust Assurance is unavailable.' }, 503);

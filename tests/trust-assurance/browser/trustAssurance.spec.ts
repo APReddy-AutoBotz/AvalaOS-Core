@@ -198,3 +198,22 @@ test('feature-disable disagreement latches the ready workspace read-only', async
   const commandsAfter = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:')).length;
   expect(commandsAfter).toBe(commandsBefore);
 });
+
+test('retired evidence remains history while only actionable evidence is targeted', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?evidence-history=1&tenant-context=1');
+  const log=page.getByTestId('trust-call-log');
+  await page.getByRole('button',{name:'Review evidence',exact:true}).click();
+  await expect(log).toContainText('60000000-0000-4000-8000-000000000016');
+  await expect(log).not.toContainText('target:resource.review:{"resourceType":"evidence_version","resourceId":"60000000-0000-4000-8000-000000000006"');
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?evidence-history=1&evidence-withdrawn=1');
+  await expect(page.getByRole('button',{name:'Review evidence',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Link support',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Supersede evidence',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Withdraw evidence',exact:true})).toBeDisabled();
+});
+
+test('snapshot actions follow lifecycle and the current-publication pointer', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?snapshot-mixed=1');
+  await expect(page.getByRole('button',{name:'Review snapshot',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Withdraw publication',exact:true})).toBeEnabled();
+});

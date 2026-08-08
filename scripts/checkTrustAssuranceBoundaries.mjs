@@ -10,7 +10,7 @@ for(const file of ['services/trustAssurance/contracts.ts','services/trustAssuran
 const runtimeFiles=['components/admin/TrustCenterPanel.tsx','playwright.trust-assurance.config.ts','.github/workflows/trust-assurance.yml','vite.trust-assurance.config.ts','tests/trust-assurance/browser/trustAssuranceHarness.tsx'];
 for(const file of runtimeFiles){const source=fs.readFileSync(file,'utf8');if(source.includes('VITE_RUNTIME_MODE')){console.error(`Obsolete Trust runtime authority in ${file}`);process.exit(1)}}
 const panel=fs.readFileSync('components/admin/TrustCenterPanel.tsx','utf8');
-if(!panel.includes('getRuntimeModeResolution()')||panel.includes('resolveRuntimeMode(')){console.error('Trust Center must consume canonical runtime resolution');process.exit(1)}
+if(!panel.includes('getRuntimeModeResolution()')||!panel.includes('getRuntimeBoundaryError()')||panel.includes('resolveRuntimeMode(')){console.error('Trust Center must consume canonical runtime and server-configuration boundaries');process.exit(1)}
 const workflow=fs.readFileSync('.github/workflows/trust-assurance.yml','utf8'),playwright=fs.readFileSync('playwright.trust-assurance.config.ts','utf8');
 if(!workflow.includes('VITE_AVALA_RUNTIME_MODE: pilot')||!playwright.includes("VITE_AVALA_RUNTIME_MODE:'pilot'")){console.error('Trust pilot browser harness must use canonical runtime authority');process.exit(1)}
 const client=fs.readFileSync('services/trustAssurance/client.ts','utf8');

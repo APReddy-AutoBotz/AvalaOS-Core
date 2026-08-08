@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyTrustAssuranceRuntimeConfiguration, decodeTrustAssuranceQueryRequest, trustAssuranceMutationsReadOnly } from './trustAssuranceQuery';
+import { applyTrustAssuranceRuntimeConfiguration, classifyTrustPersistenceError, decodeTrustAssuranceQueryRequest, trustAssuranceMutationsReadOnly } from './trustAssuranceQuery';
 
 const request = {
   organizationId: '22222222-2222-4222-8222-222222222222',
@@ -26,4 +26,7 @@ assert.equal(trustAssuranceMutationsReadOnly(true, false), false);
 assert.equal(trustAssuranceMutationsReadOnly(true, true), true);
 assert.equal(trustAssuranceMutationsReadOnly(false, false), true);
 assert.equal(trustAssuranceMutationsReadOnly(false, true), true);
+assert.equal(classifyTrustPersistenceError({message:'wrapped PR1B_AUTHORIZATION_STALE detail'}),'AUTHORIZATION_STALE');
+assert.equal(classifyTrustPersistenceError('{"message":"PR1B_NOT_FOUND","hint":"private"}'),'ACCESS_DENIED');
+assert.equal(classifyTrustPersistenceError('connection refused'),'PERSISTENCE_UNAVAILABLE');
 console.log('Trust Assurance query tests passed');

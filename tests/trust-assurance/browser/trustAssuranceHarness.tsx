@@ -11,6 +11,9 @@ const matrix = params.has('tenant-context');
 const responseLoss = params.has('response-loss');
 const featureDisabled = params.has('feature-disabled');
 const featureMismatch = params.has('feature-mismatch');
+const evidenceHistory = params.has('evidence-history');
+const evidenceWithdrawn = params.has('evidence-withdrawn');
+const snapshotMixed = params.has('snapshot-mixed');
 const contextA: TenantContextProjection = {
   userId: '10000000-0000-4000-8000-000000000001',
   organizationId: '20000000-0000-4000-8000-000000000002',
@@ -44,19 +47,20 @@ const projectionFor = (context: TenantContextProjection, published: boolean): In
   evidence: [{
     evidenceVersionId: '60000000-0000-4000-8000-000000000006', evidenceId: '70000000-0000-4000-8000-000000000007', version: 1,
     evidenceType: 'test_report', referenceType: 'test_report', referenceValue: 'tests/trust-assurance', summary: 'Expired focused evidence.',
-    evidenceBoundary: 'verified_with_evidence', lifecycle: 'active', freshness: 'expired', observedAt: '2026-08-01T00:00:00Z',
+    evidenceBoundary: 'verified_with_evidence', freshness: 'expired', observedAt: '2026-08-01T00:00:00Z',
     reviewDueAt: null, expiresAt: '2026-08-02T00:00:00Z', canonicalHash: 'b'.repeat(64), approved: true, ownerDisplayName: 'Assigned owner',
-  }],
+    lifecycle: evidenceHistory ? 'superseded' : 'active',
+  }, ...(evidenceHistory ? [{evidenceVersionId:'60000000-0000-4000-8000-000000000016',evidenceId:'70000000-0000-4000-8000-000000000017',version:1,evidenceType:'test_report',referenceType:'test_report' as const,referenceValue:'tests/trust-new',summary:'New actionable evidence.',evidenceBoundary:'docs_only' as const,lifecycle:evidenceWithdrawn?'withdrawn' as const:'active' as const,freshness:'current' as const,observedAt:'2026-08-08T00:00:00Z',reviewDueAt:null,expiresAt:null,canonicalHash:'e'.repeat(64),approved:true,ownerDisplayName:'Assigned owner'}] : [])],
   relationships: [{
     claimVersionId: '40000000-0000-4000-8000-000000000004', evidenceVersionId: '60000000-0000-4000-8000-000000000006',
     relationship: 'contradicts', rationale: 'Current contradiction.',
   }],
   reviewQueueCount: 1,
-  snapshotHistory: featureDisabled ? [{
+  snapshotHistory: snapshotMixed ? [{snapshotId:'80000000-0000-4000-8000-000000000018',snapshotHash:'f'.repeat(64),version:2,lifecycle:'changes_requested',createdAt:'2026-08-08T00:00:00Z'},{snapshotId:'80000000-0000-4000-8000-000000000008',snapshotHash:'c'.repeat(64),version:3,lifecycle:'published',createdAt:'2026-08-07T00:00:00Z'}] : featureDisabled ? [{
     snapshotId: '80000000-0000-4000-8000-000000000008', snapshotHash: 'c'.repeat(64), version: 3,
     lifecycle: 'published', createdAt: '2026-08-07T00:00:00Z',
   }] : [],
-  currentPublication: published ? {
+  currentPublication: (published || snapshotMixed) ? {
     publicationId: '81000000-0000-4000-8000-000000000008', snapshotId: '80000000-0000-4000-8000-000000000008',
     snapshotHash: 'c'.repeat(64), publishedAt: '2026-08-07T00:00:00Z',
   } : null,
@@ -97,6 +101,7 @@ const Harness: React.FC = () => {
   };
   const command = async (request: TrustCommandRequest) => {
     log(`command:${request.operation}:${request.workspaceId}:request=${request.requestId}:key=${request.idempotencyKey}:auth=${request.expectedAuthorizationVersion}`);
+    log(`target:${request.operation}:${JSON.stringify(request.payload)}`);
     if (matrix && !responseLoss && request.workspaceId === contextB.workspaceId) await waitForWorkspaceBCommand();
     else await delay(500);
     log(`command-complete:${request.operation}:${request.workspaceId}`);

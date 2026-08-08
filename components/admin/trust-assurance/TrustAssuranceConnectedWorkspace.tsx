@@ -27,6 +27,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [unresolved, setUnresolved] = useState<TrustCommandRequest | null>(null);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const generation = useRef(0);
   const inFlight = useRef(false);
   const unresolvedByScope = useRef(new Map<string, TrustCommandRequest>());
@@ -70,6 +71,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
     setBuyer(null);
     setBuyerWarning('');
     setNotice('');
+    setSelectedEvidenceId(null);
     mutationBlocked.current = false;
     setPending(inFlight.current);
     setUnresolved(tenantContext ? unresolvedByScope.current.get(attemptScopeKey(tenantContext)) ?? null : null);
@@ -158,7 +160,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
       <p>Outcome unknown for {unresolved.operation}. Retry the same governed command.</p>
       <button type="button" disabled={pending || globalReadOnly || mutationBlocked.current || state.projection.readOnly} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
     </section>}
-    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} readOnly={globalReadOnly || mutationBlocked.current || state.projection.readOnly} execute={execute} />}
+    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} readOnly={globalReadOnly || mutationBlocked.current || state.projection.readOnly} selectedEvidenceId={selectedEvidenceId} onSelectEvidence={setSelectedEvidenceId} execute={execute} />}
     <div aria-live="polite" className="text-sm font-bold text-slate-600">{notice}</div>
     {buyerWarning && state.kind === 'ready' && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">{buyerWarning}</p>}
     {!buyer && !buyerWarning && state.kind === 'ready' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">No publication: buyer-safe preview remains unavailable.</p>}
@@ -170,26 +172,37 @@ const CommandBar: React.FC<{
   pending: boolean;
   unresolved: boolean;
   readOnly: boolean;
+  selectedEvidenceId: string | null;
+  onSelectEvidence: (evidenceId: string | null) => void;
   execute: (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => Promise<void>;
-}> = ({ projection, pending, unresolved, readOnly, execute }) => {
-  const claim = projection.claims[0], evidence = projection.evidence[0], snapshot = projection.snapshotHistory[0];
+}> = ({ projection, pending, unresolved, readOnly, selectedEvidenceId, onSelectEvidence, execute }) => {
+  const claim = projection.claims[0];
+  const activeEvidence = projection.evidence.filter(item => item.lifecycle === 'active');
+  const transitionEvidence = projection.evidence.filter(item => ['active','blocked','not_run'].includes(item.lifecycle));
+  const selectedEvidence = projection.evidence.find(item => item.evidenceId === selectedEvidenceId);
+  const reviewEvidence = selectedEvidence?.lifecycle === 'active' ? selectedEvidence : activeEvidence.length === 1 ? activeEvidence[0] : undefined;
+  const mutableEvidence = selectedEvidence && ['active','blocked','not_run'].includes(selectedEvidence.lifecycle) ? selectedEvidence : transitionEvidence.length === 1 ? transitionEvidence[0] : undefined;
+  const reviewSnapshot = projection.snapshotHistory.find(item => ['draft','under_review','changes_requested'].includes(item.lifecycle));
+  const publishSnapshot = projection.snapshotHistory.find(item => item.lifecycle === 'reviewed');
+  const publishedSnapshot = projection.currentPublication ? projection.snapshotHistory.find(item => item.snapshotId === projection.currentPublication?.snapshotId) : undefined;
   const disabled = pending || unresolved || readOnly;
   return <section aria-label="Trust Assurance commands" className="rounded-2xl border bg-white p-4">
     <h3 className="font-black">Governed actions</h3>
-    <p className="mt-1 text-xs text-slate-500">Actions refresh only after a durable server response. The first current item is used for bounded review/build actions.</p>
+    <p className="mt-1 text-xs text-slate-500">Actions refresh only after a durable server response. Historical evidence remains visible but is never an implicit mutation target.</p>
+    {projection.evidence.length > 1 && <label className="mt-3 block text-xs font-bold">Evidence target<select aria-label="Evidence target" value={selectedEvidenceId ?? ''} onChange={event => onSelectEvidence(event.target.value || null)} className="ml-2 rounded border px-2 py-1"><option value="">Select actionable evidence</option>{projection.evidence.map(item=><option key={item.evidenceId} value={item.evidenceId}>{item.summary} · {item.lifecycle}</option>)}</select></label>}
     <div className="mt-3 flex flex-wrap gap-2">
       <Action label="Create claim" disabled={disabled} onClick={() => execute('claim.create', { readinessDomain: 'evidence', claimText: 'Source evidence is available for independent review.', proposedProofStatus: 'configured', proofBoundary: 'docs_only', buyerSafeWording: 'Source evidence is available for independent review.', limitationDisclosure: 'Source-only evidence; hosted behavior is not proven.', doesNotProve: ['Hosted or production behavior'] })} />
       {claim && <Action label="Revise claim" disabled={disabled} onClick={() => execute('claim.revise', { claimId: claim.claimId, claimText: claim.claimText, proposedProofStatus: claim.proposedProofStatus, proofBoundary: claim.proofBoundary, buyerSafeWording: claim.buyerSafeWording, limitationDisclosure: claim.limitationDisclosure, doesNotProve: claim.doesNotProve }, claim.version)} />}
       <Action label="Register evidence" disabled={disabled} onClick={() => execute('evidence.register', { evidenceType: 'test_report', referenceType: 'test_report', referenceValue: 'tests/trust-assurance', digest: null, summary: 'Focused source evidence awaiting independent review.', evidenceBoundary: 'docs_only', result: 'performed', observedAt: new Date().toISOString(), reviewDueAt: null, expiresAt: null })} />
       {claim && <Action label="Review claim" disabled={disabled} onClick={() => execute('resource.review', { resourceType: 'claim_version', resourceId: claim.claimVersionId, decision: 'reviewed', rationale: 'Reviewed exact current claim version.' })} />}
-      {evidence && <Action label="Review evidence" disabled={disabled} onClick={() => execute('resource.review', { resourceType: 'evidence_version', resourceId: evidence.evidenceVersionId, decision: 'reviewed', rationale: 'Reviewed exact current evidence version.' })} />}
-      {claim && evidence && <Action label="Link support" disabled={disabled} onClick={() => execute('evidence.link', { claimVersionId: claim.claimVersionId, evidenceVersionId: evidence.evidenceVersionId, relationship: 'supports', rationale: 'Evidence supports the exact claim version.' })} />}
+      {projection.evidence.length > 0 && <Action label="Review evidence" disabled={disabled || !reviewEvidence} onClick={() => reviewEvidence && execute('resource.review', { resourceType: 'evidence_version', resourceId: reviewEvidence.evidenceVersionId, decision: 'reviewed', rationale: 'Reviewed exact current evidence version.' })} />}
+      {claim && projection.evidence.length > 0 && <Action label="Link support" disabled={disabled || !reviewEvidence} onClick={() => reviewEvidence && execute('evidence.link', { claimVersionId: claim.claimVersionId, evidenceVersionId: reviewEvidence.evidenceVersionId, relationship: 'supports', rationale: 'Evidence supports the exact claim version.' })} />}
       {claim && <Action label="Build snapshot" disabled={disabled} onClick={() => execute('snapshot.create', { claimIds: [claim.claimId] })} />}
-      {evidence && <Action label="Supersede evidence" disabled={disabled} onClick={() => execute('evidence.supersede', { evidenceId: evidence.evidenceId }, evidence.version)} />}
-      {evidence && <Action label="Withdraw evidence" disabled={disabled} onClick={() => execute('evidence.withdraw', { evidenceId: evidence.evidenceId }, evidence.version)} />}
-      {snapshot?.lifecycle === 'draft' && <Action label="Review snapshot" disabled={disabled} onClick={() => execute('snapshot.review', { snapshotId: snapshot.snapshotId, decision: 'reviewed', rationale: 'Reviewed exact snapshot.' }, snapshot.version)} />}
-      {snapshot?.lifecycle === 'reviewed' && <Action label="Publish snapshot" disabled={disabled} onClick={() => execute('snapshot.publish', { snapshotId: snapshot.snapshotId }, snapshot.version)} />}
-      {snapshot?.lifecycle === 'published' && <Action label="Withdraw publication" disabled={disabled} onClick={() => execute('snapshot.withdraw', { snapshotId: snapshot.snapshotId, rationale: 'Publication withdrawn with history preserved.' }, snapshot.version)} />}
+      {projection.evidence.length > 0 && <Action label="Supersede evidence" disabled={disabled || !mutableEvidence} onClick={() => mutableEvidence && execute('evidence.supersede', { evidenceId: mutableEvidence.evidenceId }, mutableEvidence.version)} />}
+      {projection.evidence.length > 0 && <Action label="Withdraw evidence" disabled={disabled || !mutableEvidence} onClick={() => mutableEvidence && execute('evidence.withdraw', { evidenceId: mutableEvidence.evidenceId }, mutableEvidence.version)} />}
+      {reviewSnapshot && <Action label="Review snapshot" disabled={disabled} onClick={() => execute('snapshot.review', { snapshotId: reviewSnapshot.snapshotId, decision: 'reviewed', rationale: 'Reviewed exact snapshot.' }, reviewSnapshot.version)} />}
+      {publishSnapshot && <Action label="Publish snapshot" disabled={disabled} onClick={() => execute('snapshot.publish', { snapshotId: publishSnapshot.snapshotId }, publishSnapshot.version)} />}
+      {publishedSnapshot && <Action label="Withdraw publication" disabled={disabled} onClick={() => execute('snapshot.withdraw', { snapshotId: publishedSnapshot.snapshotId, rationale: 'Publication withdrawn with history preserved.' }, publishedSnapshot.version)} />}
     </div>
   </section>;
 };

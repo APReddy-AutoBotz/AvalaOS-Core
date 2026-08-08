@@ -45,6 +45,11 @@ export type RuntimeModeResolution =
 
 export type RuntimeDataAccess = 'local' | 'server';
 
+export const isValidServerConfiguration = (url: unknown, anonKey: unknown): boolean => {
+  if (typeof url !== 'string' || url.trim() !== url || !url || typeof anonKey !== 'string' || anonKey.trim() !== anonKey || !anonKey) return false;
+  try { return new URL(url).protocol === 'https:'; } catch { return false; }
+};
+
 export type RuntimeAuthorityResolution = {
   mode: RuntimeMode;
   dataAccess: RuntimeDataAccess;
