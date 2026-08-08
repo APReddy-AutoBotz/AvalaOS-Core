@@ -28,6 +28,8 @@ const names = {
   upgrade: `enterprise_upgrade_${suffix}`,
   populated: `enterprise_populated_${suffix}`,
   dirty: `enterprise_dirty_${suffix}`,
+  ancestryClean: `enterprise_ancestry_clean_${suffix}`,
+  ancestryDirty: `enterprise_ancestry_dirty_${suffix}`,
   authority: `enterprise_authority_${suffix}`,
 };
 const clients = [];
@@ -123,6 +125,83 @@ try {
   assert.equal((await dirty.query("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND table_name='ai_provider_configs' AND column_name='endpoint_url'")).rows[0].n, 0);
   assert.equal((await dirty.query("SELECT count(*)::int n FROM public.capabilities WHERE capability_key='evidence.write'")).rows[0].n, 0);
   console.log('FOUNDATION PASS incompatible dirty-schema rejection is atomic');
+
+  const ancestryPreflight = '20260808180000_enterprise_promotion_ancestry_dirty_history_preflight.sql';
+  const beforeAncestryPreflight = migrations.slice(0, migrations.indexOf(ancestryPreflight));
+  const seedPromotionHistory = async (client, corrupt) => {
+    const fixture = await createEnterpriseIntelligenceFixture(client);
+    const processId = fixture.uuid(corrupt ? 970 : 960);
+    const caseId = fixture.uuid(corrupt ? 971 : 961);
+    const priorId = fixture.uuid(corrupt ? 972 : 962);
+    const promotedId = fixture.uuid(corrupt ? 973 : 963);
+    const evidenceId = fixture.uuid(corrupt ? 974 : 964);
+    const sourceAssessmentId = fixture.uuid(corrupt ? 975 : 965);
+    const sourceSnapshot = { sourceV1: { assessmentId: sourceAssessmentId, clonedAt: '2026-08-08T00:00:00Z' } };
+    const importedFacts = [{ key: 'v1_fact', value: 'preserved' }];
+    const agentNecessity = { irreducibleAmbiguity: true, controllable: true };
+    await client.query("INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,'Ancestry preflight','Draft')", [processId, fixture.org, fixture.workspace]);
+    await client.query(
+      `INSERT INTO public.assessments(id,process_id,org_id,workspace_id,status,responses,score_version,created_by,updated_by)
+       VALUES($1,$2,$3,$4,'Approved','{}'::jsonb,'assess-core-2026-05',$5,$5)`,
+      [sourceAssessmentId, processId, fixture.org, fixture.workspace, fixture.requester],
+    );
+    await client.query(
+      `INSERT INTO public.assess_v2_cases(
+         id,org_id,workspace_id,process_id,owner_id,status,version,source_v1_assessment_id,source_v1_score_version
+       ) VALUES($1,$2,$3,$4,$5,'draft',2,$6,'assess-core-2026-05')`,
+      [caseId, fixture.org, fixture.workspace, processId, fixture.requester, sourceAssessmentId],
+    );
+    await client.query(
+      `INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,agent_necessity,source_kind,source_snapshot,imported_facts,created_by)
+       VALUES($1,$2,$3,$4,1,'Prior',$12::jsonb,'v1_clone',$5::jsonb,$6::jsonb,$7),
+             ($8,$2,$3,$4,2,'Promoted',$9::jsonb,'draft_upsert',$10::jsonb,$11::jsonb,$7)`,
+      [priorId, caseId, fixture.org, fixture.workspace, JSON.stringify(sourceSnapshot), JSON.stringify(importedFacts), fixture.requester,
+        promotedId, JSON.stringify(corrupt ? {} : agentNecessity), JSON.stringify(corrupt ? { promotion: true } : sourceSnapshot), JSON.stringify(corrupt ? [] : importedFacts), JSON.stringify(agentNecessity)],
+    );
+    await client.query('UPDATE public.assess_v2_cases SET head_version_id=$1 WHERE id=$2', [promotedId, caseId]);
+    await client.query(
+      `INSERT INTO public.assess_v2_evidence_links(id,version_id,case_id,org_id,workspace_id,payload)
+       VALUES($1,$2,$3,$4,$5,public.enterprise_build_assess_v2_evidence_submission($1,'upload','text/plain'))`,
+      [evidenceId, promotedId, caseId, fixture.org, fixture.workspace],
+    );
+    const candidate = (await client.query('SELECT * FROM public.enterprise_evidence_candidates WHERE id=$1', [fixture.candidate])).rows[0];
+    await client.query(
+      `INSERT INTO public.enterprise_evidence_assess_promotions(
+         org_id,workspace_id,candidate_id,source_id,source_version_id,assess_case_id,
+         assess_case_version_id,assess_evidence_link_id,assess_case_version,candidate_version,
+         candidate_provenance_hash,field_key,promoted_by
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,2,$9,$10,$11,$12)`,
+      [fixture.org, fixture.workspace, candidate.id, candidate.source_id, candidate.source_version_id,
+        caseId, promotedId, evidenceId, candidate.version, candidate.provenance_hash, candidate.field_key, fixture.requester],
+    );
+    return { promotedId, sourceSnapshot: corrupt ? { promotion: true } : sourceSnapshot, importedFacts: corrupt ? [] : importedFacts, agentNecessity: corrupt ? {} : agentNecessity };
+  };
+
+  const ancestryClean = await createDatabase(admin, names.ancestryClean);
+  await apply(ancestryClean, beforeAncestryPreflight);
+  await seedPromotionHistory(ancestryClean, false);
+  await transaction(ancestryClean, ancestryPreflight, await readFile(join('supabase/migrations', ancestryPreflight), 'utf8'));
+  console.log('FOUNDATION PASS native, V1-clone, and post-correction ancestry histories pass');
+
+  const ancestryDirty = await createDatabase(admin, names.ancestryDirty);
+  await apply(ancestryDirty, beforeAncestryPreflight);
+  const dirtyHistory = await seedPromotionHistory(ancestryDirty, true);
+  const priorComment = (await ancestryDirty.query("SELECT obj_description('public.enterprise_promote_evidence_batch_to_assess_v2(uuid,jsonb,uuid,bigint,uuid,uuid,uuid,bigint,uuid,uuid,bigint)'::regprocedure,'pg_proc') value")).rows[0].value;
+  await assert.rejects(
+    transaction(ancestryDirty, ancestryPreflight, await readFile(join('supabase/migrations', ancestryPreflight), 'utf8')),
+    /ENTERPRISE_PROMOTION_ANCESTRY_HISTORY_REQUIRES_REVIEW/,
+  );
+  assert.equal((await ancestryDirty.query("SELECT obj_description('public.enterprise_promote_evidence_batch_to_assess_v2(uuid,jsonb,uuid,bigint,uuid,uuid,uuid,bigint,uuid,uuid,bigint)'::regprocedure,'pg_proc') value")).rows[0].value, priorComment);
+  const unchangedDirtyHistory = (await ancestryDirty.query(
+    'SELECT source_snapshot,imported_facts,agent_necessity FROM public.assess_v2_case_versions WHERE id=$1',
+    [dirtyHistory.promotedId],
+  )).rows[0];
+  assert.deepEqual(unchangedDirtyHistory, {
+    source_snapshot: dirtyHistory.sourceSnapshot,
+    imported_facts: dirtyHistory.importedFacts,
+    agent_necessity: dirtyHistory.agentNecessity,
+  });
+  console.log('FOUNDATION PASS corrupted superseded-promotion history rejects atomically before mutation');
 
   const authority = await createDatabase(admin, names.authority);
   await apply(authority, migrations);

@@ -127,6 +127,24 @@ assert.equal(projection.blueprints[0].components.find(item => item.type === 'Age
 assert.equal(projection.approvalResources.find(item => item.id === PACKAGE)?.separationOfDuties, 'creator_cannot_review');
 assert.equal(projection.assessPromotion.state, 'contract_pending');
 assert.equal(decodeEnterpriseIntelligenceProjection(projection).workspaceId, WORKSPACE);
+
+const astral = '\u{1f680}';
+const scalarBoundaryRows = raw();
+scalarBoundaryRows.evidenceCandidates[0].value = `${'a'.repeat(11_999)}${astral}`;
+const scalarBoundaryProjection = buildEnterpriseIntelligenceProjection(authority(), scalarBoundaryRows);
+assert.equal(scalarBoundaryProjection.evidenceCandidates[0].value, scalarBoundaryRows.evidenceCandidates[0].value);
+assert.equal(Array.from(scalarBoundaryProjection.evidenceCandidates[0].value).length, 12_000);
+assert.equal(new TextEncoder().encode(scalarBoundaryProjection.evidenceCandidates[0].value).byteLength, 12_003);
+
+for (const invalidValue of [
+  `${'a'.repeat(12_000)}${astral}`,
+  `${'a'.repeat(11_999)}\ud83d`,
+  `${'a'.repeat(11_999)}\ude80`,
+]) {
+  const invalidRows = raw();
+  invalidRows.evidenceCandidates[0].value = invalidValue;
+  assert.deepEqual(buildEnterpriseIntelligenceProjection(authority(), invalidRows).evidenceCandidates, []);
+}
 const serialized = JSON.stringify(projection);
 for (const prohibited of ['must-never-project', 'contentHash', 'extractedTextHash', 'idempotencyKey', 'resource_hash', 'storage_path', 'secret_ref']) {
   assert.ok(!serialized.includes(prohibited), `projection must omit ${prohibited}`);

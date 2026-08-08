@@ -58,6 +58,7 @@ Assess scoring changes; OCR; audio transcription; remote URL or archive ingestio
 30. Evidence excerpt bounds count Unicode scalar values, never split surrogate pairs, reject malformed/unpaired surrogates before hashing, and use one exact sanitized string for locator derivation, persistence, effect recovery, and replay.
 31. Provider and reviewed candidate values reject malformed/unpaired UTF-16, truncate at 12,000 Unicode scalar values, and use one exact canonical string before candidate construction, hashing, staging, persistence, review/edit lineage, promotion, response-loss recovery, and replay.
 32. Every Enterprise promotion version preserves the exact prior Assess V2 `source_snapshot`, `imported_facts`, and `agent_necessity`; native and V1-clone ancestry is never replaced by promotion metadata, which remains authoritative only in relational promotion and audit lineage.
+33. Review projection returns the exact governed candidate value without code-unit truncation. An additive first-statement upgrade preflight rejects promotion history whose immutable version differs from its exact predecessor in `source_snapshot`, `imported_facts`, or `agent_necessity`; it never silently repairs history.
 
 ## Feature quality gates
 

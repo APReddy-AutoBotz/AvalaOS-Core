@@ -5,6 +5,7 @@ import {
   ENTERPRISE_AI_PROVIDERS,
   ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
   EVIDENCE_CANDIDATE_FIELDS,
+  isUnicodeScalarString,
   SUPPORTED_EVIDENCE_MIME_TYPES,
   type AssembleBlueprintDraft,
   type AssembleComponentType,
@@ -351,10 +352,14 @@ const projectEvidence = (raw: EnterpriseIntelligenceRawProjection, actorId: stri
   });
   const candidates: EnterpriseEvidenceCandidateProjection[] = raw.evidenceCandidates.flatMap(candidate => {
     if (!includes(EVIDENCE_CANDIDATE_FIELDS, candidate.field_key) || !includes(['suggested', 'accepted', 'rejected', 'edited'] as const, candidate.suggestion_status)) return [];
+    const candidateValue = text(candidate.value);
+    // Candidate values are already canonical database truth. Never manufacture
+    // different review evidence by truncating that truth in the projection.
+    if (!isUnicodeScalarString(candidateValue) || Array.from(candidateValue).length > 12_000) return [];
     const reviewedBy = text(candidate.reviewed_by);
     return [{
       id: text(candidate.id), sourceId: text(candidate.source_id), field: candidate.field_key as EvidenceCandidateField,
-      value: text(candidate.value).slice(0, 12_000), safeExcerpt: short(candidate.safe_excerpt, 1_000) || undefined,
+      value: candidateValue, safeExcerpt: short(candidate.safe_excerpt, 1_000) || undefined,
       sourceLocator: short(candidate.source_locator, 400), confidence: Math.max(0, Math.min(1, number(candidate.confidence))),
       status: candidate.suggestion_status as EvidenceSuggestionStatus,
       promptVersionLabel: short(candidate.prompt_version, 120) || undefined,

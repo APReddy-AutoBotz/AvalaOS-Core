@@ -64,6 +64,10 @@ const promotionAncestrySql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260808170000_enterprise_promotion_ancestry_preservation.sql'),
   'utf8',
 );
+const promotionAncestryPreflightSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808180000_enterprise_promotion_ancestry_dirty_history_preflight.sql'),
+  'utf8',
+);
 const enterpriseDomainSource = fs.readFileSync(path.join(process.cwd(), 'services/enterpriseIntelligence.ts'), 'utf8');
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const storageSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/storage.ts'), 'utf8');
@@ -305,6 +309,11 @@ check(!commandSource.includes('raw.value.slice(0, 12_000)')
   && commandSource.indexOf('persistedValue = sanitizeEvidenceCandidateValue(raw.value)')
     < commandSource.indexOf('const candidate = await buildGroundedEvidenceCandidate'),
   'Provider candidate values must be canonicalized before grounded hashing and persistence.');
+check(querySource.includes('isUnicodeScalarString(candidateValue)')
+  && querySource.includes('Array.from(candidateValue).length > 12_000')
+  && querySource.includes('value: candidateValue')
+  && !querySource.includes('.slice(0, 12_000)'),
+  'Review projections must return only the exact governed Unicode-scalar candidate value.');
 check(commandSource.includes("Array.from(input.candidate.value).length > 12_000")
   && commandSource.includes('!isUnicodeScalarString(input.candidate.value)'),
   'The grounded candidate boundary must fail closed on non-canonical or malformed values.');
@@ -401,6 +410,20 @@ check(promotionAncestrySql.indexOf('-- Validate the complete locked set before c
 check(promotionAncestrySql.includes('TO service_role')
   && promotionAncestrySql.includes('FROM PUBLIC, anon, authenticated'),
   'The corrected atomic promotion function must remain service-role only.');
+check(promotionAncestryPreflightSql.indexOf('DO $migration$')
+    < promotionAncestryPreflightSql.indexOf('COMMENT ON FUNCTION'),
+  'Dirty-history detection must run before any migration mutation.');
+for (const required of [
+  'ENTERPRISE_PROMOTION_ANCESTRY_HISTORY_REQUIRES_REVIEW',
+  'promoted.source_snapshot IS DISTINCT FROM prior.source_snapshot',
+  'promoted.imported_facts IS DISTINCT FROM prior.imported_facts',
+  'promoted.agent_necessity IS DISTINCT FROM prior.agent_necessity',
+  'prior.version = promoted.version - 1',
+]) check(promotionAncestryPreflightSql.includes(required),
+  `Promotion dirty-history preflight is missing ${required}.`);
+check(!/\b(?:UPDATE|DELETE|INSERT)\b/i.test(
+  promotionAncestryPreflightSql.slice(0, promotionAncestryPreflightSql.indexOf('COMMENT ON FUNCTION')),
+), 'Promotion dirty-history preflight must never repair immutable history.');
 const assessEvidenceBuilderStart = assessEvidenceSubmissionSql.indexOf(
   'CREATE OR REPLACE FUNCTION public.enterprise_build_assess_v2_evidence_submission',
 );
