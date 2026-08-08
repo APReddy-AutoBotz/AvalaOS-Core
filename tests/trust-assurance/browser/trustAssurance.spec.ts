@@ -106,7 +106,7 @@ test('optional buyer outage preserves ready internal projection while authority 
   await expect(page.getByText(/Buyer-safe preview is temporarily unavailable/)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Trust Assurance commands' })).toBeVisible();
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1&buyer-stale=1');
-  await expect(page.getByRole('alert')).toContainText('authorization is stale');
+  await expect(page.getByRole('alert')).toContainText('Authorization changed. Refresh your tenant session.');
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1&buyer-denied=1');
   await expect(page.getByRole('alert')).toContainText('revoked');
 });
@@ -193,6 +193,8 @@ test('feature-disable disagreement latches the ready workspace read-only', async
   await expect(page.getByText(/^Read-only mode:/)).toBeVisible();
   const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
   for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
-  const commands = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:'));
-  expect(commands).toHaveLength(1);
+  const commandsBefore = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:')).length;
+  await controls.first().evaluate((button: HTMLButtonElement) => button.click());
+  const commandsAfter = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:')).length;
+  expect(commandsAfter).toBe(commandsBefore);
 });
