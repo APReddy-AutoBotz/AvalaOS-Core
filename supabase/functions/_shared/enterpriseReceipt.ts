@@ -128,6 +128,32 @@ export const persistEnterpriseExecutionPlan = async (
   }
 };
 
+export const renewEnterpriseExternalWriteLease = async (
+  receipt: EnterpriseReceiptRow,
+  scope: EnterpriseReceiptScope,
+): Promise<EnterpriseReceiptRow> => {
+  try {
+    const value = await rpc<EnterpriseReceiptRow | EnterpriseReceiptRow[]>('enterprise_ai_renew_external_write_lease', {
+      p_id: receipt.id,
+      p_org: scope.organizationId,
+      p_workspace: scope.workspaceId,
+      p_execution_token: receipt.execution_token,
+      p_execution_fence: receipt.execution_fence,
+    });
+    const renewed = rowFrom(value);
+    if (!renewed?.id
+      || renewed.execution_token !== receipt.execution_token
+      || renewed.execution_fence !== receipt.execution_fence) {
+      throw new EnterpriseReceiptError('COMMAND_IN_PROGRESS');
+    }
+    receipt.lease_expires_at = renewed.lease_expires_at;
+    return renewed;
+  } catch (error) {
+    if (error instanceof EnterpriseReceiptError) throw error;
+    throw mapEnterpriseReceiptRpcError(error);
+  }
+};
+
 const reconcileEnterpriseReceipt = async (
   receipt: EnterpriseReceiptRow,
   scope: EnterpriseReceiptScope,

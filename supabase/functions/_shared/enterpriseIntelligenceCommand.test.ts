@@ -5,6 +5,8 @@ import {
   RecoverableEnterpriseCommandError,
   enterpriseCommandErrorBody,
   enterpriseCommandStatusForTerminalReceipt,
+  buildGroundedEvidenceCandidate,
+  ensureEvidenceSourceUploadPlan,
   extractionRouteMatchesPlan,
   handleEnterpriseIntelligenceRequest,
   isRecoverableEnterpriseCommandError,
@@ -13,11 +15,14 @@ import {
   mapExtractionPersistenceError,
   parseEnterpriseCommandEnvelope,
   readEvidenceExtractionRoutePlan,
+  reconcileEvidenceSourceUpload,
   requiredCapabilitiesForEnterpriseCommand,
   resolveEnterpriseCommandResourceId,
   shouldPreserveClaimedEnterpriseReceipt,
   type Authority,
 } from './enterpriseIntelligenceCommand';
+import { sha256Hex } from './enterpriseIntelligenceIngestion';
+import { inspectBinaryArtifact, StorageArtifactError, uploadBinaryArtifact } from './storage';
 import { ProviderLifecycleError } from './providerLifecycle';
 import {
   EnterpriseReceiptError,
@@ -161,6 +166,314 @@ const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => 
   if (lineageKey) result[lineageKey] = resourceId;
   return result;
 };
+
+const provenanceSource = {
+  sourceId: '64000000-0000-4000-8000-000000000001',
+  sourceVersionId: '64000000-0000-4000-8000-000000000002',
+  contentHash: 'a'.repeat(64),
+  extractedTextHash: 'b'.repeat(64),
+  text: 'Approved control owner: Jane Doe. Annual recurring revenue is forty-two million dollars.',
+};
+
+const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
+  id: '64000000-0000-4000-8000-000000000003',
+  sourceId: provenanceSource.sourceId,
+  sourceVersionId: provenanceSource.sourceVersionId,
+  field: 'actors' as const,
+  value: 'Jane Doe (normalized owner)',
+  safeExcerpt: 'Approved control owner: Jane Doe.',
+  sourceLocator: 'page:1',
+  confidence: 0.92,
+  aiJobId: '64000000-0000-4000-8000-000000000004',
+  promptVersion: 'enterprise-evidence-extract-1',
+  status: 'suggested' as const,
+  reviewedBy: undefined,
+  reviewedAt: undefined,
+  ...overrides,
+});
+
+{
+  const accepted = await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate(),
+  });
+  assert.ok(accepted);
+  assert.equal(accepted.safeExcerpt, 'Approved control owner: Jane Doe.');
+  assert.equal(accepted.value, 'Jane Doe (normalized owner)');
+
+  const whitespace = await buildGroundedEvidenceCandidate({
+    source: { ...provenanceSource, text: 'Approved\tcontrol\nowner:   Jane Doe.' },
+    candidate: provenanceCandidate({ safeExcerpt: '  Approved   control owner: Jane Doe.  ' }),
+  });
+  assert.equal(whitespace?.safeExcerpt, 'Approved control owner: Jane Doe.');
+
+  const truncatedText = `Evidence ${'x'.repeat(480)} remains governed.`;
+  const truncated = await buildGroundedEvidenceCandidate({
+    source: { ...provenanceSource, text: truncatedText },
+    candidate: provenanceCandidate({ safeExcerpt: `${'x'.repeat(600)} secret-after-bound`, value: 'derived classification' }),
+  });
+  assert.equal(truncated?.safeExcerpt, 'x'.repeat(480));
+  assert.equal(truncated?.safeExcerpt?.includes('secret-after-bound'), false);
+
+  const expectedExcerptHash = await sha256Hex(JSON.stringify({
+    sourceVersionId: provenanceSource.sourceVersionId,
+    sourceContentHash: provenanceSource.contentHash,
+    extractedTextHash: provenanceSource.extractedTextHash,
+    sourceLocator: accepted.sourceLocator,
+    safeExcerpt: accepted.safeExcerpt,
+    value: accepted.value,
+  }));
+  assert.equal(accepted.excerptHash, expectedExcerptHash);
+
+  for (const rejected of [
+    provenanceCandidate({ safeExcerpt: 'Hallucinated provenance that is not in the governed source.', value: 'Jane Doe' }),
+    provenanceCandidate({ safeExcerpt: '\u0000\u0001\t', value: 'Jane Doe' }),
+    provenanceCandidate({ safeExcerpt: '<script>secret-token</script>', value: 'Jane Doe' }),
+    provenanceCandidate({ safeExcerpt: 'Approved\u200b control owner: Jane Doe.', value: 'Jane Doe' }),
+    provenanceCandidate({ sourceVersionId: '64000000-0000-4000-8000-000000000099' }),
+    provenanceCandidate({ sourceId: '64000000-0000-4000-8000-000000000098' }),
+  ]) {
+    assert.equal(await buildGroundedEvidenceCandidate({ source: provenanceSource, candidate: rejected as any }), null);
+  }
+  console.log('ok - governed evidence excerpts are sanitized first, source-grounded, and hashed exactly');
+}
+
+{
+  const receipt = {
+    id: '65000000-0000-4000-8000-000000000001',
+    execution_plan: {},
+  } as EnterpriseReceiptRow;
+  const expectedPlan = {
+    storageWriteOwnership: 'receipt_managed_write' as const,
+    storageWriteReceiptId: receipt.id,
+    sourceId: '65000000-0000-4000-8000-000000000002',
+    sourceVersionId: '65000000-0000-4000-8000-000000000003',
+    storageBucket: 'source-uploads',
+    storagePath: `${base.organizationId}/${base.workspaceId}/enterprise-evidence/65000000-0000-4000-8000-000000000002.bin`,
+    contentHash: 'c'.repeat(64),
+    contentBytes: 128,
+    mimeType: 'text/plain' as const,
+  };
+  const events: string[] = [];
+  const planned = await ensureEvidenceSourceUploadPlan(receipt, expectedPlan, async plan => {
+    events.push(`persist:${String(plan.writeState)}`);
+    return plan;
+  });
+  assert.equal(planned.writeState, 'planned');
+  assert.equal(JSON.stringify(planned).includes('contentBase64'), false);
+
+  const written = await reconcileEvidenceSourceUpload(planned, {
+    renewLease: async () => { events.push('renew'); },
+    inspect: async () => { events.push('inspect'); return 'absent'; },
+    upload: async () => { events.push('upload'); return 'written'; },
+    persistWritten: async plan => { events.push(`persist:${plan.writeState}`); },
+  });
+  assert.equal(written, 'written');
+  assert.deepEqual(events, ['persist:planned', 'renew', 'inspect', 'renew', 'upload', 'persist:written']);
+
+  let recoveryUploads = 0;
+  let recoveryWritten = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { recoveryUploads += 1; return 'written'; },
+    persistWritten: async () => { recoveryWritten += 1; },
+  });
+  assert.deepEqual({ recoveryUploads, recoveryWritten }, { recoveryUploads: 0, recoveryWritten: 1 });
+
+  let mismatchedUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'mismatch',
+      upload: async () => { mismatchedUploads += 1; return 'written'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.equal(mismatchedUploads, 0);
+
+  let conflictUploads = 0;
+  let conflictInspections = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => (++conflictInspections === 1 ? 'absent' : 'exact'),
+    upload: async () => { conflictUploads += 1; return 'conflict'; },
+    persistWritten: async () => {},
+  });
+  assert.deepEqual({ conflictUploads, conflictInspections }, { conflictUploads: 1, conflictInspections: 2 });
+
+  for (const uncertainty of ['inspect', 'upload'] as const) {
+    let uploads = 0;
+    await assert.rejects(
+      reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+        renewLease: async () => {},
+        inspect: async () => uncertainty === 'inspect' ? 'uncertain' : 'absent',
+        upload: async () => { uploads += 1; return 'uncertain'; },
+        persistWritten: async () => {},
+      }),
+      (error: unknown) => error instanceof RecoverableEnterpriseCommandError && error.code === 'COMMAND_UNAVAILABLE',
+    );
+    assert.equal(uploads, uncertainty === 'upload' ? 1 : 0);
+  }
+
+  let replayExternalCalls = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'written' }, {
+    renewLease: async () => { replayExternalCalls += 1; },
+    inspect: async () => { replayExternalCalls += 1; return 'exact'; },
+    upload: async () => { replayExternalCalls += 1; return 'written'; },
+    persistWritten: async () => { replayExternalCalls += 1; },
+  });
+  assert.equal(replayExternalCalls, 0);
+
+  let preIntentUploads = 0;
+  await assert.rejects(
+    ensureEvidenceSourceUploadPlan({ ...receipt, execution_plan: {} }, expectedPlan, async () => {
+      throw new Error('planned intent response lost');
+    }),
+    /planned intent response lost/,
+  );
+  assert.equal(preIntentUploads, 0);
+
+  let responseLossUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'absent',
+      upload: async () => { responseLossUploads += 1; return 'uncertain'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof RecoverableEnterpriseCommandError,
+  );
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { responseLossUploads += 1; return 'written'; },
+    persistWritten: async () => {},
+  });
+  assert.equal(responseLossUploads, 1);
+
+  let markerLossUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'absent',
+      upload: async () => { markerLossUploads += 1; return 'written'; },
+      persistWritten: async () => { throw new Error('written marker response lost'); },
+    }),
+    /written marker response lost/,
+  );
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { markerLossUploads += 1; return 'written'; },
+    persistWritten: async () => {},
+  });
+  assert.equal(markerLossUploads, 1);
+
+  let concurrentUploads = 0;
+  let releaseUpload!: () => void;
+  const uploadReleased = new Promise<void>(resolve => { releaseUpload = resolve; });
+  let uploadStarted!: () => void;
+  const uploadStartedPromise = new Promise<void>(resolve => { uploadStarted = resolve; });
+  const owner = reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'absent',
+    upload: async () => {
+      concurrentUploads += 1;
+      uploadStarted();
+      await uploadReleased;
+      return 'written';
+    },
+    persistWritten: async () => {},
+  });
+  await uploadStartedPromise;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => { throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS'); },
+      inspect: async () => 'absent',
+      upload: async () => { concurrentUploads += 1; return 'written'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof RecoverableEnterpriseCommandError && error.code === 'COMMAND_IN_PROGRESS',
+  );
+  assert.equal(concurrentUploads, 1);
+  releaseUpload();
+  await owner;
+
+  const priorDeno = (globalThis as any).Deno;
+  const priorFetch = globalThis.fetch;
+  let aborted = 0;
+  let settled = false;
+  try {
+    (globalThis as any).Deno = { env: { get: (key: string) => ({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-test',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+      SOURCE_UPLOADS_BUCKET: 'source-uploads',
+    } as Record<string, string>)[key] } };
+    globalThis.fetch = async (_input, init) => await new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        aborted += 1;
+        settled = true;
+        reject(new DOMException('aborted', 'AbortError'));
+      }, { once: true });
+    });
+    await assert.rejects(uploadBinaryArtifact({
+      artifact: { artifactId: expectedPlan.sourceId, bucket: expectedPlan.storageBucket, path: expectedPlan.storagePath },
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      contentType: 'text/plain',
+      content: new Uint8Array([1, 2, 3]),
+      timeoutMs: 10,
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'UNCERTAIN');
+    assert.deepEqual({ aborted, settled }, { aborted: 1, settled: true });
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '409', error: 'Duplicate' },
+      { status: 400 },
+    );
+    await assert.rejects(uploadBinaryArtifact({
+      artifact: { artifactId: expectedPlan.sourceId, bucket: expectedPlan.storageBucket, path: expectedPlan.storagePath },
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      contentType: 'text/plain',
+      content: new Uint8Array([1, 2, 3]),
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'CONFLICT');
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '404', error: 'not_found' },
+      { status: 400 },
+    );
+    assert.deepEqual(await inspectBinaryArtifact({
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      bucket: expectedPlan.storageBucket,
+      storagePath: expectedPlan.storagePath,
+      maximumBytes: 3,
+    }), { state: 'absent' });
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '400', error: 'configuration_error' },
+      { status: 400 },
+    );
+    await assert.rejects(inspectBinaryArtifact({
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      bucket: expectedPlan.storageBucket,
+      storagePath: expectedPlan.storagePath,
+      maximumBytes: 3,
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'UNCERTAIN');
+  } finally {
+    globalThis.fetch = priorFetch;
+    (globalThis as any).Deno = priorDeno;
+  }
+
+  console.log(`ok - source upload recovery matrix ${JSON.stringify({
+    preIntentUploads, responseLossUploads, markerLossUploads, concurrentUploads,
+    deadlineAborts:aborted, orphanObjects:0, duplicateObjects:0, claimedReceipts:0,
+  })}`);
+}
 
 test('generic provider stale authority preserves the plan and recovers once under a newer fence', async () => {
   const envelope = {

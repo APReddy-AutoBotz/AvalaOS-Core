@@ -902,6 +902,52 @@ try {
     assert.deepEqual(afterReplay, {sources:1,effects:2,claimed:0});
     console.log(`SOURCE FAILURE RECOVERY COUNTS ${JSON.stringify({sourceRecords:1,failureTransitions:1,effects:2,replayWrites:0,claimedFinal:0})}`);
   });
+  await scenario('evidence source upload intent is fenced, monotonic, and lease-renewable', async () => {
+    const sourceId = fixture.uuid(726); const sourceVersionId = fixture.uuid(727);
+    const request = fixture.uuid(728); const token = fixture.uuid(729);
+    const receipt = (await authority.query(
+      "SELECT (public.enterprise_ai_claim_command($1,$2,$3,'evidence.source.create','source-upload-intent-001',$4,$5,NULL,$6)).*",
+      [fixture.requester, fixture.org, fixture.workspace, request, fixture.hash('7'), token],
+    )).rows[0];
+    const planned = {
+      storageWriteOwnership:'receipt_managed_write', storageWriteReceiptId:receipt.id,
+      sourceId, sourceVersionId, storageBucket:'source-uploads',
+      storagePath:`${fixture.org}/${fixture.workspace}/enterprise-evidence/${sourceId}.bin`,
+      contentHash:fixture.hash('8'), contentBytes:128, mimeType:'text/plain', writeState:'planned',
+    };
+    const plannedReceipt = (await authority.query(
+      'SELECT (public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)).*',
+      [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence, JSON.stringify(planned)],
+    )).rows[0];
+    assert.equal(plannedReceipt.execution_plan.writeState, 'planned');
+    const renewed = (await authority.query(
+      'SELECT (public.enterprise_ai_renew_external_write_lease($1,$2,$3,$4,$5)).*',
+      [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence],
+    )).rows[0];
+    assert.equal(renewed.execution_fence, receipt.execution_fence);
+    assert.ok(new Date(renewed.lease_expires_at).getTime() > Date.now() + 15_000);
+    await assert.rejects(authority.query(
+      'SELECT public.enterprise_ai_renew_external_write_lease($1,$2,$3,$4,$5)',
+      [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence + 1],
+    ), /ENTERPRISE_AI_STALE_EXECUTION_FENCE/);
+    const written = {...planned, writeState:'written'};
+    const writtenReceipt = (await authority.query(
+      'SELECT (public.enterprise_ai_plan_command($1,$2,$3,$4,$5,$6::jsonb)).*',
+      [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence, JSON.stringify(written)],
+    )).rows[0];
+    assert.equal(writtenReceipt.execution_plan.writeState, 'written');
+    const failure = {ok:false,error:{code:'RESOURCE_STALE',message:'The Enterprise Intelligence command could not be completed.'}};
+    await authority.query(
+      'SELECT public.enterprise_ai_fail_command($1,$2,$3,$4,$5,$6::jsonb,false)',
+      [receipt.id, fixture.org, fixture.workspace, token, receipt.execution_fence, JSON.stringify(failure)],
+    );
+    const counts = (await authority.query(
+      "SELECT count(*) FILTER (WHERE status='claimed')::int claimed, count(*) FILTER (WHERE id=$1)::int receipts FROM public.enterprise_ai_command_receipts",
+      [receipt.id],
+    )).rows[0];
+    assert.deepEqual(counts, {claimed:0,receipts:1});
+    console.log(`SOURCE UPLOAD INTENT ${JSON.stringify({planned:1,written:1,leaseRenewals:1,staleFenceDenials:1,claimedFinal:0,rawSourceBytesInPlan:0})}`);
+  });
   await scenario('scanned PDF records truthful OCR-required failure and immutable provenance', async () => {
     const scanned = fixture.sources.find(source => source.extension === 'scanned.pdf');
     const before = (await authority.query('SELECT provenance_hash FROM public.enterprise_evidence_source_versions WHERE id=$1', [scanned.sourceVersionId])).rows[0].provenance_hash;

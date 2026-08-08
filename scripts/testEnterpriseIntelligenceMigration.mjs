@@ -48,7 +48,12 @@ const modernizationCanonicalSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260808130000_enterprise_modernization_canonical_projection.sql'),
   'utf8',
 );
+const sourceUploadRecoverySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808140000_enterprise_source_upload_recovery.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
+const storageSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/storage.ts'), 'utf8');
 const ingestionSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceIngestion.ts'), 'utf8');
 const querySource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceQuery.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
@@ -220,6 +225,32 @@ check(authorizationAttemptSql.includes('enterprise_ai_record_effect'), 'Correcte
 check(secretWriteIntentSql.includes("old_write_state='planned' AND new_write_state='written'"), 'Receipt plans must permit only the managed planned-to-written state advance.');
 check(secretWriteIntentSql.includes("p_plan @> (receipt.execution_plan - 'writeState')"), 'Write-state advancement must preserve every other receipt-plan field.');
 check(secretWriteIntentSql.includes('ENTERPRISE_AI_STALE_EXECUTION_FENCE'), 'Secret intent persistence must retain execution fencing.');
+for (const required of [
+  'enterprise_ai_renew_external_write_lease',
+  "receipt.command_type <> 'evidence.source.create'",
+  "receipt.execution_plan->>'storageWriteOwnership' <> 'receipt_managed_write'",
+  "receipt.execution_plan->>'storageWriteReceiptId' IS DISTINCT FROM receipt.id::TEXT",
+  "receipt.execution_plan->>'writeState' NOT IN ('planned', 'written')",
+  "statement_timestamp() + interval '45 seconds'",
+  'execution_token = p_execution_token',
+  'execution_fence = p_execution_fence',
+]) check(sourceUploadRecoverySql.includes(required), `Source upload recovery is missing ${required}.`);
+check(sourceUploadRecoverySql.includes('FROM PUBLIC, anon, authenticated'), 'Source upload lease renewal must reject browser roles.');
+check(sourceUploadRecoverySql.includes('TO service_role'), 'Source upload lease renewal must remain service-only.');
+check(commandSource.includes('storageWriteOwnership: \'receipt_managed_write\'')
+  && commandSource.indexOf('ensureEvidenceSourceUploadPlan') < commandSource.indexOf('uploadBinaryArtifact({'),
+'Evidence source upload intent must be persisted before the external write.');
+check(commandSource.includes("writeState: 'planned'") && commandSource.includes("writeState: 'written'"),
+  'Evidence source upload recovery requires a monotonic planned-to-written marker.');
+check(storageSource.includes('STORAGE_EXTERNAL_OPERATION_TIMEOUT_MS = 15_000')
+  && storageSource.includes('controller.abort()')
+  && storageSource.includes('await fetch(input, { ...init, signal: controller.signal })'),
+'Storage inspection and upload require a hard abortable deadline that settles before ownership release.');
+check(commandSource.includes('buildGroundedEvidenceCandidate')
+  && commandSource.includes('sanitizeEvidenceExcerpt(input.candidate.safeExcerpt)')
+  && commandSource.includes('normalizeEvidenceGroundingText(input.source.text).includes(normalizedExcerpt)'),
+'Candidate provenance must validate the exact sanitized persisted excerpt against the governed source.');
+check(!commandSource.includes('normalizedValue'), 'Candidate values must never substitute for excerpt provenance.');
 for (const required of [
   'enterprise_ai_claim_provider_secret_cleanup',
   "p_operation NOT IN ('provider.secret.bind','provider.secret.rotate')",

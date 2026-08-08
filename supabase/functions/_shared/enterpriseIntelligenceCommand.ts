@@ -10,10 +10,12 @@ import {
   buildMonitorBaseline,
   evaluateModernizationDecision,
   isSupportedEvidenceMimeType,
+  sanitizeEvidenceExcerpt,
   stableFingerprint,
   type AssembleBlueprintDraft,
   type EnterpriseAiCapability,
   type EnterpriseAiProvider,
+  type EvidenceCandidateField,
   type ModernizationFactors,
   type ModernizationDisposition,
   type SupportedEvidenceMimeType,
@@ -43,6 +45,7 @@ import {
   hashReceiptValue,
   persistEnterpriseExecutionPlan,
   reloadEnterpriseReceipt,
+  renewEnterpriseExternalWriteLease,
   type EnterpriseReceiptRow,
 } from './enterpriseReceipt.ts';
 import { handleOptions, jsonResponse } from './http.ts';
@@ -58,8 +61,10 @@ import {
 import {
   downloadStoredFile,
   assertSourceUploadsBucket,
+  inspectBinaryArtifact,
   prepareTextArtifact,
   resolveSourceUploadsBucket,
+  StorageArtifactError,
   uploadBinaryArtifact,
 } from './storage.ts';
 
@@ -136,7 +141,9 @@ export const shouldPreserveClaimedEnterpriseReceipt = (
   || (error instanceof EnterpriseCommandError && error.code === 'AUTHORIZATION_STALE')
   || (error instanceof EnterpriseCommandError
     && error.code === 'COMMAND_UNAVAILABLE'
-    && executionPlan?.externalStorageWritten === true);
+    && (executionPlan?.externalStorageWritten === true
+      || (executionPlan?.storageWriteOwnership === 'receipt_managed_write'
+        && (executionPlan?.writeState === 'planned' || executionPlan?.writeState === 'written'))));
 
 export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandError => {
   if (supabaseRpcErrorHasSignal(error,
@@ -668,6 +675,138 @@ export function mapProviderLifecycleCommandError(error: unknown): EnterpriseComm
   return new EnterpriseCommandError('COMMAND_BLOCKED');
 }
 
+export type EvidenceSourceUploadPlan = {
+  storageWriteOwnership: 'receipt_managed_write';
+  storageWriteReceiptId: string;
+  sourceId: string;
+  sourceVersionId: string;
+  storageBucket: string;
+  storagePath: string;
+  contentHash: string;
+  contentBytes: number;
+  mimeType: SupportedEvidenceMimeType;
+  writeState: 'planned' | 'written';
+};
+
+type EvidenceSourceUploadPlanIdentity = Omit<EvidenceSourceUploadPlan, 'writeState'>;
+
+const sourceUploadPlanIdentityKeys = [
+  'storageWriteOwnership', 'storageWriteReceiptId', 'sourceId', 'sourceVersionId',
+  'storageBucket', 'storagePath', 'contentHash', 'contentBytes', 'mimeType',
+] as const;
+
+const readEvidenceSourceUploadPlan = (
+  plan: JsonObject,
+  expected: EvidenceSourceUploadPlanIdentity,
+): EvidenceSourceUploadPlan | null => {
+  const hasManagedIntent = plan.storageWriteOwnership !== undefined
+    || plan.storageWriteReceiptId !== undefined
+    || plan.contentHash !== undefined
+    || plan.contentBytes !== undefined
+    || plan.mimeType !== undefined
+    || plan.writeState !== undefined;
+  if (!hasManagedIntent) return null;
+  if (!sourceUploadPlanIdentityKeys.every(key => plan[key] === expected[key])
+    || (plan.writeState !== 'planned' && plan.writeState !== 'written')) {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  return { ...expected, writeState: plan.writeState };
+};
+
+export const ensureEvidenceSourceUploadPlan = async (
+  receipt: EnterpriseReceiptRow,
+  expected: EvidenceSourceUploadPlanIdentity,
+  persistPlan: (plan: JsonObject) => Promise<JsonObject>,
+): Promise<EvidenceSourceUploadPlan> => {
+  const current = receipt.execution_plan || {};
+  const existing = readEvidenceSourceUploadPlan(current, expected);
+  if (existing) return existing;
+  for (const key of ['sourceId', 'sourceVersionId', 'storageBucket', 'storagePath'] as const) {
+    if (current[key] !== undefined && current[key] !== expected[key]) {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+  }
+  const planned: EvidenceSourceUploadPlan = { ...expected, writeState: 'planned' };
+  const persisted = await persistPlan({ ...current, ...planned });
+  const decoded = readEvidenceSourceUploadPlan(persisted, expected);
+  if (!decoded) throw new EnterpriseCommandError('RESOURCE_STALE');
+  receipt.execution_plan = persisted;
+  return decoded;
+};
+
+export type EvidenceSourceUploadInspection = 'absent' | 'exact' | 'mismatch' | 'uncertain';
+export type EvidenceSourceUploadAttempt = 'written' | 'conflict' | 'uncertain';
+
+export const reconcileEvidenceSourceUpload = async (
+  plan: EvidenceSourceUploadPlan,
+  deps: {
+    renewLease: () => Promise<void>;
+    inspect: () => Promise<EvidenceSourceUploadInspection>;
+    upload: () => Promise<EvidenceSourceUploadAttempt>;
+    persistWritten: (plan: EvidenceSourceUploadPlan) => Promise<void>;
+  },
+) => {
+  if (plan.writeState === 'written') return 'written' as const;
+
+  const inspectOwnedObject = async () => {
+    await deps.renewLease();
+    const inspection = await deps.inspect();
+    if (inspection === 'uncertain') throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    if (inspection === 'mismatch') throw new EnterpriseCommandError('RESOURCE_STALE');
+    return inspection;
+  };
+
+  let inspection = await inspectOwnedObject();
+  if (inspection === 'absent') {
+    await deps.renewLease();
+    const uploaded = await deps.upload();
+    if (uploaded === 'uncertain') throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    if (uploaded === 'conflict') {
+      inspection = await inspectOwnedObject();
+      if (inspection !== 'exact') throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+  }
+  await deps.persistWritten({ ...plan, writeState: 'written' });
+  return 'written' as const;
+};
+
+const normalizeEvidenceGroundingText = (value: string) => value
+  .normalize('NFKC')
+  .toLowerCase()
+  .replace(/\s+/gu, ' ')
+  .trim();
+
+export const buildGroundedEvidenceCandidate = async (input: {
+  source: {
+    sourceId: string;
+    sourceVersionId: string;
+    contentHash: string;
+    extractedTextHash: string;
+    text: string;
+  };
+  candidate: Omit<Parameters<typeof buildEvidenceCandidate>[0], 'field'> & { field: EvidenceCandidateField };
+}) => {
+  if (input.candidate.sourceId !== input.source.sourceId
+    || input.candidate.sourceVersionId !== input.source.sourceVersionId) return null;
+  const persistedExcerpt = typeof input.candidate.safeExcerpt === 'string'
+    ? sanitizeEvidenceExcerpt(input.candidate.safeExcerpt)
+    : '';
+  const normalizedExcerpt = normalizeEvidenceGroundingText(persistedExcerpt);
+  if (!normalizedExcerpt
+    || !normalizeEvidenceGroundingText(input.source.text).includes(normalizedExcerpt)) return null;
+  const candidate = buildEvidenceCandidate({ ...input.candidate, safeExcerpt: persistedExcerpt });
+  if (candidate.safeExcerpt !== persistedExcerpt) throw new EnterpriseCommandError('RESOURCE_STALE');
+  candidate.excerptHash = await sha256Hex(JSON.stringify({
+    sourceVersionId: input.source.sourceVersionId,
+    sourceContentHash: input.source.contentHash,
+    extractedTextHash: input.source.extractedTextHash,
+    sourceLocator: candidate.sourceLocator,
+    safeExcerpt: candidate.safeExcerpt,
+    value: candidate.value,
+  }));
+  return candidate;
+};
+
 const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requirePermission(authority, 'evidence.write');
   const mimeType = requireMime(payload.mimeType);
@@ -681,18 +820,81 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
   const versionId = plannedUuid(receipt, 'sourceVersionId');
   const bucket = assertSourceUploadsBucket(resolveSourceUploadsBucket());
   const artifact = prepareTextArtifact({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket, artifactType: 'enterprise-evidence', extension: 'bin', artifactId: sourceId });
-  await ensureExecutionPlan(receipt, authority, {
+  const contentHash = await sha256Hex(bytes);
+  const uploadIdentity: EvidenceSourceUploadPlanIdentity = {
+    storageWriteOwnership: 'receipt_managed_write',
+    storageWriteReceiptId: receipt.id,
     sourceId,
     sourceVersionId: versionId,
     storageBucket: bucket,
     storagePath: artifact.path,
-  });
-  try {
-    if (receipt.execution_plan?.externalStorageWritten !== true) {
-      await uploadBinaryArtifact({ artifact, orgId: authority.organizationId, workspaceId: authority.workspaceId, contentType: mimeType, content: bytes });
-      await ensureExecutionPlan(receipt, authority, { externalStorageWritten: true });
+    contentHash,
+    contentBytes: bytes.length,
+    mimeType,
+  };
+  const persistUploadPlan = async (plan: JsonObject) => {
+    try {
+      return await ensureExecutionPlan(receipt, authority, plan);
+    } catch (error) {
+      if (error instanceof EnterpriseReceiptError
+        && (error.code === 'COMMAND_UNAVAILABLE' || error.code === 'COMMAND_IN_PROGRESS')) {
+        throw new RecoverableEnterpriseCommandError(error.code);
+      }
+      throw error;
     }
-    const contentHash = await sha256Hex(bytes);
+  };
+  const uploadPlan = await ensureEvidenceSourceUploadPlan(receipt, uploadIdentity, persistUploadPlan);
+  try {
+    await reconcileEvidenceSourceUpload(uploadPlan, {
+      renewLease: async () => {
+        try {
+          await renewEnterpriseExternalWriteLease(receipt, authority);
+        } catch (error) {
+          if (error instanceof EnterpriseReceiptError
+            && (error.code === 'COMMAND_UNAVAILABLE' || error.code === 'COMMAND_IN_PROGRESS')) {
+            throw new RecoverableEnterpriseCommandError(error.code);
+          }
+          throw error;
+        }
+      },
+      inspect: async () => {
+        try {
+          const inspected = await inspectBinaryArtifact({
+            orgId: authority.organizationId,
+            workspaceId: authority.workspaceId,
+            bucket,
+            storagePath: artifact.path,
+            maximumBytes: bytes.length,
+          });
+          if (inspected.state === 'absent') return 'absent';
+          if (!inspected.content || inspected.content.length !== bytes.length) return 'mismatch';
+          return await sha256Hex(inspected.content) === contentHash ? 'exact' : 'mismatch';
+        } catch (error) {
+          if (error instanceof StorageArtifactError && error.code === 'UNCERTAIN') return 'uncertain';
+          throw error;
+        }
+      },
+      upload: async () => {
+        try {
+          await uploadBinaryArtifact({
+            artifact,
+            orgId: authority.organizationId,
+            workspaceId: authority.workspaceId,
+            contentType: mimeType,
+            content: bytes,
+          });
+          return 'written';
+        } catch (error) {
+          if (error instanceof StorageArtifactError) {
+            return error.code === 'CONFLICT' ? 'conflict' : 'uncertain';
+          }
+          throw error;
+        }
+      },
+      persistWritten: async writtenPlan => {
+        await persistUploadPlan({ ...(receipt.execution_plan || {}), ...writtenPlan });
+      },
+    });
     const existingSource = await findOne<{ id: string }>(
       'enterprise_evidence_sources',
       `select=id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceId)}&deleted_at=is.null`,
@@ -773,7 +975,7 @@ const commandEvidenceSourceCreate = async (authority: Authority, payload: JsonOb
     });
     return result;
   } catch (error) {
-    if (error instanceof EnterpriseCommandError) throw error;
+    if (error instanceof EnterpriseCommandError || error instanceof EnterpriseReceiptError) throw error;
     throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
   }
 };
@@ -1108,34 +1310,31 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       if (typeof raw.value !== 'string' || !raw.value.trim() || typeof raw.sourceLocator !== 'string') continue;
       const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0;
       if (confidence < 0 || confidence > 1) continue;
-      const safeExcerpt = typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined;
-      const normalizedSource = text.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
-      const normalizedExcerpt = safeExcerpt?.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
-      const normalizedValue = raw.value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
-      if (!normalizedExcerpt || (!normalizedSource.includes(normalizedExcerpt) && !normalizedSource.includes(normalizedValue))) continue;
-      const candidate = buildEvidenceCandidate({
-        id: crypto.randomUUID(),
-        sourceId,
-        sourceVersionId,
-        field: field as any,
-        value: raw.value.slice(0, 12_000),
-        safeExcerpt,
-        sourceLocator: raw.sourceLocator.slice(0, 400),
-        confidence,
-        aiJobId: jobId,
-        promptVersion,
-        status: 'suggested',
-        reviewedBy: undefined,
-        reviewedAt: undefined,
+      const candidate = await buildGroundedEvidenceCandidate({
+        source: {
+          sourceId,
+          sourceVersionId,
+          contentHash: version.content_hash,
+          extractedTextHash: version.extracted_text_hash || await sha256Hex(text),
+          text,
+        },
+        candidate: {
+          id: crypto.randomUUID(),
+          sourceId,
+          sourceVersionId,
+          field: field as EvidenceCandidateField,
+          value: raw.value.slice(0, 12_000),
+          safeExcerpt: typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined,
+          sourceLocator: raw.sourceLocator.slice(0, 400),
+          confidence,
+          aiJobId: jobId,
+          promptVersion,
+          status: 'suggested',
+          reviewedBy: undefined,
+          reviewedAt: undefined,
+        },
       });
-      candidate.excerptHash = await sha256Hex(JSON.stringify({
-        sourceVersionId,
-        sourceContentHash: version.content_hash,
-        extractedTextHash: version.extracted_text_hash || await sha256Hex(text),
-        sourceLocator: candidate.sourceLocator,
-        safeExcerpt: candidate.safeExcerpt,
-        value: candidate.value,
-      }));
+      if (!candidate) continue;
       candidates.push(candidate);
     }
   } catch {
