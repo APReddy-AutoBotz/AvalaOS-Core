@@ -15,6 +15,7 @@ jobs:
       - run: node scripts/runTrustAssuranceTest.mjs
       - run: node scripts/runEdgeTypeScriptTest.mjs types.ts services/trustCenterModel.ts services/trustAssurance/contracts.ts services/trustAssurance/domain.ts supabase/functions/_shared/tenantAuthority.ts supabase/functions/_shared/trustAssuranceCommand.ts supabase/functions/_shared/trustAssuranceCommand.test.ts
       - run: node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/trustAssuranceQuery.ts supabase/functions/_shared/trustAssuranceQuery.test.ts
+      - run: node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/http.ts supabase/functions/_shared/trustAssuranceHttp.ts supabase/functions/_shared/trustAssuranceHttp.test.ts
       - run: node scripts/testTrustAssuranceMigration.mjs
       - run: node scripts/checkTrustAssuranceBoundaries.mjs
       - run: npm run typecheck && npm run typecheck:edge && npm run build

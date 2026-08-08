@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import type { TenantContextProjection } from '../../../types';
-import { loadEnterpriseSessionContexts } from '../../../services/enterpriseAssess';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { EnterpriseSessionState, TenantContextProjection } from '../../../types';
 import { commandTrustAssurance, queryTrustAssurance } from '../../../services/trustAssurance/client';
 import type { BuyerSafeProjection, InternalAssuranceProjection, TrustCommandRequest, TrustOperation } from '../../../services/trustAssurance/contracts';
 import { TrustAssuranceWorkspace, type TrustAssuranceState } from './TrustAssuranceWorkspace';
@@ -14,59 +13,84 @@ const errorState = (error: unknown): TrustAssuranceState => ({
 });
 
 export const TrustAssuranceConnectedWorkspace: React.FC<{
-  loadContexts?: typeof loadEnterpriseSessionContexts;
+  tenantContext: TenantContextProjection | null;
+  selectionState?: EnterpriseSessionState;
   query?: typeof queryTrustAssurance;
   command?: typeof commandTrustAssurance;
-}> = ({ loadContexts = loadEnterpriseSessionContexts, query: queryProjection = queryTrustAssurance, command: sendCommand = commandTrustAssurance }) => {
-  const [context, setContext] = useState<TenantContextProjection | null>(null);
+}> = ({ tenantContext, selectionState = 'ready', query: queryProjection = queryTrustAssurance, command: sendCommand = commandTrustAssurance }) => {
   const [state, setState] = useState<TrustAssuranceState>({ kind: 'loading' });
   const [buyer, setBuyer] = useState<BuyerSafeProjection | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
+  const generation = useRef(0);
 
-  const load = useCallback(async () => {
+  const loadSelected = useCallback(async (selected: TenantContextProjection, requestGeneration: number) => {
+    if (generation.current !== requestGeneration) return;
     setState({ kind: 'loading' });
+    setBuyer(null);
     try {
-      const contexts = await loadContexts();
-      const next = contexts.find(item => item.capabilities.includes('trust.read'));
-      if (!next) {
-        setState({ kind: 'revoked' });
-        return;
-      }
-      setContext(next);
-      const projection = await queryProjection({ organizationId: next.organizationId, workspaceId: next.workspaceId, authorizationVersion: next.authorizationVersion }, 'internal') as InternalAssuranceProjection;
+      const scope = { organizationId: selected.organizationId, workspaceId: selected.workspaceId, authorizationVersion: selected.authorizationVersion };
+      const projection = await queryProjection(scope, 'internal') as InternalAssuranceProjection;
+      if (generation.current !== requestGeneration) return;
       setState({ kind: 'ready', projection });
-      setBuyer(projection.currentPublication
-        ? await queryProjection({ organizationId: next.organizationId, workspaceId: next.workspaceId, authorizationVersion: next.authorizationVersion }, 'buyer') as BuyerSafeProjection
-        : null);
+      if (!projection.currentPublication) return;
+      const buyerProjection = await queryProjection(scope, 'buyer') as BuyerSafeProjection;
+      if (generation.current === requestGeneration) setBuyer(buyerProjection);
     } catch (error) {
-      setState(errorState(error));
+      if (generation.current === requestGeneration) setState(errorState(error));
     }
-  }, [loadContexts, queryProjection]);
+  }, [queryProjection]);
 
-  useEffect(() => { void load(); }, [load]);
+  const contextKey = tenantContext
+    ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}:${tenantContext.capabilities.join(',')}`
+    : 'none';
+  useEffect(() => {
+    const requestGeneration = ++generation.current;
+    setBuyer(null);
+    setNotice('');
+    setPending(false);
+    if (selectionState === 'loading') setState({ kind: 'loading' });
+    else if (selectionState === 'offline') setState({ kind: 'offline' });
+    else if (selectionState === 'stale') setState({ kind: 'stale_authorization' });
+    else if (selectionState === 'revoked' || selectionState === 'expired_session') setState({ kind: 'revoked' });
+    else if (selectionState === 'error' || selectionState === 'blocked') setState({ kind: 'blocked' });
+    else if (!tenantContext) setState({ kind: selectionState === 'empty' ? 'empty' : 'revoked' });
+    else if (!tenantContext.capabilities.includes('trust.read')) setState({ kind: 'revoked' });
+    else void loadSelected(tenantContext, requestGeneration);
+    return () => { if (generation.current === requestGeneration) generation.current += 1; };
+  }, [contextKey, selectionState, loadSelected]);
 
   const execute = async (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => {
-    if (!context || pending || state.kind !== 'ready' || state.projection.readOnly) return;
+    if (!tenantContext || pending || state.kind !== 'ready' || state.projection.readOnly) return;
+    const requestGeneration = generation.current;
+    const selected = tenantContext;
     setPending(true);
     setNotice('');
     const request: TrustCommandRequest = {
       requestId: crypto.randomUUID(), idempotencyKey: `trust-ui-${operation}-${crypto.randomUUID()}`, operation,
-      organizationId: context.organizationId, workspaceId: context.workspaceId,
-      expectedAuthorizationVersion: context.authorizationVersion, expectedVersion, payload,
+      organizationId: selected.organizationId, workspaceId: selected.workspaceId,
+      expectedAuthorizationVersion: selected.authorizationVersion, expectedVersion, payload,
     };
     try {
       const result = await sendCommand(request);
+      if (generation.current !== requestGeneration) return;
       if ('code' in result) {
         setNotice(result.code);
+        if (result.code === 'AUTHORIZATION_STALE') {
+          setBuyer(null);
+          setState({ kind: 'stale_authorization' });
+        } else if (result.code === 'ACCESS_DENIED' || result.code === 'PERMISSION_DENIED') {
+          setBuyer(null);
+          setState({ kind: 'revoked' });
+        }
         return;
       }
-      await load();
-      setNotice(result.replayed ? 'Durable result replayed.' : 'Durable change committed.');
+      await loadSelected(selected, requestGeneration);
+      if (generation.current === requestGeneration) setNotice(result.replayed ? 'Durable result replayed.' : 'Durable change committed.');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'PERSISTENCE_UNAVAILABLE');
+      if (generation.current === requestGeneration) setNotice(error instanceof Error ? error.message : 'PERSISTENCE_UNAVAILABLE');
     } finally {
-      setPending(false);
+      if (generation.current === requestGeneration) setPending(false);
     }
   };
 

@@ -1,6 +1,121 @@
 import '../../../index.css';
-import React from'react';import{createRoot}from'react-dom/client';import TrustCenterPanel from'../../../components/admin/TrustCenterPanel';import{TrustAssuranceConnectedWorkspace}from'../../../components/admin/trust-assurance/TrustAssuranceConnectedWorkspace';import type{InternalAssuranceProjection}from'../../../services/trustAssurance/contracts';
-const context={userId:'10000000-0000-4000-8000-000000000001',organizationId:'20000000-0000-4000-8000-000000000002',organizationName:'Fixture',workspaceId:'30000000-0000-4000-8000-000000000003',workspaceName:'Workspace',authorizationVersion:2,capabilities:['trust.read','trust.manage','trust.review','trust.publish']};
-let projection:InternalAssuranceProjection={mode:'server_authoritative',organizationId:context.organizationId,workspaceId:context.workspaceId,authorizationVersion:2,readOnly:new URLSearchParams(location.search).has('readonly'),claims:[{claimVersionId:'40000000-0000-4000-8000-000000000004',claimId:'50000000-0000-4000-8000-000000000005',version:1,readinessDomain:'security',claimText:'Source controls are reviewed.',buyerSafeWording:'Source controls are reviewed.',proposedProofStatus:'verified',effectiveProofStatus:'evidence_required',proofBoundary:'verified_with_evidence',limitationDisclosure:'Source only.',doesNotProve:['Hosted behavior'],canonicalHash:'a'.repeat(64),ownerDisplayName:'Assigned owner',lifecycle:'under_review',blockedReasons:['CURRENT_CONTRADICTION']}],evidence:[{evidenceVersionId:'60000000-0000-4000-8000-000000000006',evidenceId:'70000000-0000-4000-8000-000000000007',version:1,evidenceType:'test_report',referenceType:'test_report',referenceValue:'tests/trust-assurance',summary:'Expired focused evidence.',evidenceBoundary:'verified_with_evidence',lifecycle:'active',freshness:'expired',observedAt:'2026-08-01T00:00:00Z',reviewDueAt:null,expiresAt:'2026-08-02T00:00:00Z',canonicalHash:'b'.repeat(64),approved:true,ownerDisplayName:'Assigned owner'}],relationships:[{claimVersionId:'40000000-0000-4000-8000-000000000004',evidenceVersionId:'60000000-0000-4000-8000-000000000006',relationship:'contradicts',rationale:'Current contradiction.'}],reviewQueueCount:1,snapshotHistory:[],currentPublication:null};
-const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));const command=async(request:any)=>{await delay(500);if(new URLSearchParams(location.search).has('conflict'))return{ok:false as const,code:'VERSION_CONFLICT' as const,message:'Conflict'};if(request.operation==='snapshot.create')projection={...projection,snapshotHistory:[{snapshotId:'80000000-0000-4000-8000-000000000008',snapshotHash:'c'.repeat(64),version:1,lifecycle:'draft',createdAt:'2026-08-07T00:00:00Z'}]};return{ok:true as const,replayed:false,resourceId:'80000000-0000-4000-8000-000000000008',version:1,body:{}}};
-const query=async()=>projection;const connected=<TrustAssuranceConnectedWorkspace loadContexts={async()=>new URLSearchParams(location.search).has('revoked')?[]:[context]} query={query as any} command={command as any}/>;createRoot(document.getElementById('root')!).render(<TrustCenterPanel connectedWorkspace={connected}/>);
+import React, { useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import TrustCenterPanel from '../../../components/admin/TrustCenterPanel';
+import { TrustAssuranceConnectedWorkspace } from '../../../components/admin/trust-assurance/TrustAssuranceConnectedWorkspace';
+import type { BuyerSafeProjection, InternalAssuranceProjection, TrustCommandRequest, TrustQueryView } from '../../../services/trustAssurance/contracts';
+import type { TenantContextProjection } from '../../../types';
+
+const params = new URLSearchParams(location.search);
+const matrix = params.has('tenant-context');
+const contextA: TenantContextProjection = {
+  userId: '10000000-0000-4000-8000-000000000001',
+  organizationId: '20000000-0000-4000-8000-000000000002',
+  organizationName: 'Fixture',
+  workspaceId: '30000000-0000-4000-8000-000000000003',
+  workspaceName: 'Workspace A',
+  authorizationVersion: 2,
+  capabilities: ['trust.read', 'trust.manage', 'trust.review', 'trust.publish'],
+};
+const contextB: TenantContextProjection = {
+  ...contextA,
+  workspaceId: '30000000-0000-4000-8000-000000000013',
+  workspaceName: 'Workspace B',
+  authorizationVersion: 3,
+};
+const deniedA: TenantContextProjection = { ...contextA, capabilities: ['assess.read'] };
+
+const projectionFor = (context: TenantContextProjection, published: boolean): InternalAssuranceProjection => ({
+  mode: 'server_authoritative',
+  organizationId: context.organizationId,
+  workspaceId: context.workspaceId,
+  authorizationVersion: context.authorizationVersion,
+  readOnly: params.has('readonly'),
+  claims: [{
+    claimVersionId: '40000000-0000-4000-8000-000000000004', claimId: '50000000-0000-4000-8000-000000000005', version: 1,
+    readinessDomain: 'security', claimText: `${context.workspaceName} assurance`, buyerSafeWording: `${context.workspaceName} assurance`,
+    proposedProofStatus: 'verified', effectiveProofStatus: 'evidence_required', proofBoundary: 'verified_with_evidence',
+    limitationDisclosure: 'Source only.', doesNotProve: ['Hosted behavior'], canonicalHash: 'a'.repeat(64),
+    ownerDisplayName: 'Assigned owner', lifecycle: 'under_review', blockedReasons: ['CURRENT_CONTRADICTION'],
+  }],
+  evidence: [{
+    evidenceVersionId: '60000000-0000-4000-8000-000000000006', evidenceId: '70000000-0000-4000-8000-000000000007', version: 1,
+    evidenceType: 'test_report', referenceType: 'test_report', referenceValue: 'tests/trust-assurance', summary: 'Expired focused evidence.',
+    evidenceBoundary: 'verified_with_evidence', lifecycle: 'active', freshness: 'expired', observedAt: '2026-08-01T00:00:00Z',
+    reviewDueAt: null, expiresAt: '2026-08-02T00:00:00Z', canonicalHash: 'b'.repeat(64), approved: true, ownerDisplayName: 'Assigned owner',
+  }],
+  relationships: [{
+    claimVersionId: '40000000-0000-4000-8000-000000000004', evidenceVersionId: '60000000-0000-4000-8000-000000000006',
+    relationship: 'contradicts', rationale: 'Current contradiction.',
+  }],
+  reviewQueueCount: 1,
+  snapshotHistory: [],
+  currentPublication: published ? {
+    publicationId: '81000000-0000-4000-8000-000000000008', snapshotId: '80000000-0000-4000-8000-000000000008',
+    snapshotHash: 'c'.repeat(64), publishedAt: '2026-08-07T00:00:00Z',
+  } : null,
+});
+const buyerFor = (context: TenantContextProjection): BuyerSafeProjection => ({
+  mode: 'published_snapshot',
+  publication: { publicId: '81000000-0000-4000-8000-000000000008', snapshotHash: 'c'.repeat(64), publishedAt: '2026-08-07T00:00:00Z' },
+  claims: [{
+    wording: `${context.workspaceName} assurance`, effectiveProofStatus: 'verified', proofBoundary: 'verified_with_evidence',
+    lastReviewedAt: '2026-08-07T00:00:00Z', evidence: [], limitationDisclosure: 'Source only.', doesNotProve: ['Hosted behavior'],
+  }],
+});
+const projections = new Map<string, InternalAssuranceProjection>([
+  [contextA.workspaceId, projectionFor(contextA, false)],
+  [contextB.workspaceId, projectionFor(contextB, true)],
+]);
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+let releaseWorkspaceAQuery: (() => void) | null = null;
+let releaseWorkspaceBCommand: (() => void) | null = null;
+const waitForWorkspaceAQuery = () => new Promise<void>(resolve => { releaseWorkspaceAQuery = resolve; });
+const waitForWorkspaceBCommand = () => new Promise<void>(resolve => { releaseWorkspaceBCommand = resolve; });
+
+const Harness: React.FC = () => {
+  const [selected, setSelected] = useState<TenantContextProjection | null>(params.has('revoked') ? null : matrix ? contextB : contextA);
+  const [calls, setCalls] = useState<string[]>([]);
+  const log = (value: string) => setCalls(previous => [...previous, value]);
+  const query = async (scope: { workspaceId: string }, view: TrustQueryView) => {
+    log(`query:${view}:${scope.workspaceId}`);
+    if (matrix && view === 'internal' && scope.workspaceId === contextA.workspaceId) await waitForWorkspaceAQuery();
+    const context = scope.workspaceId === contextB.workspaceId ? contextB : contextA;
+    return view === 'buyer' ? buyerFor(context) : projections.get(scope.workspaceId)!;
+  };
+  const command = async (request: TrustCommandRequest) => {
+    log(`command:${request.operation}:${request.workspaceId}`);
+    if (matrix && request.workspaceId === contextB.workspaceId) await waitForWorkspaceBCommand();
+    else await delay(500);
+    log(`command-complete:${request.operation}:${request.workspaceId}`);
+    if (params.has('conflict')) return { ok: false as const, code: 'VERSION_CONFLICT' as const, message: 'Conflict' };
+    if (request.operation === 'snapshot.create' && request.workspaceId) {
+      const projection = projections.get(request.workspaceId)!;
+      projections.set(request.workspaceId, { ...projection, snapshotHistory: [{
+        snapshotId: '80000000-0000-4000-8000-000000000008', snapshotHash: 'c'.repeat(64), version: 1,
+        lifecycle: 'draft', createdAt: '2026-08-07T00:00:00Z',
+      }] });
+    }
+    return { ok: true as const, replayed: false, resourceId: '80000000-0000-4000-8000-000000000008', version: 1, body: {} };
+  };
+  const connected = useMemo(() => <TrustAssuranceConnectedWorkspace
+    tenantContext={selected}
+    selectionState={selected ? 'ready' : 'revoked'}
+    query={query as never}
+    command={command}
+  />, [selected]);
+  return <>
+    {matrix && <section aria-label="Tenant context controls" className="m-4 flex flex-wrap gap-2">
+      <button type="button" onClick={() => setSelected(contextB)}>Select workspace B</button>
+      <button type="button" onClick={() => setSelected(contextA)}>Select workspace A</button>
+      <button type="button" onClick={() => setSelected(deniedA)}>Select workspace A without Trust</button>
+      <button type="button" onClick={() => { releaseWorkspaceAQuery?.(); releaseWorkspaceAQuery = null; }}>Release workspace A query</button>
+      <button type="button" onClick={() => { releaseWorkspaceBCommand?.(); releaseWorkspaceBCommand = null; }}>Release workspace B command</button>
+      <button type="button" onClick={() => setCalls([])}>Clear call log</button>
+      <output data-testid="trust-call-log">{calls.join('\n')}</output>
+    </section>}
+    <TrustCenterPanel connectedWorkspace={connected} />
+  </>;
+};
+
+createRoot(document.getElementById('root')!).render(<Harness />);

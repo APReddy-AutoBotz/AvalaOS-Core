@@ -1,10 +1,10 @@
 import { handleOptions } from '../_shared/http.ts';
+import { trustAssuranceCommandResponse as json } from '../_shared/trustAssuranceHttp.ts';
 import { executeTrustCommand } from '../_shared/trustAssuranceCommand.ts';
 import { getAuthUser, supabaseEnv } from '../_shared/supabase.ts';
 import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
 declare const Deno:{env:{get:(key:string)=>string|undefined};serve:(handler:(request:Request)=>Response|Promise<Response>)=>void};
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 Deno.serve(async request=>{
   const options=handleOptions(request);if(options)return options;if(request.method!=='POST')return json({ok:false,code:'ACCESS_DENIED',message:'The requested resource is unavailable.'},404);
   let actorId='';try{actorId=(await getAuthUser(request)).id}catch{return json({ok:false,code:'ACCESS_DENIED',message:'The requested resource is unavailable.'},404)}

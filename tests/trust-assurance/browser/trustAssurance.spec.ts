@@ -18,6 +18,33 @@ test('canonical pilot runtime mounts the governed real journey', async ({ page }
   await views.getByRole('button', { name: 'Publication history', exact: true }).click();
   await expect(page.getByText(/draft/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?tenant-context=1');
+  await page.getByRole('navigation', { name: 'Trust Assurance views', exact: true }).getByRole('button', { name: 'Claims', exact: true }).click();
+  await expect(page.getByText('Workspace B assurance', { exact: true })).toBeVisible();
+  const callLog = page.getByTestId('trust-call-log');
+  await expect(callLog).toContainText('query:internal:30000000-0000-4000-8000-000000000013');
+  await expect(callLog).toContainText('query:buyer:30000000-0000-4000-8000-000000000013');
+  await expect(callLog).not.toContainText('30000000-0000-4000-8000-000000000003');
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  await page.getByRole('button', { name: 'Select workspace A', exact: true }).click();
+  await expect(page.getByText('Workspace B assurance', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Loading server-authoritative assurance evidence/)).toBeVisible();
+  await page.getByRole('button', { name: 'Release workspace A query', exact: true }).click();
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Release workspace B command', exact: true }).click();
+  await expect(callLog).toContainText('command-complete:snapshot.create:30000000-0000-4000-8000-000000000013');
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await expect(callLog).toContainText('command:snapshot.create:30000000-0000-4000-8000-000000000013');
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  await expect(callLog).toContainText('command:snapshot.create:30000000-0000-4000-8000-000000000003');
+  await expect(callLog).toContainText('command-complete:snapshot.create:30000000-0000-4000-8000-000000000003');
+  await page.getByRole('button', { name: 'Clear call log', exact: true }).click();
+  await page.getByRole('button', { name: 'Select workspace A without Trust', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('revoked');
+  await page.waitForTimeout(400);
+  await expect(callLog).toHaveText('');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
 });
 
 test('revoked and version conflict remain explicit', async ({ page }) => {

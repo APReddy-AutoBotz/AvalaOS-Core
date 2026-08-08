@@ -137,6 +137,46 @@ END $$;
 REVOKE ALL ON FUNCTION public.trust_assurance_assert_active_participant(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.trust_assurance_assert_active_participant(uuid,uuid,uuid) TO service_role;
 
+-- Publication locks every mutable aggregate named by the immutable selection
+-- before it recomputes lineage or evidence law. Deterministic UUID ordering is
+-- shared with link mutation so currentness cannot change between validation
+-- and the buyer-publication effect.
+CREATE FUNCTION public.trust_assurance_lock_snapshot_selection(p_snapshot_id uuid,p_org_id uuid,p_workspace_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE expected_claims integer;locked_claims integer;expected_evidence integer;locked_evidence integer;BEGIN
+ SELECT jsonb_array_length(s.selection->'claims') INTO expected_claims
+ FROM public.trust_snapshots s WHERE s.id=p_snapshot_id AND s.org_id=p_org_id AND s.workspace_id IS NOT DISTINCT FROM p_workspace_id;
+ IF expected_claims IS NULL OR expected_claims<1 THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
+ PERFORM c.id
+ FROM public.trust_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.selection->'claims') selected
+ JOIN public.trust_claims c ON c.id=(selected->>'claimId')::uuid
+ WHERE s.id=p_snapshot_id AND c.org_id=p_org_id AND c.workspace_id IS NOT DISTINCT FROM p_workspace_id
+   AND c.current_version_id=(selected->>'claimVersionId')::uuid
+ ORDER BY c.id FOR SHARE OF c;
+ GET DIAGNOSTICS locked_claims=ROW_COUNT;
+ IF locked_claims<>expected_claims THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
+ SELECT COALESCE(sum(jsonb_array_length(selected->'links')),0)::integer INTO expected_evidence
+ FROM public.trust_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.selection->'claims') selected
+ WHERE s.id=p_snapshot_id;
+ PERFORM e.id
+ FROM public.trust_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.selection->'claims') selected
+ CROSS JOIN LATERAL jsonb_array_elements(selected->'links') selected_link
+ JOIN public.trust_claim_evidence_links l ON l.id=(selected_link->>'linkId')::uuid
+   AND l.claim_version_id=(selected->>'claimVersionId')::uuid AND l.canonical_hash=selected_link->>'linkHash'
+ JOIN public.trust_evidence_versions ev ON ev.id=(selected_link->>'evidenceVersionId')::uuid
+   AND ev.id=l.evidence_version_id AND ev.canonical_hash=selected_link->>'evidenceHash'
+ JOIN public.trust_evidence e ON e.id=ev.evidence_id
+ WHERE s.id=p_snapshot_id AND l.org_id=p_org_id AND l.workspace_id IS NOT DISTINCT FROM p_workspace_id
+   AND ev.org_id=p_org_id AND ev.workspace_id IS NOT DISTINCT FROM p_workspace_id
+   AND e.org_id=p_org_id AND e.workspace_id IS NOT DISTINCT FROM p_workspace_id
+   AND e.current_version_id=ev.id AND e.lifecycle='active' AND ev.lifecycle='active'
+ ORDER BY e.id,ev.id FOR SHARE OF e;
+ GET DIAGNOSTICS locked_evidence=ROW_COUNT;
+ IF locked_evidence<>expected_evidence THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
+END $$;
+REVOKE ALL ON FUNCTION public.trust_assurance_lock_snapshot_selection(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.trust_assurance_lock_snapshot_selection(uuid,uuid,uuid) TO service_role;
+
 -- Mutation dispatcher remains private; every operation is validated and committed by one transaction.
 CREATE FUNCTION public.trust_assurance_command(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_operation text,p_idempotency_key text,p_request_id uuid,p_request_hash text,p_authorization_version bigint,p_expected_version bigint,p_payload jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
@@ -154,11 +194,12 @@ DECLARE r public.trust_command_receipts; actual bigint; cap text; selection_valu
    SELECT version,creator_id,reviewed_by INTO actual,snapshot_creator_id,snapshot_reviewer_id FROM public.trust_snapshots WHERE id=(p_payload->>'snapshotId')::uuid AND org_id=p_org_id AND workspace_id IS NOT DISTINCT FROM p_workspace_id FOR UPDATE;
    IF actual IS NULL OR actual<>p_expected_version THEN RAISE EXCEPTION 'VERSION_CONFLICT'; END IF;
    IF snapshot_reviewer_id IS NULL OR snapshot_creator_id=p_actor_id OR snapshot_reviewer_id=p_actor_id THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
-   PERFORM public.trust_assurance_assert_active_participant(snapshot_creator_id,p_org_id,p_workspace_id);
-   PERFORM public.trust_assurance_assert_active_participant(snapshot_reviewer_id,p_org_id,p_workspace_id);
+   PERFORM public.trust_assurance_lock_snapshot_selection((p_payload->>'snapshotId')::uuid,p_org_id,p_workspace_id);
    IF EXISTS(SELECT 1 FROM public.trust_snapshots s WHERE s.id=(p_payload->>'snapshotId')::uuid AND (s.lifecycle<>'reviewed' OR s.reviewed_hash IS DISTINCT FROM s.canonical_hash)) THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
    SELECT public.trust_assurance_hash(jsonb_build_object('claims',jsonb_agg(jsonb_build_object('claimId',c.id,'claimVersionId',cv.id,'claimHash',cv.canonical_hash,'links',COALESCE((SELECT jsonb_agg(jsonb_build_object('linkId',l.id,'linkHash',l.canonical_hash,'evidenceVersionId',ev.id,'evidenceHash',ev.canonical_hash) ORDER BY l.id) FROM public.trust_claim_evidence_links l JOIN public.trust_evidence_versions ev ON ev.id=l.evidence_version_id WHERE l.claim_version_id=cv.id),'[]'::jsonb)) ORDER BY c.id))) INTO derived_hash FROM public.trust_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.selection->'claims') x JOIN public.trust_claims c ON c.id=(x->>'claimId')::uuid JOIN public.trust_claim_versions cv ON cv.id=c.current_version_id WHERE s.id=(p_payload->>'snapshotId')::uuid;
    IF derived_hash IS DISTINCT FROM (SELECT canonical_hash FROM public.trust_snapshots WHERE id=(p_payload->>'snapshotId')::uuid) OR EXISTS(SELECT 1 FROM public.trust_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.selection->'claims') x JOIN public.trust_claim_versions cv ON cv.id=(x->>'claimVersionId')::uuid WHERE s.id=(p_payload->>'snapshotId')::uuid AND (NOT EXISTS(SELECT 1 FROM public.trust_review_events re WHERE re.resource_type='claim_version' AND re.resource_id=cv.id AND re.resource_hash=cv.canonical_hash AND re.decision IN('reviewed','approved')) OR (cv.proposed_proof_status='verified' AND public.trust_assurance_effective_claim_law(cv.id,x->'links',now())->>'effectiveProofStatus'<>'verified'))) THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
+   PERFORM public.trust_assurance_assert_active_participant(snapshot_creator_id,p_org_id,p_workspace_id);
+   PERFORM public.trust_assurance_assert_active_participant(snapshot_reviewer_id,p_org_id,p_workspace_id);
    SELECT cp.publication_id,old.snapshot_id INTO current_publication_id,current_snapshot_id FROM public.trust_current_publications cp JOIN public.trust_publication_events old ON old.id=cp.publication_id WHERE cp.org_id=p_org_id AND cp.workspace_scope=COALESCE(p_workspace_id,'00000000-0000-0000-0000-000000000000') FOR UPDATE OF cp;
    INSERT INTO public.trust_publication_events(org_id,workspace_id,snapshot_id,snapshot_hash,event_type,publisher_id,supersedes_publication_id,is_current) SELECT old.org_id,old.workspace_id,old.snapshot_id,old.snapshot_hash,'superseded',p_actor_id,old.id,false FROM public.trust_publication_events old WHERE old.id=current_publication_id;
    INSERT INTO public.trust_publication_events(org_id,workspace_id,snapshot_id,snapshot_hash,event_type,publisher_id,is_current) SELECT p_org_id,p_workspace_id,s.id,s.canonical_hash,'published',p_actor_id,false FROM public.trust_snapshots s WHERE s.id=(p_payload->>'snapshotId')::uuid RETURNING id INTO r.id;
@@ -189,6 +230,10 @@ DECLARE r public.trust_command_receipts; actual bigint; cap text; selection_valu
    UPDATE public.trust_evidence SET lifecycle=CASE WHEN p_operation='evidence.supersede' THEN 'superseded' ELSE 'withdrawn' END,version=version+1,updated_at=now() WHERE id=(p_payload->>'evidenceId')::uuid AND org_id=p_org_id AND workspace_id IS NOT DISTINCT FROM p_workspace_id AND version=p_expected_version RETURNING id,version INTO r.resource_id,actual;
    IF actual IS NULL THEN RAISE EXCEPTION 'VERSION_CONFLICT'; END IF;
  ELSIF p_operation='evidence.link' THEN
+   PERFORM c.id FROM public.trust_claims c WHERE c.current_version_id=(p_payload->>'claimVersionId')::uuid AND c.org_id=p_org_id AND c.workspace_id IS NOT DISTINCT FROM p_workspace_id ORDER BY c.id FOR UPDATE;
+   IF NOT FOUND THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
+   PERFORM e.id FROM public.trust_evidence e WHERE e.current_version_id=(p_payload->>'evidenceVersionId')::uuid AND e.org_id=p_org_id AND e.workspace_id IS NOT DISTINCT FROM p_workspace_id AND e.lifecycle='active' ORDER BY e.id FOR SHARE;
+   IF NOT FOUND THEN RAISE EXCEPTION 'PUBLICATION_BLOCKED'; END IF;
    INSERT INTO public.trust_claim_evidence_links(org_id,workspace_id,claim_version_id,evidence_version_id,relationship,rationale,canonical_hash,created_by) VALUES(p_org_id,p_workspace_id,(p_payload->>'claimVersionId')::uuid,(p_payload->>'evidenceVersionId')::uuid,p_payload->>'relationship',p_payload->>'rationale',public.trust_assurance_hash(jsonb_build_object('claimVersionId',p_payload->>'claimVersionId','evidenceVersionId',p_payload->>'evidenceVersionId','rationale',p_payload->>'rationale','relationship',p_payload->>'relationship')),p_actor_id) RETURNING id INTO r.resource_id; actual:=1;
  ELSIF p_operation='resource.review' THEN
    IF p_payload->>'resourceType'='claim_version' THEN SELECT cv.canonical_hash INTO resource_hash FROM public.trust_claim_versions cv JOIN public.trust_claims c ON c.current_version_id=cv.id WHERE cv.id=(p_payload->>'resourceId')::uuid AND cv.org_id=p_org_id AND cv.workspace_id IS NOT DISTINCT FROM p_workspace_id AND cv.created_by<>p_actor_id FOR SHARE;

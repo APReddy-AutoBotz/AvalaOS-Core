@@ -1,4 +1,5 @@
 import { handleOptions } from '../_shared/http.ts';
+import { trustAssuranceQueryResponse as response } from '../_shared/trustAssuranceHttp.ts';
 import { getAuthUser, supabaseEnv } from '../_shared/supabase.ts';
 import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
@@ -11,15 +12,6 @@ declare const Deno: {
   env: { get: (key: string) => string | undefined };
   serve: (handler: (request: Request) => Response | Promise<Response>) => void;
 };
-
-const response = (body: unknown, status: number) => new Response(JSON.stringify(body), {
-  status,
-  headers: {
-    'content-type': 'application/json',
-    'cache-control': 'private, no-store',
-    vary: 'authorization',
-  },
-});
 
 Deno.serve(async request => {
   const options = handleOptions(request);

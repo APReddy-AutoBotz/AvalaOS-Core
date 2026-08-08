@@ -16,8 +16,9 @@ The candidate adds deterministic proof/freshness/hash/publication law, strict in
 | Typed command/authority | executed evidence | `node scripts/runEdgeTypeScriptTest.mjs …trustAssuranceCommand.test.ts`: command suite passed |
 | Boundary/migration scan | executed evidence | migration contract: 11 governed tables; boundary scan passed |
 | Typecheck/default regression/build/static security/audit | executed evidence | `npm run typecheck`, `npm run typecheck:edge`, `npm test`, `npm run build`, AI-boundary, secret-hygiene, audit, and diff checks passed; build emitted only the retained Browserslist-age warning |
-| Disposable PostgreSQL 16 | executed evidence | 28/28 scenarios passed against a loopback-only disposable PostgreSQL 16 container; the configured non-loopback `DATABASE_URL` was not used |
-| Chromium Desktop Chrome/Pixel 7 | executed evidence | dedicated canonical-pilot Trust harness passed 6/6, including real journey, revoked/version conflict, read-only, and horizontal-overflow assertions |
+| Actual-response CORS | executed evidence | command/query response helper passed 200/400/403/404/409/503 plus canonical OPTIONS assertions with retained cache/Vary behavior |
+| Disposable PostgreSQL 16 | executed evidence | 34/34 scenarios passed against a loopback-only disposable PostgreSQL 16 container, including six controlled selected-aggregate concurrency cases; the configured non-loopback `DATABASE_URL` was not used |
+| Chromium Desktop Chrome/Pixel 7 | executed evidence | dedicated canonical-pilot Trust harness passed 6/6, including exact selected-workspace transport, deterministic B-to-A switch/late-completion fencing, denied-A no-fallback, real journey, revoked/version conflict, read-only, and horizontal-overflow assertions |
 | Hosted/live Supabase, deployment, Storage, providers | not run | Explicitly outside authority |
 
 ## Failure modes and rollback
@@ -38,7 +39,15 @@ The pre-correction audit found the same browser-authority defect family across c
 
 The correction removes canonical/resource/snapshot hashes from accepted payloads, strictly decodes every operation, derives hashes/selections/review targets in PostgreSQL, re-resolves current evidence at publication, serializes receipt claims with an advisory transaction lock, exposes private fresh-authority internal and buyer projections, connects the Admin surface through strict clients, and replaces the static browser test with a real React/client harness. Deterministic pre-effect failures roll back and do not persist receipts; this is safe because no canonical effect occurred, current authority is rechecked before every attempt/replay, and a committed receipt remains the only replay authority.
 
-The disposable PostgreSQL harness now bootstraps roles plus `auth.users`/`auth.uid()`, creates and cleans five databases, and covers the full chain, accepted-main upgrade, populated upgrade, dirty rollback, executable Trust authority, server hashes, exact reviews, publication, replay/conflict, revocation/staleness, buyer projection, and audit rollback. Local PostgreSQL 16 passed 28/28 and the dedicated local Chromium matrix passed 6/6; exact-head GitHub Actions remains publication authority.
+The disposable PostgreSQL harness now bootstraps roles plus `auth.users`/`auth.uid()`, creates and cleans five databases, and covers the full chain, accepted-main upgrade, populated upgrade, dirty rollback, executable Trust authority, server hashes, exact reviews, publication, replay/conflict, revocation/staleness, buyer projection, audit rollback, and controlled publication/aggregate mutation interleavings. Local PostgreSQL 16 passed 34/34 and the dedicated local Chromium matrix passed 6/6; exact-head GitHub Actions remains publication authority.
+
+## Request-context and publication-atomicity closure
+
+Both Edge handlers now build every actual response through one Trust-owned helper layered on the canonical shared CORS headers. Executable construction tests cover command and authenticated query responses at 200, 400, 403, 404, 409, and 503, plus OPTIONS, command `no-store`, query `private, no-store`, and `Vary: Authorization`. Existing authenticated `supabase.functions.invoke` client tests continue to prove typed envelopes reach the caller without caller-supplied bearer transport.
+
+The connected workspace now accepts only the exact `OrganizationProvider` selection passed by `TrustCenterPanel`. The bounded browser harness holds A's query and B's command behind explicit release gates: B internal/buyer/mutation calls use B; switching to A immediately removes B and shows loading; releasing A displays only A; releasing the late B command cannot overwrite A; the next mutation uses A; and a selected A without `trust.read` shows revoked with an empty call log even though B is readable.
+
+The private snapshot-selection helper locks the snapshot's exact claims and evidence in deterministic UUID order before hash, currentness, evidence-law, review, participant, pointer, event, lifecycle, receipt, and audit effects. Six multi-connection scenarios prove both directions for claim revision, evidence withdrawal, and evidence supersession: publication-first excludes mutation until commit, while mutation-first causes publication to wait and then reject with no pointer, publication-event, snapshot lifecycle/version, receipt, or audit delta.
 
 ## Exact-head focused correction
 

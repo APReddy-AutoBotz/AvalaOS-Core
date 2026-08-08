@@ -13,6 +13,7 @@ import {
   summarizeProofStatuses,
 } from '../../services/trustCenterPresentation';
 import { getRuntimeModeResolution } from '../../services/supabaseClient';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { TrustAssuranceWorkspace } from './trust-assurance/TrustAssuranceWorkspace';
 import { TrustAssuranceConnectedWorkspace } from './trust-assurance/TrustAssuranceConnectedWorkspace';
 
@@ -52,6 +53,11 @@ const BoundaryPill: React.FC<{ boundary: Parameters<typeof getProofBoundaryLabel
   </span>
 );
 
+const GovernedTrustAssuranceWorkspace: React.FC = () => {
+  const { tenantContext, sessionState } = useOrganizationContext();
+  return <TrustAssuranceConnectedWorkspace tenantContext={tenantContext} selectionState={sessionState} />;
+};
+
 const TrustCenterPanel: React.FC<{ connectedWorkspace?: React.ReactNode }> = ({ connectedWorkspace }) => {
   const runtime = getRuntimeModeResolution();
   const snapshot = useMemo(() => buildCurrentTrustCenterSnapshot(), []);
@@ -61,7 +67,7 @@ const TrustCenterPanel: React.FC<{ connectedWorkspace?: React.ReactNode }> = ({ 
   if (runtime.status === 'blocked' || runtime.requiresServerAuthority) {
     return runtime.status === 'blocked'
       ? <TrustAssuranceWorkspace state={{ kind: 'blocked' }} />
-      : <>{connectedWorkspace ?? <TrustAssuranceConnectedWorkspace />}</>;
+      : <>{connectedWorkspace ?? <GovernedTrustAssuranceWorkspace />}</>;
   }
 
   return (
