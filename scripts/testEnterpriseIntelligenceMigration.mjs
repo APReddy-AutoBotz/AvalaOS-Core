@@ -60,6 +60,10 @@ const assessEvidenceSubmissionSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260808160000_enterprise_assess_evidence_submission_contract.sql'),
   'utf8',
 );
+const promotionAncestrySql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808170000_enterprise_promotion_ancestry_preservation.sql'),
+  'utf8',
+);
 const enterpriseDomainSource = fs.readFileSync(path.join(process.cwd(), 'services/enterpriseIntelligence.ts'), 'utf8');
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const storageSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/storage.ts'), 'utf8');
@@ -282,13 +286,28 @@ const excerptSanitizer = enterpriseDomainSource.slice(
   enterpriseDomainSource.indexOf('const projectionUuid'),
 );
 check(excerptSanitizer.includes('for (const codePoint of value)')
-  && excerptSanitizer.includes('truncateUnicodeCodePoints(normalized, maxLength)')
+  && excerptSanitizer.includes('truncateUnicodeScalarString(normalized, maxLength')
   && !excerptSanitizer.includes('.slice('),
   'Evidence excerpts must truncate by Unicode code point, never UTF-16 code unit.');
 check(excerptSanitizer.includes('ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE')
   && commandSource.includes('!isUnicodeScalarString(input.candidate.safeExcerpt)'),
   'Malformed or unpaired surrogate excerpts must be rejected before hashing or persistence.');
 check(!commandSource.includes('normalizedValue'), 'Candidate values must never substitute for excerpt provenance.');
+const candidateValueUtility = enterpriseDomainSource.slice(
+  enterpriseDomainSource.indexOf('export const sanitizeEvidenceCandidateValue'),
+  enterpriseDomainSource.indexOf('const projectionUuid'),
+);
+check(candidateValueUtility.includes('truncateUnicodeScalarString(value, maxLength')
+  && candidateValueUtility.includes('ENTERPRISE_EVIDENCE_VALUE_INVALID_UNICODE')
+  && !candidateValueUtility.includes('.slice('),
+  'Candidate values must reject malformed Unicode and truncate only by code point.');
+check(!commandSource.includes('raw.value.slice(0, 12_000)')
+  && commandSource.indexOf('persistedValue = sanitizeEvidenceCandidateValue(raw.value)')
+    < commandSource.indexOf('const candidate = await buildGroundedEvidenceCandidate'),
+  'Provider candidate values must be canonicalized before grounded hashing and persistence.');
+check(commandSource.includes("Array.from(input.candidate.value).length > 12_000")
+  && commandSource.includes('!isUnicodeScalarString(input.candidate.value)'),
+  'The grounded candidate boundary must fail closed on non-canonical or malformed values.');
 check(commandSource.includes("EVIDENCE_SOURCE_LOCATOR_PREFIX = 'normalized-text:v1:chars'")
   && commandSource.includes('sourceLocator?: never')
   && !commandSource.includes('raw.sourceLocator'),
@@ -370,6 +389,18 @@ check(readyReviewSql.includes('ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED'), 'Edi
 check(atomicPromotionSql.includes('FUNCTION public.enterprise_promote_evidence_batch_to_assess_v2'), 'One service-only batch promotion RPC is required.');
 check(atomicPromotionSql.includes("'evidence.assess.promote', 'command'"), 'Batch promotion requires one command effect for response-loss recovery.');
 check(atomicPromotionSql.indexOf('-- All preconditions are now locked and valid.') < atomicPromotionSql.indexOf('INSERT INTO public.assess_v2_case_versions'), 'Every candidate must validate before the first promotion mutation.');
+check(promotionAncestrySql.includes('CREATE OR REPLACE FUNCTION public.enterprise_promote_evidence_batch_to_assess_v2')
+  && promotionAncestrySql.includes('source_kind, source_snapshot, imported_facts, created_by')
+  && promotionAncestrySql.includes("'draft_upsert', old_version.source_snapshot, old_version.imported_facts, p_actor"),
+  'Promotion versions must preserve the exact prior Assess source snapshot and imported facts.');
+check(!promotionAncestrySql.includes("jsonb_build_object('promotion', jsonb_build_object("),
+  'Enterprise promotion metadata must not replace canonical Assess source ancestry.');
+check(promotionAncestrySql.indexOf('-- Validate the complete locked set before creating any version')
+    < promotionAncestrySql.indexOf('INSERT INTO public.assess_v2_case_versions'),
+  'The ancestry correction must preserve full atomic pre-validation before the first mutation.');
+check(promotionAncestrySql.includes('TO service_role')
+  && promotionAncestrySql.includes('FROM PUBLIC, anon, authenticated'),
+  'The corrected atomic promotion function must remain service-role only.');
 const assessEvidenceBuilderStart = assessEvidenceSubmissionSql.indexOf(
   'CREATE OR REPLACE FUNCTION public.enterprise_build_assess_v2_evidence_submission',
 );

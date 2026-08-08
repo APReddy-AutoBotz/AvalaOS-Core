@@ -11,6 +11,7 @@ import {
   evaluateModernizationDecision,
   isUnicodeScalarString,
   isSupportedEvidenceMimeType,
+  sanitizeEvidenceCandidateValue,
   sanitizeEvidenceExcerpt,
   stableFingerprint,
   type AssembleBlueprintDraft,
@@ -835,6 +836,10 @@ export const buildGroundedEvidenceCandidate = async (input: {
 }) => {
   if (input.candidate.sourceId !== input.source.sourceId
     || input.candidate.sourceVersionId !== input.source.sourceVersionId) return null;
+  if (typeof input.candidate.value !== 'string'
+    || !isUnicodeScalarString(input.candidate.value)
+    || Array.from(input.candidate.value).length > 12_000
+    || !input.candidate.value.trim()) return null;
   if (typeof input.candidate.safeExcerpt !== 'string'
     || !isUnicodeScalarString(input.candidate.safeExcerpt)) return null;
   const persistedExcerpt = typeof input.candidate.safeExcerpt === 'string'
@@ -1363,6 +1368,13 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       const field = raw.fieldKey;
       if (typeof field !== 'string' || !EVIDENCE_CANDIDATE_FIELDS.includes(field as any)) continue;
       if (typeof raw.value !== 'string' || !raw.value.trim()) continue;
+      let persistedValue: string;
+      try {
+        persistedValue = sanitizeEvidenceCandidateValue(raw.value);
+      } catch {
+        continue;
+      }
+      if (!persistedValue.trim()) continue;
       const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0;
       if (confidence < 0 || confidence > 1) continue;
       const candidate = await buildGroundedEvidenceCandidate({
@@ -1378,7 +1390,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
           sourceId,
           sourceVersionId,
           field: field as EvidenceCandidateField,
-          value: raw.value.slice(0, 12_000),
+          value: persistedValue,
           safeExcerpt: typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined,
           confidence,
           aiJobId: jobId,
@@ -1468,7 +1480,17 @@ const commandEvidenceCandidateReview = async (authority: Authority, payload: Jso
     `select=content_hash,extracted_text_hash&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(current.source_version_id)}`,
   );
   if (!sourceVersion || !sourceVersion.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
-  const nextValue = status === 'edited' ? requireString(payload.value, 12_000) : current.value;
+  let nextValue = current.value;
+  if (status === 'edited') {
+    if (typeof payload.value !== 'string' || !payload.value.trim()) {
+      throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    }
+    try {
+      nextValue = sanitizeEvidenceCandidateValue(payload.value.trim());
+    } catch {
+      throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    }
+  }
   const reason = status === 'edited' ? requireString(payload.reason, 2_000) : 'review decision recorded';
   const nextExcerptHash = await hashEvidenceExcerptAnchor({
     sourceVersionId: current.source_version_id,

@@ -323,6 +323,31 @@ const main = async () => {
   }
   assert.ok(promotedDecision?.outputSnapshot.assumptions.includes(promotedEvidenceId),
     'unvalidated promoted evidence remains an explicit governed assumption');
+  const promotedCloneStored = structuredClone(promotedStored);
+  promotedCloneStored.sourceV1 = {
+    assessmentId: processId,
+    scoreVersion: ASSESS_V1_SCORE_VERSION,
+    clonedAt: '2026-08-08T12:34:56.789Z',
+    importedAs: 'unverified-source-facts',
+    importedEvidenceClaimIds: [],
+  };
+  promotedCloneStored.importedFacts = [...projection!.importedFacts];
+  const promotedCloneFinalizeDeps = deps();
+  let promotedCloneDecision: AssessV2AtomicCommand['serverDecision'];
+  promotedCloneFinalizeDeps.loadLockedCaseForFinalize = async () => promotedCloneStored;
+  promotedCloneFinalizeDeps.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+    promotedCloneDecision = command.serverDecision;
+    return { outcome: 'committed', resource: { id: caseId, status: 'reviewer_ready', version: 3 } };
+  };
+  assert.equal(
+    (await executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), promotedCloneFinalizeDeps)).resource.status,
+    'reviewer_ready',
+  );
+  const promotedCloneInput = JSON.parse(promotedCloneDecision!.inputCanonical).payload;
+  assert.deepEqual(promotedCloneInput.sourceV1, promotedCloneStored.sourceV1);
+  assert.deepEqual(promotedCloneInput.importedFacts, promotedCloneStored.importedFacts);
+  assert.deepEqual(jsonRoundTrip(promotedCloneDecision?.evidenceSnapshot.at(-1)), canonicalPromotedEvidence);
   const importedV1EvidenceClaim = 'v1.evidence.legacy-evidence-1';
   const fabricatedV1EvidenceClaim = 'v1.evidence.fabricated-but-valid';
   const lockedClone = structuredClone(stored);

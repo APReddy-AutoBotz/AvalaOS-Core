@@ -545,9 +545,16 @@ export const isUnicodeScalarString = (value: string) => {
   return true;
 };
 
-const truncateUnicodeCodePoints = (value: string, maxLength: number) => {
+export const truncateUnicodeScalarString = (
+  value: string,
+  maxLength: number,
+  invalidUnicodeCode = 'ENTERPRISE_TEXT_INVALID_UNICODE',
+) => {
+  if (!isUnicodeScalarString(value)) {
+    throw new Error(invalidUnicodeCode);
+  }
   if (!Number.isSafeInteger(maxLength) || maxLength < 0) {
-    throw new Error('ENTERPRISE_EVIDENCE_EXCERPT_LIMIT_INVALID');
+    throw new Error('ENTERPRISE_TEXT_CODE_POINT_LIMIT_INVALID');
   }
   let result = '';
   let count = 0;
@@ -560,15 +567,17 @@ const truncateUnicodeCodePoints = (value: string, maxLength: number) => {
 };
 
 export const sanitizeEvidenceExcerpt = (value: string, maxLength = 480) => {
-  if (!isUnicodeScalarString(value)) {
-    throw new Error('ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE');
-  }
+  truncateUnicodeScalarString(value, value.length, 'ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE');
   const normalized = value
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return truncateUnicodeCodePoints(normalized, maxLength);
+  return truncateUnicodeScalarString(normalized, maxLength, 'ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE');
 };
+
+export const sanitizeEvidenceCandidateValue = (value: string, maxLength = 12_000) => (
+  truncateUnicodeScalarString(value, maxLength, 'ENTERPRISE_EVIDENCE_VALUE_INVALID_UNICODE')
+);
 
 const projectionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const projectionKeys = [

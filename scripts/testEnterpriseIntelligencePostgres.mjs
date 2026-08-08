@@ -1347,34 +1347,60 @@ try {
     let ordinal = 500;
     const nextId = () => fixture.uuid(ordinal++);
     const createdReceiptIds = [];
-    const createCase = async (currentVersion = 1) => {
+    const createCase = async (currentVersion = 1, ancestry = {}) => {
       const processId = nextId(); const caseId = nextId(); const firstVersionId = nextId();
+      const sourceSnapshot = ancestry.sourceSnapshot ?? { origin: 'native-assess-v2-fixture' };
+      const importedFacts = ancestry.importedFacts ?? [];
+      const sourceKind = ancestry.sourceKind ?? 'create';
       await authority.query(
         "INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,'Atomic promotion process','Draft')",
         [processId, fixture.org, fixture.workspace],
       );
+      if (ancestry.sourceAssessmentId) {
+        await authority.query(
+          `INSERT INTO public.assessments(
+             id,process_id,org_id,workspace_id,status,responses,score_version,created_by,updated_by
+           ) VALUES($1,$2,$3,$4,'Approved','{}'::jsonb,'assess-core-2026-05',$5,$5)`,
+          [ancestry.sourceAssessmentId, processId, fixture.org, fixture.workspace, fixture.requester],
+        );
+        await authority.query(
+          `INSERT INTO public.assess_v2_cases(
+             id,org_id,workspace_id,process_id,owner_id,status,version,
+             source_v1_assessment_id,source_v1_score_version
+           ) VALUES($1,$2,$3,$4,$5,'draft',1,$6,'assess-core-2026-05')`,
+          [caseId, fixture.org, fixture.workspace, processId, fixture.requester, ancestry.sourceAssessmentId],
+        );
+      } else {
+        await authority.query(
+          "INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id,status,version) VALUES($1,$2,$3,$4,$5,'draft',1)",
+          [caseId, fixture.org, fixture.workspace, processId, fixture.requester],
+        );
+      }
       await authority.query(
-        "INSERT INTO public.assess_v2_cases(id,org_id,workspace_id,process_id,owner_id,status,version) VALUES($1,$2,$3,$4,$5,'draft',1)",
-        [caseId, fixture.org, fixture.workspace, processId, fixture.requester],
-      );
-      await authority.query(
-        "INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,source_kind,created_by) VALUES($1,$2,$3,$4,1,'Atomic promotion fixture','create',$5)",
-        [firstVersionId, caseId, fixture.org, fixture.workspace, fixture.requester],
+        `INSERT INTO public.assess_v2_case_versions(
+           id,case_id,org_id,workspace_id,version,name,source_kind,source_snapshot,imported_facts,created_by
+         ) VALUES($1,$2,$3,$4,1,'Atomic promotion fixture',$5,$6::jsonb,$7::jsonb,$8)`,
+        [firstVersionId, caseId, fixture.org, fixture.workspace, sourceKind,
+          JSON.stringify(sourceSnapshot), JSON.stringify(importedFacts), fixture.requester],
       );
       await authority.query('UPDATE public.assess_v2_cases SET head_version_id=$1 WHERE id=$2', [firstVersionId, caseId]);
       if (currentVersion === 2) {
         const secondVersionId = nextId();
         await authority.query(
-          "INSERT INTO public.assess_v2_case_versions(id,case_id,org_id,workspace_id,version,name,source_kind,created_by) VALUES($1,$2,$3,$4,2,'Changed atomic promotion fixture','draft_upsert',$5)",
-          [secondVersionId, caseId, fixture.org, fixture.workspace, fixture.requester],
+          `INSERT INTO public.assess_v2_case_versions(
+             id,case_id,org_id,workspace_id,version,name,source_kind,source_snapshot,imported_facts,created_by
+           ) VALUES($1,$2,$3,$4,2,'Changed atomic promotion fixture','draft_upsert',$5::jsonb,$6::jsonb,$7)`,
+          [secondVersionId, caseId, fixture.org, fixture.workspace,
+            JSON.stringify(sourceSnapshot), JSON.stringify(importedFacts), fixture.requester],
         );
         await authority.query('UPDATE public.assess_v2_cases SET version=2,head_version_id=$1 WHERE id=$2', [secondVersionId, caseId]);
       }
       return caseId;
     };
-    const createCandidate = async ({selectedSource = source, status = 'accepted', version = 1} = {}) => {
+    const createCandidate = async ({selectedSource = source, status = 'accepted', version = 1, value} = {}) => {
       const id = nextId();
       const safeExcerpt = `Atomic evidence excerpt ${id}`;
+      const candidateValue = value ?? `Atomic candidate ${id}`;
       await authority.query(
         `INSERT INTO public.enterprise_evidence_candidates(
            id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,
@@ -1382,7 +1408,7 @@ try {
            created_by,reviewed_by,reviewed_at
       ) VALUES($1,$2,$3,$4,$5,'process_objective',$6,$7,$8,$8,$9,$13,0.95,$10,$11,$12,statement_timestamp())`,
         [id, selectedSource.sourceId, selectedSource.sourceVersionId, fixture.org, fixture.workspace,
-          `Atomic candidate ${id}`, safeExcerpt, fixture.hash('0'), version, status, fixture.requester, fixture.reviewer,
+          candidateValue, safeExcerpt, fixture.hash('0'), version, status, fixture.requester, fixture.reviewer,
           `normalized-text:v1:chars:0-${Array.from(safeExcerpt.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim()).length}`],
       );
       return id;
@@ -1582,6 +1608,124 @@ try {
       'SELECT count(*)::int n FROM public.assess_v2_evidence_links WHERE case_id=$1', [successCase],
     )).rows[0].n), evidenceRowsBeforeAssessSave + 3);
 
+    const cloneSourceAssessmentId = nextId();
+    const cloneSourceSnapshot = {
+      assessmentId: cloneSourceAssessmentId,
+      scoreVersion: 'assess-core-2026-05',
+      clonedAt: '2026-08-08T12:34:56.789Z',
+      importedAs: 'unverified-source-facts',
+    };
+    const cloneImportedFacts = [{
+      fieldId: 'v1.responses.objective', value: 'Preserve the governed V1 objective',
+      status: 'observed', evidenceIds: [], source: 'v1-import',
+    }];
+    const cloneCase = await createCase(1, {
+      sourceAssessmentId: cloneSourceAssessmentId,
+      sourceKind: 'v1_clone',
+      sourceSnapshot: cloneSourceSnapshot,
+      importedFacts: cloneImportedFacts,
+    });
+    const unicodeCandidateValue = `${'u'.repeat(11_999)}\u{1f680}`;
+    const cloneIds = [
+      await createCandidate({value: unicodeCandidateValue}),
+      await createCandidate(),
+      await createCandidate(),
+    ];
+    const unicodeBeforePromotion = (await authority.query(
+      'SELECT value,excerpt_hash,provenance_hash,encode(convert_to(value,\'UTF8\'),\'hex\') value_hex FROM public.enterprise_evidence_candidates WHERE id=$1',
+      [cloneIds[0]],
+    )).rows[0];
+    assert.equal(unicodeBeforePromotion.value, unicodeCandidateValue);
+    assert.equal(Array.from(unicodeBeforePromotion.value).length, 12_000);
+    assert.equal(unicodeBeforePromotion.value_hex, Buffer.from(unicodeCandidateValue, 'utf8').toString('hex'));
+    const cloneReceipt = await createReceipt(
+      cloneCase, 1, await candidatePlan(cloneIds), 'atomic-promotion-v1-clone-001',
+    );
+    const clonePromoted = (await promote(cloneReceipt)).rows[0].result;
+    assert.equal(Number(clonePromoted.finalVersion), 4);
+    const cloneVersionsAfterPromotion = (await authority.query(
+      `SELECT version,source_snapshot,imported_facts
+       FROM public.assess_v2_case_versions WHERE case_id=$1 ORDER BY version`,
+      [cloneCase],
+    )).rows;
+    assert.deepEqual(cloneVersionsAfterPromotion.map(row => Number(row.version)), [1, 2, 3, 4]);
+    for (const version of cloneVersionsAfterPromotion) {
+      assert.deepEqual(version.source_snapshot, cloneSourceSnapshot, `clone source snapshot at version ${version.version}`);
+      assert.deepEqual(version.imported_facts, cloneImportedFacts, `clone imported facts at version ${version.version}`);
+    }
+    const loadedCloneAfterPromotion = (await authority.query(
+      'SELECT public.pr1d_load_assess_v2_case($1,$2,$3,$4) value',
+      [cloneCase, fixture.org, fixture.workspace, 4],
+    )).rows[0].value;
+    assert.deepEqual(loadedCloneAfterPromotion.sourceV1, {
+      assessmentId: cloneSourceAssessmentId,
+      scoreVersion: 'assess-core-2026-05',
+      clonedAt: cloneSourceSnapshot.clonedAt,
+      importedAs: 'unverified-source-facts',
+      importedEvidenceClaimIds: [],
+    });
+    assert.deepEqual(loadedCloneAfterPromotion.importedFacts, cloneImportedFacts);
+    const cloneCountsBeforeRecovery = await caseCounts(cloneCase, [cloneReceipt.id]);
+    const cloneRecovered = (await authority.query(
+      'SELECT (public.enterprise_ai_reload_command($1,$2,$3)).*',
+      [cloneReceipt.id, fixture.org, fixture.workspace],
+    )).rows[0];
+    assert.equal(cloneRecovered.status, 'committed');
+    assert.deepEqual(cloneRecovered.response, clonePromoted);
+    assert.deepEqual(await caseCounts(cloneCase, [cloneReceipt.id]), cloneCountsBeforeRecovery);
+    const unicodeAfterRecovery = (await authority.query(
+      'SELECT value,excerpt_hash,provenance_hash,encode(convert_to(value,\'UTF8\'),\'hex\') value_hex FROM public.enterprise_evidence_candidates WHERE id=$1',
+      [cloneIds[0]],
+    )).rows[0];
+    assert.deepEqual(unicodeAfterRecovery, unicodeBeforePromotion);
+    const cloneReplay = (await authority.query(
+      'SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,$8,$9)).*',
+      [fixture.requester, fixture.org, fixture.workspace, 'evidence.assess.promote', cloneReceipt.key,
+        nextId(), cloneReceipt.requestHash, null, nextId()],
+    )).rows[0];
+    assert.equal(cloneReplay.status, 'committed');
+    assert.deepEqual(cloneReplay.response, clonePromoted);
+    assert.deepEqual(await caseCounts(cloneCase, [cloneReceipt.id]), cloneCountsBeforeRecovery);
+    const unicodeAfterReplay = (await authority.query(
+      'SELECT value,excerpt_hash,provenance_hash,encode(convert_to(value,\'UTF8\'),\'hex\') value_hex FROM public.enterprise_evidence_candidates WHERE id=$1',
+      [cloneIds[0]],
+    )).rows[0];
+    assert.deepEqual(unicodeAfterReplay, unicodeBeforePromotion);
+    const cloneHead = (await authority.query(
+      'SELECT name,description FROM public.assess_v2_case_versions WHERE id=(SELECT head_version_id FROM public.assess_v2_cases WHERE id=$1)',
+      [cloneCase],
+    )).rows[0];
+    const cloneAuthoring = {
+      name: cloneHead.name,
+      description: cloneHead.description || '',
+      primitives: loadedCloneAfterPromotion.primitives,
+      edges: loadedCloneAfterPromotion.edges,
+      decisionPoints: loadedCloneAfterPromotion.decisionPoints,
+      exceptionPaths: loadedCloneAfterPromotion.exceptionPaths,
+      assets: loadedCloneAfterPromotion.assets,
+      interactions: loadedCloneAfterPromotion.interactions,
+      evidence: loadedCloneAfterPromotion.evidence,
+      agentNecessity: loadedCloneAfterPromotion.agentNecessity,
+    };
+    const cloneSaved = (await authority.query(
+      'SELECT public.pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) value',
+      [fixture.requester, fixture.org, fixture.workspace, cloneCase, 4,
+        JSON.stringify(cloneAuthoring), nextId(), 'atomic-promotion-v1-clone-save-001', authorizationVersion],
+    )).rows[0].value;
+    assert.deepEqual([cloneSaved.outcome, Number(cloneSaved.resource.version)], ['committed', 5]);
+    const loadedCloneAfterSave = (await authority.query(
+      'SELECT public.pr1d_load_assess_v2_case($1,$2,$3,$4) value',
+      [cloneCase, fixture.org, fixture.workspace, 5],
+    )).rows[0].value;
+    assert.deepEqual(loadedCloneAfterSave.sourceV1, loadedCloneAfterPromotion.sourceV1);
+    assert.deepEqual(loadedCloneAfterSave.importedFacts, cloneImportedFacts);
+    const savedCloneVersion = (await authority.query(
+      `SELECT source_snapshot,imported_facts FROM public.assess_v2_case_versions
+       WHERE id=$1`, [cloneSaved.resource.headVersionId],
+    )).rows[0];
+    assert.deepEqual(savedCloneVersion.source_snapshot, cloneSourceSnapshot);
+    assert.deepEqual(savedCloneVersion.imported_facts, cloneImportedFacts);
+
     const assertAtomicRejection = async ({caseId, ids, plan, key, expected, selectedSource = source.sourceId, startVersion = 1}) => {
       const receipt = await createReceipt(caseId, startVersion, plan || await candidatePlan(ids), key);
       await assert.rejects(promote(receipt, authority, selectedSource), expected);
@@ -1701,6 +1845,11 @@ try {
       canonicalEvidenceLinks:success.evidenceLinkIds.length, canonicalPayloadFieldCount:5,
       relationalLineageRows:promotedEvidence.length, assessSaveVersion:5,
       assessSaveReplayAdditionalRows:0, mismatchedResourceRejections:1, replayAdditionalWrites:0,
+      v1ClonePromotionVersions:4, v1CloneSavedVersion:5,
+      v1CloneAncestryMismatches:0, v1CloneImportedFactMismatches:0,
+      v1CloneRecoveryAdditionalWrites:0, v1CloneReplayAdditionalWrites:0,
+      unicodeValueCodePoints:12000, unicodeValueRoundTripMismatches:0,
+      unicodeValueRecoveryHashMismatches:0, unicodeValueReplayHashMismatches:0,
       validEditedPromotions:1,
       concurrentWinners:1, concurrentLosers:1,
       concurrentFinalVersion:4, claimedFinal,

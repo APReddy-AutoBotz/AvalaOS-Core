@@ -271,6 +271,34 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
     [astralReplay?.safeExcerpt, astralReplay?.sourceLocator, astralReplay?.excerptHash],
     [retainedAstral?.safeExcerpt, retainedAstral?.sourceLocator, retainedAstral?.excerptHash],
   );
+  const candidateValueBoundary = `${'v'.repeat(11_999)}${astral}`;
+  const valueBoundary = await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate({ value: candidateValueBoundary }),
+  });
+  assert.equal(valueBoundary?.value, candidateValueBoundary);
+  assert.equal(Array.from(valueBoundary?.value || '').length, 12_000);
+  assert.equal(/\ufffd/.test(valueBoundary?.value || ''), false);
+  const valueBoundaryReplay = await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate({ value: candidateValueBoundary }),
+  });
+  assert.deepEqual(
+    [valueBoundaryReplay?.value, valueBoundaryReplay?.excerptHash],
+    [valueBoundary?.value, valueBoundary?.excerptHash],
+  );
+  assert.equal(await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate({ value: `${'w'.repeat(12_000)}${astral}` }),
+  }), null);
+  assert.equal(await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate({ value: `invalid high \ud83d` }),
+  }), null);
+  assert.equal(await buildGroundedEvidenceCandidate({
+    source: provenanceSource,
+    candidate: provenanceCandidate({ value: `invalid low \ude80` }),
+  }), null);
   assert.equal(await buildGroundedEvidenceCandidate({
     source: provenanceSource,
     candidate: provenanceCandidate({ safeExcerpt: `Approved control owner: Jane Doe.\ud83d` }),

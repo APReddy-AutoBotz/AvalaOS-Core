@@ -12,6 +12,7 @@ import {
   ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
   evaluateModernizationDecision,
   isUnicodeScalarString,
+  sanitizeEvidenceCandidateValue,
   sanitizeEvidenceExcerpt,
   type ModernizationFactors,
 } from './enterpriseIntelligence';
@@ -111,6 +112,32 @@ test('candidate excerpt limits count Unicode code points and reject malformed UT
   assert.equal(isUnicodeScalarString(`invalid \ud83d`), false);
   assert.equal(isUnicodeScalarString(`invalid \ude80`), false);
   assert.throws(() => sanitizeEvidenceExcerpt(`invalid \ud83d`), /ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE/);
+});
+
+test('candidate values use one Unicode-scalar 12,000-code-point boundary', () => {
+  const rocket = '\u{1f680}';
+  const retained = sanitizeEvidenceCandidateValue(`${'v'.repeat(11_999)}${rocket}`);
+  assert.equal(retained, `${'v'.repeat(11_999)}${rocket}`);
+  assert.equal(Array.from(retained).length, 12_000);
+  assert.equal(isUnicodeScalarString(retained), true);
+
+  const truncated = sanitizeEvidenceCandidateValue(`${'w'.repeat(12_000)}${rocket}`);
+  assert.equal(truncated, 'w'.repeat(12_000));
+  assert.equal(Array.from(truncated).length, 12_000);
+
+  const multipleAstral = sanitizeEvidenceCandidateValue(`${'x'.repeat(11_998)}${rocket}\u{1f4a1}${rocket}`);
+  assert.equal(multipleAstral, `${'x'.repeat(11_998)}${rocket}\u{1f4a1}`);
+  assert.equal(Array.from(multipleAstral).length, 12_000);
+  assert.equal(isUnicodeScalarString(multipleAstral), true);
+
+  assert.throws(
+    () => sanitizeEvidenceCandidateValue(`invalid high \ud83d`),
+    /ENTERPRISE_EVIDENCE_VALUE_INVALID_UNICODE/,
+  );
+  assert.throws(
+    () => sanitizeEvidenceCandidateValue(`invalid low \ude80`),
+    /ENTERPRISE_EVIDENCE_VALUE_INVALID_UNICODE/,
+  );
 });
 
 test('delivery handoff becomes stale when the approved Studio version changes', () => {
