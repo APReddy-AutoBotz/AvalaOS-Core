@@ -6,6 +6,7 @@ import { useAssessGovernanceConfig } from '../../services/assessGovernanceServic
 import { ASSESS_SECTIONS, ASSUMPTION_CATEGORIES, EVIDENCE_TYPES, getAssessFieldOptions } from '../../constants/assessQuestionBank';
 import AdminOverviewPanel from '../admin/AdminOverviewPanel';
 import AdminWorkbench from '../admin/AdminWorkbench';
+import ReleaseCandidateReadinessPanel from '../admin/ReleaseCandidateReadinessPanel';
 import BuyerAcceptancePackPanel from '../admin/BuyerAcceptancePackPanel';
 import BuyerAcceptanceReviewGatePanel from '../admin/BuyerAcceptanceReviewGatePanel';
 import BuyerAcceptanceAdminWalkthroughPanel from '../admin/BuyerAcceptanceAdminWalkthroughPanel';
@@ -171,6 +172,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     maxTemplates={limits?.maxTemplates}
                 />
             }
+            releaseCandidate={<ReleaseCandidateReadinessPanel />}
             organization={
                 <div className="space-y-6">
             {/* Company Profile Form */}

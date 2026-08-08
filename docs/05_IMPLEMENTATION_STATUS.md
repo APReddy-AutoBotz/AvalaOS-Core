@@ -98,3 +98,8 @@ Executed post-merge verification passed PostgreSQL 16 with 114 scenarios passed 
 ## Draft Trust Assurance Evidence Hub
 
 Draft PR #222 is an implementation candidate, not accepted or deployed. Post-PR #221 convergence moves its unaccepted migration to unique forward version `20260808190000`, retains strict HTTPS pilot/production configuration, and binds claim/evidence actions to explicit user targets. Feature disablement or read-only mode blocks mutations while preserving freshly authorized projections; rollback is an additive forward fix, never destructive SQL.
+# V1 release-candidate candidate (Draft PR #225)
+
+The post-Enterprise-Intelligence and post-Trust-Assurance main-derived candidate is seeded at `ce8d92415e8b0ee42f7fdfe034310a5246dc132f`. Draft PR #225 adds a bounded V1 RC proof composition: the existing AP Invoice Exception journey, an Admin readiness surface, a commit-bound machine-readable evidence checker, and operator/rollback guidance. It composes rather than replaces Core CI, Enterprise Intelligence, Trust Assurance, Studio Governed Artifacts, PR1F, and PR1G gates.
+
+Claims are limited to executed source/local synthetic checks and exact-head GitHub Actions results when those workflows run. Pilot configuration is **configured but not live-verified**. Hosted deployment, live Supabase/Vault/provider behavior, production, security certification, and compliance certification are **not proven/hosted/live**. Assemble remains at its accepted documentation/Phase-1 boundary. The next safe milestone after RC closure is a separately approved disposable/pilot environment acceptance exercise, not deployment or a post-V1 feature milestone.

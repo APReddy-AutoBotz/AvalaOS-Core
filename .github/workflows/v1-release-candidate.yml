@@ -1,0 +1,31 @@
+name: V1 Release Candidate Evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-source-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:v1-rc
+      - run: npm run build
+        env:
+          VITE_RC_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v1-rc-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/v1-rc/evidence-manifest.json
+          if-no-files-found: error
+          retention-days: 14

@@ -10,6 +10,7 @@ interface AdminWorkbenchProps {
   organizationName: string;
   planLabel: string;
   overview: React.ReactNode;
+  releaseCandidate: React.ReactNode;
   organization: React.ReactNode;
   modules: React.ReactNode;
   trustCenter: React.ReactNode;
@@ -26,6 +27,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
   organizationName,
   planLabel,
   overview,
+  releaseCandidate,
   organization,
   modules,
   trustCenter,
@@ -45,6 +47,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
 
   const sectionContent: Record<AdminSectionKey, React.ReactNode> = {
     overview,
+    release_candidate: releaseCandidate,
     organization,
     modules,
     trust_center: trustCenter,

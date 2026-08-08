@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Post-Trust-Hub V1 RC candidate
+
+Enterprise Intelligence PR #221 and Trust Assurance PR #222 are contained in post-Trust-Hub `main` merge `095ba67adeb1ac89c4b3b2f46734e06815e335b0`. Draft PR #225 starts from child seed `ce8d92415e8b0ee42f7fdfe034310a5246dc132f` and is the active V1 release-candidate/pilot-readiness proof milestone. Its proof remains bounded to source, local synthetic, and exact-head CI evidence: no hosted deployment, live provider/Vault/Supabase validation, pilot acceptance, production readiness, security certification, or compliance certification is established. Assemble remains at the accepted documentation/Phase-1 boundary.
+
 ## Studio PR B accepted corrective closure
 
 PR #217 accepted head `c83d456501741dbeecc864846fe7419c8d9046e7` merged as `372ed0880950d3209f79139704d3935b49c294d0`. Corrective PR #218 accepted head `f713d30cfe64040a143c9442a18064b3523c1d94` merged as and is contained in verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`. PR #218 corrects the five PR #217 projection/RPC, strict-decoder, command-translation, crash-recovery, and hold/deletion-serialization findings; both PRs have zero unresolved review threads. The accepted migration remains unchanged at blob `3383268eab95d1b2f12f4bb8a77246e63c3e30a3`. Authority remains server-side and fail closed; legacy document exports stay non-canonical. Source and CI acceptance is not hosted, deployment, pilot, production, readiness, security-certification, or compliance proof.

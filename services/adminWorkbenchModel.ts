@@ -1,5 +1,6 @@
 export type AdminSectionKey =
   | 'overview'
+  | 'release_candidate'
   | 'organization'
   | 'modules'
   | 'trust_center'
@@ -26,6 +27,13 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     shortLabel: 'Overview',
     description: 'Review organization context, module access, proof posture, evidence/approval/audit/export/artifact storage/RLS, hosted/deployment/operations preparation, M5.7 gate-selection summaries, and next admin decisions.',
     proofSafeDisclosure: 'Trust Center proof states are evidence-gated and do not expand runtime or deployment scope.',
+  },
+  {
+    key: 'release_candidate',
+    label: 'V1 RC Readiness',
+    shortLabel: 'RC proof',
+    description: 'Inspect exact build identity, canonical journey lineage, bounded proof states, limitations, and safe rollback posture.',
+    proofSafeDisclosure: 'Release-candidate evidence is synthetic/local/CI unless explicitly stated; it is not hosted, live, production, security, or compliance proof.',
   },
   {
     key: 'organization',

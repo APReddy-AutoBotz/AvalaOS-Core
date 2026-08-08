@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "candidate": "AvalaOS V1 RC",
+  "seedHead": "ce8d92415e8b0ee42f7fdfe034310a5246dc132f",
+  "proofBoundary": "source, CI, and local synthetic evidence only",
+  "canonicalJourney": "AP Invoice Exception Handling",
+  "authoritativeChecks": [
+    { "id": "core", "workflow": ".github/workflows/ci.yml" },
+    { "id": "enterprise-intelligence", "workflow": ".github/workflows/enterprise-intelligence.yml" },
+    { "id": "trust-assurance", "workflow": ".github/workflows/trust-assurance.yml" },
+    { "id": "studio-governed-artifacts", "workflow": ".github/workflows/studio-governed-artifacts.yml" },
+    { "id": "pr1f", "workflow": ".github/workflows/pr1f-assess-v2-economics.yml" },
+    { "id": "pr1g", "workflow": ".github/workflows/pr1g-application-portfolio.yml" }
+  ],
+  "prohibitedClaims": ["production ready", "security certified", "compliance certified", "hosted ready", "live provider validated"]
+}
