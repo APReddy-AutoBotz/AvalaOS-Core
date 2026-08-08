@@ -1723,7 +1723,9 @@ try {
         decision: {
           assessmentId: source.assessment, assessmentVersion: String(source.version),
           modelVersion: 'modernization-disposition-1', primaryDisposition: 'optimize',
-          eligibleDispositions: ['optimize'], blockers: [], conflicts: [], factorBands: {},
+          alternativeDisposition: 'assemble', eligibleDispositions: ['optimize'],
+          blockers: ['EDGE_ONLY_BLOCKER'], conflicts: ['EDGE_ONLY_CONFLICT'],
+          factorBands: {edgeOnlyPoison: {readinessBand: 'Ready'}},
           requiresHumanApproval: true, aiRationaleStatus: 'not_requested',
         },
       };
@@ -1739,6 +1741,39 @@ try {
         [receipt.id, fixture.org, fixture.workspace],
       )).rows[0];
       assert.deepEqual([reconciled.status, reconciled.response], ['committed', result]);
+      const persisted = (await authority.query(`SELECT
+        to_jsonb(assessment) assessment, to_jsonb(decision) decision,
+        public.enterprise_modernization_canonical_resource(to_jsonb(assessment), to_jsonb(decision)) canonical_resource
+        FROM public.enterprise_modernization_assessments assessment
+        JOIN public.enterprise_modernization_decisions decision
+          ON decision.modernization_assessment_id=assessment.id
+        WHERE assessment.id=$1 AND decision.id=$2`, [modernizationAssessmentId, decisionId])).rows[0];
+      const effect = (await authority.query(
+        "SELECT resource_id,safe_result FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1 AND effect_key='command'",
+        [receipt.id],
+      )).rows[0];
+      const expectedHash = (await authority.query(
+        'SELECT public.enterprise_sha256_jsonb($1::jsonb) hash', [JSON.stringify(persisted.canonical_resource)],
+      )).rows[0].hash;
+      assert.equal(result.resourceId, decisionId);
+      assert.equal(effect.resource_id, decisionId);
+      assert.deepEqual(effect.safe_result, result);
+      assert.deepEqual(result.decision, persisted.canonical_resource.decision);
+      assert.deepEqual(result.decision.conflicts, persisted.decision.conflicts);
+      assert.deepEqual(result.decision.blockers, persisted.decision.blockers);
+      assert.deepEqual(result.decision.factorBands, persisted.assessment.factor_bands);
+      assert.deepEqual(result.decision.eligibleDispositions, persisted.decision.eligible_dispositions);
+      assert.equal(result.decision.primaryDisposition, persisted.decision.primary_disposition);
+      assert.equal(result.resourceHash, persisted.decision.resource_hash);
+      assert.equal(result.resourceHash, expectedHash);
+      assert.deepEqual(result.decision.conflicts, []);
+      assert.ok(!JSON.stringify(result).includes('EDGE_ONLY_'));
+      assert.ok(!JSON.stringify(result).includes('edgeOnlyPoison'));
+      const beforeReplay = (await authority.query(`SELECT
+        (SELECT count(*)::int FROM public.enterprise_modernization_assessments WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM public.enterprise_modernization_decisions WHERE id=$2) decisions,
+        (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=$3) effects`,
+      [modernizationAssessmentId, decisionId, receipt.id])).rows[0];
       const exactReplay = (await authority.query(
         `SELECT (public.enterprise_ai_claim_command(
           $1,$2,$3,'modernization.evaluate',$4,$5,$6,NULL,$7
@@ -1747,10 +1782,13 @@ try {
           nextUuid(), requestHash, nextUuid()],
       )).rows[0];
       assert.deepEqual([exactReplay.status, exactReplay.response], ['committed', result]);
-      assert.equal(Number((await authority.query(
-        "SELECT count(*)::int n FROM public.enterprise_ai_effect_journal WHERE receipt_id=$1 AND effect_key='command'",
-        [receipt.id],
-      )).rows[0].n), 1);
+      const afterReplay = (await authority.query(`SELECT
+        (SELECT count(*)::int FROM public.enterprise_modernization_assessments WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM public.enterprise_modernization_decisions WHERE id=$2) decisions,
+        (SELECT count(*)::int FROM public.enterprise_ai_effect_journal WHERE receipt_id=$3) effects`,
+      [modernizationAssessmentId, decisionId, receipt.id])).rows[0];
+      assert.deepEqual(beforeReplay, {assessments: 1, decisions: 1, effects: 1});
+      assert.deepEqual(afterReplay, beforeReplay);
       return result;
     };
 
@@ -1809,7 +1847,9 @@ try {
     console.log(`MODERNIZATION CURRENT-ASSESSMENT ${JSON.stringify({
       approvedV1:'succeeded', newerDraft:'rejected', newerReviewerReady:'rejected',
       newerRejected:'rejected', newerSuperseded:'rejected', latestApprovedV2:'succeeded',
-      concurrentStaleLosers:1, obsoleteDecisions:0, replayAdditionalEffects:0, finalClaimed,
+      concurrentStaleLosers:1, obsoleteDecisions:0, edgeConflictProposed:1,
+      databaseConflicts:0, canonicalConflictMismatches:0, replayAdditionalDecisions:0,
+      replayAdditionalEffects:0, finalClaimed,
     })}`);
   });
 

@@ -9,6 +9,7 @@ const MAX_DOCX_ENTRIES = 2_000;
 const MAX_DOCX_ENTRY_BYTES = 20_000_000;
 const MAX_DOCX_TOTAL_EXPANDED_BYTES = 20_000_000;
 const MAX_PDF_STREAM_BYTES = 20_000_000;
+const MAX_PDF_TOTAL_EXPANDED_BYTES = 20_000_000;
 
 export type EvidenceExtractionFailureCode = 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE';
 
@@ -113,17 +114,37 @@ export const readBoundedStream = async (
   return bounded;
 };
 
-const inflatePdfStream = async (bytes: Uint8Array) => {
+export type PdfExpansionBudget = { remainingBytes: number };
+
+export const readPdfExpandedStream = async (
+  stream: ReadableStream<Uint8Array>,
+  budget: PdfExpansionBudget,
+) => {
+  if (budget.remainingBytes <= 0) {
+    await stream.cancel('PDF_STREAM_TOO_LARGE').catch(() => undefined);
+    throw new Error('PDF_STREAM_TOO_LARGE');
+  }
+  const expanded = await readBoundedStream(
+    stream,
+    Math.min(MAX_PDF_STREAM_BYTES, budget.remainingBytes),
+    'PDF_STREAM_TOO_LARGE',
+  );
+  budget.remainingBytes -= expanded.byteLength;
+  return expanded;
+};
+
+const inflatePdfStream = async (bytes: Uint8Array, budget: PdfExpansionBudget) => {
   if (bytes.byteLength > MAX_PDF_STREAM_BYTES) throw new Error('PDF_STREAM_TOO_LARGE');
   if (typeof DecompressionStream === 'undefined') throw new Error('PDF_DECOMPRESSION_UNAVAILABLE');
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
-  return readBoundedStream(stream, MAX_PDF_STREAM_BYTES, 'PDF_STREAM_TOO_LARGE');
+  return readPdfExpandedStream(stream, budget);
 };
 
 const extractPdfText = async (bytes: Uint8Array) => {
   const raw = new TextDecoder('latin1').decode(bytes);
   if (!raw.startsWith('%PDF-')) throw new Error('PDF_SIGNATURE_INVALID');
   const fragments = extractPdfFragments(raw);
+  const expansionBudget: PdfExpansionBudget = { remainingBytes: MAX_PDF_TOTAL_EXPANDED_BYTES };
 
   for (const streamMatch of raw.matchAll(/<<(.*?)>>\s*stream\r?\n/gms)) {
     if (!/\/Filter\s*(?:\/FlateDecode|\[\s*\/FlateDecode\s*\])/.test(streamMatch[1])) continue;
@@ -133,7 +154,7 @@ const extractPdfText = async (bytes: Uint8Array) => {
     let contentEnd = endMarker;
     while (contentEnd > contentStart && (bytes[contentEnd - 1] === 0x0a || bytes[contentEnd - 1] === 0x0d)) contentEnd -= 1;
     const compressed = bytes.slice(contentStart, contentEnd);
-    const inflated = await inflatePdfStream(compressed);
+    const inflated = await inflatePdfStream(compressed, expansionBudget);
     fragments.push(...extractPdfFragments(new TextDecoder('latin1').decode(inflated)));
   }
 

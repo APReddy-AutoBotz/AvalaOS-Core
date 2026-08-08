@@ -44,8 +44,13 @@ const modernizationCurrentSql = fs.readFileSync(
   path.join(process.cwd(), 'supabase/migrations/20260808120000_enterprise_modernization_current_assessment.sql'),
   'utf8',
 );
+const modernizationCanonicalSql = fs.readFileSync(
+  path.join(process.cwd(), 'supabase/migrations/20260808130000_enterprise_modernization_canonical_projection.sql'),
+  'utf8',
+);
 const commandSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceCommand.ts'), 'utf8');
 const ingestionSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceIngestion.ts'), 'utf8');
+const querySource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/enterpriseIntelligenceQuery.ts'), 'utf8');
 const providerLifecycleSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycle.ts'), 'utf8');
 const providerLifecycleEndpointSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerLifecycleEndpoint.ts'), 'utf8');
 const providerSecretAdapterSource = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/_shared/providerSecretAdapter.ts'), 'utf8');
@@ -130,6 +135,34 @@ check(modernizationCurrentSql.includes('ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURR
   'A superseded source assessment must fail closed.');
 check(modernizationCurrentSql.includes("(p_result -> ('decision'::text)) - ('alternativeDisposition'::text)"),
   'Canonical modernization response assembly must group and type both JSONB operators explicitly.');
+check(modernizationCanonicalSql.includes('RENAME TO enterprise_commit_modernization_assessment_before_canonical_projection'),
+  'Canonical modernization correction must remain additive and forward-only.');
+check(modernizationCanonicalSql.includes('BEFORE INSERT ON public.enterprise_modernization_decisions')
+  && modernizationCanonicalSql.includes('enterprise_modernization_canonical_resource(to_jsonb(assessment_row), to_jsonb(NEW))'),
+  'The persisted modernization resource hash must cover the canonical committed resource semantics.');
+for (const token of [
+  "'factorBands', p_assessment->'factor_bands'",
+  "'blockers', p_decision->'blockers'",
+  "'conflicts', p_decision->'conflicts'",
+  "'primaryDisposition', p_decision->>'primary_disposition'",
+  "'eligibleDispositions', p_decision->'eligible_dispositions'",
+  "'assessmentVersion', p_assessment->>'source_assessment_version'",
+]) check(modernizationCanonicalSql.includes(token), `Canonical modernization projection is missing ${token}.`);
+const canonicalReceiptStart = modernizationCanonicalSql.lastIndexOf(
+  'CREATE OR REPLACE FUNCTION public.enterprise_commit_modernization_assessment(',
+);
+const canonicalReceiptFunction = modernizationCanonicalSql.slice(
+  canonicalReceiptStart,
+  modernizationCanonicalSql.indexOf('$$;', canonicalReceiptStart) + 3,
+);
+const canonicalAssembly = canonicalReceiptFunction.slice(canonicalReceiptFunction.indexOf('committed :='));
+check(canonicalReceiptFunction.includes("p_result->>'resourceId' IS DISTINCT FROM p_decision->>'id'"),
+  'The proposed modernization result may be used only for pre-commit identity validation.');
+check(!canonicalAssembly.includes('p_result'),
+  'Canonical modernization response/effect assembly must not copy any proposed Edge fields.');
+check(canonicalAssembly.includes('canonical_result := jsonb_build_object(')
+  && !canonicalAssembly.includes('p_result ||'),
+  'Canonical modernization response/effect assembly must be rebuilt from committed database fields.');
 const currentAssessmentSelection = commandSource.slice(
   commandSource.indexOf('const assertApprovedApplicationAssessment'),
   commandSource.indexOf('type CanonicalDimensionRow'),
@@ -148,8 +181,16 @@ check(ingestionSource.includes('export const readBoundedStream')
   && ingestionSource.includes('await reader.cancel(')
   && ingestionSource.includes('chunk.byteLength > maxBytes - totalBytes'),
 'Untrusted decompression must enforce and cancel on an incremental byte bound.');
+check(ingestionSource.includes('MAX_PDF_TOTAL_EXPANDED_BYTES')
+  && ingestionSource.includes('Math.min(MAX_PDF_STREAM_BYTES, budget.remainingBytes)')
+  && ingestionSource.includes('budget.remainingBytes -= expanded.byteLength'),
+  'Every PDF stream must consume one cumulative expanded-byte document budget.');
 check(!/new Response\([^)]*\)\.arrayBuffer\(\)/u.test(ingestionSource),
   'PDF and DOCX decompression must never materialize an unchecked Response arrayBuffer.');
+check(querySource.includes('decodeModernizationBlockers(row.blockers)')
+  && querySource.includes('MODERNIZATION_BLOCKER_KEYS')
+  && !querySource.includes('JSON.stringify(row.blockers)'),
+  'Modernization blocker projection must use a strict bounded decoder without arbitrary JSON serialization.');
 for (const table of requiredTables) {
   check(sql.includes(`CREATE TABLE public.${table}`), `Missing strict table creation for ${table}`);
 }

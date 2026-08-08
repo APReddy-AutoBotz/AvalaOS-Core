@@ -81,6 +81,7 @@ assert.equal(projection.studioDocuments[0].approvedVersionLabel, 'Approved versi
 assert.equal(projection.deliveryPackages[0].lineageState, 'complete');
 assert.equal(projection.monitorBaselines[0].liveTelemetryConnected, false);
 assert.equal(projection.modernizationDecisions[0].assembleEligible, true);
+assert.deepEqual(projection.modernizationDecisions[0].conflicts, []);
 assert.equal(projection.blueprints[0].components.find(item => item.type === 'Agent Tools')?.enabled, false);
 assert.equal(projection.approvalResources.find(item => item.id === PACKAGE)?.separationOfDuties, 'creator_cannot_review');
 assert.equal(projection.assessPromotion.state, 'contract_pending');
@@ -89,6 +90,48 @@ const serialized = JSON.stringify(projection);
 for (const prohibited of ['must-never-project', 'contentHash', 'extractedTextHash', 'idempotencyKey', 'resource_hash', 'storage_path', 'secret_ref']) {
   assert.ok(!serialized.includes(prohibited), `projection must omit ${prohibited}`);
 }
+
+const blockerRows = raw();
+blockerRows.modernizationDecisions[0].blockers = [
+  { dimension: 'security_and_control', missingEvidence: [], hardGates: ['REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW'] },
+  { dimension: 'state_and_execution', missingEvidence: ['EXECUTION_CHARACTERISTICS'], hardGates: ['BATCH_DELAYED_FEEDBACK'] },
+  { dimension: 'integration_accessibility', missingEvidence: ['API_CONTRACT'], hardGates: [] },
+  { dimension: 'semantic_and_data_clarity', missingEvidence: [], hardGates: [] },
+];
+const blockerProjection = buildEnterpriseIntelligenceProjection(authority(), blockerRows);
+assert.deepEqual(blockerProjection.modernizationDecisions[0].blockers, [
+  'integration_accessibility: missing evidence [API_CONTRACT]',
+  'semantic_and_data_clarity: governed blocker',
+  'state_and_execution: missing evidence [EXECUTION_CHARACTERISTICS]; hard gates [BATCH_DELAYED_FEEDBACK]',
+  'security_and_control: hard gates [REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW]',
+]);
+
+const malformedBlockerRows = raw();
+malformedBlockerRows.modernizationDecisions[0] = {
+  ...malformedBlockerRows.modernizationDecisions[0],
+  primary_disposition: 'blocked',
+  status: 'blocked',
+  blockers: [{
+    dimension: 'security_and_control',
+    missingEvidence: [],
+    hardGates: [],
+    privatePayload: 'must-never-project-blocker-detail',
+  }, {
+    dimension: 'integration_accessibility',
+    missingEvidence: Array.from({ length: 21 }, (_, index) => `OVERSIZED_${index}`),
+    hardGates: [],
+  }, {
+    dimension: 'unknown_dimension',
+    missingEvidence: ['UNKNOWN_DETAIL'],
+    hardGates: [],
+  }],
+};
+const malformedBlockerProjection = buildEnterpriseIntelligenceProjection(authority(), malformedBlockerRows);
+assert.deepEqual(
+  malformedBlockerProjection.modernizationDecisions[0].blockers,
+  ['Governed blocker details unavailable'],
+);
+assert.ok(!JSON.stringify(malformedBlockerProjection).includes('must-never-project-blocker-detail'));
 
 const authorityDatabase = (value: unknown): TenantAuthorityDatabase => ({ loadFreshProjection: async () => value });
 const queryDatabase = (value: EnterpriseIntelligenceRawProjection): EnterpriseIntelligenceQueryDatabase => ({ loadProjectionRows: async () => value });

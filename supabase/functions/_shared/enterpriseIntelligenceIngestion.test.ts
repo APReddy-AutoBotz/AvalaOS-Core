@@ -5,6 +5,7 @@ import {
   decodeBase64,
   extractEvidenceText,
   readBoundedStream,
+  readPdfExpandedStream,
   sha256Hex,
 } from './enterpriseIntelligenceIngestion';
 
@@ -18,14 +19,20 @@ const joinBytes = (...parts: Uint8Array[]) => {
   return result;
 };
 
-const compressedPdf = (expanded: Uint8Array) => {
-  const compressed = new Uint8Array(deflateSync(expanded));
-  return joinBytes(
-    new TextEncoder().encode(`%PDF-1.4\n1 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`),
-    compressed,
-    new TextEncoder().encode('\nendstream\nendobj\n%%EOF'),
-  );
-};
+const compressedPdfStreams = (...expandedStreams: Uint8Array[]) => joinBytes(
+  new TextEncoder().encode('%PDF-1.4\n'),
+  ...expandedStreams.flatMap((expanded, index) => {
+    const compressed = new Uint8Array(deflateSync(expanded));
+    return [
+      new TextEncoder().encode(`${index + 1} 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`),
+      compressed,
+      new TextEncoder().encode('\nendstream\nendobj\n'),
+    ];
+  }),
+  new TextEncoder().encode('%%EOF'),
+);
+
+const compressedPdf = (expanded: Uint8Array) => compressedPdfStreams(expanded);
 
 const compressedDocx = (expanded: Uint8Array, advertisedExpandedBytes = expanded.byteLength) => {
   const name = new TextEncoder().encode('word/document.xml');
@@ -116,6 +123,43 @@ await test('rejects a small PDF decompression bomb while a valid near-limit stre
   const literal = new TextEncoder().encode('BT (Near limit governed PDF evidence) Tj ET');
   const expanded = joinBytes(new Uint8Array(19_999_900).fill(0x20), literal);
   assert.equal(await extractEvidenceText(compressedPdf(expanded), 'application/pdf'), 'Near limit governed PDF evidence');
+});
+
+await test('enforces one cumulative expanded-byte budget across every PDF stream', async () => {
+  const overBudget = compressedPdfStreams(
+    new Uint8Array(10_000_000).fill(0x20),
+    new Uint8Array(10_000_001).fill(0x20),
+  );
+  assert.ok(overBudget.byteLength < 12_000_000);
+  await assert.rejects(extractEvidenceText(overBudget, 'application/pdf'), /PDF_STREAM_TOO_LARGE/);
+
+  const literal = new TextEncoder().encode('BT (Cumulative near limit PDF evidence) Tj ET');
+  const withinBudget = compressedPdfStreams(
+    new Uint8Array(10_000_000).fill(0x20),
+    joinBytes(new Uint8Array(9_999_900).fill(0x20), literal),
+  );
+  assert.equal(
+    await extractEvidenceText(withinBudget, 'application/pdf'),
+    'Cumulative near limit PDF evidence',
+  );
+});
+
+await test('cancels a later PDF stream as soon as the document budget is exhausted', async () => {
+  const budget = { remainingBytes: 6 };
+  let pulls = 0;
+  let cancellations = 0;
+  const laterStream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(4));
+      if (pulls === 10) controller.close();
+    },
+    cancel() { cancellations += 1; },
+  });
+  await assert.rejects(readPdfExpandedStream(laterStream, budget), /PDF_STREAM_TOO_LARGE/);
+  assert.equal(cancellations, 1);
+  assert.ok(pulls < 10, `cumulative PDF reader consumed ${pulls} chunks`);
+  assert.equal(budget.remainingBytes, 6, 'failed stream must not consume a partially retained budget');
 });
 
 await test('rejects a lying DOCX decompression bomb while a valid near-limit entry succeeds', async () => {

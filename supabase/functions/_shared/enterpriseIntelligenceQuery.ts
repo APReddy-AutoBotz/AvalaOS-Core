@@ -88,12 +88,75 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 
 const isRow = (value: unknown): value is Row => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback;
+const MODERNIZATION_BLOCKER_DIMENSIONS = [
+  'integration_accessibility',
+  'semantic_and_data_clarity',
+  'state_and_execution',
+  'security_and_control',
+  'architecture_changeability',
+  'ui_automation_readiness',
+  'ai_assisted_engineering_readiness',
+] as const;
+const MODERNIZATION_BLOCKER_KEYS = ['dimension', 'hardGates', 'missingEvidence'];
+const MAX_MODERNIZATION_BLOCKERS = 50;
+const MAX_MODERNIZATION_BLOCKER_CODES = 20;
+const MODERNIZATION_BLOCKER_GENERIC = 'Governed blocker details unavailable';
+const blockerCode = /^[A-Z0-9][A-Z0-9_.:-]{0,119}$/;
 const number = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || fallback;
 const bool = (value: unknown) => value === true;
 const array = (value: unknown) => Array.isArray(value) ? value : [];
 const strings = (value: unknown) => array(value).filter((entry): entry is string => typeof entry === 'string');
 const object = (value: unknown): Row => isRow(value) ? value : {};
 const short = (value: unknown, max = 160) => text(value).replace(/\s+/g, ' ').trim().slice(0, max);
+
+const decodeBlockerCodes = (value: unknown): string[] | null => {
+  if (!Array.isArray(value) || value.length > MAX_MODERNIZATION_BLOCKER_CODES) return null;
+  const decoded: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') return null;
+    const normalized = item.trim();
+    if (!blockerCode.test(normalized)) return null;
+    decoded.push(normalized);
+  }
+  return [...new Set(decoded)].sort();
+};
+
+export const decodeModernizationBlockers = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [MODERNIZATION_BLOCKER_GENERIC];
+  if (value.length === 0) return [];
+  if (value.length > MAX_MODERNIZATION_BLOCKERS) return [MODERNIZATION_BLOCKER_GENERIC];
+  const decoded: Array<{ dimension: typeof MODERNIZATION_BLOCKER_DIMENSIONS[number]; detail: string }> = [];
+  const seenDimensions = new Set<string>();
+  let malformed = false;
+  for (const item of value) {
+    if (!isRow(item)
+      || Object.keys(item).sort().join('|') !== MODERNIZATION_BLOCKER_KEYS.join('|')
+      || !MODERNIZATION_BLOCKER_DIMENSIONS.includes(item.dimension as typeof MODERNIZATION_BLOCKER_DIMENSIONS[number])
+      || seenDimensions.has(String(item.dimension))) {
+      malformed = true;
+      continue;
+    }
+    const missingEvidence = decodeBlockerCodes(item.missingEvidence);
+    const hardGates = decodeBlockerCodes(item.hardGates);
+    if (!missingEvidence || !hardGates) {
+      malformed = true;
+      continue;
+    }
+    const sections = [
+      missingEvidence.length ? `missing evidence [${missingEvidence.join(', ')}]` : '',
+      hardGates.length ? `hard gates [${hardGates.join(', ')}]` : '',
+    ].filter(Boolean);
+    if (sections.length === 0) sections.push('governed blocker');
+    const dimension = item.dimension as typeof MODERNIZATION_BLOCKER_DIMENSIONS[number];
+    decoded.push({ dimension, detail: `${dimension}: ${sections.join('; ')}` });
+    seenDimensions.add(dimension);
+  }
+  decoded.sort((left, right) => MODERNIZATION_BLOCKER_DIMENSIONS.indexOf(left.dimension)
+    - MODERNIZATION_BLOCKER_DIMENSIONS.indexOf(right.dimension));
+  const details = decoded.map(item => item.detail);
+  if (malformed) details.push(MODERNIZATION_BLOCKER_GENERIC);
+  return details.length ? details : [MODERNIZATION_BLOCKER_GENERIC];
+};
 const includes = <T extends string>(values: readonly T[], value: unknown): value is T => typeof value === 'string' && values.includes(value as T);
 const byNewest = (left: Row, right: Row) => Date.parse(text(right.created_at)) - Date.parse(text(left.created_at));
 const hasAny = (authority: TenantContext, ...capabilities: string[]) => capabilities.some(capability => authority.capabilities.includes(capability));
@@ -358,7 +421,7 @@ const projectModernization = (raw: EnterpriseIntelligenceRawProjection, actorId:
       id: text(row.id), applicationName: applicationNames.get(text(assessment?.application_ref)) || 'Approved application',
       status: row.status as EnterpriseModernizationProjection['status'], primaryDisposition: primary,
       alternativeDisposition: includes(['retain', 'optimize', 'automate_around', 'integrate', 'api_enable_wrap', 'refactor', 'replatform', 'rebuild', 'replace', 'assemble', 'retire', 'insufficient_evidence', 'blocked'] as const, row.alternative_disposition) ? row.alternative_disposition as ModernizationDisposition : undefined,
-      blockers: strings(row.blockers).slice(0, 50), conflicts: strings(row.conflicts).slice(0, 50),
+      blockers: decodeModernizationBlockers(row.blockers), conflicts: strings(row.conflicts).slice(0, 50),
       assembleEligible: row.status === 'approved' && ASSEMBLE_ELIGIBLE_DISPOSITIONS.includes(primary),
       createdByCurrentActor: text(row.created_by) === actorId,
     }];
