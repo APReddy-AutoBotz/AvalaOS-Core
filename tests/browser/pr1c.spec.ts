@@ -8,7 +8,7 @@ const WS='33333333-3333-4333-8333-333333333333';
 const PROCESS='44444444-4444-4444-8444-444444444444';
 const ASSESSMENT='55555555-5555-4555-8555-555555555555';
 const HANDOFF='66666666-6666-4666-8666-666666666666';
-const API='http://127.0.0.1:59999';
+const API='https://127.0.0.1:59999';
 const ALL_CAPABILITIES = [
   'assess.read','assess.create','assess.response.write','assess.finalize',
   'govern.resolve','studio.handoff.create',

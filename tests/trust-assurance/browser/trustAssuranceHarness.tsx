@@ -14,6 +14,7 @@ const featureMismatch = params.has('feature-mismatch');
 const evidenceHistory = params.has('evidence-history');
 const evidenceWithdrawn = params.has('evidence-withdrawn');
 const snapshotMixed = params.has('snapshot-mixed');
+const multipleClaims = params.has('multiple-claims');
 const contextA: TenantContextProjection = {
   userId: '10000000-0000-4000-8000-000000000001',
   organizationId: '20000000-0000-4000-8000-000000000002',
@@ -43,7 +44,13 @@ const projectionFor = (context: TenantContextProjection, published: boolean): In
     proposedProofStatus: 'verified', effectiveProofStatus: 'evidence_required', proofBoundary: 'verified_with_evidence',
     limitationDisclosure: 'Source only.', doesNotProve: ['Hosted behavior'], canonicalHash: 'a'.repeat(64),
     ownerDisplayName: 'Assigned owner', lifecycle: 'under_review', blockedReasons: ['CURRENT_CONTRADICTION'],
-  }],
+  }, ...(multipleClaims ? [{
+    claimVersionId: '40000000-0000-4000-8000-000000000014', claimId: '50000000-0000-4000-8000-000000000015', version: 3,
+    readinessDomain: 'evidence' as const, claimText: `${context.workspaceName} second claim`, buyerSafeWording: `${context.workspaceName} second claim`,
+    proposedProofStatus: 'configured' as const, effectiveProofStatus: 'configured' as const, proofBoundary: 'docs_only' as const,
+    limitationDisclosure: 'Second source-only claim.', doesNotProve: ['Hosted behavior'], canonicalHash: 'd'.repeat(64),
+    ownerDisplayName: 'Assigned owner', lifecycle: 'under_review' as const, blockedReasons: [],
+  }] : [])],
   evidence: [{
     evidenceVersionId: '60000000-0000-4000-8000-000000000006', evidenceId: '70000000-0000-4000-8000-000000000007', version: 1,
     evidenceType: 'test_report', referenceType: 'test_report', referenceValue: 'tests/trust-assurance', summary: 'Expired focused evidence.',

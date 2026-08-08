@@ -16,7 +16,7 @@ const ASSESSMENT='55555555-5555-4555-8555-555555555555';
 const HANDOFF='66666666-6666-4666-8666-666666666666';
 const V2_HEAD_VERSION='77777777-7777-4777-8777-777777777777';
 const V2_CLONE_VERSION='99999999-9999-4999-8999-999999999999';
-const API='http://127.0.0.1:59999';
+const API='https://127.0.0.1:59999';
 const ALL_CAPABILITIES = [
   'assess.read','assess.create','assess.response.write','assess.finalize',
   'govern.resolve','studio.handoff.create',

@@ -2,9 +2,7 @@
 
 ## Reservation and compatibility
 
-The currently published file, `20260807120000_trust_assurance_evidence_hub.sql`, is an additive migration after the accepted-main maximum `20260730190000`, but its timestamp is **not collision-safe**: active Draft PR #221 already owns `20260807120000_enterprise_review_action_replay_authority.sql` and currently extends through at least `20260807130000_provider_secret_cleanup_recovery.sql`.
-
-Renaming the Trust migration is a mandatory post-#221 convergence blocker. Do not choose a replacement while PR #221 is moving. After PR #221 is human-merged, determine the final accepted canonical migration maximum and rename this file once to a unique timestamp strictly later than that maximum. The Trust migration must remain otherwise independent of PR #221 tables, functions, and migrations. Feature scripts discover the migration by the stable `*_trust_assurance_evidence_hub.sql` suffix, and the workflow uses the same suffix glob, so the convergence rename does not require changing test logic. The migration never edits accepted blobs, seeds tenants, deletes history, or supplies a destructive down migration.
+The Trust migration is `20260808190000_trust_assurance_evidence_hub.sql`, the unique additive version immediately after accepted main's `20260808180000_enterprise_promotion_ancestry_dirty_history_preflight.sql` tip. The previously drafted colliding `20260807120000` Trust version was never accepted and has been moved forward; the accepted Enterprise migration at that version is unchanged. Feature scripts and the workflow discover the migration by its stable suffix and additionally assert the exact unique ordered tip. The migration remains independent of Enterprise Intelligence tables, never edits accepted blobs, seeds tenants, deletes history, or supplies a destructive down migration.
 
 ## Controls
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 const candidates=fs.readdirSync('supabase/migrations').filter(name=>/^\d{14}_trust_assurance_evidence_hub\.sql$/.test(name));
 if(candidates.length!==1){console.error(`Expected exactly one Trust Assurance migration, found ${candidates.length}`);process.exit(1)}
+if(candidates[0]!=='20260808190000_trust_assurance_evidence_hub.sql'){console.error(`Trust migration is not the unique post-main tip: ${candidates[0]}`);process.exit(1)}
 const migration=fs.readFileSync(`supabase/migrations/${candidates[0]}`,'utf8');
 const required=['FORCE ROW LEVEL SECURITY','trust_assurance_immutable','trust_assurance_command','IDEMPOTENCY_CONFLICT','FEATURE_DISABLED','p_mutations_enabled boolean','trust_one_current_publication','REVOKE ALL','service_role','trust_audit','trust_assurance_evidence_freshness','trust_assurance_effective_claim_law','trust_assurance_append_review_event','trust_assurance_current_review_disposition','review_ordinal','trust-review:','trust-current-publication:','trust_assurance_internal_projection','trust_assurance_buyer_projection','pg_advisory_xact_lock','trust_assurance_assert_active_participant','FOR SHARE OF p,om,wm,o,w','trust_assurance_lock_snapshot_selection','ORDER BY c.id FOR SHARE OF c','ORDER BY e.id,ev.id FOR SHARE OF e'];
 const missing=required.filter(value=>!migration.includes(value));
@@ -24,5 +25,6 @@ const trustHttp=fs.readFileSync('supabase/functions/_shared/trustAssuranceHttp.t
 if(!commandEdge.includes('trustAssuranceCommandResponse')||!queryEdge.includes('trustAssuranceQueryResponse')||!trustHttp.includes('...corsHeaders')){console.error('Trust actual responses must use the shared CORS response contract');process.exit(1)}
 const connected=fs.readFileSync('components/admin/trust-assurance/TrustAssuranceConnectedWorkspace.tsx','utf8');
 if(connected.includes('loadEnterpriseSessionContexts')||!connected.includes('tenantContext: TenantContextProjection | null')||!connected.includes('generation.current')||!connected.includes('useLayoutEffect')||!connected.includes('unresolvedByScope')||!connected.includes('Retry unresolved command')||!connected.includes('inFlight.current')){console.error('Trust connected workspace must fence context and preserve one synchronous durable unresolved attempt');process.exit(1)}
+if(connected.includes('const claim = projection.claims[0]')||!connected.includes('selectedClaimId === null')||!connected.includes('selectedEvidenceId !== null')){console.error('Trust actions must preserve explicit claim and evidence target binding');process.exit(1)}
 if(!panel.includes('useOrganizationContext()')||!panel.includes('tenantContext={tenantContext}')||!panel.includes('selectionState={sessionState}')){console.error('Trust Center must pass the OrganizationProvider selection into the connected workspace');process.exit(1)}
 console.log('Trust Assurance boundary scan passed');

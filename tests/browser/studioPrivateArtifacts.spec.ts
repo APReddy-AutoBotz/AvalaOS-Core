@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type { StudioPrivateArtifactFormat } from '../../services/studioArtifacts/privateArtifactContracts';
 
-const API = 'http://127.0.0.1:59999';
+const API = 'https://127.0.0.1:59999';
 const PREVIEW_ORIGINS = new Set([
   'http://127.0.0.1:4188',
   'http://127.0.0.1:4190',

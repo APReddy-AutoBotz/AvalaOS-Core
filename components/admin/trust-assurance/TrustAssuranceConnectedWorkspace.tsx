@@ -27,6 +27,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [unresolved, setUnresolved] = useState<TrustCommandRequest | null>(null);
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const generation = useRef(0);
   const inFlight = useRef(false);
@@ -71,6 +72,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
     setBuyer(null);
     setBuyerWarning('');
     setNotice('');
+    setSelectedClaimId(null);
     setSelectedEvidenceId(null);
     mutationBlocked.current = false;
     setPending(inFlight.current);
@@ -160,7 +162,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
       <p>Outcome unknown for {unresolved.operation}. Retry the same governed command.</p>
       <button type="button" disabled={pending || globalReadOnly || mutationBlocked.current || state.projection.readOnly} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
     </section>}
-    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} readOnly={globalReadOnly || mutationBlocked.current || state.projection.readOnly} selectedEvidenceId={selectedEvidenceId} onSelectEvidence={setSelectedEvidenceId} execute={execute} />}
+    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} readOnly={globalReadOnly || mutationBlocked.current || state.projection.readOnly} selectedClaimId={selectedClaimId} onSelectClaim={setSelectedClaimId} selectedEvidenceId={selectedEvidenceId} onSelectEvidence={setSelectedEvidenceId} execute={execute} />}
     <div aria-live="polite" className="text-sm font-bold text-slate-600">{notice}</div>
     {buyerWarning && state.kind === 'ready' && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">{buyerWarning}</p>}
     {!buyer && !buyerWarning && state.kind === 'ready' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">No publication: buyer-safe preview remains unavailable.</p>}
@@ -172,16 +174,23 @@ const CommandBar: React.FC<{
   pending: boolean;
   unresolved: boolean;
   readOnly: boolean;
+  selectedClaimId: string | null;
+  onSelectClaim: (claimId: string | null) => void;
   selectedEvidenceId: string | null;
   onSelectEvidence: (evidenceId: string | null) => void;
   execute: (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => Promise<void>;
-}> = ({ projection, pending, unresolved, readOnly, selectedEvidenceId, onSelectEvidence, execute }) => {
-  const claim = projection.claims[0];
+}> = ({ projection, pending, unresolved, readOnly, selectedClaimId, onSelectClaim, selectedEvidenceId, onSelectEvidence, execute }) => {
+  const claim = projection.claims.find(item => item.claimId === selectedClaimId)
+    ?? (selectedClaimId === null && projection.claims.length === 1 ? projection.claims[0] : undefined);
   const activeEvidence = projection.evidence.filter(item => item.lifecycle === 'active');
   const transitionEvidence = projection.evidence.filter(item => ['active','blocked','not_run'].includes(item.lifecycle));
   const selectedEvidence = projection.evidence.find(item => item.evidenceId === selectedEvidenceId);
-  const reviewEvidence = selectedEvidence?.lifecycle === 'active' ? selectedEvidence : activeEvidence.length === 1 ? activeEvidence[0] : undefined;
-  const mutableEvidence = selectedEvidence && ['active','blocked','not_run'].includes(selectedEvidence.lifecycle) ? selectedEvidence : transitionEvidence.length === 1 ? transitionEvidence[0] : undefined;
+  const reviewEvidence = selectedEvidenceId !== null
+    ? (selectedEvidence?.lifecycle === 'active' ? selectedEvidence : undefined)
+    : activeEvidence.length === 1 ? activeEvidence[0] : undefined;
+  const mutableEvidence = selectedEvidenceId !== null
+    ? (selectedEvidence && ['active','blocked','not_run'].includes(selectedEvidence.lifecycle) ? selectedEvidence : undefined)
+    : transitionEvidence.length === 1 ? transitionEvidence[0] : undefined;
   const reviewSnapshot = projection.snapshotHistory.find(item => ['draft','under_review','changes_requested'].includes(item.lifecycle));
   const publishSnapshot = projection.snapshotHistory.find(item => item.lifecycle === 'reviewed');
   const publishedSnapshot = projection.currentPublication ? projection.snapshotHistory.find(item => item.snapshotId === projection.currentPublication?.snapshotId) : undefined;
@@ -189,6 +198,7 @@ const CommandBar: React.FC<{
   return <section aria-label="Trust Assurance commands" className="rounded-2xl border bg-white p-4">
     <h3 className="font-black">Governed actions</h3>
     <p className="mt-1 text-xs text-slate-500">Actions refresh only after a durable server response. Historical evidence remains visible but is never an implicit mutation target.</p>
+    {projection.claims.length > 1 && <label className="mt-3 block text-xs font-bold">Claim target<select aria-label="Claim target" value={selectedClaimId ?? ''} onChange={event => onSelectClaim(event.target.value || null)} className="ml-2 rounded border px-2 py-1"><option value="">Select claim</option>{projection.claims.map(item=><option key={item.claimId} value={item.claimId}>{item.buyerSafeWording}</option>)}</select></label>}
     {projection.evidence.length > 1 && <label className="mt-3 block text-xs font-bold">Evidence target<select aria-label="Evidence target" value={selectedEvidenceId ?? ''} onChange={event => onSelectEvidence(event.target.value || null)} className="ml-2 rounded border px-2 py-1"><option value="">Select actionable evidence</option>{projection.evidence.map(item=><option key={item.evidenceId} value={item.evidenceId}>{item.summary} · {item.lifecycle}</option>)}</select></label>}
     <div className="mt-3 flex flex-wrap gap-2">
       <Action label="Create claim" disabled={disabled} onClick={() => execute('claim.create', { readinessDomain: 'evidence', claimText: 'Source evidence is available for independent review.', proposedProofStatus: 'configured', proofBoundary: 'docs_only', buyerSafeWording: 'Source evidence is available for independent review.', limitationDisclosure: 'Source-only evidence; hosted behavior is not proven.', doesNotProve: ['Hosted or production behavior'] })} />

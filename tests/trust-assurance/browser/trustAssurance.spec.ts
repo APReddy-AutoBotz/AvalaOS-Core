@@ -205,11 +205,35 @@ test('retired evidence remains history while only actionable evidence is targete
   await page.getByRole('button',{name:'Review evidence',exact:true}).click();
   await expect(log).toContainText('60000000-0000-4000-8000-000000000016');
   await expect(log).not.toContainText('target:resource.review:{"resourceType":"evidence_version","resourceId":"60000000-0000-4000-8000-000000000006"');
+  await page.getByRole('combobox',{name:'Evidence target'}).selectOption('70000000-0000-4000-8000-000000000007');
+  await expect(page.getByRole('button',{name:'Review evidence',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Link support',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Supersede evidence',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Withdraw evidence',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Withdraw evidence',exact:true}).evaluate((button: HTMLButtonElement)=>button.click());
+  await expect(log).not.toContainText('target:evidence.withdraw:');
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?evidence-history=1&evidence-withdrawn=1');
   await expect(page.getByRole('button',{name:'Review evidence',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Link support',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Supersede evidence',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Withdraw evidence',exact:true})).toBeDisabled();
+});
+
+test('explicit claim selection binds every claim action and snapshot selection', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?multiple-claims=1&tenant-context=1');
+  const log=page.getByTestId('trust-call-log');
+  for(const label of ['Revise claim','Review claim','Link support','Build snapshot'])
+    await expect(page.getByRole('button',{name:label,exact:true})).toBeDisabled();
+  await page.getByRole('combobox',{name:'Claim target'}).selectOption('50000000-0000-4000-8000-000000000015');
+  await page.getByRole('button',{name:'Revise claim',exact:true}).click();
+  await expect(log).toContainText('target:claim.revise:{"claimId":"50000000-0000-4000-8000-000000000015"');
+  await page.getByRole('button',{name:'Review claim',exact:true}).click();
+  await expect(log).toContainText('target:resource.review:{"resourceType":"claim_version","resourceId":"40000000-0000-4000-8000-000000000014"');
+  await page.getByRole('button',{name:'Link support',exact:true}).click();
+  await expect(log).toContainText('target:evidence.link:{"claimVersionId":"40000000-0000-4000-8000-000000000014"');
+  await page.getByRole('button',{name:'Build snapshot',exact:true}).click();
+  await expect(log).toContainText('target:snapshot.create:{"claimIds":["50000000-0000-4000-8000-000000000015"]}');
+  await expect(log).not.toContainText('target:snapshot.create:{"claimIds":["50000000-0000-4000-8000-000000000005"]}');
 });
 
 test('snapshot actions follow lifecycle and the current-publication pointer', async ({ page }) => {

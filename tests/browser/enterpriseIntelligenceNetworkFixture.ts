@@ -1,7 +1,7 @@
 import type { Page, Request } from '@playwright/test';
 import type { EnterpriseIntelligenceProjection } from '../../services/enterpriseIntelligence';
 
-export const ENTERPRISE_API = 'http://127.0.0.1:59999';
+export const ENTERPRISE_API = 'https://127.0.0.1:59999';
 export const IDS = {
   actor: '10000000-0000-4000-8000-000000000001',
   organization: '20000000-0000-4000-8000-000000000002',
