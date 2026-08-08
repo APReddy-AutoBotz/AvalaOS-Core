@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { EnterpriseSessionState, TenantContextProjection } from '../../../types';
 import { commandTrustAssurance, queryTrustAssurance } from '../../../services/trustAssurance/client';
 import type { BuyerSafeProjection, InternalAssuranceProjection, TrustCommandRequest, TrustOperation } from '../../../services/trustAssurance/contracts';
@@ -44,7 +44,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   const contextKey = tenantContext
     ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}:${tenantContext.capabilities.join(',')}`
     : 'none';
-  useEffect(() => {
+  useLayoutEffect(() => {
     const requestGeneration = ++generation.current;
     setBuyer(null);
     setNotice('');

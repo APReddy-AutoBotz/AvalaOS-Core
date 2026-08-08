@@ -22,6 +22,6 @@ const commandEdge=fs.readFileSync('supabase/functions/trust-assurance-command/in
 const trustHttp=fs.readFileSync('supabase/functions/_shared/trustAssuranceHttp.ts','utf8');
 if(!commandEdge.includes('trustAssuranceCommandResponse')||!queryEdge.includes('trustAssuranceQueryResponse')||!trustHttp.includes('...corsHeaders')){console.error('Trust actual responses must use the shared CORS response contract');process.exit(1)}
 const connected=fs.readFileSync('components/admin/trust-assurance/TrustAssuranceConnectedWorkspace.tsx','utf8');
-if(connected.includes('loadEnterpriseSessionContexts')||!connected.includes('tenantContext: TenantContextProjection | null')||!connected.includes('generation.current')){console.error('Trust connected workspace must consume and fence the selected provider tenant context');process.exit(1)}
+if(connected.includes('loadEnterpriseSessionContexts')||!connected.includes('tenantContext: TenantContextProjection | null')||!connected.includes('generation.current')||!connected.includes('useLayoutEffect')){console.error('Trust connected workspace must consume, pre-paint clear, and fence the selected provider tenant context');process.exit(1)}
 if(!panel.includes('useOrganizationContext()')||!panel.includes('tenantContext={tenantContext}')||!panel.includes('selectionState={sessionState}')){console.error('Trust Center must pass the OrganizationProvider selection into the connected workspace');process.exit(1)}
 console.log('Trust Assurance boundary scan passed');
