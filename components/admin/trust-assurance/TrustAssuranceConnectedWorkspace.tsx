@@ -12,6 +12,9 @@ const errorState = (error: unknown): TrustAssuranceState => ({
       : typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error',
 });
 
+const attemptScopeKey = (tenant: TenantContextProjection): string =>
+  `${tenant.userId}:${tenant.organizationId}:${tenant.workspaceId}`;
+
 export const TrustAssuranceConnectedWorkspace: React.FC<{
   tenantContext: TenantContextProjection | null;
   selectionState?: EnterpriseSessionState;
@@ -22,7 +25,10 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   const [buyer, setBuyer] = useState<BuyerSafeProjection | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
+  const [unresolved, setUnresolved] = useState<TrustCommandRequest | null>(null);
   const generation = useRef(0);
+  const inFlight = useRef(false);
+  const unresolvedByScope = useRef(new Map<string, TrustCommandRequest>());
 
   const loadSelected = useCallback(async (selected: TenantContextProjection, requestGeneration: number) => {
     if (generation.current !== requestGeneration) return;
@@ -44,11 +50,13 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
   const contextKey = tenantContext
     ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}:${tenantContext.capabilities.join(',')}`
     : 'none';
+  const selectedScopeKey = tenantContext ? attemptScopeKey(tenantContext) : null;
   useLayoutEffect(() => {
     const requestGeneration = ++generation.current;
     setBuyer(null);
     setNotice('');
-    setPending(false);
+    setPending(inFlight.current);
+    setUnresolved(tenantContext ? unresolvedByScope.current.get(attemptScopeKey(tenantContext)) ?? null : null);
     if (selectionState === 'loading') setState({ kind: 'loading' });
     else if (selectionState === 'offline') setState({ kind: 'offline' });
     else if (selectionState === 'stale') setState({ kind: 'stale_authorization' });
@@ -60,20 +68,26 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
     return () => { if (generation.current === requestGeneration) generation.current += 1; };
   }, [contextKey, selectionState, loadSelected]);
 
-  const execute = async (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => {
-    if (!tenantContext || pending || state.kind !== 'ready' || state.projection.readOnly) return;
-    const requestGeneration = generation.current;
-    const selected = tenantContext;
+  const submitAttempt = async (storedRequest: TrustCommandRequest, selected: TenantContextProjection, requestGeneration: number) => {
+    if (inFlight.current) return;
+    const scopeKey = attemptScopeKey(selected);
+    inFlight.current = true;
     setPending(true);
     setNotice('');
-    const request: TrustCommandRequest = {
-      requestId: crypto.randomUUID(), idempotencyKey: `trust-ui-${operation}-${crypto.randomUUID()}`, operation,
-      organizationId: selected.organizationId, workspaceId: selected.workspaceId,
-      expectedAuthorizationVersion: selected.authorizationVersion, expectedVersion, payload,
-    };
+    const request = { ...storedRequest, expectedAuthorizationVersion: selected.authorizationVersion };
     try {
       const result = await sendCommand(request);
+      if ('code' in result && result.code === 'PERSISTENCE_UNAVAILABLE') {
+        unresolvedByScope.current.set(scopeKey, storedRequest);
+        if (generation.current === requestGeneration) {
+          setUnresolved(storedRequest);
+          setNotice('Outcome unknown. Retry the same governed command.');
+        }
+        return;
+      }
+      unresolvedByScope.current.delete(scopeKey);
       if (generation.current !== requestGeneration) return;
+      setUnresolved(null);
       if ('code' in result) {
         setNotice(result.code);
         if (result.code === 'AUTHORIZATION_STALE') {
@@ -87,17 +101,46 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
       }
       await loadSelected(selected, requestGeneration);
       if (generation.current === requestGeneration) setNotice(result.replayed ? 'Durable result replayed.' : 'Durable change committed.');
-    } catch (error) {
-      if (generation.current === requestGeneration) setNotice(error instanceof Error ? error.message : 'PERSISTENCE_UNAVAILABLE');
+    } catch {
+      unresolvedByScope.current.set(scopeKey, storedRequest);
+      if (generation.current === requestGeneration) {
+        setUnresolved(storedRequest);
+        setNotice('Outcome unknown. Retry the same governed command.');
+      }
     } finally {
-      if (generation.current === requestGeneration) setPending(false);
+      inFlight.current = false;
+      setPending(false);
     }
+  };
+
+  const execute = async (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => {
+    if (!tenantContext || !selectedScopeKey || inFlight.current || unresolvedByScope.current.has(selectedScopeKey) || state.kind !== 'ready' || state.projection.readOnly) return;
+    const requestGeneration = generation.current;
+    const selected = tenantContext;
+    const request: TrustCommandRequest = {
+      requestId: crypto.randomUUID(), idempotencyKey: `trust-ui-${operation}-${crypto.randomUUID()}`, operation,
+      organizationId: selected.organizationId, workspaceId: selected.workspaceId,
+      expectedAuthorizationVersion: selected.authorizationVersion, expectedVersion, payload,
+    };
+    unresolvedByScope.current.set(selectedScopeKey, request);
+    await submitAttempt(request, selected, requestGeneration);
+  };
+
+  const retryUnresolved = async () => {
+    if (!tenantContext || !selectedScopeKey || inFlight.current) return;
+    const request = unresolvedByScope.current.get(selectedScopeKey);
+    if (!request) return;
+    await submitAttempt(request, tenantContext, generation.current);
   };
 
   return <div className="space-y-4">
     <TrustAssuranceWorkspace state={state} buyerProjection={buyer} />
     {state.kind === 'ready' && state.projection.readOnly && state.projection.claims.length === 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">Read-only mode: history and projections remain available; mutations are disabled.</p>}
-    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} execute={execute} />}
+    {state.kind === 'ready' && unresolved && <section role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold">
+      <p>Outcome unknown for {unresolved.operation}. Retry the same governed command.</p>
+      <button type="button" disabled={pending} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
+    </section>}
+    {state.kind === 'ready' && <CommandBar projection={state.projection} pending={pending} unresolved={Boolean(unresolved)} execute={execute} />}
     <div aria-live="polite" className="text-sm font-bold text-slate-600">{notice}</div>
     {!buyer && state.kind === 'ready' && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">No publication: buyer-safe preview remains unavailable.</p>}
   </div>;
@@ -106,10 +149,11 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
 const CommandBar: React.FC<{
   projection: InternalAssuranceProjection;
   pending: boolean;
+  unresolved: boolean;
   execute: (operation: TrustOperation, payload: Record<string, unknown>, expectedVersion?: number) => Promise<void>;
-}> = ({ projection, pending, execute }) => {
+}> = ({ projection, pending, unresolved, execute }) => {
   const claim = projection.claims[0], evidence = projection.evidence[0], snapshot = projection.snapshotHistory[0];
-  const disabled = pending || projection.readOnly;
+  const disabled = pending || unresolved || projection.readOnly;
   return <section aria-label="Trust Assurance commands" className="rounded-2xl border bg-white p-4">
     <h3 className="font-black">Governed actions</h3>
     <p className="mt-1 text-xs text-slate-500">Actions refresh only after a durable server response. The first current item is used for bounded review/build actions.</p>

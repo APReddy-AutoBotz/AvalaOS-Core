@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyTrustAssuranceRuntimeConfiguration, decodeTrustAssuranceQueryRequest } from './trustAssuranceQuery';
+import { applyTrustAssuranceRuntimeConfiguration, decodeTrustAssuranceQueryRequest, trustAssuranceMutationsReadOnly } from './trustAssuranceQuery';
 
 const request = {
   organizationId: '22222222-2222-4222-8222-222222222222',
@@ -22,4 +22,8 @@ assert.deepEqual(applyTrustAssuranceRuntimeConfiguration('internal', internal, t
 assert.deepEqual(applyTrustAssuranceRuntimeConfiguration('internal', internal, false), internal);
 const buyer = { mode: 'published_snapshot', publication: {}, claims: [] };
 assert.equal(applyTrustAssuranceRuntimeConfiguration('buyer', buyer, true), buyer, 'buyer-safe output is unchanged');
+assert.equal(trustAssuranceMutationsReadOnly(true, false), false);
+assert.equal(trustAssuranceMutationsReadOnly(true, true), true);
+assert.equal(trustAssuranceMutationsReadOnly(false, false), true);
+assert.equal(trustAssuranceMutationsReadOnly(false, true), true);
 console.log('Trust Assurance query tests passed');

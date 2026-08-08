@@ -27,3 +27,6 @@ export const applyTrustAssuranceRuntimeConfiguration = (
   if (view !== 'internal' || !projection || typeof projection !== 'object' || Array.isArray(projection)) return projection;
   return { ...(projection as Record<string, unknown>), readOnly };
 };
+
+export const trustAssuranceMutationsReadOnly = (featureEnabled: boolean, explicitReadOnly: boolean): boolean =>
+  !featureEnabled || explicitReadOnly;

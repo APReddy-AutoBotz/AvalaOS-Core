@@ -6,6 +6,7 @@ import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
 import {
   applyTrustAssuranceRuntimeConfiguration,
   decodeTrustAssuranceQueryRequest,
+  trustAssuranceMutationsReadOnly,
 } from '../_shared/trustAssuranceQuery.ts';
 
 declare const Deno: {
@@ -16,7 +17,7 @@ declare const Deno: {
 Deno.serve(async request => {
   const options = handleOptions(request);
   if (options) return options;
-  if (request.method !== 'POST' || Deno.env.get('TRUST_ASSURANCE_ENABLED') !== 'true') {
+  if (request.method !== 'POST') {
     return response({ code: 'ACCESS_DENIED', message: 'The requested resource is unavailable.' }, 404);
   }
 
@@ -81,6 +82,9 @@ Deno.serve(async request => {
   return response(applyTrustAssuranceRuntimeConfiguration(
     input.view,
     body,
-    Deno.env.get('TRUST_ASSURANCE_READ_ONLY') === 'true',
+    trustAssuranceMutationsReadOnly(
+      Deno.env.get('TRUST_ASSURANCE_ENABLED') === 'true',
+      Deno.env.get('TRUST_ASSURANCE_READ_ONLY') === 'true',
+    ),
   ), 200);
 });

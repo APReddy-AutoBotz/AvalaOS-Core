@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+const attemptFields = (line: string) => {
+  const match = line.match(/request=([^:]+):key=([^:]+):auth=([^:]+):expected=([^:]+):payload=(.*)$/);
+  if (!match) throw new Error(`Malformed harness attempt evidence: ${line}`);
+  return { requestId: match[1], idempotencyKey: match[2], authorizationVersion: match[3], expectedVersion: match[4], payload: match[5] };
+};
+
 test('canonical pilot runtime mounts the governed real journey', async ({ page }) => {
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html');
   await expect(page.getByRole('heading', { name: 'Trust and Assurance Evidence Hub', exact: true })).toBeVisible();
@@ -30,6 +36,7 @@ test('canonical pilot runtime mounts the governed real journey', async ({ page }
   await page.getByRole('button', { name: 'Select workspace A', exact: true }).click();
   await expect(page.getByText('Workspace B assurance', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Loading server-authoritative assurance evidence/)).toBeVisible();
+  await expect(callLog).toContainText('query:internal:30000000-0000-4000-8000-000000000003');
   await page.getByRole('button', { name: 'Release workspace A query', exact: true }).click();
   await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Release workspace B command', exact: true }).click();
@@ -54,13 +61,92 @@ test('revoked and version conflict remain explicit', async ({ page }) => {
   await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
   await expect(page.getByText('VERSION_CONFLICT', { exact: true })).toBeVisible();
   await expect(page.getByText(/No publication/)).toBeVisible();
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  const conflictCalls = (await page.getByTestId('trust-call-log').textContent())!.split('\n').filter(line => line.startsWith('command:snapshot.create:'));
+  expect(conflictCalls).toHaveLength(2);
+  expect(conflictCalls[0].match(/key=([^:]+)/)![1]).not.toBe(conflictCalls[1].match(/key=([^:]+)/)![1]);
 });
 
 test('server-projected read-only mode disables every governed mutation', async ({ page }) => {
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?readonly=1');
-  await expect(page.getByRole('status')).toContainText('Read-only mode');
+  await expect(page.getByText(/^Read-only mode:/)).toBeVisible();
   const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
   await expect(controls).toHaveCount(9);
   for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
+
+test('response loss preserves exact create identities, scope, and refreshed authority replay', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?response-loss=1');
+  const log = page.getByTestId('trust-call-log');
+  const counts = async () => JSON.parse((await page.getByTestId('trust-effect-counts').textContent())!);
+
+  await page.getByRole('button', { name: 'Create claim', exact: true }).dblclick();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+  expect((await counts())['claim.create']).toBe(1);
+  let lines = (await log.textContent())!.split('\n');
+  expect(lines.filter(line => line.startsWith('commit-response-lost:claim.create:'))).toHaveLength(1);
+  await page.getByRole('button', { name: 'Retry unresolved command', exact: true }).click();
+  await expect(page.getByText('Durable result replayed.', { exact: true })).toBeVisible();
+  lines = (await log.textContent())!.split('\n');
+  expect(attemptFields(lines.find(line => line.startsWith('commit-response-lost:claim.create:'))!)).toEqual(attemptFields(lines.find(line => line.startsWith('replay:claim.create:'))!));
+
+  await page.getByRole('button', { name: 'Create claim', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+  expect((await counts())['claim.create']).toBe(2);
+  lines = (await log.textContent())!.split('\n');
+  const claimCommits = lines.filter(line => line.startsWith('commit-response-lost:claim.create:')).map(attemptFields);
+  expect(claimCommits[0].idempotencyKey).not.toBe(claimCommits[1].idempotencyKey);
+  await page.getByRole('button', { name: 'Retry unresolved command', exact: true }).click();
+  await expect(page.getByText('Durable result replayed.', { exact: true })).toBeVisible();
+
+  for (const [label, operation] of [['Register evidence', 'evidence.register'], ['Build snapshot', 'snapshot.create']] as const) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+    expect((await counts())[operation]).toBe(1);
+    await page.getByRole('button', { name: 'Retry unresolved command', exact: true }).click();
+    await expect(page.getByText('Durable result replayed.', { exact: true })).toBeVisible();
+    lines = (await log.textContent())!.split('\n');
+    expect(attemptFields(lines.find(line => line.startsWith(`commit-response-lost:${operation}:`))!)).toEqual(attemptFields(lines.find(line => line.startsWith(`replay:${operation}:`))!));
+  }
+
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?response-loss=1&tenant-context=1');
+  const scopedLog = page.getByTestId('trust-call-log');
+  await page.getByRole('button', { name: 'Build snapshot', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+  let scopedLines = (await scopedLog.textContent())!.split('\n');
+  const original = attemptFields(scopedLines.find(line => line.startsWith('commit-response-lost:snapshot.create:'))!);
+  expect(original.authorizationVersion).toBe('3');
+  await page.getByRole('button', { name: 'Select workspace A', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Trust Assurance views', exact: true }).getByRole('button', { name: 'Claims', exact: true }).click();
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Refresh workspace B authority', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Trust Assurance views', exact: true }).getByRole('button', { name: 'Claims', exact: true }).click();
+  await expect(page.getByText('Workspace B assurance', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry unresolved command', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retry unresolved command', exact: true }).click();
+  await expect(page.getByText('Durable result replayed.', { exact: true })).toBeVisible();
+  scopedLines = (await scopedLog.textContent())!.split('\n');
+  const refreshed = attemptFields(scopedLines.find(line => line.startsWith('replay:snapshot.create:'))!);
+  expect(refreshed).toEqual({ ...original, authorizationVersion: '4' });
+});
+
+test('feature-disabled rollback preserves authorized internal and buyer reads', async ({ page }) => {
+  await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?feature-disabled=1');
+  await expect(page.getByText(/^Read-only mode:/)).toBeVisible();
+  const views = page.getByRole('navigation', { name: 'Trust Assurance views', exact: true });
+  await views.getByRole('button', { name: 'Claims', exact: true }).click();
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await views.getByRole('button', { name: 'Buyer-safe preview', exact: true }).click();
+  await expect(page.getByText('Workspace A assurance', { exact: true })).toBeVisible();
+  await views.getByRole('button', { name: 'Publication history', exact: true }).click();
+  await expect(page.getByText(/· published ·/)).toBeVisible();
+  const controls = page.getByRole('region', { name: 'Trust Assurance commands' }).getByRole('button');
+  for (let index = 0; index < await controls.count(); index += 1) await expect(controls.nth(index)).toBeDisabled();
+  const callLog = await page.getByTestId('trust-call-log').textContent();
+  expect(callLog).toContain('query:internal:');
+  expect(callLog).toContain('query:buyer:');
+  expect(callLog).not.toContain('command:');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
 });

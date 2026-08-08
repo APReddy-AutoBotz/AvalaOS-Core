@@ -18,7 +18,24 @@ The current hard-coded Trust Center remains an explicit `local_demo`/`automated_
 
 `trust_review_events`, `trust_publication_events`, `trust_command_receipts`, and `trust_audit_events` are append-only. `trust_snapshots` contains an exact selection and deterministic hash. `trust_current_publications` atomically points to the one current publication for an organization/scope while old publication events and snapshots remain immutable.
 
+Review history is ordered per exact organization/workspace/resource type/resource ID/resource hash. Review commands take an exact-scope advisory transaction lock and append the next monotonic `review_ordinal`. The private `trust_assurance_current_review_disposition` helper is the sole current-review law: the greatest ordinal is authoritative. A positive review followed by `changes_requested` is no longer positive; a later valid positive review restores approval without rewriting history. Evidence law, claim and snapshot publication checks, internal approval projection, buyer effective status, and queue counts all consume this helper.
+
 Evidence lifecycle is `active|superseded|withdrawn|blocked|not_run`; freshness is independently derived as `current|review_due|expired`; assurance lifecycle is `draft|under_review|changes_requested|reviewed|approved|published|withdrawn`. Existing proof statuses, boundaries, and readiness domains are imported unchanged.
+
+| Operation | Legal source state | Result | Fence/event |
+| --- | --- | --- | --- |
+| claim create | new | draft | immutable version, receipt, audit |
+| claim revise | any non-withdrawn current aggregate | draft with new immutable version | required expected version |
+| evidence register | new | active, blocked, or not_run from result | immutable version, receipt, audit |
+| evidence supersede/withdraw | active, blocked, or not_run | superseded/withdrawn | required expected version |
+| evidence link | current non-withdrawn claim and evidence | immutable exact-version link | claim then evidence lock |
+| resource review | current non-withdrawn claim, or current active/performed evidence | append-only current disposition | independent reviewer and exact hash |
+| snapshot create | current non-withdrawn claims | draft immutable selection/hash | server-derived selection |
+| snapshot review | draft, under_review, changes_requested, or reviewed | reviewed or changes_requested | required expected version and append-only exact-hash review |
+| snapshot publish | reviewed with current positive exact-hash disposition | published/current pointer | required expected version, three-person law, publication event |
+| snapshot withdraw | exact current published snapshot | withdrawn/no current pointer | required expected version, withdrawal event |
+
+Published and withdrawn snapshots are never reviewable or reopenable. An illegal review, stale fence, or invalid lifecycle commits no review event, receipt, audit, pointer, or aggregate mutation.
 
 ## Deterministic evidence law
 
@@ -39,13 +56,15 @@ Every request requires an authenticated user, active organization and exact work
 
 The typed operations cover claim create/revise, evidence register/supersede/withdraw/link, resource review, snapshot create/review/publish/withdraw. `(org, actor, operation, idempotencyKey)` is logical identity; the canonical payload hash excludes transport correlation. Exact replay returns the durable terminal body/resource/version. Changed payload conflicts. Receipt/aggregate locking creates one winner; stale expected versions fail before effects. `claim.revise`, `evidence.withdraw`, and `evidence.supersede` update the same aggregate rows publication share-locks. `evidence.link` follows claim-then-evidence order and locks current aggregate identity before creating lineage. A publication-first transaction therefore excludes mutations until commit; a mutation-first transaction makes publication reload and reject stale immutable selection with zero effects. State, immutable event, audit, and terminal receipt commit together, so audit failure rolls back and lost HTTP responses replay exactly.
 
+The browser creates one in-memory unresolved attempt per user/organization/workspace before dispatch and uses a synchronous in-flight guard. `PERSISTENCE_UNAVAILABLE` retains the same request ID, idempotency key, operation, expected version, and exact payload; unrelated mutations remain disabled until the explicit retry resolves it. A same-scope retry may overlay only a freshly selected authorization version because authorization version is deliberately excluded from the logical hash. Context changes cannot replay an attempt into another workspace or let late completion overwrite the selected scope, and Trust payloads are never persisted to local storage. Terminal success or bounded terminal failure clears the attempt so a later intentional action receives a new key.
+
 ## Projections and redaction
 
 Internal projections include owners by display name, effective status, freshness, contradictions, blocked reasons, queue counts, snapshots, and publication state. The buyer-safe decoder accepts only published-snapshot shape: approved wording/status/boundary, reviewed date, sanitized reference summary, limitations, does-not-prove statements, freshness, and publication identity/date. Unknown fields are rejected. Email, internal notes/IDs, infrastructure identifiers, audit rows, draft evidence, raw logs, secrets, signed URLs, customer documents, and object coordinates are excluded.
 
 ## Failure and rollback posture
 
-Missing production configuration, offline state, revocation, stale authority, malformed projection, evidence insufficiency, contradiction, version conflict, hash drift, and separation violations fail closed. The feature flag/read-only mode stops mutation while preserving authorized history and safe projections. Forward additive repair is the only schema rollback; destructive deletion is prohibited. Hosted rollback and incident readiness are not claimed.
+Missing production configuration, offline state, revocation, stale authority, malformed projection, evidence insufficiency, contradiction, version conflict, hash drift, and separation violations fail closed. `TRUST_ASSURANCE_ENABLED` is a mutation-execution gate, not a read-visibility gate; when it is not true, freshly authenticated and authorized internal/history and buyer-safe current-publication queries remain available, while the internal projection is overlaid `readOnly=true`. `TRUST_ASSURANCE_READ_ONLY=true` has the same mutation-blocking/read-preserving posture. New effects are blocked, but an exact already-committed receipt can still replay after fresh authority and matching-hash checks; a changed request conflicts. Forward additive repair is the only schema rollback; destructive deletion is prohibited. Hosted rollback and incident readiness are not claimed.
 
 ## Parallel boundary and convergence
 
