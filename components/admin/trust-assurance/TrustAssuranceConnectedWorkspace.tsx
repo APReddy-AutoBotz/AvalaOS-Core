@@ -153,7 +153,7 @@ export const TrustAssuranceConnectedWorkspace: React.FC<{
 
   return <div className="space-y-4">
     <TrustAssuranceWorkspace state={state} buyerProjection={buyer} />
-    {state.kind === 'ready' && (globalReadOnly || mutationBlocked.current || state.projection.readOnly) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">Read-only mode: history and projections remain available; mutations are disabled.</p>}
+    {state.kind === 'ready' && (globalReadOnly || mutationBlocked.current) && !state.projection.readOnly && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold">Read-only mode: history and projections remain available; mutations are disabled.</p>}
     {state.kind === 'ready' && unresolved && <section role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold">
       <p>Outcome unknown for {unresolved.operation}. Retry the same governed command.</p>
       <button type="button" disabled={pending || globalReadOnly || mutationBlocked.current || state.projection.readOnly} onClick={() => void retryUnresolved()} className="mt-2 rounded-lg bg-[#002C4B] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Retry unresolved command</button>
