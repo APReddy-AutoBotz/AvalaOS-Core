@@ -222,8 +222,15 @@ test('retired evidence remains history while only actionable evidence is targete
 test('explicit claim selection binds every claim action and snapshot selection', async ({ page }) => {
   await page.goto('/tests/trust-assurance/browser/trustAssuranceHarness.html?multiple-claims=1&tenant-context=1');
   const log=page.getByTestId('trust-call-log');
-  for(const label of ['Revise claim','Review claim','Link support','Build snapshot'])
-    await expect(page.getByRole('button',{name:label,exact:true})).toBeDisabled();
+  for(const label of ['Revise claim','Review claim','Link support','Build snapshot']) {
+    const action=page.getByRole('button',{name:label,exact:true});
+    await expect(action).toBeDisabled();
+    await action.evaluate((button: HTMLButtonElement)=>button.click());
+  }
+  await expect(log).not.toContainText('target:claim.revise:');
+  await expect(log).not.toContainText('target:resource.review:{"resourceType":"claim_version"');
+  await expect(log).not.toContainText('target:evidence.link:');
+  await expect(log).not.toContainText('target:snapshot.create:');
   await page.getByRole('combobox',{name:'Claim target'}).selectOption('50000000-0000-4000-8000-000000000015');
   await page.getByRole('button',{name:'Revise claim',exact:true}).click();
   await expect(log).toContainText('target:claim.revise:{"claimId":"50000000-0000-4000-8000-000000000015"');
