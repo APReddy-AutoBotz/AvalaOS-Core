@@ -28,6 +28,19 @@ export const StorageKeys = {
     ASSESS_GOVERNANCE_CONFIG: `${APP_PREFIX}-assess-governance-config`,
 };
 
+let legacyProviderKeyCleanupAttempted = false;
+
+/** One-way startup cleanup. This key is never read or used for AI execution. */
+export const clearLegacyBrowserProviderKey = () => {
+    if (legacyProviderKeyCleanupAttempted) return;
+    legacyProviderKeyCleanupAttempted = true;
+    try {
+        localStorage.removeItem(StorageKeys.API_KEY);
+    } catch {
+        // Storage access can be unavailable; the application remains fail-closed.
+    }
+};
+
 export class StorageService {
     static load<T>(key: string, defaultValue: T): T {
         try {

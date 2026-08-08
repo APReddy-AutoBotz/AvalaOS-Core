@@ -30,27 +30,20 @@
       "pathPrefix": "tests/browser/pr1g.spec.ts",
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App PR 1G browser fixture setup confined to browser tests; do not treat it as runtime authority."
-    }
-  ],
-  "entries": [
-    {
-      "pattern": "StorageKeys.API_KEY",
-      "path": "App.tsx",
-      "lines": [
-        195
-      ],
-      "reason": "deprecated cleanup-only path",
-      "futureAction": "Keep only until scan evidence proves legacy browser API-key cleanup can be removed."
     },
     {
       "pattern": "localStorage",
-      "path": "App.tsx",
-      "lines": [
-        195
-      ],
-      "reason": "deprecated cleanup-only path",
-      "futureAction": "Keep only for legacy browser API-key cleanup; do not add provider-key reads or writes."
+      "pathPrefix": "tests/browser/enterpriseIntelligence.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep the one-way historical provider-key cleanup assertion confined to the Enterprise Intelligence browser test."
     },
+    {
+      "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
+      "reason": "test/control documentation",
+      "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
+    }
+  ],
+  "entries": [
     {
       "pattern": "localStorage",
       "path": "tests/browser/pr1c.spec.ts",
@@ -76,19 +69,8 @@
       "path": "services/aiOrchestrator.ts",
       "lines": [
         1,
-        85,
-        99,
-        133
-      ],
-      "reason": "explicit local-demo/internal-dev fallback",
-      "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
-    },
-    {
-      "pattern": "getAiProviderApiKey",
-      "path": "services/aiOrchestrator.ts",
-      "lines": [
-        1,
-        94
+        42,
+        71
       ],
       "reason": "explicit local-demo/internal-dev fallback",
       "futureAction": "Keep only behind M3.1a mode policy; M3.2 owns pilot/production provider resolution."
@@ -170,7 +152,7 @@
       "pattern": "GROQ_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
       "lines": [
-        119
+        131
       ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
@@ -179,18 +161,36 @@
       "pattern": "GEMINI_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
       "lines": [
-        120
+        132
       ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
     },
     {
+      "pattern": "StorageKeys.API_KEY",
+      "path": "services/storage.ts",
+      "lines": [
+        38
+      ],
+      "reason": "deprecated cleanup-only path",
+      "futureAction": "Retain only this one-way startup removal; never read, write, or execute with the historical browser provider key."
+    },
+    {
       "pattern": "localStorage",
       "path": "services/storage.ts",
       "lines": [
-        34,
-        44,
-        51
+        38
+      ],
+      "reason": "deprecated cleanup-only path",
+      "futureAction": "Retain only this one-way startup removal; never read, write, or execute with the historical browser provider key."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "services/storage.ts",
+      "lines": [
+        47,
+        57,
+        64
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep generic storage classified separately from provider-key storage; do not add provider-key writes."

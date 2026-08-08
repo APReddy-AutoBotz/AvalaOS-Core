@@ -7,7 +7,11 @@ const sql=(await readFile(file,'utf8')).replaceAll('\r\n','\n');
 const forwardFile='supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
 const forward=(await readFile(forwardFile,'utf8')).replaceAll('\r\n','\n');
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1),'20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql','PR #217 forward fix must be the chronological tip');
+assert.equal(
+  migrations.indexOf('20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql'),
+  migrations.indexOf('20260729163251_studio_private_artifact_authority.sql') + 1,
+  'PR #217 forward fix must immediately follow the accepted PR #217 migration',
+);
 const acceptedBlob=createHash('sha1').update(`blob ${Buffer.byteLength(sql)}\0`).update(sql).digest('hex');
 assert.equal(acceptedBlob,'3383268eab95d1b2f12f4bb8a77246e63c3e30a3','accepted PR #217 migration blob drift');
 const capabilities=['studio.artifacts.rendition.generate','studio.artifacts.download','studio.artifacts.retention.manage','studio.artifacts.legal_hold.manage','studio.artifacts.delete.request','studio.artifacts.delete.approve'];
@@ -348,4 +352,4 @@ assert.ok(
   'deletion request binding must precede delegation for a new command',
 );
 assert.match(forward,/REVOKE ALL ON FUNCTION[\s\S]+studio_rendition_generation_lock\(uuid,uuid,uuid,text,text\)[\s\S]+studio_rendition_recovery_authority\(uuid,bigint\)[\s\S]+studio_rendition_attempt_complete_internal\(uuid,bigint\)[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
-console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, additive forward-fix tip, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);
+console.log(`Studio private artifact migration contract passed: accepted blob ${acceptedBlob}, immediate additive forward-fix successor, ${tables.length} forced-RLS tables, ${capabilities.length} capabilities, fenced service RPCs, one safe projection.`);

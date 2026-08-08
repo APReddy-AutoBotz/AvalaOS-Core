@@ -853,6 +853,7 @@ export enum View {
     TEMPLATE_LIBRARY = 'template_library',
     PROCESS_DETAIL = 'process_detail',
     GUIDED_ASSESSMENT = 'guided_assessment',
+    ENTERPRISE_INTELLIGENCE = 'enterprise_intelligence',
 }
 
 export interface User {

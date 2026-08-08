@@ -44,6 +44,15 @@ const authoring = {
   candidateEvaluations: [], gateResults: [], controlRequirements: [], modernizationDispositions: [],
 };
 
+const promotedEvidenceId = '77777777-7777-4777-8777-777777777777';
+const canonicalPromotedEvidence = {
+  id: promotedEvidenceId,
+  claimIds: [],
+  sourceType: 'document',
+  status: 'submitted',
+  validated: false,
+} as const;
+
 const jsonRoundTrip = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const main = async () => {
   const parsedAuthoring = parseAssessV2DraftPayload(authoring);
@@ -52,6 +61,19 @@ const main = async () => {
   assert.deepEqual(parsedAuthoring.interactions, stored.interactions);
   assert.deepEqual(parsedAuthoring.evidence, stored.evidence);
   assert.deepEqual(parsedAuthoring.agentNecessity, stored.agentNecessity);
+  const parsedPromotedAuthoring = parseAssessV2DraftPayload({
+    ...authoring,
+    evidenceLinks: [...authoring.evidenceLinks, canonicalPromotedEvidence],
+  });
+  assert.deepEqual(jsonRoundTrip(parsedPromotedAuthoring.evidence.at(-1)), canonicalPromotedEvidence);
+  assert.throws(
+    () => parseAssessV2DraftPayload({
+      ...authoring,
+      evidenceLinks: [{ ...canonicalPromotedEvidence, candidateId: caseId }, ...authoring.evidenceLinks],
+    }),
+    (error: unknown) => error instanceof AssessV2Error && error.code === 'INVALID_COMMAND',
+    'Enterprise lineage must not enter the strict Assess evidence payload',
+  );
   const nestedUnknowns = [
     { ...authoring, unknown: true },
     { ...authoring, primitives: [{ ...authoring.primitives[0], unknown: true }, ...authoring.primitives.slice(1)] },
@@ -255,6 +277,77 @@ const main = async () => {
   assert.equal(JSON.parse(decision.inputCanonical).payload.interactions[0].facts.capacityKnown, true);
   assert.ok(decision.outputSnapshot.trace.every(item => item.fieldIds.length));
   assert.equal((commands[0].payload as Record<string, unknown>).decision, undefined);
+
+  const promotedDraftEnvelope = {
+    ...draft,
+    requestId: '88888888-8888-4888-8888-888888888888',
+    idempotencyKey: 'idem-v2-promoted-draft-0001',
+    payload: { ...authoring, evidenceLinks: [...authoring.evidenceLinks, canonicalPromotedEvidence] },
+  } as AssessV2Envelope;
+  const promotedDraftDeps = deps();
+  let savedPromotedDraft: AssessV2AtomicCommand | undefined;
+  promotedDraftDeps.executeAtomicCommand = async command => {
+    savedPromotedDraft = command;
+    return { outcome: 'committed', resource: { id: caseId, status: 'draft', version: 3 } };
+  };
+  assert.equal(
+    (await executeAssessV2Command(req(promotedDraftEnvelope), parseAssessV2Envelope(promotedDraftEnvelope), promotedDraftDeps)).outcome,
+    'committed',
+  );
+  assert.deepEqual(jsonRoundTrip(savedPromotedDraft?.payload.evidence), jsonRoundTrip([...stored.evidence, canonicalPromotedEvidence]));
+
+  const promotedStored = { ...structuredClone(stored), evidence: [...structuredClone(stored.evidence), canonicalPromotedEvidence] } as AssessmentCaseV2;
+  const promotedFinalizeDeps = deps();
+  let promotedDecision: AssessV2AtomicCommand['serverDecision'];
+  promotedFinalizeDeps.loadLockedCaseForFinalize = async () => promotedStored;
+  promotedFinalizeDeps.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+    promotedDecision = command.serverDecision;
+    return { outcome: 'committed', resource: { id: caseId, status: 'reviewer_ready', version: 3 } };
+  };
+  assert.equal(
+    (await executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), promotedFinalizeDeps)).resource.status,
+    'reviewer_ready',
+  );
+  assert.deepEqual(jsonRoundTrip(promotedDecision?.evidenceSnapshot.at(-1)), canonicalPromotedEvidence);
+  for (const key of [
+    'confidence', 'processReadiness', 'candidateEvaluations', 'gateResults',
+    'composedOperatingModel', 'interactionDecisions', 'modernization',
+    'controlRequirements', 'controls',
+  ] as const) {
+    assert.deepEqual(
+      promotedDecision?.outputSnapshot[key],
+      decision.outputSnapshot[key],
+      `unbound submitted evidence must not alter deterministic Assess output ${key}`,
+    );
+  }
+  assert.ok(promotedDecision?.outputSnapshot.assumptions.includes(promotedEvidenceId),
+    'unvalidated promoted evidence remains an explicit governed assumption');
+  const promotedCloneStored = structuredClone(promotedStored);
+  promotedCloneStored.sourceV1 = {
+    assessmentId: processId,
+    scoreVersion: ASSESS_V1_SCORE_VERSION,
+    clonedAt: '2026-08-08T12:34:56.789Z',
+    importedAs: 'unverified-source-facts',
+    importedEvidenceClaimIds: [],
+  };
+  promotedCloneStored.importedFacts = [...projection!.importedFacts];
+  const promotedCloneFinalizeDeps = deps();
+  let promotedCloneDecision: AssessV2AtomicCommand['serverDecision'];
+  promotedCloneFinalizeDeps.loadLockedCaseForFinalize = async () => promotedCloneStored;
+  promotedCloneFinalizeDeps.executeAtomicCommand = async command => {
+    if (!command.serverDecision) throw new AssessV2Error('RESOURCE_NOT_AVAILABLE');
+    promotedCloneDecision = command.serverDecision;
+    return { outcome: 'committed', resource: { id: caseId, status: 'reviewer_ready', version: 3 } };
+  };
+  assert.equal(
+    (await executeAssessV2Command(req(finalize), parseAssessV2Envelope(finalize), promotedCloneFinalizeDeps)).resource.status,
+    'reviewer_ready',
+  );
+  const promotedCloneInput = JSON.parse(promotedCloneDecision!.inputCanonical).payload;
+  assert.deepEqual(promotedCloneInput.sourceV1, promotedCloneStored.sourceV1);
+  assert.deepEqual(promotedCloneInput.importedFacts, promotedCloneStored.importedFacts);
+  assert.deepEqual(jsonRoundTrip(promotedCloneDecision?.evidenceSnapshot.at(-1)), canonicalPromotedEvidence);
   const importedV1EvidenceClaim = 'v1.evidence.legacy-evidence-1';
   const fabricatedV1EvidenceClaim = 'v1.evidence.fabricated-but-valid';
   const lockedClone = structuredClone(stored);
