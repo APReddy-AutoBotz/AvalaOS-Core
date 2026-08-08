@@ -1713,7 +1713,7 @@ try {
       const requestHash = fixture.hash('8');
       const receipt = (await authority.query(
         `SELECT (public.enterprise_ai_claim_command(
-          $1,$2,$3,'modernization.evaluate',$4,$5,$6,'modernization_decision',$7
+          $1,$2,$3,'modernization.evaluate',$4,$5,$6,NULL,$7
         )).*`,
         [fixture.requester, fixture.org, fixture.workspace, `modernization-current-${label}`,
           nextUuid(), requestHash, token],
@@ -1741,7 +1741,7 @@ try {
       assert.deepEqual([reconciled.status, reconciled.response], ['committed', result]);
       const exactReplay = (await authority.query(
         `SELECT (public.enterprise_ai_claim_command(
-          $1,$2,$3,'modernization.evaluate',$4,$5,$6,'modernization_decision',$7
+          $1,$2,$3,'modernization.evaluate',$4,$5,$6,NULL,$7
         )).*`,
         [fixture.requester, fixture.org, fixture.workspace, `modernization-current-${label}`,
           nextUuid(), requestHash, nextUuid()],
