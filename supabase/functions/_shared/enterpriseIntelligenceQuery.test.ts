@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
+import {
+  assessApplication,
+  type ApplicationMetadata,
+  type ApplicationRecord,
+} from '../../../services/assessV2/applicationPortfolio.ts';
 import { decodeEnterpriseIntelligenceProjection } from '../../../services/enterpriseIntelligence.ts';
 import type { TenantAuthorityDatabase, TenantContext } from './tenantAuthority.ts';
 import {
   buildEnterpriseIntelligenceProjection,
+  decodeModernizationBlockers,
   handleEnterpriseIntelligenceQuery,
   type EnterpriseIntelligenceQueryDatabase,
   type EnterpriseIntelligenceRawProjection,
@@ -29,6 +35,41 @@ const MODERN_ASSESSMENT = '11000000-0000-4000-8000-000000000011';
 const DECISION = '12000000-0000-4000-8000-000000000012';
 const BLUEPRINT = '13000000-0000-4000-8000-000000000013';
 const ASSESS_DRAFT = '16000000-0000-4000-8000-000000000016';
+
+const CANONICAL_MISSING_EVIDENCE_BY_DIMENSION = {
+  integration_accessibility: [],
+  semantic_and_data_clarity: ['DOCUMENTATION_QUALITY'],
+  state_and_execution: ['EXECUTION_CHARACTERISTICS'],
+  security_and_control: ['REGULATED_DATA_FLAGS'],
+  architecture_changeability: ['SOURCE_RIGHTS', 'DEPLOYMENT_REPEATABILITY'],
+  ui_automation_readiness: [
+    'stableInterface',
+    'controlAccessibility',
+    'deterministicErrorDetection',
+    'reversibilityOrCompensation',
+    'materialActionApproval',
+    'monitoring',
+    'humanOwner',
+  ],
+  ai_assisted_engineering_readiness: [],
+} as const;
+
+const CANONICAL_HARD_GATES_BY_DIMENSION = {
+  integration_accessibility: ['UI_BRIDGE_EVIDENCE_REQUIRED'],
+  semantic_and_data_clarity: ['UNDOCUMENTED_SEMANTICS'],
+  state_and_execution: ['BATCH_DELAYED_FEEDBACK'],
+  security_and_control: ['REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW'],
+  architecture_changeability: ['NO_LEGAL_SOURCE_ACCESS'],
+  ui_automation_readiness: ['UI_AUTOMATION_POSITIVE_EVIDENCE_REQUIRED'],
+  ai_assisted_engineering_readiness: [
+    'AI_REBUILD_REQUIRES_LEGALSOURCERIGHTS',
+    'AI_REBUILD_REQUIRES_EXECUTABLEACCEPTANCETESTS',
+    'AI_REBUILD_REQUIRES_REPRODUCIBLEBUILD',
+    'AI_REBUILD_REQUIRES_CONTROLLEDSECURITYREVIEW',
+    'AI_REBUILD_REQUIRES_HUMANENGINEERINGOWNER',
+    'AI_REBUILD_REQUIRES_CONTROLLEDDEPLOYMENTROLLBACK',
+  ],
+} as const;
 
 const authority = (): TenantContext => ({
   userId: USER,
@@ -95,12 +136,12 @@ const blockerRows = raw();
 blockerRows.modernizationDecisions[0].blockers = [
   { dimension: 'security_and_control', missingEvidence: [], hardGates: ['REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW'] },
   { dimension: 'state_and_execution', missingEvidence: ['EXECUTION_CHARACTERISTICS'], hardGates: ['BATCH_DELAYED_FEEDBACK'] },
-  { dimension: 'integration_accessibility', missingEvidence: ['API_CONTRACT'], hardGates: [] },
+  { dimension: 'integration_accessibility', missingEvidence: [], hardGates: ['UI_BRIDGE_EVIDENCE_REQUIRED'] },
   { dimension: 'semantic_and_data_clarity', missingEvidence: [], hardGates: [] },
 ];
 const blockerProjection = buildEnterpriseIntelligenceProjection(authority(), blockerRows);
 assert.deepEqual(blockerProjection.modernizationDecisions[0].blockers, [
-  'integration_accessibility: missing evidence [API_CONTRACT]',
+  'integration_accessibility: hard gates [UI_BRIDGE_EVIDENCE_REQUIRED]',
   'semantic_and_data_clarity: governed blocker',
   'state_and_execution: missing evidence [EXECUTION_CHARACTERISTICS]; hard gates [BATCH_DELAYED_FEEDBACK]',
   'security_and_control: hard gates [REGULATED_DATA_REQUIRES_INDEPENDENT_REVIEW]',
@@ -132,6 +173,145 @@ assert.deepEqual(
   ['Governed blocker details unavailable'],
 );
 assert.ok(!JSON.stringify(malformedBlockerProjection).includes('must-never-project-blocker-detail'));
+
+const canonicalBlockers = Object.keys(CANONICAL_MISSING_EVIDENCE_BY_DIMENSION).map(dimension => ({
+  dimension,
+  missingEvidence: [...CANONICAL_MISSING_EVIDENCE_BY_DIMENSION[dimension as keyof typeof CANONICAL_MISSING_EVIDENCE_BY_DIMENSION]],
+  hardGates: [...CANONICAL_HARD_GATES_BY_DIMENSION[dimension as keyof typeof CANONICAL_HARD_GATES_BY_DIMENSION]],
+}));
+for (const blocker of canonicalBlockers) {
+  for (const code of blocker.missingEvidence) {
+    assert.deepEqual(
+      decodeModernizationBlockers([{ dimension: blocker.dimension, missingEvidence: [code], hardGates: [] }]),
+      [`${blocker.dimension}: missing evidence [${code}]`],
+      `canonical missing-evidence code ${code} must project exactly`,
+    );
+  }
+  for (const code of blocker.hardGates) {
+    assert.deepEqual(
+      decodeModernizationBlockers([{ dimension: blocker.dimension, missingEvidence: [], hardGates: [code] }]),
+      [`${blocker.dimension}: hard gates [${code}]`],
+      `canonical hard-gate code ${code} must project exactly`,
+    );
+  }
+}
+for (const requiredCamelCaseCode of ['stableInterface', 'controlAccessibility', 'humanOwner']) {
+  assert.ok(
+    decodeModernizationBlockers([{
+      dimension: 'ui_automation_readiness',
+      missingEvidence: [requiredCamelCaseCode],
+      hardGates: [],
+    }])[0].includes(requiredCamelCaseCode),
+  );
+}
+for (const rejected of [
+  'unknownCamelCaseValue',
+  'UNKNOWN_BUT_FREE_TEXT_CODE',
+  '<script>alert(1)</script>',
+  'providerKey=must-never-project',
+  `OVERSIZED_${'X'.repeat(200)}`,
+]) {
+  assert.deepEqual(
+    decodeModernizationBlockers([{
+      dimension: 'ui_automation_readiness',
+      missingEvidence: [rejected],
+      hardGates: [],
+    }]),
+    ['Governed blocker details unavailable'],
+  );
+}
+const mixedCanonicalBlockers = canonicalBlockers
+  .map(blocker => ({
+    ...blocker,
+    missingEvidence: blocker.missingEvidence.length ? [...blocker.missingEvidence, blocker.missingEvidence[0]] : [],
+    hardGates: blocker.hardGates.length ? [...blocker.hardGates, blocker.hardGates[0]] : [],
+  }))
+  .reverse();
+const mixedCanonicalDetails = decodeModernizationBlockers(mixedCanonicalBlockers);
+const allCanonicalCodes = [
+  ...Object.values(CANONICAL_MISSING_EVIDENCE_BY_DIMENSION).flat(),
+  ...Object.values(CANONICAL_HARD_GATES_BY_DIMENSION).flat(),
+];
+const blockerDetailLoss = allCanonicalCodes.filter(code => !mixedCanonicalDetails.some(detail => detail.includes(code)));
+assert.deepEqual(blockerDetailLoss, [], 'blocker detail loss must be zero for the complete canonical PR1G vocabulary');
+for (const code of allCanonicalCodes) {
+  assert.equal(
+    mixedCanonicalDetails.join('\n').split(code).length - 1,
+    1,
+    `canonical blocker code ${code} must be deduplicated`,
+  );
+}
+assert.deepEqual(
+  mixedCanonicalDetails.map(detail => detail.split(':', 1)[0]),
+  Object.keys(CANONICAL_MISSING_EVIDENCE_BY_DIMENSION),
+  'mixed canonical blockers must retain governed dimension order',
+);
+
+const pr1gMetadata = (overrides: Partial<ApplicationMetadata>): ApplicationMetadata => ({
+  name: 'Projection vocabulary fixture',
+  businessCapabilities: ['claims'],
+  supportedProcesses: ['claims-intake'],
+  businessCriticality: 'high',
+  lifecycleState: 'current',
+  sourceCode: 'available_legal_access',
+  documentationQuality: 'high',
+  automatedTestMaturity: 'executable_acceptance',
+  deploymentRepeatability: 'deterministic',
+  observability: 'strong',
+  dataClassifications: ['internal'],
+  regulatedData: false,
+  operatingRegions: ['US'],
+  interfaces: ['REST/GraphQL'],
+  upstreamDependencies: [],
+  downstreamDependencies: [],
+  realTime: true,
+  eventDriven: true,
+  synchronous: true,
+  batch: false,
+  ...overrides,
+});
+const assessVocabulary = (metadata: ApplicationMetadata) => assessApplication({
+  id: APPLICATION,
+  orgId: ORG,
+  workspaceId: WORKSPACE,
+  version: 1,
+  metadataVersion: 1,
+  metadata,
+  authorId: USER,
+  status: 'draft',
+  evidence: [],
+} satisfies ApplicationRecord);
+const sourceMissingEvidence = assessVocabulary(pr1gMetadata({
+  interfaces: ['UI-only'],
+  documentationQuality: 'Unknown',
+  realTime: 'Unknown',
+  synchronous: 'Unknown',
+  regulatedData: 'Unknown',
+  sourceCode: 'Unknown',
+  deploymentRepeatability: 'Unknown',
+  bridgeEvidence: {},
+})).dimensions.flatMap(dimension => dimension.missingEvidence);
+const sourceHardGates = assessVocabulary(pr1gMetadata({
+  interfaces: ['UI-only'],
+  documentationQuality: 'low',
+  batch: true,
+  realTime: false,
+  regulatedData: true,
+  sourceCode: 'unavailable',
+  deploymentRepeatability: 'ad_hoc',
+  bridgeEvidence: {},
+  aiControls: {},
+})).dimensions.flatMap(dimension => dimension.hardGates);
+assert.deepEqual(
+  [...new Set(sourceMissingEvidence)].sort(),
+  [...Object.values(CANONICAL_MISSING_EVIDENCE_BY_DIMENSION).flat()].sort(),
+  'projection allowlist must mirror the complete production PR1G missing-evidence vocabulary',
+);
+assert.deepEqual(
+  [...new Set(sourceHardGates)].sort(),
+  [...Object.values(CANONICAL_HARD_GATES_BY_DIMENSION).flat()].sort(),
+  'projection allowlist must mirror the complete production PR1G hard-gate vocabulary',
+);
 
 const authorityDatabase = (value: unknown): TenantAuthorityDatabase => ({ loadFreshProjection: async () => value });
 const queryDatabase = (value: EnterpriseIntelligenceRawProjection): EnterpriseIntelligenceQueryDatabase => ({ loadProjectionRows: async () => value });
