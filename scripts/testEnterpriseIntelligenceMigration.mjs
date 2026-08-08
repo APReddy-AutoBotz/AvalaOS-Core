@@ -128,6 +128,8 @@ check(modernizationCurrentSql.indexOf('pg_advisory_xact_lock')
   'Modernization must lock before selecting the latest assessment across all lifecycle states.');
 check(modernizationCurrentSql.includes('ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT'),
   'A superseded source assessment must fail closed.');
+check(modernizationCurrentSql.includes("p_result->'decision' - 'alternativeDisposition'::text"),
+  'Canonical modernization response assembly must select the JSONB key-removal overload explicitly.');
 const currentAssessmentSelection = commandSource.slice(
   commandSource.indexOf('const assertApprovedApplicationAssessment'),
   commandSource.indexOf('type CanonicalDimensionRow'),
