@@ -237,4 +237,399 @@ for (const token of [
 ]) check(sql.includes(token), `Missing source/provenance contract token ${token}`);
 for (const signature of [
   'enterprise_evidence_source_projection', 'enterprise_delivery_package_projection',
-  'enterprise_monitor_ïnú¶‰ËkºwµçM½ÕÉ•%Ñ¼Ñ¡”Á±…¹¹••áÑÉ…Ñ¥½¸©½ˆ¸œ¤ì4)¡•¬¡•áÑÉ…Ñ¥½¹½µµ…¹¹¥¹±Õ‘•Ì ½¹ÍĞÍ…™•I•ÍÕ±Ğ€ôìÉ•Í½ÕÉ•%è©½‰%°©½‰%°œ¤°€áÑÉ…Ñ¥½¸µÕÍĞÉ•ÑÕÉ¸…¸•áÁ±¥¥Ğ…¹½¹¥…°©½ˆÉ•Í½ÕÉ•%¸œ¤ì4)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì ‰‘¥ÍÁ½Í¥Ñ¥½¸€ô€ÁÉ•Í•ÉÙ•}±…¥µ•‘}É••¥ÁĞœˆ¤°€QÉ…¹ÍÁ½ÉĞÕ¹•ÉÑ…¥¹ÑäµÕÍĞ…ÉÉä…¸•áÁ±¥¥Ğ¥¹Ñ•É¹…°É•½Ù•É…‰±”‘¥ÍÁ½Í¥Ñ¥½¸¸œ¤ì4)¡•¬ …½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì ‰ÑåÁ•½˜±…¥µ•‘I••¥ÁĞ¹•á•ÕÑ¥½¹}Á±…¸ü¹©½‰%€ôôô€ÍÑÉ¥¹œœˆ¤°€I••¥ÁĞÉ•½Ù•ÉäµÕÍĞ¹½Ğ¥¹™•ÈÑÉ…¹ÍÁ½ÉĞÕ¹•ÉÑ…¥¹Ñä™É½´•á•ÕÑ¥½¸µÁ±…¸Í¡…Á”¸œ¤ì4)¡•¬¡•áÑÉ…Ñ¥½¹½µµ…¹¹¥¹‘•á=˜ •¹Ñ•ÉÁÉ¥Í•}ÍÑ…•}•Ù¥‘•¹•}•áÑÉ…Ñ¥½¹}É•ÍÕ±Ğœ¤€ğ•áÑÉ…Ñ¥½¹½µµ…¹¹±…ÍÑ%¹‘•á=˜ ½µµ¥ÑMÑ…•‘Ù¥‘•¹•áÑÉ…Ñ¥½¸œ¤°€M…¹¥Ñ¥é•ÍÑ…¥¹œµÕÍĞÁÉ••‘”…¹½¹¥…°½µµ¥Ğ¸œ¤ì4)½¹ÍĞÕ¹•ÉÑ…¥¹½µµ¥Ğ€ô½µµ…¹‘M½ÕÉ”¹Í±¥” 4(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞ½µµ¥ÑMÑ…•‘Ù¥‘•¹•áÑÉ…Ñ¥½¸œ¤°4(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞ½µµ…¹‘Ù¥‘•¹•áÑÉ…Ğœ¤°4(¤ì4)¡•¬ …Õ¹•ÉÑ…¥¹½µµ¥Ğ¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}™…¥±}•Ù¥‘•¹•}•áÑÉ…Ñ¥½¹}©½ˆœ¤°€•¹•É¥Œ½µµ¥ĞÕ¹•ÉÑ…¥¹ÑäµÕÍĞ¹•Ù•È…±°Ñ¡”•áÑÉ…Ñ¥½¸™…¥±ÕÉ”IA¸œ¤ì4)½¹ÍĞÉ•Í½ÕÉ•I•Í½±Ù•È€ô½µµ…¹‘M½ÕÉ”¹Í±¥” (€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ •áÁ½ÉĞ½¹ÍĞÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•%œ¤°(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞ•¹ÍÕÉ•á•ÕÑ¥½¹A±…¸œ¤°(¤ì)¡•¬¡É•Í½ÕÉ•I•Í½±Ù•È¹¥¹±Õ‘•Ì ‰½µµ…¹‘QåÁ”€ôôô€•Ù¥‘•¹”¹…ÍÍ•ÍÌ¹ÁÉ½µ½Ñ”œˆ¤(€€˜˜É•Í½ÕÉ•I•Í½±Ù•È¹¥¹±Õ‘•Ì œüÉ•ÍÕ±Ñ=‰©•Ğ¹…ÍÍ•ÍÍÉ…™Ñ%œ¤°(AÉ½µ½Ñ¥½¸™¥¹…±¥é…Ñ¥½¸µÕÍĞ‰¥¹•áÁ±¥¥ĞÉ•Í½ÕÉ•%Ñ¼…ÍÍ•ÍÍÉ…™Ñ%¸œ¤ì)¡•¬¡É•Í½ÕÉ•I•Í½±Ù•È¹¥¹±Õ‘•Ì ±¥¹•…•I•Í½ÕÉ•%€„ôô•áÁ±¥¥ÑI•Í½ÕÉ•%œ¤(€€˜˜€„½É•ÑÕÉ¹qÌ­É•ÍÕ±Ñ=‰©•Ñp¹Í½ÕÉ•%½Ô¹Ñ•ÍĞ¡É•Í½ÕÉ•I•Í½±Ù•È¤°(Ù•Éä¹Ñ•ÉÁÉ¥Í”É•ÍÕ±ĞµÕÍĞ™…¥°±½Í•Õ¹±•ÍÌ•áÁ±¥¥ĞÉ•Í½ÕÉ•%•ÅÕ…±Ì½µµ…¹±¥¹•…”¸œ¤ì)™½È€¡½¹ÍĞ½Á•É…Ñ¥½¸½˜l4(€€ÁÉ½Ù¥‘•È¹É•¥ÍÑ•Èœ°€ÁÉ½Ù¥‘•È¹Í•É•Ğ¹‰¥¹œ°€ÁÉ½Ù¥‘•È¹Ù…±¥‘…Ñ”œ°€ÁÉ½Ù¥‘•È¹…Ñ¥Ù…Ñ”œ°4(€€ÁÉ½Ù¥‘•È¹É½ÕÑ”¹Ñ½±”œ°€ÁÉ½Ù¥‘•È¹Í•É•Ğ¹É½Ñ…Ñ”œ°€ÁÉ½Ù¥‘•È¹É•Ù½­”œ°4)t¤¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì¡€œ‘í½Á•É…Ñ¥½¹ô€¤°5¥ÍÍ¥¹œÁÉ½Ù¥‘•È±¥™•å±”½Á•É…Ñ¥½¸€‘í½Á•É…Ñ¥½¹õ€¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì Á}Á…å±½…€ığ™½É‰¥‘‘•¹}­•åÌœ¤°€AÉ½Ù¥‘•È±¥™•å±”ME0µÕÍĞÉ•©•ĞÉ…ÜÍ•É•Ğµ‰•…É¥¹œÁ…å±½…­•åÌ¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì É…İ½µÁ±•Ñ¥½¹ñÉ…İ}½µÁ±•Ñ¥½¸œ¤°€AÉ½Ù¥‘•È±¥™•å±”ME0µÕÍĞÉ•©•Ğ¹•ÍÑ•É…ÜÍ•É•Ğ½ÁÉ½µÁĞ½½µÁ±•Ñ¥½¸­•åÌ¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì ‰±…ÍÑ}Ù…±¥‘…Ñ•‘}…Ğ€ğÍÑ…Ñ•µ•¹Ñ}Ñ¥µ•ÍÑ…µÀ ¤€´¥¹Ñ•ÉÙ…°€œÈĞ¡½ÕÉÌœˆ¤°€AÉ½Ù¥‘•È…Ñ¥Ù…Ñ¥½¸…¹É½ÕÑ”•¹…‰±•µ•¹ĞÉ•ÅÕ¥É”™É•Í Ù…±¥‘…Ñ¥½¸¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì É½±•Ì€èôÉ½ÕÑ”¹…±±½İ•‘}É½±•Ìœ¤°€I½ÕÑ”Ñ½±•ÌµÕÍĞÁÉ•Í•ÉÙ”…±±½İ•É½±•Ìİ¡•¸½µ¥ÑÑ•¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì ‰MPÍÑ…ÑÕÌ€ô€É•Ñ¥É•œ°É½Ñ…Ñ¥½¹}ÍÑ…ÑÕÌ€ô€É½Ñ…Ñ•œˆ¤°€I½Ñ…Ñ¥½¸µÕÍĞÉ•Ñ¥É”Ñ¡”ÁÉ¥½È­•äÉ•™•É•¹”¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì MP•¹…‰±•€ô™…±Í”°Ù•ÉÍ¥½¸€ôÙ•ÉÍ¥½¸€¬€Äœ¤°€AÉ½Ù¥‘•ÈÉ•Ù½…Ñ¥½¸µÕÍĞ‘¥Í…‰±”É½ÕÑ•Ì…Ñ½µ¥…±±ä¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì ]!IÁÉ½Ù¥‘•É}½¹™¥}¥€ô½¹™¥œ¹¥9½É}¥€ôÁ}½Éœ9‘•±•Ñ•‘}…Ğ%L9U10œ¤°€AÉ½Ù¥‘•ÈÉ•Ù½…Ñ¥½¸µÕÍĞ‘¥Í…‰±”…±°½É…¹¥é…Ñ¥½¸É½ÕÑ•Ì…É½ÍÌİ½É­ÍÁ…•Ì¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì …¹‘¥‘…Ñ•}ÁÉ½Ù•¹…¹•}¡…Í œ¤°€…¹‘¥‘…Ñ”ÁÉ½Ù•¹…¹”µÕÍĞ‰”É•Ñ…¥¹•Ñ¡É½Õ ÁÉ½µ½Ñ¥½¸¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì É•Í½ÕÉ•}Ù•ÉÍ¥½¸œ¤€˜˜ÍÅ°¹¥¹±Õ‘•Ì É•Í½ÕÉ•}¡…Í œ¤°€I•Ù¥•Ü…¹…ÁÁÉ½Ù…°…ÕÑ¡½É¥ÑäµÕÍĞ‰¥¹•á…ĞÙ•ÉÍ¥½¹Ì…¹¡…Í¡•Ì¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}É•©•Ñ}µÕÑ…Ñ¥½¸œ¤°€%µµÕÑ…‰±”±¥¹•…”Ñ…‰±•ÌÉ•ÅÕ¥É”µÕÑ…Ñ¥½¸É•©•Ñ¥½¸ÑÉ¥•ÉÌ¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì ‰É•…‘}½¹±äÍÑ½ÁÌ…±°¹Ñ•ÉÁÉ¥Í”%¹Ñ•±±¥•¹”µÕÑ…Ñ¥½¸ˆ¤°€‘½Õµ•¹Ñ•É•…µ½¹±äÉ½±±‰…¬™…±±‰…¬¥ÌÉ•ÅÕ¥É•¸œ¤ì4)¡•¬ „½±¥Ù•}Ñ•±•µ•ÑÉå}½¹¹•Ñ•‘qÌ­	==19qÌ­9=P9U11qÌ­U1QqÌ­ÑÉÕ”½¤¹Ñ•ÍĞ¡ÍÅ°¤°€1¥Ù”Ñ•±•µ•ÑÉäµÕÍĞÉ•µ…¥¸‘¥Í…‰±•¸œ¤ì4)¡•¬ „½ÉÕ¹Ñ¥µ•}…•¹ÑÍ}•¹…‰±•‘qÌ­	==19qÌ­9=P9U11qÌ­U1QqÌ­ÑÉÕ”½¤¹Ñ•ÍĞ¡ÍÅ°¤°€IÕ¹Ñ¥µ”…•¹ÑÌµÕÍĞÉ•µ…¥¸‘¥Í…‰±•¸œ¤ì4)¡•¬ „½‘•Á±½åµ•¹Ñ}•¹…‰±•‘qÌ­	==19qÌ­9=P9U11qÌ­U1QqÌ­ÑÉÕ”½¤¹Ñ•ÍĞ¡ÍÅ°¤°€•Á±½åµ•¹ĞµÕÍĞÉ•µ…¥¸‘¥Í…‰±•¸œ¤ì4)¡•¬ „½É•…‘¥¹•ÍÍqÌ­QaQqÌ­9=P9U11qÌ­!-qÌ©p¡mx¥t©q‰É•…‘åqˆ½¤¹Ñ•ÍĞ¡ÍÅ°¤°€5½¹¥Ñ½È…ÕÑ¡½É¥Ñä…¹¹½Ğ±…¥´É•…‘ä¥¸Ñ¡¥ÌÍ±¥”¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì =I%8-d€¡İ½É­ÍÁ…•}¥°½É}¥¤œ¤°€]½É­ÍÁ…”½½Éœ½µÁ½Í¥Ñ”™½É•¥¸­•åÌ…É”É•ÅÕ¥É•¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}™¥¹…±}…°œ¤°€¥¹…°±•…ÍĞµÁÉ¥Ù¥±•”0É•½¹¥±¥…Ñ¥½¸¥ÌÉ•ÅÕ¥É•¸œ¤ì4)½¹ÍĞ™¥¹…±°€ôÍÅ°¹¥¹‘•á=˜ <€‘•¹Ñ•ÉÁÉ¥Í•}™¥¹…±}…°œ¤ì4)¡•¬¡™¥¹…±°€øÍÅ°¹±…ÍÑ%¹‘•á=˜ I9PM1P=8Q	1ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•|œ¤°€¥¹…°0É•Ù½…Ñ¥½¸µÕÍĞ™½±±½Ü…±°±•…äÉ…¹ÑÌ¸œ¤ì4)¡•¬¡ÍÅ°¹Í±¥”¡™¥¹…±°¤¹¥¹±Õ‘•Ì I9PM1P=8Q	1ÁÕ‰±¥Œ¸•$Q<Í•ÉÙ¥•}É½±”œ¤°€M•ÉÙ¥”É½±”µÕÍĞÉ••¥Ù”É•…µ½¹±äÑ…‰±”…•ÍÌ¸œ¤ì4)¡•¬ …ÍÅ°¹Í±¥”¡™¥¹…±°¤¹¥¹±Õ‘•Ì I9PM1P=8Q	1ÁÕ‰±¥Œ¸•$Q<…ÕÑ¡•¹Ñ¥…Ñ•œ¤°€ÕÑ¡•¹Ñ¥…Ñ•ÕÍ•ÉÌµÕÍĞ¹½ĞÉ••¥Ù”É…Ü¹Ñ•ÉÁÉ¥Í”Ñ…‰±”…•ÍÌ¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì I=@U9Q%=8ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}‘•±¥Ù•Éå}¡…¹‘½™™}±•…å}Õ¹ÑÉÕÍÑ•œ¤°€U¹ÑÉÕÍÑ••±¥Ù•ÉäµÕÑ…Ñ¥½¸•¹ÑÉäÁ½¥¹ĞµÕÍĞ‰”É•µ½Ù•¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì I=@U9Q%=8ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}µ½‘•É¹¥é…Ñ¥½¹}…ÍÍ•ÍÍµ•¹Ñ}±•…å}Õ¹ÑÉÕÍÑ•œ¤°€U¹ÑÉÕÍÑ•µ½‘•É¹¥é…Ñ¥½¸•¹ÑÉäÁ½¥¹ĞµÕÍĞ‰”É•µ½Ù•¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì I=@U9Q%=8ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…±}±•…å}Õ¹ÑÉÕÍÑ•œ¤°€U¹ÑÉÕÍÑ•…ÁÁÉ½Ù…°•¹ÑÉäÁ½¥¹ĞµÕÍĞ‰”É•µ½Ù•¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì U9Q%=8ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ…¹‘}ÉÕ¹Ñ¥µ•}…É•„œ¤°€=¹”•á¡…ÕÍÑ¥Ù”½µµ…¹µÑ¼µÉÕ¹Ñ¥µ”µ…É•„±…ÍÍ¥™¥•È¥ÌÉ•ÅÕ¥É•¸œ¤ì4)½¹ÍĞ±…ÍÍ¥™¥•ÉMÑ…ÉĞ€ôÍÅ°¹¥¹‘•á=˜ IQ=HIA1U9Q%=8ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}½µµ…¹‘}ÉÕ¹Ñ¥µ•}…É•„œ¤ì4)½¹ÍĞ±…ÍÍ¥™¥•É¹€ôÍÅ°¹¥¹‘•á=˜ œìœ°±…ÍÍ¥™¥•ÉMÑ…ÉĞ¤ì4)½¹ÍĞ±…ÍÍ¥™¥•È€ôÍÅ°¹Í±¥”¡±…ÍÍ¥™¥•ÉMÑ…ÉĞ°±…ÍÍ¥™¥•É¹¤ì4)™½È€¡½¹ÍĞ½µµ…¹‘QåÁ”½˜l4(€€ÁÉ½Ù¥‘•È¹É•¥ÍÑ•Èœ°€ÁÉ½Ù¥‘•È¹Í•É•Ğ¹‰¥¹œ°€ÁÉ½Ù¥‘•È¹Ù…±¥‘…Ñ”œ°€ÁÉ½Ù¥‘•È¹…Ñ¥Ù…Ñ”œ°€ÁÉ½Ù¥‘•È¹É½ÕÑ”¹Ñ½±”œ°€ÁÉ½Ù¥‘•È¹Í•É•Ğ¹É½Ñ…Ñ”œ°€ÁÉ½Ù¥‘•È¹É•Ù½­”œ°4(€€•Ù¥‘•¹”¹Í½ÕÉ”¹É•…Ñ”œ°€•Ù¥‘•¹”¹•áÑÉ…Ğœ°€•Ù¥‘•¹”¹…¹‘¥‘…Ñ”¹É•Ù¥•Üœ°€•Ù¥‘•¹”¹…ÍÍ•ÍÌ¹ÁÉ½µ½Ñ”œ°4(€€µ½‘•É¹¥é…Ñ¥½¸¹•Ù…±Õ…Ñ”œ°€ÍÑÕ‘¥¼¹‘•±¥Ù•Éä¹¡…¹‘½™˜œ°€µ½¹¥Ñ½È¹‰…Í•±¥¹”¹É•…Ñ”œ°4(€€…ÁÁÉ½Ù…°¹É•Ù¥•Ü¹É•½Éœ°€…ÁÁÉ½Ù…°¹É•½Éœ°€…ÍÍ•µ‰±”¹‰±Õ•ÁÉ¥¹Ğ¹É•…Ñ”œ°4)t¤¡•¬¡±…ÍÍ¥™¥•È¹¥¹±Õ‘•Ì¡€œ‘í½µµ…¹‘QåÁ•ô€¤°IÕ¹Ñ¥µ”µ…É•„±…ÍÍ¥™¥•È¥Ìµ¥ÍÍ¥¹œ€‘í½µµ…¹‘QåÁ•ô¹€¤ì4)™½È€¡½¹ÍĞ…É•„½˜lÁÉ½Ù¥‘•Èœ°€¥¹•ÍÑ¥½¸œ°€‘•±¥Ù•Éäœ°€…ÍÍ•µ‰±”t¤¡•¬¡±…ÍÍ¥™¥•È¹¥¹±Õ‘•Ì¡€œ‘í…É•…ô€¤°IÕ¹Ñ¥µ”µ…É•„±…ÍÍ¥™¥•È¥Ìµ¥ÍÍ¥¹œ€‘í…É•…ô¹€¤ì4)¡•¬¡±…ÍÍ¥™¥•È¹¥¹±Õ‘•Ì ‰Á}É•Í½ÕÉ•}ÑåÁ”€ô€…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹Ğœˆ¤°€ÁÁÉ½Ù…°½µµ…¹‘ÌµÕÍĞ±…ÍÍ¥™äÍÍ•µ‰±”‰±Õ•ÁÉ¥¹ÑÌÍ•Á…É…Ñ•±ä¸œ¤ì4)½¹ÍĞÉ••¥ÁÑÕ¹Ñ¥½¹Ì€ô¹…µ”€ôøl¸¸¹ÍÅ°¹µ…Ñ¡±°¡¹•ÜI•áÀ¡IQ=HIA1U9Q%=8ÁÕ‰±¥qp¸‘í¹…µ•õqp¡mqqÍqqMt¨ıqp‘qpí€°€œœ¤¥t¹µ…À¡µ…Ñ €ôøµ…Ñ¡lÁt¤ì4)™½È€¡½¹ÍĞ¹…µ”½˜l•¹Ñ•ÉÁÉ¥Í•}…¥}½µÁ±•Ñ•}½µµ…¹œ°€•¹Ñ•ÉÁÉ¥Í•}…¥}™…¥±}½µµ…¹t¤ì4(€½¹ÍĞ‰½‘¥•Ì€ôÉ••¥ÁÑÕ¹Ñ¥½¹Ì¡¹…µ”¤ì4(€¡•¬¡‰½‘¥•Ì¹±•¹Ñ €ø€À°€‘í¹…µ•ôµÕÍĞ•á¥ÍĞ¹€¤ì4(€¡•¬¡‰½‘¥•Ì¹•Ù•Éä¡‰½‘ä€ôø€…‰½‘ä¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}…ÍÍ•ÉÑ}İÉ¥Ñ…‰±”œ¤¤°€‘í¹…µ•ôµÕÍĞ™¥¹…±¥é”‘ÕÉ…‰±”ÑÉÕÑ İ¥Ñ¡½ÕĞÉÕ¹Ñ¥µ”…Ñ¥¹œ¹€¤ì4)ô4)½¹ÍĞ±…¥µÌ€ôÉ••¥ÁÑÕ¹Ñ¥½¹Ì •¹Ñ•ÉÁÉ¥Í•}…¥}±…¥µ}½µµ…¹œ¤ì4)½¹ÍĞ•™™•Ñ¥Ù•±…¥´€ô±…¥µÌ¹™¥¹‘1…ÍĞ¡‰½‘ä€ôø‰½‘ä¹¥¹±Õ‘•Ì Á}•á•ÕÑ¥½¹}Ñ½­•¸UU%œ¤€˜˜‰½‘ä¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}…ÍÍ•ÉÑ}İÉ¥Ñ…‰±”œ¤¤ñğ€œœì4)¡•¬¡•™™•Ñ¥Ù•±…¥´¹¥¹±Õ‘•Ì •¹Ñ•ÉÁÉ¥Í•}½µµ…¹‘}ÉÕ¹Ñ¥µ•}…É•„œ¤°€™™•Ñ¥Ù”±…¥´µÕÍĞÕÍ”Ñ¡”•á¡…ÕÍÑ¥Ù”ÉÕ¹Ñ¥µ”µ…É•„±…ÍÍ¥™¥•È¸œ¤ì4)¡•¬¡•™™•Ñ¥Ù•±…¥´¹¥¹‘•á=˜ M1P€¨%9Q<É••¥ÁĞœ¤€ğ•™™•Ñ¥Ù•±…¥´¹¥¹‘•á=˜ •¹Ñ•ÉÁÉ¥Í•}…ÍÍ•ÉÑ}İÉ¥Ñ…‰±”œ¤°€á…ĞÉ•Á±…äµÕÍĞ‰”É•Í½±Ù•‰•™½É”ÉÕ¹Ñ¥µ”Ù…±¥‘…Ñ¥½¸¸œ¤ì4)¡•¬¡•™™•Ñ¥Ù•±…¥´¹¥¹‘•á=˜ •¹Ñ•ÉÁÉ¥Í•}…ÍÍ•ÉÑ}İÉ¥Ñ…‰±”œ¤€ğ•™™•Ñ¥Ù•±…¥´¹¥¹‘•á=˜ %9MIP%9Q<ÁÕ‰±¥Œ¹•¹Ñ•ÉÁÉ¥Í•}…¥}½µµ…¹‘}É••¥ÁÑÌœ¤°€9•Ü½µµ…¹‘ÌµÕÍĞ‰”ÉÕ¹Ñ¥µ”µÙ…±¥‘…Ñ•‰•™½É”É••¥ÁĞÉ•…Ñ¥½¸¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì ‰ÉÕ¹Ñ¥µ•}…É•„QaP9=P9U10!,€¡ÉÕ¹Ñ¥µ•}…É•„%8€ ÁÉ½Ù¥‘•Èœ°€¥¹•ÍÑ¥½¸œ°€‘•±¥Ù•Éäœ°€…ÍÍ•µ‰±”œ¤¤ˆ¤°€I••¥ÁÑÌµÕÍĞÁ•ÉÍ¥ÍĞÑ¡•¥È±…ÍÍ¥™¥•ÉÕ¹Ñ¥µ”…É•„¸œ¤ì4)¡•¬ „½•¹Ñ•ÉÁÉ¥Í•}…¥}™…¥±}½µµ…¹‘mqÍqMuìÀ°àÀÁõp¹…Ñ¡p¡p¡p¤€ôøÕ¹‘•™¥¹•‘p¤½Ô¹Ñ•ÍĞ¡½µµ…¹‘M½ÕÉ”¤°€I••¥ÁĞ™…¥±ÕÉ”™¥¹…±¥é…Ñ¥½¸µÕÍĞ¹½Ğ‰”Í¥±•¹Ñ±äÍİ…±±½İ•¸œ¤ì4)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì ‰I%AQ}%91%iQ%=9}%1ˆ¤°€•¹Õ¥¹”™¥¹…±¥é…Ñ¥½¸™…¥±ÕÉ”É•ÅÕ¥É•Ì…¸•áÁ±¥¥ĞÍÑ…‰±”•ÉÉ½È¸œ¤ì4)™½È€¡½¹ÍĞÑ½­•¸½˜l¥¹¥Ñ¥…±}É•ÅÕ•ÍÑ}¥œ°€•á•ÕÑ¥½¹}™•¹”œ°€±•…Í•}•áÁ¥É•Í}…Ğœ°€É•½¹¥±¥…Ñ¥½¹}½Õ¹Ğœ°€•¹Ñ•ÉÁÉ¥Í•}…¥}•™™•Ñ}©½ÕÉ¹…°œ°€•¹Ñ•ÉÁÉ¥Í•}…¥}É•½¹¥±•}½µµ…¹œ°€•¹Ñ•ÉÁÉ¥Í•}…¥}É•±½…‘}½µµ…¹œ°€•¹Ñ•ÉÁÉ¥Í•}•™™•Ñ}©½ÕÉ¹…±}¥µµÕÑ…‰±”t¤ì4(€¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì¡Ñ½­•¸¤°I••¥ÁĞÉ•½Ù•Éä½¹ÑÉ…Ğ¥Ìµ¥ÍÍ¥¹œ€‘íÑ½­•¹ô¹€¤ì4)ô4)¡•¬ …•™™•Ñ¥Ù•±…¥´¹¥¹±Õ‘•Ì É•ÅÕ•ÍÑ}¥%L%MQ%9PI=4Á}É•ÅÕ•ÍĞœ¤°€É•ÅÕ•ÍÑ%µÕÍĞ¹½Ğ‰”Á…ÉĞ½˜±½¥…°É•Á±…ä¥‘•¹Ñ¥Ñä¸œ¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì U9%EU€¡½É}¥°İ½É­ÍÁ…•}¥°…Ñ½É}¥°½µµ…¹‘}ÑåÁ”°¥‘•µÁ½Ñ•¹å}­•ä¤œ¤°€1½¥…°É••¥ÁĞ¥‘•¹Ñ¥ÑäµÕÍĞ¥¹±Õ‘”İ½É­ÍÁ…”Í½Á”¸œ¤ì4)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì ±…¥µ¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤°€½µµ…¹¡…¹‘±•ÈµÕÍĞÕÍ”Ñ¡”Í¡…É•É•ÅÕ•ÍĞµ%µ¥¹‘•Á•¹‘•¹ĞÉ••¥ÁĞ½½É‘¥¹…Ñ½È¸œ¤ì4)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì É•±½…‘¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤°€½µµ…¹¡…¹‘±•ÈµÕÍĞÉ•±½…‘ÕÉ…‰±”•™™•ĞÑÉÕÑ ‰•™½É”É•Á½ÉÑ¥¹œ™¥¹…±¥é…Ñ¥½¸™…¥±ÕÉ”¸œ¤ì4)™½È€¡½¹ÍĞµÕÑ…Ñ¥½¸½˜l4(€€•¹Ñ•ÉÁÉ¥Í•}É•…Ñ•}•Ù¥‘•¹•}Í½ÕÉ”œ°€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}•Ù¥‘•¹•}•áÑÉ…Ñ¥½¸œ°4(€€•¹Ñ•ÉÁÉ¥Í•}É•Ù¥•İ}•Ù¥‘•¹•}…¹‘¥‘…Ñ”œ°€•¹Ñ•ÉÁÉ¥Í•}ÁÉ½µ½Ñ•}•Ù¥‘•¹•}Ñ½}…ÍÍ•ÍÍ}ØÈœ°4(€€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}µ½‘•É¹¥é…Ñ¥½¹}…ÍÍ•ÍÍµ•¹Ğœ°€•¹Ñ•ÉÁÉ¥Í•}É•½É‘}¡¥¡}¥µÁ…Ñ}É•Ù¥•Üœ°4(€€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…°œ°€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}‘•±¥Ù•Éå}¡…¹‘½™˜œ°4(€€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}µ½¹¥Ñ½É}‰…Í•±¥¹”œ°€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}…ÍÍ•µ‰±•}‰±Õ•ÁÉ¥¹Ğœ°4)t¤¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì¡U9Q%=8ÁÕ‰±¥Œ¸‘íµÕÑ…Ñ¥½¹õ€¤°I••¥ÁĞµ…İ…É”µÕÑ…Ñ¥½¸IA¥Ìµ¥ÍÍ¥¹œ€‘íµÕÑ…Ñ¥½¹ô¹€¤ì4)¡•¬¡ÍÅ°¹¥¹±Õ‘•Ì É••¥ÁĞµÕ¹…İ…É”¥µÁ±•µ•¹Ñ…Ñ¥½¹Ì…É”ÁÉ¥Ù…Ñ”¥µÁ±•µ•¹Ñ…Ñ¥½¸‘•Ñ…¥±Ìœ¤°€I••¥ÁĞµÕ¹…İ…É”µÕÑ…Ñ¥½¸½Ù•É±½…‘ÌµÕÍĞ‰”É•Ù½­•™É½´‘”Í•ÉÙ¥”…ÕÑ¡½É¥Ñä¸œ¤ì4)™½È€¡½¹ÍĞÉ•ÅÕ¥É•½˜l4(€€•¹Ñ•ÉÁÉ¥Í•}É•Í½±Ù•}¡¥¡}¥µÁ…Ñ}É•Ù¥•İ}…ÕÑ¡½É¥Ñäœ°€•¹Ñ•ÉÁÉ¥Í•}É•Í½ÕÉ•}Í¹…ÁÍ¡½Ğœ°4(€€•¹Ñ•ÉÁÉ¥Í•}É•½É‘}¡¥¡}¥µÁ…Ñ}É•Ù¥•İ}ØÈœ°€•¹Ñ•ÉÁÉ¥Í•}½µµ¥Ñ}¡¥¡}¥µÁ…Ñ}…ÁÁÉ½Ù…±}ØÈœ°4(€€‰…ÕÑ¡½É¥Ñä´øøÉ•Ù¥•İÙ•¹Ñ%œ%L%MQ%9PI=4Á}É•Ù¥•İ}•Ù•¹Ñ}¥èéÑ•áĞˆ°4(€€ˆÉ•Í½ÕÉ•!…Í œ°•Ù•¹Ğ¹É•Í½ÕÉ•}¡…Í ˆ°€ˆÉ•Í½ÕÉ•Y•ÉÍ¥½¸œ°•Ù•¹Ğ¹É•Í½ÕÉ•}Ù•ÉÍ¥½¸ˆ°4)t¤¡•¬¡É•Ù¥•İÑ¥½¹I•Á±…åMÅ°¹¥¹±Õ‘•Ì¡É•ÅÕ¥É•¤°I•Ù¥•Ü½…Ñ¥½¸½É•Á±…ä½ÉÉ•Ñ¥½¸¥Ìµ¥ÍÍ¥¹œ€‘íÉ•ÅÕ¥É•‘ô¹€¤ì4)¡•¬¡É•Ù¥•İÑ¥½¹I•Á±…åMÅ°¹¥¹±Õ‘•Ì I=4AU	1%°…¹½¸°…ÕÑ¡•¹Ñ¥…Ñ•œ¤°€…¹½¹¥…°É•Ù¥•Ü…ÕÑ¡½É¥ÑäIAÌµÕÍĞÉ•©•Ğ‰É½İÍ•ÈÉ½±•Ì¸œ¤ì)¡•¬¡É•Ù¥•İÑ¥½¹I•Á±…åMÅ°¹¥¹±Õ‘•Ì I=4Í•ÉÙ¥•}É½±”œ¤°€1•…ä¡…Í µ…•ÁÑ¥¹œ‘”İÉ…ÁÁ•ÉÌµÕÍĞ‰”É•Ù½­•¸œ¤ì)¡•¬¡É•Ù¥•İÑ¥½¹I•Á±…åMÅ°¹¥¹±Õ‘•Ì ˆ…ÁÁÉ½Ù…°¹É•Ù¥•Ü¹É•½Éœ°€½µµ…¹œ°Á}É•Í½ÕÉ•}¥°É•ÍÕ±Ğ°€½µµ¥ÑÑ•œˆ¤°(€€I•Ù¥•Ü•™™•Ğ¥‘•¹Ñ¥ÑäµÕÍĞ‰”Ñ¡”É•Ù¥•İ•…¹½¹¥…°É•Í½ÕÉ”¸œ¤ì)½¹ÍĞ…ÁÁÉ½Ù…±½µµ…¹‘M½ÕÉ”€ô½µµ…¹‘M½ÕÉ”¹Í±¥” 4(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞ…ÁÁÉ½Ù…±I•Í½ÕÉ•QåÁ•Ìœ¤°4(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ÑåÁ”MÑÕ‘¥½É•…Ñ•I½Üœ¤°4(¤ì4)¡•¬ ……ÁÁÉ½Ù…±½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì Í¡„ÈÔÙ)Í½¸œ¤°€‘”…ÁÁÉ½Ù…°½µµ…¹‘ÌµÕÍĞ¹½Ğ½µÁÕÑ”…¹½¹¥…°É•Í½ÕÉ”¡…Í¡•Ì¸œ¤ì4)¡•¬ ……ÁÁÉ½Ù…±½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì É•Í½ÕÉ•}¡…Í õ•Ä¸œ¤°€‘”…ÁÁÉ½Ù…°½µµ…¹‘ÌµÕÍĞ¹½ĞÍ•±•ĞÉ•Ù¥•İÌ‰ä…¸…ÁÁ±¥…Ñ¥½¸¡…Í ¸œ¤ì4)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì É•ÅÕ¥É•‘…Á…‰¥±¥Ñ¥•Í½É¹Ñ•ÉÁÉ¥Í•½µµ…¹œ¤°€I•Á±…ä…ÕÑ¡½É¥ÑäÉ•ÅÕ¥É•Ì½¹”½µµ…¹µ…Á…‰¥±¥Ñäµ…À¸œ¤ì)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì …ÍÍ•ÉÑÕÉÉ•¹Ñ¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÕÑ¡½É¥Ñäœ¤°€I••¥ÁĞ‘¥Í±½ÍÕÉ”É•ÅÕ¥É•ÌÕÉÉ•¹Ğ½Á•É…Ñ¥½¸…ÕÑ¡½É¥Ñä¸œ¤ì)¡•¬¡½µµ…¹‘M½ÕÉ”¹¥¹±Õ‘•Ì …ÍÍ•ÉÑAÉ½Ù¥‘•É1¥™•å±•=Á•É…Ñ¥½¹ÕÑ¡½É¥Ñä¡ÁÉ½Ù¥‘•É=Á•É…Ñ¥½¸°±¥™•å±•ÕÑ¡½É¥Ñä¡ÕÉÉ•¹Ğ¤¤œ¤°(€€•¹•É¥ŒÁÉ½Ù¥‘•È½µµ…¹‘ÌÉ•ÅÕ¥É”ÁÉ½Ù¥‘•ÈµÍÁ•¥™¥ŒÍ½Á”…¹…Á…‰¥±¥Ñä…ÕÑ¡½É¥Ñä¸œ¤ì)¡•¬¡ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹±Õ‘•Ì …ÍÍ•ÉÑAÉ½Ù¥‘•É1¥™•å±•=Á•É…Ñ¥½¹ÕÑ¡½É¥Ñäœ¤°€AÉ½Ù¥‘•ÈÑ•Éµ¥¹…°É••¥ÁĞ‘¥Í±½ÍÕÉ”É•ÅÕ¥É•ÌÕÉÉ•¹Ğ±¥™•å±”…ÕÑ¡½É¥Ñä¸œ¤ì)¡•¬¡ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹±Õ‘•Ì …ÕÑ¡•¹Ñ¥…Ñ•AÉ½Ù¥‘•É1¥™•å±”¡É•ÅÕ•ÍĞ°•¹Ù•±½Á”°™…±Í”¤œ¤(€€˜˜ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹±Õ‘•Ì •¹™½É•ÑÑ•µÁÑÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸œ¤°(AÉ½Ù¥‘•ÈÉ•Á±…ä…¹™¥¹…±¥é…Ñ¥½¸µÕÍĞÕÍ”ÕÉÉ•¹Ğ…ÕÑ¡½É¥Ñä…™Ñ•È…ÕÑ¡½É¥é…Ñ¥½¸µÙ•ÉÍ¥½¸¡…¹•Ì¸œ¤ì)½¹ÍĞ•¹Ñ•ÉÁÉ¥Í•MÕ•ÍÍ¥¹…±¥é…Ñ¥½¸€ô½µµ…¹‘M½ÕÉ”¹Í±¥” (€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ•á•ÕÑ•½µµ…¹œ¤°(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ô…Ñ €¡•ÉÉ½È¤œ°½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ•á•ÕÑ•½µµ…¹œ¤¤°(¤ì)¡•¬¡•¹Ñ•ÉÁÉ¥Í•MÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäœ¤(€€ğ•¹Ñ•ÉÁÉ¥Í•MÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ½µÁ±•Ñ•I••¥ÁĞœ¤(€€˜˜•¹Ñ•ÉÁÉ¥Í•MÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹±…ÍÑ%¹‘•á=˜ …İ…¥Ğ…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäœ¤(€€€€ø•¹Ñ•ÉÁÉ¥Í•MÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ½µÁ±•Ñ•I••¥ÁĞœ¤°(¹Ñ•ÉÁÉ¥Í”ÍÕ•ÍÌ™¥¹…±¥é…Ñ¥½¸µÕÍĞÉ•…ÕÑ¡½É¥é”‰•™½É”½µµ¥Ğ…¹‘¥Í±½ÍÕÉ”¸œ¤ì)½¹ÍĞ•¹Ñ•ÉÁÉ¥Í•…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸€ô½µµ…¹‘M½ÕÉ”¹Í±¥” (€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ ‰¥˜€¡±…¥µ•‘I••¥ÁĞ€˜˜±…¥µ•‘ÕÑ¡½É¥Ñä€˜˜±…¥µ•‘½µµ…¹‘QåÁ”€˜˜½µµ…¹‘ÉÉ½È¹½‘”€„ôô€I%AQ}%91%iQ%=9}%1œ¤ˆ¤°(€½µµ…¹‘M½ÕÉ”¹¥¹‘•á=˜ •áÁ½ÉĞ½¹ÍĞ¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•=ÁÑ¥½¹Ìœ¤°(¤ì)¡•¬¡•¹Ñ•ÉÁÉ¥Í•…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäœ¤(€€ğ•¹Ñ•ÉÁÉ¥Í•…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ™…¥±I••¥ÁĞœ¤(€€˜˜•¹Ñ•ÉÁÉ¥Í•…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹±…ÍÑ%¹‘•á=˜ …İ…¥Ğ…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäœ¤(€€€€ø•¹Ñ•ÉÁÉ¥Í•…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥Ğ™…¥±I••¥ÁĞœ¤°(¹Ñ•ÉÁÉ¥Í”™…¥±ÕÉ”™¥¹…±¥é…Ñ¥½¸µÕÍĞÉ•…ÕÑ¡½É¥é”‰•™½É”½µµ¥Ğ…¹‘¥Í±½ÍÕÉ”¸œ¤ì)½¹ÍĞÁÉ½Ù¥‘•ÉMÕ•ÍÍ¥¹…±¥é…Ñ¥½¸€ôÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹Í±¥” (€ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ€¡½Ù•ÉÉ¥‘•Ì¹•á•ÕÑ•½µµ…¹ñğ•á•ÕÑ•AÉ½Ù¥‘•É1¥™•å±•½µµ…¹¤œ¤°(€ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ô…Ñ €¡•ÉÉ½È¤œ°ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ½¹ÍĞÉ•ÍÕ±Ğ€ô…İ…¥Ğ€¡½Ù•ÉÉ¥‘•Ì¹•á•ÕÑ•½µµ…¹ñğ•á•ÕÑ•AÉ½Ù¥‘•É1¥™•å±•½µµ…¹¤œ¤¤°(¤ì)¡•¬¡ÁÉ½Ù¥‘•ÉMÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥ĞÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”œ¤(€€ğÁÉ½Ù¥‘•ÉMÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ ½Ù•ÉÉ¥‘•Ì¹½µÁ±•Ñ•I••¥ÁĞñğ½µÁ±•Ñ•¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤(€€˜˜ÁÉ½Ù¥‘•ÉMÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹±…ÍÑ%¹‘•á=˜ …İ…¥ĞÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”œ¤(€€€€øÁÉ½Ù¥‘•ÉMÕ•ÍÍ¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ ½Ù•ÉÉ¥‘•Ì¹½µÁ±•Ñ•I••¥ÁĞñğ½µÁ±•Ñ•¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤°(AÉ½Ù¥‘•ÈÍÕ•ÍÌ™¥¹…±¥é…Ñ¥½¸µÕÍĞÉ•…ÕÑ¡½É¥é”‰•™½É”½µµ¥Ğ…¹‘¥Í±½ÍÕÉ”¸œ¤ì)½¹ÍĞÁÉ½Ù¥‘•É…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸€ôÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹Í±¥” (€ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ‰Í…™•ÉÉ½È¹½‘”€„ôô€UQ!=I%iQ%=9}MQ1œˆ¤°(€ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ¥˜€¡±…¥µ•‘I••¥ÁĞ€˜˜±…¥µ•‘ÕÑ¡½É¥Ñä€˜˜±…¥µ•‘¹Ù•±½Á”¤ìœ°ÁÉ½Ù¥‘•É1¥™•å±•¹‘Á½¥¹ÑM½ÕÉ”¹¥¹‘•á=˜ ‰Í…™•ÉÉ½È¹½‘”€„ôô€UQ!=I%iQ%=9}MQ1œˆ¤¤°(¤ì)¡•¬¡ÁÉ½Ù¥‘•É…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ …İ…¥ĞÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”œ¤(€€ğÁÉ½Ù¥‘•É…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ ½Ù•ÉÉ¥‘•Ì¹™…¥±I••¥ÁĞñğ™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤(€€˜˜ÁÉ½Ù¥‘•É…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹±…ÍÑ%¹‘•á=˜ …İ…¥ĞÉ•…ÕÑ¡½É¥é•AÉ½Ù¥‘•É1¥™•å±”œ¤(€€€€øÁÉ½Ù¥‘•É…¥±ÕÉ•¥¹…±¥é…Ñ¥½¸¹¥¹‘•á=˜ ½Ù•ÉÉ¥‘•Ì¹™…¥±I••¥ÁĞñğ™…¥±¹Ñ•ÉÁÉ¥Í•I••¥ÁĞœ¤°(AÉ½Ù¥‘•È™…¥±ÕÉ”™¥¹…±¥é…Ñ¥½¸µÕÍĞÉ•…ÕÑ¡½É¥é”‰•™½É”½µµ¥Ğ…¹‘¥Í±½ÍÕÉ”¸œ¤ì(4)½¹Í½±”¹±½œ¡¹Ñ•ÉÁÉ¥Í”%¹Ñ•±±¥•¹”µ¥É…Ñ¥½¸½¹ÑÉ…Ğè€‘í…ÍÍ•ÉÑ¥½¹ÍôÍÑÉ¥ĞÍ¡•µ„°ÁÉ½Ù•¹…¹”°±¥™•å±”°0°…¹É½±±‰…¬…ÍÍ•ÉÑ¥½¹ÌÁ…ÍÍ•¹€¤ì4
+  'enterprise_monitor_projection', 'enterprise_assemble_blueprint_projection',
+]) check(sql.includes(`FUNCTION public.${signature}`), `Missing safe projection ${signature}`);
+check(sql.includes('enterprise_high_impact_approval_separation_check'), 'Three-person approval separation is required.');
+check(sql.includes('enterprise_evidence_assess_promotions'), 'Accepted evidence must have immutable Assess promotion lineage.');
+check(sql.includes('enterprise_provider_lifecycle_transition'), 'The service-only provider lifecycle transition RPC is required.');
+check(authorizationAttemptSql.includes('current_authorization IS DISTINCT FROM p_authorization_version'), 'Provider authorization version must be an attempt precondition.');
+check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE'), 'Stale-but-authorized provider attempts require a recoverable signal.');
+check(authorizationAttemptSql.includes('ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED'), 'Removed provider authority requires a terminal non-disclosing signal.');
+check(authorizationAttemptSql.includes('enterprise_ai_record_effect'), 'Corrected provider transitions must retain fenced effect evidence.');
+check(secretWriteIntentSql.includes("old_write_state='planned' AND new_write_state='written'"), 'Receipt plans must permit only the managed planned-to-written state advance.');
+check(secretWriteIntentSql.includes("p_plan @> (receipt.execution_plan - 'writeState')"), 'Write-state advancement must preserve every other receipt-plan field.');
+check(secretWriteIntentSql.includes('ENTERPRISE_AI_STALE_EXECUTION_FENCE'), 'Secret intent persistence must retain execution fencing.');
+for (const required of [
+  'enterprise_ai_renew_external_write_lease',
+  "receipt.command_type <> 'evidence.source.create'",
+  "receipt.execution_plan->>'storageWriteOwnership' <> 'receipt_managed_write'",
+  "receipt.execution_plan->>'storageWriteReceiptId' IS DISTINCT FROM receipt.id::TEXT",
+  "receipt.execution_plan->>'writeState' NOT IN ('planned', 'written')",
+  "statement_timestamp() + interval '45 seconds'",
+  'execution_token = p_execution_token',
+  'execution_fence = p_execution_fence',
+]) check(sourceUploadRecoverySql.includes(required), `Source upload recovery is missing ${required}.`);
+check(sourceUploadRecoverySql.includes('FROM PUBLIC, anon, authenticated'), 'Source upload lease renewal must reject browser roles.');
+check(sourceUploadRecoverySql.includes('TO service_role'), 'Source upload lease renewal must remain service-only.');
+check(commandSource.includes('storageWriteOwnership: \'receipt_managed_write\'')
+  && commandSource.indexOf('ensureEvidenceSourceUploadPlan') < commandSource.indexOf('uploadBinaryArtifact({'),
+'Evidence source upload intent must be persisted before the external write.');
+check(commandSource.includes('storageBucket: typeof EVIDENCE_SOURCE_BUCKET')
+  && commandSource.includes("if (plan.storageBucket !== EVIDENCE_SOURCE_BUCKET) throw new EnterpriseCommandError('RESOURCE_STALE')"),
+  'Receipt plans and recovery must reject noncanonical evidence buckets before external I/O.');
+check(commandSource.includes("writeState: 'planned'") && commandSource.includes("writeState: 'written'"),
+  'Evidence source upload recovery requires a monotonic planned-to-written marker.');
+check(storageSource.includes('STORAGE_EXTERNAL_OPERATION_TIMEOUT_MS = 15_000')
+  && storageSource.includes('controller.abort()')
+  && storageSource.includes('await fetch(input, { ...init, signal: controller.signal })'),
+'Storage inspection and upload require a hard abortable deadline that settles before ownership release.');
+check(commandSource.includes('buildGroundedEvidenceCandidate')
+  && commandSource.includes('sanitizeEvidenceExcerpt(input.candidate.safeExcerpt)')
+  && commandSource.includes('deriveCanonicalEvidenceSourceLocator(input.source.text, persistedExcerpt)'),
+'Candidate provenance must validate the exact sanitized persisted excerpt against the governed source.');
+const excerptSanitizer = enterpriseDomainSource.slice(
+  enterpriseDomainSource.indexOf('export const isUnicodeScalarString'),
+  enterpriseDomainSource.indexOf('const projectionUuid'),
+);
+check(excerptSanitizer.includes('for (const codePoint of value)')
+  && excerptSanitizer.includes('truncateUnicodeCodePoints(normalized, maxLength)')
+  && !excerptSanitizer.includes('.slice('),
+  'Evidence excerpts must truncate by Unicode code point, never UTF-16 code unit.');
+check(excerptSanitizer.includes('ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE')
+  && commandSource.includes('!isUnicodeScalarString(input.candidate.safeExcerpt)'),
+  'Malformed or unpaired surrogate excerpts must be rejected before hashing or persistence.');
+check(!commandSource.includes('normalizedValue'), 'Candidate values must never substitute for excerpt provenance.');
+check(commandSource.includes("EVIDENCE_SOURCE_LOCATOR_PREFIX = 'normalized-text:v1:chars'")
+  && commandSource.includes('sourceLocator?: never')
+  && !commandSource.includes('raw.sourceLocator'),
+  'Provider output must have no source-locator authority or static assignment path.');
+for (const required of [
+  'enterprise_evidence_source_locator_is_canonical',
+  "^normalized-text:v1:chars:",
+  'enterprise_evidence_candidate_locators_are_canonical',
+  'enterprise_evidence_excerpt_anchor_hash',
+  'enterprise_evidence_candidates_canonical_locator',
+  'enterprise_ai_extraction_stage_canonical_locators',
+  "source_locator_schema = 'normalized-text-char-range-1'",
+  'NEW.excerpt_hash := public.enterprise_evidence_excerpt_anchor_hash(',
+  'CREATE OR REPLACE FUNCTION public.enterprise_candidate_guard()',
+  'NEW.excerpt_hash IS DISTINCT FROM expected_excerpt_hash',
+  'NEW.excerpt_hash IS DISTINCT FROM OLD.excerpt_hash',
+  'CREATE OR REPLACE FUNCTION public.enterprise_review_evidence_candidate(',
+  'next_excerpt_hash := public.enterprise_evidence_excerpt_anchor_hash(',
+  'excerpt_hash = next_excerpt_hash',
+  'enterprise_promote_evidence_to_assess_v2(uuid,uuid,bigint,uuid,uuid,uuid,uuid,text,bigint)',
+  'enterprise_promote_evidence_batch_to_assess_v2(uuid,jsonb,uuid,bigint,uuid,uuid,uuid,bigint,uuid,uuid,bigint)',
+  'FOREACH promotion_function IN ARRAY',
+  'current_excerpt := public.enterprise_evidence_excerpt_anchor_hash(',
+  'ENTERPRISE_EVIDENCE_PROMOTION_ANCHOR_CONTRACT_DRIFT',
+]) check(evidenceLocatorAuthoritySql.includes(required), `Evidence locator authority is missing ${required}.`);
+check(evidenceLocatorAuthoritySql.includes('FROM PUBLIC, anon, authenticated')
+  && evidenceLocatorAuthoritySql.includes('TO service_role'),
+  'Evidence locator validation/hash helpers must remain service-only.');
+for (const required of [
+  'enterprise_ai_claim_provider_secret_cleanup',
+  "p_operation NOT IN ('provider.secret.bind','provider.secret.rotate')",
+  'actor_id=p_actor',
+  'initial_request_id IS DISTINCT FROM p_request',
+  "plan->>'secretOwnership' IS DISTINCT FROM 'managed_write'",
+  "plan->>'secretPlanReceiptId' IS DISTINCT FROM receipt.id::text",
+  "plan->>'providerConfigId' IS DISTINCT FROM p_provider_config_id::text",
+  "secret_ref=plan->>'secretReference' AND status='active'",
+  "effect_key='command'",
+  'execution_fence=execution_fence+1',
+  "'cleanupTerminalCode','PERMISSION_DENIED'",
+  "receipt.response#>>'{error,code}' IS DISTINCT FROM 'PERMISSION_DENIED'",
+]) check(providerCleanupRecoverySql.includes(required), `Provider cleanup recovery is missing ${required}.`);
+check(providerCleanupRecoverySql.includes('FROM PUBLIC,anon,authenticated'), 'Provider cleanup recovery must reject browser roles.');
+check(providerCleanupRecoverySql.includes('TO service_role'), 'Provider cleanup recovery must remain service-only.');
+check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupRecoverySql), 'Provider cleanup recovery must not accept raw key material.');
+for (const required of [
+  'enterprise_ai_claim_provider_secret_cleanup_v2',
+  "lease_expires_at=statement_timestamp()+interval '45 seconds'",
+  'enterprise_ai_renew_provider_secret_cleanup_lease',
+  'execution_token=p_execution_token AND execution_fence=p_execution_fence',
+  "command_type IN ('provider.secret.bind','provider.secret.rotate')",
+  "execution_plan->>'secretOwnership'='managed_write'",
+  "execution_plan->>'secretPlanReceiptId'=id::text",
+  "COALESCE((execution_plan->>'cleanupRequired')::boolean,false)",
+  'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+]) check(providerCleanupDeadlineSql.includes(required), `Provider cleanup deadline migration is missing ${required}.`);
+check(providerCleanupDeadlineSql.includes('FROM PUBLIC,anon,authenticated'), 'Cleanup deadline functions must reject browser roles.');
+check(providerCleanupDeadlineSql.match(/TO service_role/g)?.length === 2, 'Both cleanup deadline functions must remain service-only.');
+check(providerCleanupDeadlineSql.includes('enterprise_ai_claim_provider_secret_cleanup(\n  UUID,UUID,UUID,TEXT,TEXT,UUID,UUID,UUID\n) FROM service_role'), 'The superseded one-second cleanup claim must no longer be executable.');
+check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupDeadlineSql), 'Cleanup deadline functions must not accept raw key material.');
+check(providerLifecycleSource.indexOf("secretOwnership: 'managed_write'") < providerLifecycleSource.indexOf('await deps.secretBackend.write'), 'Managed secret ownership must be persisted before the external write.');
+check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === execution.receiptId"), 'Cleanup ownership must be bound to the current receipt plan.');
+check(providerLifecycleSource.includes('await fingerprintProviderSecret(existing) !== safeFingerprint'), 'Cleanup must verify the resolved secret fingerprint before deletion.');
+check(providerLifecycleSource.includes('protectedSecretReferenceHash'), 'Cleanup must protect the prior active secret reference.');
+check(providerLifecycleSource.includes('PROVIDER_SECRET_DELETE_TIMEOUT_MS = 10_000'), 'Managed cleanup requires a bounded external-delete deadline.');
+check(providerLifecycleSource.includes('await execution.renewCleanupLease()'), 'Managed cleanup must renew its fenced lease immediately before delete.');
+check(providerLifecycleSource.includes('controller.abort()') && providerLifecycleSource.includes('await removePromise.catch'), 'Timed-out cleanup must abort and settle the old delete before releasing ownership.');
+check(providerSecretAdapterSource.includes('signal: AbortSignal') && providerSecretAdapterSource.includes('signal: input.signal'), 'The writable secret backend must honor cleanup cancellation.');
+check(providerLifecycleEndpointSource.includes("'enterprise_ai_claim_provider_secret_cleanup_v2'"), 'The recovery endpoint must use the long-lease cleanup claim.');
+check(providerLifecycleEndpointSource.includes("'enterprise_ai_renew_provider_secret_cleanup_lease'"), 'The recovery endpoint must renew the exact cleanup fence.');
+check(providerLifecycleEndpointSource.includes("claimedReceipt.execution_plan?.secretOwnership === 'managed_write'"), 'A planned managed write must keep persistence failures claimed for reconciliation.');
+check(readyReviewSql.includes('enterprise_provider_route_role_guard'), 'Route-role writes require exact active scope validation.');
+check(readyReviewSql.includes("capability.capability_key = 'org.admin'"), 'Organization route roles must be organization administrators.');
+check(readyReviewSql.includes("'source-record'"), 'Source/version persistence must be journaled before parsing.');
+check(readyReviewSql.includes('enterprise_record_source_extraction_success'), 'Successful parsing requires a receipt-aware terminal transition.');
+check(readyReviewSql.includes("p_failure_code, 'command'" ) || readyReviewSql.includes("'evidence.source.create', 'command'"), 'Deterministic parse failure requires a receipt-aware terminal effect.');
+check(readyReviewSql.includes("candidate.suggestion_status NOT IN ('accepted', 'edited')"), 'Reviewed edited candidates must be eligible for promotion.');
+check(readyReviewSql.includes('ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED'), 'Edited promotion requires append-only edit history.');
+check(atomicPromotionSql.includes('FUNCTION public.enterprise_promote_evidence_batch_to_assess_v2'), 'One service-only batch promotion RPC is required.');
+check(atomicPromotionSql.includes("'evidence.assess.promote', 'command'"), 'Batch promotion requires one command effect for response-loss recovery.');
+check(atomicPromotionSql.indexOf('-- All preconditions are now locked and valid.') < atomicPromotionSql.indexOf('INSERT INTO public.assess_v2_case_versions'), 'Every candidate must validate before the first promotion mutation.');
+const assessEvidenceBuilderStart = assessEvidenceSubmissionSql.indexOf(
+  'CREATE OR REPLACE FUNCTION public.enterprise_build_assess_v2_evidence_submission',
+);
+const assessEvidenceBuilder = assessEvidenceSubmissionSql.slice(
+  assessEvidenceBuilderStart,
+  assessEvidenceSubmissionSql.indexOf('$$;', assessEvidenceBuilderStart) + 3,
+);
+for (const token of [
+  "'id', p_evidence_id",
+  "'claimIds', '[]'::jsonb",
+  "'sourceType', public.enterprise_assess_v2_source_type",
+  "'status', 'submitted'",
+  "'validated', false",
+]) check(assessEvidenceBuilder.includes(token), `Canonical Assess EvidenceSubmission is missing ${token}.`);
+for (const forbidden of [
+  'candidateId', 'candidateVersion', 'candidateProvenanceHash', 'sourceId',
+  'sourceVersionId', 'sourceLocator', 'safeExcerpt', 'fieldKey', 'value',
+]) check(!assessEvidenceBuilder.includes(forbidden),
+  `Enterprise lineage field ${forbidden} must not enter the strict Assess EvidenceSubmission payload.`);
+check(assessEvidenceSubmissionSql.includes('ADD COLUMN assess_evidence_link_id UUID')
+  && assessEvidenceSubmissionSql.includes('FOREIGN KEY (assess_case_version_id, assess_evidence_link_id)')
+  && assessEvidenceSubmissionSql.includes('enterprise_promoted_assess_evidence_canonical'),
+  'Each Enterprise promotion must bind one exact canonical Assess evidence row through an enforced relation.');
+check(assessEvidenceSubmissionSql.includes('ENTERPRISE_ASSESS_EVIDENCE_LEGACY_ROWS_REQUIRE_REVIEW')
+  && !assessEvidenceSubmissionSql.includes('UPDATE public.assess_v2_evidence_links'),
+  'A dirty pre-release upgrade must fail closed without rewriting immutable Assess evidence history.');
+const correctedBatchStart = assessEvidenceSubmissionSql.indexOf(
+  'CREATE OR REPLACE FUNCTION public.enterprise_promote_evidence_batch_to_assess_v2',
+);
+const correctedBatch = assessEvidenceSubmissionSql.slice(
+  correctedBatchStart,
+  assessEvidenceSubmissionSql.indexOf('$$;', correctedBatchStart) + 3,
+);
+check(correctedBatch.includes('-- Validate the complete locked set before creating any version, evidence,')
+  && correctedBatch.indexOf('-- Validate the complete locked set before creating any version, evidence,')
+    < correctedBatch.indexOf('INSERT INTO public.assess_v2_case_versions'),
+  'The corrected batch must retain full locked-set validation before its first mutation.');
+check(correctedBatch.includes('public.enterprise_build_assess_v2_evidence_submission(')
+  && correctedBatch.includes('assess_evidence_link_id')
+  && correctedBatch.includes("'evidenceLinkIds', evidence_link_ids"),
+  'Promotion response, immutable lineage, and canonical evidence rows must share exact evidence-link identities.');
+check(correctedBatch.includes("'resourceId', assess_case.id")
+  && correctedBatch.includes("'evidence.assess.promote', 'command', assess_case.id, result, 'committed'"),
+  'The corrected batch must retain the Assess draft as the canonical receipt/effect resource.');
+check(assessEvidenceSubmissionSql.includes('FROM PUBLIC, anon, authenticated, service_role;')
+  && assessEvidenceSubmissionSql.includes('Superseded single-candidate implementation; no application role has execution authority.')
+  && assessEvidenceSubmissionSql.includes('Superseded receipt-aware single-candidate wrapper; no application role has execution authority.'),
+  'Both obsolete single-candidate promotion surfaces must be retired from every application role.');
+const promotionCommand = commandSource.slice(
+  commandSource.indexOf('const commandEvidenceAssessPromote'),
+  commandSource.indexOf('const assertApprovedApplicationAssessment'),
+);
+check(!/for\s*\([^)]*candidate[^)]*\)[\s\S]*?rpc\(['"]enterprise_promote_evidence_to_assess_v2/iu.test(promotionCommand), 'The command handler must not loop over the single-candidate promotion RPC.');
+check((promotionCommand.match(/enterprise_promote_evidence_batch_to_assess_v2/gu) || []).length === 1, 'The command handler must make exactly one promotion RPC call.');
+check(promotionCommand.includes('evidenceLinkIds?: string[]')
+  && promotionCommand.includes('response.evidenceLinkIds.length !== promotionCandidates.length')
+  && promotionCommand.includes('new Set(response.evidenceLinkIds).size !== promotionCandidates.length'),
+  'The Edge boundary must validate one unique canonical Assess evidence-link identity per promoted candidate.');
+check(correctedBatch.indexOf('PERFORM public.enterprise_ai_record_effect') < correctedBatch.indexOf('RETURN result;'), 'Batch success requires a durable receipt effect.');
+check(correctedBatch.includes("'resourceId', assess_case.id"), 'Batch response must identify the Assess draft as its canonical resource.');
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job', 'enterprise_fail_evidence_extraction_job',
+  'enterprise_ai_job_attempts', 'attempt_lease_expires_at', 'execution_fence',
+  "'evidence.extract','command',p_job_id,p_result,'committed'",
+]) check(extractionRecoverySql.includes(required), `Extraction recovery migration is missing ${required}.`);
+check(extractionRecoverySql.includes("job.status IN ('succeeded','failed','blocked')"), 'Terminal extraction jobs must replay durable effect truth.');
+check(extractionRecoverySql.includes('p_execution_fence<=job.execution_fence'), 'Only a newer fence may resume an expired job.');
+check(extractionRecoverySql.includes("attempt_kind IN ('claimed','resumed')"), 'Every provider attempt requires append-only safe audit evidence.');
+const extractionClaimSql = extractionRecoverySql.slice(
+  extractionRecoverySql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_claim_or_resume_evidence_extraction_job'),
+  extractionRecoverySql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_fail_evidence_extraction_job'),
+);
+check(extractionClaimSql.includes('p_job_id,p_org,p_workspace,p_capability'), 'Recovery must insert the planned job ID, never a replacement.');
+check(!extractionClaimSql.includes('gen_random_uuid()'), 'Recovery must not generate a second job ID.');
+for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key', 'authorization']) {
+  check(!extractionRecoverySql.includes(forbidden), `Extraction ledgers must reject ${forbidden}.`);
+}
+for (const required of [
+  'enterprise_claim_or_resume_evidence_extraction_job_v2',
+  'enterprise_ai_extraction_staged_results',
+  'enterprise_stage_evidence_extraction_result',
+  'enterprise_commit_staged_evidence_extraction',
+  "'state','staged'",
+  "receipt.execution_plan->>'routeId'",
+  "receipt.execution_plan->>'providerConfigId'",
+  "receipt.execution_plan->>'model'",
+  'stage.safe_result',
+]) check(extractionRouteStagingSql.includes(required), `Extraction route/staging correction is missing ${required}.`);
+check(extractionRouteStagingSql.indexOf("effect_key='command'")
+  < extractionRouteStagingSql.indexOf("job.status IN ('succeeded','failed','blocked')"),
+'Recovery must check the canonical effect before terminal job state.');
+check(extractionRouteStagingSql.indexOf('enterprise_ai_extraction_staged_results')
+  < extractionRouteStagingSql.lastIndexOf("attempt_lease_expires_at>statement_timestamp()"),
+'Recovery must inspect staged sanitized output before deciding whether another provider attempt may start.');
+check(extractionRouteStagingSql.includes('staged_payload_hash IS DISTINCT FROM p_staged_payload_hash'),
+  'Changed staged payloads must conflict.');
+check(extractionRouteStagingSql.includes('enterprise_extraction_stage_immutable'),
+  'Staged sanitized extraction output must be immutable.');
+check(extractionRouteStagingSql.includes('REVOKE ALL ON TABLE public.enterprise_ai_extraction_staged_results FROM PUBLIC,anon,authenticated'),
+  'Browser roles must not read staged extraction output.');
+for (const forbidden of ['raw_prompt', 'prompt_body', 'raw_completion', 'completion_body', 'provider_key']) {
+  check(!extractionRouteStagingSql.includes(forbidden), `Staging schema must not define forbidden field ${forbidden}.`);
+}
+const extractionCommand = commandSource.slice(
+  commandSource.indexOf('const commandEvidenceExtract'),
+  commandSource.indexOf('const commandEvidenceCandidateReview'),
+);
+check(!/insertRow\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly insert its job row.');
+check(!/updateRows\(['"]enterprise_ai_job_ledger/iu.test(extractionCommand), 'Extraction must not directly patch terminal job state.');
+check(extractionCommand.indexOf('enterprise_claim_or_resume_evidence_extraction_job_v2') < extractionCommand.indexOf('runGovernedProviderRequest'), 'Job ownership must precede provider invocation.');
+check(extractionCommand.indexOf('readEvidenceExtractionRoutePlan') < extractionCommand.indexOf('resolveRoute('), 'Recovery must read the immutable route plan before any default route resolution.');
+check(extractionCommand.includes('{ routeId: routePlan.routeId, model: routePlan.model }'), 'Recovery must request the exact planned route and model.');
+check(extractionRouteStagingSql.includes("p_result->>'resourceId' IS DISTINCT FROM p_job_id::text"), 'Staging must bind response resourceId to the planned extraction job.');
+check(extractionCommand.includes('const safeResult = { resourceId: jobId, jobId,'), 'Extraction must return an explicit canonical job resourceId.');
+check(commandSource.includes("disposition = 'preserve_claimed_receipt'"), 'Transport uncertainty must carry an explicit internal recoverable disposition.');
+check(!commandSource.includes("typeof claimedReceipt.execution_plan?.jobId === 'string'"), 'Receipt recovery must not infer transport uncertainty from execution-plan shape.');
+check(extractionCommand.indexOf('enterprise_stage_evidence_extraction_result') < extractionCommand.lastIndexOf('commitStagedEvidenceExtraction'), 'Sanitized staging must precede canonical commit.');
+const uncertainCommit = commandSource.slice(
+  commandSource.indexOf('const commitStagedEvidenceExtraction'),
+  commandSource.indexOf('const commandEvidenceExtract'),
+);
+check(!uncertainCommit.includes('enterprise_fail_evidence_extraction_job'), 'Generic commit uncertainty must never call the extraction failure RPC.');
+const resourceResolver = commandSource.slice(
+  commandSource.indexOf('export const resolveEnterpriseCommandResourceId'),
+  commandSource.indexOf('const ensureExecutionPlan'),
+);
+check(resourceResolver.includes("commandType === 'evidence.assess.promote'")
+  && resourceResolver.includes('? resultObject.assessDraftId'),
+'Promotion finalization must bind explicit resourceId to assessDraftId.');
+check(resourceResolver.includes('lineageResourceId !== explicitResourceId')
+  && !/return\s+resultObject\.sourceId/u.test(resourceResolver),
+'Every Enterprise result must fail closed unless explicit resourceId equals command lineage.');
+for (const operation of [
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate',
+  'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+]) check(sql.includes(`'${operation}'`), `Missing provider lifecycle operation ${operation}`);
+check(sql.includes('p_payload ?| forbidden_keys'), 'Provider lifecycle SQL must reject raw secret-bearing payload keys.');
+check(sql.includes('rawCompletion|raw_completion'), 'Provider lifecycle SQL must reject nested raw secret/prompt/completion keys.');
+check(sql.includes("last_validated_at < statement_timestamp() - interval '24 hours'"), 'Provider activation and route enablement require fresh validation.');
+check(sql.includes('roles := route.allowed_roles'), 'Route toggles must preserve allowed roles when omitted.');
+check(sql.includes("SET status = 'retired', rotation_status = 'rotated'"), 'Rotation must retire the prior key reference.');
+check(sql.includes('SET enabled = false, version = version + 1'), 'Provider revocation must disable routes atomically.');
+check(sql.includes('WHERE provider_config_id = config.id AND org_id = p_org AND deleted_at IS NULL'), 'Provider revocation must disable all organization routes across workspaces.');
+check(sql.includes('candidate_provenance_hash'), 'Candidate provenance must be retained through promotion.');
+check(sql.includes('resource_version') && sql.includes('resource_hash'), 'Review and approval authority must bind exact versions and hashes.');
+check(sql.includes('enterprise_reject_mutation'), 'Immutable lineage tables require mutation rejection triggers.');
+check(sql.includes("read_only stops all Enterprise Intelligence mutation"), 'A documented read-only rollback fallback is required.');
+check(!/live_telemetry_connected\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Live telemetry must remain disabled.');
+check(!/runtime_agents_enabled\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Runtime agents must remain disabled.');
+check(!/deployment_enabled\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+true/i.test(sql), 'Deployment must remain disabled.');
+check(!/readiness\s+TEXT\s+NOT NULL\s+CHECK\s*\([^)]*\bready\b/i.test(sql), 'Monitor authority cannot claim ready in this slice.');
+check(sql.includes('FOREIGN KEY (workspace_id, org_id)'), 'Workspace/org composite foreign keys are required.');
+check(sql.includes('enterprise_final_acl'), 'Final least-privilege ACL reconciliation is required.');
+const finalAcl = sql.indexOf('DO $enterprise_final_acl$');
+check(finalAcl > sql.lastIndexOf('GRANT SELECT ON TABLE public.enterprise_'), 'Final ACL revocation must follow all legacy grants.');
+check(sql.slice(finalAcl).includes('GRANT SELECT ON TABLE public.%I TO service_role'), 'Service role must receive read-only table access.');
+check(!sql.slice(finalAcl).includes('GRANT SELECT ON TABLE public.%I TO authenticated'), 'Authenticated users must not receive raw Enterprise table access.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_delivery_handoff_legacy_untrusted'), 'Untrusted Delivery mutation entry point must be removed.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_modernization_assessment_legacy_untrusted'), 'Untrusted modernization entry point must be removed.');
+check(sql.includes('DROP FUNCTION public.enterprise_commit_high_impact_approval_legacy_untrusted'), 'Untrusted approval entry point must be removed.');
+check(sql.includes('FUNCTION public.enterprise_command_runtime_area'), 'One exhaustive command-to-runtime-area classifier is required.');
+const classifierStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.enterprise_command_runtime_area');
+const classifierEnd = sql.indexOf('$$;', classifierStart);
+const classifier = sql.slice(classifierStart, classifierEnd);
+for (const commandType of [
+  'provider.register', 'provider.secret.bind', 'provider.validate', 'provider.activate', 'provider.route.toggle', 'provider.secret.rotate', 'provider.revoke',
+  'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
+  'modernization.evaluate', 'studio.delivery.handoff', 'monitor.baseline.create',
+  'approval.review.record', 'approval.record', 'assemble.blueprint.create',
+]) check(classifier.includes(`'${commandType}'`), `Runtime-area classifier is missing ${commandType}.`);
+for (const area of ['provider', 'ingestion', 'delivery', 'assemble']) check(classifier.includes(`'${area}'`), `Runtime-area classifier is missing ${area}.`);
+check(classifier.includes("p_resource_type = 'assemble_blueprint'"), 'Approval commands must classify Assemble blueprints separately.');
+const receiptFunctions = name => [...sql.matchAll(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'g'))].map(match => match[0]);
+for (const name of ['enterprise_ai_complete_command', 'enterprise_ai_fail_command']) {
+  const bodies = receiptFunctions(name);
+  check(bodies.length > 0, `${name} must exist.`);
+  check(bodies.every(body => !body.includes('enterprise_assert_writable')), `${name} must finalize durable truth without runtime gating.`);
+}
+const claims = receiptFunctions('enterprise_ai_claim_command');
+const effectiveClaim = claims.findLast(body => body.includes('p_execution_token UUID') && body.includes('enterprise_assert_writable')) || '';
+check(effectiveClaim.includes('enterprise_command_runtime_area'), 'Effective claim must use the exhaustive runtime-area classifier.');
+check(effectiveClaim.indexOf('SELECT * INTO receipt') < effectiveClaim.indexOf('enterprise_assert_writable'), 'Exact replay must be resolved before runtime validation.');
+check(effectiveClaim.indexOf('enterprise_assert_writable') < effectiveClaim.indexOf('INSERT INTO public.enterprise_ai_command_receipts'), 'New commands must be runtime-validated before receipt creation.');
+check(sql.includes("runtime_area TEXT NOT NULL CHECK (runtime_area IN ('provider', 'ingestion', 'delivery', 'assemble'))"), 'Receipts must persist their classified runtime area.');
+check(!/enterprise_ai_fail_command[\s\S]{0,800}\.catch\(\(\) => undefined\)/u.test(commandSource), 'Receipt failure finalization must not be silently swallowed.');
+check(commandSource.includes("RECEIPT_FINALIZATION_FAILED"), 'Genuine finalization failure requires an explicit stable error.');
+for (const token of ['initial_request_id', 'execution_fence', 'lease_expires_at', 'reconciliation_count', 'enterprise_ai_effect_journal', 'enterprise_ai_reconcile_command', 'enterprise_ai_reload_command', 'enterprise_effect_journal_immutable']) {
+  check(sql.includes(token), `Receipt recovery contract is missing ${token}.`);
+}
+check(!effectiveClaim.includes('request_id IS DISTINCT FROM p_request'), 'requestId must not be part of logical replay identity.');
+check(sql.includes('UNIQUE (org_id, workspace_id, actor_id, command_type, idempotency_key)'), 'Logical receipt identity must include workspace scope.');
+check(commandSource.includes('claimEnterpriseReceipt'), 'Command handler must use the shared request-ID-independent receipt coordinator.');
+check(commandSource.includes('reloadEnterpriseReceipt'), 'Command handler must reload durable effect truth before reporting finalization failure.');
+for (const mutation of [
+  'enterprise_create_evidence_source', 'enterprise_commit_evidence_extraction',
+  'enterprise_review_evidence_candidate', 'enterprise_promote_evidence_to_assess_v2',
+  'enterprise_commit_modernization_assessment', 'enterprise_record_high_impact_review',
+  'enterprise_commit_high_impact_approval', 'enterprise_commit_delivery_handoff',
+  'enterprise_commit_monitor_baseline', 'enterprise_commit_assemble_blueprint',
+]) check(sql.includes(`FUNCTION public.${mutation}`), `Receipt-aware mutation RPC is missing ${mutation}.`);
+check(sql.includes('receipt-unaware implementations are private implementation details'), 'Receipt-unaware mutation overloads must be revoked from Edge service authority.');
+for (const required of [
+  'enterprise_resolve_high_impact_review_authority', 'enterprise_resource_snapshot',
+  'enterprise_record_high_impact_review_v2', 'enterprise_commit_high_impact_approval_v2',
+  "authority->>'reviewEventId' IS DISTINCT FROM p_review_event_id::text",
+  "'resourceHash', event.resource_hash", "'resourceVersion', event.resource_version",
+]) check(reviewActionReplaySql.includes(required), `Review/action/replay correction is missing ${required}.`);
+check(reviewActionReplaySql.includes('FROM PUBLIC, anon, authenticated'), 'Canonical review authority RPCs must reject browser roles.');
+check(reviewActionReplaySql.includes('FROM service_role'), 'Legacy hash-accepting Edge wrappers must be revoked.');
+check(reviewActionReplaySql.includes("'approval.review.record', 'command', p_resource_id, result, 'committed'"),
+  'Review effect identity must be the reviewed canonical resource.');
+const approvalCommandSource = commandSource.slice(
+  commandSource.indexOf('const approvalResourceTypes'),
+  commandSource.indexOf('type StudioAggregateRow'),
+);
+check(!approvalCommandSource.includes('sha256Json'), 'Edge approval commands must not compute canonical resource hashes.');
+check(!approvalCommandSource.includes('resource_hash=eq.'), 'Edge approval commands must not select reviews by an application hash.');
+check(commandSource.includes('requiredCapabilitiesForEnterpriseCommand'), 'Replay authority requires one command-capability map.');
+check(commandSource.includes('assertCurrentEnterpriseCommandAuthority'), 'Receipt disclosure requires current operation authority.');
+check(commandSource.includes('assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current))'),
+  'Generic provider commands require provider-specific scope and capability authority.');
+check(providerLifecycleEndpointSource.includes('assertProviderLifecycleOperationAuthority'), 'Provider terminal receipt disclosure requires current lifecycle authority.');
+check(providerLifecycleEndpointSource.includes('authenticateProviderLifecycle(request, envelope, false)')
+  && providerLifecycleEndpointSource.includes('enforceAttemptAuthorizationVersion'),
+'Provider replay and finalization must use current authority after authorization-version changes.');
+const enterpriseSuccessFinalization = commandSource.slice(
+  commandSource.indexOf('const result = await executeCommand'),
+  commandSource.indexOf('} catch (error)', commandSource.indexOf('const result = await executeCommand')),
+);
+check(enterpriseSuccessFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseSuccessFinalization.indexOf('await completeReceipt')
+  && enterpriseSuccessFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseSuccessFinalization.indexOf('await completeReceipt'),
+'Enterprise success finalization must reauthorize before commit and disclosure.');
+const enterpriseFailureFinalization = commandSource.slice(
+  commandSource.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  commandSource.indexOf('export const handleEnterpriseIntelligenceOptions'),
+);
+check(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
+  < enterpriseFailureFinalization.indexOf('await failReceipt')
+  && enterpriseFailureFinalization.lastIndexOf('await assertCurrentAuthority')
+    > enterpriseFailureFinalization.indexOf('await failReceipt'),
+'Enterprise failure finalization must reauthorize before commit and disclosure.');
+const providerSuccessFinalization = providerLifecycleEndpointSource.slice(
+  providerLifecycleEndpointSource.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)'),
+  providerLifecycleEndpointSource.indexOf('} catch (error)', providerLifecycleEndpointSource.indexOf('const result = await (overrides.executeCommand || executeProviderLifecycleCommand)')),
+);
+check(providerSuccessFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt')
+  && providerSuccessFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerSuccessFinalization.indexOf('overrides.completeReceipt || completeEnterpriseReceipt'),
+'Provider success finalization must reauthorize before commit and disclosure.');
+const providerFailureFinalization = providerLifecycleEndpointSource.slice(
+  providerLifecycleEndpointSource.indexOf("safeError.code !== 'AUTHORIZATION_STALE'"),
+  providerLifecycleEndpointSource.indexOf('if (claimedReceipt && claimedAuthority && claimedEnvelope) {', providerLifecycleEndpointSource.indexOf("safeError.code !== 'AUTHORIZATION_STALE'")),
+);
+check(providerFailureFinalization.indexOf('await reauthorizeProviderLifecycle')
+  < providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt')
+  && providerFailureFinalization.lastIndexOf('await reauthorizeProviderLifecycle')
+    > providerFailureFinalization.indexOf('overrides.failReceipt || failEnterpriseReceipt'),
+'Provider failure finalization must reauthorize before commit and disclosure.');
+
+console.log(`Enterprise Intelligence migration contract: ${assertions} strict schema, provenance, lifecycle, ACL, and rollback assertions passed.`);

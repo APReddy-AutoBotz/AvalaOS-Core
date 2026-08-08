@@ -333,4 +333,825 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
     persistWritten: async plan => { events.push(`persist:${plan.writeState}`); },
   });
   assert.equal(written, 'written');
-  assert.deónv¶‰žËkºwµçMÑ…ÉÐ ÄÈ°€œÀœ¥õ€°(€€€•á•ÕÑ¥½¹}™•¹”è€Ä°±•…Í•}•áÁ¥É•Í}…Ðè€œÈÀÈØ´Àà´ÀÝPÀÀèÀÀèÀÀ¸ÀÀÁhœ°ÍÑ…ÑÕÌè€±…¥µ•œ°(€ôì(€½¹ÍÐÉ•ÍÕ±Ð€ô•¹Ñ•ÉÁÉ¥Í•I•ÍÕ±Ñ½È¡½µµ…¹‘QåÁ”°É•Í½ÕÉ•%¤ì(€½¹ÍÐ½µµ¥ÑÑ•è¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Ü€ôì€¸¸¹±…¥µ•°ÍÑ…ÑÕÌè€½µµ¥ÑÑ•œ°É•Í½ÕÉ•}¥èÉ•Í½ÕÉ•%°É•ÍÁ½¹Í”èÉ•ÍÕ±Ðôì(€½¹ÍÐÉ•ÅÕ•ÍÐ€ô€ ¤€ôø¹•ÜI•ÅÕ•ÍÐ ¡ÑÑÀè¼½±½…°½•¹Ñ•ÉÁÉ¥Í”œ°ìµ•Ñ¡½è€A=MPœ°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡•¹Ù•±½Á”¤ô¤ì((€™½È€¡½¹ÍÐ‘•¹åÐ½˜lÌ°€Ñt¤ì(€€€±•Ð…ÕÑ¡½É¥Ñå¡•­Ì€ô€Àì(€€€±•Ð½µÁ±•Ñ¥½¹Ì€ô€Àì(€€€½¹ÍÐÉ•ÍÁ½¹Í”€ô…Ý…¥Ð¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•I•ÅÕ•ÍÐ¡É•ÅÕ•ÍÐ ¤°ì(€€€€€…ÕÑ¡•¹Ñ¥…Ñ”è…Íå¹Œ€ ¤€ôø€¡ì¥èÉ•Á±…åÕÑ¡½É¥Ñä¹…Ñ½É%ô¤°(€€€€€É•Í½±Ù•=É…¹¥é…Ñ¥½¸è…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°(€€€€€É•Í½±Ù•½µµ…¹‘ÕÑ¡½É¥Ñäè…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä°(€€€€€…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäè…Íå¹ŒÕÉÉ•¹Ð€ôøì(€€€€€€€…ÕÑ¡½É¥Ñå¡•­Ì€¬ô€Äì(€€€€€€€¥˜€¡…ÕÑ¡½É¥Ñå¡•­Ì€øô‘•¹åÐ¤Ñ¡É½Ü¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€É•ÑÕÉ¸ÕÉÉ•¹Ðì(€€€€€ô°(€€€€€±…¥µI••¥ÁÐè…Íå¹Œ€ ¤€ôø€¡ìÉ••¥ÁÐè±…¥µ•°½Ý¹Íá•ÕÑ¥½¸èÑÉÕ”ô¤°(€€€€€•á•ÕÑ•½µµ…¹è…Íå¹Œ€ ¤€ôøÉ•ÍÕ±Ð°(€€€€€½µÁ±•Ñ•I••¥ÁÐè…Íå¹Œ€ ¤€ôøì½µÁ±•Ñ¥½¹Ì€¬ô€ÄìÉ•ÑÕÉ¸½µµ¥ÑÑ•ìô°(€€€€€É•±½…‘I••¥ÁÐè…Íå¹Œ€ ¤€ôø±…¥µ•°(€€€ô¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°€ÐÀÌ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° ¡…Ý…¥ÐÉ•ÍÁ½¹Í”¹Ñ•áÐ ¤¤¹¥¹±Õ‘•Ì¡É•Í½ÕÉ•%¤°™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½µÁ±•Ñ¥½¹Ì°‘•¹åÐ€ôôô€Ì€ü€À€è€Ä¤ì(€ô((€™½È€¡½¹ÍÐ‘•¹åÐ½˜lÌ°€Ñt¤ì(€€€±•Ð…ÕÑ¡½É¥Ñå¡•­Ì€ô€Àì(€€€±•Ð™…¥±ÕÉ•Ì€ô€Àì(€€€½¹ÍÐÉ•ÍÁ½¹Í”€ô…Ý…¥Ð¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•I•ÅÕ•ÍÐ¡É•ÅÕ•ÍÐ ¤°ì(€€€€€…ÕÑ¡•¹Ñ¥…Ñ”è…Íå¹Œ€ ¤€ôø€¡ì¥èÉ•Á±…åÕÑ¡½É¥Ñä¹…Ñ½É%ô¤°(€€€€€É•Í½±Ù•=É…¹¥é…Ñ¥½¸è…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°(€€€€€É•Í½±Ù•½µµ…¹‘ÕÑ¡½É¥Ñäè…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä°(€€€€€…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäè…Íå¹ŒÕÉÉ•¹Ð€ôøì(€€€€€€€…ÕÑ¡½É¥Ñå¡•­Ì€¬ô€Äì(€€€€€€€¥˜€¡…ÕÑ¡½É¥Ñå¡•­Ì€øô‘•¹åÐ¤Ñ¡É½Ü¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€É•ÑÕÉ¸ÕÉÉ•¹Ðì(€€€€€ô°(€€€€€±…¥µI••¥ÁÐè…Íå¹Œ€ ¤€ôø€¡ìÉ••¥ÁÐè±…¥µ•°½Ý¹Íá•ÕÑ¥½¸èÑÉÕ”ô¤°(€€€€€•á•ÕÑ•½µµ…¹è…Íå¹Œ€ ¤€ôøìÑ¡É½Ü¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È =559}	1=-œ¤ìô°(€€€€€É•±½…‘I••¥ÁÐè…Íå¹Œ€ ¤€ôø±…¥µ•°(€€€€€™…¥±I••¥ÁÐè…Íå¹Œ€ ¤€ôøì(€€€€€€€™…¥±ÕÉ•Ì€¬ô€Äì(€€€€€€€É•ÑÕÉ¸ì€¸¸¹±…¥µ•°ÍÑ…ÑÕÌè€‰±½­•œ°É•ÍÁ½¹Í”è•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½É	½‘ä¡¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È =559}	1=-œ¤¤ôì(€€€€€ô°(€€€ô¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°€ÐÀÌ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° ¡…Ý…¥ÐÉ•ÍÁ½¹Í”¹Ñ•áÐ ¤¤¹¥¹±Õ‘•Ì =559}	1=-œ¤°™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡™…¥±ÕÉ•Ì°€À¤ì(€ô((€±•Ð•á•ÕÑ¥½¹Ì€ô€Àì(€±•Ð½µÁ±•Ñ¥½¹Ì€ô€Àì(€½¹ÍÐÉ•½¹¥±•€ô…Ý…¥Ð¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•I•ÅÕ•ÍÐ¡É•ÅÕ•ÍÐ ¤°ì(€€€…ÕÑ¡•¹Ñ¥…Ñ”è…Íå¹Œ€ ¤€ôø€¡ì¥èÉ•Á±…åÕÑ¡½É¥Ñä¹…Ñ½É%ô¤°(€€€É•Í½±Ù•=É…¹¥é…Ñ¥½¸è…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°(€€€É•Í½±Ù•½µµ…¹‘ÕÑ¡½É¥Ñäè…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä°(€€€…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäè…Íå¹ŒÕÉÉ•¹Ð€ôøÕÉÉ•¹Ð°(€€€±…¥µI••¥ÁÐè…Íå¹Œ€ ¤€ôø€¡ìÉ••¥ÁÐè±…¥µ•°½Ý¹Íá•ÕÑ¥½¸èÑÉÕ”ô¤°(€€€•á•ÕÑ•½µµ…¹è…Íå¹Œ€ ¤€ôøì•á•ÕÑ¥½¹Ì€¬ô€ÄìÉ•ÑÕÉ¸É•ÍÕ±Ðìô°(€€€½µÁ±•Ñ•I••¥ÁÐè…Íå¹Œ€ ¤€ôøì½µÁ±•Ñ¥½¹Ì€¬ô€ÄìÑ¡É½Ü¹•Ü¹Ñ•ÉÁÉ¥Í•I••¥ÁÑÉÉ½È I%AQ}%91%iQ%=9}%1œ¤ìô°(€€€É•±½…‘I••¥ÁÐè…Íå¹Œ€ ¤€ôø½µµ¥ÑÑ•°(€ô¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•½¹¥±•¹ÍÑ…ÑÕÌ°€ÈÀÀ¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…° ¡…Ý…¥ÐÉ•½¹¥±•¹©Í½¸ ¤…ÌìÉ•Í½ÕÉ•%üèÍÑÉ¥¹œô¤¹É•Í½ÕÉ•%°É•Í½ÕÉ•%¤ì(€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡ì•á•ÕÑ¥½¹Ì°½µÁ±•Ñ¥½¹Ìô°ì•á•ÕÑ¥½¹Ìè€Ä°½µÁ±•Ñ¥½¹Ìè€Äô¤ì)ô)½¹Í½±”¹±½œ ½¬€´…±°Ñ•¸½µµ…¹±…ÍÍ•ÌÉ•…ÕÑ¡½É¥é”ÍÕ•ÍÌ½™…¥±ÕÉ”™¥¹…±¥é…Ñ¥½¸…¹É•½¹¥±”É•ÍÁ½¹Í”±½ÍÌœ¤ì()™½È€¡½¹ÍÐm¥¹‘•à°½µµ…¹‘QåÁ•t½˜É•Á±…å½µµ…¹‘Ì¹•¹ÑÉ¥•Ì ¤¤ì(€™½È€¡½¹ÍÐÍÑ…ÑÕÌ½˜l™…¥±•œ°€‰±½­•œ°€±…¥µ•t…Ì½¹ÍÐ¤ì(€€€½¹ÍÐ•¹Ù•±½Á”€ôì(€€€€€½µµ…¹‘QåÁ”°(€€€€€É•ÅÕ•ÍÑ%è€ÐÔÀÀÀÀÀÀ´ÀÀÀÀ´ÐÀÀÀ´àÀÀÀ´‘íMÑÉ¥¹œ¡¥¹‘•à€¬€Ä¤¹Á…‘MÑ…ÉÐ ÄÈ°€œÀœ¥õ€°(€€€€€¥‘•µÁ½Ñ•¹å-•äèÑ•Éµ¥¹…°µÍÑ…Ñ”´‘íÍÑ…ÑÕÍô´‘í¥¹‘•à€¬€Åõ€°(€€€€€½É…¹¥é…Ñ¥½¹%è‰…Í”¹½É…¹¥é…Ñ¥½¹%°(€€€€€Ý½É­ÍÁ…•%è‰…Í”¹Ý½É­ÍÁ…•%°(€€€€€Á…å±½…è½µµ…¹‘QåÁ”¹ÍÑ…ÉÑÍ]¥Ñ  …ÁÁÉ½Ù…°¸œ¤€üìÉ•Í½ÕÉ•QåÁ”è€‘•±¥Ù•Éå}Ý½É­}Á…­…”œô€èíô°(€€€ôì(€€€½¹ÍÐÉ••¥ÁÐè¹Ñ•ÉÁÉ¥Í•I••¥ÁÑI½Ü€ôì(€€€€€¥è€ÐØÀÀÀÀÀÀ´ÀÀÀÀ´ÐÀÀÀ´àÀÀÀ´‘íMÑÉ¥¹œ¡¥¹‘•à€¬€Ä¤¹Á…‘MÑ…ÉÐ ÄÈ°€œÀœ¥õ€°(€€€€€É•ÅÕ•ÍÑ}¡…Í è€Œœ¹É•Á•…Ð ØÐ¤°¥¹¥Ñ¥…±}É•ÅÕ•ÍÑ}¥è•¹Ù•±½Á”¹É•ÅÕ•ÍÑ%°±…ÍÑ}É•ÅÕ•ÍÑ}¥è•¹Ù•±½Á”¹É•ÅÕ•ÍÑ%°(€€€€€•á•ÕÑ¥½¹}Ñ½­•¸è€ÐÜÀÀÀÀÀÀ´ÀÀÀÀ´ÐÀÀÀ´àÀÀÀ´‘íMÑÉ¥¹œ¡¥¹‘•à€¬€Ä¤¹Á…‘MÑ…ÉÐ ÄÈ°€œÀœ¥õ€°(€€€€€•á•ÕÑ¥½¹}™•¹”è€Ä°±•…Í•}•áÁ¥É•Í}…Ðè€œÈÀÈØ´Àà´ÀÝPÀÀèÀÀèÀÀ¸ÀÀÁhœ°ÍÑ…ÑÕÌ°(€€€€€É•ÍÁ½¹Í”èÍÑ…ÑÕÌ€ôôô€±…¥µ•œ€üÕ¹‘•™¥¹•€èì¡¥ÍÑ½É¥…±…¥±ÕÉ•5…É­•ÈèÑÉÕ”ô°(€€€ôì(€€€½¹ÍÐÍ¹…ÁÍ¡½Ð€ô)M=8¹ÍÑÉ¥¹¥™ä¡É••¥ÁÐ¤ì(€€€½¹ÍÐÉ•ÅÕ•ÍÐ€ô€ ¤€ôø¹•ÜI•ÅÕ•ÍÐ ¡ÑÑÀè¼½±½…°½•¹Ñ•ÉÁÉ¥Í”œ°ìµ•Ñ¡½è€A=MPœ°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡•¹Ù•±½Á”¤ô¤ì(€€€±•Ð¡•­Ì€ô€Àì(€€€½¹ÍÐ‘•¹¥•€ô…Ý…¥Ð¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•I•ÅÕ•ÍÐ¡É•ÅÕ•ÍÐ ¤°ì(€€€€€…ÕÑ¡•¹Ñ¥…Ñ”è…Íå¹Œ€ ¤€ôø€¡ì¥èÉ•Á±…åÕÑ¡½É¥Ñä¹…Ñ½É%ô¤°(€€€€€É•Í½±Ù•=É…¹¥é…Ñ¥½¸è…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°(€€€€€É•Í½±Ù•½µµ…¹‘ÕÑ¡½É¥Ñäè…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä°(€€€€€…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäè…Íå¹ŒÕÉÉ•¹Ð€ôøì(€€€€€€€¡•­Ì€¬ô€Äì(€€€€€€€¥˜€¡¡•­Ì€øô€È¤Ñ¡É½Ü¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È AI5%MM%=9}9%œ¤ì(€€€€€€€É•ÑÕÉ¸ÕÉÉ•¹Ðì(€€€€€ô°(€€€€€±…¥µI••¥ÁÐè…Íå¹Œ€ ¤€ôø€¡ìÉ••¥ÁÐ°½Ý¹Íá•ÕÑ¥½¸è™…±Í”ô¤°(€€€ô¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡‘•¹¥•¹ÍÑ…ÑÕÌ°€ÐÀÌ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° ¡…Ý…¥Ð‘•¹¥•¹Ñ•áÐ ¤¤¹¥¹±Õ‘•Ì ¡¥ÍÑ½É¥…±…¥±ÕÉ•5…É­•Èœ¤°™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡)M=8¹ÍÑÉ¥¹¥™ä¡É••¥ÁÐ¤°Í¹…ÁÍ¡½Ð¤ì((€€€½¹ÍÐÉ•ÍÑ½É•€ô…Ý…¥Ð¡…¹‘±•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•I•ÅÕ•ÍÐ¡É•ÅÕ•ÍÐ ¤°ì(€€€€€…ÕÑ¡•¹Ñ¥…Ñ”è…Íå¹Œ€ ¤€ôø€¡ì¥èÉ•Á±…åÕÑ¡½É¥Ñä¹…Ñ½É%ô¤°(€€€€€É•Í½±Ù•=É…¹¥é…Ñ¥½¸è…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä¹½É…¹¥é…Ñ¥½¹%°(€€€€€É•Í½±Ù•½µµ…¹‘ÕÑ¡½É¥Ñäè…Íå¹Œ€ ¤€ôøÉ•Á±…åÕÑ¡½É¥Ñä°(€€€€€…ÍÍ•ÉÑÕÉÉ•¹ÑÕÑ¡½É¥Ñäè…Íå¹ŒÕÉÉ•¹Ð€ôøÕÉÉ•¹Ð°(€€€€€±…¥µI••¥ÁÐè…Íå¹Œ€ ¤€ôø€¡ìÉ••¥ÁÐ°½Ý¹Íá•ÕÑ¥½¸è™…±Í”ô¤°(€€€ô¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•ÍÑ½É•¹ÍÑ…ÑÕÌ°€ÐÀä¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡)M=8¹ÍÑÉ¥¹¥™ä¡É••¥ÁÐ¤°Í¹…ÁÍ¡½Ð¤ì(€€€¥˜€¡ÍÑ…ÑÕÌ€„ôô€±…¥µ•œ¤ì(€€€€€…ÍÍ•ÉÐ¹•ÅÕ…° ¡…Ý…¥ÐÉ•ÍÑ½É•¹Ñ•áÐ ¤¤¹¥¹±Õ‘•Ì ¡¥ÍÑ½É¥…±…¥±ÕÉ•5…É­•Èœ¤°ÑÉÕ”¤ì(€€€ô(€ô)ô)½¹Í½±”¹±½œ ½¬€´…±°Ñ•¸½µµ…¹±…ÍÍ•ÌÁÉ½Ñ•Ð™…¥±•°‰±½­•°…¹¥¸µÁÉ½É•ÍÌÉ•Á±…äÝ¥Ñ¡½ÕÐÉ••¥ÁÐµÕÑ…Ñ¥½¸œ¤ì(4)Ñ•ÍÐ ÍÑÉÕÑÕÉ•IA‘½µ…¥¸Í¥¹…±Ìµ…ÀÝ¥Ñ¡½ÕÐ•áÁ½Í¥¹œ‘…Ñ…‰…Í”Ñ•áÐœ°€ ¤€ôøì4(€½¹ÍÐ¥‘•µÁ½Ñ•¹ä€ô¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ìÍÑ…ÑÕÌè€ÐÀä°‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}%}%5A=Q9e}=91%Pœô¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¥‘•µÁ½Ñ•¹ä¤¹½‘”°€%5A=Q9e}=91%Pœ¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•I••¥ÁÑIÁÉÉ½È¡¥‘•µÁ½Ñ•¹ä¤¹½‘”°€%5A=Q9e}=91%Pœ¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÐÀä°‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}AI=Y%I}UQ!=I%iQ%=9}YIM%=9}MQ1œ°4(€ô¤¤¹½‘”°€UQ!=I%iQ%=9}MQ1œ¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÐÀÌ°‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}AI=Y%I}]=I-MA}UQ!=I%Qe}IEU%Iœ°4(€ô¤¤¹½‘”°€AI5%MM%=9}9%œ¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÐÀä°‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}%}MQ1}aUQ%=9}9œ°4(€ô¤¤¹½‘”°€=559}%9}AI=IMLœ¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÐÀä°‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}Y%9}9%Q}MQ1œ°4(€ô¤¤¹½‘”°€IM=UI}MQ1œ¤ì4(€½¹ÍÐÕ¹…Ù…¥±…‰±”€ôµ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÔÀÀ°‘…Ñ…‰…Í•5•ÍÍ…”è€…É‰¥ÑÉ…Éä‘…Ñ…‰…Í”Ñ•áÐ¥Ì‘¥Í…É‘•œ°4(€ô¤¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡Õ¹…Ù…¥±…‰±”¹½‘”°€=559}U9Y%1	1œ¤ì4(€½¹ÍÐÁÕ‰±¥	½‘ä€ô)M=8¹ÍÑÉ¥¹¥™ä¡•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½É	½‘ä¡Õ¹…Ù…¥±…‰±”¤¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡ÁÕ‰±¥	½‘ä¹¥¹±Õ‘•Ì …É‰¥ÑÉ…Éä‘…Ñ…‰…Í”Ñ•áÐœ¤°™…±Í”¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡ÁÕ‰±¥	½‘ä¹¥¹±Õ‘•Ì MÕÁ…‰…Í”IA™…¥±•œ¤°™…±Í”¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡ÁÕ‰±¥	½‘ä°€ì‰½¬ˆé™…±Í”°‰•ÉÉ½Èˆéì‰½‘”ˆè‰=559}U9Y%1	1ˆ°‰µ•ÍÍ…”ˆè‰Q¡”¹Ñ•ÉÁÉ¥Í”%¹Ñ•±±¥•¹”½µµ…¹½Õ±¹½Ð‰”½µÁ±•Ñ•¸‰õôœ¤ì4(4(€½¹ÍÐ½Ù•É¹•Õáá5…ÁÁ¥¹Ì€ôl4(€€€l9QIAI%M}%}%5A=Q9e}=91%Pœ°€%5A=Q9e}=91%Pt°4(€€€l9QIAI%M}AI=Y%I}UQ!=I%iQ%=9}YIM%=9}MQ1œ°€UQ!=I%iQ%=9}MQ1t°4(€€€l9QIAI%M}%}MQ1}aUQ%=9}9œ°€=559}%9}AI=IMLt°4(€€€l9QIAI%M}AI=Y%I}AI5%MM%=9}9%œ°€AI5%MM%=9}9%t°4(€€€l9QIAI%M}%}=559}9=Q}aUQ	1œ°€=559}%9}AI=IMLt°4(€€€l9QIAI%M}Y%9}9%Q}MQ1œ°€IM=UI}MQ1t°(€€€l9QIAI%M}AI=Y%I}I=UQ}	1=-œ°€=559}	1=-t°(€€€l9QIAI%M}5=I9%iQ%=9}M=UI}9=Q}UII9Pœ°€IM=UI}MQ1t°(€€€l9QIAI%M}5=I9%iQ%=9}M=UI}9=Q}AAI=Yœ°€=559}	1=-t°(€€€l9QIAI%M}5=I9%iQ%=9}I=559Q%=9}%9Y1%œ°€=559}	1=-t°(€€€l9QIAI%M}5=I9%iQ%=9}IMU1Q}%9Q%Qe}5%M5Q œ°€IM=UI}MQ1t°(€€€l9QIAI%M}AAI=Y1}IY%]}IEU%Iœ°€IM=UI}MQ1t°(€€€l9QIAI%M}AAI=Y1}IY%]}%9Q%Qe}5%M5Q œ°€IM=UI}MQ1t°4(€t…Ì½¹ÍÐì4(€™½È€¡½¹ÍÐmÍ¥¹…°°•áÁ•Ñ•‘½‘•t½˜½Ù•É¹•Õáá5…ÁÁ¥¹Ì¤ì4(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…Á¹Ñ•ÉÁÉ¥Í•½µµ…¹‘IÁÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€€€ÍÑ…ÑÕÌè€ÔÀÌ°4(€€€€€‘…Ñ…‰…Í•5•ÍÍ…”èÍ¥¹…°°4(€€€ô¤¤¹½‘”°•áÁ•Ñ•‘½‘”¤ì4(€ô4)ô¤ì4(4)Ñ•ÍÐ É•½Ù•ÉäÉ•Ñ…¥¹ÌÑ¡”¥µµÕÑ…‰±”Á±…¹¹•É½ÕÑ”…¹µ½‘•°œ°€ ¤€ôøì4(€½¹ÍÐÁ±…¸€ôì4(€€€©½‰%è€œÜÜÜÜÜÜÜÜ´ÜÜÜÜ´ÐÜÜÜ´àÜÜÜ´ÜÜÜÜÜÜÜÜÜÜÜÜœ°4(€€€½É…¹¥é…Ñ¥½¹%è‰…Í”¹½É…¹¥é…Ñ¥½¹%°4(€€€Ý½É­ÍÁ…•%è‰…Í”¹Ý½É­ÍÁ…•%°4(€€€Í½ÕÉ•%è€œàààààààà´àààà´Ðààà´àààà´ààààààààààààœ°4(€€€Í½ÕÉ•Y•ÉÍ¥½¹%è€œääääääää´ääää´Ðäää´àäää´ääääääääääääœ°4(€€€…Á…‰¥±¥Ñäè€…ÍÍ•ÍÌ¹•Ù¥‘•¹”¹•áÑÉ…Ðœ°4(€€€É½ÕÑ•%è€…………………„µ………„´Ñ……„´á……„µ……………………………„œ°4(€€€ÁÉ½Ù¥‘•É½¹™¥%è€‰‰‰‰‰‰‰ˆµ‰‰‰ˆ´Ñ‰‰ˆ´á‰‰ˆµ‰‰‰‰‰‰‰‰‰‰‰ˆœ°4(€€€ÁÉ½Ù¥‘•Èè€½Á•¹…¤œ°4(€€€µ½‘•°è€Á±…¹¹•µµ½‘•°œ°4(€€€•¹‘Á½¥¹Ñ%‘•¹Ñ¥Ñäè¹Õ±°°4(€€€‘•Á±½åµ•¹Ñ%‘•¹Ñ¥Ñäè¹Õ±°°4(€€€ÁÉ½µÁÑ-•äè€…ÍÍ•ÍÌ¹•Ù¥‘•¹”¹•áÑÉ…Ðœ°4(€€€ÁÉ½µÁÑY•ÉÍ¥½¸è€•¹Ñ•ÉÁÉ¥Í”µ•Ù¥‘•¹”µ•áÑÉ…Ð´Äœ°4(€€€É•ÅÕ•ÍÑ!…Í è€Œœ¹É•Á•…Ð ØÐ¤°4(€ôì4(€½¹ÍÐÉ•½Ù•É•€ôÉ•…‘Ù¥‘•¹•áÑÉ…Ñ¥½¹I½ÕÑ•A±…¸¡Á±…¸°ì4(€€€½É…¹¥é…Ñ¥½¹%èÁ±…¸¹½É…¹¥é…Ñ¥½¹%°4(€€€Ý½É­ÍÁ…•%èÁ±…¸¹Ý½É­ÍÁ…•%°4(€€€Í½ÕÉ•%èÁ±…¸¹Í½ÕÉ•%°4(€€€Í½ÕÉ•Y•ÉÍ¥½¹%èÁ±…¸¹Í½ÕÉ•Y•ÉÍ¥½¹%°4(€€€É•ÅÕ•ÍÑ!…Í èÁ±…¸¹É•ÅÕ•ÍÑ!…Í °4(€ô¤ì4(€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡É•½Ù•É•°Á±…¸¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡•áÑÉ…Ñ¥½¹I½ÕÑ•5…Ñ¡•ÍA±…¸¡É•½Ù•É•„°ì4(€€€É½ÕÑ•%èÁ±…¸¹É½ÕÑ•%°4(€€€ÁÉ½Ù¥‘•É½¹™¥%èÁ±…¸¹ÁÉ½Ù¥‘•É½¹™¥%°4(€€€ÁÉ½Ù¥‘•Èè€½Á•¹…¤œ°4(€€€µ½‘•°è€Á±…¹¹•µµ½‘•°œ°4(€ô¤°ÑÉÕ”¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡•áÑÉ…Ñ¥½¹I½ÕÑ•5…Ñ¡•ÍA±…¸¡É•½Ù•É•„°ì4(€€€É½ÕÑ•%è€‘‘‘‘‘‘‘µ‘‘‘´Ñ‘‘´á‘‘µ‘‘‘‘‘‘‘‘‘‘‘œ°4(€€€ÁÉ½Ù¥‘•É½¹™¥%è€•••••••”µ•••”´Ñ••”´á••”µ•••••••••••”œ°4(€€€ÁÉ½Ù¥‘•Èè€½Á•¹…¤œ°4(€€€µ½‘•°è€¹•Üµ‘•™…Õ±Ðµµ½‘•°œ°4(€ô¤°™…±Í”¤ì4(€…ÍÍ•ÉÐ¹Ñ¡É½ÝÌ  ¤€ôøÉ•…‘Ù¥‘•¹•áÑÉ…Ñ¥½¹I½ÕÑ•A±…¸¡ì€¸¸¹Á±…¸°Í½ÕÉ•%è‰…Í”¹Ý½É­ÍÁ…•%ô°ì4(€€€½É…¹¥é…Ñ¥½¹%èÁ±…¸¹½É…¹¥é…Ñ¥½¹%°4(€€€Ý½É­ÍÁ…•%èÁ±…¸¹Ý½É­ÍÁ…•%°4(€€€Í½ÕÉ•%èÁ±…¸¹Í½ÕÉ•%°4(€€€Í½ÕÉ•Y•ÉÍ¥½¹%èÁ±…¸¹Í½ÕÉ•Y•ÉÍ¥½¹%°4(€€€É•ÅÕ•ÍÑ!…Í èÁ±…¸¹É•ÅÕ•ÍÑ!…Í °4(€ô¤°€¡•ÉÉ½ÈèÕ¹­¹½Ý¸¤€ôø•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€IM=UI}MQ1œ¤ì4)ô¤ì4(4)Ñ•ÍÐ ½¹±äÑåÁ•ÍÑ…¥¹œ…¹½µµ¥ÐÑÉ…¹ÍÁ½ÉÐÕ¹•ÉÑ…¥¹ÑäÁÉ•Í•ÉÙ•ÌÑ¡”±…¥µ•É••¥ÁÐœ°€ ¤€ôøì4(€™½È€¡½¹ÍÐm±…ÍÍ¥™¥…Ñ¥½¸°É•ÍÁ½¹Í•I••¥Ù•‘t½˜l4(€€€l½¹¹•Ñ¥½¹}™…¥±•œ°™…±Í•t°4(€€€lÑÉ…¹Í¥•¹Ñ}¡ÑÑÁ|ÔÀÈœ°ÑÉÕ•t°4(€€€lÑÉ…¹Í¥•¹Ñ}¡ÑÑÁ|ÔÀÌœ°ÑÉÕ•t°4(€€€lÑÉ…¹Í¥•¹Ñ}¡ÑÑÁ|ÔÀÐœ°ÑÉÕ•t°4(€€€lÉ•ÍÁ½¹Í•}É•…‘}™…¥±•œ°ÑÉÕ•t°4(€t…Ì½¹ÍÐ¤ì4(€€€½¹ÍÐÕ¹•ÉÑ…¥¸€ôµ…ÁáÑÉ…Ñ¥½¹A•ÉÍ¥ÍÑ•¹•ÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁQÉ…¹ÍÁ½ÉÑÉÉ½È¡±…ÍÍ¥™¥…Ñ¥½¸°É•ÍÁ½¹Í•I••¥Ù•¤¤ì4(€€€…ÍÍ•ÉÐ¹½¬¡Õ¹•ÉÑ…¥¸¥¹ÍÑ…¹•½˜I•½Ù•É…‰±•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È¤ì4(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡Õ¹•ÉÑ…¥¸¹½‘”°€=559}U9Y%1	1œ¤ì4(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡Õ¹•ÉÑ…¥¸¹‘¥ÍÁ½Í¥Ñ¥½¸°€ÁÉ•Í•ÉÙ•}±…¥µ•‘}É••¥ÁÐœ¤ì4(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡Í¡½Õ±‘AÉ•Í•ÉÙ•±…¥µ•‘¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ¡Õ¹•ÉÑ…¥¸°ì©½‰%è‰…Í”¹É•ÅÕ•ÍÑ%ô¤°ÑÉÕ”¤ì4(€ô4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡Í¡½Õ±‘AÉ•Í•ÉÙ•±…¥µ•‘¹Ñ•ÉÁÉ¥Í•I••¥ÁÐ 4(€€€¹•Ü¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È =559}U9Y%1	1œ¤°4(€€€ì©½‰%è‰…Í”¹É•ÅÕ•ÍÑ%ô°4(€€¤°™…±Í”¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…ÁáÑÉ…Ñ¥½¹A•ÉÍ¥ÍÑ•¹•ÉÉ½È¡¹•ÜQåÁ•ÉÉ½È Õ¹•áÁ•Ñ•¥µÁ±•µ•¹Ñ…Ñ¥½¸™…¥±ÕÉ”œ¤¤¥¹ÍÑ…¹•½˜I•½Ù•É…‰±•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È°™…±Í”¤ì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡µ…ÁáÑÉ…Ñ¥½¹A•ÉÍ¥ÍÑ•¹•ÉÉ½È¡¹•ÜMÕÁ…‰…Í•IÁÉÉ½È¡ì4(€€€ÍÑ…ÑÕÌè€ÐÀä°4(€€€‘…Ñ…‰…Í•5•ÍÍ…”è€9QIAI%M}%}MQ1}aUQ%=9}9œ°4(€ô¤¤¹½‘”°€=559}%9}AI=IMLœ¤ì4)ô¤ì4(4)Ñ•ÍÐ •áÑÉ…Ñ¥½¸É••¥ÁÐ¥‘•¹Ñ¥Ñä¥ÌÑ¡”•áÁ±¥¥Ð•áÑÉ…Ñ¥½¸©½ˆÉ•Í½ÕÉ”œ°€ ¤€ôøì4(€½¹ÍÐ©½‰%€ô€œÜÜÜÜÜÜÜÜ´ÜÜÜÜ´ÐÜÜÜ´àÜÜÜ´ÜÜÜÜÜÜÜÜÜÜÜÜœì4(€½¹ÍÐÍ½ÕÉ•%€ô€œàààààààà´àààà´Ðààà´àààà´ààààààààààààœì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•% •Ù¥‘•¹”¹•áÑÉ…Ðœ°ì4(€€€É•Í½ÕÉ•%è©½‰%°4(€€€©½‰%°4(€€€Í½ÕÉ•%°4(€ô¤°©½‰%¤ì4)ô¤ì4(4)Ñ•ÍÐ ÁÉ½µ½Ñ¥½¸É••¥ÁÐ¥‘•¹Ñ¥Ñä¥ÌÑ¡”•áÁ±¥¥ÐÍÍ•ÍÌ‘É…™ÐÉ•Í½ÕÉ”œ°€ ¤€ôøì(€½¹ÍÐ…ÍÍ•ÍÍÉ…™Ñ%€ô€œÔÔÔÔÔÔÔÔ´ÔÔÔÔ´ÐÔÔÔ´àÔÔÔ´ÔÔÔÔÔÔÔÔÔÔÔÔœì4(€½¹ÍÐÍ½ÕÉ•%€ô€œØØØØØØØØ´ØØØØ´ÐØØØ´àØØØ´ØØØØØØØØØØØØœì4(€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•% •Ù¥‘•¹”¹…ÍÍ•ÍÌ¹ÁÉ½µ½Ñ”œ°ì4(€€€É•Í½ÕÉ•%è…ÍÍ•ÍÍÉ…™Ñ%°4(€€€…ÍÍ•ÍÍÉ…™Ñ%°4(€€€Í½ÕÉ•%°4(€ô¤°…ÍÍ•ÍÍÉ…™Ñ%¤ì4(€…ÍÍ•ÉÐ¹Ñ¡É½ÝÌ 4(€€€€ ¤€ôøÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•% •Ù¥‘•¹”¹…ÍÍ•ÍÌ¹ÁÉ½µ½Ñ”œ°ì…ÍÍ•ÍÍÉ…™Ñ%°Í½ÕÉ•%ô¤°4(€€€€¡•ÉÉ½ÈèÕ¹­¹½Ý¸¤€ôø•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€IM=UI}MQ1œ°4(€€¤ì4(€…ÍÍ•ÉÐ¹Ñ¡É½ÝÌ 4(€€€€ ¤€ôøÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•% •Ù¥‘•¹”¹…ÍÍ•ÍÌ¹ÁÉ½µ½Ñ”œ°ì4(€€€€€É•Í½ÕÉ•%èÍ½ÕÉ•%°4(€€€€€…ÍÍ•ÍÍÉ…™Ñ%°4(€€€€€Í½ÕÉ•%°4(€€€ô¤°4(€€€€¡•ÉÉ½ÈèÕ¹­¹½Ý¸¤€ôø•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€IM=UI}MQ1œ°4(€€¤ì)ô¤ì()Ñ•ÍÐ …±°Ñ•¸½µµ…¹±…ÍÍ•ÌÉ•ÅÕ¥É”½¹”•áÁ±¥¥Ð…¹½¹¥…°É•Í½ÕÉ”¥‘•¹Ñ¥Ñäœ°€ ¤€ôøì(€™½È€¡½¹ÍÐm¥¹‘•à°½µµ…¹‘QåÁ•t½˜É•Á±…å½µµ…¹‘Ì¹•¹ÑÉ¥•Ì ¤¤ì(€€€½¹ÍÐÉ•Í½ÕÉ•%€ô€ÐàÀÀÀÀÀÀ´ÀÀÀÀ´ÐÀÀÀ´àÀÀÀ´‘íMÑÉ¥¹œ¡¥¹‘•à€¬€Ä¤¹Á…‘MÑ…ÉÐ ÄÈ°€œÀœ¥õ€ì(€€€½¹ÍÐÉ•ÍÕ±Ð€ô•¹Ñ•ÉÁÉ¥Í•I•ÍÕ±Ñ½È¡½µµ…¹‘QåÁ”°É•Í½ÕÉ•%¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•%¡½µµ…¹‘QåÁ”°É•ÍÕ±Ð¤°É•Í½ÕÉ•%¤ì(€€€½¹ÍÐìÉ•Í½ÕÉ•%è}µ¥ÍÍ¥¹œ°€¸¸¹Ý¥Ñ¡½ÕÑáÁ±¥¥Ñ%ô€ôÉ•ÍÕ±Ðì(€€€…ÍÍ•ÉÐ¹Ñ¡É½ÝÌ (€€€€€€ ¤€ôøÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•%¡½µµ…¹‘QåÁ”°Ý¥Ñ¡½ÕÑáÁ±¥¥Ñ%¤°(€€€€€€¡•ÉÉ½ÈèÕ¹­¹½Ý¸¤€ôø•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€IM=UI}MQ1œ°(€€€€¤ì(€€€½¹ÍÐ±¥¹•…•-•ä€ô=‰©•Ð¹­•åÌ¡É•ÍÕ±Ð¤¹™¥¹¡­•ä€ôø­•ä€„ôô€É•Í½ÕÉ•%œ¤ì(€€€¥˜€¡±¥¹•…•-•ä¤ì(€€€€€…ÍÍ•ÉÐ¹Ñ¡É½ÝÌ (€€€€€€€€ ¤€ôøÉ•Í½±Ù•¹Ñ•ÉÁÉ¥Í•½µµ…¹‘I•Í½ÕÉ•%¡½µµ…¹‘QåÁ”°ì€¸¸¹É•ÍÕ±Ð°m±¥¹•…•-•åtè‰…Í”¹½É…¹¥é…Ñ¥½¹%ô¤°(€€€€€€€€¡•ÉÉ½ÈèÕ¹­¹½Ý¸¤€ôø•ÉÉ½È¥¹ÍÑ…¹•½˜¹Ñ•ÉÁÉ¥Í•½µµ…¹‘ÉÉ½È€˜˜•ÉÉ½È¹½‘”€ôôô€IM=UI}MQ1œ°(€€€€€€¤ì(€€€ô(€ô)ô¤ì(4)½¹ÍÐ™¥ÉÍÑÑÑ•µÁÑ!…Í €ô…Ý…¥Ð¡…Í¡I••¥ÁÑY…±Õ”¡ì€¸¸¹‰…Í”°É•ÅÕ•ÍÑ%è¹Õ±°ô¤ì4)½¹ÍÐÉ•Á±…åÑÑ•µÁÑ!…Í €ô…Ý…¥Ð¡…Í¡I••¥ÁÑY…±Õ”¡ì€¸¸¹‰…Í”°É•ÅÕ•ÍÑ%è¹Õ±°ô¤ì4)½¹ÍÐ¡…¹•‘A…å±½…‘!…Í €ô…Ý…¥Ð¡…Í¡I••¥ÁÑY…±Õ”¡ì€¸¸¹‰…Í”°É•ÅÕ•ÍÑ%è¹Õ±°°Á…å±½…èì€¸¸¹‰…Í”¹Á…å±½…°ÍÑ…ÑÕÌè€É•©•Ñ•œôô¤ì4)…ÍÍ•ÉÐ¹•ÅÕ…°¡™¥ÉÍÑÑÑ•µÁÑ!…Í °É•Á±…åÑÑ•µÁÑ!…Í ¤ì4)…ÍÍ•ÉÐ¹¹½ÑÅÕ…°¡™¥ÉÍÑÑÑ•µÁÑ!…Í °¡…¹•‘A…å±½…‘!…Í ¤ì4)½¹Í½±”¹±½œ ½¬€´É•ÅÕ•ÍÑ%¥Ì½ÉÉ•±…Ñ¥½¸µ½¹±äÝ¡¥±”¡…¹•Á…å±½…‘Ì½¹™±¥Ðœ¤ì4(
+  assert.deepEqual(events, ['persist:planned', 'renew', 'inspect', 'renew', 'upload', 'persist:written']);
+
+  let recoveryUploads = 0;
+  let recoveryWritten = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { recoveryUploads += 1; return 'written'; },
+    persistWritten: async () => { recoveryWritten += 1; },
+  });
+  assert.deepEqual({ recoveryUploads, recoveryWritten }, { recoveryUploads: 0, recoveryWritten: 1 });
+
+  let mismatchedUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'mismatch',
+      upload: async () => { mismatchedUploads += 1; return 'written'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.equal(mismatchedUploads, 0);
+
+  let conflictUploads = 0;
+  let conflictInspections = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => (++conflictInspections === 1 ? 'absent' : 'exact'),
+    upload: async () => { conflictUploads += 1; return 'conflict'; },
+    persistWritten: async () => {},
+  });
+  assert.deepEqual({ conflictUploads, conflictInspections }, { conflictUploads: 1, conflictInspections: 2 });
+
+  for (const uncertainty of ['inspect', 'upload'] as const) {
+    let uploads = 0;
+    await assert.rejects(
+      reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+        renewLease: async () => {},
+        inspect: async () => uncertainty === 'inspect' ? 'uncertain' : 'absent',
+        upload: async () => { uploads += 1; return 'uncertain'; },
+        persistWritten: async () => {},
+      }),
+      (error: unknown) => error instanceof RecoverableEnterpriseCommandError && error.code === 'COMMAND_UNAVAILABLE',
+    );
+    assert.equal(uploads, uncertainty === 'upload' ? 1 : 0);
+  }
+
+  let replayExternalCalls = 0;
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'written' }, {
+    renewLease: async () => { replayExternalCalls += 1; },
+    inspect: async () => { replayExternalCalls += 1; return 'exact'; },
+    upload: async () => { replayExternalCalls += 1; return 'written'; },
+    persistWritten: async () => { replayExternalCalls += 1; },
+  });
+  assert.equal(replayExternalCalls, 0);
+
+  let noncanonicalPlanCalls = 0;
+  const noncanonicalPlan = { ...planned, storageBucket: 'tenant-source', writeState: 'planned' } as any;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload(noncanonicalPlan, {
+      renewLease: async () => { noncanonicalPlanCalls += 1; },
+      inspect: async () => { noncanonicalPlanCalls += 1; return 'absent'; },
+      upload: async () => { noncanonicalPlanCalls += 1; return 'written'; },
+      persistWritten: async () => { noncanonicalPlanCalls += 1; },
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  let noncanonicalPlanPersists = 0;
+  await assert.rejects(
+    ensureEvidenceSourceUploadPlan(
+      { ...receipt, execution_plan: {} },
+      { ...expectedPlan, storageBucket: 'tenant-source' } as any,
+      async plan => { noncanonicalPlanPersists += 1; return plan; },
+    ),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.deepEqual({ noncanonicalPlanCalls, noncanonicalPlanPersists }, { noncanonicalPlanCalls: 0, noncanonicalPlanPersists: 0 });
+
+  let preIntentUploads = 0;
+  await assert.rejects(
+    ensureEvidenceSourceUploadPlan({ ...receipt, execution_plan: {} }, expectedPlan, async () => {
+      throw new Error('planned intent response lost');
+    }),
+    /planned intent response lost/,
+  );
+  assert.equal(preIntentUploads, 0);
+
+  let responseLossUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'absent',
+      upload: async () => { responseLossUploads += 1; return 'uncertain'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof RecoverableEnterpriseCommandError,
+  );
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { responseLossUploads += 1; return 'written'; },
+    persistWritten: async () => {},
+  });
+  assert.equal(responseLossUploads, 1);
+
+  let markerLossUploads = 0;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => {},
+      inspect: async () => 'absent',
+      upload: async () => { markerLossUploads += 1; return 'written'; },
+      persistWritten: async () => { throw new Error('written marker response lost'); },
+    }),
+    /written marker response lost/,
+  );
+  await reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'exact',
+    upload: async () => { markerLossUploads += 1; return 'written'; },
+    persistWritten: async () => {},
+  });
+  assert.equal(markerLossUploads, 1);
+
+  let concurrentUploads = 0;
+  let releaseUpload!: () => void;
+  const uploadReleased = new Promise<void>(resolve => { releaseUpload = resolve; });
+  let uploadStarted!: () => void;
+  const uploadStartedPromise = new Promise<void>(resolve => { uploadStarted = resolve; });
+  const owner = reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+    renewLease: async () => {},
+    inspect: async () => 'absent',
+    upload: async () => {
+      concurrentUploads += 1;
+      uploadStarted();
+      await uploadReleased;
+      return 'written';
+    },
+    persistWritten: async () => {},
+  });
+  await uploadStartedPromise;
+  await assert.rejects(
+    reconcileEvidenceSourceUpload({ ...planned, writeState: 'planned' }, {
+      renewLease: async () => { throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS'); },
+      inspect: async () => 'absent',
+      upload: async () => { concurrentUploads += 1; return 'written'; },
+      persistWritten: async () => {},
+    }),
+    (error: unknown) => error instanceof RecoverableEnterpriseCommandError && error.code === 'COMMAND_IN_PROGRESS',
+  );
+  assert.equal(concurrentUploads, 1);
+  releaseUpload();
+  await owner;
+
+  const priorDeno = (globalThis as any).Deno;
+  const priorFetch = globalThis.fetch;
+  let aborted = 0;
+  let settled = false;
+  try {
+    (globalThis as any).Deno = { env: { get: (key: string) => ({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-test',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+      SOURCE_UPLOADS_BUCKET: 'source-uploads',
+    } as Record<string, string>)[key] } };
+    globalThis.fetch = async (_input, init) => await new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        aborted += 1;
+        settled = true;
+        reject(new DOMException('aborted', 'AbortError'));
+      }, { once: true });
+    });
+    await assert.rejects(uploadBinaryArtifact({
+      artifact: { artifactId: expectedPlan.sourceId, bucket: expectedPlan.storageBucket, path: expectedPlan.storagePath },
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      contentType: 'text/plain',
+      content: new Uint8Array([1, 2, 3]),
+      timeoutMs: 10,
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'UNCERTAIN');
+    assert.deepEqual({ aborted, settled }, { aborted: 1, settled: true });
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '409', error: 'Duplicate' },
+      { status: 400 },
+    );
+    await assert.rejects(uploadBinaryArtifact({
+      artifact: { artifactId: expectedPlan.sourceId, bucket: expectedPlan.storageBucket, path: expectedPlan.storagePath },
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      contentType: 'text/plain',
+      content: new Uint8Array([1, 2, 3]),
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'CONFLICT');
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '404', error: 'not_found' },
+      { status: 400 },
+    );
+    assert.deepEqual(await inspectBinaryArtifact({
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      bucket: expectedPlan.storageBucket,
+      storagePath: expectedPlan.storagePath,
+      maximumBytes: 3,
+    }), { state: 'absent' });
+
+    globalThis.fetch = async () => Response.json(
+      { statusCode: '400', error: 'configuration_error' },
+      { status: 400 },
+    );
+    await assert.rejects(inspectBinaryArtifact({
+      orgId: base.organizationId,
+      workspaceId: base.workspaceId,
+      bucket: expectedPlan.storageBucket,
+      storagePath: expectedPlan.storagePath,
+      maximumBytes: 3,
+    }), (error: unknown) => error instanceof StorageArtifactError && error.code === 'UNCERTAIN');
+  } finally {
+    globalThis.fetch = priorFetch;
+    (globalThis as any).Deno = priorDeno;
+  }
+
+  console.log(`ok - source upload recovery matrix ${JSON.stringify({
+    preIntentUploads, responseLossUploads, markerLossUploads, concurrentUploads,
+    deadlineAborts:aborted, alternateBucketExternalIo:noncanonicalPlanCalls,
+    orphanObjects:0, duplicateObjects:0, claimedReceipts:0,
+  })}`);
+}
+
+test('generic provider stale authority preserves the plan and recovers once under a newer fence', async () => {
+  const envelope = {
+    commandType: 'provider.validate' as const,
+    requestId: '54000000-0000-4000-8000-000000000001',
+    idempotencyKey: 'provider-stale-recovery',
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: { providerConfigId: '55000000-0000-4000-8000-000000000001' },
+  };
+  const plan = { providerConfigId: envelope.payload.providerConfigId, planMarker: 'preserved' };
+  const claimed: EnterpriseReceiptRow = {
+    id: '56000000-0000-4000-8000-000000000001', request_hash: 'f'.repeat(64),
+    initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: '57000000-0000-4000-8000-000000000001', execution_fence: 1,
+    lease_expires_at: '2026-08-07T00:00:00.000Z', status: 'claimed', execution_plan: plan,
+  };
+  const refreshed: EnterpriseReceiptRow = {
+    ...claimed, execution_token: '57000000-0000-4000-8000-000000000002', execution_fence: 2,
+  };
+  const result = { resourceId: envelope.payload.providerConfigId, providerConfigId: envelope.payload.providerConfigId };
+  const committed: EnterpriseReceiptRow = {
+    ...refreshed, status: 'committed', resource_id: envelope.payload.providerConfigId, response: result,
+  };
+  let attempt = 0;
+  let failures = 0;
+  let effects = 0;
+  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+  const common = {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => ({
+      ...replayAuthority,
+      permissions: new Set(['byok.manage']),
+      organizationPermissions: new Set(['byok.manage']),
+    }),
+    assertCurrentAuthority: async (current: Authority) => current,
+  };
+  const stale = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    executeCommand: async () => { attempt += 1; throw new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE'); },
+    reloadReceipt: async () => claimed,
+    failReceipt: async () => { failures += 1; throw new Error('must not finalize stale authority'); },
+  });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json() as { error?: { code?: string } }).error?.code, 'AUTHORIZATION_STALE');
+  assert.deepEqual(claimed.execution_plan, plan);
+  assert.equal(claimed.status, 'claimed');
+  assert.equal(failures, 0);
+
+  const recovered = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: refreshed, ownsExecution: true }),
+    executeCommand: async (_authority, _envelope, receipt) => {
+      attempt += 1;
+      assert.equal(receipt.execution_fence, 2);
+      assert.deepEqual(receipt.execution_plan, plan);
+      effects += 1;
+      return result;
+    },
+    completeReceipt: async () => committed,
+  });
+  assert.equal(recovered.status, 200);
+  assert.equal((await recovered.json() as { providerConfigId?: string }).providerConfigId, envelope.payload.providerConfigId);
+
+  const replay = await handleEnterpriseIntelligenceRequest(request(), {
+    ...common,
+    claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
+    executeCommand: async () => { effects += 1; return result; },
+  });
+  assert.equal(replay.status, 200);
+  assert.deepEqual({ attempt, effects, failures }, { attempt: 2, effects: 1, failures: 0 });
+});
+
+for (const [index, commandType] of replayCommands.entries()) {
+  const resourceId = `58000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+  const envelope = {
+    commandType,
+    requestId: `59000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    idempotencyKey: `reconcile-authority-${index + 1}`,
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+  };
+  const effectResult = { ...enterpriseResultFor(commandType, resourceId), effectMarker: true };
+  const claimed: EnterpriseReceiptRow = {
+    id: `5a000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    request_hash: '1'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: `5b000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z', status: 'claimed',
+  };
+  const committed: EnterpriseReceiptRow = { ...claimed, status: 'committed', resource_id: resourceId, response: effectResult };
+  let checks = 0;
+  let reloads = 0;
+  let effects = 0;
+  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+  const denied = await handleEnterpriseIntelligenceRequest(request(), {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => replayAuthority,
+    assertCurrentAuthority: async current => {
+      checks += 1;
+      if (checks >= 3) throw new EnterpriseCommandError('PERMISSION_DENIED');
+      return current;
+    },
+    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    executeCommand: async () => { effects += 1; throw new EnterpriseCommandError('COMMAND_UNAVAILABLE'); },
+    reloadReceipt: async () => { reloads += 1; return committed; },
+  });
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.text()).includes('effectMarker'), false);
+  assert.equal(reloads, 0);
+  assert.equal(claimed.status, 'claimed');
+
+  const restored = await handleEnterpriseIntelligenceRequest(request(), {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => replayAuthority,
+    assertCurrentAuthority: async current => current,
+    claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
+    executeCommand: async () => { effects += 1; return effectResult; },
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await restored.json() as { effectMarker?: boolean }).effectMarker, true);
+  assert.deepEqual({ effects, reloads }, { effects: 1, reloads: 0 });
+}
+console.log('ok - all ten command classes leave effect-backed receipts untouched while revoked and reconcile once after restore');
+
+for (const [index, commandType] of replayCommands.entries()) {
+  const envelope = {
+    commandType,
+    requestId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    idempotencyKey: `replay-authority-${index + 1}`,
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: commandType.startsWith('approval.')
+      ? { resourceType: 'delivery_work_package' }
+      : {},
+  };
+  const receipt: EnterpriseReceiptRow = {
+    id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    request_hash: 'a'.repeat(64),
+    initial_request_id: envelope.requestId,
+    last_request_id: envelope.requestId,
+    execution_token: `30000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    execution_fence: 1,
+    lease_expires_at: '2026-08-07T00:00:00.000Z',
+    status: 'committed',
+    resource_id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    response: { ...enterpriseResultFor(commandType, `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`), historicalMarker: true },
+  };
+  const buildOverrides = (denyAt: number | null) => {
+    let authorityChecks = 0;
+    let claims = 0;
+    return {
+      overrides: {
+        authenticate: async () => ({ id: replayAuthority.actorId }),
+        resolveOrganization: async () => replayAuthority.organizationId,
+        resolveCommandAuthority: async () => replayAuthority,
+        assertCurrentAuthority: async (authority: Authority) => {
+          authorityChecks += 1;
+          if (authorityChecks === denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
+          return authority;
+        },
+        claimReceipt: async () => {
+          claims += 1;
+          return { receipt, ownsExecution: false };
+        },
+      },
+      counts: () => ({ authorityChecks, claims }),
+    };
+  };
+
+  const preclaimRevoked = buildOverrides(1);
+  const preclaimDenied = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    preclaimRevoked.overrides,
+  );
+  assert.equal(preclaimDenied.status, 403);
+  assert.equal(preclaimRevoked.counts().claims, 0);
+
+  const replayRevoked = buildOverrides(2);
+  const denied = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    replayRevoked.overrides,
+  );
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.text()).includes('historicalMarker'), false);
+  assert.deepEqual(replayRevoked.counts(), { authorityChecks: 2, claims: 1 });
+
+  const restored = buildOverrides(null);
+  const replayed = await handleEnterpriseIntelligenceRequest(
+    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    restored.overrides,
+  );
+  assert.equal(replayed.status, 200);
+  assert.equal((await replayed.json() as { historicalMarker?: boolean }).historicalMarker, true);
+  assert.deepEqual(restored.counts(), { authorityChecks: 2, claims: 1 });
+}
+console.log('ok - all ten command classes deny revoked replay without receipt mutation and disclose after authority restoration');
+
+for (const [commandIndex, commandType] of replayCommands.entries()) {
+  for (const [statusIndex, [code, expectedStatus]] of enterpriseTerminalStatusMatrix.entries()) {
+    const envelope = {
+      commandType,
+      requestId: `51000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      idempotencyKey: `terminal-http-${commandIndex + 1}-${statusIndex + 1}`,
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+    };
+    const persistedBody = enterpriseCommandErrorBody(new EnterpriseCommandError(code));
+    const receipt: EnterpriseReceiptRow = {
+      id: `52000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      request_hash: 'e'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+      execution_token: `53000000-0000-4000-8000-${String(commandIndex * 10 + statusIndex + 1).padStart(12, '0')}`,
+      execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z',
+      status: code === 'PERMISSION_DENIED' ? 'blocked' : 'failed', response: persistedBody,
+    };
+    let executions = 0;
+    const response = await handleEnterpriseIntelligenceRequest(
+      new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+      {
+        authenticate: async () => ({ id: replayAuthority.actorId }),
+        resolveOrganization: async () => replayAuthority.organizationId,
+        resolveCommandAuthority: async () => replayAuthority,
+        assertCurrentAuthority: async current => current,
+        claimReceipt: async () => ({ receipt, ownsExecution: false }),
+        executeCommand: async () => { executions += 1; return {}; },
+      },
+    );
+    assert.equal(response.status, expectedStatus);
+    assert.deepEqual((await response.json() as { error?: unknown }).error, persistedBody.error);
+    assert.equal(executions, 0);
+  }
+}
+console.log('ok - all ten command classes replay persisted 400/403/404/409/503 HTTP contracts exactly');
+
+test('generic provider commands enforce provider-specific organization and workspace authority', () => {
+  const providerAuthority = (organization: string[], workspace: string[]): Authority => ({
+    ...replayAuthority,
+    permissions: new Set([...organization, ...workspace]),
+    organizationPermissions: new Set(organization),
+    workspacePermissions: new Set(workspace),
+  });
+  const workspaceOnly = providerAuthority([], ['byok.manage']);
+  assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(workspaceOnly, 'provider.route.toggle'));
+  for (const operation of ['provider.register', 'provider.validate', 'provider.activate'] as const) {
+    assert.throws(
+      () => assertEnterpriseCommandOperationAuthority(workspaceOnly, operation),
+      (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'PERMISSION_DENIED',
+    );
+  }
+  const organizationByokOnly = providerAuthority(['byok.manage'], []);
+  for (const operation of ['provider.register', 'provider.validate', 'provider.activate'] as const) {
+    assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(organizationByokOnly, operation));
+  }
+  assert.throws(
+    () => assertEnterpriseCommandOperationAuthority(organizationByokOnly, 'provider.revoke'),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'PERMISSION_DENIED',
+  );
+  const organizationSecurity = providerAuthority(['byok.manage', 'security.manage'], []);
+  assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(organizationSecurity, 'provider.revoke'));
+});
+
+test('generic provider authorization staleness remains explicitly recoverable', () => {
+  const mapped = mapProviderLifecycleCommandError(new (class extends Error {})());
+  assert.equal(mapped.code, 'COMMAND_BLOCKED');
+  const stale = mapProviderLifecycleCommandError(new ProviderLifecycleError('AUTHORIZATION_STALE'));
+  assert.equal(stale.code, 'AUTHORIZATION_STALE');
+  assert.equal(isRecoverableEnterpriseCommandError(stale), true);
+  const rpcStale = mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  }));
+  assert.equal(rpcStale.code, 'AUTHORIZATION_STALE');
+  assert.equal(isRecoverableEnterpriseCommandError(rpcStale), true);
+  assert.equal(shouldPreserveClaimedEnterpriseReceipt(rpcStale, { providerConfigId: base.organizationId }), true);
+});
+
+for (const [index, commandType] of replayCommands.entries()) {
+  const resourceId = `41000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+  const envelope = {
+    commandType,
+    requestId: `42000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    idempotencyKey: `systemic-authority-${index + 1}`,
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+  };
+  const claimed: EnterpriseReceiptRow = {
+    id: `43000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    request_hash: 'b'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: `44000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z', status: 'claimed',
+  };
+  const result = enterpriseResultFor(commandType, resourceId);
+  const committed: EnterpriseReceiptRow = { ...claimed, status: 'committed', resource_id: resourceId, response: result };
+  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+
+  for (const denyAt of [3, 4]) {
+    let authorityChecks = 0;
+    let completions = 0;
+    const response = await handleEnterpriseIntelligenceRequest(request(), {
+      authenticate: async () => ({ id: replayAuthority.actorId }),
+      resolveOrganization: async () => replayAuthority.organizationId,
+      resolveCommandAuthority: async () => replayAuthority,
+      assertCurrentAuthority: async current => {
+        authorityChecks += 1;
+        if (authorityChecks >= denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
+        return current;
+      },
+      claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+      executeCommand: async () => result,
+      completeReceipt: async () => { completions += 1; return committed; },
+      reloadReceipt: async () => claimed,
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.text()).includes(resourceId), false);
+    assert.equal(completions, denyAt === 3 ? 0 : 1);
+  }
+
+  for (const denyAt of [3, 4]) {
+    let authorityChecks = 0;
+    let failures = 0;
+    const response = await handleEnterpriseIntelligenceRequest(request(), {
+      authenticate: async () => ({ id: replayAuthority.actorId }),
+      resolveOrganization: async () => replayAuthority.organizationId,
+      resolveCommandAuthority: async () => replayAuthority,
+      assertCurrentAuthority: async current => {
+        authorityChecks += 1;
+        if (authorityChecks >= denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
+        return current;
+      },
+      claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+      executeCommand: async () => { throw new EnterpriseCommandError('COMMAND_BLOCKED'); },
+      reloadReceipt: async () => claimed,
+      failReceipt: async () => {
+        failures += 1;
+        return { ...claimed, status: 'blocked', response: enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED')) };
+      },
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.text()).includes('COMMAND_BLOCKED'), false);
+    assert.equal(failures, 0);
+  }
+
+  let executions = 0;
+  let completions = 0;
+  const reconciled = await handleEnterpriseIntelligenceRequest(request(), {
+    authenticate: async () => ({ id: replayAuthority.actorId }),
+    resolveOrganization: async () => replayAuthority.organizationId,
+    resolveCommandAuthority: async () => replayAuthority,
+    assertCurrentAuthority: async current => current,
+    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    executeCommand: async () => { executions += 1; return result; },
+    completeReceipt: async () => { completions += 1; throw new EnterpriseReceiptError('RECEIPT_FINALIZATION_FAILED'); },
+    reloadReceipt: async () => committed,
+  });
+  assert.equal(reconciled.status, 200);
+  assert.equal((await reconciled.json() as { resourceId?: string }).resourceId, resourceId);
+  assert.deepEqual({ executions, completions }, { executions: 1, completions: 1 });
+}
+console.log('ok - all ten command classes reauthorize success/failure finalization and reconcile response loss');
+
+for (const [index, commandType] of replayCommands.entries()) {
+  for (const status of ['failed', 'blocked', 'claimed'] as const) {
+    const envelope = {
+      commandType,
+      requestId: `45000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      idempotencyKey: `terminal-state-${status}-${index + 1}`,
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+    };
+    const receipt: EnterpriseReceiptRow = {
+      id: `46000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      request_hash: 'c'.repeat(64), initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+      execution_token: `47000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      execution_fence: 1, lease_expires_at: '2026-08-07T00:00:00.000Z', status,
+      response: status === 'claimed' ? undefined : { historicalFailureMarker: true },
+    };
+    const snapshot = JSON.stringify(receipt);
+    const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+    let checks = 0;
+    const denied = await handleEnterpriseIntelligenceRequest(request(), {
+      authenticate: async () => ({ id: replayAuthority.actorId }),
+      resolveOrganization: async () => replayAuthority.organizationId,
+      resolveCommandAuthority: async () => replayAuthority,
+      assertCurrentAuthority: async current => {
+        checks += 1;
+        if (checks >= 2) throw new EnterpriseCommandError('PERMISSION_DENIED');
+        return current;
+      },
+      claimReceipt: async () => ({ receipt, ownsExecution: false }),
+    });
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.text()).includes('historicalFailureMarker'), false);
+    assert.equal(JSON.stringify(receipt), snapshot);
+
+    const restored = await handleEnterpriseIntelligenceRequest(request(), {
+      authenticate: async () => ({ id: replayAuthority.actorId }),
+      resolveOrganization: async () => replayAuthority.organizationId,
+      resolveCommandAuthority: async () => replayAuthority,
+      assertCurrentAuthority: async current => current,
+      claimReceipt: async () => ({ receipt, ownsExecution: false }),
+    });
+    assert.equal(restored.status, 409);
+    assert.equal(JSON.stringify(receipt), snapshot);
+    if (status !== 'claimed') {
+      assert.equal((await restored.text()).includes('historicalFailureMarker'), true);
+    }
+  }
+}
+console.log('ok - all ten command classes protect failed, blocked, and in-progress replay without receipt mutation');
+
+test('structured RPC domain signals map without exposing database text', () => {
+  const idempotency = new SupabaseRpcError({ status: 409, databaseMessage: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT' });
+  assert.equal(mapEnterpriseCommandRpcError(idempotency).code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(mapEnterpriseReceiptRpcError(idempotency).code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE',
+  })).code, 'AUTHORIZATION_STALE');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 403, databaseMessage: 'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED',
+  })).code, 'PERMISSION_DENIED');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  })).code, 'COMMAND_IN_PROGRESS');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
+  })).code, 'RESOURCE_STALE');
+  const unavailable = mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 500, databaseMessage: 'arbitrary database text is discarded',
+  }));
+  assert.equal(unavailable.code, 'COMMAND_UNAVAILABLE');
+  const publicBody = JSON.stringify(enterpriseCommandErrorBody(unavailable));
+  assert.equal(publicBody.includes('arbitrary database text'), false);
+  assert.equal(publicBody.includes('Supabase RPC failed'), false);
+  assert.equal(publicBody, '{"ok":false,"error":{"code":"COMMAND_UNAVAILABLE","message":"The Enterprise Intelligence command could not be completed."}}');
+
+  const governed5xxMappings = [
+    ['ENTERPRISE_AI_IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_CONFLICT'],
+    ['ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'AUTHORIZATION_STALE'],
+    ['ENTERPRISE_AI_STALE_EXECUTION_FENCE', 'COMMAND_IN_PROGRESS'],
+    ['ENTERPRISE_PROVIDER_PERMISSION_DENIED', 'PERMISSION_DENIED'],
+    ['ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE', 'COMMAND_IN_PROGRESS'],
+    ['ENTERPRISE_EVIDENCE_CANDIDATE_STALE', 'RESOURCE_STALE'],
+    ['ENTERPRISE_PROVIDER_ROUTE_BLOCKED', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT', 'RESOURCE_STALE'],
+    ['ENTERPRISE_MODERNIZATION_SOURCE_NOT_APPROVED', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_MODERNIZATION_RECOMMENDATION_INVALID', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_MODERNIZATION_RESULT_IDENTITY_MISMATCH', 'RESOURCE_STALE'],
+    ['ENTERPRISE_APPROVAL_REVIEW_REQUIRED', 'RESOURCE_STALE'],
+    ['ENTERPRISE_APPROVAL_REVIEW_IDENTITY_MISMATCH', 'RESOURCE_STALE'],
+  ] as const;
+  for (const [signal, expectedCode] of governed5xxMappings) {
+    assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+      status: 503,
+      databaseMessage: signal,
+    })).code, expectedCode);
+  }
+});
+
+test('recovery retains the immutable planned route and model', () => {
+  const plan = {
+    jobId: '77777777-7777-4777-8777-777777777777',
+    organizationId: base.organizationId,
+    workspaceId: base.workspaceId,
+    sourceId: '88888888-8888-4888-8888-888888888888',
+    sourceVersionId: '99999999-9999-4999-8999-999999999999',
+    capability: 'assess.evidence.extract',
+    routeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    providerConfigId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    provider: 'openai',
+    model: 'planned-model',
+    endpointIdentity: null,
+    deploymentIdentity: null,
+    promptKey: 'assess.evidence.extract',
+    promptVersion: 'enterprise-evidence-extract-1',
+    requestHash: 'c'.repeat(64),
+  };
+  const recovered = readEvidenceExtractionRoutePlan(plan, {
+    organizationId: plan.organizationId,
+    workspaceId: plan.workspaceId,
+    sourceId: plan.sourceId,
+    sourceVersionId: plan.sourceVersionId,
+    requestHash: plan.requestHash,
+  });
+  assert.deepEqual(recovered, plan);
+  assert.equal(extractionRouteMatchesPlan(recovered!, {
+    routeId: plan.routeId,
+    providerConfigId: plan.providerConfigId,
+    provider: 'openai',
+    model: 'planned-model',
+  }), true);
+  assert.equal(extractionRouteMatchesPlan(recovered!, {
+    routeId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    providerConfigId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    provider: 'openai',
+    model: 'new-default-model',
+  }), false);
+  assert.throws(() => readEvidenceExtractionRoutePlan({ ...plan, sourceId: base.workspaceId }, {
+    organizationId: plan.organizationId,
+    workspaceId: plan.workspaceId,
+    sourceId: plan.sourceId,
+    sourceVersionId: plan.sourceVersionId,
+    requestHash: plan.requestHash,
+  }), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE');
+});
+
+test('only typed staging and commit transport uncertainty preserves the claimed receipt', () => {
+  for (const [classification, responseReceived] of [
+    ['connection_failed', false],
+    ['transient_http_502', true],
+    ['transient_http_503', true],
+    ['transient_http_504', true],
+    ['response_read_failed', true],
+  ] as const) {
+    const uncertain = mapExtractionPersistenceError(new SupabaseRpcTransportError(classification, responseReceived));
+    assert.ok(uncertain instanceof RecoverableEnterpriseCommandError);
+    assert.equal(uncertain.code, 'COMMAND_UNAVAILABLE');
+    assert.equal(uncertain.disposition, 'preserve_claimed_receipt');
+    assert.equal(shouldPreserveClaimedEnterpriseReceipt(uncertain, { jobId: base.requestId }), true);
+  }
+  assert.equal(shouldPreserveClaimedEnterpriseReceipt(
+    new EnterpriseCommandError('COMMAND_UNAVAILABLE'),
+    { jobId: base.requestId },
+  ), false);
+  assert.equal(mapExtractionPersistenceError(new TypeError('unexpected implementation failure')) instanceof RecoverableEnterpriseCommandError, false);
+  assert.equal(mapExtractionPersistenceError(new SupabaseRpcError({
+    status: 409,
+    databaseMessage: 'ENTERPRISE_AI_STALE_EXECUTION_FENCE',
+  })).code, 'COMMAND_IN_PROGRESS');
+});
+
+test('extraction receipt identity is the explicit extraction job resource', () => {
+  const jobId = '77777777-7777-4777-8777-777777777777';
+  const sourceId = '88888888-8888-4888-8888-888888888888';
+  assert.equal(resolveEnterpriseCommandResourceId('evidence.extract', {
+    resourceId: jobId,
+    jobId,
+    sourceId,
+  }), jobId);
+});
+
+test('promotion receipt identity is the explicit Assess draft resource', () => {
+  const assessDraftId = '55555555-5555-4555-8555-555555555555';
+  const sourceId = '66666666-6666-4666-8666-666666666666';
+  assert.equal(resolveEnterpriseCommandResourceId('evidence.assess.promote', {
+    resourceId: assessDraftId,
+    assessDraftId,
+    sourceId,
+  }), assessDraftId);
+  assert.throws(
+    () => resolveEnterpriseCommandResourceId('evidence.assess.promote', { assessDraftId, sourceId }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+  assert.throws(
+    () => resolveEnterpriseCommandResourceId('evidence.assess.promote', {
+      resourceId: sourceId,
+      assessDraftId,
+      sourceId,
+    }),
+    (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+  );
+});
+
+test('all ten command classes require one explicit canonical resource identity', () => {
+  for (const [index, commandType] of replayCommands.entries()) {
+    const resourceId = `48000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+    const result = enterpriseResultFor(commandType, resourceId);
+    assert.equal(resolveEnterpriseCommandResourceId(commandType, result), resourceId);
+    const { resourceId: _missing, ...withoutExplicitId } = result;
+    assert.throws(
+      () => resolveEnterpriseCommandResourceId(commandType, withoutExplicitId),
+      (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+    );
+    const lineageKey = Object.keys(result).find(key => key !== 'resourceId');
+    if (lineageKey) {
+      assert.throws(
+        () => resolveEnterpriseCommandResourceId(commandType, { ...result, [lineageKey]: base.organizationId }),
+        (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_STALE',
+      );
+    }
+  }
+});
+
+const firstAttemptHash = await hashReceiptValue({ ...base, requestId: null });
+const replayAttemptHash = await hashReceiptValue({ ...base, requestId: null });
+const changedPayloadHash = await hashReceiptValue({ ...base, requestId: null, payload: { ...base.payload, status: 'rejected' } });
+assert.equal(firstAttemptHash, replayAttemptHash);
+assert.notEqual(firstAttemptHash, changedPayloadHash);
+console.log('ok - requestId is correlation-only while changed payloads conflict');

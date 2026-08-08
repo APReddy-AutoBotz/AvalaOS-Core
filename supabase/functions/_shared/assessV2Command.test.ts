@@ -203,7 +203,20 @@ const main = async () => {
   );
   const cloneReplayOnlyCommand = { ...parseAssessV2Envelope(clone), actorId: actor } as AssessV2AtomicCommand;
   assert.deepEqual(buildAssessV2CloneReplayRpcBody(cloneReplayOnlyCommand), {
-    p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_ß­¢G§²ÚîÆ­yÕ.outcome, 'replayed');
+    p_actor_id: actor, p_org_id: org, p_workspace_id: workspace, p_case_id: caseId,
+    p_source_assessment_id: processId, p_name: 'Clone', p_description: '',
+    p_idempotency_key: clone.idempotencyKey, p_authorization_version: 7,
+  });
+  assert.throws(() => buildAssessV2CloneReplayRpcBody(executedClone!), (error: unknown) => error instanceof AssessV2Error && error.code === 'COMMAND_UNAVAILABLE');
+  const cloneReplay = deps();
+  let cloneReplayLoads = 0;
+  cloneReplay.loadFrozenV1AssessmentForClone = async () => { cloneReplayLoads += 1; return null; };
+  cloneReplay.executeAtomicCommand = async command => {
+    assert.equal(command.serverCloneProjection, undefined);
+    return { outcome: 'replayed', resource: { id: caseId, status: 'draft', version: 1, cloneContractVersion: ASSESS_V1_TO_V2_CLONE_CONTRACT_VERSION, importedFactCount: projection!.importedFactCount, importedEvidenceCount: projection!.importedEvidenceCount } };
+  };
+  const replayedClone = await executeAssessV2Command(req(clone), parseAssessV2Envelope(clone), cloneReplay);
+  assert.equal(replayedClone.outcome, 'replayed');
   assert.equal(cloneReplayLoads, 0, 'an exact clone retry must replay before the V1 source lookup');
   for (const code of ['IDEMPOTENCY_CONFLICT', 'READ_ONLY', 'FEATURE_DISABLED'] as const) {
     const failedReplay = deps();

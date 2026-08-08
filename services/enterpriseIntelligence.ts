@@ -502,4 +502,429 @@ export interface AssembleBlueprintDraft {
   status: 'draft';
   components: AssembleBlueprintComponent[];
   readableDocument: string;
-  workflow: ['draft', 'edit', 'review', 'approval', 'publi×N÷¶‰žËkºwµçe½¹-•ä¹Ñ•ÍÐ¡­•ä¤¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}AI=)Q%=9}M9M%Q%Y}%1œ¤ì4(€€€É•©•ÑM•¹Í¥Ñ¥Ù•AÉ½©•Ñ¥½¹¥•±‘Ì¡•¹ÑÉä¤ì4(€ô¤ì4)ôì4(4(¼¨¨MÑÉ¥Ð‰É½ÝÍ•È‘•½‘•È™½ÈÑ¡”Í•ÉÙ•Èµ¥ÍÍÕ•°µ¥¹¥µ¥é•É•…ÁÉ½©•Ñ¥½¸¸€¨¼4)•áÁ½ÉÐ½¹ÍÐ‘•½‘•¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•AÉ½©•Ñ¥½¸€ô€¡Ù…±Õ”èÕ¹­¹½Ý¸¤è¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•AÉ½©•Ñ¥½¸€ôøì4(€¥˜€ …Ù…±Õ”ñðÑåÁ•½˜Ù…±Õ”€„ôô€½‰©•ÐœñðÉÉ…ä¹¥ÍÉÉ…ä¡Ù…±Õ”¤¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}AI=)Q%=9}%9Y1%œ¤ì4(€½¹ÍÐÉ½Ü€ôÙ…±Õ”…ÌI•½ÉñÍÑÉ¥¹œ°Õ¹­¹½Ý¸øì4(€¥˜€¡=‰©•Ð¹­•åÌ¡É½Ü¤¹Í½µ”¡­•ä€ôø€…ÁÉ½©•Ñ¥½¹-•åÌ¹¥¹±Õ‘•Ì¡­•ä…ÌÑåÁ•½˜ÁÉ½©•Ñ¥½¹-•åÍm¹Õµ‰•Ét¤¤¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}AI=)Q%=9}%9Y1%œ¤ì4(€¥˜€ 4(€€€É½Ü¹Í¡•µ…Y•ÉÍ¥½¸€„ôô9QIAI%M}%9Q11%9}AI=)Q%=9}YIM%=84(€€€ñðÑåÁ•½˜É½Ü¹½É…¹¥é…Ñ¥½¹%€„ôô€ÍÑÉ¥¹œœñð€…ÁÉ½©•Ñ¥½¹UÕ¥¹Ñ•ÍÐ¡É½Ü¹½É…¹¥é…Ñ¥½¹%¤4(€€€ñðÑåÁ•½˜É½Ü¹Ý½É­ÍÁ…•%€„ôô€ÍÑÉ¥¹œœñð€…ÁÉ½©•Ñ¥½¹UÕ¥¹Ñ•ÍÐ¡É½Ü¹Ý½É­ÍÁ…•%¤4(€€€ñð€…9Õµ‰•È¹¥ÍM…™•%¹Ñ••È¡É½Ü¹…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸¤ñð9Õµ‰•È¡É½Ü¹…ÕÑ¡½É¥é…Ñ¥½¹Y•ÉÍ¥½¸¤€ð€Ä4(€€€ñðÑåÁ•½˜É½Ü¹•¹•É…Ñ•‘Ð€„ôô€ÍÑÉ¥¹œœñð€…9Õµ‰•È¹¥Í¥¹¥Ñ”¡…Ñ”¹Á…ÉÍ”¡É½Ü¹•¹•É…Ñ•‘Ð¤¤4(€€€ñð€…ÉÉ…ä¹¥ÍÉÉ…ä¡É½Ü¹…Á…‰¥±¥Ñ¥•Ì¤ñðÉ½Ü¹…Á…‰¥±¥Ñ¥•Ì¹Í½µ”¡…Á…‰¥±¥Ñä€ôøÑåÁ•½˜…Á…‰¥±¥Ñä€„ôô€ÍÑÉ¥¹œœ¤4(€€€ñð€…lÉ•…‘äœ°€•µÁÑäœ°€‰±½­•œ°€ÍÑ…±”œ°€Õ¹…Ù…¥±…‰±”t¹¥¹±Õ‘•Ì¡MÑÉ¥¹œ¡É½Ü¹…Ù…¥±…‰¥±¥Ñä¤¤4(€€€ñð€…lÁÉ½Ù¥‘•ÉÌœ°€•Ù¥‘•¹•M½ÕÉ•Ìœ°€•Ù¥‘•¹•…¹‘¥‘…Ñ•Ìœ°€…ÍÍ•ÍÍÉ…™ÑÌœ°€…ÁÁ±¥…Ñ¥½¹Ìœ°€ÍÑÕ‘¥½½Õµ•¹ÑÌœ°€‘•±¥Ù•ÉåA…­…•Ìœ°€µ½¹¥Ñ½É	…Í•±¥¹•Ìœ°€µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹Ìœ°€‰±Õ•ÁÉ¥¹ÑÌœ°€…ÁÁÉ½Ù…±I•Í½ÕÉ•Ìœ°€½µµ…¹‘Ñ¥Ù¥Ñät¹•Ù•Éä¡­•ä€ôøÉÉ…ä¹¥ÍÉÉ…ä¡É½Ým­•åt¤¤4(€€€ñð€…É½Ü¹…ÍÍ•ÍÍAÉ½µ½Ñ¥½¸ñðÑåÁ•½˜É½Ü¹…ÍÍ•ÍÍAÉ½µ½Ñ¥½¸€„ôô€½‰©•ÐœñðÉÉ…ä¹¥ÍÉÉ…ä¡É½Ü¹…ÍÍ•ÍÍAÉ½µ½Ñ¥½¸¤4(€€¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}AI=)Q%=9}%9Y1%œ¤ì4(€É•©•ÑM•¹Í¥Ñ¥Ù•AÉ½©•Ñ¥½¹¥•±‘Ì¡É½Ü¤ì4(€É•ÑÕÉ¸ÍÑÉÕÑÕÉ•‘±½¹”¡É½Ü¤…ÌÕ¹­¹½Ý¸…Ì¹Ñ•ÉÁÉ¥Í•%¹Ñ•±±¥•¹•AÉ½©•Ñ¥½¸ì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ±…ÍÍ¥™åÙ¥‘•¹•¥±”€ô€¡¹…µ”èÍÑÉ¥¹œ°‰É½ÝÍ•É5¥µ•QåÁ”èÍÑÉ¥¹œ°Í¥é”è¹Õµ‰•È¤èÙ¥‘•¹•¥±•MÕÁÁ½ÉÐ€ôøì4(€¥˜€ …9Õµ‰•È¹¥ÍM…™•%¹Ñ••È¡Í¥é”¤ñðÍ¥é”€ðô€ÀñðÍ¥é”€ø€ÄÉ|ÀÀÁ|ÀÀÀ¤ì4(€€€É•ÑÕÉ¸ìÍÕÁÁ½ÉÑ•è™…±Í”°ÍÑ…Ñ”è€Õ¹ÍÕÁÁ½ÉÑ•œ°µ•ÍÍ…”è€M½ÕÉ•ÌµÕÍÐ½¹Ñ…¥¸‘…Ñ„…¹‰”¹¼±…É•ÈÑ¡…¸€ÄÈ5¸œôì4(€ô4(€½¹ÍÐ•áÑ•¹Í¥½¸€ô¹…µ”¹ÑÉ¥´ ¤¹Ñ½1½…±•1½Ý•É…Í” ¤¹µ…Ñ  ½p¹m„µèÀ´åt¬¼¤ü¹lÁtñð€œœì4(€½¹ÍÐ‰åáÑ•¹Í¥½¸èI•½ÉñÍÑÉ¥¹œ°MÕÁÁ½ÉÑ•‘Ù¥‘•¹•5¥µ•QåÁ”ø€ôì4(€€€€œ¹ÑáÐœè€Ñ•áÐ½Á±…¥¸œ°4(€€€€œ¹µœè€Ñ•áÐ½µ…É­‘½Ý¸œ°4(€€€€œ¹µ…É­‘½Ý¸œè€Ñ•áÐ½µ…É­‘½Ý¸œ°4(€€€€œ¹ÍØœè€Ñ•áÐ½ÍØœ°4(€€€€œ¹ÙÑÐœè€Ñ•áÐ½ÙÑÐœ°4(€€€€œ¹ÍÉÐœè€…ÁÁ±¥…Ñ¥½¸½àµÍÕ‰É¥Àœ°4(€€€€œ¹Á‘˜œè€…ÁÁ±¥…Ñ¥½¸½Á‘˜œ°4(€€€€œ¹‘½àœè€…ÁÁ±¥…Ñ¥½¸½Ù¹¹½Á•¹áµ±™½Éµ…ÑÌµ½™™¥•‘½Õµ•¹Ð¹Ý½É‘ÁÉ½•ÍÍ¥¹µ°¹‘½Õµ•¹Ðœ°4(€ôì4(€½¹ÍÐµ¥µ•QåÁ”€ô‰åáÑ•¹Í¥½¹m•áÑ•¹Í¥½¹t4(€€€ñð€¡¥ÍMÕÁÁ½ÉÑ•‘Ù¥‘•¹•5¥µ•QåÁ”¡‰É½ÝÍ•É5¥µ•QåÁ”¤€ü‰É½ÝÍ•É5¥µ•QåÁ”€èÕ¹‘•™¥¹•¤ì4(€¥˜€ …µ¥µ•QåÁ”¤É•ÑÕÉ¸ìÍÕÁÁ½ÉÑ•è™…±Í”°ÍÑ…Ñ”è€Õ¹ÍÕÁÁ½ÉÑ•œ°µ•ÍÍ…”è€Q¡¥Ì™½Éµ…Ð¥Ì¹½ÐÍÕÁÁ½ÉÑ•¸UÍ”QaP°5…É­‘½Ý¸°MX°YQP½MIP°„Ñ•áÐA°½È=`¸œôì4(€¥˜€¡µ¥µ•QåÁ”€ôôô€…ÁÁ±¥…Ñ¥½¸½Á‘˜œ¤ì4(€€€É•ÑÕÉ¸ìÍÕÁÁ½ÉÑ•èÑÉÕ”°µ¥µ•QåÁ”°ÍÑ…Ñ”è€Ñ•áÑ}Á‘™}É•ÅÕ¥É•Í}Ñ•áÑ}±…å•Èœ°µ•ÍÍ…”è€Q•áÐAÌ…É”ÍÕÁÁ½ÉÑ•¸M…¹¹•AÌ¹••=H°Ý¡¥ ¥Ì¹½Ð…Ù…¥±…‰±”¥¸Ñ¡¥ÌÙ•ÉÑ¥…°¸œôì4(€ô4(€¥˜€¡µ¥µ•QåÁ”€ôôô€…ÁÁ±¥…Ñ¥½¸½Ù¹¹½Á•¹áµ±™½Éµ…ÑÌµ½™™¥•‘½Õµ•¹Ð¹Ý½É‘ÁÉ½•ÍÍ¥¹µ°¹‘½Õµ•¹Ðœ¤ì4(€€€É•ÑÕÉ¸ìÍÕÁÁ½ÉÑ•èÑÉÕ”°µ¥µ•QåÁ”°ÍÑ…Ñ”è€‘½á}Ñ•áÐœ°µ•ÍÍ…”è€=`Ñ•áÐ¥Ì•áÑÉ…Ñ•Í•ÉÙ•ÈµÍ¥‘”ì•µ‰•‘‘•¥µ…•Ì…¹=H…É”¹½ÐÁÉ½•ÍÍ•¸œôì4(€ô4(€É•ÑÕÉ¸ìÍÕÁÁ½ÉÑ•èÑÉÕ”°µ¥µ•QåÁ”°ÍÑ…Ñ”è€¹…Ñ¥Ù•}Ñ•áÐœ°µ•ÍÍ…”è€Q¡¥ÌÑ•áÐµ½É¥•¹Ñ•™½Éµ…Ð¥ÌÍÕÁÁ½ÉÑ•™½È‰½Õ¹‘•Í•ÉÙ•È•áÑÉ…Ñ¥½¸¸œôì4)ôì4(4)½¹ÍÐÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%€ô€¡Ù…±Õ”èÍÑÉ¥¹œ¤€ôøì4(€¥˜€ …ÁÉ½©•Ñ¥½¹UÕ¥¹Ñ•ÍÐ¡Ù…±Õ”¤¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}M1Q=I}%9Y1%œ¤ì4(€É•ÑÕÉ¸Ù…±Õ”ì4)ôì4(4(¼¨¨M•±•Ñ½Èµ½¹±äµÕÑ…Ñ¥½¸Á…å±½…‘Ì¹•Ù•È…ÉÉä…ÕÑ¡½É¥Ñ…Ñ¥Ù”¡…Í¡•Ì½È¥µµÕÑ…‰±”Ù•ÉÍ¥½¹Ì¸€¨¼4)•áÁ½ÉÐ½¹ÍÐ‰Õ¥±‘¹Ñ•ÉÁÉ¥Í•M•±•Ñ½ÉA…å±½…‘Ì€ôì4(€•Ù¥‘•¹•áÑÉ…Ñ¥½¸¡Í½ÕÉ•%èÍÑÉ¥¹œ¤ì4(€€€É•ÑÕÉ¸ìÍ½ÕÉ•%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡Í½ÕÉ•%¤ôì4(€ô°4(€µ½‘•É¹¥é…Ñ¥½¸¡…ÁÁ±¥…Ñ¥½¹%èÍÑÉ¥¹œ¤ì4(€€€É•ÑÕÉ¸ì…ÁÁ±¥…Ñ¥½¹%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡…ÁÁ±¥…Ñ¥½¹%¤ôì4(€ô°4(€ÍÑÕ‘¥½!…¹‘½™˜¡ÍÑÕ‘¥½½Õµ•¹Ñ%èÍÑÉ¥¹œ¤ì4(€€€É•ÑÕÉ¸ìÍÑÕ‘¥½½Õµ•¹Ñ%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡ÍÑÕ‘¥½½Õµ•¹Ñ%¤ôì4(€ô°4(€µ½¹¥Ñ½É	…Í•±¥¹”¡Ý½É­A…­…•%èÍÑÉ¥¹œ¤ì4(€€€É•ÑÕÉ¸ìÝ½É­A…­…•%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡Ý½É­A…­…•%¤ôì4(€ô°4(€…ÍÍ•ÍÍAÉ½µ½Ñ¥½¸¡Í½ÕÉ•%èÍÑÉ¥¹œ°…ÍÍ•ÍÍÉ…™Ñ%èÍÑÉ¥¹œ°…¹‘¥‘…Ñ•%‘ÌèÍÑÉ¥¹mt¤ì4(€€€¥˜€ …ÉÉ…ä¹¥ÍÉÉ…ä¡…¹‘¥‘…Ñ•%‘Ì¤ñð…¹‘¥‘…Ñ•%‘Ì¹±•¹Ñ €ð€Äñð…¹‘¥‘…Ñ•%‘Ì¹±•¹Ñ €ø€ÄÀÀ¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}M1Q=I}%9Y1%œ¤ì4(€€€½¹ÍÐ¹½Éµ…±¥é•‘…¹‘¥‘…Ñ•Ì€ô…¹‘¥‘…Ñ•%‘Ì¹µ…À¡É•ÅÕ¥É•AÉ½©•Ñ¥½¹%¤ì4(€€€¥˜€¡¹•ÜM•Ð¡¹½Éµ…±¥é•‘…¹‘¥‘…Ñ•Ì¤¹Í¥é”€„ôô¹½Éµ…±¥é•‘…¹‘¥‘…Ñ•Ì¹±•¹Ñ ¤Ñ¡É½Ü¹•ÜÉÉ½È 9QIAI%M}M1Q=I}%9Y1%œ¤ì4(€€€É•ÑÕÉ¸ì4(€€€€€Í½ÕÉ•%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡Í½ÕÉ•%¤°4(€€€€€…ÍÍ•ÍÍÉ…™Ñ%èÉ•ÅÕ¥É•AÉ½©•Ñ¥½¹%¡…ÍÍ•ÍÍÉ…™Ñ%¤°4(€€€€€…¹‘¥‘…Ñ•%‘Ìè¹½Éµ…±¥é•‘…¹‘¥‘…Ñ•Ì°4(€€€ôì4(€ô°4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ¥ÍMÕÁÁ½ÉÑ•‘Ù¥‘•¹•5¥µ•QåÁ”€ô€¡Ù…±Õ”èÍÑÉ¥¹œ¤èÙ…±Õ”¥ÌMÕÁÁ½ÉÑ•‘Ù¥‘•¹•5¥µ•QåÁ”€ôø€ 4(€MUAA=IQ}Y%9}5%5}QeAL¹¥¹±Õ‘•Ì¡Ù…±Õ”…ÌMÕÁÁ½ÉÑ•‘Ù¥‘•¹•5¥µ•QåÁ”¤4(¤ì4(4)•áÁ½ÉÐ½¹ÍÐ‰Õ¥±‘Ù¥‘•¹•…¹‘¥‘…Ñ”€ô€¡¥¹ÁÕÐè=µ¥Ðñ¹Ñ•ÉÁÉ¥Í•Ù¥‘•¹•…¹‘¥‘…Ñ”°€•á•ÉÁÑ!…Í œð€•‘¥Ñ½Õ¹Ðœø¤è¹Ñ•ÉÁÉ¥Í•Ù¥‘•¹•…¹‘¥‘…Ñ”€ôøì4(€½¹ÍÐÍ…™•á•ÉÁÐ€ô¥¹ÁÕÐ¹Í…™•á•ÉÁÐ€üÍ…¹¥Ñ¥é•Ù¥‘•¹•á•ÉÁÐ¡¥¹ÁÕÐ¹Í…™•á•ÉÁÐ¤€èÕ¹‘•™¥¹•ì4(€É•ÑÕÉ¸ì4(€€€€¸¸¹¥¹ÁÕÐ°4(€€€Í…™•á•ÉÁÐ°4(€€€•á•ÉÁÑ!…Í èÍÑ…‰±•¥¹•ÉÁÉ¥¹Ð¡€‘í¥¹ÁÕÐ¹Í½ÕÉ•Y•ÉÍ¥½¹%‘ôè‘í¥¹ÁÕÐ¹Í½ÕÉ•1½…Ñ½Éôè‘íÍ…™•á•ÉÁÐñð¥¹ÁÕÐ¹Ù…±Õ•õ€¤°4(€€€•‘¥Ñ½Õ¹Ðè€À°4(€ôì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ•Ù…±Õ…Ñ•5½‘•É¹¥é…Ñ¥½¹•¥Í¥½¸€ô€¡¥¹ÁÕÐèì4(€…ÍÍ•ÍÍµ•¹Ñ%èÍÑÉ¥¹œì4(€…ÍÍ•ÍÍµ•¹ÑY•ÉÍ¥½¸èÍÑÉ¥¹œì4(€™…Ñ½ÉÌè5½‘•É¹¥é…Ñ¥½¹…Ñ½ÉÌì4)ô¤è5½‘•É¹¥é…Ñ¥½¹•¥Í¥½¸€ôøì4(€½¹ÍÐ‰±½­•ÉÌèÍÑÉ¥¹mt€ômtì4(€½¹ÍÐ½¹™±¥ÑÌèÍÑÉ¥¹mt€ômtì4(€½¹ÍÐÕ¹­¹½Ý¹!¥¡%µÁ…Ñ…Ñ½ÉÌèÉÉ…äñ­•å½˜5½‘•É¹¥é…Ñ¥½¹…Ñ½ÉÌø€ôl4(€€€€É¥Ñ¥…±¥Ñäœ°4(€€€€Í•ÕÉ¥Ñå½µÁ±¥…¹”œ°4(€€€€‘…Ñ…A½ÉÑ…‰¥±¥Ñäœ°4(€€€€‘•Á•¹‘•¹åI¥Í¬œ°4(€tì4(4(€Õ¹­¹½Ý¹!¥¡%µÁ…Ñ…Ñ½ÉÌ¹™½É…  ¡™…Ñ½È¤€ôøì4(€€€¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÍm™…Ñ½Ét€ôôô€Õ¹­¹½Ý¸œ¤‰±½­•ÉÌ¹ÁÕÍ ¡€‘í™…Ñ½Éõ}•Ù¥‘•¹•}É•ÅÕ¥É•‘€¤ì4(€ô¤ì4(4(€¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹Í•ÕÉ¥Ñå½µÁ±¥…¹”€ôôô€¡¥ œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹½Á•É…Ñ¥¹I¥Í¬€ôôô€¡¥ œ¤ì4(€€€½¹™±¥ÑÌ¹ÁÕÍ  Í•ÕÉ¥Ñå}…¹‘}½Á•É…Ñ¥¹}É¥Í­}É•ÅÕ¥É•}½Ù•É¹…¹•}É•Ù¥•Üœ¤ì4(€ô4(€¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹¡…¹•™™½ÉÐ€ôôô€¡¥ œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹Ñ¥µ•Q½Y…±Õ”€ôôô€¡¥ œ¤ì4(€€€½¹™±¥ÑÌ¹ÁÕÍ  ¡…¹•}•™™½ÉÑ}…¹‘}Ñ¥µ•}Ñ½}Ù…±Õ•}½¹™±¥Ðœ¤ì4(€ô4(4(€¥˜€¡‰±½­•ÉÌ¹±•¹Ñ €ø€À¤ì4(€€€É•ÑÕÉ¸ì4(€€€€€…ÍÍ•ÍÍµ•¹Ñ%è¥¹ÁÕÐ¹…ÍÍ•ÍÍµ•¹Ñ%°4(€€€€€…ÍÍ•ÍÍµ•¹ÑY•ÉÍ¥½¸è¥¹ÁÕÐ¹…ÍÍ•ÍÍµ•¹ÑY•ÉÍ¥½¸°4(€€€€€µ½‘•±Y•ÉÍ¥½¸è5=I9%iQ%=9}5=1}YIM%=8°4(€€€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸è€¥¹ÍÕ™™¥¥•¹Ñ}•Ù¥‘•¹”œ°4(€€€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸è€‰±½­•œ°4(€€€€€•±¥¥‰±•¥ÍÁ½Í¥Ñ¥½¹Ìèl¥¹ÍÕ™™¥¥•¹Ñ}•Ù¥‘•¹”œ°€‰±½­•t°4(€€€€€™…Ñ½É	…¹‘Ìèì€¸¸¹¥¹ÁÕÐ¹™…Ñ½ÉÌô°4(€€€€€‰±½­•ÉÌ°4(€€€€€½¹™±¥ÑÌ°4(€€€€€É•ÅÕ¥É•Í!Õµ…¹ÁÁÉ½Ù…°èÑÉÕ”°4(€€€€€…¥I…Ñ¥½¹…±•MÑ…ÑÕÌè€¹½Ñ}É•ÅÕ•ÍÑ•œ°4(€€€ôì4(€ô4(4(€±•ÐÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸è5½‘•É¹¥é…Ñ¥½¹¥ÍÁ½Í¥Ñ¥½¸€ô€½ÁÑ¥µ¥é”œì4(€±•Ð…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸è5½‘•É¹¥é…Ñ¥½¹¥ÍÁ½Í¥Ñ¥½¸€ô€É•Ñ…¥¸œì4(4(€¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹É¥Ñ¥…±¥Ñä€ôôô€±½Üœ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹½Á•É…Ñ¥¹I¥Í¬€ôôô€¡¥ œ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô€É•Ñ¥É”œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€É•Ñ…¥¸œì4(€ô•±Í”¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹Ù•¹‘½É1½­%¸€ôôô€¡¥ œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹±½Õ‘¥Ð€ôôô€±½Üœ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô€É•Á±…Ñ™½É´œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€É•™…Ñ½Èœì4(€ô•±Í”¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹Ñ•¡!•…±Ñ €ôôô€±½Üœ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹µ…¥¹Ñ…¥¹…‰¥±¥Ñä€ôôô€±½Üœ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô¥¹ÁÕÐ¹™…Ñ½ÉÌ¹¡…¹•™™½ÉÐ€ôôô€¡¥ œ€ü€É•Á±…”œ€è€É•‰Õ¥±œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€É•™…Ñ½Èœì4(€ô•±Í”¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹…Á¥%¹Ñ•É…Ñ¥½¸€ôôô€¡¥ œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹…É¡¥Ñ•ÑÕÉ”€„ôô€±½Üœ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô€…Á¥}•¹…‰±•}ÝÉ…Àœì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€¥¹Ñ•É…Ñ”œì4(€ô•±Í”¥˜€ 4(€€€¥¹ÁÕÐ¹™…Ñ½ÉÌ¹™¥Ð€ôôô€¡¥ œ4(€€€€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹…É¡¥Ñ•ÑÕÉ”€ôôô€¡¥ œ4(€€€€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹µ…¥¹Ñ…¥¹…‰¥±¥Ñä€„ôô€±½Üœ4(€€€€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹½Á•É…Ñ¥¹I¥Í¬€„ôô€¡¥ œ4(€€¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô¥¹ÁÕÐ¹™…Ñ½ÉÌ¹…•¹Ñ¥Ð€ôôô€¡¥ œ€ü€…ÍÍ•µ‰±”œ€è€…ÕÑ½µ…Ñ•}…É½Õ¹œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€…Á¥}•¹…‰±•}ÝÉ…Àœì4(€ô•±Í”¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹…Á¥%¹Ñ•É…Ñ¥½¸€ôôô€µ•‘¥Õ´œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹¡…¹•™™½ÉÐ€ôôô€±½Üœ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô€¥¹Ñ•É…Ñ”œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€½ÁÑ¥µ¥é”œì4(€ô•±Í”¥˜€¡¥¹ÁÕÐ¹™…Ñ½ÉÌ¹Ñ•¡!•…±Ñ €ôôô€¡¥ œ€˜˜¥¹ÁÕÐ¹™…Ñ½ÉÌ¹µ…¥¹Ñ…¥¹…‰¥±¥Ñä€ôôô€¡¥ œ¤ì4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸€ô€É•Ñ…¥¸œì4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸€ô€½ÁÑ¥µ¥é”œì4(€ô4(4(€½¹ÍÐ•±¥¥‰±•¥ÍÁ½Í¥Ñ¥½¹Ì€ôl¸¸¹¹•ÜM•Ðñ5½‘•É¹¥é…Ñ¥½¹¥ÍÁ½Í¥Ñ¥½¸ø¡l4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸°4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸°4(€€€€½ÁÑ¥µ¥é”œ°4(€€€€É•Ñ…¥¸œ°4(€t¥tì4(4(€É•ÑÕÉ¸ì4(€€€…ÍÍ•ÍÍµ•¹Ñ%è¥¹ÁÕÐ¹…ÍÍ•ÍÍµ•¹Ñ%°4(€€€…ÍÍ•ÍÍµ•¹ÑY•ÉÍ¥½¸è¥¹ÁÕÐ¹…ÍÍ•ÍÍµ•¹ÑY•ÉÍ¥½¸°4(€€€µ½‘•±Y•ÉÍ¥½¸è5=I9%iQ%=9}5=1}YIM%=8°4(€€€ÁÉ¥µ…Éå¥ÍÁ½Í¥Ñ¥½¸°4(€€€…±Ñ•É¹…Ñ¥Ù•¥ÍÁ½Í¥Ñ¥½¸°4(€€€•±¥¥‰±•¥ÍÁ½Í¥Ñ¥½¹Ì°4(€€€™…Ñ½É	…¹‘Ìèì€¸¸¹¥¹ÁÕÐ¹™…Ñ½ÉÌô°4(€€€‰±½­•ÉÌ°4(€€€½¹™±¥ÑÌ°4(€€€É•ÅÕ¥É•Í!Õµ…¹ÁÁÉ½Ù…°èÑÉÕ”°4(€€€…¥I…Ñ¥½¹…±•MÑ…ÑÕÌè€¹½Ñ}É•ÅÕ•ÍÑ•œ°4(€ôì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ‰Õ¥±‘•±¥Ù•Éå]½É­A…­…•É…™Ð€ô€¡¥¹ÁÕÐèì4(€Á…­…•%èÍÑÉ¥¹œì4(€…ÁÁÉ½Ù•‘½Õµ•¹ÐèMÑÕ‘¥½ÁÁÉ½Ù•‘½Õµ•¹ÑI•˜ì4(€ÕÉÉ•¹ÑÁÁÉ½Ù•‘½Õµ•¹ÐèMÑÕ‘¥½ÁÁÉ½Ù•‘½Õµ•¹ÑI•˜ì4(€Í½ÕÉ•M•Ñ¥½¹ÌèÉÉ…äñì±½…Ñ½ÈèÍÑÉ¥¹œìÑ¥Ñ±”èÍÑÉ¥¹œìÍÕµµ…ÉäèÍÑÉ¥¹œì…•ÁÑ…¹•É¥Ñ•É¥„üèÍÑÉ¥¹mtôøì4)ô¤è•±¥Ù•Éå]½É­A…­…•É…™Ð€ôøì4(€½¹ÍÐÍÑ…±”€ô¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹Ù•ÉÍ¥½¸€„ôô¥¹ÁÕÐ¹ÕÉÉ•¹ÑÁÁÉ½Ù•‘½Õµ•¹Ð¹Ù•ÉÍ¥½¸4(€€€ñð¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹½¹Ñ•¹Ñ!…Í €„ôô¥¹ÁÕÐ¹ÕÉÉ•¹ÑÁÁÉ½Ù•‘½Õµ•¹Ð¹½¹Ñ•¹Ñ!…Í 4(€€€ñð¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹‘½Õµ•¹Ñ%€„ôô¥¹ÁÕÐ¹ÕÉÉ•¹ÑÁÁÉ½Ù•‘½Õµ•¹Ð¹‘½Õµ•¹Ñ%4(€€€ñð¥¹ÁÕÐ¹ÕÉÉ•¹ÑÁÁÉ½Ù•‘½Õµ•¹Ð¹±¥™•å±”€„ôô€…ÁÁÉ½Ù•œì4(€½¹ÍÐ¥‘•µÁ½Ñ•¹å-•ä€ôÍÑ…‰±•¥¹•ÉÁÉ¥¹Ð¡l4(€€€¥¹ÁÕÐ¹Á…­…•%°4(€€€¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹‘½Õµ•¹Ñ%°4(€€€¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹Ù•ÉÍ¥½¸°4(€€€¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹½¹Ñ•¹Ñ!…Í °4(€t¹©½¥¸ œèœ¤¤ì4(4(€¥˜€¡ÍÑ…±”¤ì4(€€€É•ÑÕÉ¸ì4(€€€€€¥‘•µÁ½Ñ•¹å-•ä°4(€€€€€Í½ÕÉ”è¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð°4(€€€€€ÍÑ…ÑÕÌè€ÍÑ…±”œ°4(€€€€€¥Ñ•µÌèmt°4(€€€€€‰±½­•ÉÌèlÍÑÕ‘¥½}…ÁÁÉ½Ù•‘}Ù•ÉÍ¥½¹}¡…¹•‘}½É}µ¥ÍÍ¥¹œt°4(€€€€€É•ÅÕ¥É•Í!Õµ…¹I•Ù¥•ÜèÑÉÕ”°4(€€€€€…¹AÕ‰±¥Í è™…±Í”°4(€€€ôì4(€ô4(4(€½¹ÍÐ¥Ñ•µÌ€ô¥¹ÁÕÐ¹Í½ÕÉ•M•Ñ¥½¹Ì¹µ…À ¡Í•Ñ¥½¸°¥¹‘•à¤è•±¥Ù•Éå]½É­A…­…•%Ñ•´€ôø€¡ì4(€€€¥è€‘í¥¹ÁÕÐ¹Á…­…•%‘ôµ¥Ñ•´´‘í¥¹‘•à€¬€Åõ€°4(€€€¥Ñ•µQåÁ”è¥¹‘•à€ôôô€À€ü€Á¥Œœ€è€MÑ½Éäœ°4(€€€Ñ¥Ñ±”èÍ•Ñ¥½¸¹Ñ¥Ñ±”°4(€€€‘•ÍÉ¥ÁÑ¥½¸èÍ•Ñ¥½¸¹ÍÕµµ…Éä°4(€€€Á…É•¹Ñ%è¥¹‘•à€ôôô€À€üÕ¹‘•™¥¹•€è€‘í¥¹ÁÕÐ¹Á…­…•%‘ôµ¥Ñ•´´Å€°4(€€€…•ÁÑ…¹•É¥Ñ•É¥„èÍ•Ñ¥½¸¹…•ÁÑ…¹•É¥Ñ•É¥„ñðmt°4(€€€¹½¹Õ¹Ñ¥½¹…±I•ÅÕ¥É•µ•¹ÑÌèmt°4(€€€Í½ÕÉ•M•Ñ¥½¹1½…Ñ½ÈèÍ•Ñ¥½¸¹±½…Ñ½È°4(€€€Í½ÕÉ•½Õµ•¹Ñ%è¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹‘½Õµ•¹Ñ%°4(€€€Í½ÕÉ•½Õµ•¹ÑY•ÉÍ¥½¸è¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹Ù•ÉÍ¥½¸°4(€€€Í½ÕÉ•½Õµ•¹Ñ!…Í è¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð¹½¹Ñ•¹Ñ!…Í °4(€ô¤¤ì4(4(€É•ÑÕÉ¸ì4(€€€¥‘•µÁ½Ñ•¹å-•ä°4(€€€Í½ÕÉ”è¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘½Õµ•¹Ð°4(€€€ÍÑ…ÑÕÌè¥Ñ•µÌ¹±•¹Ñ €ü€‘É…™Ðœ€è€‰±½­•œ°4(€€€¥Ñ•µÌ°4(€€€‰±½­•ÉÌè¥Ñ•µÌ¹±•¹Ñ €ümt€èl…ÁÁÉ½Ù•‘}ÍÑÕ‘¥½}‘½Õµ•¹Ñ}¡…Í}¹½}¡…¹‘½™™}Í•Ñ¥½¹Ìt°4(€€€É•ÅÕ¥É•Í!Õµ…¹I•Ù¥•ÜèÑÉÕ”°4(€€€…¹AÕ‰±¥Í è™…±Í”°4(€ôì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ‰Õ¥±‘5½¹¥Ñ½É	…Í•±¥¹”€ô€¡¥¹ÁÕÐèì4(€¥èÍÑÉ¥¹œì4(€Ý½É­A…­…•%èÍÑÉ¥¹œì4(€Ý½É­A…­…”è•±¥Ù•Éå]½É­A…­…•É…™Ðì4(€…ÁÁÉ½Ù•‘%Ñ•µ%‘ÌèÍÑÉ¥¹mtì4)ô¤è5½¹¥Ñ½É	…Í•±¥¹”€ôøì4(€½¹ÍÐ½µÁ±•Ñ”€ô¥¹ÁÕÐ¹Ý½É­A…­…”¹ÍÑ…ÑÕÌ€ôôô€‘É…™Ðœ4(€€€€˜˜¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹±•¹Ñ €ø€À4(€€€€˜˜¥¹ÁÕÐ¹Ý½É­A…­…”¹‰±½­•ÉÌ¹±•¹Ñ €ôôô€À4(€€€€˜˜¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘%Ñ•µ%‘Ì¹±•¹Ñ €ôôô¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹±•¹Ñ 4(€€€€˜˜¹•ÜM•Ð¡¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘%Ñ•µ%‘Ì¤¹Í¥é”€ôôô¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹±•¹Ñ 4(€€€€˜˜¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘%Ñ•µ%‘Ì¹•Ù•Éä¡¥Ñ•µ%€ôø¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹Í½µ”¡¥Ñ•´€ôø¥Ñ•´¹¥€ôôô¥Ñ•µ%¤¤ì4(4(€É•ÑÕÉ¸ì4(€€€¥è¥¹ÁÕÐ¹¥°4(€€€Ý½É­A…­…•%è¥¹ÁÕÐ¹Ý½É­A…­…•%°4(€€€Í½ÕÉ•½Õµ•¹Ñ%è¥¹ÁÕÐ¹Ý½É­A…­…”¹Í½ÕÉ”¹‘½Õµ•¹Ñ%°4(€€€Í½ÕÉ•½Õµ•¹ÑY•ÉÍ¥½¸è¥¹ÁÕÐ¹Ý½É­A…­…”¹Í½ÕÉ”¹Ù•ÉÍ¥½¸°4(€€€Í½ÕÉ•½Õµ•¹Ñ!…Í è¥¹ÁÕÐ¹Ý½É­A…­…”¹Í½ÕÉ”¹½¹Ñ•¹Ñ!…Í °4(€€€ÍÑ…ÑÕÌè½µÁ±•Ñ”€ü€…ÁÁÉ½Ù…±}É•ÅÕ¥É•œ€è€‰±½­•œ°4(€€€…ÁÁÉ½Ù•‘%Ñ•µ%‘Ìèl¸¸¹¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘%Ñ•µ%‘Ít°4(€€€µ¥±•ÍÑ½¹•Ìè¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹™¥±Ñ•È¡¥Ñ•´€ôø¥Ñ•´¹¥Ñ•µQåÁ”€ôôô€5¥±•ÍÑ½¹”œ¤¹µ…À¡¥Ñ•´€ôø¥Ñ•´¹Ñ¥Ñ±”¤°4(€€€‘•Á•¹‘•¹¥•Ìè¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹™¥±Ñ•È¡¥Ñ•´€ôø¥Ñ•´¹¥Ñ•µQåÁ”€ôôô€•Á•¹‘•¹äœ¤¹µ…À¡¥Ñ•´€ôø¥Ñ•´¹Ñ¥Ñ±”¤°4(€€€‰±½­•ÉÌè½µÁ±•Ñ”€ümt€èlÝ½É­}Á…­…•}É•ÅÕ¥É•Í}¡Õµ…¹}É•Ù¥•Ý}‰•™½É•}µ½¹¥Ñ½É}‰…Í•±¥¹”t°4(€€€É¥Í­Ìè¥¹ÁÕÐ¹Ý½É­A…­…”¹¥Ñ•µÌ¹™¥±Ñ•È¡¥Ñ•´€ôø¥Ñ•´¹¥Ñ•µQåÁ”€ôôô€I¥Í¬œ¤¹µ…À¡¥Ñ•´€ôø¥Ñ•´¹Ñ¥Ñ±”¤°4(€€€É•…‘¥¹•ÍÌè½µÁ±•Ñ”€ü€É•Ù¥•Ý}É•ÅÕ¥É•œ€è€¹½Ñ}É•…‘äœ°4(€€€±¥¹•…•½µÁ±•Ñ”è½µÁ±•Ñ”°4(€€€±¥Ù•Q•±•µ•ÑÉå½¹¹•Ñ•è™…±Í”°4(€ôì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ‰Õ¥±‘ÍÍ•µ‰±•	±Õ•ÁÉ¥¹ÑÉ…™Ð€ô€¡¥¹ÁÕÐèì4(€‰±Õ•ÁÉ¥¹Ñ%èÍÑÉ¥¹œì4(€µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹%èÍÑÉ¥¹œì4(€‘¥ÍÁ½Í¥Ñ¥½¸è5½‘•É¹¥é…Ñ¥½¹¥ÍÁ½Í¥Ñ¥½¸ì4(€¹…µ”èÍÑÉ¥¹œì4)ô¤èÍÍ•µ‰±•	±Õ•ÁÉ¥¹ÑÉ…™Ð€ôøì4(€¥˜€ …MM5	1}1%%	1}%MA=M%Q%=9L¹¥¹±Õ‘•Ì¡¥¹ÁÕÐ¹‘¥ÍÁ½Í¥Ñ¥½¸¤¤ì4(€€€Ñ¡É½Ü¹•ÜÉÉ½È MM5	1}%MA=M%Q%=9}9=Q}1%%	1œ¤ì4(€ô4(4(€½¹ÍÐ½µÁ½¹•¹ÑÌèÍÍ•µ‰±•	±Õ•ÁÉ¥¹Ñ½µÁ½¹•¹Ñmt€ôMM5	1}=5A=99Q}Q1=¹µ…À ¡ÑåÁ”°¥¹‘•à¤€ôø€¡ì4(€€€¥è€‘í¥¹ÁÕÐ¹‰±Õ•ÁÉ¥¹Ñ%‘ôµ½µÁ½¹•¹Ð´‘í¥¹‘•à€¬€Åõ€°4(€€€ÑåÁ”°4(€€€¹…µ”èÑåÁ”°4(€€€‘•ÍÉ¥ÁÑ¥½¸èÑåÁ”€ôôô€•¹ÐQ½½±Ìœ4(€€€€€€ü€=ÁÑ¥½¹…°Ñ½½°‘•™¥¹¥Ñ¥½¹ÌÉ•µ…¥¸‘¥Í…‰±•Õ¹Ñ¥°Í•Á…É…Ñ•±ä½Ù•É¹•¸œ4(€€€€€€è€‘íÑåÁ•ô‘•™¥¹¥Ñ¥½¸™½ÈÑ¡”€‘í¥¹ÁÕÐ¹¹…µ•ô‰±Õ•ÁÉ¥¹Ð¹€°4(€€€•¹…‰±•èÑåÁ”€„ôô€•¹ÐQ½½±Ìœ°4(€€€½¹™¥ÕÉ…Ñ¥½¸èÑåÁ”€ôôô€•¹ÐQ½½±Ìœ€üì•¹…‰±•‘	å•™…Õ±Ðè™…±Í”ô€èíô°4(€ô¤¤ì4(4(€½¹ÍÐÉ•…‘…‰±•½Õµ•¹Ð€ôl4(€€€€Œ€‘í¥¹ÁÕÐ¹¹…µ•õ€°4(€€€€œœ°4(€€€5½‘•É¹¥é…Ñ¥½¸‘¥ÍÁ½Í¥Ñ¥½¸è€‘í¥¹ÁÕÐ¹‘¥ÍÁ½Í¥Ñ¥½¹õ€°4(€€€•¥Í¥½¸è€‘í¥¹ÁÕÐ¹µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹%‘õ€°4(€€€€œœ°4(€€€€Q¡¥Ì¥Ì„½Ù•É¹•A¡…Í”€Ä‰±Õ•ÁÉ¥¹Ð‘É…™Ð¸%Ð½¹Ñ…¥¹Ì¹¼½‘”°‘•Á±½åµ•¹Ð°¥¹™É…ÍÑÉÕÑÕÉ”°É•‘•¹Ñ¥…±Ì°Í½ÕÉ”µÍåÍÑ•´…±±Ì°½ÈÉÕ¹Ñ¥µ”…•¹ÑÌ¸œ°4(€€€€œœ°4(€€€€œŒŒ½µÁ½¹•¹Ð…Ñ…±½œœ°4(€€€€¸¸¹½µÁ½¹•¹ÑÌ¹µ…À¡½µÁ½¹•¹Ð€ôø€´€‘í½µÁ½¹•¹Ð¹ÑåÁ•ôè€‘í½µÁ½¹•¹Ð¹•¹…‰±•€ü€•¹…‰±•™½È‘•Í¥¸œ€è€‘¥Í…‰±•‰ä‘•™…Õ±Ðõ€¤°4(€t¹©½¥¸ q¸œ¤ì4(4(€É•ÑÕÉ¸ì4(€€€¥è¥¹ÁÕÐ¹‰±Õ•ÁÉ¥¹Ñ%°4(€€€Í¡•µ…Y•ÉÍ¥½¸èMM5	1}	1UAI%9Q}M!5}YIM%=8°4(€€€µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹%è¥¹ÁÕÐ¹µ½‘•É¹¥é…Ñ¥½¹•¥Í¥½¹%°4(€€€‘¥ÍÁ½Í¥Ñ¥½¸è¥¹ÁÕÐ¹‘¥ÍÁ½Í¥Ñ¥½¸°4(€€€ÍÑ…ÑÕÌè€‘É…™Ðœ°4(€€€½µÁ½¹•¹ÑÌ°4(€€€É•…‘…‰±•½Õµ•¹Ð°4(€€€Ý½É­™±½Üèl‘É…™Ðœ°€•‘¥Ðœ°€É•Ù¥•Üœ°€…ÁÁÉ½Ù…°œ°€ÁÕ‰±¥Í t°4(€€€Í…™•Ñäèì4(€€€€€½‘••¹•É…Ñ¥½¸è™…±Í”°4(€€€€€‘•Á±½åµ•¹Ðè™…±Í”°4(€€€€€¥¹™É…ÍÑÉÕÑÕÉ•¡…¹•Ìè™…±Í”°4(€€€€€É•‘•¹Ñ¥…±•ÍÌè™…±Í”°4(€€€€€Í½ÕÉ•MåÍÑ•µ…±±Ìè™…±Í”°4(€€€€€ÉÕ¹Ñ¥µ••¹ÑÌè™…±Í”°4(€€€ô°4(€€€É•ÅÕ¥É•Í!Õµ…¹ÁÁÉ½Ù…°èÑÉÕ”°4(€€€…¹AÕ‰±¥Í è™…±Í”°4(€ôì4)ôì4(4)•áÁ½ÉÐ½¹ÍÐ…ÍÍ•ÉÑ!¥¡%µÁ…ÑÁÁÉ½Ù…±M•Á…É…Ñ¥½¸€ô€¡¥¹ÁÕÐèì4(€É•…Ñ•‘	äèÍÑÉ¥¹œì4(€É•Ù¥•Ý•‘	äèÍÑÉ¥¹œì4(€…ÁÁÉ½Ù•‘	äèÍÑÉ¥¹œì4)ô¤€ôøì4(€¥˜€¡¹•ÜM•Ð¡m¥¹ÁÕÐ¹É•…Ñ•‘	ä°¥¹ÁÕÐ¹É•Ù¥•Ý•‘	ä°¥¹ÁÕÐ¹…ÁÁÉ½Ù•‘	åt¤¹Í¥é”€„ôô€Ì¤ì4(€€€Ñ¡É½Ü¹•ÜÉÉ½È AAI=Y1}MAIQ%=9}IEU%Iœ¤ì4(€ô4(€É•ÑÕÉ¸ÑÉÕ”…Ì½¹ÍÐì4)ôì4(
+  workflow: ['draft', 'edit', 'review', 'approval', 'publish'];
+  safety: {
+    codeGeneration: false;
+    deployment: false;
+    infrastructureChanges: false;
+    credentialAccess: false;
+    sourceSystemCalls: false;
+    runtimeAgents: false;
+  };
+  requiresHumanApproval: true;
+  canPublish: false;
+}
+
+const hashStep = (seed: number, value: string) => {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619) >>> 0;
+  }
+  return hash >>> 0;
+};
+
+/** A stable non-secret idempotency fingerprint. Cryptographic hashes are computed server-side. */
+export const stableFingerprint = (value: string) => {
+  const normalized = value.normalize('NFKC');
+  const first = hashStep(2166136261, normalized).toString(16).padStart(8, '0');
+  const second = hashStep(2166136261 ^ 0x9e3779b9, normalized).toString(16).padStart(8, '0');
+  return `${first}${second}`.repeat(4).slice(0, 64);
+};
+
+export const isUnicodeScalarString = (value: string) => {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const truncateUnicodeCodePoints = (value: string, maxLength: number) => {
+  if (!Number.isSafeInteger(maxLength) || maxLength < 0) {
+    throw new Error('ENTERPRISE_EVIDENCE_EXCERPT_LIMIT_INVALID');
+  }
+  let result = '';
+  let count = 0;
+  for (const codePoint of value) {
+    if (count >= maxLength) break;
+    result += codePoint;
+    count += 1;
+  }
+  return result;
+};
+
+export const sanitizeEvidenceExcerpt = (value: string, maxLength = 480) => {
+  if (!isUnicodeScalarString(value)) {
+    throw new Error('ENTERPRISE_EVIDENCE_EXCERPT_INVALID_UNICODE');
+  }
+  const normalized = value
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return truncateUnicodeCodePoints(normalized, maxLength);
+};
+
+const projectionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const projectionKeys = [
+  'schemaVersion', 'organizationId', 'workspaceId', 'authorizationVersion', 'generatedAt',
+  'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
+  'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
+  'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
+  'assessPromotion',
+] as const;
+const prohibitedProjectionKey = /(?:^|_)(?:apiKey|authorization|bearerToken|contentHash|extractedTextHash|idempotencyKey|objectKey|providerKey|rawKey|secret|secretReference|storageBucket|storagePath|versionId)$/i;
+
+const rejectSensitiveProjectionFields = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    value.forEach(rejectSensitiveProjectionFields);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+    if (prohibitedProjectionKey.test(key)) throw new Error('ENTERPRISE_PROJECTION_SENSITIVE_FIELD');
+    rejectSensitiveProjectionFields(entry);
+  });
+};
+
+/** Strict browser decoder for the server-issued, minimized read projection. */
+export const decodeEnterpriseIntelligenceProjection = (value: unknown): EnterpriseIntelligenceProjection => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).some(key => !projectionKeys.includes(key as typeof projectionKeys[number]))) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  if (
+    row.schemaVersion !== ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION
+    || typeof row.organizationId !== 'string' || !projectionUuid.test(row.organizationId)
+    || typeof row.workspaceId !== 'string' || !projectionUuid.test(row.workspaceId)
+    || !Number.isSafeInteger(row.authorizationVersion) || Number(row.authorizationVersion) < 1
+    || typeof row.generatedAt !== 'string' || !Number.isFinite(Date.parse(row.generatedAt))
+    || !Array.isArray(row.capabilities) || row.capabilities.some(capability => typeof capability !== 'string')
+    || !['ready', 'empty', 'blocked', 'stale', 'unavailable'].includes(String(row.availability))
+    || !['providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts', 'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines', 'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity'].every(key => Array.isArray(row[key]))
+    || !row.assessPromotion || typeof row.assessPromotion !== 'object' || Array.isArray(row.assessPromotion)
+  ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
+  rejectSensitiveProjectionFields(row);
+  return structuredClone(row) as unknown as EnterpriseIntelligenceProjection;
+};
+
+export const classifyEvidenceFile = (name: string, browserMimeType: string, size: number): EvidenceFileSupport => {
+  if (!Number.isSafeInteger(size) || size <= 0 || size > 12_000_000) {
+    return { supported: false, state: 'unsupported', message: 'Sources must contain data and be no larger than 12 MB.' };
+  }
+  const extension = name.trim().toLocaleLowerCase().match(/\.[a-z0-9]+$/)?.[0] || '';
+  const byExtension: Record<string, SupportedEvidenceMimeType> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.markdown': 'text/markdown',
+    '.csv': 'text/csv',
+    '.vtt': 'text/vtt',
+    '.srt': 'application/x-subrip',
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  const mimeType = byExtension[extension]
+    || (isSupportedEvidenceMimeType(browserMimeType) ? browserMimeType : undefined);
+  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, CSV, VTT/SRT, a text PDF, or DOCX.' };
+  if (mimeType === 'application/pdf') {
+    return { supported: true, mimeType, state: 'text_pdf_requires_text_layer', message: 'Text PDFs are supported. Scanned PDFs need OCR, which is not available in this vertical.' };
+  }
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return { supported: true, mimeType, state: 'docx_text', message: 'DOCX text is extracted server-side; embedded images and OCR are not processed.' };
+  }
+  return { supported: true, mimeType, state: 'native_text', message: 'This text-oriented format is supported for bounded server extraction.' };
+};
+
+const requireProjectionId = (value: string) => {
+  if (!projectionUuid.test(value)) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+  return value;
+};
+
+/** Selector-only mutation payloads never carry authoritative hashes or immutable versions. */
+export const buildEnterpriseSelectorPayloads = {
+  evidenceExtraction(sourceId: string) {
+    return { sourceId: requireProjectionId(sourceId) };
+  },
+  modernization(applicationId: string) {
+    return { applicationId: requireProjectionId(applicationId) };
+  },
+  studioHandoff(studioDocumentId: string) {
+    return { studioDocumentId: requireProjectionId(studioDocumentId) };
+  },
+  monitorBaseline(workPackageId: string) {
+    return { workPackageId: requireProjectionId(workPackageId) };
+  },
+  assessPromotion(sourceId: string, assessDraftId: string, candidateIds: string[]) {
+    if (!Array.isArray(candidateIds) || candidateIds.length < 1 || candidateIds.length > 100) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+    const normalizedCandidates = candidateIds.map(requireProjectionId);
+    if (new Set(normalizedCandidates).size !== normalizedCandidates.length) throw new Error('ENTERPRISE_SELECTOR_INVALID');
+    return {
+      sourceId: requireProjectionId(sourceId),
+      assessDraftId: requireProjectionId(assessDraftId),
+      candidateIds: normalizedCandidates,
+    };
+  },
+};
+
+export const isSupportedEvidenceMimeType = (value: string): value is SupportedEvidenceMimeType => (
+  SUPPORTED_EVIDENCE_MIME_TYPES.includes(value as SupportedEvidenceMimeType)
+);
+
+export const buildEvidenceCandidate = (input: Omit<EnterpriseEvidenceCandidate, 'excerptHash' | 'editCount'>): EnterpriseEvidenceCandidate => {
+  const safeExcerpt = input.safeExcerpt ? sanitizeEvidenceExcerpt(input.safeExcerpt) : undefined;
+  return {
+    ...input,
+    safeExcerpt,
+    excerptHash: stableFingerprint(`${input.sourceVersionId}:${input.sourceLocator}:${safeExcerpt || input.value}`),
+    editCount: 0,
+  };
+};
+
+export const evaluateModernizationDecision = (input: {
+  assessmentId: string;
+  assessmentVersion: string;
+  factors: ModernizationFactors;
+}): ModernizationDecision => {
+  const blockers: string[] = [];
+  const conflicts: string[] = [];
+  const unknownHighImpactFactors: Array<keyof ModernizationFactors> = [
+    'criticality',
+    'securityCompliance',
+    'dataPortability',
+    'dependencyRisk',
+  ];
+
+  unknownHighImpactFactors.forEach((factor) => {
+    if (input.factors[factor] === 'unknown') blockers.push(`${factor}_evidence_required`);
+  });
+
+  if (input.factors.securityCompliance === 'high' && input.factors.operatingRisk === 'high') {
+    conflicts.push('security_and_operating_risk_require_governance_review');
+  }
+  if (input.factors.changeEffort === 'high' && input.factors.timeToValue === 'high') {
+    conflicts.push('change_effort_and_time_to_value_conflict');
+  }
+
+  if (blockers.length > 0) {
+    return {
+      assessmentId: input.assessmentId,
+      assessmentVersion: input.assessmentVersion,
+      modelVersion: MODERNIZATION_MODEL_VERSION,
+      primaryDisposition: 'insufficient_evidence',
+      alternativeDisposition: 'blocked',
+      eligibleDispositions: ['insufficient_evidence', 'blocked'],
+      factorBands: { ...input.factors },
+      blockers,
+      conflicts,
+      requiresHumanApproval: true,
+      aiRationaleStatus: 'not_requested',
+    };
+  }
+
+  let primaryDisposition: ModernizationDisposition = 'optimize';
+  let alternativeDisposition: ModernizationDisposition = 'retain';
+
+  if (input.factors.criticality === 'low' && input.factors.operatingRisk === 'high') {
+    primaryDisposition = 'retire';
+    alternativeDisposition = 'retain';
+  } else if (input.factors.vendorLockIn === 'high' && input.factors.cloudFit === 'low') {
+    primaryDisposition = 'replatform';
+    alternativeDisposition = 'refactor';
+  } else if (input.factors.techHealth === 'low' && input.factors.maintainability === 'low') {
+    primaryDisposition = input.factors.changeEffort === 'high' ? 'replace' : 'rebuild';
+    alternativeDisposition = 'refactor';
+  } else if (input.factors.apiIntegration === 'high' && input.factors.architecture !== 'low') {
+    primaryDisposition = 'api_enable_wrap';
+    alternativeDisposition = 'integrate';
+  } else if (
+    input.factors.fit === 'high'
+    && input.factors.architecture === 'high'
+    && input.factors.maintainability !== 'low'
+    && input.factors.operatingRisk !== 'high'
+  ) {
+    primaryDisposition = input.factors.agentFit === 'high' ? 'assemble' : 'automate_around';
+    alternativeDisposition = 'api_enable_wrap';
+  } else if (input.factors.apiIntegration === 'medium' && input.factors.changeEffort === 'low') {
+    primaryDisposition = 'integrate';
+    alternativeDisposition = 'optimize';
+  } else if (input.factors.techHealth === 'high' && input.factors.maintainability === 'high') {
+    primaryDisposition = 'retain';
+    alternativeDisposition = 'optimize';
+  }
+
+  const eligibleDispositions = [...new Set<ModernizationDisposition>([
+    primaryDisposition,
+    alternativeDisposition,
+    'optimize',
+    'retain',
+  ])];
+
+  return {
+    assessmentId: input.assessmentId,
+    assessmentVersion: input.assessmentVersion,
+    modelVersion: MODERNIZATION_MODEL_VERSION,
+    primaryDisposition,
+    alternativeDisposition,
+    eligibleDispositions,
+    factorBands: { ...input.factors },
+    blockers,
+    conflicts,
+    requiresHumanApproval: true,
+    aiRationaleStatus: 'not_requested',
+  };
+};
+
+export const buildDeliveryWorkPackageDraft = (input: {
+  packageId: string;
+  approvedDocument: StudioApprovedDocumentRef;
+  currentApprovedDocument: StudioApprovedDocumentRef;
+  sourceSections: Array<{ locator: string; title: string; summary: string; acceptanceCriteria?: string[] }>;
+}): DeliveryWorkPackageDraft => {
+  const stale = input.approvedDocument.version !== input.currentApprovedDocument.version
+    || input.approvedDocument.contentHash !== input.currentApprovedDocument.contentHash
+    || input.approvedDocument.documentId !== input.currentApprovedDocument.documentId
+    || input.currentApprovedDocument.lifecycle !== 'approved';
+  const idempotencyKey = stableFingerprint([
+    input.packageId,
+    input.approvedDocument.documentId,
+    input.approvedDocument.version,
+    input.approvedDocument.contentHash,
+  ].join(':'));
+
+  if (stale) {
+    return {
+      idempotencyKey,
+      source: input.approvedDocument,
+      status: 'stale',
+      items: [],
+      blockers: ['studio_approved_version_changed_or_missing'],
+      requiresHumanReview: true,
+      canPublish: false,
+    };
+  }
+
+  const items = input.sourceSections.map((section, index): DeliveryWorkPackageItem => ({
+    id: `${input.packageId}-item-${index + 1}`,
+    itemType: index === 0 ? 'Epic' : 'Story',
+    title: section.title,
+    description: section.summary,
+    parentId: index === 0 ? undefined : `${input.packageId}-item-1`,
+    acceptanceCriteria: section.acceptanceCriteria || [],
+    nonFunctionalRequirements: [],
+    sourceSectionLocator: section.locator,
+    sourceDocumentId: input.approvedDocument.documentId,
+    sourceDocumentVersion: input.approvedDocument.version,
+    sourceDocumentHash: input.approvedDocument.contentHash,
+  }));
+
+  return {
+    idempotencyKey,
+    source: input.approvedDocument,
+    status: items.length ? 'draft' : 'blocked',
+    items,
+    blockers: items.length ? [] : ['approved_studio_document_has_no_handoff_sections'],
+    requiresHumanReview: true,
+    canPublish: false,
+  };
+};
+
+export const buildMonitorBaseline = (input: {
+  id: string;
+  workPackageId: string;
+  workPackage: DeliveryWorkPackageDraft;
+  approvedItemIds: string[];
+}): MonitorBaseline => {
+  const complete = input.workPackage.status === 'draft'
+    && input.workPackage.items.length > 0
+    && input.workPackage.blockers.length === 0
+    && input.approvedItemIds.length === input.workPackage.items.length
+    && new Set(input.approvedItemIds).size === input.workPackage.items.length
+    && input.approvedItemIds.every(itemId => input.workPackage.items.some(item => item.id === itemId));
+
+  return {
+    id: input.id,
+    workPackageId: input.workPackageId,
+    sourceDocumentId: input.workPackage.source.documentId,
+    sourceDocumentVersion: input.workPackage.source.version,
+    sourceDocumentHash: input.workPackage.source.contentHash,
+    status: complete ? 'approval_required' : 'blocked',
+    approvedItemIds: [...input.approvedItemIds],
+    milestones: input.workPackage.items.filter(item => item.itemType === 'Milestone').map(item => item.title),
+    dependencies: input.workPackage.items.filter(item => item.itemType === 'Dependency').map(item => item.title),
+    blockers: complete ? [] : ['work_package_requires_human_review_before_monitor_baseline'],
+    risks: input.workPackage.items.filter(item => item.itemType === 'Risk').map(item => item.title),
+    readiness: complete ? 'review_required' : 'not_ready',
+    lineageComplete: complete,
+    liveTelemetryConnected: false,
+  };
+};
+
+export const buildAssembleBlueprintDraft = (input: {
+  blueprintId: string;
+  modernizationDecisionId: string;
+  disposition: ModernizationDisposition;
+  name: string;
+}): AssembleBlueprintDraft => {
+  if (!ASSEMBLE_ELIGIBLE_DISPOSITIONS.includes(input.disposition)) {
+    throw new Error('ASSEMBLE_DISPOSITION_NOT_ELIGIBLE');
+  }
+
+  const components: AssembleBlueprintComponent[] = ASSEMBLE_COMPONENT_CATALOG.map((type, index) => ({
+    id: `${input.blueprintId}-component-${index + 1}`,
+    type,
+    name: type,
+    description: type === 'Agent Tools'
+      ? 'Optional tool definitions remain disabled until separately governed.'
+      : `${type} definition for the ${input.name} blueprint.`,
+    enabled: type !== 'Agent Tools',
+    configuration: type === 'Agent Tools' ? { enabledByDefault: false } : {},
+  }));
+
+  const readableDocument = [
+    `# ${input.name}`,
+    '',
+    `Modernization disposition: ${input.disposition}`,
+    `Decision: ${input.modernizationDecisionId}`,
+    '',
+    'This is a governed Phase 1 blueprint draft. It contains no code, deployment, infrastructure, credentials, source-system calls, or runtime agents.',
+    '',
+    '## Component catalog',
+    ...components.map(component => `- ${component.type}: ${component.enabled ? 'enabled for design' : 'disabled by default'}`),
+  ].join('\n');
+
+  return {
+    id: input.blueprintId,
+    schemaVersion: ASSEMBLE_BLUEPRINT_SCHEMA_VERSION,
+    modernizationDecisionId: input.modernizationDecisionId,
+    disposition: input.disposition,
+    status: 'draft',
+    components,
+    readableDocument,
+    workflow: ['draft', 'edit', 'review', 'approval', 'publish'],
+    safety: {
+      codeGeneration: false,
+      deployment: false,
+      infrastructureChanges: false,
+      credentialAccess: false,
+      sourceSystemCalls: false,
+      runtimeAgents: false,
+    },
+    requiresHumanApproval: true,
+    canPublish: false,
+  };
+};
+
+export const assertHighImpactApprovalSeparation = (input: {
+  createdBy: string;
+  reviewedBy: string;
+  approvedBy: string;
+}) => {
+  if (new Set([input.createdBy, input.reviewedBy, input.approvedBy]).size !== 3) {
+    throw new Error('APPROVAL_SEPARATION_REQUIRED');
+  }
+  return true as const;
+};
