@@ -317,7 +317,8 @@ BEGIN
   END IF;
 
   committed := public.enterprise_commit_modernization_assessment(p_assessment, p_decision);
-  canonical_decision := (p_result->'decision' - 'alternativeDisposition'::text) || jsonb_build_object(
+  canonical_decision := ((p_result -> ('decision'::text)) - ('alternativeDisposition'::text))
+    || jsonb_build_object(
     'assessmentId', p_assessment->>'source_assessment_id',
     'assessmentVersion', p_assessment->>'source_assessment_version',
     'modelVersion', 'modernization-disposition-1',
