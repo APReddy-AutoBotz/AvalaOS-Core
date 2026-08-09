@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Roadmap
 
+## Active post-RC milestone — Draft PR #226
+
+PR #225 is merged and its V1 RC proof boundary is accepted at `c0a6196b18a9725eb162e56e86435aa4d0e402d1`. The active next milestone is the separately scoped disposable/local pilot acceptance exercise: canonical synthetic Assess → Govern → Studio → Delivery → Monitor execution, tenant/adversarial and recovery drills, private-artifact authority, operator diagnostics, disposable PostgreSQL, and Desktop Chrome/Pixel 7 evidence. GitHub Actions binds the manifest to the exact candidate head and fails closed. This is not deployment or hosted/live/production proof; any following milestone requires explicit approval.
+
 ## Current Position
 
 Historical M0–M5.7 and post-M5.7 milestone records remain accepted for the limited proof stated in their evidence. Source hardening through PR #204 is present on `main`. Those records do not establish a server-authoritative, tenant-safe pilot or production platform.

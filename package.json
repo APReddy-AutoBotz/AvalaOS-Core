@@ -165,7 +165,12 @@
     "verify:v1-rc-evidence:authoritative": "node scripts/verify-v1-rc-evidence.mjs --authoritative",
     "test:v1-rc-evidence": "node scripts/resolve-v1-rc-workflow-evidence.test.cjs && node scripts/verify-v1-rc-evidence.test.mjs",
     "test:workflow-yaml": "node scripts/checkWorkflowYaml.test.mjs",
-    "test:v1-rc": "npm run test:v1-rc-model && npm run test:v1-rc-evidence && npm run verify:v1-rc-evidence && npm run typecheck"
+    "test:v1-rc": "npm run test:v1-rc-model && npm run test:v1-rc-evidence && npm run verify:v1-rc-evidence && npm run typecheck",
+    "test:pilot-acceptance-model": "node scripts/pilotAcceptanceJourney.test.mjs",
+    "verify:pilot-acceptance": "node scripts/verify-pilot-acceptance.mjs",
+    "verify:pilot-acceptance:authoritative": "node scripts/verify-pilot-acceptance.mjs --authoritative",
+    "test:pilot-acceptance": "npm run test:pilot-acceptance-model && node scripts/verify-pilot-acceptance.test.mjs && npm run test:enterprise-intelligence-cleanup-boundary && npm run test:workflow-yaml",
+    "test:enterprise-intelligence-cleanup-boundary": "node scripts/cleanupEnterpriseIntelligenceCiArtifacts.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

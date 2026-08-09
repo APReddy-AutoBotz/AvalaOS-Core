@@ -1,5 +1,13 @@
 # AvalaOS Core Implementation Status
 
+## Draft PR #226 — disposable pilot acceptance
+
+- **Implemented candidate:** deterministic synthetic canonical-journey model, tenant/non-disclosure matrix, recovery/read-only/rollback drills, versioned acceptance specification, fail-closed manifest generator, and composed `Pilot Acceptance` workflow.
+- **Executed evidence:** local source checks are supporting evidence and are reported only after execution.
+- **Planned verification:** exact-head GitHub Actions PostgreSQL 16, retained Edge/domain suites, Desktop Chrome/Pixel 7, accessibility/performance, and authoritative manifest.
+- **Not proven hosted/live:** Supabase, Vault, Storage, providers, deployment, production, security certification, and compliance certification.
+- **Rollback:** disable the affected path or enter read-only/maintenance; preserve immutable history and apply only an additive forward correction. No production rollback or cutover is authorized.
+
 ## Enterprise Intelligence Draft PR (in progress)
 
 The isolated implementation worktree is based on exact required baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5` and uses branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`. The original dirty checkout and its two existing deck files are outside this worktree and were not modified.

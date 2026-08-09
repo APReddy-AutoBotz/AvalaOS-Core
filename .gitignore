@@ -36,3 +36,4 @@ test-results
 *.sln
 *.sw?
 artifacts/v1-rc/
+artifacts/pilot-acceptance/
