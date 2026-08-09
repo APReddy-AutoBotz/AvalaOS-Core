@@ -61,11 +61,28 @@ const requiredSourceAuthorityCommands = [
   'npm run test:pr1d',
   'npm run test:pr1f',
   'npm run test:pr1g',
+  'npm run test:pr1g-coverage',
   'npm run test:studio-artifacts',
+  'npm run test:studio-artifacts-coverage',
+  'npm run test:studio-private-artifacts-coverage',
+  'npm run test:enterprise-intelligence-provider',
 ];
 for (const command of requiredSourceAuthorityCommands) {
   assert.match(sourceAuthorityStep?.run || '', new RegExp(`^${command}$`, 'mu'));
 }
+const trustAuthorityStep = pilotWorkflow.jobs['source-and-journey'].steps.find(
+  step => step.name === 'Trust command, query, HTTP, and boundary authority',
+);
+for (const requiredTrustAuthority of [
+  'trustAssuranceCommand.test.ts',
+  'trustAssuranceQuery.test.ts',
+  'trustAssuranceHttp.test.ts',
+  'checkTrustAssuranceBoundaries.mjs',
+]) {
+  assert.match(trustAuthorityStep?.run || '', new RegExp(requiredTrustAuthority, 'u'));
+}
+assert.equal(pilotWorkflow.permissions?.actions, 'read');
+assert.equal(pilotWorkflow.permissions?.['id-token'], 'write');
 const requiredMigrationAuthorityCommands = [
   'npm run test:migrations:pr1d',
   'npm run test:migrations:pr1f',
@@ -165,5 +182,6 @@ assert.equal(
   'npm run verify:pilot-acceptance:authoritative',
   'the subsequent step must enforce the authoritative fail-closed verifier',
 );
+assert.equal(manifestVerificationStep.env?.GITHUB_TOKEN, '${{ github.token }}');
 
 console.log('Workflow YAML regression checks passed.');

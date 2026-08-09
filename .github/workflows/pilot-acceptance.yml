@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
+  id-token: write
 
 env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -30,10 +32,20 @@ jobs:
           npm run test:pr1e
           npm run test:pr1f
           npm run test:pr1g
+          npm run test:pr1g-coverage
           npm run test:studio-artifacts
+          npm run test:studio-artifacts-coverage
           npm run test:studio-private-artifacts
+          npm run test:studio-private-artifacts-coverage
           npm run test:enterprise-intelligence
+          npm run test:enterprise-intelligence-provider
       - run: node scripts/runTrustAssuranceTest.mjs
+      - name: Trust command, query, HTTP, and boundary authority
+        run: |
+          node scripts/runEdgeTypeScriptTest.mjs types.ts services/trustCenterModel.ts services/trustAssurance/contracts.ts services/trustAssurance/domain.ts supabase/functions/_shared/tenantAuthority.ts supabase/functions/_shared/trustAssuranceCommand.ts supabase/functions/_shared/trustAssuranceCommand.test.ts
+          node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/trustAssuranceQuery.ts supabase/functions/_shared/trustAssuranceQuery.test.ts
+          node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/http.ts supabase/functions/_shared/trustAssuranceHttp.ts supabase/functions/_shared/trustAssuranceHttp.test.ts
+          node scripts/checkTrustAssuranceBoundaries.mjs
       - run: npm run test:ai-boundary-static && npm run test:secret-hygiene && npm run test:scoring
       - run: npm run typecheck && npm run typecheck:edge && npm run build && git diff --check
 
@@ -135,6 +147,7 @@ jobs:
           NODE
       - name: Verify exact-head fail-closed pilot manifest
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
         run: npm run verify:pilot-acceptance:authoritative
       - uses: actions/upload-artifact@v4
