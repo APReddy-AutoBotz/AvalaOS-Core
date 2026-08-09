@@ -162,6 +162,7 @@
     "ci:enterprise-intelligence:source": "npm run typecheck && npm run typecheck:edge && npm run test:enterprise-intelligence && npm run test:provider-resolver && npm run test:provider-resolver-integration && npm run test:ai-boundary-static && npm run test:secret-hygiene && npm run test:scoring && npm run build && npm audit --audit-level=moderate && git diff --check",
     "test:v1-rc-model": "node scripts/runTypeScriptTest.mjs types.ts services/releaseCandidateReadinessModel.ts services/releaseCandidateReadinessModel.test.ts",
     "verify:v1-rc-evidence": "node scripts/verify-v1-rc-evidence.mjs",
+    "verify:v1-rc-evidence:authoritative": "node scripts/verify-v1-rc-evidence.mjs --authoritative",
     "test:v1-rc-evidence": "node scripts/resolve-v1-rc-workflow-evidence.test.cjs && node scripts/verify-v1-rc-evidence.test.mjs",
     "test:workflow-yaml": "node scripts/checkWorkflowYaml.test.mjs",
     "test:v1-rc": "npm run test:v1-rc-model && npm run test:v1-rc-evidence && npm run verify:v1-rc-evidence && npm run typecheck"

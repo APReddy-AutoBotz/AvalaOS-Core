@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const planPath = 'release/v1-rc-evidence-plan.json';
+const authoritative = process.argv.includes('--authoritative');
 const planBytes = readFileSync(planPath);
 const plan = JSON.parse(planBytes);
 const errors = [];
@@ -96,3 +97,7 @@ const manifest = {
 mkdirSync('artifacts/v1-rc', { recursive: true });
 writeFileSync('artifacts/v1-rc/evidence-manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`V1 RC evidence manifest generated for ${head}: ${manifest.aggregateProofState}`);
+if (authoritative && !allProven) {
+  console.error('Authoritative V1 RC evidence gate requires every composed workflow to prove exact-candidate success.');
+  process.exitCode = 1;
+}
