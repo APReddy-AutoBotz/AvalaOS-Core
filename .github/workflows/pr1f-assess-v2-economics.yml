@@ -2,6 +2,7 @@ name: PR 1F Assess V2 Economics
 on:
   pull_request:
     paths:
+      - '.github/workflows/pr1f-assess-v2-economics.yml'
       - 'services/assessV2/economics/**'
       - 'services/assessV2EconomicsClient.ts'
       - 'components/assess-v2/AssessV2EconomicsWorkspace*'
@@ -20,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,6 +54,8 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/avala_pr1f
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -61,6 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

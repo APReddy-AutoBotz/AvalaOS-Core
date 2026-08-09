@@ -11,6 +11,7 @@ console.log('Running Admin Workbench model tests...');
 
 assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
   'overview',
+  'release_candidate',
   'organization',
   'modules',
   'trust_center',
@@ -29,6 +30,10 @@ assert.match(getDefaultAdminSection().description, /RLS, hosted\/deployment\/ope
 const trustCenterSection = getAdminSectionByKey('trust_center');
 assert.ok(trustCenterSection);
 assert.equal(trustCenterSection.label, 'Trust Center');
+
+const releaseCandidateSection = getAdminSectionByKey('release_candidate');
+assert.ok(releaseCandidateSection);
+assert.match(releaseCandidateSection.proofSafeDisclosure || '', /not hosted, live, production, security, or compliance proof/i);
 
 const buyerAcceptancePackSection = getAdminSectionByKey('buyer_acceptance_pack');
 assert.ok(buyerAcceptancePackSection);

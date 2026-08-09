@@ -163,3 +163,6 @@ PR 1D adds separate V2 case-authoring, decision-intelligence, command-authority,
 ## PR 1F active candidate
 
 PR 1F adds versioned Assess V2 economics, deterministic scenario formulas, independent economic review, append-only realized outcomes, transparent calibration reporting with **Insufficient Data** status, and tenant/workspace portfolio dispositions. It preserves V1 scoring, PR 1D decision immutability, PR 1E review/Govern/Studio handoff authority, and the sequence PR 1F -> PR 1G Application Portfolio & AI-Assisted Modernization Assessment -> broader Studio/private-artifact work.
+# V1 RC composition boundary
+
+Draft PR #225 composes the existing server-authoritative module contracts through the canonical AP Invoice Exception lineage. The Admin RC surface and evidence manifest are read-only projections: neither may mint canonical IDs, scores, approvals, hashes, provider authority, or release truth. Enterprise Intelligence/BYOK and Trust Assurance participate only as governed control/evidence surfaces. Exact release identity comes from the build commit and workflow artifact; browser state is never authoritative. Rollback remains global maintenance/read-only or server-side feature disablement with immutable history preserved. Assemble runtime remains out of scope.
