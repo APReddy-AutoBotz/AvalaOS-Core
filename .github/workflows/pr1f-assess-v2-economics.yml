@@ -2,6 +2,7 @@ name: PR 1F Assess V2 Economics
 on:
   pull_request:
     paths:
+      - '.github/workflows/pr1f-assess-v2-economics.yml'
       - 'services/assessV2/economics/**'
       - 'services/assessV2EconomicsClient.ts'
       - 'components/assess-v2/AssessV2EconomicsWorkspace*'
