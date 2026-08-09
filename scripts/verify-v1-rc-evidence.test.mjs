@@ -42,6 +42,15 @@ manifest = JSON.parse(readFileSync('artifacts/v1-rc/evidence-manifest.json', 'ut
 assert.equal(manifest.aggregateProofState, 'proven_exact_sha_ci');
 assert.ok(manifest.composedChecks.every(check => check.headSha === head && check.runId && check.workflowId && check.result === 'success'));
 
+const failedRuns = exactRuns.map(run => ({ ...run }));
+failedRuns[2].conclusion = 'failure';
+result = run({ V1_RC_WORKFLOW_EVIDENCE_JSON: JSON.stringify(failedRuns), V1_RC_EXPECTED_HEAD: head });
+assert.equal(result.status, 0, result.stderr);
+manifest = JSON.parse(readFileSync('artifacts/v1-rc/evidence-manifest.json', 'utf8'));
+assert.equal(manifest.aggregateProofState, 'incomplete_exact_sha_evidence');
+assert.equal(manifest.composedChecks[2].state, 'not_proven');
+assert.equal(manifest.composedChecks[2].result, 'failure');
+
 exactRuns[0].headSha = 'e'.repeat(40);
 result = run({ V1_RC_WORKFLOW_EVIDENCE_JSON: JSON.stringify(exactRuns) });
 assert.notEqual(result.status, 0);
