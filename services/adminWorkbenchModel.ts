@@ -1,6 +1,7 @@
 export type AdminSectionKey =
   | 'overview'
   | 'release_candidate'
+  | 'pilot_operations'
   | 'organization'
   | 'modules'
   | 'trust_center'
@@ -34,6 +35,13 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     shortLabel: 'RC proof',
     description: 'Inspect exact build identity, canonical journey lineage, bounded proof states, limitations, and safe rollback posture.',
     proofSafeDisclosure: 'Release-candidate evidence is synthetic/local/CI unless explicitly stated; it is not hosted, live, production, security, or compliance proof.',
+  },
+  {
+    key: 'pilot_operations',
+    label: 'Pilot Operations',
+    shortLabel: 'Pilot Ops',
+    description: 'Inspect the server-projected non-live release, environment, promotion, recovery, and operational-control state.',
+    proofSafeDisclosure: 'Hosted/live activation is not authorized or proven. Pilot Operations cannot deploy or inspect hosted infrastructure.',
   },
   {
     key: 'organization',

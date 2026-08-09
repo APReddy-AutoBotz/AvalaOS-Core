@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict'; import fs from 'node:fs'; import {spawnSync,execFileSync} from 'node:child_process'; import contract from '../config/v1-pilot-operations-contract.json' with {type:'json'};
+const head=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(), runId='40000000001';
+const evidence=()=>Object.fromEntries(contract.requiredGates.map(id=>[id,{result:'passed',head,runId,job:`job-${id}`,command:`test:${id}`}]))
+const run=(values=evidence(),extra={})=>spawnSync(process.execPath,['scripts/verify-pilot-operations.mjs','--authoritative'],{encoding:'utf8',env:{...process.env,GITHUB_ACTIONS:'true',GITHUB_WORKFLOW:'Pilot Operations',GITHUB_REPOSITORY:'APReddy-AutoBotz/AvalaOS-Core',GITHUB_RUN_ID:runId,PILOT_OPERATIONS_HEAD:head,PILOT_OPERATIONS_GATE_RESULTS:JSON.stringify(values),...extra}});
+assert.equal(run().status,0); let manifest=JSON.parse(fs.readFileSync('artifacts/pilot-operations/manifest.json')); assert.equal(manifest.result,'passed'); assert.equal(manifest.liveActivation.state,'LIVE_ACTIVATION_NOT_AUTHORIZED');
+const absent=evidence();delete absent[contract.requiredGates[0]];assert.equal(run(absent).status,1);assert.equal(run(evidence(),{PILOT_OPERATIONS_HEAD:'a'.repeat(40)}).status,1);const stale=evidence();stale[contract.requiredGates[0]].runId='old';assert.equal(run(stale).status,1);
+console.log('Pilot Operations verifier: exact-head, missing/stale evidence, and live stop gate passed.');

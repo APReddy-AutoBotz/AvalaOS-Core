@@ -170,7 +170,12 @@
     "verify:pilot-acceptance": "node scripts/verify-pilot-acceptance.mjs",
     "verify:pilot-acceptance:authoritative": "node scripts/verify-pilot-acceptance.mjs --authoritative",
     "test:pilot-acceptance": "npm run test:pilot-acceptance-model && node scripts/verify-pilot-acceptance.test.mjs && npm run test:enterprise-intelligence-cleanup-boundary && npm run test:workflow-yaml",
-    "test:enterprise-intelligence-cleanup-boundary": "node scripts/cleanupEnterpriseIntelligenceCiArtifacts.test.mjs"
+    "test:enterprise-intelligence-cleanup-boundary": "node scripts/cleanupEnterpriseIntelligenceCiArtifacts.test.mjs",
+    "lint:pilot-operations": "node scripts/checkPilotOperationsCi.mjs",
+    "test:pilot-operations": "npm run lint:pilot-operations && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/tenantAuthority.ts supabase/functions/_shared/pilotOperationsContracts.ts supabase/functions/_shared/pilotOperationsCommand.ts supabase/functions/_shared/pilotOperationsCommand.test.ts && node scripts/runPr1fTypeScriptTest.mjs services/pilotOperations/operationsModel.ts services/pilotOperations/operationsModel.test.ts && npx tsx components/admin/PilotOperationsPanel.test.tsx && node scripts/verify-pilot-operations.test.mjs",
+    "test:migrations:pilot-operations": "node scripts/testPilotOperationsMigration.mjs",
+    "test:recovery:pilot-operations": "node scripts/pilotOperationsRecovery.test.mjs",
+    "test:browser:pilot-operations": "playwright test --config=playwright.pilot-operations.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

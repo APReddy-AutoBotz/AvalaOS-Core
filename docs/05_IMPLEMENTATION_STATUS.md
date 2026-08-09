@@ -1,5 +1,9 @@
 # AvalaOS Core Implementation Status
 
+## Workstream 6 — implementation candidate
+
+Draft PR #227 is the active non-production Pilot Operations candidate on accepted PR #226 baseline `5bfcdf9a93391e1488b626b37ff3e2112e2f3f97`. Source and exact-head disposable CI evidence is acceptance-pending. Hosted/live deployment, real providers/secrets, customer data, production, security certification, and compliance certification remain not run or unproven. Live activation is blocked by `LIVE_ACTIVATION_NOT_AUTHORIZED` pending separate AP approval.
+
 ## Draft PR #226 — disposable pilot acceptance
 
 - **Implemented candidate:** deterministic synthetic canonical-journey model, tenant/non-disclosure matrix, recovery/read-only/rollback drills, versioned acceptance specification, fail-closed manifest generator, and composed `Pilot Acceptance` workflow.

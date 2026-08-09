@@ -29,4 +29,11 @@
     "failed"
   ],
   "stopGate": "Any real hosted deployment, hosted project inspection or mutation, real secret configuration, live provider call, customer-data use, production cutover, or security/compliance readiness claim requires separate explicit AP approval."
+  ,"requiredGates": [
+    "retained-authority", "operations-source", "postgres-fresh-upgrade", "tenant-adversarial",
+    "backup-restore-recovery", "maintenance-rollback", "browser-desktop", "browser-pixel7",
+    "accessibility-performance", "security-hygiene"
+  ],
+  "liveActivationState": "LIVE_ACTIVATION_NOT_AUTHORIZED",
+  "manifestSchemaVersion": "v1-pilot-operations-manifest-1"
 }
