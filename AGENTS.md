@@ -70,30 +70,42 @@ The root controller retains final authority for scope, plan, integration, accept
 - If any child creates or attempts to create a descendant, the controller must interrupt it immediately and mark the orchestration run failed.
 - `max_threads = 4` is the effective tested concurrency control and must not be exceeded.
 - `max_depth = 1` remains configured so the intended technical control becomes effective when the upstream defect is fixed, but it must not be the only descendant-containment control until [openai/codex#32027](https://github.com/openai/codex/issues/32027) is fixed and retested.
-- Per-agent `sandbox_mode` values are defaults; a live parent permission selection is reapplied to spawned children and must govern each controlled wave.
-- Never run this controlled workflow with `--yolo` or `danger-full-access`.
+- Per-agent `sandbox_mode` values are defaults; when the managed environment exposes a selectable live parent permission profile, that selected profile governs spawned children.
+- Never explicitly request, configure, or escalate to `--yolo` or `danger-full-access` for this controlled workflow.
+
+### Managed Codex Cloud permission compatibility
+
+A managed Codex Cloud session may be provisioned with a fixed filesystem permission profile that the task cannot change. A fixed broad profile is an environment property, not an instruction to use broad authority, and **must not by itself block an otherwise authorized repository task**.
+
+When the live parent profile cannot be changed:
+
+- Wave 1 remains **behaviorally read-only**: reviewers and the root controller may inspect repository state and run non-mutating checks, but they must not edit files, commit, push, create branches/PRs, or invoke repository/hosted mutation tools during Wave 1.
+- All Wave 1 reviewers must finish and close, and the root controller must synthesize their findings before any write begins.
+- Wave 2 may then use the already-provisioned fixed filesystem profile only for the explicitly AP-authorized repository work package. Do not treat the broad profile as authorization for additional scope.
+- Hosted/live infrastructure inspection or mutation, real secrets, deployment, production actions, external operational side effects, and other task stop-gates remain prohibited unless separately and explicitly approved.
+- Do not block merely because the managed profile cannot be toggled if these behavioral phase boundaries can be enforced. If the environment cannot enforce the task's actual product/security stop-gates, stop and request AP clarification.
 
 After the P0 gate permits broader work:
 
 ### Wave 1 — Concurrent Findings Only
 
-Wave 1 must run with the live parent/controller permission set to read-only so every reviewer inherits read-only enforcement.
+Wave 1 must be read-only so every reviewer is confined to findings and evidence. Prefer an actual read-only live parent/controller permission profile when the environment supports switching. If a managed Codex Cloud session exposes only a fixed profile, enforce the Managed Codex Cloud permission compatibility rules above instead.
 
 - `architecture_explorer`: map affected trust boundaries, dependencies, and file ownership.
 - `security_reviewer`: validate attack paths, authorization boundaries, negative tests, and residual risk.
 - `quality_reviewer`: define feature-owned CI, migration, coverage, accessibility, performance, rollback, and evidence requirements.
 
-All Wave 1 reviewers must finish and close before the controller changes permissions.
+All Wave 1 reviewers must finish and close before implementation writes begin.
 
 The controller must synthesize the findings and resolve conflicts before implementation begins.
 
 ### Permission Transition
 
-Only after Wave 1 is complete and no reviewer remains active may the root controller explicitly switch to workspace-write. Reviewer agents must not run during the write-enabled phase.
+Only after Wave 1 is complete and no reviewer remains active may implementation writes begin. If the live profile is selectable, the root controller explicitly switches to workspace-write. If the managed environment provides only a fixed profile, the controller records the transition and begins Wave 2 under that fixed profile while continuing to enforce the task scope and stop-gates behaviorally. Reviewer agents must not run during the write-enabled phase.
 
 ### Wave 2 — Substantial Implementation Ownership
 
-Wave 2 runs under the root controller's explicit workspace-write selection and may contain only `implementation_worker` agents. Use up to three workers for independent, non-overlapping tracks. Every assignment must be a meaningful body of work, not a micro-task, and must include its behavior, focused tests, documentation updates, and rollback notes.
+Wave 2 may contain only `implementation_worker` agents. Use up to three workers for independent, non-overlapping tracks. Every assignment must be a meaningful body of work, not a micro-task, and must include its behavior, focused tests, documentation updates, and rollback notes.
 
 Suggested PR 1A ownership:
 
