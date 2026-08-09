@@ -30,4 +30,45 @@ assert.equal(isAuthoritativeRcContext({ eventName: 'pull_request', pullRequestNu
 assert.equal(isAuthoritativeRcContext({ eventName: 'workflow_dispatch' }), true);
 assert.equal(isAuthoritativeRcContext({ eventName: 'pull_request', pullRequestNumber: 226 }), false);
 
+const pilotWorkflow = parseWorkflowYaml(
+  await readFile('.github/workflows/pilot-acceptance.yml', 'utf8'),
+  'pilot-acceptance.yml',
+);
+const migrationStep = pilotWorkflow.jobs['disposable-postgresql-16'].steps.find(
+  step => step.name === 'Fresh, accepted-main upgrade, RLS, receipt/effect, and recovery contracts',
+);
+const disposableDatabaseUrl = 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic';
+for (const variable of [
+  'DATABASE_URL',
+  'PR1B_MIGRATION_DATABASE_URL',
+  'PR1C_MIGRATION_DATABASE_URL',
+  'PR1E_MIGRATION_DATABASE_URL',
+  'STUDIO_ARTIFACT_MIGRATION_DATABASE_URL',
+  'STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL',
+  'ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL',
+]) {
+  assert.equal(
+    migrationStep?.env?.[variable],
+    disposableDatabaseUrl,
+    `${variable} must target the Pilot Acceptance disposable PostgreSQL 16 database`,
+  );
+}
+
+const browserStep = pilotWorkflow.jobs['browser-desktop-pixel7'].steps.find(
+  step => step.name === 'Accepted canonical projections, accessibility, responsive and performance budgets',
+);
+const browserCommands = browserStep?.run?.trim().split('\n').map(command => command.trim());
+const trustBuild = 'npx vite build --config vite.trust-assurance.config.ts';
+const trustTest = 'npx playwright test --config=playwright.trust-assurance.config.ts';
+assert.equal(
+  browserCommands?.at(-2),
+  trustBuild,
+  'the sequential browser job must rebuild the isolated Trust Assurance preview after retained suite builds',
+);
+assert.equal(
+  browserCommands?.at(-1),
+  trustTest,
+  'the Trust Assurance browser suite must run immediately after its isolated preview build',
+);
+
 console.log('Workflow YAML regression checks passed.');

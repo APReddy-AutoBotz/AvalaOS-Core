@@ -45,6 +45,9 @@ jobs:
       - name: Fresh, accepted-main upgrade, RLS, receipt/effect, and recovery contracts
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PR1B_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PR1C_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PR1E_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
           STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
           STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
           ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
@@ -79,6 +82,7 @@ jobs:
           npm run test:browser:pr1g
           npm run test:browser:enterprise-intelligence
           npm run test:browser:studio-private-artifacts
+          npx vite build --config vite.trust-assurance.config.ts
           npx playwright test --config=playwright.trust-assurance.config.ts
 
   evidence-manifest:
