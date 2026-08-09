@@ -4,7 +4,7 @@
 
 This runbook verifies the main-derived V1 release candidate with local, disposable, synthetic data. It never authorizes deployment, live Supabase/Vault/provider access, real credentials, customer data, production operations, or security/compliance claims. GitHub Actions is authoritative for disposable PostgreSQL/Supabase and Chromium/Playwright runtime gates.
 
-The existing canonical fixture is `Assess (assess-proc-ap-invoice-exception) → Govern → Studio (docgen-ap-invoice-exception) → Delivery (proj-ap-invoice-exception) → Monitor (pack-ap-invoice-exception)`.
+The displayed `Assess (assess-proc-ap-invoice-exception) → Govern → Studio (docgen-ap-invoice-exception) → Delivery (proj-ap-invoice-exception) → Monitor (pack-ap-invoice-exception)` lineage is a **synthetic presentation fixture only**. Its IDs come from demo data. In particular, `docgen-ap-invoice-exception` is a legacy `DocumentGeneration`, not a canonical governed Studio aggregate or revision. Server-committed Assess decisions, Govern approvals, Studio aggregate/revision records, Enterprise Delivery packages/work items, receipts, effects, and exact versions remain authoritative; this RC surface does not bind or mint them.
 
 ## Configuration matrix
 
@@ -21,8 +21,8 @@ The existing canonical fixture is `Assess (assess-proc-ap-invoice-exception) →
 
 1. Start at the exact PR head with a clean worktree; run `npm ci` and `npm run test:v1-rc`.
 2. Run all available source suites. Unavailable database/browser services are `not run`, never a pass.
-3. Require Core CI, Enterprise Intelligence, Trust Assurance, Studio Governed Artifacts, PR1F, PR1G, and V1 Release Candidate Evidence at the same SHA.
-4. Inspect the safe `v1-rc-evidence-<sha>` artifact: `commit`, workflow/run identity, plan digest, and `liveHostedValidation: not_run` must be explicit.
+3. Require Core CI, Enterprise Intelligence, Trust Assurance, Studio Governed Artifacts, PR1F, PR1G, and V1 Release Candidate Evidence at the same SHA. A workflow file existing in the repository is not execution evidence.
+4. Inspect the safe `v1-rc-evidence-<sha>` artifact: `commit`, checkout identity, generator workflow/run identity, plan digest, and `liveHostedValidation: not_run` must be explicit. Every positive composed check must contain the exact workflow name and ID, run ID, candidate head SHA, `success` conclusion, and provenance. A missing exact-SHA run is `missing` / `not_run`, and the aggregate remains `incomplete_exact_sha_evidence`.
 5. Exercise the canonical path with Desktop Chrome and Pixel 7. Pass requires no horizontal overflow, visible focus, keyboard operation, meaningful names/ARIA, understandable bounded errors/read-only copy, and applicable axe gates.
 
 No paid hosted dependency is required for source verification.
@@ -56,7 +56,7 @@ If build SHA is `not injected`, rebuild with `VITE_RC_COMMIT_SHA=$(git rev-parse
 ## Pilot acceptance checklist
 
 - [ ] The candidate SHA matches every workflow and manifest.
-- [ ] Canonical process/evidence/resource/version lineage survives all five stages.
+- [ ] Synthetic presentation lineage is explicitly distinguished from canonical server-authoritative resources; independently executed server tests prove the actual process/evidence/resource/version contracts.
 - [ ] Deterministic scores, risk/approval law, tenant/RLS/capability/version authority, Trust separation, and BYOK boundaries are unchanged.
 - [ ] Every recovery row has named executable exact-head evidence.
 - [ ] Desktop Chrome and Pixel 7 accessibility/responsive checks pass without horizontal overflow.

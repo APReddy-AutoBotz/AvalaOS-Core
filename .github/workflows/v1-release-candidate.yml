@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   compose-source-evidence:
@@ -13,13 +14,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run test:v1-rc
+      - name: Resolve exact-candidate workflow evidence
+        id: workflow-evidence
+        uses: actions/github-script@v7
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        with:
+          script: |
+            const checks = [
+              ['core', 'AvalaOS Core CI', 'ci.yml'],
+              ['enterprise-intelligence', 'Enterprise Intelligence', 'enterprise-intelligence.yml'],
+              ['trust-assurance', 'Trust Assurance Evidence Hub', 'trust-assurance.yml'],
+              ['studio-governed-artifacts', 'Studio Governed Artifacts', 'studio-governed-artifacts.yml'],
+              ['pr1f', 'PR 1F Assess V2 Economics', 'pr1f-assess-v2-economics.yml'],
+              ['pr1g', 'PR 1G Application Portfolio', 'pr1g-application-portfolio.yml'],
+            ];
+            const evidence = [];
+            for (const [id, workflowName, workflowFile] of checks) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowFile,
+                head_sha: process.env.CANDIDATE_SHA,
+                status: 'completed',
+                per_page: 20,
+              });
+              const run = response.data.workflow_runs.find(candidate => candidate.head_sha === process.env.CANDIDATE_SHA);
+              if (run) evidence.push({
+                id,
+                workflowName,
+                workflowId: run.workflow_id,
+                runId: run.id,
+                headSha: run.head_sha,
+                conclusion: run.conclusion,
+                provenance: 'github_actions_api',
+              });
+            }
+            core.setOutput('json', JSON.stringify(evidence));
+      - name: Verify RC model and fail-closed evidence composition
+        run: npm run test:v1-rc
+        env:
+          V1_RC_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          V1_RC_WORKFLOW_EVIDENCE_JSON: ${{ steps.workflow-evidence.outputs.json }}
       - run: npm run build
         env:
           VITE_RC_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

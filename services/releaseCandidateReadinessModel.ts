@@ -1,28 +1,32 @@
-export type RcProofState = 'proven_ci_or_local_synthetic' | 'configured_not_live_verified' | 'not_proven_hosted_or_live';
+export type RcProofState = 'proven_exact_sha_ci' | 'configured_not_live_verified' | 'not_run_on_candidate' | 'not_proven_hosted_or_live';
 
 export interface RcJourneyHandoff {
   stage: 'Assess' | 'Govern' | 'Studio' | 'Delivery' | 'Monitor';
-  resourceId: string;
-  evidenceRef: string;
-  versionRef: string;
-  authority: string;
+  fixtureId: string;
+  fixtureEvidenceRef: string;
+  fixtureVersionRef: string;
+  authorityBoundary: string;
 }
 
 export const RC_SEED_HEAD = 'ce8d92415e8b0ee42f7fdfe034310a5246dc132f';
 
+/**
+ * Presentation-only demo lineage. These IDs come from data/mockData.ts and are
+ * not server-authoritative resource, receipt, evidence, or governed revision IDs.
+ */
 export const CANONICAL_RC_JOURNEY: readonly RcJourneyHandoff[] = [
-  { stage: 'Assess', resourceId: 'assess-proc-ap-invoice-exception', evidenceRef: 'proc-ap-invoice-exception', versionRef: 'assess-core-2026-05', authority: 'Deterministic server scoring; AI is not decision authority.' },
-  { stage: 'Govern', resourceId: 'proc-ap-invoice-exception', evidenceRef: 'assess-proc-ap-invoice-exception', versionRef: 'assess-core-2026-05', authority: 'Human review and approval remain mandatory for governed risk.' },
-  { stage: 'Studio', resourceId: 'docgen-ap-invoice-exception', evidenceRef: 'assess-proc-ap-invoice-exception', versionRef: 'governed-artifact-revision', authority: 'Immutable source lineage and governed artifact revision authority.' },
-  { stage: 'Delivery', resourceId: 'proj-ap-invoice-exception', evidenceRef: 'docgen-ap-invoice-exception', versionRef: 'pack-ap-invoice-exception', authority: 'Approved handoff only; retries retain receipt/effect identity.' },
-  { stage: 'Monitor', resourceId: 'pack-ap-invoice-exception', evidenceRef: 'proj-ap-invoice-exception', versionRef: 'pack-ap-invoice-exception', authority: 'Read-only lineage, retry, reconciliation, and blocker projection.' },
+  { stage: 'Assess', fixtureId: 'assess-proc-ap-invoice-exception', fixtureEvidenceRef: 'proc-ap-invoice-exception', fixtureVersionRef: 'assess-core-2026-05', authorityBoundary: 'Synthetic display of deterministic scoring; server commits remain the only scoring authority.' },
+  { stage: 'Govern', fixtureId: 'proc-ap-invoice-exception', fixtureEvidenceRef: 'assess-proc-ap-invoice-exception', fixtureVersionRef: 'assess-core-2026-05', authorityBoundary: 'Synthetic display only; server-authorized human review and approval remain mandatory.' },
+  { stage: 'Studio', fixtureId: 'docgen-ap-invoice-exception', fixtureEvidenceRef: 'assess-proc-ap-invoice-exception', fixtureVersionRef: 'legacy-demo-document-generation', authorityBoundary: 'Legacy demo DocumentGeneration; not a canonical governed Studio aggregate or revision.' },
+  { stage: 'Delivery', fixtureId: 'proj-ap-invoice-exception', fixtureEvidenceRef: 'docgen-ap-invoice-exception', fixtureVersionRef: 'demo-delivery-project', authorityBoundary: 'Synthetic project display; authoritative handoff requires the server-committed approved artifact and package version.' },
+  { stage: 'Monitor', fixtureId: 'pack-ap-invoice-exception', fixtureEvidenceRef: 'proj-ap-invoice-exception', fixtureVersionRef: 'demo-delivery-pack', authorityBoundary: 'Synthetic readiness display; server package/work-item rows are authoritative.' },
 ] as const;
 
 export const RC_MODULE_EVIDENCE = [
-  ['Core', 'proven_ci_or_local_synthetic', 'Core CI source/unit/build gates'],
-  ['Enterprise Intelligence / BYOK', 'proven_ci_or_local_synthetic', 'Synthetic provider and secret-boundary suites; no live provider proof'],
-  ['Trust Assurance', 'proven_ci_or_local_synthetic', 'Synthetic claim/evidence/publication authority suites'],
-  ['Hosted platform', 'not_proven_hosted_or_live', 'No hosted deployment, provider, Vault, or production validation'],
+  ['Core', 'not_run_on_candidate', 'Consult the exact-SHA manifest; the UI does not infer workflow success.'],
+  ['Enterprise Intelligence / BYOK', 'not_run_on_candidate', 'Consult exact-SHA workflow provenance; no live provider proof.'],
+  ['Trust Assurance', 'not_run_on_candidate', 'Not run on this candidate unless an exact-SHA run is listed in the manifest.'],
+  ['Hosted platform', 'not_proven_hosted_or_live', 'No hosted deployment, provider, Vault, or production validation.'],
 ] as const satisfies readonly (readonly [string, RcProofState, string])[];
 
 export function releaseCandidateIdentity(buildSha?: string) {
@@ -39,9 +43,9 @@ export function validateCanonicalRcJourney(journey: readonly RcJourneyHandoff[] 
   const errors: string[] = [];
   if (journey.map(item => item.stage).join('>') !== expected.join('>')) errors.push('Canonical stage order is incomplete.');
   journey.forEach((item, index) => {
-    if (!item.resourceId || !item.evidenceRef || !item.versionRef) errors.push(`${item.stage} lineage is incomplete.`);
-    if (index > 0 && !journey.slice(0, index).some(previous => previous.resourceId === item.evidenceRef)) {
-      errors.push(`${item.stage} evidence does not reference an earlier canonical resource.`);
+    if (!item.fixtureId || !item.fixtureEvidenceRef || !item.fixtureVersionRef) errors.push(`${item.stage} fixture lineage is incomplete.`);
+    if (index > 0 && !journey.slice(0, index).some(previous => previous.fixtureId === item.fixtureEvidenceRef)) {
+      errors.push(`${item.stage} fixture evidence does not reference an earlier presentation fixture.`);
     }
   });
   return errors;
