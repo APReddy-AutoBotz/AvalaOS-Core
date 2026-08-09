@@ -13,7 +13,7 @@
     "verify:print": "node scripts/ui-rebaseline-print-verify.mjs",
     "verify:marketing-capture-isolation": "node scripts/marketing-capture-isolation-verify.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run test:requirements && npm run test:view-access-guard && npm run test:govern-presentation-access && npm run test:context-request-gate && npm run test:marketing-capture-policy && npm run test:view-state-persistence && npm run test:module-journey-lifecycle && npm run test:canonical-demo-seed && npm run test:decision-pack-rendering && npm run test:assess-to-studio-handoff && npm run test:docs-to-delivery-lineage && npm run test:delivery-policy && npm run test:govern-lite && npm run test:delivery-pack && npm run test:trust-center && npm run test:trust-center-presentation && npm run test:admin-workbench && npm run test:evidence-control && npm run test:export-artifact-control && npm run test:rls-tenant-isolation-prep && npm run test:hosted-deployment-operations-prep && npm run test:buyer-acceptance-pack && npm run test:buyer-acceptance-pack-presentation && npm run test:buyer-acceptance-review-gate && npm run test:buyer-acceptance-review-gate-presentation && npm run test:buyer-acceptance-admin-walkthrough && npm run test:buyer-acceptance-admin-walkthrough-presentation && npm run test:buyer-acceptance-browser-walkthrough-plan && npm run test:buyer-acceptance-browser-walkthrough-execution-boundary && npm run test:buyer-acceptance-browser-walkthrough-manual-runbook && npm run test:buyer-acceptance-browser-walkthrough-manual-execution-approval && npm run test:buyer-acceptance-manual-browser-pre-execution-readiness && npm run test:buyer-demo-copy && npm run test:monitor-burndown-svg && npm run test:ai-boundary && npm run test:provider-resolver && npm run test:provider-resolver-integration && npm run test:required-supplemental && npm run typecheck:edge && npm run test:pr1a && npm run test:pr1b && npm run test:pr1c && npm run test:pr1d && npm run test:pr1e && npm run test:enterprise-intelligence",
+    "test": "npm run typecheck && npm run test:workflow-yaml && npm run test:requirements && npm run test:view-access-guard && npm run test:govern-presentation-access && npm run test:context-request-gate && npm run test:marketing-capture-policy && npm run test:view-state-persistence && npm run test:module-journey-lifecycle && npm run test:canonical-demo-seed && npm run test:decision-pack-rendering && npm run test:assess-to-studio-handoff && npm run test:docs-to-delivery-lineage && npm run test:delivery-policy && npm run test:govern-lite && npm run test:delivery-pack && npm run test:trust-center && npm run test:trust-center-presentation && npm run test:admin-workbench && npm run test:evidence-control && npm run test:export-artifact-control && npm run test:rls-tenant-isolation-prep && npm run test:hosted-deployment-operations-prep && npm run test:buyer-acceptance-pack && npm run test:buyer-acceptance-pack-presentation && npm run test:buyer-acceptance-review-gate && npm run test:buyer-acceptance-review-gate-presentation && npm run test:buyer-acceptance-admin-walkthrough && npm run test:buyer-acceptance-admin-walkthrough-presentation && npm run test:buyer-acceptance-browser-walkthrough-plan && npm run test:buyer-acceptance-browser-walkthrough-execution-boundary && npm run test:buyer-acceptance-browser-walkthrough-manual-runbook && npm run test:buyer-acceptance-browser-walkthrough-manual-execution-approval && npm run test:buyer-acceptance-manual-browser-pre-execution-readiness && npm run test:buyer-demo-copy && npm run test:monitor-burndown-svg && npm run test:ai-boundary && npm run test:provider-resolver && npm run test:provider-resolver-integration && npm run test:required-supplemental && npm run typecheck:edge && npm run test:pr1a && npm run test:pr1b && npm run test:pr1c && npm run test:pr1d && npm run test:pr1e && npm run test:enterprise-intelligence",
     "test:requirements": "node scripts/runScoringRegression.mjs",
     "test:scoring": "node scripts/runScoringRegression.mjs",
     "test:view-access-guard": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts services/viewAccessGuard.ts services/viewAccessGuard.test.ts",
@@ -163,6 +163,7 @@
     "test:v1-rc-model": "node scripts/runTypeScriptTest.mjs types.ts services/releaseCandidateReadinessModel.ts services/releaseCandidateReadinessModel.test.ts",
     "verify:v1-rc-evidence": "node scripts/verify-v1-rc-evidence.mjs",
     "test:v1-rc-evidence": "node scripts/verify-v1-rc-evidence.test.mjs",
+    "test:workflow-yaml": "node scripts/checkWorkflowYaml.test.mjs",
     "test:v1-rc": "npm run test:v1-rc-model && npm run test:v1-rc-evidence && npm run verify:v1-rc-evidence && npm run typecheck"
   },
   "dependencies": {
@@ -181,6 +182,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
-    "vite": "8.0.16"
+    "vite": "8.0.16",
+    "yaml": "^2.9.0"
   }
 }

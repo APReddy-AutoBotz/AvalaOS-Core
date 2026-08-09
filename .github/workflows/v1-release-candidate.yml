@@ -21,6 +21,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run test:workflow-yaml
       - name: Resolve exact-candidate workflow evidence
         id: workflow-evidence
         uses: actions/github-script@v7
