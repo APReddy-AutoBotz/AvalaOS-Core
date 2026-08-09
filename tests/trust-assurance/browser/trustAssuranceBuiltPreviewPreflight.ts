@@ -19,9 +19,11 @@ export default async function trustAssuranceBuiltPreviewPreflight(config: FullCo
         .waitFor({ state: 'visible', timeout: PREFLIGHT_TIMEOUT_MS }),
       page.getByText(/^Read-only mode:/)
         .waitFor({ state: 'visible', timeout: PREFLIGHT_TIMEOUT_MS }),
-      page.getByText(/CURRENT_CONTRADICTION/)
-        .waitFor({ state: 'visible', timeout: PREFLIGHT_TIMEOUT_MS }),
     ]);
+    const views = page.getByRole('navigation', { name: 'Trust Assurance views', exact: true });
+    await views.getByRole('button', { name: 'Claims', exact: true }).click({ timeout: PREFLIGHT_TIMEOUT_MS });
+    await page.getByText(/CURRENT_CONTRADICTION/)
+      .waitFor({ state: 'visible', timeout: PREFLIGHT_TIMEOUT_MS });
   } catch (error) {
     throw new Error(
       `TRUST_BUILT_PREVIEW_PREFLIGHT_FAILED: the pilot Trust harness did not mount its governed read-only scenario within ${PREFLIGHT_TIMEOUT_MS}ms`,

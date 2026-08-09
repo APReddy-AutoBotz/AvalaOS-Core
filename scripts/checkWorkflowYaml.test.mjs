@@ -83,5 +83,15 @@ assert.match(
   /globalSetup: '.\/tests\/trust-assurance\/browser\/trustAssuranceBuiltPreviewPreflight\.ts'/u,
   'the Trust suite must fail fast when the built preview does not mount its governed harness state',
 );
+const trustBuiltPreviewPreflight = await readFile(
+  'tests/trust-assurance/browser/trustAssuranceBuiltPreviewPreflight.ts',
+  'utf8',
+);
+const claimsNavigation = trustBuiltPreviewPreflight.indexOf("name: 'Claims'");
+const contradictionAssertion = trustBuiltPreviewPreflight.indexOf('CURRENT_CONTRADICTION');
+assert.ok(
+  claimsNavigation >= 0 && contradictionAssertion > claimsNavigation,
+  'the Trust built-preview preflight must navigate to Claims before asserting claim content',
+);
 
 console.log('Workflow YAML regression checks passed.');
