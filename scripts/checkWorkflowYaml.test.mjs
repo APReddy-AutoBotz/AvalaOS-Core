@@ -54,16 +54,58 @@ for (const variable of [
   );
 }
 
+const sourceAuthorityStep = pilotWorkflow.jobs['source-and-journey'].steps.find(
+  step => step.name === 'Accepted V1 decision, source, portfolio, and artifact authority',
+);
+const requiredSourceAuthorityCommands = [
+  'npm run test:pr1d',
+  'npm run test:pr1f',
+  'npm run test:pr1g',
+  'npm run test:studio-artifacts',
+];
+for (const command of requiredSourceAuthorityCommands) {
+  assert.match(sourceAuthorityStep?.run || '', new RegExp(`^${command}$`, 'mu'));
+}
+const requiredMigrationAuthorityCommands = [
+  'npm run test:migrations:pr1d',
+  'npm run test:migrations:pr1f',
+  'npm run test:migrations:pr1g',
+  'npm run test:migrations:studio-artifacts',
+];
+for (const command of requiredMigrationAuthorityCommands) {
+  assert.match(migrationStep?.run || '', new RegExp(`^\\s*${command}$`, 'mu'));
+}
+
 const browserStep = pilotWorkflow.jobs['browser-desktop-pixel7'].steps.find(
   step => step.name === 'Accepted canonical projections, accessibility, responsive and performance budgets',
 );
 const browserCommands = browserStep?.run?.trim().split('\n').map(command => command.trim());
 const trustBuild = 'npx vite build --config vite.trust-assurance.config.ts';
 const trustTest = 'npx playwright test --config=playwright.trust-assurance.config.ts';
+for (const command of ['npm run test:browser:pr1d', 'npm run test:browser:studio-artifacts']) {
+  assert.ok(browserCommands?.includes(command), `${command} must remain in authoritative browser acceptance`);
+}
 assert.equal(
   browserCommands?.at(-2),
   trustBuild,
   'the sequential browser job must rebuild the isolated Trust Assurance preview after retained suite builds',
+);
+
+const synthesizeGateResults = ({ source, postgres, browser }) => ({
+  'canonical-journey': source,
+  'tenant-adversarial': source && postgres,
+  'recovery-rollback': source && postgres,
+  'studio-private-artifacts': source && postgres && browser,
+  'postgres-fresh-upgrade': postgres,
+  'browser-desktop': browser,
+  'browser-pixel7': browser,
+  'accessibility-performance': browser,
+  'security-hygiene': source,
+});
+assert.ok(Object.values(synthesizeGateResults({ source: true, postgres: true, browser: true })).every(Boolean));
+assert.ok(
+  Object.values(synthesizeGateResults({ source: false, postgres: true, browser: true })).some(result => !result),
+  'one failed required V1 source authority suite must fail the synthesized pilot manifest gates closed',
 );
 assert.equal(
   browserCommands?.at(-1),

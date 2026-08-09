@@ -22,8 +22,17 @@ jobs:
         with: {node-version: 22, cache: npm}
       - run: npm ci
       - run: npm run test:pilot-acceptance
-      - run: npm run test:pr1b && npm run test:pr1c && npm run test:pr1e
-      - run: npm run test:enterprise-intelligence && npm run test:studio-private-artifacts
+      - name: Accepted V1 decision, source, portfolio, and artifact authority
+        run: |
+          npm run test:pr1b
+          npm run test:pr1c
+          npm run test:pr1d
+          npm run test:pr1e
+          npm run test:pr1f
+          npm run test:pr1g
+          npm run test:studio-artifacts
+          npm run test:studio-private-artifacts
+          npm run test:enterprise-intelligence
       - run: node scripts/runTrustAssuranceTest.mjs
       - run: npm run test:ai-boundary-static && npm run test:secret-hygiene && npm run test:scoring
       - run: npm run typecheck && npm run typecheck:edge && npm run build && git diff --check
@@ -54,9 +63,11 @@ jobs:
         run: |
           npm run test:migrations:pr1b
           npm run test:migrations:pr1c
+          npm run test:migrations:pr1d
           npm run test:migrations:pr1e
           npm run test:migrations:pr1f
           npm run test:migrations:pr1g
+          npm run test:migrations:studio-artifacts
           npm run test:migrations:enterprise-intelligence:postgres
           npm run test:migrations:studio-private-artifacts
           node scripts/testTrustAssurancePostgres.mjs
@@ -77,9 +88,11 @@ jobs:
       - name: Accepted canonical projections, accessibility, responsive and performance budgets
         run: |
           npm run test:browser:pr1c
+          npm run test:browser:pr1d
           npm run test:browser:pr1e
           npm run test:browser:pr1f
           npm run test:browser:pr1g
+          npm run test:browser:studio-artifacts
           npm run test:browser:enterprise-intelligence
           npm run test:browser:studio-private-artifacts
           npx vite build --config vite.trust-assurance.config.ts
