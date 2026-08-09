@@ -70,6 +70,28 @@ const requiredSourceAuthorityCommands = [
 for (const command of requiredSourceAuthorityCommands) {
   assert.match(sourceAuthorityStep?.run || '', new RegExp(`^${command}$`, 'mu'));
 }
+const sourceSteps = pilotWorkflow.jobs['source-and-journey'].steps;
+const sourceAuthorityStepIndex = sourceSteps.indexOf(sourceAuthorityStep);
+const generatedArtifactCleanupStepIndex = sourceSteps.findIndex(
+  step => step.name === 'Remove generated compile outputs before static security scans',
+);
+const staticSecurityScanStepIndex = sourceSteps.findIndex(
+  step => step.run === 'npm run test:ai-boundary-static && npm run test:secret-hygiene && npm run test:scoring',
+);
+assert.ok(
+  generatedArtifactCleanupStepIndex > sourceAuthorityStepIndex,
+  'generated provider test outputs must be cleaned after the retained provider authority suite',
+);
+assert.equal(
+  generatedArtifactCleanupStepIndex + 1,
+  staticSecurityScanStepIndex,
+  'generated compile outputs must be cleaned immediately before the static security scan',
+);
+assert.equal(
+  sourceSteps[generatedArtifactCleanupStepIndex]?.run,
+  'npm run clean:enterprise-intelligence-ci',
+  'Pilot Acceptance must use the reusable Enterprise Intelligence cleanup boundary',
+);
 const trustAuthorityStep = pilotWorkflow.jobs['source-and-journey'].steps.find(
   step => step.name === 'Trust command, query, HTTP, and boundary authority',
 );

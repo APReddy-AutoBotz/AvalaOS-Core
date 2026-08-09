@@ -46,6 +46,8 @@ jobs:
           node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/trustAssuranceQuery.ts supabase/functions/_shared/trustAssuranceQuery.test.ts
           node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/http.ts supabase/functions/_shared/trustAssuranceHttp.ts supabase/functions/_shared/trustAssuranceHttp.test.ts
           node scripts/checkTrustAssuranceBoundaries.mjs
+      - name: Remove generated compile outputs before static security scans
+        run: npm run clean:enterprise-intelligence-ci
       - run: npm run test:ai-boundary-static && npm run test:secret-hygiene && npm run test:scoring
       - run: npm run typecheck && npm run typecheck:edge && npm run build && git diff --check
 
