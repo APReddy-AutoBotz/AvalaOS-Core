@@ -6,10 +6,29 @@ const planPath = 'release/v1-rc-evidence-plan.json';
 const planBytes = readFileSync(planPath);
 const plan = JSON.parse(planBytes);
 const errors = [];
+const exactCandidateRef = 'ref: ${{ github.event.pull_request.head.sha || github.sha }}';
 if (plan.schemaVersion !== 2) errors.push('Unsupported evidence-plan schema.');
 if (!/^[0-9a-f]{40}$/.test(plan.seedHead)) errors.push('Seed head must be an exact SHA.');
 for (const check of plan.authoritativeChecks ?? []) {
-  try { readFileSync(check.workflow); } catch { errors.push(`Missing composed workflow: ${check.workflow}`); }
+  try {
+    const workflow = readFileSync(check.workflow, 'utf8');
+    const lines = workflow.split('\n');
+    const checkoutSteps = lines.flatMap((line, lineIndex) => {
+      if (!line.includes('uses: actions/checkout@')) return [];
+      const stepIndent = line.match(/^\s*/)?.[0].length ?? 0;
+      let end = lineIndex + 1;
+      while (end < lines.length && !new RegExp(`^\\s{${stepIndent}}- `).test(lines[end])) end += 1;
+      return [lines.slice(lineIndex, end).join('\n')];
+    });
+    if (checkoutSteps.length === 0) errors.push(`Composed workflow has no checkout step: ${check.workflow}`);
+    checkoutSteps.forEach((step, index) => {
+      if (!step.includes(exactCandidateRef)) {
+        errors.push(`${check.workflow} checkout ${index + 1} does not pin the exact pull-request head or event SHA.`);
+      }
+    });
+  } catch {
+    errors.push(`Missing composed workflow: ${check.workflow}`);
+  }
   if (!check.id || !check.workflowName) errors.push(`Incomplete workflow identity in plan: ${check.workflow ?? 'unknown'}`);
 }
 

@@ -20,6 +20,13 @@ assert.notEqual(result.status, 0);
 assert.match(result.stderr, /does not match expected candidate head/);
 
 const plan = JSON.parse(readFileSync('release/v1-rc-evidence-plan.json', 'utf8'));
+for (const check of plan.authoritativeChecks) {
+  const workflow = readFileSync(check.workflow, 'utf8');
+  const checkoutCount = (workflow.match(/uses: actions\/checkout@/g) ?? []).length;
+  const exactRefCount = (workflow.match(/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/g) ?? []).length;
+  assert.ok(checkoutCount > 0, `${check.workflow} must check out source`);
+  assert.equal(exactRefCount, checkoutCount, `${check.workflow} must pin every checkout to the candidate SHA`);
+}
 const exactRuns = plan.authoritativeChecks.map((check, index) => ({
   id: check.id,
   workflowName: check.workflowName,
