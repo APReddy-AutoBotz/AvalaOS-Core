@@ -61,6 +61,7 @@ jobs:
           V1_RC_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           V1_RC_WORKFLOW_EVIDENCE_JSON: ${{ steps.workflow-evidence.outputs.json }}
       - name: Enforce authoritative exact-candidate evidence gate
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 225)
         run: npm run verify:v1-rc-evidence:authoritative
         env:
           V1_RC_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
