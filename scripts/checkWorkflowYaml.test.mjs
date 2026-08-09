@@ -71,4 +71,17 @@ assert.equal(
   'the Trust Assurance browser suite must run immediately after its isolated preview build',
 );
 
+const trustViteConfig = await readFile('vite.trust-assurance.config.ts', 'utf8');
+assert.match(
+  trustViteConfig,
+  /'import\.meta\.env\.VITE_AVALA_RUNTIME_MODE': JSON\.stringify\('pilot'\)/u,
+  'the immutable Trust production build must embed pilot mode at build time',
+);
+const trustPlaywrightConfig = await readFile('playwright.trust-assurance.config.ts', 'utf8');
+assert.match(
+  trustPlaywrightConfig,
+  /globalSetup: '.\/tests\/trust-assurance\/browser\/trustAssuranceBuiltPreviewPreflight\.ts'/u,
+  'the Trust suite must fail fast when the built preview does not mount its governed harness state',
+);
+
 console.log('Workflow YAML regression checks passed.');
