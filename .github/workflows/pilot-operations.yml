@@ -78,7 +78,9 @@ jobs:
         env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_recovery'}
         run: npm run test:recovery:pilot-operations
       - if: always()
-        run: dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_recovery avalaos_pilot_restore
+        run: |
+          dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_recovery
+          dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_restore
         env: {PGPASSWORD: postgres}
 
   browser-desktop-pixel7:

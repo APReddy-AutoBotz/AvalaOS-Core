@@ -25,7 +25,7 @@ const PilotOperationsPanel: React.FC<Props> = ({ projection, loading, error, pen
   return (
     <section aria-labelledby="pilot-operations-title" className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <header>
-        <p className="text-xs font-black uppercase tracking-widest text-amber-600">Non-live control plane</p>
+        <p className="text-xs font-black uppercase tracking-widest text-amber-700">Non-live control plane</p>
         <h3 id="pilot-operations-title" className="mt-1 text-2xl font-black text-[#002C4B] dark:text-white">Pilot Operations</h3>
         <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">Hosted/live activation is not authorized or proven. This surface cannot deploy to hosted infrastructure.</p>
       </header>

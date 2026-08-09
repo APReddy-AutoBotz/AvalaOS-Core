@@ -12,6 +12,7 @@ console.log('Running Admin Workbench model tests...');
 assert.deepEqual(ADMIN_WORKBENCH_SECTIONS.map(section => section.key), [
   'overview',
   'release_candidate',
+  'pilot_operations',
   'organization',
   'modules',
   'trust_center',
@@ -34,6 +35,15 @@ assert.equal(trustCenterSection.label, 'Trust Center');
 const releaseCandidateSection = getAdminSectionByKey('release_candidate');
 assert.ok(releaseCandidateSection);
 assert.match(releaseCandidateSection.proofSafeDisclosure || '', /not hosted, live, production, security, or compliance proof/i);
+
+const pilotOperationsSection = getAdminSectionByKey('pilot_operations');
+assert.ok(pilotOperationsSection);
+assert.equal(pilotOperationsSection.label, 'Pilot Operations');
+assert.equal(
+  ADMIN_WORKBENCH_SECTIONS.findIndex(section => section.key === 'pilot_operations'),
+  ADMIN_WORKBENCH_SECTIONS.findIndex(section => section.key === 'release_candidate') + 1,
+);
+assert.match(pilotOperationsSection.proofSafeDisclosure || '', /hosted\/live activation is not authorized or proven/i);
 
 const buyerAcceptancePackSection = getAdminSectionByKey('buyer_acceptance_pack');
 assert.ok(buyerAcceptancePackSection);
@@ -127,6 +137,7 @@ assert.doesNotMatch(sectionCopy, /Avala Govern Lite/);
 assert.doesNotMatch(sectionCopy, /Avala Delivery Lite/);
 
 assert.equal(isAdminSectionKey('overview'), true);
+assert.equal(isAdminSectionKey('pilot_operations'), true);
 assert.equal(isAdminSectionKey('trust_center'), true);
 assert.equal(isAdminSectionKey('buyer_acceptance_pack'), true);
 assert.equal(isAdminSectionKey('buyer_acceptance_review_gate'), true);
