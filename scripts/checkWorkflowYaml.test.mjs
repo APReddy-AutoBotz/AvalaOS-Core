@@ -94,4 +94,34 @@ assert.ok(
   'the Trust built-preview preflight must navigate to Claims before asserting claim content',
 );
 
+const manifestSteps = pilotWorkflow.jobs['evidence-manifest'].steps;
+const gateResultsStepIndex = manifestSteps.findIndex(
+  step => step.name === 'Generate exact-head pilot gate results',
+);
+const manifestVerificationStepIndex = manifestSteps.findIndex(
+  step => step.name === 'Verify exact-head fail-closed pilot manifest',
+);
+assert.ok(gateResultsStepIndex >= 0, 'Pilot Acceptance must generate the exact gate-result JSON');
+assert.ok(
+  manifestVerificationStepIndex > gateResultsStepIndex,
+  'authoritative manifest verification must run in a subsequent step after GITHUB_ENV propagation',
+);
+const gateResultsStep = manifestSteps[gateResultsStepIndex];
+const manifestVerificationStep = manifestSteps[manifestVerificationStepIndex];
+assert.match(
+  gateResultsStep.run,
+  /PILOT_ACCEPTANCE_GATE_RESULTS=.*JSON\.stringify\(result\)/u,
+  'gate generation must export the exact result JSON through GITHUB_ENV',
+);
+assert.doesNotMatch(
+  gateResultsStep.run,
+  /verify:pilot-acceptance:authoritative/u,
+  'a step must not consume a GITHUB_ENV value that it has just written',
+);
+assert.equal(
+  manifestVerificationStep.run,
+  'npm run verify:pilot-acceptance:authoritative',
+  'the subsequent step must enforce the authoritative fail-closed verifier',
+);
+
 console.log('Workflow YAML regression checks passed.');

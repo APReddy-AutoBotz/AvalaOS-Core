@@ -95,7 +95,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Generate exact-head fail-closed pilot manifest
+      - name: Generate exact-head pilot gate results
         env:
           PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
           SOURCE_RESULT: ${{ needs.source-and-journey.result }}
@@ -120,7 +120,10 @@ jobs:
           };
           process.stdout.write(`PILOT_ACCEPTANCE_GATE_RESULTS=${JSON.stringify(result)}\n`);
           NODE
-          npm run verify:pilot-acceptance:authoritative
+      - name: Verify exact-head fail-closed pilot manifest
+        env:
+          PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
+        run: npm run verify:pilot-acceptance:authoritative
       - uses: actions/upload-artifact@v4
         if: always()
         with:
