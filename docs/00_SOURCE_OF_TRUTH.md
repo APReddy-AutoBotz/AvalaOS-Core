@@ -1,6 +1,10 @@
 # AvalaOS Core Source Of Truth
 
-## Post-Trust-Hub V1 RC candidate
+## Post-V1-RC disposable pilot acceptance candidate
+
+PR #225 merged as `c0a6196b18a9725eb162e56e86435aa4d0e402d1` and accepted the V1 release-candidate source/local/exact-head CI proof boundary. Draft PR #226 is the separately authorized disposable/local pilot-acceptance exercise. Its repository-owned workflow composes accepted authority suites, disposable PostgreSQL 16, synthetic provider/storage boundaries, Desktop Chrome and Pixel 7 browser projects, and a fail-closed exact-head manifest. Until authoritative GitHub Actions completes, its status is `configured_not_live_verified`; a successful run may establish only `proven_disposable_pilot_evidence`. Hosted/live infrastructure, deployment, real providers, production, security certification, and compliance certification remain `not_proven_hosted_live`. The next milestone requires separate approval and is not a production cutover.
+
+## Historical pre-RC candidate context
 
 Enterprise Intelligence PR #221 and Trust Assurance PR #222 are contained in post-Trust-Hub `main` merge `095ba67adeb1ac89c4b3b2f46734e06815e335b0`. Draft PR #225 starts from child seed `ce8d92415e8b0ee42f7fdfe034310a5246dc132f` and is the active V1 release-candidate/pilot-readiness proof milestone. Its proof remains bounded to source, local synthetic, and exact-head CI evidence: no hosted deployment, live provider/Vault/Supabase validation, pilot acceptance, production readiness, security certification, or compliance certification is established. Assemble remains at the accepted documentation/Phase-1 boundary.
 
