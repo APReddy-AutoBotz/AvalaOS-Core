@@ -7,7 +7,7 @@ const html = renderToStaticMarkup(<PilotOperationsPanel projection={{
   release: { candidateLabel: 'candidate-7', commitSha: 'a'.repeat(40), lifecycle: 'validated' },
   environment: { label: 'Pilot candidate', type: 'pilot_candidate', lifecycle: 'configured', version: 4 },
   controls: { maintenance: false, readOnly: true, disabledFeatures: [] },
-  promotion: { eligible: false, blockers: ['LIVE_ACTIVATION_NOT_AUTHORIZED'], rollbackEligible: false },
+  promotion: { eligible: false, blockers: ['missing_evidence'], liveStopGates: ['LIVE_ACTIVATION_NOT_AUTHORIZED'], rollbackEligible: false },
   provider: { configured: true, enabled: false },
   health: { schemaCompatible: true, queueState: 'healthy', reconciliationState: 'healthy' }, recovery: { backupState: 'passed', restoreState: 'passed' },
   truth: 'not_proven_hosted_live', liveActivationAuthorized: false,

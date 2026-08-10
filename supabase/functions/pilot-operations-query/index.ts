@@ -2,6 +2,7 @@ import { handleOptions } from '../_shared/http.ts';
 import { getAuthUser, supabaseEnv } from '../_shared/supabase.ts';
 import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
+import { decodePilotOperationsFailure, pilotOperationsFailureStatus } from '../_shared/pilotOperationsErrors.ts';
 declare const Deno:{serve:(handler:(request:Request)=>Response|Promise<Response>)=>void};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
@@ -11,5 +12,5 @@ Deno.serve(async request=>{const options=handleOptions(request);if(options)retur
     const authority=await resolveTenantAuthority(actor,{organizationId:body.organizationId,workspaceId:body.workspaceId,expectedAuthorizationVersion:body.expectedAuthorizationVersion as number},createTenantAuthorityDatabase(request));
     if(!authority.capabilities.includes('operations.read'))return json({code:'ACCESS_DENIED'},404);
     const {url,serviceRoleKey}=supabaseEnv();const result=await fetch(`${url}/rest/v1/rpc/pilot_operations_projection`,{method:'POST',redirect:'error',headers:{apikey:serviceRoleKey,Authorization:`Bearer ${serviceRoleKey}`,'content-type':'application/json'},body:JSON.stringify({p_actor:actor,p_org:body.organizationId,p_workspace:body.workspaceId,p_authorization_version:body.expectedAuthorizationVersion})});
-    if(!result.ok)return json({code:'PERSISTENCE_UNAVAILABLE'},503);return json(await result.json());
+    if(!result.ok){const code=await decodePilotOperationsFailure(result);return code?json({code},pilotOperationsFailureStatus(code)):json({code:'PERSISTENCE_UNAVAILABLE'},503)}return json(await result.json());
   }catch(error){return json({code:error instanceof Error&&error.message==='AUTHORIZATION_STALE'?'AUTHORIZATION_STALE':'ACCESS_DENIED'},error instanceof Error&&error.message==='AUTHORIZATION_STALE'?409:404);}});

@@ -24,6 +24,7 @@ export type PilotOperationsErrorCode =
   | 'TENANT_DEPROVISIONED' | 'ENVIRONMENT_BLOCKED' | 'MAINTENANCE_ACTIVE' | 'READ_ONLY_ACTIVE'
   | 'MAINTENANCE_MODE' | 'READ_ONLY_MODE' | 'EXPECTED_VERSION_REQUIRED'
   | 'EVIDENCE_STALE' | 'EVIDENCE_INVALID' | 'EVIDENCE_NOT_VERIFIED' | 'PREFLIGHT_BLOCKED'
+  | 'PROVIDER_REFERENCE_STALE' | 'PROVIDER_REFERENCE_INVALID'
   | 'PERSISTENCE_UNAVAILABLE' | typeof PILOT_OPERATIONS_LIVE_STOP;
 
 export type PilotOperationsProjection = {
@@ -33,4 +34,5 @@ export type PilotOperationsProjection = {
   release: { id: string; gitSha: string; lifecycle: string; version: number } | null;
   provider: { configured: boolean; enabled: boolean; purpose: string } | null;
   blockers: string[];
+  liveStopGates: string[];
 };

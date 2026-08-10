@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const file = 'supabase/migrations/20260809120000_pilot_operations_control_plane.sql';
 const sql = await readFile(file, 'utf8');
 const correction = await readFile('supabase/migrations/20260809133000_pilot_operations_authority_correction.sql', 'utf8');
+const truthClosure = await readFile('supabase/migrations/20260810120000_pilot_operations_truth_closure.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -22,5 +23,9 @@ for (const required of ['pilot_operations_evidence_manifests','pg_advisory_xact_
   assert.ok(correction.includes(required), `missing additive Pilot Operations correction: ${required}`);
 }
 assert.doesNotMatch(correction, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
+for (const required of ['pilot_operations_ingest_recovery_evidence','EVIDENCE_NOT_VERIFIED','PROVIDER_REFERENCE_STALE','pilot_operations_tenant_rebind_results','liveStopGates','LIVE_ACTIVATION_NOT_AUTHORIZED']) {
+  assert.ok(truthClosure.includes(required), `missing Pilot Operations truth closure: ${required}`);
+}
+assert.doesNotMatch(truthClosure, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');

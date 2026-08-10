@@ -5,7 +5,7 @@ import type { PilotOperationsProjection } from '../../services/pilotOperations/o
 import type { PilotOperation, PilotOperationsCommand } from '../../supabase/functions/_shared/pilotOperationsContracts';
 import PilotOperationsPanel, { type PilotOperationRequest } from './PilotOperationsPanel';
 
-const resultKind=(code:string):'error'|'stale'|'revoked'|'blocked'=>code==='VERSION_CONFLICT'||code==='AUTHORIZATION_STALE'||code==='EVIDENCE_STALE'?'stale':code==='ACCESS_DENIED'||code==='TENANT_DEPROVISIONED'?'revoked':code==='FEATURE_DISABLED'||code==='ENVIRONMENT_BLOCKED'||code==='MAINTENANCE_ACTIVE'||code==='READ_ONLY_ACTIVE'||code==='MAINTENANCE_MODE'||code==='READ_ONLY_MODE'||code==='EVIDENCE_NOT_VERIFIED'||code==='PREFLIGHT_BLOCKED'||code==='LIVE_ACTIVATION_NOT_AUTHORIZED'?'blocked':'error';
+const resultKind=(code:string):'error'|'stale'|'revoked'|'blocked'=>code==='VERSION_CONFLICT'||code==='AUTHORIZATION_STALE'||code==='EVIDENCE_STALE'?'stale':code==='ACCESS_DENIED'||code==='TENANT_DEPROVISIONED'?'revoked':code==='FEATURE_DISABLED'||code==='ENVIRONMENT_BLOCKED'||code==='MAINTENANCE_ACTIVE'||code==='READ_ONLY_ACTIVE'||code==='MAINTENANCE_MODE'||code==='READ_ONLY_MODE'||code==='EVIDENCE_NOT_VERIFIED'||code==='PROVIDER_REFERENCE_STALE'||code==='PROVIDER_REFERENCE_INVALID'||code==='PREFLIGHT_BLOCKED'||code==='LIVE_ACTIVATION_NOT_AUTHORIZED'?'blocked':'error';
 const commandFor=(request:PilotOperationRequest,projection:PilotOperationsProjection):{operation:PilotOperation;payload:Record<string,unknown>}=>{
   const ids=projection.authority;
   if(!ids)throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');

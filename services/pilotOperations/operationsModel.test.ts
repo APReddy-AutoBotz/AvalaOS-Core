@@ -8,7 +8,7 @@ const fixture = () => ({
   health: { schemaCompatible: true, queueState: 'healthy', reconciliationState: 'healthy' },
   provider: { configured: true, enabled: false },
   recovery: { backupState: 'passed', restoreState: 'passed', evidenceDigest: `sha256:${'b'.repeat(64)}` },
-  promotion: { eligible: true, blockers: [], rollbackEligible: true, rollbackTargetLabel: 'candidate-226' },
+  promotion: { eligible: true, blockers: [], liveStopGates: ['LIVE_ACTIVATION_NOT_AUTHORIZED'], rollbackEligible: true, rollbackTargetLabel: 'candidate-226' },
   truth: 'proven_disposable_or_ci_evidence', liveActivationAuthorized: false,
 });
 
