@@ -53,9 +53,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Fresh, upgrade, tenant and maintenance/rollback authority
+      - name: Apply fresh and accepted-baseline upgrade to disposable PostgreSQL 16
         env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
         run: npm run test:migrations:pilot-operations
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: 'pilot-operations-postgres-${{ env.CANDIDATE_SHA }}', path: artifacts/pilot-operations/postgres-execution.json, if-no-files-found: error, retention-days: 14}
       - if: always()
         run: dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_operations
         env: {PGPASSWORD: postgres}
@@ -77,6 +80,9 @@ jobs:
       - name: Disposable backup, clean restore, corruption and interrupted recovery
         env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_recovery'}
         run: npm run test:recovery:pilot-operations
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: 'pilot-operations-recovery-${{ env.CANDIDATE_SHA }}', path: artifacts/pilot-operations/postgres-recovery.json, if-no-files-found: error, retention-days: 14}
       - if: always()
         run: |
           dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_recovery
@@ -103,6 +109,10 @@ jobs:
         with: {ref: '${{ env.CANDIDATE_SHA }}'}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
+      - uses: actions/download-artifact@v4
+        with: {name: 'pilot-operations-postgres-${{ env.CANDIDATE_SHA }}', path: artifacts/downloaded/postgres}
+      - uses: actions/download-artifact@v4
+        with: {name: 'pilot-operations-recovery-${{ env.CANDIDATE_SHA }}', path: artifacts/downloaded/recovery}
       - name: Bind independently required gates to this exact workflow and head
         env:
           PILOT_OPERATIONS_HEAD: ${{ env.CANDIDATE_SHA }}
@@ -118,10 +128,10 @@ jobs:
           const e={
             'retained-authority':gate(process.env.RETAINED,'retained-authority','npm run test:pilot-acceptance'),
             'operations-source':gate(process.env.SOURCE,'operations-source','npm run test:pilot-operations'),
-            'postgres-fresh-upgrade':gate(process.env.POSTGRES,'disposable-postgresql-16','npm run test:migrations:pilot-operations'),
-            'tenant-adversarial':gate(process.env.POSTGRES,'disposable-postgresql-16','two-tenant pilot operations scenarios'),
-            'backup-restore-recovery':gate(process.env.RECOVERY,'backup-restore-recovery','npm run test:recovery:pilot-operations'),
-            'maintenance-rollback':gate(process.env.POSTGRES,'disposable-postgresql-16','maintenance and rollback scenarios'),
+            'postgres-fresh-upgrade':gate(process.env.POSTGRES,'disposable-postgresql-16','npm run test:migrations:pilot-operations:postgres'),
+            'tenant-adversarial':gate(process.env.POSTGRES,'disposable-postgresql-16','applied PostgreSQL forced-RLS and tenant table denial scenarios'),
+            'backup-restore-recovery':gate(process.env.RECOVERY,'backup-restore-recovery','npm run test:recovery:pilot-operations:postgres'),
+            'maintenance-rollback':gate(process.env.POSTGRES,'disposable-postgresql-16','applied-schema runtime-control authority scenarios'),
             'browser-desktop':gate(process.env.BROWSER,'browser-desktop-pixel7','Desktop Chrome project'),
             'browser-pixel7':gate(process.env.BROWSER,'browser-desktop-pixel7','Pixel 7 project'),
             'accessibility-performance':gate(process.env.BROWSER,'browser-desktop-pixel7','axe, responsive and performance assertions'),
@@ -129,7 +139,10 @@ jobs:
           process.stdout.write(`PILOT_OPERATIONS_GATE_RESULTS=${JSON.stringify(e)}\n`);
           NODE
       - run: node scripts/verify-pilot-operations.mjs --authoritative
-        env: {PILOT_OPERATIONS_HEAD: '${{ env.CANDIDATE_SHA }}'}
+        env:
+          PILOT_OPERATIONS_HEAD: '${{ env.CANDIDATE_SHA }}'
+          PILOT_OPERATIONS_POSTGRES_ARTIFACT: artifacts/downloaded/postgres/postgres-execution.json
+          PILOT_OPERATIONS_RECOVERY_ARTIFACT: artifacts/downloaded/recovery/postgres-recovery.json
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: 'pilot-operations-${{ env.CANDIDATE_SHA }}', path: artifacts/pilot-operations/manifest.json, if-no-files-found: error, retention-days: 14}

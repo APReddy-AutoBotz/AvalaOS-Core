@@ -21,7 +21,7 @@ const PilotOperationsPanel: React.FC<Props> = ({ projection, loading, error, pen
   if (loading) return <section aria-busy="true" aria-label="Pilot Operations"><p>Loading authoritative pilot operations state…</p></section>;
   if (error || !projection) return <section role="alert" aria-label="Pilot Operations"><h3 className="font-black">Pilot Operations unavailable</h3><p>{error || 'The server projection was not available. No operation was performed.'}</p></section>;
   const blocked = projection.promotion.blockers;
-  const request = (action: PilotOperationRequest['action']) => onRequest?.({ action, expectedVersion: projection.environment.version });
+  const request = (action: PilotOperationRequest['action']) => onRequest?.({ action, expectedVersion: ['validate','approve','simulate_promotion','rollback'].includes(action) ? (projection.authority?.releaseVersion ?? projection.environment.version) : projection.environment.version });
   return (
     <section aria-labelledby="pilot-operations-title" className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <header>
@@ -41,7 +41,7 @@ const PilotOperationsPanel: React.FC<Props> = ({ projection, loading, error, pen
       </div>
       <div><h4 className="font-black">Rollback</h4><p className="text-sm">{projection.promotion.rollbackEligible ? `Eligible to the exact prior candidate ${projection.promotion.rollbackTargetLabel || 'recorded by the server'}.` : 'Not eligible.'} History is never rewritten.</p></div>
       <div className="flex flex-wrap gap-2" aria-label="Controlled pilot operations">
-        {(['validate','approve','simulate_promotion','maintenance','read_only','rollback'] as const).map(action => <button key={action} type="button" disabled={Boolean(pendingAction) || (action === 'simulate_promotion' && blocked.length > 0)} onClick={() => request(action)} className="rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === action ? 'Pending…' : action.replaceAll('_', ' ')}</button>)}
+        {(['validate','approve','simulate_promotion','maintenance','read_only','rollback'] as const).map(action => <button key={action} type="button" disabled={Boolean(pendingAction) || !onRequest || action === 'rollback' || (action === 'simulate_promotion' && blocked.length > 0)} onClick={() => request(action)} className="rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === action ? 'Pending…' : action.replaceAll('_', ' ')}</button>)}
       </div>
       <p aria-live="polite" role={actionResult?.kind === 'error' ? 'alert' : 'status'}>{actionResult?.message}</p>
       <footer className="text-xs font-semibold text-slate-600">Truth classification: {projection.truth.replaceAll('_', ' ')} · Projection version {projection.environment.version}</footer>

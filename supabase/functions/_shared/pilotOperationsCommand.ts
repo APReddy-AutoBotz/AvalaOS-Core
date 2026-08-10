@@ -20,12 +20,12 @@ export const decodePilotOperationsCommand = (value: unknown): PilotOperationsCom
   if (!OPS.has(operation) || typeof v.organizationId!=='string'||!UUID.test(v.organizationId)||typeof v.workspaceId!=='string'||!UUID.test(v.workspaceId)||
       typeof v.requestId!=='string'||!UUID.test(v.requestId)||typeof v.idempotencyKey!=='string'||v.idempotencyKey.length<8||v.idempotencyKey.length>200||
       !Number.isSafeInteger(v.expectedAuthorizationVersion)||(v.expectedAuthorizationVersion as number)<1||
-      (v.expectedVersion!==undefined&&(!Number.isSafeInteger(v.expectedVersion)||(v.expectedVersion as number)<1))||
+      !Number.isSafeInteger(v.expectedVersion)||(v.expectedVersion as number)<0||
       !v.payload||typeof v.payload!=='object'||Array.isArray(v.payload)) throw new PilotOperationsCommandError('VALIDATION_FAILED');
   const payload=v.payload as Record<string,unknown>;
   if (Object.keys(payload).some(k=>/(secret|token|credential|password|database.?url|signed.?url)/i.test(k))) throw new PilotOperationsCommandError('VALIDATION_FAILED');
   if (payload.liveActivation===true || payload.target==='hosted' || payload.target==='production') throw new PilotOperationsCommandError(PILOT_OPERATIONS_LIVE_STOP);
-  return {operation,organizationId:v.organizationId,workspaceId:v.workspaceId,requestId:v.requestId,idempotencyKey:v.idempotencyKey,expectedAuthorizationVersion:v.expectedAuthorizationVersion as number,expectedVersion:v.expectedVersion as number|undefined,payload};
+  return {operation,organizationId:v.organizationId,workspaceId:v.workspaceId,requestId:v.requestId,idempotencyKey:v.idempotencyKey,expectedAuthorizationVersion:v.expectedAuthorizationVersion as number,expectedVersion:v.expectedVersion as number,payload};
 };
 
 export const authorizePilotOperationsCommand = (command:PilotOperationsCommand, authority:TenantContext): void => {
@@ -34,4 +34,4 @@ export const authorizePilotOperationsCommand = (command:PilotOperationsCommand, 
   if(!authority.capabilities.includes(REQUIRED[command.operation])) throw new PilotOperationsCommandError('ACCESS_DENIED');
 };
 
-export const canonicalPilotOperationsPayload = (command:PilotOperationsCommand): string => JSON.stringify({operation:command.operation,organizationId:command.organizationId,workspaceId:command.workspaceId,expectedVersion:command.expectedVersion??null,payload:Object.fromEntries(Object.entries(command.payload).sort(([a],[b])=>a.localeCompare(b)))});
+export const canonicalPilotOperationsPayload = (command:PilotOperationsCommand): string => JSON.stringify({operation:command.operation,organizationId:command.organizationId,workspaceId:command.workspaceId,expectedVersion:command.expectedVersion,payload:Object.fromEntries(Object.entries(command.payload).sort(([a],[b])=>a.localeCompare(b)))});

@@ -6,7 +6,8 @@ import { useAssessGovernanceConfig } from '../../services/assessGovernanceServic
 import { ASSESS_SECTIONS, ASSUMPTION_CATEGORIES, EVIDENCE_TYPES, getAssessFieldOptions } from '../../constants/assessQuestionBank';
 import AdminOverviewPanel from '../admin/AdminOverviewPanel';
 import AdminWorkbench from '../admin/AdminWorkbench';
-import PilotOperationsPanel from '../admin/PilotOperationsPanel';
+import { PilotOperationsConnectedPanel } from '../admin/PilotOperationsConnectedPanel';
+import { useOrganizationContext } from './OrganizationProvider';
 import ReleaseCandidateReadinessPanel from '../admin/ReleaseCandidateReadinessPanel';
 import BuyerAcceptancePackPanel from '../admin/BuyerAcceptancePackPanel';
 import BuyerAcceptanceReviewGatePanel from '../admin/BuyerAcceptanceReviewGatePanel';
@@ -19,6 +20,7 @@ interface OrganizationSetupViewProps {
 }
 
 const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUser, allUsers }) => {
+    const { tenantContext, sessionState } = useOrganizationContext();
     const { currentOrganization, updateCompanyProfile, updateOrganizationModules, getLimitsForCurrentOrg, getAuditLogsForOrg } = useOrganization();
     const { config: assessGovernanceConfig, updateConfig: updateAssessGovernanceConfig, resetConfig: resetAssessGovernanceConfig } = useAssessGovernanceConfig();
 
@@ -174,7 +176,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                 />
             }
             releaseCandidate={<ReleaseCandidateReadinessPanel />}
-            pilotOperations={<PilotOperationsPanel projection={null} error="Pilot Operations requires an authenticated server projection. No live or browser fallback is permitted." />}
+            pilotOperations={<PilotOperationsConnectedPanel tenantContext={tenantContext} selectionState={sessionState} />}
             organization={
                 <div className="space-y-6">
             {/* Company Profile Form */}

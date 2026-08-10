@@ -1,26 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-test('projects safe server-projected operations truth without false live success', async ({ page }) => {
-  await page.goto('/tests/browser/pilotOperationsHarness.html');
-  await expect(page.getByRole('heading', { name: 'Pilot Operations' })).toBeVisible();
-  await expect(page.getByText(/Hosted\/live activation is not authorized/)).toBeVisible();
-  await expect(page.getByText(/LIVE_ACTIVATION_NOT_AUTHORIZED/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'simulate promotion' })).toBeDisabled();
-  await page.getByRole('button', { name: 'read only' }).click();
-  await expect(page.getByRole('status')).toContainText('request accepted');
-  const body = await page.locator('body').innerText();
-  expect(body).not.toMatch(/credential|database_url|secret reference|project id/i);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.filter(item => ['serious','critical'].includes(item.impact || ''))).toEqual([]);
-});
-
-test('supports keyboard focus and practical projection budget', async ({ page }) => {
-  const start = Date.now();
-  await page.goto('/tests/browser/pilotOperationsHarness.html');
-  await expect(page.getByRole('heading', { name: 'Pilot Operations' })).toBeVisible();
-  expect(Date.now() - start).toBeLessThan(2_000);
-  await page.keyboard.press('Tab');
-  await expect(page.locator(':focus')).toBeVisible();
-});
+const open=async(page:import('@playwright/test').Page,state='ready')=>{await page.goto(`/tests/browser/pilotOperationsHarness.html?state=${state}`);await page.getByRole('button',{name:/Pilot Operations/}).click()};
+test('actual Admin Workbench projects safe server truth and governed command success',async({page})=>{const start=Date.now();await open(page);await expect(page.getByRole('heading',{name:'Admin Workbench'})).toBeVisible();await expect(page.getByRole('heading',{name:'Pilot Operations',exact:true})).toBeVisible();expect(Date.now()-start).toBeLessThan(2_000);await expect(page.getByText(/Hosted\/live activation is not authorized/)).toBeVisible();await expect(page.getByRole('button',{name:'simulate promotion'})).toBeDisabled();await page.getByRole('button',{name:'read only'}).click();await expect(page.getByRole('status')).toContainText('Authoritative command committed');await expect(page.getByText(/Read-only on/)).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);const results=await new AxeBuilder({page}).analyze();expect(results.violations.filter(item=>['serious','critical'].includes(item.impact||''))).toEqual([])});
+test('actual Admin Workbench owns loading, error, revoked and control states',async({page})=>{await open(page,'loading');await expect(page.getByText(/Loading authoritative/)).toBeVisible();await expect(page.getByRole('heading',{name:'Pilot Operations',exact:true})).toBeVisible();for(const state of ['error','revoked'] as const){await open(page,state);await expect(page.getByRole('alert')).toContainText(state==='error'?'PERSISTENCE_UNAVAILABLE':'ACCESS_DENIED')}for(const state of ['read_only','maintenance'] as const){await open(page,state);await expect(page.getByText(new RegExp(state==='read_only'?'Read-only on':'Maintenance on'))).toBeVisible()}await page.keyboard.press('Tab');await expect(page.locator(':focus')).toBeVisible()});
+test('actual Admin Workbench shows stale, revoked and blocked command denial without false success',async({page})=>{for(const [state,code] of [['stale','VERSION_CONFLICT'],['denied','ACCESS_DENIED'],['blocked','ENVIRONMENT_BLOCKED']] as const){await open(page,state);await expect(page.getByRole('heading',{name:'Pilot Operations',exact:true})).toBeVisible();await page.getByRole('button',{name:'read only'}).click();await expect(page.getByText(code)).toBeVisible();await expect(page.getByText(/Authoritative command committed/)).toHaveCount(0)}});

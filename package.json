@@ -173,8 +173,12 @@
     "test:enterprise-intelligence-cleanup-boundary": "node scripts/cleanupEnterpriseIntelligenceCiArtifacts.test.mjs",
     "lint:pilot-operations": "node scripts/checkPilotOperationsCi.mjs",
     "test:pilot-operations": "npm run lint:pilot-operations && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/tenantAuthority.ts supabase/functions/_shared/pilotOperationsContracts.ts supabase/functions/_shared/pilotOperationsCommand.ts supabase/functions/_shared/pilotOperationsCommand.test.ts && node scripts/runPr1fTypeScriptTest.mjs services/pilotOperations/operationsModel.ts services/pilotOperations/operationsModel.test.ts && npx tsx components/admin/PilotOperationsPanel.test.tsx && node scripts/verify-pilot-operations.test.mjs",
-    "test:migrations:pilot-operations": "node scripts/testPilotOperationsMigration.mjs",
-    "test:recovery:pilot-operations": "node scripts/pilotOperationsRecovery.test.mjs",
+    "test:migrations:pilot-operations:contract": "node scripts/testPilotOperationsMigration.mjs",
+    "test:migrations:pilot-operations:postgres": "node scripts/testPilotOperationsPostgres.mjs",
+    "test:migrations:pilot-operations": "npm run test:migrations:pilot-operations:contract && npm run test:migrations:pilot-operations:postgres",
+    "test:recovery:pilot-operations:model": "node scripts/pilotOperationsRecovery.test.mjs",
+    "test:recovery:pilot-operations:postgres": "node scripts/testPilotOperationsRecoveryPostgres.mjs",
+    "test:recovery:pilot-operations": "npm run test:recovery:pilot-operations:model && npm run test:recovery:pilot-operations:postgres",
     "test:browser:pilot-operations": "playwright test --config=playwright.pilot-operations.config.ts"
   },
   "dependencies": {

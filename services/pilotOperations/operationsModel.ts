@@ -5,6 +5,8 @@ export type PilotOperationsTruth =
   | 'failed';
 
 export type PilotOperationsProjection = {
+  /** Opaque server-projected identifiers used only to target authoritative commands. */
+  authority?: { environmentId: string; releaseId: string; releaseVersion: number };
   release: { candidateLabel: string; commitSha: string; lifecycle: string };
   environment: { label: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number };
   controls: { maintenance: boolean; readOnly: boolean; disabledFeatures: string[] };
@@ -29,6 +31,7 @@ const digest = /^sha256:[0-9a-f]{64}$/;
 const safeLabel = /^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,79}$/;
 const safeState = /^[a-z][a-z0-9_]{0,63}$/;
 const safeFeature = /^[a-z][a-z0-9_-]{0,63}$/;
+const safeBlocker = /^(?:[a-z][a-z0-9_]{0,63}|[A-Z][A-Z0-9_]{0,63})$/;
 
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
@@ -59,7 +62,7 @@ const enumValue = <T extends string>(value: unknown, allowed: readonly T[]): T =
 /** Strict decoder for the deliberately sanitized operator read model. Unknown fields fail closed. */
 export const decodePilotOperationsProjection = (input: unknown): PilotOperationsProjection => {
   const root = object(input);
-  exactKeys(root, ['release', 'environment', 'controls', 'health', 'provider', 'recovery', 'promotion', 'truth', 'liveActivationAuthorized']);
+  if (Object.keys(root).some(key => !['authority','release','environment','controls','health','provider','recovery','promotion','truth','liveActivationAuthorized'].includes(key)) || !['release','environment','controls','health','provider','recovery','promotion','truth','liveActivationAuthorized'].every(key=>key in root)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   const release = object(root.release);
   const environment = object(root.environment);
   const controls = object(root.controls);
@@ -77,7 +80,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   if (root.liveActivationAuthorized !== false) throw new Error('LIVE_ACTIVATION_NOT_AUTHORIZED');
   if (!Array.isArray(controls.disabledFeatures) || !Array.isArray(promotion.blockers)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   const disabledFeatures = controls.disabledFeatures.map(item => text(item, safeFeature));
-  const blockers = promotion.blockers.map(item => text(item, safeState));
+  const blockers = promotion.blockers.map(item => text(item, safeBlocker));
   if (new Set(disabledFeatures).size !== disabledFeatures.length || new Set(blockers).size !== blockers.length) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   const evidenceDigest = recovery.evidenceDigest === undefined ? undefined : text(recovery.evidenceDigest, digest);
   const rollbackTargetLabel = promotion.rollbackTargetLabel === undefined ? undefined : text(promotion.rollbackTargetLabel, safeLabel);
@@ -105,6 +108,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
     truth: enumValue(root.truth, ['proven_disposable_or_ci_evidence', 'configured_not_live_verified', 'not_proven_hosted_live', 'failed'] as const),
     liveActivationAuthorized: false,
   };
+  if(root.authority!==undefined){const authority=object(root.authority);exactKeys(authority,['environmentId','releaseId','releaseVersion']);decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})()}}
   if (decoded.provider.enabled && !decoded.provider.configured) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.promotion.eligible !== (decoded.promotion.blockers.length === 0)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   return decoded;

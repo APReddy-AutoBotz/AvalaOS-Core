@@ -8,4 +8,6 @@ assert.equal(canonicalPilotOperationsPayload(command),canonicalPilotOperationsPa
 for(const payload of [{...base,payload:{liveActivation:true}},{...base,payload:{target:'production'}},{...base,payload:{secretValue:'no'}}]) assert.throws(()=>decodePilotOperationsCommand(payload),PilotOperationsCommandError);
 assert.throws(()=>authorizePilotOperationsCommand(command,{userId:id('9'),organizationId:id('1'),workspaceId:id('2'),authorizationVersion:8,capabilities:['release.promote']}),/AUTHORIZATION_STALE/);
 assert.throws(()=>authorizePilotOperationsCommand(command,{userId:id('9'),organizationId:id('1'),workspaceId:id('2'),authorizationVersion:7,capabilities:[]}),/ACCESS_DENIED/);
+assert.throws(()=>decodePilotOperationsCommand({...base,expectedVersion:undefined}),/VALIDATION_FAILED/);
+assert.throws(()=>decodePilotOperationsCommand({...base,expectedVersion:null}),/VALIDATION_FAILED/);
 console.log('pilot operations command tests passed');
