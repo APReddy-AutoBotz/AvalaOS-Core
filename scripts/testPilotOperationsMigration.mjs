@@ -5,6 +5,7 @@ const file = 'supabase/migrations/20260809120000_pilot_operations_control_plane.
 const sql = await readFile(file, 'utf8');
 const correction = await readFile('supabase/migrations/20260809133000_pilot_operations_authority_correction.sql', 'utf8');
 const truthClosure = await readFile('supabase/migrations/20260810120000_pilot_operations_truth_closure.sql', 'utf8');
+const operationalClosure = await readFile('supabase/migrations/20260810140000_pilot_operations_operational_closure.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -28,4 +29,9 @@ for (const required of ['pilot_operations_ingest_recovery_evidence','EVIDENCE_NO
 }
 assert.doesNotMatch(truthClosure, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 
+assert.match(operationalClosure, /pilot_operations_rollback_events/);
+assert.match(operationalClosure, /rollback_non_live_promotion/);
+assert.match(operationalClosure, /ROLLBACK_NOT_ELIGIBLE/);
+assert.match(operationalClosure, /env\.maintenance[\s\S]*MAINTENANCE_MODE[\s\S]*env\.read_only[\s\S]*READ_ONLY_MODE[\s\S]*disabled_features \? 'recovery'/);
+assert.match(sql, /LIVE_ACTIVATION_NOT_AUTHORIZED/);
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');

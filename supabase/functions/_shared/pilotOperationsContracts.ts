@@ -2,7 +2,7 @@ export const PILOT_OPERATIONS_LIVE_STOP = 'LIVE_ACTIVATION_NOT_AUTHORIZED' as co
 
 export type PilotOperation =
   | 'register_environment' | 'register_release_candidate' | 'validate_release_candidate'
-  | 'approve_promotion' | 'simulate_promotion' | 'supersede_release_candidate'
+  | 'approve_promotion' | 'simulate_promotion' | 'supersede_release_candidate' | 'rollback_non_live_promotion'
   | 'bind_provider_reference' | 'bootstrap_tenant' | 'deprovision_tenant'
   | 'reactivate_tenant' | 'set_runtime_control' | 'record_recovery_drill';
 
@@ -24,7 +24,7 @@ export type PilotOperationsErrorCode =
   | 'TENANT_DEPROVISIONED' | 'ENVIRONMENT_BLOCKED' | 'MAINTENANCE_ACTIVE' | 'READ_ONLY_ACTIVE'
   | 'MAINTENANCE_MODE' | 'READ_ONLY_MODE' | 'EXPECTED_VERSION_REQUIRED'
   | 'EVIDENCE_STALE' | 'EVIDENCE_INVALID' | 'EVIDENCE_NOT_VERIFIED' | 'PREFLIGHT_BLOCKED'
-  | 'PROVIDER_REFERENCE_STALE' | 'PROVIDER_REFERENCE_INVALID'
+  | 'PROVIDER_REFERENCE_STALE' | 'PROVIDER_REFERENCE_INVALID' | 'ROLLBACK_NOT_ELIGIBLE' | 'SEPARATION_OF_DUTY_REQUIRED'
   | 'PERSISTENCE_UNAVAILABLE' | typeof PILOT_OPERATIONS_LIVE_STOP;
 
 export type PilotOperationsProjection = {
@@ -35,4 +35,5 @@ export type PilotOperationsProjection = {
   provider: { configured: boolean; enabled: boolean; purpose: string } | null;
   blockers: string[];
   liveStopGates: string[];
+  rollback: { eligible: boolean; reason: string | null; targetCandidateId: string | null; targetVersion: number | null; targetLabel: string | null };
 };

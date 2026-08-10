@@ -43,3 +43,9 @@ An operator may record a failed or requested drill but cannot self-attest a pass
 - **Hosted action:** stop and obtain separate AP approval.
 
 PostgreSQL, Desktop Chrome, Pixel 7, and the full manifest are authoritative only when the `Pilot Operations` workflow records a successful exact-head result. Missing, skipped, cancelled, stale, or mismatched evidence is blocked/failed, never passed.
+
+## Governed non-live rollback and recovery ingestion controls
+
+Rollback is a server-authoritative, non-live forward supersession to the exact prior candidate promoted in the same environment. The server projects the opaque target and a bounded eligibility reason, then revalidates tenant/environment binding, current candidate and target versions, fresh `release.promote` authority, operator separation, runtime controls, and idempotency under lock. A successful operation appends immutable rollback, release, receipt, and sanitized audit history; it never deletes history, downgrades a migration, invokes a hosted target, or changes `LIVE_ACTIVATION_NOT_AUTHORIZED`. When rollback is unavailable, the projection supplies the exact bounded reason and the Admin action remains unreachable.
+
+Trusted recovery-evidence ingestion is service/CI-only but is not exempt from environment authority. Deactivated lifecycle, maintenance, read-only mode, or the `recovery` feature kill switch denies every new canonical evidence mutation before either immutable recovery row is inserted. Authorized safe reads remain available. The safe fallback is maintenance/read-only or feature disablement with retained immutable records and an additive forward fix; destructive schema or evidence rollback is prohibited.

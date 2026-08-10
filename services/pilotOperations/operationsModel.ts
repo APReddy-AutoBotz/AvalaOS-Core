@@ -6,14 +6,14 @@ export type PilotOperationsTruth =
 
 export type PilotOperationsProjection = {
   /** Opaque server-projected identifiers used only to target authoritative commands. */
-  authority?: { environmentId: string; releaseId: string; releaseVersion: number };
+  authority?: { environmentId: string; releaseId: string; releaseVersion: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
   release: { candidateLabel: string; commitSha: string; lifecycle: string };
   environment: { label: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number };
   controls: { maintenance: boolean; readOnly: boolean; disabledFeatures: string[] };
   health: { schemaCompatible: boolean; queueState: 'healthy' | 'degraded' | 'blocked'; reconciliationState: 'healthy' | 'degraded' | 'blocked' };
   provider: { configured: boolean; enabled: boolean };
   recovery: { backupState: 'not_run' | 'passed' | 'failed'; restoreState: 'not_run' | 'passed' | 'failed'; evidenceDigest?: string };
-  promotion: { eligible: boolean; blockers: string[]; liveStopGates: string[]; rollbackEligible: boolean; rollbackTargetLabel?: string };
+  promotion: { eligible: boolean; blockers: string[]; liveStopGates: string[]; rollbackEligible: boolean; rollbackReason?: string; rollbackTargetLabel?: string };
   truth: PilotOperationsTruth;
   liveActivationAuthorized: false;
 };
@@ -76,7 +76,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   exactKeys(health, ['schemaCompatible', 'queueState', 'reconciliationState']);
   exactKeys(provider, ['configured', 'enabled']);
   if (Object.keys(recovery).some(key => !['backupState', 'restoreState', 'evidenceDigest'].includes(key)) || !('backupState' in recovery) || !('restoreState' in recovery)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
-  if (Object.keys(promotion).some(key => !['eligible', 'blockers', 'liveStopGates', 'rollbackEligible', 'rollbackTargetLabel'].includes(key)) || !('eligible' in promotion) || !('blockers' in promotion) || !('liveStopGates' in promotion) || !('rollbackEligible' in promotion)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+  if (Object.keys(promotion).some(key => !['eligible', 'blockers', 'liveStopGates', 'rollbackEligible', 'rollbackReason', 'rollbackTargetLabel'].includes(key)) || !('eligible' in promotion) || !('blockers' in promotion) || !('liveStopGates' in promotion) || !('rollbackEligible' in promotion)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (root.liveActivationAuthorized !== false) throw new Error('LIVE_ACTIVATION_NOT_AUTHORIZED');
   if (!Array.isArray(controls.disabledFeatures) || !Array.isArray(promotion.blockers) || !Array.isArray(promotion.liveStopGates)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   const disabledFeatures = controls.disabledFeatures.map(item => text(item, safeFeature));
@@ -84,6 +84,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   const liveStopGates = promotion.liveStopGates.map(item => text(item, safeBlocker));
   if (new Set(disabledFeatures).size !== disabledFeatures.length || new Set(blockers).size !== blockers.length || new Set(liveStopGates).size !== liveStopGates.length) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   const evidenceDigest = recovery.evidenceDigest === undefined ? undefined : text(recovery.evidenceDigest, digest);
+  const rollbackReason = promotion.rollbackReason === undefined ? undefined : text(promotion.rollbackReason, safeBlocker);
   const rollbackTargetLabel = promotion.rollbackTargetLabel === undefined ? undefined : text(promotion.rollbackTargetLabel, safeLabel);
   const decoded: PilotOperationsProjection = {
     release: { candidateLabel: text(release.candidateLabel, safeLabel), commitSha: text(release.commitSha, sha), lifecycle: text(release.lifecycle, safeState) },
@@ -105,11 +106,12 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
       restoreState: enumValue(recovery.restoreState, ['not_run', 'passed', 'failed'] as const),
       ...(evidenceDigest ? { evidenceDigest } : {}),
     },
-    promotion: { eligible: boolean(promotion.eligible), blockers: [...blockers].sort(), liveStopGates: [...liveStopGates].sort(), rollbackEligible: boolean(promotion.rollbackEligible), ...(rollbackTargetLabel ? { rollbackTargetLabel } : {}) },
+    promotion: { eligible: boolean(promotion.eligible), blockers: [...blockers].sort(), liveStopGates: [...liveStopGates].sort(), rollbackEligible: boolean(promotion.rollbackEligible), ...(rollbackReason ? { rollbackReason } : {}), ...(rollbackTargetLabel ? { rollbackTargetLabel } : {}) },
     truth: enumValue(root.truth, ['proven_disposable_or_ci_evidence', 'configured_not_live_verified', 'not_proven_hosted_live', 'failed'] as const),
     liveActivationAuthorized: false,
   };
-  if(root.authority!==undefined){const authority=object(root.authority);exactKeys(authority,['environmentId','releaseId','releaseVersion']);decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})()}}
+  if(root.authority!==undefined){const authority=object(root.authority);if(Object.keys(authority).some(k=>!['environmentId','releaseId','releaseVersion','rollbackTargetCandidateId','rollbackTargetVersion'].includes(k)))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})(),...(authority.rollbackTargetCandidateId?{rollbackTargetCandidateId:text(authority.rollbackTargetCandidateId,/^[0-9a-f-]{36}$/i),rollbackTargetVersion:Number(authority.rollbackTargetVersion)}:{})}}
+  if(decoded.promotion.rollbackEligible!==Boolean(decoded.authority?.rollbackTargetCandidateId)||decoded.promotion.rollbackEligible===Boolean(decoded.promotion.rollbackReason))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.provider.enabled && !decoded.provider.configured) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.promotion.eligible !== (decoded.promotion.blockers.length === 0)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (!decoded.promotion.liveStopGates.includes('LIVE_ACTIVATION_NOT_AUTHORIZED')) throw new Error('LIVE_ACTIVATION_NOT_AUTHORIZED');
