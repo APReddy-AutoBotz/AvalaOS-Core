@@ -95,6 +95,9 @@ try {
   const approved=(await command('approve_promotion','postgres-approve-separate-actor',{candidateId:valid.resourceId},validated.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const promoted=(await command('simulate_promotion','postgres-simulate-non-live',{candidateId:valid.resourceId,target:'non_live'},approved.version)).rows[0].result;
   assert.equal(promoted.lifecycle,'promoted_non_live');
+  const onePromotedProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(onePromotedProjection.rollback.eligible,false);
+  assert.equal(onePromotedProjection.rollback.reason,'ROLLBACK_PRIOR_CANDIDATE_NOT_FOUND','one promoted release plus unrelated pending work must remain rollback-ineligible');
 
   const nextPayload={...validPayload,gitSha:'1'.repeat(40),buildIdentity:'postgres-rollback-current',evidenceManifestSha256:'2'.repeat(64)};
   const next=(await command('register_release_candidate','postgres-rollback-candidate',nextPayload,0)).rows[0].result;
@@ -103,24 +106,35 @@ try {
   const nextApproved=(await command('approve_promotion','postgres-rollback-approve',{candidateId:next.resourceId},nextValidated.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const nextPromoted=(await command('simulate_promotion','postgres-rollback-promote',{candidateId:next.resourceId,target:'non_live'},nextApproved.version)).rows[0].result;
   const rollbackProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(rollbackProjection.release.id,candidate.resourceId,'the unrelated draft remains separately actionable');
+  assert.equal(rollbackProjection.promotedRelease.id,next.resourceId,'current promoted truth must come from immutable promotion history');
   assert.equal(rollbackProjection.rollback.eligible,true); assert.equal(rollbackProjection.rollback.targetCandidateId,valid.resourceId);
+  await command('set_runtime_control','postgres-rollback-maintenance-on',{environmentId:environment.resourceId,maintenance:true,readOnly:false},3);
+  const maintenanceProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(maintenanceProjection.rollback.eligible,false); assert.equal(maintenanceProjection.rollback.reason,'MAINTENANCE_MODE');
+  await command('set_runtime_control','postgres-rollback-maintenance-off',{environmentId:environment.resourceId,maintenance:false,readOnly:false},4);
+  await command('set_runtime_control','postgres-rollback-readonly-on',{environmentId:environment.resourceId,maintenance:false,readOnly:true},5);
+  const readOnlyProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(readOnlyProjection.rollback.eligible,false); assert.equal(readOnlyProjection.rollback.reason,'READ_ONLY_MODE');
+  await command('set_runtime_control','postgres-rollback-readonly-off',{environmentId:environment.resourceId,maintenance:false,readOnly:false},6);
   const rollbackPayload={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
   const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const replay=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   assert.deepEqual(replay,rollback); assert.equal(rollback.liveActivationAuthorized,false);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_rollback_events WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n),1);
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
 
   const evidenceArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations','31329036283','3'.repeat(40),'4'.repeat(64),'5'.repeat(64),candidatePayload.schemaVersion,fixture.requester];
   const evidenceCount=async()=>Number((await fresh.query('SELECT count(*) n FROM pilot_operations_recovery_evidence_ingestions WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n);
   const beforeEvidence=await evidenceCount();
-  await command('set_runtime_control','postgres-recovery-maintenance',{environmentId:environment.resourceId,maintenance:true,readOnly:false,disabledFeatures:[]},3);
+  await command('set_runtime_control','postgres-recovery-maintenance',{environmentId:environment.resourceId,maintenance:true,readOnly:false,disabledFeatures:[]},7);
   await assert.rejects(fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceArgs),/MAINTENANCE_MODE/); assert.equal(await evidenceCount(),beforeEvidence);
-  await command('set_runtime_control','postgres-recovery-read-only',{environmentId:environment.resourceId,maintenance:false,readOnly:true,disabledFeatures:[]},4);
+  await command('set_runtime_control','postgres-recovery-read-only',{environmentId:environment.resourceId,maintenance:false,readOnly:true,disabledFeatures:[]},8);
   await assert.rejects(fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceArgs),/READ_ONLY_MODE/); assert.equal(await evidenceCount(),beforeEvidence);
-  await command('set_runtime_control','postgres-recovery-disabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:['recovery']},5);
+  await command('set_runtime_control','postgres-recovery-disabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:['recovery']},9);
   await assert.rejects(fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceArgs),/FEATURE_DISABLED/); assert.equal(await evidenceCount(),beforeEvidence);
-  await command('set_runtime_control','postgres-recovery-enabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:[]},6);
+  await command('set_runtime_control','postgres-recovery-enabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:[]},10);
   const recoveryCommitted=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.equal(await evidenceCount(),beforeEvidence+1);
   const recoveryReplay=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.deepEqual(recoveryReplay,recoveryCommitted); assert.equal(await evidenceCount(),beforeEvidence+1);
 
@@ -129,7 +143,8 @@ try {
   const pendingPayload={...candidatePayload,gitSha:'6'.repeat(40),buildIdentity:'postgres-pending-after-promotion',evidenceManifestSha256:'7'.repeat(64)};
   const pending=(await command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0)).rows[0].result;
   const pendingProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
-  assert.equal(pendingProjection.release.id,pending.resourceId); assert.equal(pendingProjection.promotedRelease.id,next.resourceId);
+  assert.equal(pendingProjection.release.id,pending.resourceId); assert.equal(pendingProjection.promotedRelease.id,valid.resourceId);
+  assert.equal(pendingProjection.rollback.eligible,true); assert.equal(pendingProjection.rollback.targetCandidateId,next.resourceId,'post-rollback history must select the immediately preceding promoted release');
   assert.equal(pendingProjection.health.schemaCompatible,false); assert.ok(pendingProjection.blockers.includes('SCHEMA_INCOMPATIBLE'));
   assert.equal(pendingProjection.recovery.backupState,'completed'); assert.equal(pendingProjection.recovery.restoreState,'completed');
   const deprovisioned=(await command('deprovision_tenant','postgres-deprovision',{},tenant.version??1)).rows[0].result;

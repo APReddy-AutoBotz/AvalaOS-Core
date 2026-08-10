@@ -21,7 +21,7 @@ const PilotOperationsPanel: React.FC<Props> = ({ projection, loading, error, pen
   if (loading) return <section aria-busy="true" aria-label="Pilot Operations"><p>Loading authoritative pilot operations state…</p></section>;
   if (error || !projection) return <section role="alert" aria-label="Pilot Operations"><h3 className="font-black">Pilot Operations unavailable</h3><p>{error || 'The server projection was not available. No operation was performed.'}</p></section>;
   const blocked = projection.promotion.blockers;
-  const request = (action: PilotOperationRequest['action']) => onRequest?.({ action, expectedVersion: ['validate','approve','simulate_promotion','rollback'].includes(action) ? (projection.authority?.releaseVersion ?? projection.environment.version) : projection.environment.version });
+  const request = (action: PilotOperationRequest['action']) => onRequest?.({ action, expectedVersion: action === 'rollback' ? (projection.authority?.rollbackCurrentVersion ?? projection.environment.version) : ['validate','approve','simulate_promotion'].includes(action) ? (projection.authority?.releaseVersion ?? projection.environment.version) : projection.environment.version });
   return (
     <section aria-labelledby="pilot-operations-title" className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <header>

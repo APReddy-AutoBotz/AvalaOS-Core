@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { decodePilotOperationsProjection, simulateNonLivePromotion } from './operationsModel';
 
 const fixture = () => ({
-  authority: { environmentId: '11111111-1111-4111-8111-111111111111', releaseId: '22222222-2222-4222-8222-222222222222', releaseVersion: 3, rollbackTargetCandidateId: '33333333-3333-4333-8333-333333333333', rollbackTargetVersion: 4 },
+  authority: { environmentId: '11111111-1111-4111-8111-111111111111', releaseId: '22222222-2222-4222-8222-222222222222', releaseVersion: 3, rollbackCurrentCandidateId: '44444444-4444-4444-8444-444444444444', rollbackCurrentVersion: 5, rollbackTargetCandidateId: '33333333-3333-4333-8333-333333333333', rollbackTargetVersion: 4 },
   release: { candidateLabel: 'candidate-227', commitSha: 'a'.repeat(40), lifecycle: 'approved_for_pilot_promotion' },
   environment: { label: 'Synthetic candidate', type: 'pilot_candidate', lifecycle: 'active', version: 3 },
   controls: { maintenance: false, readOnly: false, disabledFeatures: [] },

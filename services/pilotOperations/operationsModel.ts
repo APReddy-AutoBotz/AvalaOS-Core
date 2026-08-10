@@ -6,7 +6,7 @@ export type PilotOperationsTruth =
 
 export type PilotOperationsProjection = {
   /** Opaque server-projected identifiers used only to target authoritative commands. */
-  authority?: { environmentId: string; releaseId: string; releaseVersion: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
+  authority?: { environmentId: string; releaseId: string; releaseVersion: number; rollbackCurrentCandidateId?: string; rollbackCurrentVersion?: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
   release: { candidateLabel: string; commitSha: string; lifecycle: string; promotedHistoryLabel?: string };
   environment: { label: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number };
   controls: { maintenance: boolean; readOnly: boolean; disabledFeatures: string[] };
@@ -110,7 +110,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
     truth: enumValue(root.truth, ['proven_disposable_or_ci_evidence', 'configured_not_live_verified', 'not_proven_hosted_live', 'failed'] as const),
     liveActivationAuthorized: false,
   };
-  if(root.authority!==undefined){const authority=object(root.authority);if(Object.keys(authority).some(k=>!['environmentId','releaseId','releaseVersion','rollbackTargetCandidateId','rollbackTargetVersion'].includes(k)))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})(),...(authority.rollbackTargetCandidateId?{rollbackTargetCandidateId:text(authority.rollbackTargetCandidateId,/^[0-9a-f-]{36}$/i),rollbackTargetVersion:Number(authority.rollbackTargetVersion)}:{})}}
+  if(root.authority!==undefined){const authority=object(root.authority);if(Object.keys(authority).some(k=>!['environmentId','releaseId','releaseVersion','rollbackCurrentCandidateId','rollbackCurrentVersion','rollbackTargetCandidateId','rollbackTargetVersion'].includes(k)))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})(),...(authority.rollbackTargetCandidateId?{rollbackCurrentCandidateId:text(authority.rollbackCurrentCandidateId,/^[0-9a-f-]{36}$/i),rollbackCurrentVersion:Number(authority.rollbackCurrentVersion),rollbackTargetCandidateId:text(authority.rollbackTargetCandidateId,/^[0-9a-f-]{36}$/i),rollbackTargetVersion:Number(authority.rollbackTargetVersion)}:{})}}
   if(decoded.promotion.rollbackEligible!==Boolean(decoded.authority?.rollbackTargetCandidateId)||decoded.promotion.rollbackEligible===Boolean(decoded.promotion.rollbackReason))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.provider.enabled && !decoded.provider.configured) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.promotion.eligible !== (decoded.promotion.blockers.length === 0)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');

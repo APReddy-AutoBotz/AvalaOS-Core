@@ -7,6 +7,7 @@ const correction = await readFile('supabase/migrations/20260809133000_pilot_oper
 const truthClosure = await readFile('supabase/migrations/20260810120000_pilot_operations_truth_closure.sql', 'utf8');
 const operationalClosure = await readFile('supabase/migrations/20260810140000_pilot_operations_operational_closure.sql', 'utf8');
 const lifecycleTruth = await readFile('supabase/migrations/20260810160000_pilot_operations_lifecycle_truth_convergence.sql', 'utf8');
+const rollbackProjectionCorrection = await readFile('supabase/migrations/20260810180000_pilot_operations_rollback_projection_correction.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -39,5 +40,9 @@ for (const required of ['pilot_operations_ingest_recovery_evidence_v3','tenant.l
 }
 assert.match(lifecycleTruth, /pr1b_assert_command_authority[\s\S]*TENANT_DEPROVISIONED[\s\S]*pilot_operations_command_receipts/);
 assert.doesNotMatch(lifecycleTruth, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
+for (const required of ["e.event_type='promoted_non_live' AND c.id<>promoted.id", "WHEN promoted.id IS NULL THEN 'ROLLBACK_CURRENT_NOT_PROMOTED'", 'ROLLBACK_PRIOR_CANDIDATE_NOT_FOUND', 'LIVE_ACTIVATION_NOT_AUTHORIZED']) {
+  assert.ok(rollbackProjectionCorrection.includes(required), `missing rollback projection correction boundary: ${required}`);
+}
+assert.doesNotMatch(rollbackProjectionCorrection, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 assert.match(sql, /LIVE_ACTIVATION_NOT_AUTHORIZED/);
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');
