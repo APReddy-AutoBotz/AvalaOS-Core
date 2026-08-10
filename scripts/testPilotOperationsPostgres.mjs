@@ -99,10 +99,16 @@ try {
   const tenant=(await command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0)).rows[0].result;
   const deprovisioned=(await command('deprovision_tenant','postgres-deprovision',{},tenant.version??1)).rows[0].result;
   assert.equal(deprovisioned.lifecycle,'deprovisioned');
-  await assert.rejects(fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion]),/TENANT_DEPROVISIONED/);
+  await assert.rejects(
+    fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion]),
+    /PR1B_NOT_FOUND/,
+    'projection must preserve the upstream non-disclosing authority denial after deprovisioning',
+  );
   await assert.rejects(command('register_release_candidate','postgres-deprovision-denial',{...candidatePayload,gitSha:'b'.repeat(40)},0),/TENANT_DEPROVISIONED/);
   const reactivated=(await command('reactivate_tenant','postgres-reactivate',{},2)).rows[0].result;
   assert.equal(reactivated.lifecycle,'active');
+  const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
+  assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
   await fresh.query('SET ROLE authenticated');
   await assert.rejects(fresh.query('SELECT count(*) n FROM pilot_operations_release_candidates'),/permission denied/,'authenticated cross-tenant reads must disclose no rows or counts');
   await fresh.query('RESET ROLE');
@@ -112,6 +118,7 @@ try {
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
+    deprovisionNonDisclosureVerified:true,reactivationAuthorizedPathVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
