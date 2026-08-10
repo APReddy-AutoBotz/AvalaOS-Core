@@ -82,7 +82,16 @@ try {
     validPayload.evidenceManifestSha256,validPayload.schemaVersion,JSON.stringify(gates),
   ]);
   const validated=(await command('validate_release_candidate','postgres-validate-exact-evidence',{candidateId:valid.resourceId},valid.version)).rows[0].result;
-  const reviewerAuthorizationVersion=fixture.authorizationVersions[fixture.reviewer];
+  const staleReviewerAuthorizationVersion=fixture.authorizationVersions[fixture.reviewer];
+  const reviewerAuthorizationVersion=Number((await fresh.query(
+    'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',
+    [fixture.org,fixture.reviewer],
+  )).rows[0].version);
+  assert.ok(reviewerAuthorizationVersion > staleReviewerAuthorizationVersion,'granting retained operations capabilities must advance reviewer authority');
+  await assert.rejects(
+    command('approve_promotion','postgres-approve-stale-authority',{candidateId:valid.resourceId},validated.version,undefined,fixture.reviewer,staleReviewerAuthorizationVersion),
+    /PR1B_AUTHORIZATION_STALE/,
+  );
   const approved=(await command('approve_promotion','postgres-approve-separate-actor',{candidateId:valid.resourceId},validated.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const promoted=(await command('simulate_promotion','postgres-simulate-non-live',{candidateId:valid.resourceId,target:'non_live'},approved.version)).rows[0].result;
   assert.equal(promoted.lifecycle,'promoted_non_live');
@@ -102,7 +111,7 @@ try {
   await writeFile('artifacts/pilot-operations/postgres-execution.json',JSON.stringify({
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
-    expectedVersionVerified:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
+    expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
