@@ -128,8 +128,15 @@ try {
   assert.equal(deprovisioned.lifecycle,'deprovisioned');
   await assert.rejects(
     fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion]),
+    /TENANT_DEPROVISIONED/,
+    'a retained authorized actor may learn the bounded deprovisioned lifecycle state',
+  );
+  await assert.rejects(
+    fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4)',[
+      '99000000-0000-4000-8000-999999999999',fixture.org,fixture.workspace,authorizationVersion,
+    ]),
     /PR1B_NOT_FOUND/,
-    'projection must preserve the upstream non-disclosing authority denial after deprovisioning',
+    'an actor without tenant authority must receive only the non-disclosing denial',
   );
   await assert.rejects(command('register_release_candidate','postgres-deprovision-denial',{...candidatePayload,gitSha:'b'.repeat(40)},0),/TENANT_DEPROVISIONED/);
   const reactivated=(await command('reactivate_tenant','postgres-reactivate',{},2)).rows[0].result;
@@ -145,7 +152,7 @@ try {
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
-    deprovisionNonDisclosureVerified:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
+    deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
