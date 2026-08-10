@@ -37,7 +37,7 @@ try {
     console.log(`POSTGRES PASS ${label}: applied schema, forced RLS, tenant-table denial, and service-only command authority`);
   }
   const fixture=await createCommittedStudioFixture(fresh);
-  await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.manage','release.manage','release.validate','release.approve','release.promote','org.admin') ON CONFLICT DO NOTHING",[fixture.role]);
+  await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','operations.manage','release.manage','release.validate','release.approve','release.promote','org.admin') ON CONFLICT DO NOTHING",[fixture.role]);
   const authorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,fixture.requester])).rows[0].version);
   let ordinal=100;
   const command=(operation,key,payload,expectedVersion=0,requestPayload=JSON.stringify(payload),actor=fixture.requester,actorAuthorizationVersion=authorizationVersion)=>fresh.query(
