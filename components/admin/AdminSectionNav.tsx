@@ -32,7 +32,7 @@ const AdminSectionNav: React.FC<AdminSectionNavProps> = ({
             aria-current={active ? 'page' : undefined}
           >
             <span className="block text-sm font-black">{section.label}</span>
-            <span className={`mt-1 block text-[11px] font-semibold leading-4 ${active ? 'text-white/70' : 'text-slate-400'}`}>
+            <span className={`mt-1 block text-[11px] font-semibold leading-4 ${active ? 'text-white/70' : 'text-[var(--av-color-text-subtle)]'}`}>
               {section.shortLabel}
             </span>
           </button>
