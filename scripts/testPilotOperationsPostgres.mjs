@@ -121,11 +121,22 @@ try {
   await command('set_runtime_control','postgres-recovery-disabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:['recovery']},5);
   await assert.rejects(fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceArgs),/FEATURE_DISABLED/); assert.equal(await evidenceCount(),beforeEvidence);
   await command('set_runtime_control','postgres-recovery-enabled',{environmentId:environment.resourceId,maintenance:false,readOnly:false,disabledFeatures:[]},6);
-  await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceArgs); assert.equal(await evidenceCount(),beforeEvidence+1);
+  const recoveryCommitted=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.equal(await evidenceCount(),beforeEvidence+1);
+  const recoveryReplay=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.deepEqual(recoveryReplay,recoveryCommitted); assert.equal(await evidenceCount(),beforeEvidence+1);
 
   const tenant=(await command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0)).rows[0].result;
+  await assert.rejects(command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/,'bootstrap replay must remain actor-bound');
+  const pendingPayload={...candidatePayload,gitSha:'6'.repeat(40),buildIdentity:'postgres-pending-after-promotion',evidenceManifestSha256:'7'.repeat(64)};
+  const pending=(await command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0)).rows[0].result;
+  const pendingProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(pendingProjection.release.id,pending.resourceId); assert.equal(pendingProjection.promotedRelease.id,next.resourceId);
+  assert.equal(pendingProjection.health.schemaCompatible,false); assert.ok(pendingProjection.blockers.includes('SCHEMA_INCOMPATIBLE'));
+  assert.equal(pendingProjection.recovery.backupState,'completed'); assert.equal(pendingProjection.recovery.restoreState,'completed');
   const deprovisioned=(await command('deprovision_tenant','postgres-deprovision',{},tenant.version??1)).rows[0].result;
   assert.equal(deprovisioned.lifecycle,'deprovisioned');
+  await assert.rejects(command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0),/TENANT_DEPROVISIONED/,'current tenant lifecycle must precede committed receipt replay');
+  const evidenceAfterDeprovision=[...evidenceArgs]; evidenceAfterDeprovision[4]='31329036284'; evidenceAfterDeprovision[6]='8'.repeat(64); evidenceAfterDeprovision[7]='9'.repeat(64);
+  await assert.rejects(fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',evidenceAfterDeprovision),/TENANT_DEPROVISIONED/); assert.equal(await evidenceCount(),beforeEvidence+1);
   await assert.rejects(
     fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion]),
     /TENANT_DEPROVISIONED/,
@@ -152,7 +163,7 @@ try {
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
-    deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
+    deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {

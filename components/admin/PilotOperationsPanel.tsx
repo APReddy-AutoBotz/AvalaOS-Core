@@ -30,13 +30,13 @@ const PilotOperationsPanel: React.FC<Props> = ({ projection, loading, error, pen
         <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">Hosted/live activation is not authorized or proven. This surface cannot deploy to hosted infrastructure.</p>
       </header>
       <div className="grid gap-4 md:grid-cols-2">
-        <article><h4 className="font-black">Release candidate</h4><p className="mt-2">{projection.release.candidateLabel} <State value={projection.release.lifecycle} /></p><p className="mt-1 break-all font-mono text-xs">{projection.release.commitSha}</p></article>
+        <article><h4 className="font-black">Release candidate</h4><p className="mt-2">{projection.release.candidateLabel} <State value={projection.release.lifecycle} /></p><p className="mt-1 break-all font-mono text-xs">{projection.release.commitSha}</p>{projection.release.promotedHistoryLabel && <p className="mt-1 text-xs">Promoted history: {projection.release.promotedHistoryLabel}</p>}</article>
         <article><h4 className="font-black">Environment</h4><p className="mt-2">{projection.environment.label} <State value={projection.environment.lifecycle} /></p><p className="mt-1 text-sm">Schema {projection.health.schemaCompatible ? 'compatible' : 'blocked'} · Maintenance {projection.controls.maintenance ? 'on' : 'off'} · Read-only {projection.controls.readOnly ? 'on' : 'off'}</p></article>
       </div>
       <article><h4 className="font-black">Promotion gates</h4>{blocked.length === 0 ? <p>All configured non-live gates passed.</p> : <ul className="mt-2 space-y-2">{blocked.map(reason => <li key={reason}>Blocked: {reason}</li>)}</ul>}</article>
       <article><h4 className="font-black">Hosted/live stop gates</h4><ul className="mt-2 space-y-2">{projection.promotion.liveStopGates.map(reason => <li key={reason}>Blocked: {reason}</li>)}</ul></article>
       <div className="grid gap-4 md:grid-cols-3">
-        <article><h4 className="font-black">Provider controls</h4><p className="text-sm">Enterprise Intelligence: {projection.provider.configured ? (projection.provider.enabled ? 'configured / enabled' : 'configured / disabled') : 'not configured'}</p></article>
+        <article><h4 className="font-black">Provider controls</h4><p className="text-sm">Enterprise Intelligence: {projection.provider.status ?? (projection.provider.configured ? (projection.provider.enabled ? 'enabled' : 'disabled') : 'not configured')}</p></article>
         <article><h4 className="font-black">Health</h4><p className="text-sm">Queue: {projection.health.queueState}</p><p className="text-sm">Reconciliation: {projection.health.reconciliationState}</p></article>
         <article><h4 className="font-black">Recovery</h4><p className="text-sm">Backup: {projection.recovery.backupState}</p><p className="text-sm">Restore: {projection.recovery.restoreState}</p></article>
       </div>

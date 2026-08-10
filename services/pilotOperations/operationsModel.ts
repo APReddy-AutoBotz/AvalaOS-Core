@@ -7,11 +7,11 @@ export type PilotOperationsTruth =
 export type PilotOperationsProjection = {
   /** Opaque server-projected identifiers used only to target authoritative commands. */
   authority?: { environmentId: string; releaseId: string; releaseVersion: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
-  release: { candidateLabel: string; commitSha: string; lifecycle: string };
+  release: { candidateLabel: string; commitSha: string; lifecycle: string; promotedHistoryLabel?: string };
   environment: { label: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number };
   controls: { maintenance: boolean; readOnly: boolean; disabledFeatures: string[] };
   health: { schemaCompatible: boolean; queueState: 'healthy' | 'degraded' | 'blocked'; reconciliationState: 'healthy' | 'degraded' | 'blocked' };
-  provider: { configured: boolean; enabled: boolean };
+  provider: { configured: boolean; enabled: boolean; status?: 'not_configured' | 'enabled' | 'disabled' | 'expired' | 'revoked' | 'rotated' };
   recovery: { backupState: 'not_run' | 'passed' | 'failed'; restoreState: 'not_run' | 'passed' | 'failed'; evidenceDigest?: string };
   promotion: { eligible: boolean; blockers: string[]; liveStopGates: string[]; rollbackEligible: boolean; rollbackReason?: string; rollbackTargetLabel?: string };
   truth: PilotOperationsTruth;
@@ -70,11 +70,11 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   const provider = object(root.provider);
   const recovery = object(root.recovery);
   const promotion = object(root.promotion);
-  exactKeys(release, ['candidateLabel', 'commitSha', 'lifecycle']);
+  if (Object.keys(release).some(key => !['candidateLabel', 'commitSha', 'lifecycle', 'promotedHistoryLabel'].includes(key)) || !['candidateLabel', 'commitSha', 'lifecycle'].every(key => key in release)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   exactKeys(environment, ['label', 'type', 'lifecycle', 'version']);
   exactKeys(controls, ['maintenance', 'readOnly', 'disabledFeatures']);
   exactKeys(health, ['schemaCompatible', 'queueState', 'reconciliationState']);
-  exactKeys(provider, ['configured', 'enabled']);
+  if (Object.keys(provider).some(key => !['configured', 'enabled', 'status'].includes(key)) || !['configured', 'enabled'].every(key => key in provider)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (Object.keys(recovery).some(key => !['backupState', 'restoreState', 'evidenceDigest'].includes(key)) || !('backupState' in recovery) || !('restoreState' in recovery)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (Object.keys(promotion).some(key => !['eligible', 'blockers', 'liveStopGates', 'rollbackEligible', 'rollbackReason', 'rollbackTargetLabel'].includes(key)) || !('eligible' in promotion) || !('blockers' in promotion) || !('liveStopGates' in promotion) || !('rollbackEligible' in promotion)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (root.liveActivationAuthorized !== false) throw new Error('LIVE_ACTIVATION_NOT_AUTHORIZED');
@@ -87,7 +87,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   const rollbackReason = promotion.rollbackReason === undefined ? undefined : text(promotion.rollbackReason, safeBlocker);
   const rollbackTargetLabel = promotion.rollbackTargetLabel === undefined ? undefined : text(promotion.rollbackTargetLabel, safeLabel);
   const decoded: PilotOperationsProjection = {
-    release: { candidateLabel: text(release.candidateLabel, safeLabel), commitSha: text(release.commitSha, sha), lifecycle: text(release.lifecycle, safeState) },
+    release: { candidateLabel: text(release.candidateLabel, safeLabel), commitSha: text(release.commitSha, sha), lifecycle: text(release.lifecycle, safeState), ...(release.promotedHistoryLabel ? { promotedHistoryLabel: text(release.promotedHistoryLabel, safeLabel) } : {}) },
     environment: {
       label: text(environment.label, safeLabel),
       type: enumValue(environment.type, ['disposable_ci', 'pilot_candidate'] as const),
@@ -100,7 +100,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
       queueState: enumValue(health.queueState, ['healthy', 'degraded', 'blocked'] as const),
       reconciliationState: enumValue(health.reconciliationState, ['healthy', 'degraded', 'blocked'] as const),
     },
-    provider: { configured: boolean(provider.configured), enabled: boolean(provider.enabled) },
+    provider: { configured: boolean(provider.configured), enabled: boolean(provider.enabled), ...(provider.status ? { status: enumValue(provider.status, ['not_configured','enabled','disabled','expired','revoked','rotated'] as const) } : {}) },
     recovery: {
       backupState: enumValue(recovery.backupState, ['not_run', 'passed', 'failed'] as const),
       restoreState: enumValue(recovery.restoreState, ['not_run', 'passed', 'failed'] as const),

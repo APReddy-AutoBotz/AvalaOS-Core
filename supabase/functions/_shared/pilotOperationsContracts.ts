@@ -32,7 +32,10 @@ export type PilotOperationsProjection = {
   liveActivationAuthorized: false;
   environment: { id: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number; maintenance: boolean; readOnly: boolean; disabledFeatures: string[] } | null;
   release: { id: string; gitSha: string; lifecycle: string; version: number } | null;
-  provider: { configured: boolean; enabled: boolean; purpose: string } | null;
+  promotedRelease: { id: string; gitSha: string; lifecycle: string; version: number } | null;
+  provider: { configured: boolean; enabled: boolean; status: 'not_configured' | 'enabled' | 'disabled' | 'expired' | 'revoked' | 'rotated'; purpose: string } | null;
+  health: { schemaCompatible: boolean; queueState: string; reconciliationState: string };
+  recovery: { backupState: 'not_run' | 'completed'; restoreState: 'not_run' | 'completed' };
   blockers: string[];
   liveStopGates: string[];
   rollback: { eligible: boolean; reason: string | null; targetCandidateId: string | null; targetVersion: number | null; targetLabel: string | null };
