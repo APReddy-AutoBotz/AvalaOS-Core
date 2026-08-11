@@ -58,7 +58,7 @@ After all stop gates pass, the controller may execute the repository-owned activ
 6. exercise canonical AP Invoice Exception Assess → Govern → Studio → Delivery → Monitor behavior and negative stale/revoked/cross-tenant cases;
 7. exercise response loss/replay, stale promotion candidate, concurrent rollback, queues/reconciliation/recovery, maintenance/read-only/kill switches, backup/restore, corrupt/wrong-version backup rejection, and fake provider success/failure/timeout/revocation/rotation with zero provider egress;
 8. deploy only the exact head to the explicitly linked preview/branch target;
-9. verify release/environment response headers, then run Desktop Chrome and Pixel 7 acceptance;
+9. verify release/environment response headers, then run Desktop Chrome and Pixel 7 functional acceptance and the separate repository-owned accessibility/performance assertion job;
 10. assemble the sanitized hosted manifest and run the exact-head verifier.
 
 Do not disable maintenance/read-only behavior merely because migrations completed. Release it only after all required hosted gates pass and the controller explicitly approves non-production pilot traffic.
@@ -70,9 +70,12 @@ The hosted application must return `x-avalaos-release: <exact-head>` and `x-aval
 ```bash
 EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> node scripts/verify-hosted-deployment.mjs
 EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> npx playwright test --config=playwright.hosted-pilot.config.ts
+EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> npx playwright test --config=playwright.hosted-accessibility-performance.config.ts
 ```
 
 The browser may display server projections but cannot mint tenant, environment, release, approval, evidence, or provider authority. Backend/storage/simulated-provider failure must not render success. Hosted acceptance includes loading, error, offline, stale, revoked, blocked, accessibility, responsive overflow, and practical performance observations; missing coverage remains `blocked`.
+
+The accessibility/performance gate is independent of generic hosted-browser success. It runs axe against the hosted application root on Desktop Chrome and Pixel 7 and rejects serious or critical findings. It also requires complete browser navigation metrics and enforces repository-owned ceilings of 15 seconds for navigation completion, 10 seconds for DOM content loaded, and 300 resource entries. Tooling, browser launch, navigation, metric, target, job, or artifact failure blocks the gate; caller input and the generic browser job cannot substitute a pass.
 
 ## Hosted evidence manifest
 

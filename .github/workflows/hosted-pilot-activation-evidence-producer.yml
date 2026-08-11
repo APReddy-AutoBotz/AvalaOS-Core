@@ -81,8 +81,45 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --config=playwright.hosted-pilot.config.ts --workers=1
 
+  accessibility-performance:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - name: Verify exact hosted deployment before accessibility and performance assertions
+        run: node scripts/verify-hosted-deployment.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Run repository-owned hosted accessibility and performance contracts
+        run: npx playwright test --config=playwright.hosted-accessibility-performance.config.ts --workers=1
+      - name: Record sanitized successful assertion identity
+        env:
+          TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+        run: |
+          mkdir -p artifacts/hosted-pilot/accessibility-performance
+          node --input-type=module <<'NODE'
+          import {writeFile} from 'node:fs/promises';
+          import {safeHash,validateHostedUrl,ACTIVATION_PRODUCER_WORKFLOW} from './scripts/verify-hosted-pilot-evidence.mjs';
+          const result={schemaVersion:1,gate:'accessibility-performance',result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
+            workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),workflowPath:ACTIVATION_PRODUCER_WORKFLOW,
+            environment:'hosted_nonproduction_pilot',targetFingerprint:process.env.TARGET_FINGERPRINT,
+            deploymentTargetFingerprint:safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN)),projects:['hosted-accessibility-performance-desktop-chrome','hosted-accessibility-performance-pixel-7']};
+          await writeFile('artifacts/hosted-pilot/accessibility-performance/result.json',`${JSON.stringify(result,null,2)}\
+`,{mode:0o600});
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-accessibility-performance-result-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/accessibility-performance/result.json
+          if-no-files-found: error
+          retention-days: 14
+
   produce-sanitized-manifest:
-    needs: [database-provider, recovery-operations, hosted-browser]
+    needs: [database-provider, recovery-operations, hosted-browser, accessibility-performance]
     environment: hosted-nonproduction-pilot
     runs-on: ubuntu-latest
     steps:
@@ -90,6 +127,10 @@ jobs:
         with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
+      - uses: actions/download-artifact@v4
+        with:
+          name: hosted-accessibility-performance-result-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/accessibility-performance
       - name: Compose results only from required successful jobs in this immutable run
         env:
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
@@ -97,19 +138,30 @@ jobs:
         shell: bash
         run: |
           TRUSTED_GATE_RESULTS_JSON="$(node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
           import {safeHash,validateHostedUrl,ACTIVATION_PRODUCER_WORKFLOW,REQUIRED_GATES} from './scripts/verify-hosted-pilot-evidence.mjs';
           const target=process.env.TARGET_FINGERPRINT;
           const deployment=safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN));
+          const accessibility=JSON.parse(await readFile('artifacts/hosted-pilot/accessibility-performance/result.json','utf8'));
+          if(accessibility.gate!=='accessibility-performance' || accessibility.result!=='passed'
+            || accessibility.gitCommit!==process.env.EXPECTED_RELEASE_SHA || accessibility.workflowRunId!==process.env.GITHUB_RUN_ID
+            || Number(accessibility.workflowRunAttempt)!==Number(process.env.GITHUB_RUN_ATTEMPT) || accessibility.workflowPath!==ACTIVATION_PRODUCER_WORKFLOW
+            || accessibility.environment!=='hosted_nonproduction_pilot' || accessibility.targetFingerprint!==target
+            || accessibility.deploymentTargetFingerprint!==deployment
+            || JSON.stringify(accessibility.projects)!==JSON.stringify(['hosted-accessibility-performance-desktop-chrome','hosted-accessibility-performance-pixel-7']))
+            throw new Error('missing or mismatched accessibility/performance assertion artifact');
           const jobFor={
             'database-preflight':'database-provider','migration-chain':'database-provider',
             'provider-simulation-zero-egress':'database-provider','runtime-fail-closed':'database-provider',
             'tenant-adversarial':'recovery-operations','backup-restore':'recovery-operations','canonical-journey':'recovery-operations',
-            'browser-desktop':'hosted-browser','browser-pixel':'hosted-browser','accessibility-performance':'hosted-browser',
+            'browser-desktop':'hosted-browser','browser-pixel':'hosted-browser','accessibility-performance':'accessibility-performance',
           };
           const results=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
             workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
             workflowPath:ACTIVATION_PRODUCER_WORKFLOW,workflowConclusion:'success',environment:'hosted_nonproduction_pilot',
-            targetFingerprint:target,deploymentTargetFingerprint:deployment,resultId:`${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`}]))
+            targetFingerprint:target,deploymentTargetFingerprint:deployment,resultId:g==='accessibility-performance'
+              ? `accessibility-performance-artifact:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`
+              : `${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`}]))
           process.stdout.write(JSON.stringify(results));
           NODE
           )"

@@ -66,12 +66,33 @@ test('CLI and workflow fail closed unless trusted run metadata is supplied by on
 test('producer workflow executes trusted gates instead of accepting caller-declared result IDs', async () => {
   const producer = await readFile('.github/workflows/hosted-pilot-activation-evidence-producer.yml', 'utf8');
   assert.doesNotMatch(producer, /gate_result_ids_json/i);
-  for (const job of ['database-provider','recovery-operations','hosted-browser']) assert.match(producer, new RegExp(job));
+  for (const job of ['database-provider','recovery-operations','hosted-browser','accessibility-performance']) assert.match(producer, new RegExp(job));
   assert.match(producer, /hosted-pilot:verify-database/);
   assert.match(producer, /test:recovery:pilot-operations/);
   assert.match(producer, /test:migrations:pilot-operations:postgres/);
   assert.match(producer, /playwright\.hosted-pilot\.config\.ts --workers=1/);
+  assert.match(producer, /playwright\.hosted-accessibility-performance\.config\.ts --workers=1/);
+  assert.match(producer, /needs: \[database-provider, recovery-operations, hosted-browser, accessibility-performance\]/);
+  assert.match(producer, /'accessibility-performance':'accessibility-performance'/);
+  assert.doesNotMatch(producer, /'accessibility-performance':'hosted-browser'/);
+  assert.match(producer, /name: hosted-accessibility-performance-result-\$\{\{ github\.run_attempt \}\}/);
+  assert.match(producer, /missing or mismatched accessibility\/performance assertion artifact/);
+  assert.match(producer, /accessibility-performance-artifact:/);
   assert.match(producer, /TRUSTED_GATE_RESULTS_JSON/);
+});
+test('hosted accessibility and performance evidence owns executable bounded assertions', async () => {
+  const spec = await readFile('tests/browser/hostedAccessibilityPerformance.spec.ts', 'utf8');
+  const config = await readFile('playwright.hosted-accessibility-performance.config.ts', 'utf8');
+  assert.match(spec, /new AxeBuilder/);
+  assert.match(spec, /impact === 'serious' \|\| impact === 'critical'/);
+  assert.match(spec, /MAX_NAVIGATION_DURATION_MS/);
+  assert.match(spec, /MAX_DOM_CONTENT_LOADED_MS/);
+  assert.match(spec, /MAX_RESOURCE_COUNT/);
+  assert.match(spec, /complete browser-owned navigation metrics are mandatory/);
+  assert.match(config, /validateHostedUrl\(rawUrl\)/);
+  assert.match(config, /hostedAccessibilityPerformance\.spec\.ts/);
+  assert.match(config, /Desktop Chrome/);
+  assert.match(config, /Pixel 7/);
 });
 test('deployment verification requires release and nonproduction headers', async () => {
   const fetchImpl = async () => new Response('<div id="root"></div>', { headers: { 'x-avalaos-release': head, 'x-avalaos-environment': 'hosted_nonproduction_pilot' } });
