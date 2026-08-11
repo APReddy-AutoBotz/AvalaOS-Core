@@ -11,6 +11,7 @@ interface AdminWorkbenchProps {
   planLabel: string;
   overview: React.ReactNode;
   releaseCandidate: React.ReactNode;
+  pilotOperations: React.ReactNode;
   organization: React.ReactNode;
   modules: React.ReactNode;
   trustCenter: React.ReactNode;
@@ -28,6 +29,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
   planLabel,
   overview,
   releaseCandidate,
+  pilotOperations,
   organization,
   modules,
   trustCenter,
@@ -48,6 +50,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
   const sectionContent: Record<AdminSectionKey, React.ReactNode> = {
     overview,
     release_candidate: releaseCandidate,
+    pilot_operations: pilotOperations,
     organization,
     modules,
     trust_center: trustCenter,
@@ -65,14 +68,14 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
       <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Avala Admin</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--av-color-accent)]">Avala Admin</p>
             <h1 className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">Admin Workbench</h1>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
               Focused admin navigation for organization setup, module access, Trust Center review, Buyer Acceptance Pack review, Admin walkthrough rehearsal, evidence policy, users, audit signals, and AI control direction.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{organizationName}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--av-color-text-subtle)]">{organizationName}</p>
             <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{planLabel}</p>
           </div>
         </div>

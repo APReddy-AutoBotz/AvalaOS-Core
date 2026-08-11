@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Workstream 6 pilot operations candidate
+
+PR #226 merged as `5bfcdf9a93391e1488b626b37ff3e2112e2f3f97` and accepted only the disposable/local pilot evidence boundary. Draft PR #227 is the separately authorized non-production Pilot Operations candidate. It may establish source and exact-head disposable CI proof for release/environment authority, tenant bootstrap, sanitized observability, recovery, operational controls, and non-live promotion simulation. Hosted/live activation, deployment, production, real secrets/providers/customer data, security certification, and compliance certification remain `not_proven_hosted_live`; `LIVE_ACTIVATION_NOT_AUTHORIZED` is the next AP stop gate.
+
 ## Post-V1-RC disposable pilot acceptance candidate
 
 PR #225 merged as `c0a6196b18a9725eb162e56e86435aa4d0e402d1` and accepted the V1 release-candidate source/local/exact-head CI proof boundary. Draft PR #226 is the separately authorized disposable/local pilot-acceptance exercise. Its repository-owned workflow composes accepted authority suites, disposable PostgreSQL 16, synthetic provider/storage boundaries, Desktop Chrome and Pixel 7 browser projects, and a fail-closed exact-head manifest. Until authoritative GitHub Actions completes, its status is `configured_not_live_verified`; a successful run may establish only `proven_disposable_pilot_evidence`. Hosted/live infrastructure, deployment, real providers, production, security certification, and compliance certification remain `not_proven_hosted_live`. The next milestone requires separate approval and is not a production cutover.

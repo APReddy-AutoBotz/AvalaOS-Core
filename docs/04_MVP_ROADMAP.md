@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Roadmap
 
+## Active Workstream 6 candidate
+
+PR #226 disposable pilot acceptance is merged at `5bfcdf9a93391e1488b626b37ff3e2112e2f3f97`. Draft PR #227 implements the non-production pilot operations control plane and stops at `LIVE_ACTIVATION_NOT_AUTHORIZED`. A real hosted pilot requires separate AP approval.
+
 ## Active post-RC milestone — Draft PR #226
 
 PR #225 is merged and its V1 RC proof boundary is accepted at `c0a6196b18a9725eb162e56e86435aa4d0e402d1`. The active next milestone is the separately scoped disposable/local pilot acceptance exercise: canonical synthetic Assess → Govern → Studio → Delivery → Monitor execution, tenant/adversarial and recovery drills, private-artifact authority, operator diagnostics, disposable PostgreSQL, and Desktop Chrome/Pixel 7 evidence. GitHub Actions binds the manifest to the exact candidate head and fails closed. This is not deployment or hosted/live/production proof; any following milestone requires explicit approval.
