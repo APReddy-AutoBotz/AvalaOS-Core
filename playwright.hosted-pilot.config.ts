@@ -3,7 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 const rawUrl = process.env.HOSTED_PILOT_URL;
 if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; hosted acceptance cannot silently use localhost');
 const url = new URL(rawUrl);
-if (url.protocol !== 'https:' || url.username || url.password || ['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
+const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+const loopback = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '::1'
+  || /^127(?:\.|$)/.test(hostname) || /^::ffff:(?:127\.|7f[0-9a-f]{2}:)/i.test(hostname);
+if (url.protocol !== 'https:' || url.username || url.password || loopback || !hostname.includes('.')) {
   throw new Error('HOSTED_PILOT_URL must be a credential-free hosted HTTPS origin');
 }
 

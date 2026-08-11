@@ -80,6 +80,7 @@ export function classifyHostedTarget(raw, canonical) {
   const duplicateOrReordered = inventory.appliedMigrations.length !== new Set(inventory.appliedMigrations).size;
   const expectedAtState = new Set(canonical.migrations.slice(0, inventory.appliedMigrations.length).flatMap(item => item.creates));
   const missingRelations = [...expectedAtState].filter(relation => !inventory.tables.includes(relation));
+  const relationsAheadOfLedger = appTables.filter(relation => expectedRelations.has(relation) && !expectedAtState.has(relation));
   const empty = appTables.length === 0 && inventory.appliedMigrations.length === 0 && inventory.authUserCount === 0;
   const reasons = [];
   if (inventory.authUserCount > 0 && inventory.appliedMigrations.length === 0) reasons.push('auth_users_on_uninitialized_target');
@@ -87,8 +88,9 @@ export function classifyHostedTarget(raw, canonical) {
   if (foreignTables.length) reasons.push(FOREIGN_MARKERS.test(foreignTables.map(x => x.slice(7)).join('|')) ? 'known_foreign_product_schema' : 'foreign_table');
   if (!isPrefix || duplicateOrReordered || inventory.appliedMigrations.length > canonicalNames.length) reasons.push('migration_history_not_canonical_prefix');
   if (missingRelations.length) reasons.push('partially_initialized_or_dirty_schema');
+  if (relationsAheadOfLedger.length) reasons.push('relations_ahead_of_migration_ledger');
   const classification = reasons.length ? 'rejected' : empty ? 'dedicated_empty' : 'avalaos_compatible';
-  return Object.freeze({ classification, mutationAllowed: classification !== 'rejected', reasons: normalized(reasons), foreignSchemas, foreignTables, missingRelations, inventoryDigest: sha256(canonicalJson(inventory)), inventory });
+  return Object.freeze({ classification, mutationAllowed: classification !== 'rejected', reasons: normalized(reasons), foreignSchemas, foreignTables, missingRelations, relationsAheadOfLedger, inventoryDigest: sha256(canonicalJson(inventory)), inventory });
 }
 
 export function buildAdditiveMigrationPlan(classification, canonical) {

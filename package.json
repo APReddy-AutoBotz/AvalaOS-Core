@@ -186,7 +186,7 @@
     "hosted-pilot:verify-database": "node scripts/hostedPilotDatabaseVerify.mjs",
     "verify:hosted-pilot-evidence": "node scripts/verify-hosted-pilot-evidence.mjs",
     "test:browser:hosted-pilot": "playwright test --config=playwright.hosted-pilot.config.ts",
-    "test:hosted-pilot": "node --test scripts/hostedPilotActivation.test.mjs scripts/hostedPilotApplySafety.test.mjs scripts/hostedPilotDatabaseContract.test.mjs scripts/verify-hosted-pilot-evidence.test.mjs && node scripts/checkWorkflowYaml.test.mjs"
+    "test:hosted-pilot": "node --test scripts/hostedPilotActivation.test.mjs scripts/hostedPilotApplyEntrypoint.test.mjs scripts/hostedPilotApplySafety.test.mjs scripts/hostedPilotDatabaseContract.test.mjs scripts/verify-hosted-pilot-evidence.test.mjs && node scripts/checkWorkflowYaml.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

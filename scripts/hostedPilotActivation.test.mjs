@@ -50,6 +50,23 @@ test('dirty, reordered, unknown and partially initialized states fail closed', (
   assert.equal(classifyHostedTarget({ ...base, schemas: ['public', 'mockmate'] }, canonical).mutationAllowed, false);
 });
 
+test('relations introduced after the recorded ledger prefix fail closed and clean retry remains valid', () => {
+  const laterIndex = canonical.migrations.findIndex((migration, index) => index > 0 && migration.creates.length > 0);
+  assert.ok(laterIndex > 0, 'fixture requires a later canonical relation');
+  const later = canonical.migrations[laterIndex].creates[0];
+  const [schema, name] = later.split('.');
+  for (const appliedMigrations of [[], canonical.migrations.slice(0, laterIndex).map(migration => migration.name)]) {
+    const result = classifyHostedTarget({ ...base, tables: [{ schema, name }], appliedMigrations }, canonical);
+    assert.equal(result.mutationAllowed, false);
+    assert.ok(result.reasons.includes('relations_ahead_of_migration_ledger'));
+  }
+  const cleanPrefix = canonical.migrations.slice(0, laterIndex + 1);
+  const cleanTables = [...new Set(cleanPrefix.flatMap(migration => migration.creates))].map(relation => {
+    const [tableSchema, tableName] = relation.split('.'); return { schema: tableSchema, name: tableName };
+  });
+  assert.equal(classifyHostedTarget({ ...base, tables: cleanTables, appliedMigrations: cleanPrefix.map(migration => migration.name) }, canonical).mutationAllowed, true);
+});
+
 test('inventory rejects unsafe identifiers rather than reflecting them', () => {
   assert.throws(() => sanitizeStructuralInventory({ ...base, tables: [{ schema: 'public', name: 'x; select secret' }] }), /unsafe identifier/);
   assert.throws(() => sanitizeStructuralInventory({ ...base, appliedMigrations: ['../../secret'] }), /invalid/);

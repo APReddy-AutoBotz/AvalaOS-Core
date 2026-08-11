@@ -47,6 +47,11 @@ After all stop gates pass, the controller may execute the repository-owned activ
    The private token file must remain outside artifacts and be deleted after the attempt. Set `HOSTED_PILOT_ENVIRONMENT_FINGERPRINT` to the safe fingerprint emitted by the immediately preceding preflight; never derive it from a caller-supplied project label alone. The apply command uses only the repository migration chain, serializes application with a database advisory lock, re-inventories and reclassifies the actual connected catalogs, auth users, target identity, relations, and checksum ledger under that lock before any compatibility or migration write, creates any Supabase pgcrypto bridge and all of its ACLs in one rollback-safe transaction, commits one additive migration at a time, and emits only sanitized status. A partial failure stays in maintenance/read-only and requires an additive forward repair;
 4. verify migration state, RLS, grants, `SECURITY DEFINER`/`EXECUTE` boundaries, service-only RPCs, Storage policies, cross-tenant list/count/existence non-disclosure, session revocation, and authorization versions;
 5. run idempotent synthetic bootstrap for one organization/workspace and its bounded role matrix;
+   provision a distinct synthetic Recovery Promotion Operator through
+   `hosted_pilot_provision_recovery_operator` only after its `.invalid` identity has active authority
+   in that one tenant/workspace. The repository role grants exactly `operations.read` and
+   `release.promote`: it grants no approval, Owner/Admin, business, provider, production, or
+   customer-data authority. Record its current authorization version after provisioning;
 6. exercise canonical AP Invoice Exception Assess → Govern → Studio → Delivery → Monitor behavior and negative stale/revoked/cross-tenant cases;
 7. exercise response loss/replay, stale promotion candidate, concurrent rollback, queues/reconciliation/recovery, maintenance/read-only/kill switches, backup/restore, corrupt/wrong-version backup rejection, and fake provider success/failure/timeout/revocation/rotation with zero provider egress;
 8. deploy only the exact head to the explicitly linked preview/branch target;
@@ -73,6 +78,8 @@ The sanitized `manifest.json` uses schema version 1 and binds:
 - exact `gitCommit`, safe one-way target/deployment fingerprints, and safe deployment/workflow identities (never the hosted origin or site/project identifiers);
 - `environment: hosted_nonproduction_pilot`;
 - SHA-256 target fingerprint and migration-chain hash (never their raw inputs);
+- `migrationChainHash` must equal `sha256:` plus the digest computed from the exact checked-out
+  canonical migration inventory; an arbitrary, stale, or merely well-formed digest is rejected;
 - `hostedNonproductionVerified: true`, `productionAuthorized: false`, and `customerDataUsed: false`;
 - every required gate with `result: passed`, the same Git commit/workflow run, and a safe result ID.
 
@@ -89,6 +96,10 @@ The manual GitHub workflow downloads this manifest from a controller-identified 
 - **Identity/preflight failure:** perform no writes; disconnect and classify `blocked`.
 - **Migration failure:** retain maintenance/read-only behavior, stop additive application, capture sanitized migration/result identity, and forward-repair with a new additive migration after review. Never down-migrate destructively.
 - **Bootstrap/replay failure:** keep the tenant disabled, use server-authoritative idempotent deprovision/replay, and verify audit/revocation before retry.
+- **Rollback separation of duties:** use the dedicated active synthetic Recovery Promotion Operator,
+  never the original promoter or independent approver. A same-promoter, approval-only, revoked,
+  disabled, cross-tenant, or stale-authorization-version attempt must fail without a receipt or
+  lifecycle mutation. Preserve the exact rollback target candidate/version and replay receipt.
 - **Web mismatch or false success:** remove the non-production deploy from pilot traffic or retain its maintenance page; do not promote or substitute another release.
 - **Backup rejection or recovery failure:** keep read-only, preserve the original target, reject corrupt/wrong-version material, and restore only into a separately verified dedicated non-production target.
 - **Secret or provider-egress suspicion:** stop immediately. Do not print or copy the suspected value; revoke through the separately authorized operator process and invalidate the evidence run.

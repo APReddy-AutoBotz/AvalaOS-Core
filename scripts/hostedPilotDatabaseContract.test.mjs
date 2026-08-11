@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
+const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/20260811140000_hosted_recovery_promotion_operator.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
 const verifyScript=await readFile(new URL('./hostedPilotDatabaseVerify.mjs',import.meta.url),'utf8');
@@ -50,6 +51,16 @@ test('forward hosted hardening advances the marker without weakening stop gates'
   assert.match(hardeningMigration,/NOT production_authorized/);
   assert.match(hardeningMigration,/NOT customer_data_authorized/);
   assert.match(hardeningMigration,/NOT real_provider_calls_authorized/);
+});
+test('dedicated recovery operator is synthetic, promotion-only, tenant-bound and non-production',()=>{
+  assert.match(recoveryOperatorMigration,/hosted_pilot_recovery_operators/);
+  assert.match(recoveryOperatorMigration,/SYNTHETIC_IDENTITY_REQUIRED/);
+  assert.match(recoveryOperatorMigration,/RECOVERY_OPERATOR_AUTHORITY_INVALID/);
+  assert.match(recoveryOperatorMigration,/SEPARATION_OF_DUTY_REQUIRED/);
+  assert.match(recoveryOperatorMigration,/capability_key IN \('operations\.read','release\.promote'\)/);
+  assert.doesNotMatch(recoveryOperatorMigration,/capability_key IN \([^)]*(?:release\.approve|org\.admin|byok\.manage|provider\.manage)/);
+  for(const boundary of ['production_authorized','customer_data_authorized','real_provider_calls_authorized']) assert.match(recoveryOperatorMigration,new RegExp(`NOT ${boundary}`));
+  assert.match(recoveryOperatorMigration,/migration_tip='20260811140000'/);
 });
 test('database verifier derives the expected tip from canonical migration inventory',()=>{
   assert.match(verifyScript,/readdir\(new URL\('\.\.\/supabase\/migrations\/'/);

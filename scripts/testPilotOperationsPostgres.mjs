@@ -38,7 +38,20 @@ try {
   }
   const fixture=await createCommittedStudioFixture(fresh);
   await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','operations.manage','release.manage','release.validate','release.approve','release.promote','org.admin') ON CONFLICT DO NOTHING",[fixture.role]);
+  const reviewerRole='97000000-0000-4000-8000-000000000070';
+  await fresh.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Pilot approval reviewer','pilot-approval-reviewer','organization','[]')",[reviewerRole,fixture.org]);
+  await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','release.approve') ON CONFLICT DO NOTHING",[reviewerRole]);
+  await fresh.query('UPDATE organization_members SET role_id=$1 WHERE org_id=$2 AND user_id=$3',[reviewerRole,fixture.org,fixture.reviewer]);
+  const recoveryActor='97000000-0000-4000-8000-000000000071', recoverySeedRole='97000000-0000-4000-8000-000000000072';
+  await fresh.query('INSERT INTO auth.users(id) VALUES($1)',[recoveryActor]);
+  await fresh.query("INSERT INTO profiles(id,email) VALUES($1,'recovery-operator@pilot.invalid')",[recoveryActor]);
+  await fresh.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Recovery seed','recovery-seed','organization','[]')",[recoverySeedRole,fixture.org]);
+  await fresh.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[fixture.org,recoveryActor,recoverySeedRole]);
+  await fresh.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[fixture.org,fixture.workspace,recoveryActor]);
   const authorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,fixture.requester])).rows[0].version);
+  const provisioned=(await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,recoveryActor])).rows[0].result;
+  assert.deepEqual(provisioned.capabilities,['operations.read','release.promote']); assert.equal(provisioned.approvalAuthority,false); assert.equal(provisioned.productionAuthorized,false);
+  let recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
   let ordinal=100;
   const command=(operation,key,payload,expectedVersion=0,requestPayload=JSON.stringify(payload),actor=fixture.requester,actorAuthorizationVersion=authorizationVersion)=>fresh.query(
     'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',
@@ -119,12 +132,27 @@ try {
   assert.equal(readOnlyProjection.rollback.eligible,false); assert.equal(readOnlyProjection.rollback.reason,'READ_ONLY_MODE');
   await command('set_runtime_control','postgres-rollback-readonly-off',{environmentId:environment.resourceId,maintenance:false,readOnly:false},6);
   const rollbackPayload={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
-  const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
-  const replay=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-same-promoter',rollbackPayload,nextPromoted.version),/SEPARATION_OF_DUTY_REQUIRED/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-approver',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/PR1B_FORBIDDEN/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion-1),/PR1B_AUTHORIZATION_STALE/);
+  await assert.rejects(fresh.query(
+    'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',
+    [recoveryActor,'97000000-0000-4000-8000-000000000080','97000000-0000-4000-8000-000000000081','rollback_non_live_promotion','97000000-0000-4000-8000-000000000082','postgres-cross-tenant-rollback',JSON.stringify(rollbackPayload),recoveryAuthorizationVersion,nextPromoted.version,JSON.stringify(rollbackPayload)],
+  ),/PR1B_NOT_FOUND|PR1B_FORBIDDEN/);
+  await fresh.query("UPDATE organization_members SET status='disabled',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-disabled-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/PR1B_FORBIDDEN|PR1B_NOT_FOUND/);
+  await fresh.query("UPDATE organization_members SET status='removed',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-revoked-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/PR1B_FORBIDDEN|PR1B_NOT_FOUND/);
+  await fresh.query("UPDATE organization_members SET status='active',disabled_at=NULL WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion)).rows[0].result;
+  const replay=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion)).rows[0].result;
   assert.deepEqual(replay,rollback); assert.equal(rollback.liveActivationAuthorized,false);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_rollback_events WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n),1);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
 
   const evidenceArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations','31329036283','3'.repeat(40),'4'.repeat(64),'5'.repeat(64),candidatePayload.schemaVersion,fixture.requester];
   const evidenceCount=async()=>Number((await fresh.query('SELECT count(*) n FROM pilot_operations_recovery_evidence_ingestions WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n);
