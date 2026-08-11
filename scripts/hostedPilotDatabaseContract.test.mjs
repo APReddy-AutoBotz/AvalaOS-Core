@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
+const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
+const verifyScript=await readFile(new URL('./hostedPilotDatabaseVerify.mjs',import.meta.url),'utf8');
 
 test('identity and mutation surfaces fail closed',()=>{
   assert.match(migration,/product_key = 'avalaos-core'/);
@@ -36,4 +38,16 @@ test('hosted apply bridges Supabase pgcrypto schema without weakening authority'
   assert.match(applyScript,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);
   assert.match(applyScript,/revoke all on function public\.digest\(text,text\),public\.digest\(bytea,text\) from public/i);
   assert.match(applyScript,/grant execute on function public\.digest\(text,text\),public\.digest\(bytea,text\) to service_role/i);
+});
+test('forward hosted hardening advances the marker without weakening stop gates',()=>{
+  assert.match(hardeningMigration,/migration_tip = '20260811130000'/);
+  assert.match(hardeningMigration,/NOT production_authorized/);
+  assert.match(hardeningMigration,/NOT customer_data_authorized/);
+  assert.match(hardeningMigration,/NOT real_provider_calls_authorized/);
+});
+test('database verifier derives the expected tip from canonical migration inventory',()=>{
+  assert.match(verifyScript,/readdir\(new URL\('\.\.\/supabase\/migrations\/'/);
+  assert.match(verifyScript,/const expectedMigrationTip = latestMigration\.slice\(0, 14\)/);
+  assert.match(verifyScript,/marker\.migration_tip !== expectedMigrationTip/);
+  assert.doesNotMatch(verifyScript,/marker\.migration_tip !== '20260811120000'/);
 });
