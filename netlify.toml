@@ -8,10 +8,10 @@
   command = "node -e \"console.error('PRODUCTION_DEPLOYMENT_NOT_AUTHORIZED'); process.exit(1)\""
 
 [context.deploy-preview]
-  command = "npm ci && npm run build"
+  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
 [context.branch-deploy]
-  command = "npm ci && npm run build"
+  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
 [[redirects]]
   from = "/*"
