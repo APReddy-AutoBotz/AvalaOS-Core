@@ -9,6 +9,7 @@ const operationalClosure = await readFile('supabase/migrations/20260810140000_pi
 const lifecycleTruth = await readFile('supabase/migrations/20260810160000_pilot_operations_lifecycle_truth_convergence.sql', 'utf8');
 const rollbackProjectionCorrection = await readFile('supabase/migrations/20260810180000_pilot_operations_rollback_projection_correction.sql', 'utf8');
 const promotionSerialization = await readFile('supabase/migrations/20260810200000_pilot_operations_promotion_history_serialization.sql', 'utf8');
+const pendingSerialization = await readFile('supabase/migrations/20260810220000_pilot_operations_pending_candidate_serialization.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -52,5 +53,12 @@ assert.match(promotionSerialization, /FOR UPDATE[\s\S]*next_ordinal[\s\S]*promot
 assert.match(promotionSerialization, /FORCE ROW LEVEL SECURITY/);
 assert.doesNotMatch(promotionSerialization, /ORDER BY e\.created_at DESC,e\.id DESC/);
 assert.doesNotMatch(promotionSerialization, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
+for (const required of ['pilot_operations_candidate_sequences','pilot_operations_candidate_history','candidate_ordinal','AMBIGUOUS_PENDING_CANDIDATE_HISTORY','pilot_operations_current_actionable_candidate','LIVE_ACTIVATION_NOT_AUTHORIZED']) {
+  assert.ok(pendingSerialization.includes(required), `missing serialized pending-candidate boundary: ${required}`);
+}
+assert.match(pendingSerialization, /FOR UPDATE[\s\S]*next_ordinal[\s\S]*candidate_ordinal/);
+assert.match(pendingSerialization, /FORCE ROW LEVEL SECURITY/);
+assert.doesNotMatch(pendingSerialization, /release_candidates[\s\S]{0,300}ORDER BY created_at DESC,id DESC/);
+assert.doesNotMatch(pendingSerialization, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 assert.match(sql, /LIVE_ACTIVATION_NOT_AUTHORIZED/);
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');

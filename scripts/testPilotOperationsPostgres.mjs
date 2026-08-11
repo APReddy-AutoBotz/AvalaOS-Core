@@ -27,7 +27,7 @@ try {
   const upgrade=await createDatabase(admin,adminUrl,names.upgrade); clients.push(upgrade); await bootstrapAuth(upgrade); await applyMigrations(upgrade,baseline); await applyMigrations(upgrade,correction);
   for (const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     assert.equal(Number((await db.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000,true);
-    const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests','pilot_operations_promotion_sequences','pilot_operations_promotion_history'];
+    const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests','pilot_operations_promotion_sequences','pilot_operations_promotion_history','pilot_operations_candidate_sequences','pilot_operations_candidate_history'];
     const rls=(await db.query("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=ANY($1::text[]) ORDER BY relname",[tables])).rows;
     assert.equal(rls.length,tables.length);
     for(const row of rls) assert.deepEqual([row.relrowsecurity,row.relforcerowsecurity],[true,true],row.relname);
@@ -57,6 +57,7 @@ try {
   assert.deepEqual(concurrentA.rows[0].result,concurrentB.rows[0].result);
   const candidate=concurrentA.rows[0].result;
   assert.equal(Number((await fresh.query("SELECT count(*) n FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND operation='register_release_candidate' AND idempotency_key='postgres-concurrent-idempotency'",[fixture.org,fixture.workspace])).rows[0].n),1);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),1,'concurrent same-key registration must converge to one candidate ordinal');
   await assert.rejects(command('register_release_candidate','postgres-concurrent-idempotency',{...candidatePayload,buildIdentity:'changed'},0,JSON.stringify({...candidatePayload,buildIdentity:'changed'})),/IDEMPOTENCY_CONFLICT/);
   await assert.rejects(fresh.query(
     'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,NULL,$9::jsonb)',
@@ -170,6 +171,28 @@ try {
   const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
   assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
 
+  // Registration transaction A starts first without taking the environment lock.
+  // B registers first; A registers last and must own actionable-current truth even
+  // though A's transaction timestamp is older.
+  const registrationA=await connect(databaseUrlFor(adminUrl,names.fresh)); clients.push(registrationA);
+  const registrationB=await connect(databaseUrlFor(adminUrl,names.fresh)); clients.push(registrationB);
+  let registrationRequest=850;
+  const registerOn=(db,key,payload)=>db.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',[fixture.requester,fixture.org,fixture.workspace,'register_release_candidate',`99000000-0000-4000-8000-${String(registrationRequest++).padStart(12,'0')}`,key,JSON.stringify(payload),authorizationVersion,0,JSON.stringify(payload)]);
+  const registrationPayloadB={...candidatePayload,gitSha:'8'.repeat(40),buildIdentity:'postgres-registration-first',evidenceManifestSha256:'8'.repeat(64)};
+  const registrationPayloadA={...candidatePayload,gitSha:'9'.repeat(40),buildIdentity:'postgres-registration-delayed',evidenceManifestSha256:'9'.repeat(64)};
+  await registrationA.query('BEGIN'); await registrationA.query('SELECT now()');
+  const registeredB=(await registerOn(registrationB,'postgres-registration-first',registrationPayloadB)).rows[0].result;
+  const registeredA=(await registerOn(registrationA,'postgres-registration-delayed',registrationPayloadA)).rows[0].result;
+  await registrationA.query('COMMIT');
+  const registrationProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(registrationProjection.release.id,registeredA.resourceId,'last environment-serialized registration must be actionable current');
+  const candidateOrdinals=(await fresh.query('SELECT candidate_ordinal FROM pilot_operations_candidate_history WHERE environment_id=$1 ORDER BY candidate_ordinal',[environment.resourceId])).rows.map(row=>Number(row.candidate_ordinal));
+  assert.deepEqual(candidateOrdinals,Array.from({length:candidateOrdinals.length},(_,index)=>index+1));
+  const candidateHistoryCount=candidateOrdinals.length;
+  assert.deepEqual((await registerOn(registrationB,'postgres-registration-first',registrationPayloadB)).rows[0].result,registeredB);
+  assert.deepEqual((await registerOn(registrationA,'postgres-registration-delayed',registrationPayloadA)).rows[0].result,registeredA);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),candidateHistoryCount,'exact registration replay must allocate no candidate ordinal');
+
   // Transaction A starts first but deliberately does not acquire the environment
   // lock. Transaction B promotes first; A then promotes and must receive the later
   // ordinal even though its transaction timestamp is older.
@@ -209,7 +232,7 @@ try {
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
-    promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,
+    promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,pendingRegistrationSerialized:true,invertedRegistrationOrderVerified:true,gapFreeCandidateSequenceVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
