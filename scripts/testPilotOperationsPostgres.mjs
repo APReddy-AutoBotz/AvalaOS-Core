@@ -132,19 +132,31 @@ try {
   assert.equal(readOnlyProjection.rollback.eligible,false); assert.equal(readOnlyProjection.rollback.reason,'READ_ONLY_MODE');
   await command('set_runtime_control','postgres-rollback-readonly-off',{environmentId:environment.resourceId,maintenance:false,readOnly:false},6);
   const rollbackPayload={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
+  const assertNonDisclosingAuthorityDenial=(promise,label)=>assert.rejects(
+    promise,
+    error=>{
+      assert.match(String(error?.message),/PR1B_NOT_FOUND/,`${label} must use the canonical non-disclosing authority result`);
+      assert.doesNotMatch(String(error?.message),/PR1B_FORBIDDEN/,`${label} must not disclose capability membership`);
+      return true;
+    },
+  );
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-same-promoter',rollbackPayload,nextPromoted.version),/SEPARATION_OF_DUTY_REQUIRED/);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-approver',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/PR1B_FORBIDDEN/);
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion-1),/PR1B_AUTHORIZATION_STALE/);
-  await assert.rejects(fresh.query(
-    'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',
-    [recoveryActor,'97000000-0000-4000-8000-000000000080','97000000-0000-4000-8000-000000000081','rollback_non_live_promotion','97000000-0000-4000-8000-000000000082','postgres-cross-tenant-rollback',JSON.stringify(rollbackPayload),recoveryAuthorizationVersion,nextPromoted.version,JSON.stringify(rollbackPayload)],
-  ),/PR1B_NOT_FOUND|PR1B_FORBIDDEN/);
+  const nonDisclosingRollbackCases=[
+    ['active in-tenant approval-only actor',()=>command('rollback_non_live_promotion','postgres-rollback-approver',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)],
+    ['cross-tenant actor',()=>fresh.query(
+      'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',
+      [recoveryActor,'97000000-0000-4000-8000-000000000080','97000000-0000-4000-8000-000000000081','rollback_non_live_promotion','97000000-0000-4000-8000-000000000082','postgres-cross-tenant-rollback',JSON.stringify(rollbackPayload),recoveryAuthorizationVersion,nextPromoted.version,JSON.stringify(rollbackPayload)],
+    )],
+    ['nonexistent actor',()=>command('rollback_non_live_promotion','postgres-rollback-nonexistent-actor',rollbackPayload,nextPromoted.version,undefined,'97000000-0000-4000-8000-000000000083',1)],
+  ];
+  for(const [label,attempt] of nonDisclosingRollbackCases) await assertNonDisclosingAuthorityDenial(attempt(),label);
   await fresh.query("UPDATE organization_members SET status='disabled',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
   recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-disabled-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/PR1B_FORBIDDEN|PR1B_NOT_FOUND/);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-disabled-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'disabled recovery operator');
   await fresh.query("UPDATE organization_members SET status='removed',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
   recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-revoked-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/PR1B_FORBIDDEN|PR1B_NOT_FOUND/);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-revoked-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'revoked recovery operator');
   await fresh.query("UPDATE organization_members SET status='active',disabled_at=NULL WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
   recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
   const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion)).rows[0].result;
@@ -168,7 +180,7 @@ try {
   const recoveryReplay=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.deepEqual(recoveryReplay,recoveryCommitted); assert.equal(await evidenceCount(),beforeEvidence+1);
 
   const tenant=(await command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0)).rows[0].result;
-  await assert.rejects(command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/,'bootstrap replay must remain actor-bound');
+  await assertNonDisclosingAuthorityDenial(command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0,undefined,fixture.reviewer,reviewerAuthorizationVersion),'approval-only bootstrap replay actor');
   const pendingPayload={...candidatePayload,gitSha:'6'.repeat(40),buildIdentity:'postgres-pending-after-promotion',evidenceManifestSha256:'7'.repeat(64)};
   const pending=(await command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0)).rows[0].result;
   const pendingProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
