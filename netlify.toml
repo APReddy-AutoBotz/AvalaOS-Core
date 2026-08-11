@@ -1,0 +1,27 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Production deployment is deliberately non-executable in this repository contract.
+# A separately authorized production work package must replace this stop gate.
+[context.production]
+  command = "node -e \"console.error('PRODUCTION_DEPLOYMENT_NOT_AUTHORIZED'); process.exit(1)\""
+
+[context.deploy-preview]
+  command = "npm ci && npm run build"
+
+[context.branch-deploy]
+  command = "npm ci && npm run build"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    X-Frame-Options = "DENY"

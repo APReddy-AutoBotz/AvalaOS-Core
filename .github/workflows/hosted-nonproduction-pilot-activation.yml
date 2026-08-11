@@ -1,0 +1,90 @@
+name: Hosted Non-Production Pilot Activation Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_release_sha:
+        description: Exact approved 40-character commit already on this Draft PR branch
+        required: true
+        type: string
+      hosted_url:
+        description: Controller-supplied credential-free HTTPS non-production origin
+        required: true
+        type: string
+      activation_run_id:
+        description: Workflow run containing the sanitized hosted evidence manifest
+        required: true
+        type: string
+      activation_artifact_name:
+        description: Artifact containing manifest.json (no secrets or raw logs)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+  HOSTED_PILOT_URL: ${{ inputs.hosted_url }}
+
+jobs:
+  source-and-deployment-identity:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_release_sha }}
+          fetch-depth: 0
+      - name: Fail closed unless checkout is the exact authorized release
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_RELEASE_SHA"
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - run: npm run build
+      - name: Verify hosted response identifies exact release and non-production environment
+        run: node scripts/verify-hosted-deployment.mjs
+
+  hosted-browser-acceptance:
+    needs: source-and-deployment-identity
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}'}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --config=playwright.hosted-pilot.config.ts
+
+  exact-head-hosted-evidence:
+    if: always()
+    needs: [source-and-deployment-identity, hosted-browser-acceptance]
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.activation_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.activation_run_id }}
+          path: artifacts/hosted-pilot/input
+      - name: Require all hosted gates and exact release binding
+        run: node scripts/verify-hosted-pilot-evidence.mjs --manifest artifacts/hosted-pilot/input/manifest.json --expected-head "$EXPECTED_RELEASE_SHA"
+      - name: Fail if deployment or browser verification did not pass
+        env:
+          DEPLOYMENT_RESULT: ${{ needs.source-and-deployment-identity.result }}
+          BROWSER_RESULT: ${{ needs.hosted-browser-acceptance.result }}
+        run: test "$DEPLOYMENT_RESULT" = success && test "$BROWSER_RESULT" = success
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-pilot-verification-${{ inputs.expected_release_sha }}
+          path: artifacts/hosted-pilot/verified-evidence.json
+          if-no-files-found: error
+          retention-days: 14
