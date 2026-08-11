@@ -95,6 +95,8 @@ jobs:
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
       - name: Run retained deterministic desktop and mobile browser gates
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run test:browser
       - name: Run PR 1D browser gates with the dedicated pilot-mode configuration
         run: npm run test:browser:pr1d
