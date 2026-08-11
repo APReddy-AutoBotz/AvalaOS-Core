@@ -35,6 +35,11 @@ test('stale canonical prefix is compatible and plans only forward migrations', (
   assert.equal(buildAdditiveMigrationPlan(result, canonical).pending.length, canonical.count - 1);
 });
 
+test('repository and Supabase migration ledgers are canonical infrastructure, not foreign schemas', () => {
+  const result = classifyHostedTarget({ ...base, schemas: [...base.schemas, 'avalaos_migrations', 'supabase_migrations'] }, canonical);
+  assert.equal(result.mutationAllowed, true);
+});
+
 test('dirty, reordered, unknown and partially initialized states fail closed', () => {
   const secondOnly = classifyHostedTarget({ ...base, appliedMigrations: [canonical.migrations[1].name] }, canonical);
   assert.ok(secondOnly.reasons.includes('migration_history_not_canonical_prefix'));

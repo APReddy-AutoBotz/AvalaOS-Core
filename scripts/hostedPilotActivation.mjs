@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
 const MIGRATION_NAME = /^\d{14}_[a-z0-9_]+\.sql$/;
-const SAFE_SCHEMAS = new Set(['auth', 'extensions', 'graphql', 'graphql_public', 'information_schema', 'pg_catalog', 'pgsodium', 'pgsodium_masks', 'public', 'realtime', 'storage', 'vault']);
+const SAFE_SCHEMAS = new Set(['auth', 'avalaos_migrations', 'extensions', 'graphql', 'graphql_public', 'information_schema', 'pg_catalog', 'pgsodium', 'pgsodium_masks', 'public', 'realtime', 'storage', 'supabase_migrations', 'vault']);
 const FOREIGN_MARKERS = /^(career_context_|clearspeak_|interview_)|^(resume_reviews|usage_ledger)$/;
 const IDENTIFIER = /^[a-z_][a-z0-9_$]*$/;
 

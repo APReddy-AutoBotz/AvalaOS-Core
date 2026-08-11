@@ -5,6 +5,7 @@ import test from 'node:test';
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
+const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
 const verifyScript=await readFile(new URL('./hostedPilotDatabaseVerify.mjs',import.meta.url),'utf8');
 
 test('identity and mutation surfaces fail closed',()=>{
@@ -30,14 +31,19 @@ test('provider simulator is deterministic and cannot perform egress',()=>{
   assert.doesNotMatch(migration,/openai|anthropic|gemini|groq|azure/i);
 });
 test('hosted apply bridges Supabase pgcrypto schema without weakening authority',()=>{
-  assert.match(applyScript,/to_regprocedure\('public\.digest\(text,text\)'\)/);
-  assert.match(applyScript,/to_regprocedure\('extensions\.digest\(text,text\)'\)/);
-  assert.match(applyScript,/create or replace function public\.digest\(data text, algorithm text\)/i);
-  assert.match(applyScript,/create or replace function public\.digest\(data bytea, algorithm text\)/i);
-  assert.match(applyScript,/select extensions\.digest\(\$1,\$2\)/);
-  assert.match(applyScript,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);
-  assert.match(applyScript,/revoke all on function public\.digest\(text,text\),public\.digest\(bytea,text\) from public/i);
-  assert.match(applyScript,/grant execute on function public\.digest\(text,text\),public\.digest\(bytea,text\) to service_role/i);
+  assert.match(applySafety,/to_regprocedure\('public\.digest\(text,text\)'\)/);
+  assert.match(applySafety,/to_regprocedure\('extensions\.digest\(text,text\)'\)/);
+  assert.match(applySafety,/begin[\s\S]+create function public\.digest\(data text[\s\S]+create function public\.digest\(data bytea[\s\S]+revoke all[\s\S]+grant execute[\s\S]+commit/i);
+  assert.match(applySafety,/select extensions\.digest\(\$1,\$2\)/);
+  assert.match(applySafety,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);
+  assert.match(applySafety,/revoke all on function public\.digest\(text,text\),public\.digest\(bytea,text\) from public/i);
+  assert.match(applySafety,/grant execute on function public\.digest\(text,text\),public\.digest\(bytea,text\) to service_role/i);
+});
+test('hosted apply re-inventories and binds the live target while holding the advisory lock',()=>{
+  assert.match(applyScript,/pg_advisory_lock[\s\S]+inventoryConnectedHostedTarget[\s\S]+validateLockedTarget[\s\S]+ensureHostedPgcryptoCompatibility/);
+  assert.match(applySafety,/targetFingerprint !== environmentFingerprint/);
+  assert.match(applySafety,/inventoryDigest !== preflightClassification\.inventoryDigest/);
+  assert.match(applySafety,/content_sha256 !== canonical\.migrations/);
 });
 test('forward hosted hardening advances the marker without weakening stop gates',()=>{
   assert.match(hardeningMigration,/migration_tip = '20260811130000'/);

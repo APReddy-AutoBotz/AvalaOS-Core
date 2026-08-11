@@ -11,7 +11,7 @@ Production remains `production_not_authorized`; customer data remains `customer_
 Supply inputs only at execution time. Never commit or upload them as raw evidence.
 
 - dedicated Supabase target connection through the approved secret store;
-- safe expected target fingerprint and migration-chain hash;
+- safe target fingerprint emitted by the repository preflight (a SHA-256 digest of the connected PostgreSQL system, database, and execution role identities) and migration-chain hash;
 - exact approved 40-character Git head;
 - explicitly linked non-production Netlify site and credential-free HTTPS origin;
 - safe deployment ID, workflow/run ID, and result IDs;
@@ -44,7 +44,7 @@ After all stop gates pass, the controller may execute the repository-owned activ
    npm run hosted-pilot:verify-database
    ```
 
-   The private token file must remain outside artifacts and be deleted after the attempt. The apply command uses only the repository migration chain, serializes application with a database advisory lock, checks the exact checksum ledger again under that lock, commits one additive migration at a time, and emits only sanitized status. A partial failure stays in maintenance/read-only and requires an additive forward repair;
+   The private token file must remain outside artifacts and be deleted after the attempt. Set `HOSTED_PILOT_ENVIRONMENT_FINGERPRINT` to the safe fingerprint emitted by the immediately preceding preflight; never derive it from a caller-supplied project label alone. The apply command uses only the repository migration chain, serializes application with a database advisory lock, re-inventories and reclassifies the actual connected catalogs, auth users, target identity, relations, and checksum ledger under that lock before any compatibility or migration write, creates any Supabase pgcrypto bridge and all of its ACLs in one rollback-safe transaction, commits one additive migration at a time, and emits only sanitized status. A partial failure stays in maintenance/read-only and requires an additive forward repair;
 4. verify migration state, RLS, grants, `SECURITY DEFINER`/`EXECUTE` boundaries, service-only RPCs, Storage policies, cross-tenant list/count/existence non-disclosure, session revocation, and authorization versions;
 5. run idempotent synthetic bootstrap for one organization/workspace and its bounded role matrix;
 6. exercise canonical AP Invoice Exception Assess → Govern → Studio → Delivery → Monitor behavior and negative stale/revoked/cross-tenant cases;
