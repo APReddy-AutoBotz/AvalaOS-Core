@@ -59,6 +59,9 @@ jobs:
       - name: Secret hygiene scan
         run: npm run test:secret-hygiene
 
+      - name: Hosted non-production pilot contracts
+        run: npm run test:hosted-pilot
+
       - name: Regression and policy tests
         run: npm run test
 
