@@ -1,0 +1,55 @@
+name: Hosted Pilot Activation Evidence Producer
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_release_sha:
+        description: Exact approved non-production release SHA
+        required: true
+        type: string
+      target_fingerprint:
+        description: Sanitized sha256 database target fingerprint
+        required: true
+        type: string
+      deployment_origin:
+        description: Credential-free hosted non-production HTTPS origin tested by the consumer
+        required: true
+        type: string
+      deployment_id:
+        description: Sanitized non-production deployment identity
+        required: true
+        type: string
+      gate_result_ids_json:
+        description: Bounded JSON object mapping every required gate to a sanitized immutable result ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  produce-sanitized-manifest:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Produce exact-run sanitized activation manifest
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          GATE_RESULT_IDS_JSON: ${{ inputs.gate_result_ids_json }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_REPOSITORY: ${{ github.repository }}
+        run: node scripts/produce-hosted-pilot-activation-manifest.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-pilot-activation-manifest
+          path: artifacts/hosted-pilot/manifest.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { buildAdditiveMigrationPlan, classifyHostedTarget, loadCanonicalMigrationInventory, verifyPreflightToken } from './hostedPilotActivation.mjs';
 import { inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
 import { ensureHostedPgcryptoCompatibility, validateLockedTarget } from './hostedPilotApplySafety.mjs';
 
 export async function runHostedPilotApply({
-  client, inventory, token, expectedReleaseSha, actualReleaseSha, environmentFingerprint,
+  client, inventory, token, expectedReleaseSha, environmentFingerprint,
   nonce, signingKey, canonical, readMigration = async name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'),
+  resolveCheckoutSha = () => execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
 }) {
   canonical ??= await loadCanonicalMigrationInventory();
-  if (expectedReleaseSha !== actualReleaseSha) throw new Error('RELEASE_IDENTITY_MISMATCH');
+  const checkoutReleaseSha = resolveCheckoutSha();
+  if (expectedReleaseSha !== checkoutReleaseSha) throw new Error('RELEASE_IDENTITY_MISMATCH');
   const classification = classifyHostedTarget(inventory, canonical);
   const expected = { expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, nonce };
   if (!verifyPreflightToken({ token, signingKey, expected })) throw new Error('PREFLIGHT_BINDING_MISMATCH');
@@ -55,7 +58,7 @@ async function main() {
   try {
     const result = await runHostedPilotApply({
       client, inventory: JSON.parse(await readFile(inventoryPath, 'utf8')), token: (await readFile(tokenPath, 'utf8')).trim(),
-      expectedReleaseSha: required('HOSTED_PILOT_EXPECTED_RELEASE_SHA'), actualReleaseSha: required('HOSTED_PILOT_ACTUAL_RELEASE_SHA'),
+      expectedReleaseSha: required('HOSTED_PILOT_EXPECTED_RELEASE_SHA'),
       environmentFingerprint: required('HOSTED_PILOT_ENVIRONMENT_FINGERPRINT'), nonce: required('HOSTED_PILOT_PREFLIGHT_NONCE'),
       signingKey: required('HOSTED_PILOT_PREFLIGHT_SIGNING_KEY'),
     });

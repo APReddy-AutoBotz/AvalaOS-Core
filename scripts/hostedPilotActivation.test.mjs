@@ -29,7 +29,7 @@ test('known MockMate shape and auth users fail closed', () => {
 
 test('stale canonical prefix is compatible and plans only forward migrations', () => {
   const first = canonical.migrations[0];
-  const tables = first.creates.map(relation => { const [schema, name] = relation.split('.'); return { schema, name }; });
+  const tables = first.creates.map(relation => { const [qualified,kindName] = relation.split(':'); const [schema,name]=qualified.split('.'); const kinds={table:'r',view:'v',materialized_view:'m',sequence:'S',foreign_table:'f'}; return { schema,name,kind:kinds[kindName] }; });
   const result = classifyHostedTarget({ ...base, tables, appliedMigrations: [first.name] }, canonical);
   assert.equal(result.classification, 'avalaos_compatible');
   assert.equal(buildAdditiveMigrationPlan(result, canonical).pending.length, canonical.count - 1);
@@ -54,17 +54,29 @@ test('relations introduced after the recorded ledger prefix fail closed and clea
   const laterIndex = canonical.migrations.findIndex((migration, index) => index > 0 && migration.creates.length > 0);
   assert.ok(laterIndex > 0, 'fixture requires a later canonical relation');
   const later = canonical.migrations[laterIndex].creates[0];
-  const [schema, name] = later.split('.');
+  const [qualified,kindName] = later.split(':'); const [schema,name]=qualified.split('.'); const kind={table:'r',view:'v',materialized_view:'m',sequence:'S',foreign_table:'f'}[kindName];
   for (const appliedMigrations of [[], canonical.migrations.slice(0, laterIndex).map(migration => migration.name)]) {
-    const result = classifyHostedTarget({ ...base, tables: [{ schema, name }], appliedMigrations }, canonical);
+    const result = classifyHostedTarget({ ...base, tables: [{ schema, name, kind }], appliedMigrations }, canonical);
     assert.equal(result.mutationAllowed, false);
     assert.ok(result.reasons.includes('relations_ahead_of_migration_ledger'));
   }
   const cleanPrefix = canonical.migrations.slice(0, laterIndex + 1);
   const cleanTables = [...new Set(cleanPrefix.flatMap(migration => migration.creates))].map(relation => {
-    const [tableSchema, tableName] = relation.split('.'); return { schema: tableSchema, name: tableName };
+    const [qualifiedName,kindName]=relation.split(':'); const [tableSchema,tableName]=qualifiedName.split('.'); const kinds={table:'r',view:'v',materialized_view:'m',sequence:'S',foreign_table:'f'}; return {schema:tableSchema,name:tableName,kind:kinds[kindName]};
   });
   assert.equal(classifyHostedTarget({ ...base, tables: cleanTables, appliedMigrations: cleanPrefix.map(migration => migration.name) }, canonical).mutationAllowed, true);
+});
+
+
+test('foreign executable and non-table objects cannot masquerade as a dedicated target',()=>{
+  assert.equal(classifyHostedTarget({...base,routines:[{schema:'public',name:'foreign_rpc',arguments:'',owner:'attacker',acl:'=X/attacker'}]},canonical).mutationAllowed,false);
+  assert.equal(classifyHostedTarget({...base,tables:[{schema:'public',name:'foreign_view',kind:'v',owner:'attacker'}]},canonical).mutationAllowed,false);
+  const canonicalRoutine=canonical.migrations.find(m=>m.routines?.length)?.routines[0];
+  if(canonicalRoutine){
+    const match=/^([^.]+)\.([^()]+)\((.*)\)$/.exec(canonicalRoutine);
+    const result=classifyHostedTarget({...base,routines:[{schema:match[1],name:match[2],arguments:match[3],owner:'attacker',acl:'=X/attacker'}]},canonical);
+    assert.ok(result.reasons.includes('foreign_object_authority'));
+  }
 });
 
 test('inventory rejects unsafe identifiers rather than reflecting them', () => {

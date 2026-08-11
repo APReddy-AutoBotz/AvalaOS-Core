@@ -36,7 +36,7 @@ export async function ensureHostedPgcryptoCompatibility(client) {
     and pg_get_function_identity_arguments(p.oid) in ('text, text','bytea, text')
   order by n.nspname, pg_get_function_identity_arguments(p.oid)`);
 
-  const rows = (await inspect()).rows;
+  let rows = (await inspect()).rows;
   const byKey = new Map(rows.map(row => [`${row.schema_name}:${row.identity_arguments}`, row]));
   if (byKey.size !== rows.length) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
   const pair = schema => ['text, text', 'bytea, text'].map(args => byKey.get(`${schema}:${args}`));
@@ -47,11 +47,32 @@ export async function ensureHostedPgcryptoCompatibility(client) {
   const extensionsReady = extensionsPair.every(Boolean);
   const extensionsAbsent = extensionsPair.every(value => !value);
   if ((!publicReady && !publicAbsent) || (!extensionsReady && !extensionsAbsent)) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
-  if (publicAbsent && extensionsAbsent) return { mode: 'pgcrypto_not_installed_yet' };
+  let transactionOpen = false;
+  if (publicAbsent && extensionsAbsent) {
+    await client.query('begin');
+    transactionOpen = true;
+    try {
+      await client.query('create schema if not exists extensions');
+      await client.query('create extension if not exists pgcrypto with schema extensions');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    }
+    rows = (await inspect()).rows;
+    byKey.clear();
+    for (const row of rows) byKey.set(`${row.schema_name}:${row.identity_arguments}`, row);
+    if (!pair('extensions').every(Boolean) || pair('public').some(Boolean)) {
+      await client.query('rollback');
+      throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
+    }
+  }
 
   const approvedNative = row => row.extension_name === 'pgcrypto'
     && row.owner_name === row.extension_owner;
-  if (extensionsReady && !extensionsPair.every(approvedNative)) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
+  if (pair('extensions').some(Boolean) && !pair('extensions').every(approvedNative)) {
+    if (transactionOpen) await client.query('rollback');
+    throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
+  }
 
   let mode = 'supabase_extensions_bridge';
   if (publicReady) {
@@ -68,7 +89,7 @@ export async function ensureHostedPgcryptoCompatibility(client) {
     if (approvedBridge && !extensionsReady) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
   }
 
-  await client.query('begin');
+  if (!transactionOpen) await client.query('begin');
   try {
     if (publicAbsent) await client.query(`create function public.digest(data text, algorithm text)
       returns bytea language sql immutable strict parallel safe
@@ -78,15 +99,16 @@ export async function ensureHostedPgcryptoCompatibility(client) {
       returns bytea language sql immutable strict parallel safe
       set search_path=pg_catalog,extensions
       as 'select extensions.digest($1,$2)'`);
-    await client.query(`revoke all on function public.digest(text,text),public.digest(bytea,text) from public`);
+    const protectedSchemas = extensionsReady || pair('extensions').every(Boolean) ? ['extensions','public'] : ['public'];
+    for (const schema of protectedSchemas) await client.query(`revoke all on function ${schema}.digest(text,text),${schema}.digest(bytea,text) from public`);
     for (const role of ['anon', 'authenticated']) {
       const exists = (await client.query('select exists(select 1 from pg_roles where rolname=$1) as present', [role])).rows[0]?.present === true;
-      if (exists) await client.query(`revoke all on function public.digest(text,text),public.digest(bytea,text) from ${role}`);
+      if (exists) for (const schema of protectedSchemas) await client.query(`revoke all on function ${schema}.digest(text,text),${schema}.digest(bytea,text) from ${role}`);
     }
     const serviceRoleExists = (await client.query("select exists(select 1 from pg_roles where rolname='service_role') as present")).rows[0]?.present === true;
-    if (serviceRoleExists) await client.query(`grant execute on function public.digest(text,text),public.digest(bytea,text) to service_role`);
-    const verified = (await inspect()).rows.filter(row => row.schema_name === 'public');
-    if (verified.length !== 2 || verified.some(row => row.public_execute || row.anon_execute || row.authenticated_execute
+    if (serviceRoleExists) for (const schema of protectedSchemas) await client.query(`grant execute on function ${schema}.digest(text,text),${schema}.digest(bytea,text) to service_role`);
+    const verified = (await inspect()).rows.filter(row => protectedSchemas.includes(row.schema_name));
+    if (verified.length !== protectedSchemas.length * 2 || verified.some(row => row.public_execute || row.anon_execute || row.authenticated_execute
       || (serviceRoleExists && !row.service_execute))) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
     await client.query('commit');
   } catch (error) {

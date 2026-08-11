@@ -15,14 +15,6 @@ on:
         description: Workflow run containing the sanitized hosted evidence manifest
         required: true
         type: string
-      activation_artifact_name:
-        description: Artifact containing manifest.json (no secrets or raw logs)
-        required: true
-        type: string
-      activation_workflow_path:
-        description: Trusted repository workflow path that produced the selected activation artifact
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -31,6 +23,8 @@ permissions:
 env:
   EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
   HOSTED_PILOT_URL: ${{ inputs.hosted_url }}
+  ACTIVATION_PRODUCER_WORKFLOW: .github/workflows/hosted-pilot-activation-evidence-producer.yml
+  ACTIVATION_MANIFEST_ARTIFACT: hosted-pilot-activation-manifest
 
 jobs:
   source-and-deployment-identity:
@@ -78,7 +72,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ACTIVATION_RUN_ID: ${{ inputs.activation_run_id }}
-          ACTIVATION_WORKFLOW_PATH: ${{ inputs.activation_workflow_path }}
+          ACTIVATION_WORKFLOW_PATH: .github/workflows/hosted-pilot-activation-evidence-producer.yml
         with:
           script: |
             const selected = process.env.ACTIVATION_RUN_ID;
@@ -112,7 +106,7 @@ jobs:
             core.setOutput('conclusion', run.conclusion);
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.activation_artifact_name }}
+          name: hosted-pilot-activation-manifest
           github-token: ${{ github.token }}
           run-id: ${{ inputs.activation_run_id }}
           path: artifacts/hosted-pilot/input
@@ -125,17 +119,20 @@ jobs:
           ACTIVATION_EVENT: ${{ steps.activation-run.outputs.event }}
           ACTIVATION_HEAD: ${{ steps.activation-run.outputs.head }}
           ACTIVATION_CONCLUSION: ${{ steps.activation-run.outputs.conclusion }}
-        run: >-
-          node scripts/verify-hosted-pilot-evidence.mjs
-          --manifest artifacts/hosted-pilot/input/manifest.json
-          --expected-head "$EXPECTED_RELEASE_SHA"
-          --activation-run-id "$ACTIVATION_RUN_ID"
-          --activation-run-attempt "$ACTIVATION_RUN_ATTEMPT"
-          --activation-workflow "$ACTIVATION_WORKFLOW"
-          --activation-repository "$ACTIVATION_REPOSITORY"
-          --activation-event "$ACTIVATION_EVENT"
-          --activation-head "$ACTIVATION_HEAD"
-          --activation-conclusion "$ACTIVATION_CONCLUSION"
+        shell: bash
+        run: |
+          EXPECTED_DEPLOYMENT_FINGERPRINT="$(node --input-type=module -e 'import {safeHash,validateHostedUrl} from "./scripts/verify-hosted-pilot-evidence.mjs"; process.stdout.write(safeHash(validateHostedUrl(process.env.HOSTED_PILOT_URL)))')"
+          node scripts/verify-hosted-pilot-evidence.mjs \
+            --manifest artifacts/hosted-pilot/input/manifest.json \
+            --expected-head "$EXPECTED_RELEASE_SHA" \
+            --expected-deployment-fingerprint "$EXPECTED_DEPLOYMENT_FINGERPRINT" \
+            --activation-run-id "$ACTIVATION_RUN_ID" \
+            --activation-run-attempt "$ACTIVATION_RUN_ATTEMPT" \
+            --activation-workflow "$ACTIVATION_WORKFLOW" \
+            --activation-repository "$ACTIVATION_REPOSITORY" \
+            --activation-event "$ACTIVATION_EVENT" \
+            --activation-head "$ACTIVATION_HEAD" \
+            --activation-conclusion "$ACTIVATION_CONCLUSION"
       - name: Fail if deployment or browser verification did not pass
         env:
           DEPLOYMENT_RESULT: ${{ needs.source-and-deployment-identity.result }}

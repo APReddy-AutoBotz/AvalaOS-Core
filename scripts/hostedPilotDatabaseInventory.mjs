@@ -14,9 +14,17 @@ export async function inventoryConnectedHostedTarget(client) {
   const schemas = (await client.query(`select nspname from pg_namespace
     where nspname not like 'pg_%' and nspname <> 'information_schema'
     order by nspname`)).rows.map(row => row.nspname);
-  const tables = (await client.query(`select schemaname as schema, tablename as name from pg_tables
-    where schemaname not like 'pg_%' and schemaname <> 'information_schema'
-    order by schemaname,tablename`)).rows;
+  const tables = (await client.query(`select n.nspname as schema,c.relname as name,c.relkind as kind,
+      owner.rolname as owner,coalesce(array_to_string(c.relacl,','),'') as acl
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace join pg_roles owner on owner.oid=c.relowner
+    where n.nspname not like 'pg_%' and n.nspname <> 'information_schema'
+      and c.relkind in ('r','p','v','m','S','f') order by n.nspname,c.relkind,c.relname`)).rows;
+  const routines = (await client.query(`select n.nspname as schema,p.proname as name,
+      pg_get_function_identity_arguments(p.oid) as arguments,owner.rolname as owner,
+      coalesce(array_to_string(p.proacl,','),'') as acl,p.prokind as kind
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles owner on owner.oid=p.proowner
+    where n.nspname not like 'pg_%' and n.nspname <> 'information_schema'
+    order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)`)).rows;
   const authUserCount = Number((await client.query(`select case when to_regclass('auth.users') is null then 0
     else (select count(*)::integer from auth.users) end as count`)).rows[0]?.count ?? 0);
   const ledgerExists = (await client.query(`select to_regclass('avalaos_migrations.applied') is not null as present`)).rows[0]?.present === true;
@@ -29,6 +37,7 @@ export async function inventoryConnectedHostedTarget(client) {
     inventory: {
       schemas,
       tables,
+      routines,
       appliedMigrations: appliedRows.map(row => row.filename),
       authUserCount,
     },

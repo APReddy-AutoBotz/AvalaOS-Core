@@ -5,6 +5,7 @@ import test from 'node:test';
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
 const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/20260811140000_hosted_recovery_promotion_operator.sql',import.meta.url),'utf8');
+const closureMigration=await readFile(new URL('../supabase/migrations/20260811160000_hosted_closure_root_convergence.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -38,8 +39,9 @@ test('hosted apply bridges Supabase pgcrypto schema without weakening authority'
   assert.match(applySafety,/begin[\s\S]+create function public\.digest\(data text[\s\S]+create function public\.digest\(data bytea[\s\S]+revoke all[\s\S]+grant execute[\s\S]+commit/i);
   assert.match(applySafety,/select extensions\.digest\(\$1,\$2\)/);
   assert.match(applySafety,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);
-  assert.match(applySafety,/revoke all on function public\.digest\(text,text\),public\.digest\(bytea,text\) from public/i);
-  assert.match(applySafety,/grant execute on function public\.digest\(text,text\),public\.digest\(bytea,text\) to service_role/i);
+  assert.match(applySafety,/protectedSchemas[\s\S]+revoke all on function \${schema}\.digest/);
+  assert.match(applySafety,/\['extensions','public'\]/);
+  assert.match(applySafety,/grant execute on function \${schema}\.digest\(text,text\),\${schema}\.digest\(bytea,text\) to service_role/i);
 });
 test('hosted apply re-inventories and binds the live target while holding the advisory lock',()=>{
   assert.match(applyScript,/pg_advisory_lock[\s\S]+inventoryConnectedHostedTarget[\s\S]+validateLockedTarget[\s\S]+ensureHostedPgcryptoCompatibility/);
@@ -78,6 +80,17 @@ test('recovery authority is exact-workspace provisioned and checked before rollb
   for(const boundary of ['production_authorized','customer_data_authorized','real_provider_calls_authorized']) assert.match(recoveryAuthorityMigration,new RegExp(`NOT ${boundary}`));
   assert.match(recoveryAuthorityMigration,/migration_tip='20260811150000'/);
 });
+
+test('closure migration enforces immutable historical SoD and exclusive recovery rotation',()=>{
+  assert.match(closureMigration,/UNIQUE INDEX hosted_pilot_one_active_recovery_owner[\s\S]+WHERE lifecycle='active'/);
+  assert.match(closureMigration,/SET role_id=NULL[\s\S]+lifecycle='revoked'/);
+  assert.match(closureMigration,/event_type IN \('approved','promoted_non_live'\)/);
+  const historyGate=closureMigration.indexOf("event_type IN ('approved','promoted_non_live')");
+  const delegate=closureMigration.indexOf('RETURN public.pilot_operations_command_v8');
+  assert.ok(historyGate>0&&delegate>historyGate);
+  assert.match(closureMigration,/migration_tip='20260811160000'/);
+});
+
 test('database verifier derives the expected tip from canonical migration inventory',()=>{
   assert.match(verifyScript,/readdir\(new URL\('\.\.\/supabase\/migrations\/'/);
   assert.match(verifyScript,/const expectedMigrationTip = latestMigration\.slice\(0, 14\)/);

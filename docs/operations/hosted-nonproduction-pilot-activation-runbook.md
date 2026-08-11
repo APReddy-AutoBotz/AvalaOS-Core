@@ -128,3 +128,11 @@ Deprovision synthetic identities server-side, revoke sessions, disable the pilot
 ## Acceptance boundary
 
 Completion requires exact-head hosted database, simulation, deployment, desktop/mobile, accessibility/performance, recovery, and adversarial evidence. Source checks or disposable CI alone remain separate and cannot establish `hosted_nonproduction_verified`. Production cutover, external rollout, real-provider use, and readiness/certification claims remain prohibited after successful hosted verification.
+
+## Final hosted-closure convergence
+
+The applied checkout identity is derived from `git rev-parse HEAD`; operator-supplied values cannot attest a different checkout. Preflight and the locked re-inventory include public tables, partitioned/foreign tables, views, materialized views, sequences, functions, procedures, ownership, and ACL signals. Foreign or ahead-of-ledger objects keep the target in maintenance/read-only for additive forward repair.
+
+Pgcrypto installation, both native `extensions.digest` overloads, both `public.digest` compatibility wrappers, browser-role revocation, service-role grant, and catalog verification form one transaction. Any interruption rolls back the entire repair. Recovery-operator rotation is serialized per organization and workspace, fences the prior active record and effective workspace role, and preserves immutable promoter/approval-history separation of duties before rollback receipt lookup.
+
+Only `.github/workflows/hosted-pilot-activation-evidence-producer.yml` may produce the pinned `hosted-pilot-activation-manifest` artifact. The consumer binds its selected run, attempt, repository, exact head, canonical migration digest, and deployment-origin fingerprint. Production/live activation, customer-data authorization/use, external-user authorization/use, and real-provider authorization/use must all remain structurally false. Failure of any producer, consumer, deployment, browser, migration, recovery, or rollback gate leaves the target non-production and in maintenance/read-only; no localhost, stable-alias, production, or destructive fallback is permitted.

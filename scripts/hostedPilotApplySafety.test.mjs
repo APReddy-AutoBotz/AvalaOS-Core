@@ -26,7 +26,7 @@ test('locked apply rejects missing expected relations and dirty ledger checksums
   const index = canonical.migrations.indexOf(first);
   const prefix = canonical.migrations.slice(0, index + 1);
   const expectedTables = prefix.flatMap(migration => migration.creates).map(relation => {
-    const [schema, name] = relation.split('.'); return { schema, name };
+    const [qualified,kindName]=relation.split(':'); const [schema,name]=qualified.split('.'); const kinds={table:'r',view:'v',materialized_view:'m',sequence:'S',foreign_table:'f'}; return {schema,name,kind:kinds[kindName]};
   });
   const inventory = { ...baseInventory, tables: expectedTables, appliedMigrations: prefix.map(migration => migration.name) };
   const classification = classifyHostedTarget(inventory, canonical);
@@ -39,22 +39,24 @@ test('locked apply rejects missing expected relations and dirty ledger checksums
 });
 
 class BridgeClient {
-  constructor(failAt = -1, rows) { this.failAt = failAt; this.calls = []; this.mutationCount = 0; this.rows = rows ?? nativeRows('extensions'); }
+  constructor(failAt = -1, rows) { this.failAt=failAt; this.calls=[]; this.mutationCount=0; this.rows=rows??nativeRows('extensions'); this.extensionCreated=false; }
   async query(sql, params) {
     this.calls.push(sql);
     if (sql.startsWith('select n.nspname')) {
-      if (this.calls.includes('revoke all on function public.digest(text,text),public.digest(bytea,text) from public')) {
-        let verified = this.rows.filter(row => row.schema_name === 'public');
-        if (verified.length === 0) verified = bridgeRows();
-        return { rows: [...verified.map(row => ({ ...row, public_execute: false, anon_execute: false, authenticated_execute: false, service_execute: true })), ...this.rows.filter(row => row.schema_name === 'extensions')] };
+      let rows=this.rows;
+      if(this.extensionCreated && rows.length===0) rows=nativeRows('extensions');
+      if(this.calls.some(call=>String(call).startsWith('revoke all on function'))) {
+        if(!rows.some(row=>row.schema_name==='public') && rows.some(row=>row.schema_name==='extensions')) rows=[...rows,...bridgeRows()];
+        rows=rows.map(row=>({...row,public_execute:false,anon_execute:false,authenticated_execute:false,service_execute:true}));
       }
-      return { rows: this.rows };
+      return {rows};
     }
-    if (sql.startsWith('select exists')) return { rows: [{ present: true }] };
-    if (!['begin', 'rollback', 'commit'].includes(sql)) {
-      if (this.mutationCount++ === this.failAt) throw new Error('simulated interruption');
+    if (sql.startsWith('select exists')) return {rows:[{present:true}]};
+    if (!['begin','rollback','commit'].includes(sql)) {
+      if(this.mutationCount++===this.failAt) throw new Error('simulated interruption');
+      if(sql.startsWith('create extension')) this.extensionCreated=true;
     }
-    return { rows: [] };
+    return {rows:[]};
   }
 }
 
@@ -99,10 +101,11 @@ test('approved existing native and bridge implementations receive atomic least-p
   }
 });
 
-test('pgcrypto-not-installed is mutation-free and unknown or attacker overloads fail closed', async () => {
+test('pgcrypto initially absent is installed and ACL-repaired atomically while unknown overloads fail closed', async () => {
   const absent = new BridgeClient(-1, []);
-  assert.equal((await ensureHostedPgcryptoCompatibility(absent)).mode, 'pgcrypto_not_installed_yet');
-  assert.equal(absent.calls.length, 1);
+  assert.equal((await ensureHostedPgcryptoCompatibility(absent)).mode, 'supabase_extensions_bridge');
+  assert.ok(absent.calls.some(sql=>sql.startsWith('create extension')));
+  assert.equal(absent.calls.at(-1),'commit');
   const hostileCases = [
     [baseRow('public', 'text, text')],
     nativeRows('public').map(row => ({ ...row, extension_name: null, extension_owner: null, language_name: 'sql', source: 'select evil.digest($1,$2)' })),

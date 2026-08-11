@@ -119,6 +119,18 @@ try {
   const nextValidated=(await command('validate_release_candidate','postgres-rollback-validate',{candidateId:next.resourceId},next.version)).rows[0].result;
   const nextApproved=(await command('approve_promotion','postgres-rollback-approve',{candidateId:next.resourceId},nextValidated.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const nextPromoted=(await command('simulate_promotion','postgres-rollback-promote',{candidateId:next.resourceId,target:'non_live'},nextApproved.version)).rows[0].result;
+  // Historical approval cannot be erased by later recovery provisioning. Rotation back to
+  // the dedicated operator must atomically fence the former owner and effective role.
+  await fresh.query("UPDATE profiles SET email='historical-approver@pilot.invalid' WHERE id=$1",[fixture.reviewer]);
+  await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,fixture.reviewer]);
+  const reviewerRecoveryVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,fixture.reviewer])).rows[0].version);
+  const rollbackPayloadForHistory={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-historical-approver',rollbackPayloadForHistory,nextPromoted.version,undefined,fixture.reviewer,reviewerRecoveryVersion),/SEPARATION_OF_DUTY_REQUIRED/);
+  await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  assert.equal(Number((await fresh.query("SELECT count(*) n FROM hosted_pilot_recovery_operators WHERE org_id=$1 AND workspace_id=$2 AND lifecycle='active'",[fixture.org,fixture.workspace])).rows[0].n),1);
+  assert.equal((await fresh.query('SELECT lifecycle FROM hosted_pilot_recovery_operators WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3',[fixture.org,fixture.workspace,fixture.reviewer])).rows[0].lifecycle,'revoked');
+  assert.equal((await fresh.query('SELECT role_id IS NULL AS fenced FROM workspace_memberships WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3',[fixture.org,fixture.workspace,fixture.reviewer])).rows[0].fenced,true);
   const rollbackProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
   assert.equal(rollbackProjection.release.id,candidate.resourceId,'the unrelated draft remains separately actionable');
   assert.equal(rollbackProjection.promotedRelease.id,next.resourceId,'current promoted truth must come from immutable promotion history');
