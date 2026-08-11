@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
+const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
+
 test('identity and mutation surfaces fail closed',()=>{
   assert.match(migration,/product_key = 'avalaos-core'/);
   assert.match(migration,/CHECK \(NOT production_authorized\)/);
@@ -24,4 +26,14 @@ test('provider simulator is deterministic and cannot perform egress',()=>{
   assert.match(migration,/hosted_pilot_provider_simulations_immutable/);
   assert.doesNotMatch(migration,/https?:\/\//i);
   assert.doesNotMatch(migration,/openai|anthropic|gemini|groq|azure/i);
+});
+test('hosted apply bridges Supabase pgcrypto schema without weakening authority',()=>{
+  assert.match(applyScript,/to_regprocedure\('public\.digest\(text,text\)'\)/);
+  assert.match(applyScript,/to_regprocedure\('extensions\.digest\(text,text\)'\)/);
+  assert.match(applyScript,/create or replace function public\.digest\(data text, algorithm text\)/i);
+  assert.match(applyScript,/create or replace function public\.digest\(data bytea, algorithm text\)/i);
+  assert.match(applyScript,/select extensions\.digest\(\$1,\$2\)/);
+  assert.match(applyScript,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);
+  assert.match(applyScript,/revoke all on function public\.digest\(text,text\),public\.digest\(bytea,text\) from public/i);
+  assert.match(applyScript,/grant execute on function public\.digest\(text,text\),public\.digest\(bytea,text\) to service_role/i);
 });
