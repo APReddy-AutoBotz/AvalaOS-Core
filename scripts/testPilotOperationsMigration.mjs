@@ -8,6 +8,7 @@ const truthClosure = await readFile('supabase/migrations/20260810120000_pilot_op
 const operationalClosure = await readFile('supabase/migrations/20260810140000_pilot_operations_operational_closure.sql', 'utf8');
 const lifecycleTruth = await readFile('supabase/migrations/20260810160000_pilot_operations_lifecycle_truth_convergence.sql', 'utf8');
 const rollbackProjectionCorrection = await readFile('supabase/migrations/20260810180000_pilot_operations_rollback_projection_correction.sql', 'utf8');
+const promotionSerialization = await readFile('supabase/migrations/20260810200000_pilot_operations_promotion_history_serialization.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -44,5 +45,12 @@ for (const required of ["e.event_type='promoted_non_live' AND c.id<>promoted.id"
   assert.ok(rollbackProjectionCorrection.includes(required), `missing rollback projection correction boundary: ${required}`);
 }
 assert.doesNotMatch(rollbackProjectionCorrection, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
+for (const required of ['pilot_operations_promotion_sequences','pilot_operations_promotion_history','promotion_ordinal','legacy_ambiguous','AMBIGUOUS_PROMOTION_HISTORY','pilot_operations_record_promotion','LIVE_ACTIVATION_NOT_AUTHORIZED']) {
+  assert.ok(promotionSerialization.includes(required), `missing serialized promotion-history boundary: ${required}`);
+}
+assert.match(promotionSerialization, /FOR UPDATE[\s\S]*next_ordinal[\s\S]*promotion_ordinal/);
+assert.match(promotionSerialization, /FORCE ROW LEVEL SECURITY/);
+assert.doesNotMatch(promotionSerialization, /ORDER BY e\.created_at DESC,e\.id DESC/);
+assert.doesNotMatch(promotionSerialization, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 assert.match(sql, /LIVE_ACTIVATION_NOT_AUTHORIZED/);
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');

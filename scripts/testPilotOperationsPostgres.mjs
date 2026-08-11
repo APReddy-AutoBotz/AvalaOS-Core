@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import process from 'node:process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {
-  applyMigrations, bootstrapAuth, connect, createDatabase, dropDatabase, ensureClusterRoles,
+  applyMigrations, bootstrapAuth, connect, createDatabase, databaseUrlFor, dropDatabase, ensureClusterRoles,
   featureMigration, migrationNames,
 } from './pilotOperationsPostgresSupport.mjs';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
@@ -27,7 +27,7 @@ try {
   const upgrade=await createDatabase(admin,adminUrl,names.upgrade); clients.push(upgrade); await bootstrapAuth(upgrade); await applyMigrations(upgrade,baseline); await applyMigrations(upgrade,correction);
   for (const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     assert.equal(Number((await db.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000,true);
-    const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests'];
+    const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests','pilot_operations_promotion_sequences','pilot_operations_promotion_history'];
     const rls=(await db.query("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=ANY($1::text[]) ORDER BY relname",[tables])).rows;
     assert.equal(rls.length,tables.length);
     for(const row of rls) assert.deepEqual([row.relrowsecurity,row.relforcerowsecurity],[true,true],row.relname);
@@ -169,6 +169,36 @@ try {
   assert.equal(reactivated.lifecycle,'active');
   const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
   assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
+
+  // Transaction A starts first but deliberately does not acquire the environment
+  // lock. Transaction B promotes first; A then promotes and must receive the later
+  // ordinal even though its transaction timestamp is older.
+  const preparePromotion=async(label,digit)=>{
+    const payload={...validPayload,gitSha:digit.repeat(40),buildIdentity:`postgres-serialized-${label}`,evidenceManifestSha256:digit.repeat(64)};
+    const registered=(await command('register_release_candidate',`postgres-serialized-register-${label}`,payload,0)).rows[0].result;
+    await fresh.query(`INSERT INTO pilot_operations_evidence_manifests(candidate_id,org_id,workspace_id,environment_id,git_sha,build_identity,workflow_name,workflow_run_id,workflow_head_sha,manifest_sha256,schema_version,migration_compatible,required_gates,status,verified_at) VALUES($1,$2,$3,$4,$5,$6,'Pilot Operations',$7,$5,$8,$9,true,$10::jsonb,'verified',now())`,[registered.resourceId,fixture.org,fixture.workspace,environment.resourceId,payload.gitSha,payload.buildIdentity,`serialized-${label}`,payload.evidenceManifestSha256,payload.schemaVersion,JSON.stringify(gates)]);
+    const checked=(await command('validate_release_candidate',`postgres-serialized-validate-${label}`,{candidateId:registered.resourceId},registered.version)).rows[0].result;
+    const accepted=(await command('approve_promotion',`postgres-serialized-approve-${label}`,{candidateId:registered.resourceId},checked.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
+    return {registered,accepted};
+  };
+  const delayed=await preparePromotion('delayed','4');
+  const firstSerialized=await preparePromotion('first','5');
+  const delayedClient=await connect(databaseUrlFor(adminUrl,names.fresh)); clients.push(delayedClient);
+  const firstClient=await connect(databaseUrlFor(adminUrl,names.fresh)); clients.push(firstClient);
+  let serializedRequest=700;
+  const promoteOn=(db,key,item)=>db.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',[fixture.requester,fixture.org,fixture.workspace,'simulate_promotion',`99000000-0000-4000-8000-${String(serializedRequest++).padStart(12,'0')}`,key,JSON.stringify({candidateId:item.registered.resourceId,target:'non_live'}),authorizationVersion,item.accepted.version,JSON.stringify({candidateId:item.registered.resourceId,target:'non_live'})]);
+  await delayedClient.query('BEGIN'); await delayedClient.query('SELECT now()');
+  await promoteOn(firstClient,'postgres-serialized-first',firstSerialized);
+  await promoteOn(delayedClient,'postgres-serialized-delayed',delayed); await delayedClient.query('COMMIT');
+  const serializedProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  assert.equal(serializedProjection.promotedRelease.id,delayed.registered.resourceId,'serialized lock/commit order, not transaction start time, owns current truth');
+  assert.equal(serializedProjection.rollback.targetCandidateId,firstSerialized.registered.resourceId);
+  const ordinals=(await fresh.query('SELECT promotion_ordinal FROM pilot_operations_promotion_history WHERE environment_id=$1 ORDER BY promotion_ordinal',[environment.resourceId])).rows.map(row=>Number(row.promotion_ordinal));
+  assert.deepEqual(ordinals,Array.from({length:ordinals.length},(_,index)=>index+1),'committed promotion sequence must remain gap-free');
+  const beforeReplay=ordinals.length;
+  const serializedReplay=(await promoteOn(firstClient,'postgres-serialized-first',firstSerialized)).rows[0].result;
+  assert.equal(serializedReplay.resourceId,firstSerialized.registered.resourceId);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_promotion_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),beforeReplay,'exact replay must not allocate history');
   await fresh.query('SET ROLE authenticated');
   await assert.rejects(fresh.query('SELECT count(*) n FROM pilot_operations_release_candidates'),/permission denied/,'authenticated cross-tenant reads must disclose no rows or counts');
   await fresh.query('RESET ROLE');
@@ -179,6 +209,7 @@ try {
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
+    promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,
     crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
