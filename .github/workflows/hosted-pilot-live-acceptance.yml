@@ -63,8 +63,8 @@ jobs:
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run real hosted Desktop Chrome and Pixel 7 acceptance
-        run: npx playwright test --config=playwright.hosted-pilot.config.ts
+      - name: Run real hosted Desktop Chrome and Pixel 7 acceptance serially
+        run: npx playwright test --config=playwright.hosted-pilot.config.ts --workers=1
 
       - name: Upload failure diagnostics
         if: failure()
