@@ -229,6 +229,28 @@ try {
   const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
   assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
 
+  // Recovery rotation deliberately fenced the historical reviewer above. Keep the
+  // later serialization fixture independent so it cannot accidentally reuse that
+  // revoked actor or its stale authorization version.
+  const serializationReviewer='97000000-0000-4000-8000-000000000073';
+  await fresh.query('INSERT INTO auth.users(id) VALUES($1)',[serializationReviewer]);
+  await fresh.query("INSERT INTO profiles(id,email) VALUES($1,'serialization-reviewer@pilot.invalid')",[serializationReviewer]);
+  await fresh.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[fixture.org,serializationReviewer,reviewerRole]);
+  await fresh.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[fixture.org,fixture.workspace,serializationReviewer]);
+  const serializationReviewerAuthorizationVersion=Number((await fresh.query(
+    'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',
+    [fixture.org,serializationReviewer],
+  )).rows[0].version);
+  const serializationReviewerCapabilities=(await fresh.query(
+    "SELECT EXISTS(SELECT 1 FROM role_capabilities WHERE role_id=$1 AND capability_key='release.approve') approved, EXISTS(SELECT 1 FROM role_capabilities WHERE role_id=$1 AND capability_key='release.promote') promoted",
+    [reviewerRole],
+  )).rows[0];
+  assert.deepEqual(serializationReviewerCapabilities,{approved:true,promoted:false},'serialization reviewer must retain active approval-only authority');
+  assert.equal((await fresh.query(
+    "SELECT EXISTS(SELECT 1 FROM role_capabilities rc WHERE rc.capability_key='release.approve' AND rc.role_id IN (SELECT om.role_id FROM organization_members om WHERE om.org_id=$1 AND om.user_id=$3 AND om.status='active' UNION SELECT wm.role_id FROM workspace_memberships wm WHERE wm.org_id=$1 AND wm.workspace_id=$2 AND wm.user_id=$3 AND wm.status='active')) approved",
+    [fixture.org,fixture.workspace,recoveryActor],
+  )).rows[0].approved,false,'recovery operator must not gain workspace approval authority');
+
   // Registration transaction A starts first without taking the environment lock.
   // B registers first; A registers last and must own actionable-current truth even
   // though A's transaction timestamp is older.
@@ -259,7 +281,7 @@ try {
     const registered=(await command('register_release_candidate',`postgres-serialized-register-${label}`,payload,0)).rows[0].result;
     await fresh.query(`INSERT INTO pilot_operations_evidence_manifests(candidate_id,org_id,workspace_id,environment_id,git_sha,build_identity,workflow_name,workflow_run_id,workflow_head_sha,manifest_sha256,schema_version,migration_compatible,required_gates,status,verified_at) VALUES($1,$2,$3,$4,$5,$6,'Pilot Operations',$7,$5,$8,$9,true,$10::jsonb,'verified',now())`,[registered.resourceId,fixture.org,fixture.workspace,environment.resourceId,payload.gitSha,payload.buildIdentity,label==='delayed'?'31329036285':'31329036286',payload.evidenceManifestSha256,payload.schemaVersion,JSON.stringify(gates)]);
     const checked=(await command('validate_release_candidate',`postgres-serialized-validate-${label}`,{candidateId:registered.resourceId},registered.version)).rows[0].result;
-    const accepted=(await command('approve_promotion',`postgres-serialized-approve-${label}`,{candidateId:registered.resourceId},checked.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
+    const accepted=(await command('approve_promotion',`postgres-serialized-approve-${label}`,{candidateId:registered.resourceId},checked.version,undefined,serializationReviewer,serializationReviewerAuthorizationVersion)).rows[0].result;
     return {registered,accepted};
   };
   const delayed=await preparePromotion('delayed','4');
