@@ -6,7 +6,7 @@ import { REQUIRED_GATES, safeHash, validateHostedUrl, verifyActivationRun, verif
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 const head = 'a'.repeat(40), canonicalMigrationDigest = 'c'.repeat(64);
 const activationRun = { id: '123456789', attempt: '2', workflow: '.github/workflows/hosted-pilot-activation-evidence-producer.yml', repository: 'APReddy-AutoBotz/AvalaOS-Core', event: 'workflow_dispatch', head, conclusion: 'success' };
-const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, resultId: `${gate}:1` }]));
+const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowConclusion: 'success', environment: 'hosted_nonproduction_pilot', targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), resultId: `${gate}:1` }]));
 const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, evidence };
 const context = { expectedHead: head, actualHead: head, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint: manifest.deploymentTargetFingerprint };
 test('accepts exact-head complete hosted evidence bound to the selected activation run', () => assert.equal(verifyManifest(manifest, context), true));
@@ -38,6 +38,14 @@ test('rejects activation artifact and run identity substitution', () => {
   assert.throws(() => verifyActivationRun({ ...activationRun, id: '1; echo unsafe' }, head), /identity/);
   const staleGate = { ...manifest.evidence['database-preflight'], workflowRunAttempt: 1 };
   assert.throws(() => verifyManifest({ ...manifest, evidence: { ...manifest.evidence, 'database-preflight': staleGate } }, context), /database-preflight/);
+  for (const changed of [
+    { result: 'failed' }, { workflowConclusion: 'cancelled' }, { workflowPath: '.github/workflows/other.yml' },
+    { gitCommit: 'b'.repeat(40) }, { targetFingerprint: safeHash('other-target') },
+    { deploymentTargetFingerprint: safeHash('other-deployment') }, { resultId: '../foreign' },
+  ]) {
+    const foreign = { ...manifest.evidence['database-preflight'], ...changed };
+    assert.throws(() => verifyManifest({ ...manifest, evidence: { ...manifest.evidence, 'database-preflight': foreign } }, context), /database-preflight/);
+  }
 });
 test('CLI and workflow fail closed unless trusted run metadata is supplied by one exact API lookup', async () => {
   const cli = spawnSync(process.execPath, ['scripts/verify-hosted-pilot-evidence.mjs', '--manifest', 'unused.json', '--expected-head', head], { encoding: 'utf8' });
@@ -54,6 +62,16 @@ test('CLI and workflow fail closed unless trusted run metadata is supplied by on
   assert.match(workflow,/name: hosted-pilot-activation-manifest/);
   assert.match(workflow,/--expected-deployment-fingerprint/);
   for (const argument of ['activation-run-id', 'activation-run-attempt', 'activation-workflow', 'activation-repository', 'activation-event', 'activation-head', 'activation-conclusion']) assert.match(workflow, new RegExp(`--${argument}`));
+});
+test('producer workflow executes trusted gates instead of accepting caller-declared result IDs', async () => {
+  const producer = await readFile('.github/workflows/hosted-pilot-activation-evidence-producer.yml', 'utf8');
+  assert.doesNotMatch(producer, /gate_result_ids_json/i);
+  for (const job of ['database-provider','recovery-operations','hosted-browser']) assert.match(producer, new RegExp(job));
+  assert.match(producer, /hosted-pilot:verify-database/);
+  assert.match(producer, /test:recovery:pilot-operations/);
+  assert.match(producer, /test:migrations:pilot-operations:postgres/);
+  assert.match(producer, /playwright\.hosted-pilot\.config\.ts --workers=1/);
+  assert.match(producer, /TRUSTED_GATE_RESULTS_JSON/);
 });
 test('deployment verification requires release and nonproduction headers', async () => {
   const fetchImpl = async () => new Response('<div id="root"></div>', { headers: { 'x-avalaos-release': head, 'x-avalaos-environment': 'hosted_nonproduction_pilot' } });

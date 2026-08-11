@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX hosted_pilot_one_active_recovery_owner
 
 CREATE OR REPLACE FUNCTION public.hosted_pilot_provision_recovery_operator(
   p_actor uuid,p_org uuid,p_workspace uuid,p_authorization_version bigint,p_recovery_actor uuid
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE recovery_role uuid; identity_role uuid; recovery_email text;
 BEGIN
   PERFORM public.pr1b_assert_command_authority(p_actor,p_org,p_workspace,'org.admin',p_authorization_version);
@@ -83,14 +83,41 @@ REVOKE ALL ON FUNCTION public.pilot_operations_command_v8(uuid,uuid,uuid,text,uu
 CREATE FUNCTION public.pilot_operations_command(
   p_actor uuid,p_org uuid,p_workspace uuid,p_operation text,p_request uuid,p_idempotency_key text,
   p_request_payload text,p_authorization_version bigint,p_expected_version bigint,p_payload jsonb
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE candidate_id uuid;
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE rollback_candidate_id uuid; operator_record public.hosted_pilot_recovery_operators;
 BEGIN
   IF p_operation='rollback_non_live_promotion' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended('hosted-recovery:'||p_org::text||':'||p_workspace::text,0));
-    candidate_id := (p_payload->>'candidateId')::uuid;
+    PERFORM public.pr1b_assert_command_authority(
+      p_actor,p_org,p_workspace,'release.promote',p_authorization_version);
+    -- Prove current, exact-workspace recovery authority before consulting candidate
+    -- history. This preserves the canonical non-disclosing result for actors who
+    -- are unprovisioned, rotated, disabled, revoked, or scoped elsewhere.
+    SELECT * INTO operator_record FROM public.hosted_pilot_recovery_operators
+      WHERE org_id=p_org AND workspace_id=p_workspace AND actor_id=p_actor
+        AND lifecycle='active' AND synthetic_only AND NOT production_authorized
+        AND NOT customer_data_authorized AND NOT real_provider_calls_authorized
+      FOR UPDATE;
+    IF operator_record.actor_id IS NULL OR NOT EXISTS (
+      SELECT 1 FROM public.workspace_memberships wm JOIN public.roles r ON r.id=wm.role_id
+      WHERE wm.org_id=p_org AND wm.workspace_id=p_workspace AND wm.user_id=p_actor
+        AND wm.status='active' AND wm.disabled_at IS NULL AND wm.deleted_at IS NULL
+        AND r.id=operator_record.role_id AND r.scope='workspace' AND r.org_id=p_org
+        AND r.workspace_id=p_workspace AND r.status='active' AND r.deleted_at IS NULL
+    ) OR EXISTS (
+      SELECT 1 FROM public.role_capabilities rc JOIN public.workspace_memberships wm ON wm.role_id=rc.role_id
+      WHERE wm.org_id=p_org AND wm.workspace_id=p_workspace AND wm.user_id=p_actor
+        AND rc.capability_key NOT IN ('operations.read','release.promote')
+      UNION ALL
+      SELECT 1 FROM public.role_capabilities rc JOIN public.organization_members om ON om.role_id=rc.role_id
+      WHERE om.org_id=p_org AND om.user_id=p_actor
+    ) OR 2 IS DISTINCT FROM (
+      SELECT count(*) FROM public.role_capabilities WHERE role_id=operator_record.role_id
+        AND capability_key IN ('operations.read','release.promote')
+    ) THEN RAISE EXCEPTION 'PR1B_NOT_FOUND'; END IF;
+    rollback_candidate_id := (p_payload->>'candidateId')::uuid;
     IF EXISTS (SELECT 1 FROM public.pilot_operations_release_events e
-      WHERE e.org_id=p_org AND e.workspace_id=p_workspace AND e.candidate_id=candidate_id
+      WHERE e.org_id=p_org AND e.workspace_id=p_workspace AND e.candidate_id=rollback_candidate_id
         AND e.actor_id=p_actor AND e.event_type IN ('approved','promoted_non_live'))
       THEN RAISE EXCEPTION 'SEPARATION_OF_DUTY_REQUIRED'; END IF;
   END IF;
@@ -106,7 +133,7 @@ ALTER TABLE public.hosted_pilot_environment_identity ADD CONSTRAINT hosted_pilot
 
 CREATE OR REPLACE FUNCTION public.hosted_pilot_bootstrap_synthetic(
   p_actor uuid,p_org uuid,p_workspace uuid,p_authorization_version bigint,p_operation text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE lifecycle_value text; subject_count integer;
 BEGIN
   PERFORM public.pr1b_assert_command_authority(p_actor,p_org,p_workspace,'org.admin',p_authorization_version);

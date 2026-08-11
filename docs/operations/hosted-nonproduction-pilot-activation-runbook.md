@@ -136,3 +136,25 @@ The applied checkout identity is derived from `git rev-parse HEAD`; operator-sup
 Pgcrypto installation, both native `extensions.digest` overloads, both `public.digest` compatibility wrappers, browser-role revocation, service-role grant, and catalog verification form one transaction. Any interruption rolls back the entire repair. Recovery-operator rotation is serialized per organization and workspace, fences the prior active record and effective workspace role, and preserves immutable promoter/approval-history separation of duties before rollback receipt lookup.
 
 Only `.github/workflows/hosted-pilot-activation-evidence-producer.yml` may produce the pinned `hosted-pilot-activation-manifest` artifact. The consumer binds its selected run, attempt, repository, exact head, canonical migration digest, and deployment-origin fingerprint. Production/live activation, customer-data authorization/use, external-user authorization/use, and real-provider authorization/use must all remain structurally false. Failure of any producer, consumer, deployment, browser, migration, recovery, or rollback gate leaves the target non-production and in maintenance/read-only; no localhost, stable-alias, production, or destructive fallback is permitted.
+
+### Systemic hosted-closure verification order
+
+Rollback first proves that the caller is the current active, synthetic, exact-workspace
+provisioned recovery operator with the exact least-privilege role composition. Only after that
+non-disclosing authority gate passes may the wrapper inspect immutable approval/promotion history
+for the exact organization, workspace, and rollback candidate. Unprovisioned, rotated, disabled,
+revoked, wrong-tenant, or wrong-workspace actors receive `PR1B_NOT_FOUND`; an otherwise authorized
+operator who historically approved or promoted that candidate receives
+`SEPARATION_OF_DUTY_REQUIRED`. Both checks precede receipt inspection and lifecycle mutation.
+
+Database verification compares every ordered `avalaos_migrations.applied` filename and content
+SHA-256 with the exact checkout-derived canonical chain. Missing, truncated, reordered,
+checksum-mismatched, or ahead history fails closed even if the environment marker names the latest
+tip. The verifier also checks the expected owner, `SECURITY DEFINER` flag, fixed `pg_catalog`
+search path, service-role grant, and absence of `PUBLIC`, `anon`, and `authenticated` execution for
+every repository-owned service-only hosted/pilot RPC. ACL drift retains maintenance/read-only.
+
+The activation producer accepts no caller-declared gate-result IDs. Its database/provider,
+recovery/operations, and real-hosted browser jobs must all succeed in the same exact-head workflow
+run. Every emitted gate record is bound to that run, attempt, pinned workflow, hosted environment,
+database fingerprint, and tested deployment fingerprint before the consumer can verify it.

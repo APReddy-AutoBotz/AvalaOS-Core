@@ -12,23 +12,77 @@ on:
         required: true
         type: string
       deployment_origin:
-        description: Credential-free hosted non-production HTTPS origin tested by the consumer
+        description: Credential-free hosted non-production HTTPS origin tested by this run
         required: true
         type: string
       deployment_id:
         description: Sanitized non-production deployment identity
         required: true
         type: string
-      gate_result_ids_json:
-        description: Bounded JSON object mapping every required gate to a sanitized immutable result ID
-        required: true
-        type: string
 
 permissions:
   contents: read
 
+env:
+  EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+  HOSTED_PILOT_URL: ${{ inputs.deployment_origin }}
+
 jobs:
+  database-provider:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - name: Verify exact canonical hosted database, RLS, provider and service-only ACL truth
+        env:
+          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
+          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+        run: npm run hosted-pilot:verify-database
+
+  recovery-operations:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_pilot_operations}
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d avalaos_pilot_operations"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - name: Verify retained recovery, authority, replay and operations contracts
+        run: |
+          npm run test:pilot-operations
+          npm run test:migrations:pilot-operations:postgres
+          npm run test:recovery:pilot-operations
+
+  hosted-browser:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - run: node scripts/verify-hosted-deployment.mjs
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --config=playwright.hosted-pilot.config.ts --workers=1
+
   produce-sanitized-manifest:
+    needs: [database-provider, recovery-operations, hosted-browser]
     environment: hosted-nonproduction-pilot
     runs-on: ubuntu-latest
     steps:
@@ -36,13 +90,35 @@ jobs:
         with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
+      - name: Compose results only from required successful jobs in this immutable run
+        env:
+          TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+        shell: bash
+        run: |
+          TRUSTED_GATE_RESULTS_JSON="$(node --input-type=module <<'NODE'
+          import {safeHash,validateHostedUrl,ACTIVATION_PRODUCER_WORKFLOW,REQUIRED_GATES} from './scripts/verify-hosted-pilot-evidence.mjs';
+          const target=process.env.TARGET_FINGERPRINT;
+          const deployment=safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN));
+          const jobFor={
+            'database-preflight':'database-provider','migration-chain':'database-provider',
+            'provider-simulation-zero-egress':'database-provider','runtime-fail-closed':'database-provider',
+            'tenant-adversarial':'recovery-operations','backup-restore':'recovery-operations','canonical-journey':'recovery-operations',
+            'browser-desktop':'hosted-browser','browser-pixel':'hosted-browser','accessibility-performance':'hosted-browser',
+          };
+          const results=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
+            workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
+            workflowPath:ACTIVATION_PRODUCER_WORKFLOW,workflowConclusion:'success',environment:'hosted_nonproduction_pilot',
+            targetFingerprint:target,deploymentTargetFingerprint:deployment,resultId:`${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`}]))
+          process.stdout.write(JSON.stringify(results));
+          NODE
+          )"
+          printf 'TRUSTED_GATE_RESULTS_JSON=%s\n' "$TRUSTED_GATE_RESULTS_JSON" >> "$GITHUB_ENV"
       - name: Produce exact-run sanitized activation manifest
         env:
-          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
           DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
           DEPLOYMENT_ID: ${{ inputs.deployment_id }}
-          GATE_RESULT_IDS_JSON: ${{ inputs.gate_result_ids_json }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
           WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
           WORKFLOW_REPOSITORY: ${{ github.repository }}

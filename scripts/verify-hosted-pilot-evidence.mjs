@@ -67,6 +67,11 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
     if (!evidence || evidence.result !== 'passed' || evidence.gitCommit !== expectedHead
       || evidence.workflowRunId !== activationRun.id
       || String(evidence.workflowRunAttempt ?? '') !== activationRun.attempt
+      || evidence.workflowPath !== ACTIVATION_PRODUCER_WORKFLOW
+      || evidence.workflowConclusion !== 'success'
+      || evidence.environment !== 'hosted_nonproduction_pilot'
+      || evidence.targetFingerprint !== manifest.targetFingerprint
+      || evidence.deploymentTargetFingerprint !== expectedDeploymentFingerprint
       || !SAFE_ID.test(evidence.resultId ?? '')) throw new Error(`missing or mismatched executed evidence: ${gate}`);
   }
   return true;

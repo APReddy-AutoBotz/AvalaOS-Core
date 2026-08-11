@@ -11,14 +11,23 @@ const canonical=await loadCanonicalMigrationInventory();
 const targetFingerprint=required('TARGET_FINGERPRINT');
 if(!/^sha256:[0-9a-f]{64}$/.test(targetFingerprint)) throw new Error('target fingerprint must be sanitized');
 const origin=validateHostedUrl(required('DEPLOYMENT_ORIGIN'));
-const ids=JSON.parse(required('GATE_RESULT_IDS_JSON'));
-if(Object.keys(ids).length!==REQUIRED_GATES.length || REQUIRED_GATES.some(g=>!(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(ids[g]??'')))) throw new Error('exact bounded gate result IDs are required');
+const trustedResults=JSON.parse(required('TRUSTED_GATE_RESULTS_JSON'));
 const runId=required('WORKFLOW_RUN_ID'), attempt=Number(required('WORKFLOW_RUN_ATTEMPT'));
-const evidence=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:head,workflowRunId:runId,workflowRunAttempt:attempt,resultId:ids[g]}]));
+const expectedDeploymentFingerprint=safeHash(origin);
+const evidence=Object.fromEntries(REQUIRED_GATES.map(g=>{
+  const item=trustedResults[g];
+  if(!item || item.result!=='passed' || item.gitCommit!==head || item.workflowRunId!==runId
+    || Number(item.workflowRunAttempt)!==attempt || item.workflowPath!==ACTIVATION_PRODUCER_WORKFLOW
+    || item.workflowConclusion!=='success' || item.environment!=='hosted_nonproduction_pilot'
+    || item.targetFingerprint!==targetFingerprint || item.deploymentTargetFingerprint!==expectedDeploymentFingerprint
+    || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(item.resultId??''))
+    throw new Error(`trusted successful exact-run evidence is required for ${g}`);
+  return [g,item];
+}));
 const manifest={schemaVersion:1,gitCommit:head,environment:'hosted_nonproduction_pilot',hostedNonproductionVerified:true,
   productionAuthorized:false,liveActivationAuthorized:false,customerDataAuthorized:false,customerDataUsed:false,
   externalUsersAuthorized:false,externalUsersUsed:false,realProviderCallsAuthorized:false,realProviderCallsUsed:false,
-  targetFingerprint,deploymentTargetFingerprint:safeHash(origin),migrationChainHash:`sha256:${canonical.digest}`,
+  targetFingerprint,deploymentTargetFingerprint:expectedDeploymentFingerprint,migrationChainHash:`sha256:${canonical.digest}`,
   deploymentId:required('DEPLOYMENT_ID'),workflowRunId:runId,workflowRunAttempt:attempt,
   workflowPath:ACTIVATION_PRODUCER_WORKFLOW,workflowRepository:required('WORKFLOW_REPOSITORY'),workflowEvent:'workflow_dispatch',workflowConclusion:'success',evidence};
 await mkdir('artifacts/hosted-pilot',{recursive:true});

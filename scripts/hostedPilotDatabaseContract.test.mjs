@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { assertExactMigrationLedger, assertServiceOnlyRoutineCatalog, SERVICE_ONLY_HOSTED_RPCS } from './hostedPilotDatabaseVerify.mjs';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
@@ -85,15 +86,39 @@ test('closure migration enforces immutable historical SoD and exclusive recovery
   assert.match(closureMigration,/UNIQUE INDEX hosted_pilot_one_active_recovery_owner[\s\S]+WHERE lifecycle='active'/);
   assert.match(closureMigration,/SET role_id=NULL[\s\S]+lifecycle='revoked'/);
   assert.match(closureMigration,/event_type IN \('approved','promoted_non_live'\)/);
+  assert.doesNotMatch(closureMigration,/DECLARE candidate_id uuid/);
+  assert.match(closureMigration,/e\.candidate_id=rollback_candidate_id/);
+  const operatorGate=closureMigration.indexOf("lifecycle='active' AND synthetic_only");
+  const currentAuthorityGate=closureMigration.indexOf("'release.promote',p_authorization_version");
   const historyGate=closureMigration.indexOf("event_type IN ('approved','promoted_non_live')");
   const delegate=closureMigration.indexOf('RETURN public.pilot_operations_command_v8');
-  assert.ok(historyGate>0&&delegate>historyGate);
+  assert.ok(currentAuthorityGate>0&&operatorGate>currentAuthorityGate&&historyGate>operatorGate&&delegate>historyGate);
   assert.match(closureMigration,/migration_tip='20260811160000'/);
 });
 
+test('database verification requires the exact ordered canonical ledger',()=>{
+  const canonical={migrations:[{name:'20260101000000_a.sql',sha256:'a'.repeat(64)},{name:'20260101000001_b.sql',sha256:'b'.repeat(64)}]};
+  const exact=canonical.migrations.map(({name,sha256})=>({filename:name,content_sha256:sha256}));
+  assert.doesNotThrow(()=>assertExactMigrationLedger(exact,canonical));
+  for(const rows of [exact.slice(0,1),[exact[1],exact[0]],[exact[0],{...exact[1],content_sha256:'c'.repeat(64)}],[...exact,{filename:'20260101000002_c.sql',content_sha256:'c'.repeat(64)}]])
+    assert.throws(()=>assertExactMigrationLedger(rows,canonical),/LEDGER_MISMATCH/);
+});
+
+test('database verification blocks browser ACL drift on every service-only hosted RPC',()=>{
+  const exact=SERVICE_ONLY_HOSTED_RPCS.map(identity=>({identity,owner:'postgres',security_definer:true,safe_search_path:true,public_execute:false,anon_execute:false,authenticated_execute:false,service_role_execute:true}));
+  assert.doesNotThrow(()=>assertServiceOnlyRoutineCatalog(exact));
+  for(const role of ['public_execute','anon_execute','authenticated_execute']) {
+    const drift=exact.map((row,index)=>index===0?{...row,[role]:true}:row);
+    assert.throws(()=>assertServiceOnlyRoutineCatalog(drift),/RPC_ACL_MISMATCH/);
+  }
+  assert.throws(()=>assertServiceOnlyRoutineCatalog(exact.slice(1)),/RPC_ACL_MISMATCH/);
+  assert.throws(()=>assertServiceOnlyRoutineCatalog(exact.map((row,index)=>index===0?{...row,safe_search_path:false}:row)),/RPC_ACL_MISMATCH/);
+});
+
 test('database verifier derives the expected tip from canonical migration inventory',()=>{
-  assert.match(verifyScript,/readdir\(new URL\('\.\.\/supabase\/migrations\/'/);
-  assert.match(verifyScript,/const expectedMigrationTip = latestMigration\.slice\(0, 14\)/);
+  assert.match(verifyScript,/loadCanonicalMigrationInventory/);
+  assert.match(verifyScript,/const expectedMigrationTip = canonical\.tip\.slice\(0, 14\)/);
   assert.match(verifyScript,/marker\.migration_tip !== expectedMigrationTip/);
+  assert.match(verifyScript,/assertExactMigrationLedger\(ledger, canonical\)/);
   assert.doesNotMatch(verifyScript,/marker\.migration_tip !== '20260811120000'/);
 });
