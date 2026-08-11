@@ -57,6 +57,7 @@
   "knownDiscovery": {
     "existingNamedAvalaosSupabaseProjectSafeToReuse": false,
     "reason": "Read-only discovery showed the existing project named Avalaos-core-dev contains MockMate schema/data and must not be repurposed.",
-    "existingAvalaosNetlifySiteFound": false
+    "dedicatedAvalaosSupabasePilotProvisioned": true,
+    "existingAvalaosNetlifySiteFound": true
   }
 }
