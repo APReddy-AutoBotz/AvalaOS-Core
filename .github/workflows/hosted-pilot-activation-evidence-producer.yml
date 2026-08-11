@@ -108,8 +108,7 @@ jobs:
             workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),workflowPath:ACTIVATION_PRODUCER_WORKFLOW,
             environment:'hosted_nonproduction_pilot',targetFingerprint:process.env.TARGET_FINGERPRINT,
             deploymentTargetFingerprint:safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN)),projects:['hosted-accessibility-performance-desktop-chrome','hosted-accessibility-performance-pixel-7']};
-          await writeFile('artifacts/hosted-pilot/accessibility-performance/result.json',`${JSON.stringify(result,null,2)}\
-`,{mode:0o600});
+          await writeFile('artifacts/hosted-pilot/accessibility-performance/result.json',`${JSON.stringify(result,null,2)}\n`,{mode:0o600});
           NODE
       - uses: actions/upload-artifact@v4
         with:
