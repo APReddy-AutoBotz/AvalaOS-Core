@@ -5,6 +5,7 @@ import test from 'node:test';
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
 const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/20260811140000_hosted_recovery_promotion_operator.sql',import.meta.url),'utf8');
+const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
 const verifyScript=await readFile(new URL('./hostedPilotDatabaseVerify.mjs',import.meta.url),'utf8');
@@ -61,6 +62,21 @@ test('dedicated recovery operator is synthetic, promotion-only, tenant-bound and
   assert.doesNotMatch(recoveryOperatorMigration,/capability_key IN \([^)]*(?:release\.approve|org\.admin|byok\.manage|provider\.manage)/);
   for(const boundary of ['production_authorized','customer_data_authorized','real_provider_calls_authorized']) assert.match(recoveryOperatorMigration,new RegExp(`NOT ${boundary}`));
   assert.match(recoveryOperatorMigration,/migration_tip='20260811140000'/);
+});
+test('recovery authority is exact-workspace provisioned and checked before rollback delegation',()=>{
+  assert.match(recoveryAuthorityMigration,/'workspace','\[\]','active'/);
+  assert.match(recoveryAuthorityMigration,/UPDATE public\.workspace_memberships SET role_id=recovery_role/);
+  assert.match(recoveryAuthorityMigration,/Hosted Recovery Identity/);
+  assert.match(recoveryAuthorityMigration,/DELETE FROM public\.role_capabilities WHERE role_id=identity_role/);
+  assert.match(recoveryAuthorityMigration,/WHERE org_id=p_org AND workspace_id=p_workspace AND actor_id=p_actor AND lifecycle='active'/);
+  assert.match(recoveryAuthorityMigration,/FOR UPDATE/);
+  assert.match(recoveryAuthorityMigration,/hosted-recovery:'\|\|p_org::text\|\|':'\|\|p_workspace::text/);
+  const operatorGate=recoveryAuthorityMigration.indexOf("WHERE org_id=p_org AND workspace_id=p_workspace AND actor_id=p_actor AND lifecycle='active'");
+  const delegate=recoveryAuthorityMigration.indexOf('RETURN public.pilot_operations_command_v7');
+  assert.ok(operatorGate>0 && delegate>operatorGate,'active exact-workspace operator gate must precede receipt/lifecycle delegation');
+  assert.doesNotMatch(recoveryAuthorityMigration,/scope,'organization','\[\]','active',false,p_actor,p_actor\)\s*ON CONFLICT[^;]+RETURNING id INTO recovery_role/s);
+  for(const boundary of ['production_authorized','customer_data_authorized','real_provider_calls_authorized']) assert.match(recoveryAuthorityMigration,new RegExp(`NOT ${boundary}`));
+  assert.match(recoveryAuthorityMigration,/migration_tip='20260811150000'/);
 });
 test('database verifier derives the expected tip from canonical migration inventory',()=>{
   assert.match(verifyScript,/readdir\(new URL\('\.\.\/supabase\/migrations\/'/);

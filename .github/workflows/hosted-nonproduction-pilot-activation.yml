@@ -19,6 +19,10 @@ on:
         description: Artifact containing manifest.json (no secrets or raw logs)
         required: true
         type: string
+      activation_workflow_path:
+        description: Trusted repository workflow path that produced the selected activation artifact
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -69,6 +73,43 @@ jobs:
         with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
+      - name: Resolve and authorize the exact controller-selected activation run
+        id: activation-run
+        uses: actions/github-script@v7
+        env:
+          ACTIVATION_RUN_ID: ${{ inputs.activation_run_id }}
+          ACTIVATION_WORKFLOW_PATH: ${{ inputs.activation_workflow_path }}
+        with:
+          script: |
+            const selected = process.env.ACTIVATION_RUN_ID;
+            if (!/^[1-9][0-9]{0,19}$/.test(selected)) core.setFailed('activation_run_id must be a bounded decimal workflow run ID');
+            if (!/^[1-9][0-9]{0,19}$/.test(selected)) return;
+            const selectedNumber = Number(selected);
+            if (!Number.isSafeInteger(selectedNumber)) return core.setFailed('activation_run_id exceeds the safe API integer range');
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: selectedNumber,
+            });
+            const expectedRepository = `${context.repo.owner}/${context.repo.repo}`;
+            const workflowPath = String(run.path || '').split('@', 1)[0];
+            const failures = [];
+            if (String(run.id) !== selected) failures.push('run ID');
+            if (run.repository?.full_name !== expectedRepository || run.head_repository?.full_name !== expectedRepository) failures.push('repository');
+            if (run.head_sha !== process.env.EXPECTED_RELEASE_SHA) failures.push('head SHA');
+            if (run.event !== 'workflow_dispatch') failures.push('event');
+            if (run.status !== 'completed' || run.conclusion !== 'success') failures.push('result');
+            if (!/^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/.test(workflowPath)) failures.push('workflow path');
+            if (workflowPath !== process.env.ACTIVATION_WORKFLOW_PATH) failures.push('trusted workflow identity');
+            if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) failures.push('run attempt');
+            if (failures.length) return core.setFailed(`selected activation run failed trusted metadata checks: ${failures.join(', ')}`);
+            core.setOutput('id', String(run.id));
+            core.setOutput('attempt', String(run.run_attempt));
+            core.setOutput('workflow', workflowPath);
+            core.setOutput('repository', expectedRepository);
+            core.setOutput('event', run.event);
+            core.setOutput('head', run.head_sha);
+            core.setOutput('conclusion', run.conclusion);
       - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.activation_artifact_name }}
@@ -76,7 +117,25 @@ jobs:
           run-id: ${{ inputs.activation_run_id }}
           path: artifacts/hosted-pilot/input
       - name: Require all hosted gates and exact release binding
-        run: node scripts/verify-hosted-pilot-evidence.mjs --manifest artifacts/hosted-pilot/input/manifest.json --expected-head "$EXPECTED_RELEASE_SHA"
+        env:
+          ACTIVATION_RUN_ID: ${{ steps.activation-run.outputs.id }}
+          ACTIVATION_RUN_ATTEMPT: ${{ steps.activation-run.outputs.attempt }}
+          ACTIVATION_WORKFLOW: ${{ steps.activation-run.outputs.workflow }}
+          ACTIVATION_REPOSITORY: ${{ steps.activation-run.outputs.repository }}
+          ACTIVATION_EVENT: ${{ steps.activation-run.outputs.event }}
+          ACTIVATION_HEAD: ${{ steps.activation-run.outputs.head }}
+          ACTIVATION_CONCLUSION: ${{ steps.activation-run.outputs.conclusion }}
+        run: >-
+          node scripts/verify-hosted-pilot-evidence.mjs
+          --manifest artifacts/hosted-pilot/input/manifest.json
+          --expected-head "$EXPECTED_RELEASE_SHA"
+          --activation-run-id "$ACTIVATION_RUN_ID"
+          --activation-run-attempt "$ACTIVATION_RUN_ATTEMPT"
+          --activation-workflow "$ACTIVATION_WORKFLOW"
+          --activation-repository "$ACTIVATION_REPOSITORY"
+          --activation-event "$ACTIVATION_EVENT"
+          --activation-head "$ACTIVATION_HEAD"
+          --activation-conclusion "$ACTIVATION_CONCLUSION"
       - name: Fail if deployment or browser verification did not pass
         env:
           DEPLOYMENT_RESULT: ${{ needs.source-and-deployment-identity.result }}

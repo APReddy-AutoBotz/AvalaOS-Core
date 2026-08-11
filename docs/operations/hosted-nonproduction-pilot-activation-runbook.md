@@ -49,9 +49,12 @@ After all stop gates pass, the controller may execute the repository-owned activ
 5. run idempotent synthetic bootstrap for one organization/workspace and its bounded role matrix;
    provision a distinct synthetic Recovery Promotion Operator through
    `hosted_pilot_provision_recovery_operator` only after its `.invalid` identity has active authority
-   in that one tenant/workspace. The repository role grants exactly `operations.read` and
-   `release.promote`: it grants no approval, Owner/Admin, business, provider, production, or
-   customer-data authority. Record its current authorization version after provisioning;
+   in that one tenant/workspace. Provisioning is serialized with rollback, replaces broad
+   organization authority with a capability-free identity role, and assigns the two permitted
+   capabilities through an exact-workspace role. The repository role grants exactly
+   `operations.read` and `release.promote`: it grants no approval, Owner/Admin, business,
+   provider, production, or customer-data authority. Record its current authorization version
+   after provisioning and verify the active operator record for the exact organization and workspace;
 6. exercise canonical AP Invoice Exception Assess → Govern → Studio → Delivery → Monitor behavior and negative stale/revoked/cross-tenant cases;
 7. exercise response loss/replay, stale promotion candidate, concurrent rollback, queues/reconciliation/recovery, maintenance/read-only/kill switches, backup/restore, corrupt/wrong-version backup rejection, and fake provider success/failure/timeout/revocation/rotation with zero provider egress;
 8. deploy only the exact head to the explicitly linked preview/branch target;
@@ -76,20 +79,34 @@ The browser may display server projections but cannot mint tenant, environment, 
 The sanitized `manifest.json` uses schema version 1 and binds:
 
 - exact `gitCommit`, safe one-way target/deployment fingerprints, and safe deployment/workflow identities (never the hosted origin or site/project identifiers);
+- the controller-selected activation run's numeric ID and attempt, repository-owned workflow path,
+  repository, `workflow_dispatch` event, and successful conclusion. These values must match the
+  single bounded GitHub Actions run lookup used to download the artifact; manifest self-claims are
+  not activation-run authority and evidence cannot be substituted across runs or attempts;
 - `environment: hosted_nonproduction_pilot`;
 - SHA-256 target fingerprint and migration-chain hash (never their raw inputs);
 - `migrationChainHash` must equal `sha256:` plus the digest computed from the exact checked-out
   canonical migration inventory; an arbitrary, stale, or merely well-formed digest is rejected;
 - `hostedNonproductionVerified: true`, `productionAuthorized: false`, and `customerDataUsed: false`;
-- every required gate with `result: passed`, the same Git commit/workflow run, and a safe result ID.
+- every required gate with `result: passed`, the same Git commit/workflow run and run attempt, and a
+  safe result ID.
 
 Verify it from the exact checkout:
 
 ```bash
-node scripts/verify-hosted-pilot-evidence.mjs --manifest <sanitized-manifest.json> --expected-head <exact-head>
+node scripts/verify-hosted-pilot-evidence.mjs \
+  --manifest <sanitized-manifest.json> --expected-head <exact-head> \
+  --activation-run-id <trusted-run-id> --activation-run-attempt <trusted-attempt> \
+  --activation-workflow <trusted-workflow-path> --activation-repository <trusted-owner/repository> \
+  --activation-event workflow_dispatch --activation-head <exact-head> \
+  --activation-conclusion success
 ```
 
-The manual GitHub workflow downloads this manifest from a controller-identified activation run, composes hosted deployment/browser checks, and publishes only a sanitized verification record. Ordinary pull requests and pushes cannot trigger it.
+The manual GitHub workflow performs one exact-ID Actions API lookup before download, fails unless
+the run belongs to the current repository and exact release and completed successfully as a manual
+workflow, then binds the manifest and every gate to that immutable run identity. It composes hosted
+deployment/browser checks and publishes only a sanitized verification record. Ordinary pull
+requests and pushes cannot trigger it.
 
 ## Failure, rollback, and deprovision
 
@@ -99,7 +116,9 @@ The manual GitHub workflow downloads this manifest from a controller-identified 
 - **Rollback separation of duties:** use the dedicated active synthetic Recovery Promotion Operator,
   never the original promoter or independent approver. A same-promoter, approval-only, revoked,
   disabled, cross-tenant, or stale-authorization-version attempt must fail without a receipt or
-  lifecycle mutation. Preserve the exact rollback target candidate/version and replay receipt.
+  lifecycle mutation. Rollback validates and locks the active provisioned operator record for the
+  exact organization and workspace before receipt lookup; generic `release.promote` authority is
+  insufficient. Preserve the exact rollback target candidate/version and replay receipt.
 - **Web mismatch or false success:** remove the non-production deploy from pilot traffic or retain its maintenance page; do not promote or substitute another release.
 - **Backup rejection or recovery failure:** keep read-only, preserve the original target, reject corrupt/wrong-version material, and restore only into a separately verified dedicated non-production target.
 - **Secret or provider-egress suspicion:** stop immediately. Do not print or copy the suspected value; revoke through the separately authorized operator process and invalidate the evidence run.

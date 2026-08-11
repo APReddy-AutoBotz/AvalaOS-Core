@@ -140,7 +140,7 @@ try {
       return true;
     },
   );
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-same-promoter',rollbackPayload,nextPromoted.version),/SEPARATION_OF_DUTY_REQUIRED/);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-same-promoter',rollbackPayload,nextPromoted.version),'unprovisioned original promoter');
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion-1),/PR1B_AUTHORIZATION_STALE/);
   const nonDisclosingRollbackCases=[
     ['active in-tenant approval-only actor',()=>command('rollback_non_live_promotion','postgres-rollback-approver',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)],
@@ -151,6 +151,12 @@ try {
     ['nonexistent actor',()=>command('rollback_non_live_promotion','postgres-rollback-nonexistent-actor',rollbackPayload,nextPromoted.version,undefined,'97000000-0000-4000-8000-000000000083',1)],
   ];
   for(const [label,attempt] of nonDisclosingRollbackCases) await assertNonDisclosingAuthorityDenial(attempt(),label);
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='disabled' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-disabled-record',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'disabled provisioned operator record');
+  assert.equal(Number((await fresh.query("SELECT count(*) n FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND operation='rollback_non_live_promotion'",[fixture.org,fixture.workspace])).rows[0].n),0,'operator lifecycle denial must happen before receipt creation');
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='revoked' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-revoked-record',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'revoked provisioned operator record');
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='active' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
   await fresh.query("UPDATE organization_members SET status='disabled',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
   recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
   await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-disabled-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'disabled recovery operator');
