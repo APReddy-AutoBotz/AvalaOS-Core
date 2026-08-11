@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "hosted-pilot-activation-2026-08",
+  "baselineMainSha": "4940933e44280225d748b3aa727942e88acdfc04",
+  "environmentClass": "hosted_nonproduction_pilot",
+  "authorization": {
+    "hostedNonProductionInspection": true,
+    "hostedNonProductionMutation": true,
+    "hostedNonProductionDeployment": true,
+    "syntheticOrPersonalTestDataOnly": true,
+    "productionLikeSimulation": true,
+    "productionCutover": false,
+    "customerData": false,
+    "externalRealUserRollout": false,
+    "realAiProviderCalls": false,
+    "complianceOrSecurityCertificationClaim": false
+  },
+  "dataBoundary": "No customer data or external real-user data is authorized. Use synthetic or owner-controlled test data only.",
+  "providerBoundary": "Simulate provider behavior unless a separate explicit approval authorizes a real provider call.",
+  "deploymentBoundary": "A real hosted non-production pilot may be deployed and tested. Production DNS/cutover remains prohibited.",
+  "knownDiscovery": {
+    "existingNamedAvalaosSupabaseProjectSafeToReuse": false,
+    "reason": "Read-only discovery showed the existing project named Avalaos-core-dev contains MockMate schema/data and must not be repurposed.",
+    "existingAvalaosNetlifySiteFound": false
+  }
+}
