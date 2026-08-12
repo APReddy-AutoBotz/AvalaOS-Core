@@ -87,7 +87,7 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
-    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811200000');
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,canonical.tip.slice(0,14));
     const digestArgs=['a'.repeat(40),'.github/workflows/hosted-pilot-activation-evidence-producer.yml','31565268188',1,
       `sha256:${'b'.repeat(64)}`,`sha256:${'c'.repeat(64)}`,'11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222',
       '33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444',7];
