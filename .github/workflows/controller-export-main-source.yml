@@ -24,18 +24,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "f518c569fa1d0505c141bd656476ba30cfcb1e72"
+          test -f netlify.toml
+          test -f package-lock.json
 
-      - name: Export exact source tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          git archive --format=zip --output=/tmp/avalaos-main-f518c569.zip HEAD
-          test -s /tmp/avalaos-main-f518c569.zip
-
-      - name: Upload exact source artifact
+      - name: Upload exact source tree directly
         uses: actions/upload-artifact@v4
         with:
-          name: avalaos-main-source-f518c569
-          path: /tmp/avalaos-main-f518c569.zip
+          name: avalaos-main-tree-f518c569
+          path: .
           if-no-files-found: error
           retention-days: 1
