@@ -102,6 +102,41 @@ test('deterministic generated PR1E DDL expands all compatibility wrappers withou
   ]);
 });
 
+test('actual PR217 guarded DO rename and sibling routines replay to the exact surviving catalog',async()=>{
+  const migrationName='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';
+  const migration=canonical.migrations.find(item=>item.name===migrationName);
+  assert.ok(migration,`${migrationName} must remain in the canonical chain`);
+  const rename=migration.objectOperations.find(operation=>operation.action==='rename'
+    && operation.newIdentity==='public.studio_private_artifact_command_claim_pr217_accepted(jsonb)');
+  assert.deepEqual(rename,{
+    kind:'routine',action:'rename',
+    identity:'public.studio_private_artifact_command_claim(jsonb)',
+    newIdentity:'public.studio_private_artifact_command_claim_pr217_accepted(jsonb)',
+  });
+  const prefix=canonical.migrations.findIndex(item=>item.name===migrationName)+1;
+  const routines=canonicalObjectsAtPrefix(canonical.migrations,prefix).routines;
+  for(const identity of [
+    'public.studio_private_artifact_command_claim(jsonb)',
+    'public.studio_private_artifact_command_claim_pr217_accepted(jsonb)',
+    'public.studio_private_artifact_projection(uuid, uuid, uuid)',
+    'public.studio_private_artifact_reconciliation_due(integer)',
+  ]) assert.ok(routines.has(identity),`${identity} must survive the actual PR217 migration replay`);
+});
+
+test('guarded DO blocks replay literal routine DDL generically while quoted content stays opaque',()=>{
+  const operations=extractObjectOperations(`DO $guard$
+  BEGIN
+    IF to_regprocedure('public.compatibility_v2(jsonb)') IS NULL THEN
+      ALTER FUNCTION public.compatibility(jsonb) RENAME TO compatibility_v2;
+    END IF;
+    PERFORM 'ALTER FUNCTION public.phantom(jsonb) RENAME TO leaked';
+  END
+  $guard$;`);
+  assert.deepEqual(operations,[{
+    kind:'routine',action:'rename',identity:'public.compatibility(jsonb)',newIdentity:'public.compatibility_v2(jsonb)',
+  }]);
+});
+
 test('ambiguous generated routine DDL fails closed instead of disappearing from the catalog model',()=>{
   assert.throws(()=>extractObjectOperations(`DO $$BEGIN
     EXECUTE format('CREATE FUNCTION public.%I() RETURNS void LANGUAGE sql AS %L', current_setting('app.dynamic_name'), 'SELECT NULL');

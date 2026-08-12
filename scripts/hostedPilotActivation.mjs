@@ -130,6 +130,30 @@ const deterministicGeneratedRoutineStatements = statement => {
   return ddl;
 };
 
+// PostgreSQL permits literal DDL inside a DO block (for example, a guarded
+// compatibility rename). Treat the dollar-quoted PL/pgSQL body as executable
+// structure only after the outer SQL tokenizer has isolated the complete DO
+// statement. Strings, comments, nested dollar quotes, and dynamic EXECUTE text
+// remain opaque. Control-flow prefixes may precede a literal DDL statement, but
+// the DDL itself must begin after a PL/pgSQL statement boundary keyword.
+const deterministicDoRoutineStatements = statement => {
+  if (!/^DO\b/i.test(statement)) return [];
+  const opening = statement.match(/^DO\s+(?:LANGUAGE\s+plpgsql\s+)?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)/i);
+  if (!opening) throw new Error('unsupported DO block delimiter in canonical replay');
+  const delimiter = opening[1];
+  const bodyStart = opening.index + opening[0].length;
+  const bodyEnd = statement.lastIndexOf(delimiter);
+  if (bodyEnd < bodyStart) throw new Error('unterminated DO block in canonical replay');
+  const body = statement.slice(bodyStart, bodyEnd);
+  const ddl = [];
+  for (const fragment of splitSqlStatements(body)) {
+    const source = stripSqlComments(fragment);
+    const match = source.match(/(?:^|\b(?:BEGIN|THEN|ELSE|LOOP)\s+)((?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:FUNCTION|PROCEDURE)\b[\s\S]*)$/i);
+    if (match) ddl.push(match[1].trim());
+  }
+  return ddl;
+};
+
 export function canonicalObjectsAtPrefix(migrations, count=migrations.length) {
   const relations=new Map(), routines=new Map();
   for(const migration of migrations.slice(0,count)) {
@@ -162,6 +186,8 @@ export function extractObjectOperations(sql) {
     const statement=stripSqlComments(original).trim();
     const generated=deterministicGeneratedRoutineStatements(statement);
     if (generated.length) { for (const generatedStatement of generated) operations.push(...extractObjectOperations(generatedStatement)); continue; }
+    const procedural=deterministicDoRoutineStatements(statement);
+    if (procedural.length) { for (const proceduralStatement of procedural) operations.push(...extractObjectOperations(proceduralStatement)); continue; }
     const relation=new RegExp(`^(create(?:\\s+or\\s+replace)?|drop)\\s+(?:unlogged\\s+)?(table|view|materialized\\s+view|sequence|foreign\\s+table)\\s+(?:if\\s+(?:not\\s+)?exists\\s+)?(?:only\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})(?=\\s|\\(|$)`,'i').exec(statement);
     if(relation) { operations.push({kind:'relation',action:relation[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${qualifiedIdentity(relation[3],relation[4])}:${relation[2].replace(/\s+/g,'_').toLowerCase()}`}); continue; }
     const routine=new RegExp(`^(create(?:\\s+or\\s+replace)?|drop)\\s+(?:function|procedure)\\s+(?:if\\s+exists\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})\\s*\\(([\\s\\S]*?)\\)\\s*(?=returns|language|as|cascade|restrict|$)`,'i').exec(statement);
