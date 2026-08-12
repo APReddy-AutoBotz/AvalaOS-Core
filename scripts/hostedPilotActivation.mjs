@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const MIGRATION_NAME = /^\d{14}_[a-z0-9_]+\.sql$/;
@@ -31,6 +32,19 @@ export async function loadCanonicalMigrationInventory(root = process.cwd()) {
     digest: sha256(migrations.map(({ name, sha256: digest }) => `${name}\0${digest}\n`).join('')),
     migrations,
   });
+}
+
+export function loadCanonicalMigrationInventoryFromGit(commit, root = process.cwd()) {
+  if (!/^[0-9a-f]{40}$/.test(commit ?? '')) throw new Error('canonical Git commit is invalid');
+  const names = execFileSync('git', ['ls-tree', '-r', '--name-only', commit, 'supabase/migrations'], { cwd: root, encoding: 'utf8' })
+    .split('\n').map(value => value.trim()).filter(name => MIGRATION_NAME.test(name.split('/').at(-1))).map(name => name.split('/').at(-1)).sort();
+  if (!names.length) throw new Error('canonical Git migration chain is empty');
+  const migrations = names.map(name => {
+    const sql = execFileSync('git', ['show', `${commit}:supabase/migrations/${name}`], { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }).replace(/\r\n/g, '\n');
+    return { name, sha256: sha256(sql), bytes: Buffer.byteLength(sql), sql, creates: extractCreatedRelations(sql), routines: extractCreatedRoutines(sql) };
+  });
+  return Object.freeze({ algorithm: 'sha256', count: migrations.length, tip: names.at(-1),
+    digest: sha256(migrations.map(({ name, sha256: digest }) => `${name}\0${digest}\n`).join('')), migrations });
 }
 
 export function extractCreatedRelations(sql) {

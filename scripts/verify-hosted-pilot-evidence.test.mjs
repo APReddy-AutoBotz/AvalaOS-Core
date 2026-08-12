@@ -21,6 +21,7 @@ test('fails closed for wrong head, missing gate, production authority, and unsaf
   for (const value of ['https://localhost', 'https://foo.localhost', 'https://127.0.0.2', 'https://127.255.255.254', 'https://127.1', 'https://0177.0.0.1', 'https://0x7f000001', 'https://2130706433', 'https://[::1]', 'https://[::ffff:127.0.0.1]', 'https://[::ffff:7f00:1]']) {
     assert.throws(() => validateHostedUrl(value), /non-local/, value);
   }
+  for (const value of ['https://0.0.0.0','https://[::]','https://[::ffff:0.0.0.0]']) assert.throws(()=>validateHostedUrl(value),/non-local/);
   assert.equal(validateHostedUrl('https://deploy-preview-228--avalaos-pilot.netlify.app'), 'https://deploy-preview-228--avalaos-pilot.netlify.app');
   assert.throws(() => verifyManifest({ ...manifest, migrationChainHash: `sha256:${'0'.repeat(64)}` }, context), /canonical inventory/);
 });
@@ -68,6 +69,8 @@ test('producer workflow executes trusted gates instead of accepting caller-decla
   assert.doesNotMatch(producer, /gate_result_ids_json/i);
   for (const job of ['database-provider','recovery-operations','hosted-browser','accessibility-performance']) assert.match(producer, new RegExp(job));
   assert.match(producer, /hosted-pilot:verify-database/);
+  assert.match(producer, /hosted-pilot:preflight/);
+  assert.match(producer, /HOSTED_PILOT_EXERCISE_RUN_ID/);
   assert.match(producer, /test:recovery:pilot-operations/);
   assert.match(producer, /test:migrations:pilot-operations:postgres/);
   assert.match(producer, /playwright\.hosted-pilot\.config\.ts --workers=1/);
@@ -79,6 +82,9 @@ test('producer workflow executes trusted gates instead of accepting caller-decla
   assert.match(producer, /missing or mismatched accessibility\/performance assertion artifact/);
   assert.match(producer, /accessibility-performance-artifact:/);
   assert.match(producer, /TRUSTED_GATE_RESULTS_JSON/);
+  for(const gate of ['tenant-adversarial','backup-restore','canonical-journey'])
+    assert.match(producer,new RegExp(`'${gate}':'database-provider'`));
+  assert.doesNotMatch(producer,/'(?:tenant-adversarial|backup-restore|canonical-journey)':'recovery-operations'/);
 });
 test('hosted accessibility and performance evidence owns executable bounded assertions', async () => {
   const spec = await readFile('tests/browser/hostedAccessibilityPerformance.spec.ts', 'utf8');

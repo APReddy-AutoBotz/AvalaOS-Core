@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { assertExactMigrationLedger, assertServiceOnlyRoutineCatalog, SERVICE_ONLY_HOSTED_RPCS } from './hostedPilotDatabaseVerify.mjs';
+import { assertAuthorityTableCatalog, assertExactMigrationLedger, assertSecurityDefinerCatalog, assertServiceOnlyRoutineCatalog, SERVICE_ONLY_HOSTED_RPCS } from './hostedPilotDatabaseVerify.mjs';
+import { CATALOG_LIMITS, inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
 const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/20260811140000_hosted_recovery_promotion_operator.sql',import.meta.url),'utf8');
 const closureMigration=await readFile(new URL('../supabase/migrations/20260811160000_hosted_closure_root_convergence.sql',import.meta.url),'utf8');
+const verificationMigration=await readFile(new URL('../supabase/migrations/20260811170000_hosted_verification_run_evidence.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -121,4 +123,44 @@ test('database verifier derives the expected tip from canonical migration invent
   assert.match(verifyScript,/marker\.migration_tip !== expectedMigrationTip/);
   assert.match(verifyScript,/assertExactMigrationLedger\(ledger, canonical\)/);
   assert.doesNotMatch(verifyScript,/marker\.migration_tip !== '20260811120000'/);
+});
+
+test('complete authority catalogs reject omitted or browser-mutable tables and unsafe definers',()=>{
+  const tables=[{owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false}];
+  assert.doesNotThrow(()=>assertAuthorityTableCatalog(tables));
+  assert.throws(()=>assertAuthorityTableCatalog([]),/AUTHORITY_TABLE/);
+  assert.throws(()=>assertAuthorityTableCatalog([{...tables[0],authenticated_mutation:true}]),/AUTHORITY_TABLE/);
+  const definers=[{owner:'postgres',safe_search_path:true,public_execute:false,anon_execute:false}];
+  assert.doesNotThrow(()=>assertSecurityDefinerCatalog(definers));
+  assert.throws(()=>assertSecurityDefinerCatalog([{...definers[0],public_execute:true}]),/SECURITY_DEFINER/);
+});
+
+test('hosted verification evidence is exact workspace and exercise-run bound',()=>{
+  assert.match(verificationMigration,/PRIMARY KEY\(org_id,workspace_id,exercise_run_id\)/);
+  assert.match(verificationMigration,/IDEMPOTENCY_CONFLICT/);
+  assert.match(verificationMigration,/tenant_adversarial[\s\S]+provider_zero_egress[\s\S]+recovery_rollback/);
+  assert.match(verifyScript,/exercise_run_id=\$4/);
+  assert.match(verifyScript,/operator\.org_id=\$2 AND operator\.workspace_id=\$3/);
+});
+
+test('catalog inventory applies hard ceilings before detail materialization',()=>{
+  assert.ok(CATALOG_LIMITS.relations<=512 && CATALOG_LIMITS.routines<=1024 && CATALOG_LIMITS.payloadBytes<=2_000_000);
+});
+
+test('oversized catalogs fail before relation or routine details are fetched',async()=>{
+  let detailFetched=false;
+  const client={query:async sql=>{
+    if(String(sql).startsWith('set statement_timeout')) return {rows:[]};
+    if(String(sql).includes('pg_control_system')) return {rows:[{system_identifier:'s',database_name:'d',database_role:'r'}]};
+    if(String(sql).includes('select count(*) from pg_namespace')) return {rows:[{schemas:2,relations:CATALOG_LIMITS.relations+1,routines:0}]};
+    detailFetched=true; return {rows:[]};
+  }};
+  await assert.rejects(inventoryConnectedHostedTarget(client),/CATALOG_RELATIONS_LIMIT/);
+  assert.equal(detailFetched,false);
+});
+
+test('migration apply uses exact Git-tree bytes rather than mutable worktree SQL',()=>{
+  assert.match(applyScript,/loadCanonicalMigrationInventoryFromGit\(checkoutReleaseSha\)/);
+  assert.match(applyScript,/const sql = migration\.sql/);
+  assert.doesNotMatch(applyScript,/readFile\(new URL\(`\.\.\/supabase\/migrations/);
 });

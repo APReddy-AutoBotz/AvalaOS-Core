@@ -161,3 +161,11 @@ The activation producer accepts no caller-declared gate-result IDs. Its database
 recovery/operations, and real-hosted browser jobs must all succeed in the same exact-head workflow
 run. Every emitted gate record is bound to that run, attempt, pinned workflow, hosted environment,
 database fingerprint, and tested deployment fingerprint before the consumer can verify it.
+
+### Exact hosted closure convergence
+
+Migration SQL is authorized by the exact Git tree, not mutable worktree bytes. The operator must run the bounded connected-target preflight before database verification; both preflight and locked apply stop before detail materialization when catalog count, payload, or query-time ceilings are exceeded. Wildcard, unspecified, loopback, and localhost-family origins are never hosted targets.
+
+The database verifier requires the controller-selected synthetic organization, workspace, exercise-run UUID, exact release SHA, and connected-target fingerprint. It compares the complete canonical migration ledger, every public authority table's owner/RLS/FORCE-RLS/browser-mutation boundary, the complete public `SECURITY DEFINER` surface, and every service-only hosted RPC. Synthetic subjects and zero-egress provider scenarios are scoped to that organization and workspace. Recovery passes only when one currently active recovery operator, its workspace role and current authorization version, an exact-run immutable verification result, exact-head recovery evidence, and an exact-release rollback event all agree.
+
+Disposable PostgreSQL remains required regression evidence, but it cannot mint hosted tenant-adversarial, backup/restore, canonical-journey, or recovery success. Those gates come only from the exact-target hosted verification result. Missing, skipped, stale, oversized, timed-out, wrong-workspace, wrong-run, revoked-operator, or conflicting replay evidence leaves the target in maintenance/read-only and requires additive forward repair; no destructive rollback or local fallback is permitted.

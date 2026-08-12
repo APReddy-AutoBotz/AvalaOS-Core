@@ -10,6 +10,7 @@ export const SERVICE_ONLY_HOSTED_RPCS = Object.freeze([
   'hosted_pilot_bootstrap_synthetic(uuid,uuid,uuid,bigint,text)',
   'hosted_pilot_simulate_provider(uuid,uuid,uuid,bigint,text,text,text)',
   'hosted_pilot_provision_recovery_operator(uuid,uuid,uuid,bigint,uuid)',
+  'hosted_pilot_record_verification_result(uuid,uuid,uuid,text,text,uuid,bigint)',
   'pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)',
   'pilot_operations_ingest_recovery_evidence(uuid,uuid,uuid,text,text,text,text,text,text,uuid)',
   'pilot_operations_projection(uuid,uuid,uuid,bigint)',
@@ -34,10 +35,22 @@ export function assertServiceOnlyRoutineCatalog(rows, expected = SERVICE_ONLY_HO
   }
 }
 
-export async function verifyHostedPilotDatabase(client, canonical, expectedTargetFingerprint, expectedReleaseSha) {
+export function assertAuthorityTableCatalog(rows) {
+  if (!rows.length || rows.some(row => row.owner !== 'postgres' || !row.rls_enabled || !row.force_rls
+    || row.public_mutation || row.anon_mutation || row.authenticated_mutation)) throw new Error('HOSTED_PILOT_AUTHORITY_TABLE_MISMATCH');
+}
+
+export function assertSecurityDefinerCatalog(rows) {
+  if (!rows.length || rows.some(row => row.owner !== 'postgres' || !row.safe_search_path || row.public_execute || row.anon_execute))
+    throw new Error('HOSTED_PILOT_SECURITY_DEFINER_MISMATCH');
+}
+
+export async function verifyHostedPilotDatabase(client, canonical, expectedTargetFingerprint, expectedReleaseSha, scope = {}) {
   canonical ??= await loadCanonicalMigrationInventory();
   if (!/^[0-9a-f]{40}$/.test(expectedReleaseSha ?? '')) throw new Error('HOSTED_PILOT_RELEASE_SHA_REQUIRED');
   if (!/^sha256:[0-9a-f]{64}$/.test(expectedTargetFingerprint ?? '')) throw new Error('HOSTED_PILOT_TARGET_FINGERPRINT_REQUIRED');
+  for (const [name,value] of Object.entries({organizationId:scope.organizationId,workspaceId:scope.workspaceId,exerciseRunId:scope.exerciseRunId}))
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(value ?? '')) throw new Error(`HOSTED_PILOT_${name.replace(/[A-Z]/g,c=>`_${c}`).toUpperCase()}_REQUIRED`);
   const identity=(await client.query(`SELECT (SELECT system_identifier::text FROM pg_control_system()) AS system_identifier,
     current_database() AS database_name,current_user AS database_role`)).rows[0];
   const actualTargetFingerprint=`sha256:${createHash('sha256').update(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`).digest('hex')}`;
@@ -54,33 +67,59 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
   const ledger = (await client.query(`SELECT filename,content_sha256 FROM avalaos_migrations.applied ORDER BY applied_at,filename`)).rows;
   assertExactMigrationLedger(ledger, canonical);
 
-  const names=['hosted_pilot_environment_identity','hosted_pilot_synthetic_subjects','hosted_pilot_provider_simulations'];
-  const security=(await client.query(`SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class
-    WHERE relnamespace='public'::regnamespace AND relname=ANY($1::text[])`,[names])).rows;
-  if (security.length!==names.length || security.some(row=>!row.relrowsecurity||!row.relforcerowsecurity)) throw new Error('HOSTED_PILOT_RLS_MISMATCH');
-  for (const role of ['anon','authenticated']) for (const name of names) {
-    const allowed=(await client.query(`SELECT has_table_privilege($1,$2,'SELECT,INSERT,UPDATE,DELETE') allowed`,[role,`public.${name}`])).rows[0].allowed;
-    if (allowed) throw new Error('HOSTED_PILOT_GRANT_MISMATCH');
-  }
+  const authorityTables=(await client.query(`SELECT c.relname,owner.rolname owner,c.relrowsecurity rls_enabled,c.relforcerowsecurity force_rls,
+      has_table_privilege('PUBLIC',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') public_mutation,
+      has_table_privilege('anon',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') anon_mutation,
+      has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') authenticated_mutation
+    FROM pg_class c JOIN pg_roles owner ON owner.oid=c.relowner
+    WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') ORDER BY c.relname`)).rows;
+  assertAuthorityTableCatalog(authorityTables);
 
   const subjectRows=(await client.query(`SELECT test_role,lifecycle,synthetic_only
-    FROM public.hosted_pilot_synthetic_subjects ORDER BY test_role`)).rows;
+    FROM public.hosted_pilot_synthetic_subjects WHERE org_id=$1 AND workspace_id=$2 ORDER BY test_role`,[scope.organizationId,scope.workspaceId])).rows;
   const requiredSubjectRoles=['cross_tenant','operator','owner','reviewer','revoked'];
   if (!requiredSubjectRoles.every(role=>subjectRows.some(row=>row.test_role===role&&row.synthetic_only===true))
     || subjectRows.some(row=>row.test_role==='revoked'&&row.lifecycle!=='revoked')) throw new Error('HOSTED_PILOT_TENANT_EVIDENCE_MISMATCH');
   const providerRows=(await client.query(`SELECT scenario,bool_and(zero_egress) AS zero_egress
-    FROM public.hosted_pilot_provider_simulations GROUP BY scenario ORDER BY scenario`)).rows;
+    FROM public.hosted_pilot_provider_simulations WHERE org_id=$1 AND workspace_id=$2 GROUP BY scenario ORDER BY scenario`,[scope.organizationId,scope.workspaceId])).rows;
   for (const scenario of ['success','failure','timeout','revoked','rotated'])
     if (!providerRows.some(row=>row.scenario===scenario&&row.zero_egress===true)) throw new Error('HOSTED_PILOT_PROVIDER_EVIDENCE_MISMATCH');
   const operations=(await client.query(`SELECT
     (SELECT count(*)::integer FROM public.pilot_operations_recovery_evidence_ingestions
-      WHERE workflow_name='Pilot Operations' AND workflow_head_sha=$1) AS recovery_evidence_count,
+      WHERE org_id=$2 AND workspace_id=$3 AND workflow_name='Pilot Operations' AND workflow_head_sha=$1) AS recovery_evidence_count,
     (SELECT count(*)::integer FROM public.pilot_operations_rollback_events rollback
       JOIN public.pilot_operations_release_candidates candidate ON candidate.id=rollback.from_candidate_id
         AND candidate.org_id=rollback.org_id AND candidate.workspace_id=rollback.workspace_id
-      WHERE candidate.git_sha=$1) AS rollback_event_count`,[expectedReleaseSha])).rows[0];
+      WHERE candidate.git_sha=$1 AND rollback.org_id=$2 AND rollback.workspace_id=$3) AS rollback_event_count,
+    (SELECT count(*)::integer FROM public.hosted_pilot_recovery_operators operator
+      JOIN public.workspace_memberships membership ON membership.org_id=operator.org_id AND membership.workspace_id=operator.workspace_id
+        AND membership.user_id=operator.actor_id AND membership.role_id=operator.role_id AND membership.status='active'
+        AND membership.disabled_at IS NULL AND membership.deleted_at IS NULL
+      JOIN public.authorization_versions version ON version.org_id=operator.org_id AND version.user_id=operator.actor_id
+      WHERE operator.org_id=$2 AND operator.workspace_id=$3 AND operator.lifecycle='active' AND operator.synthetic_only
+        AND NOT operator.production_authorized AND NOT operator.customer_data_authorized AND NOT operator.real_provider_calls_authorized) AS current_recovery_operator_count,
+    (SELECT count(*)::integer FROM public.hosted_pilot_verification_run_results result
+      JOIN public.hosted_pilot_recovery_operators operator ON operator.org_id=result.org_id AND operator.workspace_id=result.workspace_id
+        AND operator.actor_id=result.recovery_actor_id AND operator.lifecycle='active'
+      JOIN public.authorization_versions version ON version.org_id=operator.org_id AND version.user_id=operator.actor_id
+        AND version.version=result.recovery_authorization_version
+      WHERE result.org_id=$2 AND result.workspace_id=$3 AND result.exercise_run_id=$4 AND result.release_sha=$1
+        AND result.tenant_adversarial AND result.provider_zero_egress AND result.canonical_journey
+        AND result.backup_restore AND result.recovery_rollback AND result.production_authorized=false
+        AND result.customer_data_used=false AND result.real_provider_calls_used=false) AS exact_run_evidence_count`,
+    [expectedReleaseSha,scope.organizationId,scope.workspaceId,scope.exerciseRunId])).rows[0];
   if (Number(operations?.recovery_evidence_count)<1 || Number(operations?.rollback_event_count)<1)
     throw new Error('HOSTED_PILOT_RECOVERY_EVIDENCE_MISMATCH');
+  if (Number(operations?.current_recovery_operator_count)!==1 || Number(operations?.exact_run_evidence_count)!==1)
+    throw new Error('HOSTED_PILOT_CURRENT_RECOVERY_OR_RUN_EVIDENCE_MISMATCH');
+
+  const definers=(await client.query(`SELECT p.oid::regprocedure::text identity,owner.rolname owner,
+      coalesce(p.proconfig @> ARRAY['search_path=pg_catalog']::text[],false) safe_search_path,
+      has_function_privilege('PUBLIC',p.oid,'EXECUTE') public_execute,
+      has_function_privilege('anon',p.oid,'EXECUTE') anon_execute
+    FROM pg_proc p JOIN pg_roles owner ON owner.oid=p.proowner
+    WHERE p.pronamespace='public'::regnamespace AND p.prosecdef ORDER BY p.oid::regprocedure::text`)).rows;
+  assertSecurityDefinerCatalog(definers);
 
   const routines = (await client.query(`SELECT p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' AS identity,owner.rolname AS owner,
       p.prosecdef AS security_definer,
@@ -94,7 +133,8 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
     JOIN pg_proc p ON p.oid=wanted.oid JOIN pg_roles owner ON owner.oid=p.proowner
     ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)`, [SERVICE_ONLY_HOSTED_RPCS.map(name => `public.${name}`)])).rows;
   assertServiceOnlyRoutineCatalog(routines);
-  return {status:'passed',migrationTip:marker.migration_tip,migrationCount:ledger.length,forcedRls:true,
+  return {status:'passed',migrationTip:marker.migration_tip,migrationCount:ledger.length,authorityTableCount:authorityTables.length,
+    securityDefinerCount:definers.length,forcedRls:true,
     browserTableAuthority:false,browserServiceRpcAuthority:false,tenantAdversarial:true,
     providerSimulationZeroEgress:true,recoveryVerified:true,productionAuthorized:false};
 }
@@ -105,7 +145,8 @@ async function main() {
   const client = new Client({ connectionString: url, application_name: 'avalaos_hosted_pilot_verify' });
   await client.connect();
   try { process.stdout.write(`${JSON.stringify(await verifyHostedPilotDatabase(client,undefined,
-    process.env.HOSTED_PILOT_TARGET_FINGERPRINT,process.env.EXPECTED_RELEASE_SHA))}\n`); }
+    process.env.HOSTED_PILOT_TARGET_FINGERPRINT,process.env.EXPECTED_RELEASE_SHA,{organizationId:process.env.HOSTED_PILOT_ORGANIZATION_ID,
+      workspaceId:process.env.HOSTED_PILOT_WORKSPACE_ID,exerciseRunId:process.env.HOSTED_PILOT_EXERCISE_RUN_ID}))}\n`); }
   finally { await client.end(); }
 }
 if (import.meta.url === new URL(`file://${process.argv[1] ?? ''}`).href) await main();

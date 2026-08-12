@@ -26,7 +26,8 @@ export function validateHostedUrl(value) {
   const loopback = hostname === 'localhost' || hostname.endsWith('.localhost')
     || hostname === '::1' || /^127(?:\.|$)/.test(hostname)
     || /^::ffff:(?:127\.|7f[0-9a-f]{2}:)/i.test(hostname);
-  if (loopback || !hostname.includes('.')) throw new Error('hosted URL must identify a non-local hosted target');
+  const unspecified = hostname === '0.0.0.0' || hostname === '::' || /^::ffff:0(?:\.0\.0\.0|:0)$/i.test(hostname);
+  if (loopback || unspecified || !hostname.includes('.')) throw new Error('hosted URL must identify a non-local hosted target');
   if (url.pathname !== '/' && url.pathname !== '') throw new Error('hosted URL must be an origin without a path');
   return url.origin;
 }

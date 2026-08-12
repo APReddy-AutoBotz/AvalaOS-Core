@@ -2,18 +2,18 @@
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
-import { buildAdditiveMigrationPlan, classifyHostedTarget, loadCanonicalMigrationInventory, verifyPreflightToken } from './hostedPilotActivation.mjs';
+import { buildAdditiveMigrationPlan, classifyHostedTarget, loadCanonicalMigrationInventoryFromGit, verifyPreflightToken } from './hostedPilotActivation.mjs';
 import { inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
 import { ensureHostedPgcryptoCompatibility, validateLockedTarget } from './hostedPilotApplySafety.mjs';
 
 export async function runHostedPilotApply({
   client, inventory, token, expectedReleaseSha, environmentFingerprint,
-  nonce, signingKey, canonical, readMigration = async name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'),
+  nonce, signingKey, canonical,
   resolveCheckoutSha = () => execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
 }) {
-  canonical ??= await loadCanonicalMigrationInventory();
   const checkoutReleaseSha = resolveCheckoutSha();
   if (expectedReleaseSha !== checkoutReleaseSha) throw new Error('RELEASE_IDENTITY_MISMATCH');
+  canonical ??= loadCanonicalMigrationInventoryFromGit(checkoutReleaseSha);
   const classification = classifyHostedTarget(inventory, canonical);
   const expected = { expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, nonce };
   if (!verifyPreflightToken({ token, signingKey, expected })) throw new Error('PREFLIGHT_BINDING_MISMATCH');
@@ -31,7 +31,9 @@ export async function runHostedPilotApply({
   const applied = (await client.query(`select filename, content_sha256 from avalaos_migrations.applied order by filename`)).rows;
   if (applied.length !== classification.inventory.appliedMigrations.length || applied.some((row, index) => row.filename !== classification.inventory.appliedMigrations[index] || row.content_sha256 !== canonical.migrations[index]?.sha256)) throw new Error('DATABASE_CHANGED_SINCE_PREFLIGHT');
   for (const migration of lockedPlan.pending) {
-    const sql = await readMigration(migration.name);
+    const sql = migration.sql;
+    if (typeof sql !== 'string' || migration.sha256 !== canonical.migrations.find(item => item.name === migration.name)?.sha256)
+      throw new Error('GIT_TREE_MIGRATION_BYTES_MISMATCH');
     await client.query('begin');
     try {
       await client.query(sql);

@@ -18,6 +18,7 @@ test('canonical apply entrypoint reaches locked live re-inventory without a miss
   const client = { query: async (sql) => {
     calls.push(String(sql));
     if (String(sql).includes('pg_control_system')) return { rows: [identity] };
+    if (String(sql).includes('select count(*) from pg_namespace')) return { rows: [{schemas:2,relations:0,routines:0}] };
     if (String(sql).includes('from pg_namespace')) return { rows: [{ nspname: 'auth' }, { nspname: 'public' }] };
     if (String(sql).includes('from pg_class')) return { rows: [] };
     if (String(sql).includes('p.prokind as kind')) return { rows: [] };

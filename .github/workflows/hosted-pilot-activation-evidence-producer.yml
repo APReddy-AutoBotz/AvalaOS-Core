@@ -19,6 +19,18 @@ on:
         description: Sanitized non-production deployment identity
         required: true
         type: string
+      organization_id:
+        description: Controller-selected synthetic organization UUID
+        required: true
+        type: string
+      workspace_id:
+        description: Controller-selected synthetic workspace UUID
+        required: true
+        type: string
+      exercise_run_id:
+        description: Immutable hosted exercise run UUID
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -37,10 +49,20 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Verify exact canonical hosted database, RLS, provider and service-only ACL truth
+      - name: Execute canonical bounded connected-target preflight
+        env:
+          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
+        run: |
+          umask 077
+          npm run hosted-pilot:preflight -- "$RUNNER_TEMP/hosted-preflight.json"
+          rm -f "$RUNNER_TEMP/hosted-preflight.json"
+      - name: Verify exact run-bound hosted database, RLS, provider, recovery and service-only ACL truth
         env:
           HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
           HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
         run: npm run hosted-pilot:verify-database
 
   recovery-operations:
@@ -152,7 +174,7 @@ jobs:
           const jobFor={
             'database-preflight':'database-provider','migration-chain':'database-provider',
             'provider-simulation-zero-egress':'database-provider','runtime-fail-closed':'database-provider',
-            'tenant-adversarial':'recovery-operations','backup-restore':'recovery-operations','canonical-journey':'recovery-operations',
+            'tenant-adversarial':'database-provider','backup-restore':'database-provider','canonical-journey':'database-provider',
             'browser-desktop':'hosted-browser','browser-pixel':'hosted-browser','accessibility-performance':'accessibility-performance',
           };
           const results=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,

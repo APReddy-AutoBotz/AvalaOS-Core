@@ -1,8 +1,15 @@
 import { createHash } from 'node:crypto';
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
+export const CATALOG_LIMITS = Object.freeze({ schemas: 64, relations: 512, routines: 1024, payloadBytes: 2_000_000, statementTimeoutMs: 15_000 });
+
+const assertBoundedCount = (label, value, ceiling) => {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < 0 || count > ceiling) throw new Error(`HOSTED_TARGET_CATALOG_${label.toUpperCase()}_LIMIT`);
+};
 
 export async function inventoryConnectedHostedTarget(client) {
+  await client.query(`set statement_timeout = '${CATALOG_LIMITS.statementTimeoutMs}ms'`);
   const { rows: [identity] } = await client.query(`select
     (select system_identifier::text from pg_control_system()) as system_identifier,
     current_database() as database_name,
@@ -11,6 +18,13 @@ export async function inventoryConnectedHostedTarget(client) {
     throw new Error('HOSTED_TARGET_IDENTITY_UNAVAILABLE');
   }
 
+  const counts = (await client.query(`select
+    (select count(*) from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema')::integer schemas,
+    (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname not like 'pg_%' and n.nspname <> 'information_schema' and c.relkind in ('r','p','v','m','S','f'))::integer relations,
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname not like 'pg_%' and n.nspname <> 'information_schema')::integer routines`)).rows[0];
+  assertBoundedCount('schemas', counts.schemas, CATALOG_LIMITS.schemas);
+  assertBoundedCount('relations', counts.relations, CATALOG_LIMITS.relations);
+  assertBoundedCount('routines', counts.routines, CATALOG_LIMITS.routines);
   const schemas = (await client.query(`select nspname from pg_namespace
     where nspname not like 'pg_%' and nspname <> 'information_schema'
     order by nspname`)).rows.map(row => row.nspname);
@@ -32,6 +46,8 @@ export async function inventoryConnectedHostedTarget(client) {
     ? (await client.query(`select filename,content_sha256 from avalaos_migrations.applied order by filename`)).rows
     : [];
 
+  const payloadBytes = Buffer.byteLength(JSON.stringify({ schemas, tables, routines, appliedRows }));
+  if (payloadBytes > CATALOG_LIMITS.payloadBytes) throw new Error('HOSTED_TARGET_CATALOG_PAYLOAD_LIMIT');
   return Object.freeze({
     targetFingerprint: sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`),
     inventory: {

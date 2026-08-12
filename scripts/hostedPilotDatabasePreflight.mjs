@@ -2,6 +2,7 @@ import process from 'node:process';
 import pg from 'pg';
 import { writeFile } from 'node:fs/promises';
 import { inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
+import { classifyHostedTarget, loadCanonicalMigrationInventory } from './hostedPilotActivation.mjs';
 
 const { Client } = pg;
 const url = process.env.HOSTED_PILOT_DATABASE_URL;
@@ -12,6 +13,8 @@ const client = new Client({ connectionString: url, application_name: 'avalaos_ho
 try {
   await client.connect();
   const { inventory, targetFingerprint } = await inventoryConnectedHostedTarget(client);
+  const classification = classifyHostedTarget(inventory, await loadCanonicalMigrationInventory());
+  if (!classification.mutationAllowed) throw new Error('TARGET_REJECTED_FOREIGN_OR_DIRTY_SCHEMA');
   const publicTables = inventory.tables.filter(table => table.schema === 'public').map(table => table.name);
   const { schemas, appliedMigrations, authUserCount } = inventory;
   const marker = publicTables.includes('hosted_pilot_environment_identity')
