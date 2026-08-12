@@ -1,0 +1,40 @@
+name: Hosted Closure One-Shot Latest Ledger Patch
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/hosted-closure-one-shot-latest-ledger-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-exact-stale-latest-ledger-assertion:
+    if: github.actor == 'APReddy-AutoBotz' && github.head_ref == 'controller/hosted-final-evidence-gate-closure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Replace exactly one stale latest-ledger assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('scripts/testPilotOperationsPostgres.mjs')
+          text=path.read_text()
+          old="    await assertIdentityMutationFails(db,d=>d.query(\"DELETE FROM avalaos_migrations.applied WHERE filename='20260811200000_hosted_current_exercise_evidence_binding.sql'\"),`${label}: missing latest ledger row must fail closed`);"
+          new="    await assertIdentityMutationFails(db,d=>d.query('DELETE FROM avalaos_migrations.applied WHERE filename=$1',[canonical.migrations.at(-1).name]),`${label}: missing latest ledger row must fail closed`);"
+          if text.count(old) != 1:
+              raise SystemExit('HOSTED_CLOSURE_STALE_LATEST_LEDGER_ASSERTION_NOT_EXACTLY_ONCE')
+          path.write_text(text.replace(old,new))
+          PY
+          git diff --check
+          git diff -- scripts/testPilotOperationsPostgres.mjs
+          git config user.name 'AvalaOS Controller'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/testPilotOperationsPostgres.mjs
+          git commit -m 'test(hosted-pilot): derive latest canonical ledger row'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
