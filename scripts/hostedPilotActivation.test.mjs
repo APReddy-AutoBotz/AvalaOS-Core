@@ -60,6 +60,54 @@ test('rename parsing remains comment-safe and preserves quoted lowercase identit
   ]);
 });
 
+test('statement replay uses PostgreSQL identifier truncation for long rename targets',()=>{
+  const operations=extractObjectOperations(`
+    CREATE FUNCTION public.enterprise_commit_modernization_assessment(jsonb,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;
+    ALTER FUNCTION public.enterprise_commit_modernization_assessment(jsonb,jsonb)
+      RENAME TO enterprise_commit_modernization_assessment_before_canonical_projection;
+  `);
+  assert.deepEqual(operations.at(-1),{
+    kind:'routine',action:'rename',
+    identity:'public.enterprise_commit_modernization_assessment(jsonb, jsonb)',
+    newIdentity:'public.enterprise_commit_modernization_assessment_before_canonical_pro(jsonb, jsonb)',
+  });
+});
+
+test('statement replay ignores hostile DDL text inside strings and dollar-quoted bodies',()=>{
+  const operations=extractObjectOperations(`
+    SELECT 'CREATE FUNCTION public.string_phantom() RETURNS void LANGUAGE sql AS $$select 1$$';
+    CREATE FUNCTION public.real_function() RETURNS text LANGUAGE plpgsql AS $body$
+    BEGIN
+      RETURN 'DROP FUNCTION public.real_function(); CREATE TABLE public.body_phantom(id int);';
+    END
+    $body$;
+    -- ALTER FUNCTION public.real_function() RENAME TO comment_phantom;
+  `);
+  assert.deepEqual(operations,[{kind:'routine',action:'create',identity:'public.real_function()'}]);
+});
+
+test('deterministic generated PR1E DDL expands all compatibility wrappers without an allowlist',()=>{
+  const operations=extractObjectOperations(`DO $$DECLARE n text;BEGIN
+    FOREACH n IN ARRAY ARRAY['assign_assess_v2_review','attest_assess_v2_evidence','resolve_assess_v2_review','start_assess_v2_revision','resolve_assess_v2_govern','handoff_assess_v2_studio'] LOOP
+      EXECUTE format('CREATE OR REPLACE FUNCTION public.pr1e_%I(p_actor_id uuid,p_org_id uuid,p_workspace_id uuid,p_case_id uuid,p_decision_id uuid,p_expected_version bigint,p_request_id uuid,p_idempotency_key text,p_authorization_version bigint,p_payload jsonb) RETURNS jsonb LANGUAGE sql AS %L',n,'SELECT NULL');
+    END LOOP;
+  END$$;`);
+  assert.deepEqual(operations.map(({identity})=>identity),[
+    'public.pr1e_assign_assess_v2_review(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+    'public.pr1e_attest_assess_v2_evidence(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+    'public.pr1e_resolve_assess_v2_review(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+    'public.pr1e_start_assess_v2_revision(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+    'public.pr1e_resolve_assess_v2_govern(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+    'public.pr1e_handoff_assess_v2_studio(uuid, uuid, uuid, uuid, uuid, bigint, uuid, text, bigint, jsonb)',
+  ]);
+});
+
+test('ambiguous generated routine DDL fails closed instead of disappearing from the catalog model',()=>{
+  assert.throws(()=>extractObjectOperations(`DO $$BEGIN
+    EXECUTE format('CREATE FUNCTION public.%I() RETURNS void LANGUAGE sql AS %L', current_setting('app.dynamic_name'), 'SELECT NULL');
+  END$$;`),/unsupported generated routine DDL/);
+});
+
 test('canonical inventory hashes and counts literal migration blob bytes',async()=>{
   const crlf=canonical.migrations.find(m=>m.name==='20260720100000_pr1d_fact_source_and_create_hash_hardening.sql');
   assert.ok(crlf);

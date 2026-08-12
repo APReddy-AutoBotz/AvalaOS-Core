@@ -56,6 +56,80 @@ export function normalizeRoutineIdentityArguments(argumentsSql) {
   }).join(', ');
 }
 
+const postgresIdentifier = value => {
+  const unquoted = value.startsWith('"')
+    ? value.slice(1, -1).replace(/""/g, '"')
+    : value.toLowerCase();
+  let result = '';
+  for (const character of unquoted) {
+    if (Buffer.byteLength(result + character, 'utf8') > 63) break;
+    result += character;
+  }
+  return result;
+};
+
+const IDENTIFIER_TOKEN = '(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)';
+const qualifiedIdentity = (schema, name) => `${postgresIdentifier(schema ?? 'public')}.${postgresIdentifier(name)}`;
+
+// Split only at top-level statement terminators. Quoted text and dollar-quoted
+// procedure bodies remain opaque, so DDL-shaped text in them cannot become a
+// catalog operation.
+export function splitSqlStatements(sql) {
+  const statements = [];
+  let start = 0, i = 0, state = 'code', dollar = '', blockDepth = 0;
+  while (i < sql.length) {
+    const c = sql[i], n = sql[i + 1];
+    if (state === 'line') { if (c === '\n') state = 'code'; i++; continue; }
+    if (state === 'block') {
+      if (c === '/' && n === '*') { blockDepth++; i += 2; continue; }
+      if (c === '*' && n === '/') { if (--blockDepth === 0) state = 'code'; i += 2; continue; }
+      i++; continue;
+    }
+    if (state === 'single') { if (c === "'" && n === "'") { i += 2; continue; } if (c === "'") state = 'code'; i++; continue; }
+    if (state === 'double') { if (c === '"' && n === '"') { i += 2; continue; } if (c === '"') state = 'code'; i++; continue; }
+    if (state === 'dollar') { if (sql.startsWith(dollar, i)) { i += dollar.length; state = 'code'; } else i++; continue; }
+    if (c === '-' && n === '-') { state = 'line'; i += 2; continue; }
+    if (c === '/' && n === '*') { state = 'block'; blockDepth = 1; i += 2; continue; }
+    if (c === "'") { state = 'single'; i++; continue; }
+    if (c === '"') { state = 'double'; i++; continue; }
+    if (c === '$') {
+      const match = sql.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (match) { dollar = match[0]; state = 'dollar'; i += dollar.length; continue; }
+    }
+    if (c === ';') { const statement = sql.slice(start, i).trim(); if (statement) statements.push(statement); start = i + 1; }
+    i++;
+  }
+  if (state === 'block' || state === 'single' || state === 'double' || state === 'dollar') throw new Error('unterminated SQL token while splitting statements');
+  const tail = sql.slice(start).trim(); if (tail) statements.push(tail);
+  return statements;
+}
+
+const deterministicGeneratedRoutineStatements = statement => {
+  if (!/^DO\b/i.test(statement)) return [];
+  const containsGeneratedRoutineDdl = /\bEXECUTE\s+format\(\s*'(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|ALTER)\s+(?:FUNCTION|PROCEDURE)\b/i.test(statement);
+  const array = statement.match(/\bFOREACH\s+([A-Za-z_][A-Za-z0-9_$]*)\s+IN\s+ARRAY\s+ARRAY\s*\[([\s\S]*?)\]\s+LOOP\b/i);
+  if (!array) {
+    if (containsGeneratedRoutineDdl) throw new Error('unsupported generated routine DDL must not be omitted from canonical replay');
+    return [];
+  }
+  const values = [...array[2].matchAll(/'((?:[^']|'')*)'/g)].map(match => match[1].replace(/''/g, "'"));
+  if (!values.length || values.length > 128) throw new Error('generated DDL array is empty or exceeds the bounded expansion limit');
+  const formats = [...statement.matchAll(/\bEXECUTE\s+format\(\s*'((?:[^']|'')*)'\s*,\s*([A-Za-z_][A-Za-z0-9_$]*)\b/gi)];
+  const ddl = [];
+  for (const format of formats) {
+    if (format[2].toLowerCase() !== array[1].toLowerCase()) continue;
+    const template = format[1].replace(/''/g, "'");
+    if (!/^\s*(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|ALTER)\s+(?:FUNCTION|PROCEDURE)\b/i.test(template)) continue;
+    if ((template.match(/%I/g) ?? []).length !== 1) throw new Error('generated routine DDL must have exactly one identifier placeholder');
+    ddl.push(...values.map(value => {
+      if (!IDENTIFIER.test(value)) throw new Error('generated routine DDL contains an unsafe identifier value');
+      return template.replace('%I', postgresIdentifier(value));
+    }));
+  }
+  if (containsGeneratedRoutineDdl && !ddl.length) throw new Error('generated routine DDL could not be resolved deterministically');
+  return ddl;
+};
+
 export function canonicalObjectsAtPrefix(migrations, count=migrations.length) {
   const relations=new Map(), routines=new Map();
   for(const migration of migrations.slice(0,count)) {
@@ -82,22 +156,22 @@ export function canonicalObjectsAtPrefix(migrations, count=migrations.length) {
 }
 
 export function extractObjectOperations(sql) {
-  const source=stripSqlComments(sql), operations=[];
-  const relation=/\b(create(?:\s+or\s+replace)?|drop)\s+(?:unlogged\s+)?(table|view|materialized\s+view|sequence|foreign\s+table)\s+(?:if\s+(?:not\s+)?exists\s+)?(?:only\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?/gi;
-  for(const m of source.matchAll(relation)) operations.push({index:m.index,kind:'relation',action:m[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${m[3]??'public'}.${m[4]}:${m[2].replace(/\s+/g,'_').toLowerCase()}`});
-  const routine=/\b(create(?:\s+or\s+replace)?|drop)\s+(?:function|procedure)\s+(?:if\s+exists\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s*\(([^;]*?)\)(?=\s*(?:returns|language|as|;|cascade|restrict))/gis;
-  for(const m of source.matchAll(routine)) operations.push({index:m.index,kind:'routine',action:m[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${m[2]??'public'}.${m[3]}(${normalizeRoutineIdentityArguments(m[4])})`});
-  const routineRename=/\balter\s+(?:function|procedure)\s+(?:if\s+exists\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s*\(([^;]*?)\)\s+rename\s+to\s+"?([a-z_][a-z0-9_$]*)"?/gis;
-  for(const m of source.matchAll(routineRename)) {
-    const schema=m[1]??'public', args=normalizeRoutineIdentityArguments(m[3]);
-    operations.push({index:m.index,kind:'routine',action:'rename',identity:`${schema}.${m[2]}(${args})`,newIdentity:`${schema}.${m[4]}(${args})`});
+  const operations=[];
+  const statements=splitSqlStatements(sql);
+  for (const original of statements) {
+    const statement=stripSqlComments(original).trim();
+    const generated=deterministicGeneratedRoutineStatements(statement);
+    if (generated.length) { for (const generatedStatement of generated) operations.push(...extractObjectOperations(generatedStatement)); continue; }
+    const relation=new RegExp(`^(create(?:\\s+or\\s+replace)?|drop)\\s+(?:unlogged\\s+)?(table|view|materialized\\s+view|sequence|foreign\\s+table)\\s+(?:if\\s+(?:not\\s+)?exists\\s+)?(?:only\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})(?=\\s|\\(|$)`,'i').exec(statement);
+    if(relation) { operations.push({kind:'relation',action:relation[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${qualifiedIdentity(relation[3],relation[4])}:${relation[2].replace(/\s+/g,'_').toLowerCase()}`}); continue; }
+    const routine=new RegExp(`^(create(?:\\s+or\\s+replace)?|drop)\\s+(?:function|procedure)\\s+(?:if\\s+exists\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})\\s*\\(([\\s\\S]*?)\\)\\s*(?=returns|language|as|cascade|restrict|$)`,'i').exec(statement);
+    if(routine) { operations.push({kind:'routine',action:routine[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${qualifiedIdentity(routine[2],routine[3])}(${normalizeRoutineIdentityArguments(routine[4])})`}); continue; }
+    const routineRename=new RegExp(`^alter\\s+(?:function|procedure)\\s+(?:if\\s+exists\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})\\s*\\(([\\s\\S]*?)\\)\\s+rename\\s+to\\s+(${IDENTIFIER_TOKEN})\\s*$`,'i').exec(statement);
+    if(routineRename) { const base=qualifiedIdentity(routineRename[1],routineRename[2]), schema=base.slice(0,base.indexOf('.')), args=normalizeRoutineIdentityArguments(routineRename[3]); operations.push({kind:'routine',action:'rename',identity:`${base}(${args})`,newIdentity:`${schema}.${postgresIdentifier(routineRename[4])}(${args})`}); continue; }
+    const relationRename=new RegExp(`^alter\\s+(?:table|view|materialized\\s+view|sequence|foreign\\s+table)\\s+(?:if\\s+exists\\s+)?(?:only\\s+)?(?:(${IDENTIFIER_TOKEN})\\.)?(${IDENTIFIER_TOKEN})\\s+rename\\s+to\\s+(${IDENTIFIER_TOKEN})\\s*$`,'i').exec(statement);
+    if(relationRename) { const base=qualifiedIdentity(relationRename[1],relationRename[2]), schema=base.slice(0,base.indexOf('.')); operations.push({kind:'relation',action:'rename',identity:base,newIdentity:`${schema}.${postgresIdentifier(relationRename[3])}`}); }
   }
-  const relationRename=/\balter\s+(?:table|view|materialized\s+view|sequence|foreign\s+table)\s+(?:if\s+exists\s+)?(?:only\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s+rename\s+to\s+"?([a-z_][a-z0-9_$]*)"?/gis;
-  for(const m of source.matchAll(relationRename)) {
-    const schema=m[1]??'public';
-    operations.push({index:m.index,kind:'relation',action:'rename',identity:`${schema}.${m[2]}`,newIdentity:`${schema}.${m[3]}`});
-  }
-  return operations.sort((a,b)=>a.index-b.index).map(({index,...op})=>op);
+  return operations;
 }
 
 export async function loadCanonicalMigrationInventory(root = process.cwd()) {
