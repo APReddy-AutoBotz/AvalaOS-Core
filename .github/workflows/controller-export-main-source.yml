@@ -7,19 +7,52 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  read-netlify-team-free-scope-check:
+  deploy-current-main-to-stable-pilot:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Read isolated diagnostic artifact after all-scope upsert
+      - name: Checkout exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 4a324422d7b8180940422e1f602a9aec52415a41
+          fetch-depth: 1
+
+      - name: Verify exact current source SHA
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "4a324422d7b8180940422e1f602a9aec52415a41"
+          test -f netlify.toml
+          test -f package-lock.json
+
+      - name: Request repository-scoped OIDC identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=avalaos-netlify-controller")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          test "$token" != "null"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger stable current-main Git build
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
           curl --fail-with-body --silent --show-error \
-            "https://6a7ca31b2a472acecafd45db--avalaos-pilot.netlify.app/netlify-tuple.json" \
-            | tee /tmp/netlify-tuple.json
-          jq . /tmp/netlify-tuple.json
-          jq -e '.context == "branch-deploy"' /tmp/netlify-tuple.json >/dev/null
-          jq -e '.siteName == "avalaos-pilot"' /tmp/netlify-tuple.json >/dev/null
+            --request POST \
+            --header "Authorization: Bearer ${OIDC_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            "https://fcsfvonhvyrevwhyvano.supabase.co/functions/v1/controller-netlify-build-relay-20260812" \
+            | tee /tmp/netlify-relay-response.json
+          jq -e '.ok == true' /tmp/netlify-relay-response.json >/dev/null
+          jq '{ok, upstream_status, upstream_body}' /tmp/netlify-relay-response.json
