@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { REQUIRED_GATES, safeHash, validateHostedUrl, verifyActivationRun, verifyManifest } from './verify-hosted-pilot-evidence.mjs';
+import { REQUIRED_GATES, safeHash, validateHostedUrl, validateResolvedHostedUrl, verifyActivationRun, verifyManifest } from './verify-hosted-pilot-evidence.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 const head = 'a'.repeat(40), canonicalMigrationDigest = 'c'.repeat(64);
+const scope={organizationId:'11111111-1111-4111-8111-111111111111',workspaceId:'22222222-2222-4222-8222-222222222222',exerciseRunId:'33333333-3333-4333-8333-333333333333'};
 const activationRun = { id: '123456789', attempt: '2', workflow: '.github/workflows/hosted-pilot-activation-evidence-producer.yml', repository: 'APReddy-AutoBotz/AvalaOS-Core', event: 'workflow_dispatch', head, conclusion: 'success' };
-const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowConclusion: 'success', environment: 'hosted_nonproduction_pilot', targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), resultId: `${gate}:1` }]));
-const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, evidence };
-const context = { expectedHead: head, actualHead: head, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint: manifest.deploymentTargetFingerprint };
+const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowConclusion: 'success', environment: 'hosted_nonproduction_pilot', targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), ...scope, resultId: `${gate}:1` }]));
+const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, ...scope, evidence };
+const context = { expectedHead: head, actualHead: head, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint: manifest.deploymentTargetFingerprint, expectedScope:scope };
 test('accepts exact-head complete hosted evidence bound to the selected activation run', () => assert.equal(verifyManifest(manifest, context), true));
 test('fails closed for wrong head, missing gate, production authority, and unsafe URL', () => {
   assert.throws(() => verifyManifest(manifest, { ...context, actualHead: 'b'.repeat(40) }), /exact head/);
@@ -19,11 +20,16 @@ test('fails closed for wrong head, missing gate, production authority, and unsaf
   assert.throws(() => verifyManifest({ ...manifest, hostedUrl: 'https://pilot.example.test' }, context), /prohibited/);
   assert.throws(() => validateHostedUrl('http://localhost:3000'), /HTTPS/);
   for (const value of ['https://localhost', 'https://foo.localhost', 'https://127.0.0.2', 'https://127.255.255.254', 'https://127.1', 'https://0177.0.0.1', 'https://0x7f000001', 'https://2130706433', 'https://[::1]', 'https://[::ffff:127.0.0.1]', 'https://[::ffff:7f00:1]']) {
-    assert.throws(() => validateHostedUrl(value), /non-local/, value);
+    assert.throws(() => validateHostedUrl(value), /public hosted target|non-local/, value);
   }
-  for (const value of ['https://0.0.0.0','https://[::]','https://[::ffff:0.0.0.0]']) assert.throws(()=>validateHostedUrl(value),/non-local/);
+  for (const value of ['https://0.0.0.0','https://[::]','https://[::ffff:0.0.0.0]']) assert.throws(()=>validateHostedUrl(value),/public hosted target|non-local/);
+  for (const value of ['https://10.0.0.1','https://172.16.0.1','https://192.168.1.10','https://169.254.169.254','https://pilot.local']) assert.throws(()=>validateHostedUrl(value),/public hosted target/);
   assert.equal(validateHostedUrl('https://deploy-preview-228--avalaos-pilot.netlify.app'), 'https://deploy-preview-228--avalaos-pilot.netlify.app');
   assert.throws(() => verifyManifest({ ...manifest, migrationChainHash: `sha256:${'0'.repeat(64)}` }, context), /canonical inventory/);
+});
+test('hosted DNS validation rejects aliases when any A or AAAA result is non-public',async()=>{
+  await assert.rejects(validateResolvedHostedUrl('https://pilot.example.test',async()=>[{address:'203.0.113.10'},{address:'10.0.0.8'}]),/non-public/);
+  assert.equal(await validateResolvedHostedUrl('https://pilot.example.test',async()=>[{address:'203.0.113.10'}]),'https://pilot.example.test');
 });
 test('rejects activation artifact and run identity substitution', () => {
   assert.equal(verifyActivationRun(activationRun, head), true);
@@ -95,7 +101,7 @@ test('hosted accessibility and performance evidence owns executable bounded asse
   assert.match(spec, /MAX_DOM_CONTENT_LOADED_MS/);
   assert.match(spec, /MAX_RESOURCE_COUNT/);
   assert.match(spec, /complete browser-owned navigation metrics are mandatory/);
-  assert.match(config, /validateHostedUrl\(rawUrl\)/);
+  assert.match(config, /validateResolvedHostedUrl\(rawUrl\)/);
   assert.match(config, /hostedAccessibilityPerformance\.spec\.ts/);
   assert.match(config, /Desktop Chrome/);
   assert.match(config, /Pixel 7/);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { buildAdditiveMigrationPlan, classifyHostedTarget, loadCanonicalMigrationInventoryFromGit, verifyPreflightToken } from './hostedPilotActivation.mjs';
 import { inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
@@ -32,7 +33,9 @@ export async function runHostedPilotApply({
   if (applied.length !== classification.inventory.appliedMigrations.length || applied.some((row, index) => row.filename !== classification.inventory.appliedMigrations[index] || row.content_sha256 !== canonical.migrations[index]?.sha256)) throw new Error('DATABASE_CHANGED_SINCE_PREFLIGHT');
   for (const migration of lockedPlan.pending) {
     const sql = migration.sql;
-    if (typeof sql !== 'string' || migration.sha256 !== canonical.migrations.find(item => item.name === migration.name)?.sha256)
+    const approved=canonical.migrations.find(item => item.name === migration.name);
+    if (typeof sql !== 'string' || migration.sha256 !== approved?.sha256 || migration.bytes!==approved.bytes
+      || Buffer.byteLength(sql)!==approved.bytes || createHash('sha256').update(Buffer.from(sql)).digest('hex')!==approved.sha256)
       throw new Error('GIT_TREE_MIGRATION_BYTES_MISMATCH');
     await client.query('begin');
     try {

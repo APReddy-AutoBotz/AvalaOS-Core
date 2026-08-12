@@ -4,7 +4,7 @@ import { buildAdditiveMigrationPlan, classifyHostedTarget, loadCanonicalMigratio
 import { ensureHostedPgcryptoCompatibility, validateLockedTarget } from './hostedPilotApplySafety.mjs';
 
 const canonical = await loadCanonicalMigrationInventory();
-const fingerprint = 'a'.repeat(64);
+const fingerprint = `sha256:${'a'.repeat(64)}`;
 const baseInventory = { schemas: ['auth', 'extensions', 'public'], tables: [], appliedMigrations: [], authUserCount: 0 };
 const preflightClassification = classifyHostedTarget(baseInventory, canonical);
 const preflightPlan = buildAdditiveMigrationPlan(preflightClassification, canonical);
@@ -12,7 +12,7 @@ const locked = inventory => ({ targetFingerprint: fingerprint, inventory, applie
 
 test('locked apply accepts only the unchanged connected target and canonical ledger', () => {
   assert.equal(validateLockedTarget({ lockedTarget: locked(baseInventory), preflightClassification, canonical, environmentFingerprint: fingerprint, preflightPlan }).plan.pending.length, canonical.count);
-  assert.throws(() => validateLockedTarget({ lockedTarget: { ...locked(baseInventory), targetFingerprint: 'b'.repeat(64) }, preflightClassification, canonical, environmentFingerprint: fingerprint, preflightPlan }), /DATABASE_CHANGED_SINCE_PREFLIGHT/);
+  assert.throws(() => validateLockedTarget({ lockedTarget: { ...locked(baseInventory), targetFingerprint: `sha256:${'b'.repeat(64)}` }, preflightClassification, canonical, environmentFingerprint: fingerprint, preflightPlan }), /DATABASE_CHANGED_SINCE_PREFLIGHT/);
   for (const inventory of [
     { ...baseInventory, schemas: [...baseInventory.schemas, 'foreign_product'] },
     { ...baseInventory, tables: [{ schema: 'public', name: 'foreign_table' }] },

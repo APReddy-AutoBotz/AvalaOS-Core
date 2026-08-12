@@ -31,6 +31,14 @@ on:
         description: Immutable hosted exercise run UUID
         required: true
         type: string
+      recovery_actor_id:
+        description: Current synthetic recovery operator UUID
+        required: true
+        type: string
+      recovery_authorization_version:
+        description: Current recovery operator authorization version
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -56,6 +64,16 @@ jobs:
           umask 077
           npm run hosted-pilot:preflight -- "$RUNNER_TEMP/hosted-preflight.json"
           rm -f "$RUNNER_TEMP/hosted-preflight.json"
+      - name: Record only repository-validated executed hosted gate proof
+        env:
+          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
+          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
+          HOSTED_PILOT_RECOVERY_ACTOR_ID: ${{ inputs.recovery_actor_id }}
+          HOSTED_PILOT_RECOVERY_AUTHORIZATION_VERSION: ${{ inputs.recovery_authorization_version }}
+        run: node scripts/record-hosted-pilot-executed-evidence.mjs
       - name: Verify exact run-bound hosted database, RLS, provider, recovery and service-only ACL truth
         env:
           HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
@@ -63,7 +81,9 @@ jobs:
           HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
           HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
           HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
-        run: npm run hosted-pilot:verify-database
+        run: |
+          export HOSTED_PILOT_DEPLOYMENT_FINGERPRINT="$(node --input-type=module -e 'import {safeHash,validateHostedUrl} from "./scripts/verify-hosted-pilot-evidence.mjs";process.stdout.write(safeHash(validateHostedUrl(process.env.HOSTED_PILOT_URL)))')"
+          npm run hosted-pilot:verify-database
 
   recovery-operations:
     environment: hosted-nonproduction-pilot
@@ -121,6 +141,9 @@ jobs:
         env:
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
           DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
         run: |
           mkdir -p artifacts/hosted-pilot/accessibility-performance
           node --input-type=module <<'NODE'
@@ -129,6 +152,7 @@ jobs:
           const result={schemaVersion:1,gate:'accessibility-performance',result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
             workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),workflowPath:ACTIVATION_PRODUCER_WORKFLOW,
             environment:'hosted_nonproduction_pilot',targetFingerprint:process.env.TARGET_FINGERPRINT,
+            organizationId:process.env.HOSTED_PILOT_ORGANIZATION_ID,workspaceId:process.env.HOSTED_PILOT_WORKSPACE_ID,exerciseRunId:process.env.HOSTED_PILOT_EXERCISE_RUN_ID,
             deploymentTargetFingerprint:safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN)),projects:['hosted-accessibility-performance-desktop-chrome','hosted-accessibility-performance-pixel-7']};
           await writeFile('artifacts/hosted-pilot/accessibility-performance/result.json',`${JSON.stringify(result,null,2)}\n`,{mode:0o600});
           NODE
@@ -156,18 +180,23 @@ jobs:
         env:
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
           DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
         shell: bash
         run: |
           TRUSTED_GATE_RESULTS_JSON="$(node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
           import {safeHash,validateHostedUrl,ACTIVATION_PRODUCER_WORKFLOW,REQUIRED_GATES} from './scripts/verify-hosted-pilot-evidence.mjs';
           const target=process.env.TARGET_FINGERPRINT;
+          const scope={organizationId:process.env.HOSTED_PILOT_ORGANIZATION_ID,workspaceId:process.env.HOSTED_PILOT_WORKSPACE_ID,exerciseRunId:process.env.HOSTED_PILOT_EXERCISE_RUN_ID};
           const deployment=safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN));
           const accessibility=JSON.parse(await readFile('artifacts/hosted-pilot/accessibility-performance/result.json','utf8'));
           if(accessibility.gate!=='accessibility-performance' || accessibility.result!=='passed'
             || accessibility.gitCommit!==process.env.EXPECTED_RELEASE_SHA || accessibility.workflowRunId!==process.env.GITHUB_RUN_ID
             || Number(accessibility.workflowRunAttempt)!==Number(process.env.GITHUB_RUN_ATTEMPT) || accessibility.workflowPath!==ACTIVATION_PRODUCER_WORKFLOW
             || accessibility.environment!=='hosted_nonproduction_pilot' || accessibility.targetFingerprint!==target
+            || accessibility.organizationId!==scope.organizationId || accessibility.workspaceId!==scope.workspaceId || accessibility.exerciseRunId!==scope.exerciseRunId
             || accessibility.deploymentTargetFingerprint!==deployment
             || JSON.stringify(accessibility.projects)!==JSON.stringify(['hosted-accessibility-performance-desktop-chrome','hosted-accessibility-performance-pixel-7']))
             throw new Error('missing or mismatched accessibility/performance assertion artifact');
@@ -180,7 +209,7 @@ jobs:
           const results=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
             workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
             workflowPath:ACTIVATION_PRODUCER_WORKFLOW,workflowConclusion:'success',environment:'hosted_nonproduction_pilot',
-            targetFingerprint:target,deploymentTargetFingerprint:deployment,resultId:g==='accessibility-performance'
+            targetFingerprint:target,deploymentTargetFingerprint:deployment,...scope,resultId:g==='accessibility-performance'
               ? `accessibility-performance-artifact:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`
               : `${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`}]))
           process.stdout.write(JSON.stringify(results));
@@ -195,6 +224,9 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.run_id }}
           WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
           WORKFLOW_REPOSITORY: ${{ github.repository }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
         run: node scripts/produce-hosted-pilot-activation-manifest.mjs
       - uses: actions/upload-artifact@v4
         with:

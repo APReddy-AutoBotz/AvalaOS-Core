@@ -11,7 +11,7 @@ test('canonical apply entrypoint reaches locked live re-inventory without a miss
   const inventory = { schemas: ['public', 'auth'], tables: [], appliedMigrations: [], authUserCount: 0 };
   const classification = classifyHostedTarget(inventory, canonical);
   const identity = { system_identifier: 'system-1', database_name: 'pilot', database_role: 'service_role' };
-  const environmentFingerprint = sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`);
+  const environmentFingerprint = `sha256:${sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`)}`;
   const args = { classification, canonical, expectedReleaseSha: 'a'.repeat(40), environmentFingerprint, nonce: 'entrypoint-lock-test', signingKey: 'test-signing-key' };
   const token = createPreflightToken(args);
   const calls = [];

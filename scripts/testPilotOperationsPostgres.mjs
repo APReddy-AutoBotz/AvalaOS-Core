@@ -5,6 +5,7 @@ import {
   applyMigrations, bootstrapAuth, connect, createDatabase, databaseUrlFor, dropDatabase, ensureClusterRoles,
   featureMigration, migrationNames,
 } from './pilotOperationsPostgresSupport.mjs';
+import {loadCanonicalMigrationInventory} from './hostedPilotActivation.mjs';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
 
 const adminUrl = process.env.PILOT_OPERATIONS_DATABASE_URL;
@@ -25,6 +26,13 @@ try {
   admin=await connect(adminUrl); clients.push(admin); await ensureClusterRoles(admin);
   const fresh=await createDatabase(admin,adminUrl,names.fresh); clients.push(fresh); await bootstrapAuth(fresh); await applyMigrations(fresh,migrationNames);
   const upgrade=await createDatabase(admin,adminUrl,names.upgrade); clients.push(upgrade); await bootstrapAuth(upgrade); await applyMigrations(upgrade,baseline); await applyMigrations(upgrade,correction);
+  const canonical=await loadCanonicalMigrationInventory();
+  for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
+    const relations=(await db.query(`select 'public.'||c.relname||':'||(case c.relkind when 'r' then 'table' when 'p' then 'table' when 'v' then 'view' when 'm' then 'materialized_view' when 'S' then 'sequence' when 'f' then 'foreign_table' end) identity from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in('r','p','v','m','S','f') order by identity`)).rows.map(row=>row.identity);
+    const routines=(await db.query(`select 'public.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' identity from pg_proc p where p.pronamespace='public'::regnamespace and not (p.proname='digest' and pg_get_function_identity_arguments(p.oid) in('text, text','bytea, text')) order by identity`)).rows.map(row=>row.identity);
+    assert.deepEqual(relations,canonical.relations.filter(value=>value.startsWith('public.')),`${label} relation catalog must equal checkout-derived final canonical state`);
+    assert.deepEqual(routines,canonical.routines.filter(value=>value.startsWith('public.')),`${label} routine catalog must equal checkout-derived final canonical state`);
+  }
   for (const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     assert.equal(Number((await db.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000,true);
     const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests','pilot_operations_promotion_sequences','pilot_operations_promotion_history','pilot_operations_candidate_sequences','pilot_operations_candidate_history'];

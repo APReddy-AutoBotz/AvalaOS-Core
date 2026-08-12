@@ -10,6 +10,7 @@ const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/2
 const closureMigration=await readFile(new URL('../supabase/migrations/20260811160000_hosted_closure_root_convergence.sql',import.meta.url),'utf8');
 const verificationMigration=await readFile(new URL('../supabase/migrations/20260811170000_hosted_verification_run_evidence.sql',import.meta.url),'utf8');
 const identityConvergenceMigration=await readFile(new URL('../supabase/migrations/20260811180000_hosted_forward_migration_identity_convergence.sql',import.meta.url),'utf8');
+const executedEvidenceMigration=await readFile(new URL('../supabase/migrations/20260811190000_hosted_executed_evidence_convergence.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -131,7 +132,7 @@ test('complete authority catalogs reject omitted or browser-mutable tables and u
   assert.doesNotThrow(()=>assertAuthorityTableCatalog(tables));
   assert.throws(()=>assertAuthorityTableCatalog([]),/AUTHORITY_TABLE/);
   assert.throws(()=>assertAuthorityTableCatalog([{...tables[0],authenticated_mutation:true}]),/AUTHORITY_TABLE/);
-  const definers=[{owner:'postgres',safe_search_path:true,public_execute:false,anon_execute:false}];
+  const definers=[{identity:'safe_rpc()',owner:'postgres',search_path:'pg_catalog',public_execute:false,anon_execute:false,authenticated_execute:false,service_role_execute:false}];
   assert.doesNotThrow(()=>assertSecurityDefinerCatalog(definers));
   assert.throws(()=>assertSecurityDefinerCatalog([{...definers[0],public_execute:true}]),/SECURITY_DEFINER/);
 });
@@ -142,6 +143,12 @@ test('hosted verification evidence is exact workspace and exercise-run bound',()
   assert.match(verificationMigration,/tenant_adversarial[\s\S]+provider_zero_egress[\s\S]+recovery_rollback/);
   assert.match(verifyScript,/exercise_run_id=\$4/);
   assert.match(verifyScript,/operator\.org_id=\$2 AND operator\.workspace_id=\$3/);
+});
+test('hosted verification success is derived from executed scoped state rather than caller booleans',()=>{
+  assert.doesNotMatch(executedEvidenceMigration,/p_result_sha256/);
+  for(const proof of ['hosted_pilot_synthetic_subjects','hosted_pilot_provider_simulations','pilot_operations_release_events','pilot_operations_rollback_events','pilot_operations_recovery_evidence_ingestions']) assert.match(executedEvidenceMigration,new RegExp(proof));
+  for(const binding of ['producer_workflow_path','producer_run_id','producer_run_attempt','target_fingerprint','deployment_fingerprint']) assert.match(executedEvidenceMigration,new RegExp(binding));
+  assert.match(executedEvidenceMigration,/IDEMPOTENCY_CONFLICT/);
 });
 
 test('operational identity follows the DB-owned migration ledger instead of a stale literal tip',()=>{

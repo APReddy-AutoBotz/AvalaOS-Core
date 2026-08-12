@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
-import { validateHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
+import { validateResolvedHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
 
 const rawUrl = process.env.HOSTED_PILOT_URL;
 if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; accessibility/performance acceptance cannot silently use localhost');
-const hostedOrigin = validateHostedUrl(rawUrl);
+const hostedOrigin = await validateResolvedHostedUrl(rawUrl);
 
 export default defineConfig({
   testDir: './tests/browser',

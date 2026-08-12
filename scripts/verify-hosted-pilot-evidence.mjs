@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -11,6 +13,10 @@ export const REQUIRED_GATES = Object.freeze([
 ]);
 export const ACTIVATION_PRODUCER_WORKFLOW = '.github/workflows/hosted-pilot-activation-evidence-producer.yml';
 export const ACTIVATION_MANIFEST_ARTIFACT = 'hosted-pilot-activation-manifest';
+export const canonicalTargetFingerprint = value => {
+  if (!/^sha256:[0-9a-f]{64}$/.test(value ?? '')) throw new Error('target fingerprint must use sha256:<digest>');
+  return value;
+};
 const SHA = /^[0-9a-f]{40}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const HASH = /^sha256:[0-9a-f]{64}$/;
@@ -23,13 +29,31 @@ export function validateHostedUrl(value) {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('hosted URL must be a credential-free HTTPS origin');
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  const loopback = hostname === 'localhost' || hostname.endsWith('.localhost')
+  const loopback = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')
     || hostname === '::1' || /^127(?:\.|$)/.test(hostname)
     || /^::ffff:(?:127\.|7f[0-9a-f]{2}:)/i.test(hostname);
   const unspecified = hostname === '0.0.0.0' || hostname === '::' || /^::ffff:0(?:\.0\.0\.0|:0)$/i.test(hostname);
-  if (loopback || unspecified || !hostname.includes('.')) throw new Error('hosted URL must identify a non-local hosted target');
+  if (loopback || unspecified || !hostname.includes('.') || (isIP(hostname) && !isPublicAddress(hostname))) throw new Error('hosted URL must identify a public hosted target');
   if (url.pathname !== '/' && url.pathname !== '') throw new Error('hosted URL must be an origin without a path');
   return url.origin;
+}
+
+export function isPublicAddress(address) {
+  const value=address.replace(/^\[|\]$/g,'').toLowerCase();
+  if(isIP(value)===4) { const [a,b]=value.split('.').map(Number); return !(a===0||a===10||a===127||a===169&&b===254||a===172&&b>=16&&b<=31||a===192&&b===168||a>=224); }
+  if(isIP(value)===6) {
+    if(value==='::'||value==='::1'||value.startsWith('fe8')||value.startsWith('fe9')||value.startsWith('fea')||value.startsWith('feb')||value.startsWith('fc')||value.startsWith('fd')) return false;
+    const mapped=value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); if(mapped) return isPublicAddress(mapped[1]);
+  }
+  return isIP(value)!==0;
+}
+
+export async function validateResolvedHostedUrl(value, resolver=lookup) {
+  const origin=validateHostedUrl(value), hostname=new URL(origin).hostname.replace(/^\[|\]$/g,'');
+  if(isIP(hostname)) return origin;
+  const addresses=await resolver(hostname,{all:true,verbatim:true});
+  if(!addresses.length||addresses.some(({address})=>!isPublicAddress(address))) throw new Error('hosted hostname resolved to a non-public address');
+  return origin;
 }
 
 export function safeHash(value) {
@@ -44,7 +68,7 @@ export function verifyActivationRun(run, expectedHead) {
   return true;
 }
 
-export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint }) {
+export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint, expectedScope }) {
   if (!SHA.test(expectedHead) || expectedHead !== actualHead) throw new Error('expected release does not equal the checked-out exact head');
   verifyActivationRun(activationRun ?? {}, expectedHead);
   if (manifest.schemaVersion !== 1 || manifest.gitCommit !== expectedHead) throw new Error('manifest is not bound to the exact release');
@@ -52,6 +76,7 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
   for (const field of ['productionAuthorized','liveActivationAuthorized','customerDataAuthorized','customerDataUsed','externalUsersAuthorized','externalUsersUsed','realProviderCallsAuthorized','realProviderCallsUsed'])
     if (manifest[field] !== false) throw new Error(`required non-production stop state is absent: ${field}`);
   if (manifest.hostedNonproductionVerified !== true) throw new Error('required hosted disposition is absent');
+  for(const field of ['organizationId','workspaceId','exerciseRunId']) if(!expectedScope?.[field] || manifest[field]!==expectedScope[field]) throw new Error(`manifest scope mismatch: ${field}`);
   if (!HASH.test(manifest.targetFingerprint ?? '') || !HASH.test(manifest.deploymentTargetFingerprint ?? '') || !HASH.test(manifest.migrationChainHash ?? '')) throw new Error('safe target, deployment and migration hashes are required');
   if (!/^[0-9a-f]{64}$/.test(canonicalMigrationDigest ?? '') || manifest.migrationChainHash !== `sha256:${canonicalMigrationDigest}`) throw new Error('manifest migration chain does not match the checked-out canonical inventory');
   if (!HASH.test(expectedDeploymentFingerprint ?? '') || manifest.deploymentTargetFingerprint !== expectedDeploymentFingerprint) throw new Error('manifest deployment fingerprint does not match the controller-selected tested origin');
@@ -72,6 +97,7 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
       || evidence.workflowConclusion !== 'success'
       || evidence.environment !== 'hosted_nonproduction_pilot'
       || evidence.targetFingerprint !== manifest.targetFingerprint
+      || evidence.organizationId !== manifest.organizationId || evidence.workspaceId !== manifest.workspaceId || evidence.exerciseRunId !== manifest.exerciseRunId
       || evidence.deploymentTargetFingerprint !== expectedDeploymentFingerprint
       || !SAFE_ID.test(evidence.resultId ?? '')) throw new Error(`missing or mismatched executed evidence: ${gate}`);
   }
@@ -80,13 +106,13 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
 
 async function main() {
   const args = Object.fromEntries(process.argv.slice(2).map((v, i, all) => v.startsWith('--') ? [v.slice(2), all[i + 1]] : null).filter(Boolean));
-  const required = ['manifest', 'expected-head', 'expected-deployment-fingerprint', 'activation-run-id', 'activation-run-attempt', 'activation-workflow', 'activation-repository', 'activation-event', 'activation-head', 'activation-conclusion'];
+  const required = ['manifest', 'expected-head', 'expected-deployment-fingerprint', 'organization-id', 'workspace-id', 'exercise-run-id', 'activation-run-id', 'activation-run-attempt', 'activation-workflow', 'activation-repository', 'activation-event', 'activation-head', 'activation-conclusion'];
   if (required.some((name) => !args[name])) throw new Error(`usage: --manifest <path> --expected-head <SHA> ${required.slice(2).map((name) => `--${name} <value>`).join(' ')} [--output <path>]`);
   const actualHead = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const manifest = JSON.parse(await readFile(args.manifest, 'utf8'));
   const canonical = await loadCanonicalMigrationInventory();
   const activationRun = { id: args['activation-run-id'], attempt: args['activation-run-attempt'], workflow: args['activation-workflow'], repository: args['activation-repository'], event: args['activation-event'], head: args['activation-head'], conclusion: args['activation-conclusion'] };
-  verifyManifest(manifest, { expectedHead: args['expected-head'], actualHead, canonicalMigrationDigest: canonical.digest, activationRun, expectedDeploymentFingerprint: args['expected-deployment-fingerprint'] });
+  verifyManifest(manifest, { expectedHead: args['expected-head'], actualHead, canonicalMigrationDigest: canonical.digest, activationRun, expectedDeploymentFingerprint: args['expected-deployment-fingerprint'], expectedScope:{organizationId:args['organization-id'],workspaceId:args['workspace-id'],exerciseRunId:args['exercise-run-id']} });
   const output = args.output ?? 'artifacts/hosted-pilot/verified-evidence.json';
   await mkdir(new URL('.', pathToFileURL(`${process.cwd()}/${output}`)), { recursive: true });
   await writeFile(output, `${JSON.stringify({ schemaVersion: 1, status: 'hosted_nonproduction_verified', production: 'production_not_authorized', customerData: 'customer_data_not_used', gitCommit: actualHead, activationRunId: activationRun.id, activationRunAttempt: Number(activationRun.attempt), activationWorkflow: activationRun.workflow, activationRepository: activationRun.repository, manifestHash: safeHash(JSON.stringify(manifest)) }, null, 2)}\n`, { mode: 0o600 });

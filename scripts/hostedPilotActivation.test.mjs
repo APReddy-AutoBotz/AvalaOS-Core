@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import { buildAdditiveMigrationPlan, classifyHostedTarget, createPreflightToken, loadCanonicalMigrationInventory, sanitizeStructuralInventory, verifyPreflightToken } from './hostedPilotActivation.mjs';
+import { buildAdditiveMigrationPlan, classifyHostedTarget, createPreflightToken, extractObjectOperations, loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments, sanitizeStructuralInventory, stripSqlComments, verifyPreflightToken } from './hostedPilotActivation.mjs';
 
 const canonical = await loadCanonicalMigrationInventory();
 const base = { schemas: ['public', 'auth'], tables: [], appliedMigrations: [], authUserCount: 0 };
@@ -11,12 +13,32 @@ test('canonical migration inventory has deterministic digest and tip', () => {
   assert.equal(canonical.count, canonical.migrations.length);
 });
 
+test('canonical object extraction is comment-safe, final-state aware, and PostgreSQL identity compatible',()=>{
+  const sql=`-- CREATE TABLE public.phantom(id int);\n/* CREATE FUNCTION public.phantom() RETURNS void */\nCREATE TABLE public.real_table(id int);\nCREATE FUNCTION public.defaulted(p_id uuid, p_note text DEFAULT NULL, p_count int4 = 3) RETURNS void LANGUAGE sql AS 'select';\nCREATE FUNCTION public.removed(p_id uuid) RETURNS void LANGUAGE sql AS 'select';\nDROP FUNCTION public.removed(uuid);`;
+  assert.doesNotMatch(stripSqlComments(sql),/phantom/);
+  assert.equal(normalizeRoutineIdentityArguments('p_id uuid, p_note text DEFAULT NULL, p_count int4 = 3'),'uuid, text, integer');
+  assert.deepEqual(extractObjectOperations(sql).map(op=>`${op.action}:${op.identity}`),[
+    'create:public.real_table:table','create:public.defaulted(uuid, text, integer)','create:public.removed(uuid)','drop:public.removed(uuid)']);
+  assert.equal(canonical.routines.some(identity=>identity.includes('legacy_untrusted')),false,'deliberately dropped legacy routines must not remain canonical');
+  assert.equal(canonical.relations.some(identity=>identity.includes('IF')),false,'commented pseudo-DDL must not create phantom relations');
+});
+
+test('canonical inventory hashes and counts literal migration blob bytes',async()=>{
+  const crlf=canonical.migrations.find(m=>m.name==='20260720100000_pr1d_fact_source_and_create_hash_hardening.sql');
+  assert.ok(crlf);
+  const bytes=await readFile(`supabase/migrations/${crlf.name}`);
+  assert.equal(crlf.bytes,bytes.length);
+  assert.equal(crlf.sha256,createHash('sha256').update(bytes).digest('hex'));
+  assert.equal(crlf.sql.includes('\r\n'),true);
+});
+
 test('dedicated empty target passes and receives additive-only full plan', () => {
   const result = classifyHostedTarget(base, canonical);
   assert.equal(result.classification, 'dedicated_empty');
   const plan = buildAdditiveMigrationPlan(result, canonical);
   assert.equal(plan.destructiveResetPermitted, false);
   assert.equal(plan.pending.length, canonical.count);
+  assert.ok(plan.pending.every((migration,index)=>migration.sql===canonical.migrations[index].sql && Buffer.byteLength(migration.sql)===migration.bytes));
 });
 
 test('known MockMate shape and auth users fail closed', () => {
@@ -86,10 +108,10 @@ test('inventory rejects unsafe identifiers rather than reflecting them', () => {
 
 test('preflight token binds release, target fingerprint, inventory and chain', () => {
   const classification = classifyHostedTarget(base, canonical);
-  const args = { classification, canonical, expectedReleaseSha: 'a'.repeat(40), environmentFingerprint: 'b'.repeat(64), nonce: 'single-use-operation-id', signingKey: 'test-only-signing-key' };
+  const args = { classification, canonical, expectedReleaseSha: 'a'.repeat(40), environmentFingerprint: `sha256:${'b'.repeat(64)}`, nonce: 'single-use-operation-id', signingKey: 'test-only-signing-key' };
   const token = createPreflightToken(args);
   const expected = { expectedReleaseSha: args.expectedReleaseSha, environmentFingerprint: args.environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, nonce: args.nonce };
   assert.equal(verifyPreflightToken({ token, signingKey: args.signingKey, expected }), true);
-  assert.equal(verifyPreflightToken({ token, signingKey: args.signingKey, expected: { ...expected, environmentFingerprint: 'c'.repeat(64) } }), false);
+  assert.equal(verifyPreflightToken({ token, signingKey: args.signingKey, expected: { ...expected, environmentFingerprint: `sha256:${'c'.repeat(64)}` } }), false);
   assert.equal(verifyPreflightToken({ token: `${token}x`, signingKey: args.signingKey, expected }), false);
 });
