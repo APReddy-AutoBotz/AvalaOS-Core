@@ -34,7 +34,21 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811180000');
     console.log(`POSTGRES PASS ${label}: applied schema, forced RLS, tenant-table denial, and service-only command authority`);
+  }
+  const assertIdentityMutationFails=async(db,mutation,label)=>{
+    await db.query('BEGIN');
+    try {
+      await mutation(db);
+      await assert.rejects(db.query('SELECT public.hosted_pilot_assert_current_identity()'),/HOSTED_PILOT_IDENTITY_MISMATCH/,label);
+    } finally { await db.query('ROLLBACK'); }
+  };
+  for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
+    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811180000_hosted_forward_migration_identity_convergence.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);
   }
   const fixture=await createCommittedStudioFixture(fresh);
   await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','operations.manage','release.manage','release.validate','release.approve','release.promote','org.admin') ON CONFLICT DO NOTHING",[fixture.role]);

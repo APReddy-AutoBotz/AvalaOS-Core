@@ -9,6 +9,7 @@ const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811
 const recoveryOperatorMigration=await readFile(new URL('../supabase/migrations/20260811140000_hosted_recovery_promotion_operator.sql',import.meta.url),'utf8');
 const closureMigration=await readFile(new URL('../supabase/migrations/20260811160000_hosted_closure_root_convergence.sql',import.meta.url),'utf8');
 const verificationMigration=await readFile(new URL('../supabase/migrations/20260811170000_hosted_verification_run_evidence.sql',import.meta.url),'utf8');
+const identityConvergenceMigration=await readFile(new URL('../supabase/migrations/20260811180000_hosted_forward_migration_identity_convergence.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -141,6 +142,19 @@ test('hosted verification evidence is exact workspace and exercise-run bound',()
   assert.match(verificationMigration,/tenant_adversarial[\s\S]+provider_zero_egress[\s\S]+recovery_rollback/);
   assert.match(verifyScript,/exercise_run_id=\$4/);
   assert.match(verifyScript,/operator\.org_id=\$2 AND operator\.workspace_id=\$3/);
+});
+
+test('operational identity follows the DB-owned migration ledger instead of a stale literal tip',()=>{
+  assert.match(identityConvergenceMigration,/CREATE OR REPLACE FUNCTION public\.hosted_pilot_assert_current_identity\(\)/);
+  assert.match(identityConvergenceMigration,/FROM avalaos_migrations\.applied[\s\S]+ORDER BY filename DESC LIMIT 1/);
+  assert.match(identityConvergenceMigration,/marker\.migration_tip<>latest_tip/);
+  assert.match(identityConvergenceMigration,/marker\.product_key<>'avalaos-core'/);
+  for(const boundary of ['production_authorized','customer_data_authorized','real_provider_calls_authorized'])
+    assert.match(identityConvergenceMigration,new RegExp(`marker\\.${boundary}`));
+  assert.equal((identityConvergenceMigration.match(/PERFORM public\.hosted_pilot_assert_current_identity\(\)/g)??[]).length,2);
+  assert.doesNotMatch(identityConvergenceMigration,/migration_tip='202608111[67]0000'/);
+  assert.match(identityConvergenceMigration,/migration_tip='20260811180000'/);
+  assert.match(identityConvergenceMigration,/REVOKE ALL ON FUNCTION public\.hosted_pilot_assert_current_identity\(\) FROM PUBLIC,anon,authenticated,service_role/);
 });
 
 test('catalog inventory applies hard ceilings before detail materialization',()=>{
