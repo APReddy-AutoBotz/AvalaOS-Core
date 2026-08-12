@@ -12,8 +12,11 @@
 [context.production]
   command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
+# Controller-only PR #230 transport. This branch is never merged. The final
+# script fails closed unless it is the exact authorized preview and then
+# checks out the accepted main tree before invoking the Netlify stable deploy.
 [context.deploy-preview]
-  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
+  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs && node scripts/controllerPromoteHostedPilotStable.mjs"
 
 [context.branch-deploy]
   command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
