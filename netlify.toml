@@ -16,7 +16,7 @@
   command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
 [context.branch-deploy]
-  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
+  command = "node scripts/writeNetlifyTupleDiagnostic.mjs"
 
 [[redirects]]
   from = "/*"
