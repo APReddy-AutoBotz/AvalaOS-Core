@@ -111,7 +111,7 @@ try {
     } finally { await db.query('ROLLBACK'); }
   };
   for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
-    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811200000_hosted_current_exercise_evidence_binding.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,d=>d.query('DELETE FROM avalaos_migrations.applied WHERE filename=$1',[canonical.migrations.at(-1).name]),`${label}: missing latest ledger row must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);
