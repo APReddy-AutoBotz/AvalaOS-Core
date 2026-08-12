@@ -87,7 +87,7 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
-    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811200000');
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,canonical.tip.slice(0,14));
     const digestArgs=['a'.repeat(40),'.github/workflows/hosted-pilot-activation-evidence-producer.yml','31565268188',1,
       `sha256:${'b'.repeat(64)}`,`sha256:${'c'.repeat(64)}`,'11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222',
       '33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444',7];
@@ -111,7 +111,7 @@ try {
     } finally { await db.query('ROLLBACK'); }
   };
   for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
-    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811200000_hosted_current_exercise_evidence_binding.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,d=>d.query('DELETE FROM avalaos_migrations.applied WHERE filename=$1',[canonical.migrations.at(-1).name]),`${label}: missing latest ledger row must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);

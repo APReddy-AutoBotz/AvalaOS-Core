@@ -40,6 +40,18 @@ export function assertAuthorityTableCatalog(rows) {
     || row.public_mutation || row.anon_mutation || row.authenticated_mutation)) throw new Error('HOSTED_PILOT_AUTHORITY_TABLE_MISMATCH');
 }
 
+export function assertOwnerOnlyEvidenceTableCatalog(rows) {
+  const expected = ['hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'];
+  if (rows.length !== expected.length) throw new Error('HOSTED_PILOT_EVIDENCE_TABLE_ACL_MISMATCH');
+  const byName = new Map(rows.map(row => [row.relname,row]));
+  for (const relname of expected) {
+    const row = byName.get(relname);
+    if (!row || row.owner !== 'postgres' || !row.rls_enabled || !row.force_rls
+      || row.public_mutation || row.anon_mutation || row.authenticated_mutation || row.service_role_mutation)
+      throw new Error('HOSTED_PILOT_EVIDENCE_TABLE_ACL_MISMATCH');
+  }
+}
+
 export function assertSecurityDefinerCatalog(rows) {
   if (!rows.length || rows.some(row => row.owner !== 'postgres' || !['pg_catalog','pg_catalog,public'].includes(row.search_path)
     || row.public_execute || row.anon_execute
@@ -72,12 +84,16 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
   assertExactMigrationLedger(ledger, canonical);
 
   const authorityTables=(await client.query(`SELECT c.relname,owner.rolname owner,c.relrowsecurity rls_enabled,c.relforcerowsecurity force_rls,
-      has_table_privilege('PUBLIC',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') public_mutation,
+      EXISTS (SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')) public_mutation,
       has_table_privilege('anon',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') anon_mutation,
-      has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') authenticated_mutation
+      has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') authenticated_mutation,
+      has_table_privilege('service_role',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') service_role_mutation
     FROM pg_class c JOIN pg_roles owner ON owner.oid=c.relowner
     WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') ORDER BY c.relname`)).rows;
   assertAuthorityTableCatalog(authorityTables);
+  assertOwnerOnlyEvidenceTableCatalog(authorityTables.filter(row=>
+    row.relname==='hosted_pilot_exercise_evidence_families'||row.relname==='hosted_pilot_verification_run_results'));
 
   const subjectRows=(await client.query(`SELECT test_role,lifecycle,synthetic_only
     FROM public.hosted_pilot_synthetic_subjects WHERE org_id=$1 AND workspace_id=$2 ORDER BY test_role`,[scope.organizationId,scope.workspaceId])).rows;
@@ -137,7 +153,8 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
 
   const definers=(await client.query(`SELECT p.oid::regprocedure::text identity,owner.rolname owner,
       replace(coalesce((SELECT substring(config from 13) FROM unnest(p.proconfig) config WHERE config LIKE 'search_path=%'),'') ,' ','') search_path,
-      has_function_privilege('PUBLIC',p.oid,'EXECUTE') public_execute,
+      EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE') public_execute,
       has_function_privilege('anon',p.oid,'EXECUTE') anon_execute,
       has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated_execute,
       has_function_privilege('service_role',p.oid,'EXECUTE') service_role_execute
@@ -159,7 +176,7 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
   assertServiceOnlyRoutineCatalog(routines);
   return {status:'passed',migrationTip:marker.migration_tip,migrationCount:ledger.length,authorityTableCount:authorityTables.length,
     securityDefinerCount:definers.length,forcedRls:true,
-    browserTableAuthority:false,browserServiceRpcAuthority:false,tenantAdversarial:true,
+    browserTableAuthority:false,browserServiceRpcAuthority:false,serviceRoleEvidenceMutationAuthority:false,tenantAdversarial:true,
     providerSimulationZeroEgress:true,recoveryVerified:true,productionAuthorized:false};
 }
 
