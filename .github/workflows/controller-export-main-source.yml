@@ -14,17 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout exact audited main
+      - name: Checkout exact current main
         uses: actions/checkout@v4
         with:
-          ref: f518c569fa1d0505c141bd656476ba30cfcb1e72
+          ref: 4a324422d7b8180940422e1f602a9aec52415a41
           fetch-depth: 1
 
-      - name: Verify exact source SHA
+      - name: Verify exact current source SHA
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "f518c569fa1d0505c141bd656476ba30cfcb1e72"
+          test "$(git rev-parse HEAD)" = "4a324422d7b8180940422e1f602a9aec52415a41"
           test -f netlify.toml
           test -f package-lock.json
 
@@ -41,7 +41,7 @@ jobs:
           test "$token" != "null"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger Git-backed production-branch Netlify build through OIDC relay
+      - name: Trigger current-main Git-backed Netlify build through OIDC relay
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
