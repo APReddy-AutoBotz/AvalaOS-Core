@@ -42,7 +42,20 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
-    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811180000');
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811190000');
+    const digestArgs=['a'.repeat(40),'.github/workflows/hosted-pilot-activation-evidence-producer.yml','31565268188',1,
+      `sha256:${'b'.repeat(64)}`,`sha256:${'c'.repeat(64)}`,'11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222',
+      '33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444',7];
+    const evidenceDigest=async args=>(await db.query('SELECT public.hosted_pilot_executed_evidence_digest($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) digest',args)).rows[0].digest;
+    const originalDigest=await evidenceDigest(digestArgs);
+    assert.equal(await evidenceDigest(digestArgs),originalDigest,`${label}: identical executed-evidence selectors must hash identically`);
+    for(let index=0;index<digestArgs.length;index++) {
+      const changed=[...digestArgs];
+      changed[index]=index===3||index===10?Number(changed[index])+1:index>=6&&index<=9?String(changed[index]).replace(/.$/,String(index)):`${changed[index]}|boundary`;
+      if(index===0) changed[index]='d'.repeat(40);
+      if(index===4||index===5) changed[index]=`sha256:${(index===4?'e':'f').repeat(64)}`;
+      assert.notEqual(await evidenceDigest(changed),originalDigest,`${label}: selector ${index} must be digest-bound`);
+    }
     console.log(`POSTGRES PASS ${label}: applied schema, forced RLS, tenant-table denial, and service-only command authority`);
   }
   const assertIdentityMutationFails=async(db,mutation,label)=>{
@@ -53,7 +66,7 @@ try {
     } finally { await db.query('ROLLBACK'); }
   };
   for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
-    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811180000_hosted_forward_migration_identity_convergence.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811190000_hosted_executed_evidence_convergence.sql'"),`${label}: missing latest ledger row must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);

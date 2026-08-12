@@ -149,6 +149,12 @@ test('hosted verification success is derived from executed scoped state rather t
   for(const proof of ['hosted_pilot_synthetic_subjects','hosted_pilot_provider_simulations','pilot_operations_release_events','pilot_operations_rollback_events','pilot_operations_recovery_evidence_ingestions']) assert.match(executedEvidenceMigration,new RegExp(proof));
   for(const binding of ['producer_workflow_path','producer_run_id','producer_run_attempt','target_fingerprint','deployment_fingerprint']) assert.match(executedEvidenceMigration,new RegExp(binding));
   assert.match(executedEvidenceMigration,/IDEMPOTENCY_CONFLICT/);
+  assert.doesNotMatch(executedEvidenceMigration,/E'\\0'|chr\(0\)|concat_ws\(/i);
+  assert.match(executedEvidenceMigration,/jsonb_build_array\([\s\S]+p_recovery_actor[\s\S]+p_recovery_authorization_version/);
+  assert.match(executedEvidenceMigration,/producer_run_id IS NULL/);
+  assert.match(executedEvidenceMigration,/target_fingerprint IS NULL/);
+  assert.match(executedEvidenceMigration,/recovery_actor_id<>p_recovery_actor/);
+  assert.match(executedEvidenceMigration,/e\.candidate_id=selected_candidate_id/);
 });
 
 test('operational identity follows the DB-owned migration ledger instead of a stale literal tip',()=>{
