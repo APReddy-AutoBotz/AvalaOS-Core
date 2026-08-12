@@ -71,6 +71,57 @@ const postgresIdentifier = value => {
 const IDENTIFIER_TOKEN = '(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)';
 const qualifiedIdentity = (schema, name) => `${postgresIdentifier(schema ?? 'public')}.${postgresIdentifier(name)}`;
 
+// Produce an offset-preserving view containing executable SQL/PL/pgSQL tokens
+// only. Literal and comment bytes become spaces (newlines are retained), so
+// callers can locate syntax in the mask and recover the corresponding literal
+// payload from the original source without scanning inert text.
+const maskSqlExecutableCode = sql => {
+  let masked = '', i = 0, state = 'code', dollar = '', blockDepth = 0;
+  while (i < sql.length) {
+    const c = sql[i], n = sql[i + 1];
+    if (state === 'line') { masked += c === '\n' ? '\n' : ' '; if (c === '\n') state = 'code'; i++; continue; }
+    if (state === 'block') {
+      if (c === '/' && n === '*') { masked += '  '; blockDepth++; i += 2; continue; }
+      if (c === '*' && n === '/') { masked += '  '; if (--blockDepth === 0) state = 'code'; i += 2; continue; }
+      masked += c === '\n' ? '\n' : ' '; i++; continue;
+    }
+    if (state === 'single') { masked += c === '\n' ? '\n' : ' '; if (c === "'" && n === "'") { masked += ' '; i += 2; continue; } if (c === "'") state = 'code'; i++; continue; }
+    if (state === 'double') { masked += c === '\n' ? '\n' : ' '; if (c === '"' && n === '"') { masked += ' '; i += 2; continue; } if (c === '"') state = 'code'; i++; continue; }
+    if (state === 'dollar') {
+      if (sql.startsWith(dollar, i)) { masked += ' '.repeat(dollar.length); i += dollar.length; state = 'code'; }
+      else { masked += c === '\n' ? '\n' : ' '; i++; }
+      continue;
+    }
+    if (c === '-' && n === '-') { masked += '  '; i += 2; state = 'line'; continue; }
+    if (c === '/' && n === '*') { masked += '  '; i += 2; state = 'block'; blockDepth = 1; continue; }
+    if (c === "'") { masked += ' '; i++; state = 'single'; continue; }
+    if (c === '"') { masked += ' '; i++; state = 'double'; continue; }
+    if (c === '$') { const token = sql.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/)?.[0]; if (token) { masked += ' '.repeat(token.length); i += token.length; dollar = token; state = 'dollar'; continue; } }
+    masked += c; i++;
+  }
+  if (state === 'block' || state === 'single' || state === 'double' || state === 'dollar') throw new Error('unterminated SQL token while masking executable code');
+  return masked;
+};
+
+const doBlockBody = statement => {
+  const opening = statement.match(/^DO\s+(?:LANGUAGE\s+plpgsql\s+)?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)/i);
+  if (!opening) throw new Error('unsupported DO block delimiter in canonical replay');
+  const delimiter = opening[1], start = opening.index + opening[0].length, end = statement.lastIndexOf(delimiter);
+  if (end < start) throw new Error('unterminated DO block in canonical replay');
+  return statement.slice(start, end);
+};
+
+const readSqlStringLiteral = (source, start) => {
+  if (source[start] !== "'") return null;
+  let value = '', i = start + 1;
+  while (i < source.length) {
+    if (source[i] === "'" && source[i + 1] === "'") { value += "'"; i += 2; continue; }
+    if (source[i] === "'") return { value, end: i + 1 };
+    value += source[i++];
+  }
+  throw new Error('unterminated generated DDL string literal');
+};
+
 // Split only at top-level statement terminators. Quoted text and dollar-quoted
 // procedure bodies remain opaque, so DDL-shaped text in them cannot become a
 // catalog operation.
@@ -106,27 +157,43 @@ export function splitSqlStatements(sql) {
 
 const deterministicGeneratedRoutineStatements = statement => {
   if (!/^DO\b/i.test(statement)) return [];
-  const containsGeneratedRoutineDdl = /\bEXECUTE\s+format\(\s*'(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|ALTER)\s+(?:FUNCTION|PROCEDURE)\b/i.test(statement);
-  const array = statement.match(/\bFOREACH\s+([A-Za-z_][A-Za-z0-9_$]*)\s+IN\s+ARRAY\s+ARRAY\s*\[([\s\S]*?)\]\s+LOOP\b/i);
-  if (!array) {
-    if (containsGeneratedRoutineDdl) throw new Error('unsupported generated routine DDL must not be omitted from canonical replay');
-    return [];
+  const body = doBlockBody(statement), masked = maskSqlExecutableCode(body);
+  const array = /\bFOREACH\s+([A-Za-z_][A-Za-z0-9_$]*)\s+IN\s+ARRAY\s+ARRAY\s*\[([\s\S]*?)\]\s+LOOP\b/i.exec(masked);
+  const formats = [];
+  for (const match of masked.matchAll(/\bEXECUTE\s+format\s*\(/gi)) {
+    let cursor = match.index + match[0].length;
+    while (/\s/.test(body[cursor] ?? '')) cursor++;
+    const literal = readSqlStringLiteral(body, cursor);
+    if (!literal) continue;
+    const tail = masked.slice(literal.end).match(/^\s*,\s*([A-Za-z_][A-Za-z0-9_$]*)\b/);
+    formats.push({ template: literal.value, variable: tail?.[1] });
   }
-  const values = [...array[2].matchAll(/'((?:[^']|'')*)'/g)].map(match => match[1].replace(/''/g, "'"));
+  const generatedRoutineFormats = formats.filter(({template}) => /^\s*(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|ALTER)\s+(?:FUNCTION|PROCEDURE)\b/i.test(template));
+  if (!generatedRoutineFormats.length) return [];
+  if (!array) {
+    throw new Error('unsupported generated routine DDL must not be omitted from canonical replay');
+  }
+  const arrayStart = array.index + array[0].indexOf('[') + 1;
+  const arraySource = body.slice(arrayStart, arrayStart + array[2].length);
+  const values = []; let cursor = 0;
+  while (cursor < arraySource.length) {
+    while (/[\s,]/.test(arraySource[cursor] ?? '')) cursor++;
+    if (cursor >= arraySource.length) break;
+    const literal = readSqlStringLiteral(arraySource, cursor);
+    if (!literal) throw new Error('generated DDL array must contain only string literals');
+    values.push(literal.value); cursor = literal.end;
+  }
   if (!values.length || values.length > 128) throw new Error('generated DDL array is empty or exceeds the bounded expansion limit');
-  const formats = [...statement.matchAll(/\bEXECUTE\s+format\(\s*'((?:[^']|'')*)'\s*,\s*([A-Za-z_][A-Za-z0-9_$]*)\b/gi)];
   const ddl = [];
-  for (const format of formats) {
-    if (format[2].toLowerCase() !== array[1].toLowerCase()) continue;
-    const template = format[1].replace(/''/g, "'");
-    if (!/^\s*(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|ALTER)\s+(?:FUNCTION|PROCEDURE)\b/i.test(template)) continue;
+  for (const {template, variable} of generatedRoutineFormats) {
+    if (variable?.toLowerCase() !== array[1].toLowerCase()) continue;
     if ((template.match(/%I/g) ?? []).length !== 1) throw new Error('generated routine DDL must have exactly one identifier placeholder');
     ddl.push(...values.map(value => {
       if (!IDENTIFIER.test(value)) throw new Error('generated routine DDL contains an unsafe identifier value');
       return template.replace('%I', postgresIdentifier(value));
     }));
   }
-  if (containsGeneratedRoutineDdl && !ddl.length) throw new Error('generated routine DDL could not be resolved deterministically');
+  if (generatedRoutineFormats.length && !ddl.length) throw new Error('generated routine DDL could not be resolved deterministically');
   return ddl;
 };
 
@@ -138,40 +205,12 @@ const deterministicGeneratedRoutineStatements = statement => {
 // the DDL itself must begin after a PL/pgSQL statement boundary keyword.
 const deterministicDoRoutineStatements = statement => {
   if (!/^DO\b/i.test(statement)) return [];
-  const opening = statement.match(/^DO\s+(?:LANGUAGE\s+plpgsql\s+)?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)/i);
-  if (!opening) throw new Error('unsupported DO block delimiter in canonical replay');
-  const delimiter = opening[1];
-  const bodyStart = opening.index + opening[0].length;
-  const bodyEnd = statement.lastIndexOf(delimiter);
-  if (bodyEnd < bodyStart) throw new Error('unterminated DO block in canonical replay');
-  const body = statement.slice(bodyStart, bodyEnd);
+  const body = doBlockBody(statement);
   const ddl = [];
   for (const fragment of splitSqlStatements(body)) {
     // Match only code tokens. Keep offsets stable so the literal DDL can be
     // sliced from the original fragment without ever scanning quoted payloads.
-    let masked = '', i = 0, state = 'code', dollar = '', blockDepth = 0;
-    while (i < fragment.length) {
-      const c = fragment[i], n = fragment[i + 1];
-      if (state === 'line') { masked += c === '\n' ? '\n' : ' '; if (c === '\n') state = 'code'; i++; continue; }
-      if (state === 'block') {
-        if (c === '/' && n === '*') { masked += '  '; blockDepth++; i += 2; continue; }
-        if (c === '*' && n === '/') { masked += '  '; if (--blockDepth === 0) state = 'code'; i += 2; continue; }
-        masked += c === '\n' ? '\n' : ' '; i++; continue;
-      }
-      if (state === 'single') { masked += c === '\n' ? '\n' : ' '; if (c === "'" && n === "'") { masked += ' '; i += 2; continue; } if (c === "'") state = 'code'; i++; continue; }
-      if (state === 'double') { masked += c === '\n' ? '\n' : ' '; if (c === '"' && n === '"') { masked += ' '; i += 2; continue; } if (c === '"') state = 'code'; i++; continue; }
-      if (state === 'dollar') {
-        if (fragment.startsWith(dollar, i)) { masked += ' '.repeat(dollar.length); i += dollar.length; state = 'code'; }
-        else { masked += c === '\n' ? '\n' : ' '; i++; }
-        continue;
-      }
-      if (c === '-' && n === '-') { masked += '  '; i += 2; state = 'line'; continue; }
-      if (c === '/' && n === '*') { masked += '  '; i += 2; state = 'block'; blockDepth = 1; continue; }
-      if (c === "'") { masked += ' '; i++; state = 'single'; continue; }
-      if (c === '"') { masked += ' '; i++; state = 'double'; continue; }
-      if (c === '$') { const token = fragment.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/)?.[0]; if (token) { masked += ' '.repeat(token.length); i += token.length; dollar = token; state = 'dollar'; continue; } }
-      masked += c; i++;
-    }
+    const masked = maskSqlExecutableCode(fragment);
     const match = /(?:^|\b(?:BEGIN|THEN|ELSE|LOOP)\s+)((?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:FUNCTION|PROCEDURE)\b[\s\S]*)$/i.exec(masked);
     if (match) {
       const start = match.index + match[0].length - match[1].length;

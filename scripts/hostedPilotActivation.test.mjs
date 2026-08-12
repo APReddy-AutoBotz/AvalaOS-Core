@@ -146,6 +146,16 @@ test('guarded DO replay masks EXECUTE, PERFORM, comments, and nested dollar payl
   ]) assert.deepEqual(extractObjectOperations(sql),[]);
 });
 
+test('generated routine replay masks nested payloads, comments, and inert strings before scanning',()=>{
+  const bait = `FOREACH n IN ARRAY ARRAY['phantom'] LOOP EXECUTE format('CREATE FUNCTION public.%I() RETURNS void LANGUAGE sql AS %L',n,'SELECT NULL'); END LOOP`;
+  for (const sql of [
+    `DO $outer$ BEGIN PERFORM $inner$${bait}$inner$; END $outer$;`,
+    `DO $$ BEGIN /* ${bait} */ PERFORM 1; END $$;`,
+    `DO $$ BEGIN -- ${bait}\n PERFORM 1; END $$;`,
+    `DO $$ BEGIN PERFORM '${bait.replaceAll("'", "''")}'; END $$;`,
+  ]) assert.deepEqual(extractObjectOperations(sql),[]);
+});
+
 test('ambiguous generated routine DDL fails closed instead of disappearing from the catalog model',()=>{
   assert.throws(()=>extractObjectOperations(`DO $$BEGIN
     EXECUTE format('CREATE FUNCTION public.%I() RETURNS void LANGUAGE sql AS %L', current_setting('app.dynamic_name'), 'SELECT NULL');
