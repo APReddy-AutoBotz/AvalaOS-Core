@@ -57,13 +57,34 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Execute canonical bounded connected-target preflight
+      - name: Execute canonical bounded connected-target preflight and bind actual fingerprint
         env:
           HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
+          EXPECTED_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+        shell: bash
         run: |
+          set -euo pipefail
           umask 077
-          npm run hosted-pilot:preflight -- "$RUNNER_TEMP/hosted-preflight.json"
-          rm -f "$RUNNER_TEMP/hosted-preflight.json"
+          PREFLIGHT_PATH="$RUNNER_TEMP/hosted-preflight.json"
+          trap 'rm -f "$PREFLIGHT_PATH"' EXIT
+          PREFLIGHT_RESULT="$(npm run --silent hosted-pilot:preflight -- "$PREFLIGHT_PATH")"
+          ACTUAL_TARGET_FINGERPRINT="$(PREFLIGHT_RESULT="$PREFLIGHT_RESULT" node --input-type=module -e 'const result=JSON.parse(process.env.PREFLIGHT_RESULT); if(!/^sha256:[0-9a-f]{64}$/.test(result.targetFingerprint??"")) process.exit(2); process.stdout.write(result.targetFingerprint)')"
+          if [ "$ACTUAL_TARGET_FINGERPRINT" != "$EXPECTED_TARGET_FINGERPRINT" ]; then
+            echo 'HOSTED_PILOT_TARGET_FINGERPRINT_MISMATCH' >&2
+            exit 1
+          fi
+          rm -f "$PREFLIGHT_PATH"
+          trap - EXIT
+          echo 'Hosted target fingerprint matched controller input before evidence mutation.'
+      - name: Wait for database-owner ingestion of exact-current hosted evidence families
+        timeout-minutes: 16
+        env:
+          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
+          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
+        run: node scripts/wait-hosted-pilot-evidence-families.mjs
       - name: Consume controller-ingested exact-current hosted gate proof
         env:
           HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
