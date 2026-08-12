@@ -5,7 +5,7 @@ import {
   applyMigrations, bootstrapAuth, connect, createDatabase, databaseUrlFor, dropDatabase, ensureClusterRoles,
   featureMigration, migrationNames,
 } from './pilotOperationsPostgresSupport.mjs';
-import {loadCanonicalMigrationInventory} from './hostedPilotActivation.mjs';
+import {loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments} from './hostedPilotActivation.mjs';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
 
 const adminUrl = process.env.PILOT_OPERATIONS_DATABASE_URL;
@@ -22,6 +22,13 @@ const suffix = `${process.pid}_${Date.now()}`;
 const names = {fresh:`pilot_ops_fresh_${suffix}`, upgrade:`pilot_ops_upgrade_${suffix}`};
 const clients=[];
 let admin;
+
+const normalizedPublicRoutineIdentity = ({name,arguments: identityArguments}) =>
+  `public.${name}(${normalizeRoutineIdentityArguments(identityArguments)})`;
+
+const assertExactCatalogParity = (actual, expected, message) =>
+  assert.deepEqual([...new Set(actual)].sort(), [...new Set(expected)].sort(), message);
+
 try {
   admin=await connect(adminUrl); clients.push(admin); await ensureClusterRoles(admin);
   const fresh=await createDatabase(admin,adminUrl,names.fresh); clients.push(fresh); await bootstrapAuth(fresh); await applyMigrations(fresh,migrationNames);
@@ -29,9 +36,47 @@ try {
   const canonical=await loadCanonicalMigrationInventory();
   for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     const relations=(await db.query(`select 'public.'||c.relname||':'||(case c.relkind when 'r' then 'table' when 'p' then 'table' when 'v' then 'view' when 'm' then 'materialized_view' when 'S' then 'sequence' when 'f' then 'foreign_table' end) identity from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in('r','p','v','m','S','f') order by identity`)).rows.map(row=>row.identity);
-    const routines=(await db.query(`select 'public.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' identity from pg_proc p where p.pronamespace='public'::regnamespace and not (p.proname='digest' and pg_get_function_identity_arguments(p.oid) in('text, text','bytea, text')) order by identity`)).rows.map(row=>row.identity);
-    assert.deepEqual(relations,canonical.relations.filter(value=>value.startsWith('public.')),`${label} relation catalog must equal checkout-derived final canonical state`);
-    assert.deepEqual(routines,canonical.routines.filter(value=>value.startsWith('public.')),`${label} routine catalog must equal checkout-derived final canonical state`);
+    const routineRows=(await db.query(`
+      select p.proname name, pg_get_function_identity_arguments(p.oid) arguments,
+        exists (
+          select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid
+          where d.classid='pg_proc'::regclass and d.objid=p.oid
+            and d.refclassid='pg_extension'::regclass and d.deptype='e'
+        ) extension_owned
+      from pg_proc p
+      where p.pronamespace='public'::regnamespace
+      order by p.proname, pg_get_function_identity_arguments(p.oid)
+    `)).rows;
+    const routines=routineRows.filter(row=>!row.extension_owned).map(normalizedPublicRoutineIdentity);
+    const canonicalRelations=canonical.relations.filter(value=>value.startsWith('public.'));
+    const canonicalRoutines=canonical.routines.filter(value=>value.startsWith('public.'));
+    assertExactCatalogParity(relations,canonicalRelations,`${label} relation catalog must equal checkout-derived final canonical state`);
+    assertExactCatalogParity(routines,canonicalRoutines,`${label} routine catalog must equal checkout-derived final canonical state`);
+
+    assert.equal(
+      normalizeRoutineIdentityArguments('p_org uuid, p_workspace uuid, p_note text DEFAULT NULL'),
+      normalizeRoutineIdentityArguments('uuid, uuid, text'),
+      `${label} named and type-only PostgreSQL identities must normalize identically`,
+    );
+    assert.ok(
+      routineRows.some(row=>row.extension_owned && row.name==='digest'),
+      `${label} must exercise an extension-owned pgcrypto routine`,
+    );
+    assert.equal(
+      routines.some(identity=>identity.startsWith('public.digest(')),
+      false,
+      `${label} extension-owned pgcrypto routines must not become application routines`,
+    );
+    assert.throws(
+      ()=>assertExactCatalogParity(routines.slice(1),canonicalRoutines,`${label} missing routine regression`),
+      /missing routine regression/,
+      `${label} a deliberately missing canonical application routine must fail parity`,
+    );
+    assert.throws(
+      ()=>assertExactCatalogParity([...routines,'public.unexpected_application_routine(uuid)'],canonicalRoutines,`${label} extra routine regression`),
+      /extra routine regression/,
+      `${label} a deliberately extra non-extension application routine must fail parity`,
+    );
   }
   for (const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     assert.equal(Number((await db.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000,true);
