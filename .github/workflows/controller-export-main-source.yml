@@ -41,7 +41,7 @@ jobs:
           test "$token" != "null"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger exact-source Netlify build through OIDC relay
+      - name: Trigger Git-backed production-branch Netlify build through OIDC relay
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
@@ -55,4 +55,4 @@ jobs:
             "https://fcsfvonhvyrevwhyvano.supabase.co/functions/v1/controller-netlify-build-relay-20260812" \
             | tee /tmp/netlify-relay-response.json
           jq -e '.ok == true' /tmp/netlify-relay-response.json >/dev/null
-          jq '{ok, upstream_status, artifact_bytes, upstream_body}' /tmp/netlify-relay-response.json
+          jq '{ok, upstream_status, upstream_body}' /tmp/netlify-relay-response.json
