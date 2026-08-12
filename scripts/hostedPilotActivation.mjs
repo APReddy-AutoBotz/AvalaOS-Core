@@ -61,7 +61,21 @@ export function canonicalObjectsAtPrefix(migrations, count=migrations.length) {
   for(const migration of migrations.slice(0,count)) {
     for(const op of migration.objectOperations??[]) {
       const target=op.kind==='routine'?routines:relations;
-      if(op.action==='drop') target.delete(op.identity); else target.set(op.identity,op.identity);
+      if(op.action==='drop') target.delete(op.identity);
+      else if(op.action==='rename') {
+        if(op.kind==='routine') {
+          if(target.delete(op.identity)) target.set(op.newIdentity,op.newIdentity);
+        } else {
+          const oldPrefix=`${op.identity}:`;
+          for(const identity of [...target.keys()]) {
+            if(identity.startsWith(oldPrefix)) {
+              target.delete(identity);
+              const kind=identity.slice(oldPrefix.length);
+              target.set(`${op.newIdentity}:${kind}`,`${op.newIdentity}:${kind}`);
+            }
+          }
+        }
+      } else target.set(op.identity,op.identity);
     }
   }
   return {relations:new Set(relations.keys()),routines:new Set(routines.keys())};
@@ -73,6 +87,16 @@ export function extractObjectOperations(sql) {
   for(const m of source.matchAll(relation)) operations.push({index:m.index,kind:'relation',action:m[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${m[3]??'public'}.${m[4]}:${m[2].replace(/\s+/g,'_').toLowerCase()}`});
   const routine=/\b(create(?:\s+or\s+replace)?|drop)\s+(?:function|procedure)\s+(?:if\s+exists\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s*\(([^;]*?)\)(?=\s*(?:returns|language|as|;|cascade|restrict))/gis;
   for(const m of source.matchAll(routine)) operations.push({index:m.index,kind:'routine',action:m[1].toLowerCase().startsWith('drop')?'drop':'create',identity:`${m[2]??'public'}.${m[3]}(${normalizeRoutineIdentityArguments(m[4])})`});
+  const routineRename=/\balter\s+(?:function|procedure)\s+(?:if\s+exists\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s*\(([^;]*?)\)\s+rename\s+to\s+"?([a-z_][a-z0-9_$]*)"?/gis;
+  for(const m of source.matchAll(routineRename)) {
+    const schema=m[1]??'public', args=normalizeRoutineIdentityArguments(m[3]);
+    operations.push({index:m.index,kind:'routine',action:'rename',identity:`${schema}.${m[2]}(${args})`,newIdentity:`${schema}.${m[4]}(${args})`});
+  }
+  const relationRename=/\balter\s+(?:table|view|materialized\s+view|sequence|foreign\s+table)\s+(?:if\s+exists\s+)?(?:only\s+)?(?:"?([a-z_][a-z0-9_$]*)"?\.)?"?([a-z_][a-z0-9_$]*)"?\s+rename\s+to\s+"?([a-z_][a-z0-9_$]*)"?/gis;
+  for(const m of source.matchAll(relationRename)) {
+    const schema=m[1]??'public';
+    operations.push({index:m.index,kind:'relation',action:'rename',identity:`${schema}.${m[2]}`,newIdentity:`${schema}.${m[3]}`});
+  }
   return operations.sort((a,b)=>a.index-b.index).map(({index,...op})=>op);
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import { buildAdditiveMigrationPlan, classifyHostedTarget, createPreflightToken, extractObjectOperations, loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments, sanitizeStructuralInventory, stripSqlComments, verifyPreflightToken } from './hostedPilotActivation.mjs';
+import { buildAdditiveMigrationPlan, canonicalObjectsAtPrefix, classifyHostedTarget, createPreflightToken, extractObjectOperations, loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments, sanitizeStructuralInventory, stripSqlComments, verifyPreflightToken } from './hostedPilotActivation.mjs';
 
 const canonical = await loadCanonicalMigrationInventory();
 const base = { schemas: ['public', 'auth'], tables: [], appliedMigrations: [], authUserCount: 0 };
@@ -21,6 +21,43 @@ test('canonical object extraction is comment-safe, final-state aware, and Postgr
     'create:public.real_table:table','create:public.defaulted(uuid, text, integer)','create:public.removed(uuid)','drop:public.removed(uuid)']);
   assert.equal(canonical.routines.some(identity=>identity.includes('legacy_untrusted')),false,'deliberately dropped legacy routines must not remain canonical');
   assert.equal(canonical.relations.some(identity=>identity.includes('IF')),false,'commented pseudo-DDL must not create phantom relations');
+});
+
+test('canonical replay models routine and relation renames in migration order',()=>{
+  const first=extractObjectOperations(`
+    CREATE FUNCTION public.command(p_id uuid) RETURNS void LANGUAGE sql AS 'select';
+    CREATE FUNCTION public.command(p_id text) RETURNS void LANGUAGE sql AS 'select';
+    ALTER FUNCTION public.command(uuid) RENAME TO command_v1;
+    CREATE TABLE public."Old_queue"(id uuid);
+    ALTER TABLE public."Old_queue" RENAME TO "current_queue";
+  `);
+  const second=extractObjectOperations(`
+    CREATE OR REPLACE FUNCTION public.command_v1(p_id uuid DEFAULT gen_random_uuid()) RETURNS void LANGUAGE sql AS 'select';
+    ALTER FUNCTION public.command_v1(uuid) RENAME TO command_v2;
+    DROP FUNCTION public.command_v2(uuid);
+  `);
+  assert.deepEqual(first.filter(op=>op.action==='rename'),[
+    {kind:'routine',action:'rename',identity:'public.command(uuid)',newIdentity:'public.command_v1(uuid)'},
+    {kind:'relation',action:'rename',identity:'public.Old_queue',newIdentity:'public.current_queue'},
+  ]);
+  const afterFirst=canonicalObjectsAtPrefix([{objectOperations:first}]);
+  assert.deepEqual([...afterFirst.routines].sort(),['public.command(text)','public.command_v1(uuid)']);
+  assert.deepEqual([...afterFirst.relations],['public.current_queue:table']);
+  const final=canonicalObjectsAtPrefix([{objectOperations:first},{objectOperations:second}]);
+  assert.deepEqual([...final.routines],['public.command(text)'],'rename then drop must remove only the exact overload');
+  assert.deepEqual([...final.relations],['public.current_queue:table']);
+});
+
+test('rename parsing remains comment-safe and preserves quoted lowercase identities',()=>{
+  const operations=extractObjectOperations(`
+    -- ALTER FUNCTION public.fake(uuid) RENAME TO leaked;
+    CREATE PROCEDURE "public"."quoted_command"("p_id" uuid) LANGUAGE sql AS 'select';
+    ALTER PROCEDURE "public"."quoted_command"("p_id" uuid) RENAME TO "quoted_command_v2";
+  `);
+  assert.deepEqual(operations.map(op=>op.action==='rename'?`${op.identity}->${op.newIdentity}`:op.identity),[
+    'public.quoted_command(uuid)',
+    'public.quoted_command(uuid)->public.quoted_command_v2(uuid)',
+  ]);
 });
 
 test('canonical inventory hashes and counts literal migration blob bytes',async()=>{
