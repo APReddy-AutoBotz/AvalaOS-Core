@@ -153,7 +153,8 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
 
   const definers=(await client.query(`SELECT p.oid::regprocedure::text identity,owner.rolname owner,
       replace(coalesce((SELECT substring(config from 13) FROM unnest(p.proconfig) config WHERE config LIKE 'search_path=%'),'') ,' ','') search_path,
-      has_function_privilege('PUBLIC',p.oid,'EXECUTE') public_execute,
+      EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE') public_execute,
       has_function_privilege('anon',p.oid,'EXECUTE') anon_execute,
       has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated_execute,
       has_function_privilege('service_role',p.oid,'EXECUTE') service_role_execute
