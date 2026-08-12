@@ -2,10 +2,15 @@
   command = "npm run build"
   publish = "dist"
 
-# Production deployment is deliberately non-executable in this repository contract.
-# A separately authorized production work package must replace this stop gate.
+# Netlify's production deploy context is permitted only for the dedicated
+# avalaos-pilot stable URL. scripts/writeHostedPilotNetlifyHeaders.mjs fails
+# closed unless Netlify proves SITE_NAME=avalaos-pilot, BRANCH=main,
+# URL=https://avalaos-pilot.netlify.app, and the controller-managed build-only
+# non-production testing authorization flag is present.
+# This does not authorize AvalaOS production cutover, custom-domain/DNS use,
+# customer data, external users, or real provider/BYOK egress.
 [context.production]
-  command = "node -e \"console.error('PRODUCTION_DEPLOYMENT_NOT_AUTHORIZED'); process.exit(1)\""
+  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
 [context.deploy-preview]
   command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"

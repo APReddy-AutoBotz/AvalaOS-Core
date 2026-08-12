@@ -1,12 +1,24 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const release = process.env.COMMIT_REF?.trim();
-const context = process.env.CONTEXT?.trim();
+const release = process.env.COMMIT_REF;
+const context = process.env.CONTEXT;
+const siteName = process.env.SITE_NAME;
+const branch = process.env.BRANCH;
+const siteUrl = process.env.URL;
+const stableTestingAuthorization = process.env.AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING;
 
 if (!/^[0-9a-f]{40}$/.test(release ?? '')) {
   throw new Error('NETLIFY_HOSTED_PILOT_RELEASE_REQUIRED');
 }
-if (!['deploy-preview', 'branch-deploy'].includes(context ?? '')) {
+
+const ordinaryNonProductionContext = ['deploy-preview', 'branch-deploy'].includes(context ?? '');
+const authorizedStablePilotTestingContext = context === 'production'
+  && siteName === 'avalaos-pilot'
+  && branch === 'main'
+  && siteUrl === 'https://avalaos-pilot.netlify.app'
+  && stableTestingAuthorization === 'authorized';
+
+if (!ordinaryNonProductionContext && !authorizedStablePilotTestingContext) {
   throw new Error('NETLIFY_HOSTED_PILOT_NONPRODUCTION_CONTEXT_REQUIRED');
 }
 
