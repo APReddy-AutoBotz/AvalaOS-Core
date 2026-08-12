@@ -41,7 +41,7 @@ jobs:
           test "$token" != "null"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger current-main Git build after context-neutral stable opt-in
+      - name: Trigger current-main Git build after relay stabilization
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
