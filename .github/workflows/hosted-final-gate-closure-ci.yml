@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/hosted-pilot-activation-evidence-producer.yml'
+      - '.github/workflows/hosted-pilot-dispatch-bridge.yml'
       - '.github/workflows/hosted-final-gate-closure-ci.yml'
       - 'scripts/hostedPilotDatabaseVerify.mjs'
       - 'scripts/wait-hosted-pilot-evidence-families.mjs'
