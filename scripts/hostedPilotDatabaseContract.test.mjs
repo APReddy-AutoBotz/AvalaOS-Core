@@ -11,6 +11,7 @@ const closureMigration=await readFile(new URL('../supabase/migrations/2026081116
 const verificationMigration=await readFile(new URL('../supabase/migrations/20260811170000_hosted_verification_run_evidence.sql',import.meta.url),'utf8');
 const identityConvergenceMigration=await readFile(new URL('../supabase/migrations/20260811180000_hosted_forward_migration_identity_convergence.sql',import.meta.url),'utf8');
 const executedEvidenceMigration=await readFile(new URL('../supabase/migrations/20260811190000_hosted_executed_evidence_convergence.sql',import.meta.url),'utf8');
+const currentExerciseMigration=await readFile(new URL('../supabase/migrations/20260811200000_hosted_current_exercise_evidence_binding.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -155,6 +156,25 @@ test('hosted verification success is derived from executed scoped state rather t
   assert.match(executedEvidenceMigration,/target_fingerprint IS NULL/);
   assert.match(executedEvidenceMigration,/recovery_actor_id<>p_recovery_actor/);
   assert.match(executedEvidenceMigration,/e\.candidate_id=selected_candidate_id/);
+});
+
+test('hosted result recording consumes exact current hosted evidence families only',()=>{
+  for(const family of ['tenant-adversarial','provider-simulation-zero-egress','canonical-journey','backup-restore','recovery-rollback'])
+    assert.match(currentExerciseMigration,new RegExp(`'${family}'`));
+  for(const binding of ['org_id=p_org','workspace_id=p_workspace','exercise_run_id=p_exercise_run','release_sha=p_release_sha',
+    'producer_workflow_path=p_producer_workflow_path','producer_run_id=p_producer_run_id','producer_run_attempt=p_producer_run_attempt',
+    'target_fingerprint=p_target_fingerprint','deployment_fingerprint=p_deployment_fingerprint'])
+    assert.match(currentExerciseMigration,new RegExp(binding));
+  assert.match(currentExerciseMigration,/hosted_target='hosted_nonproduction_pilot'/);
+  assert.match(currentExerciseMigration,/disposition='executed_hosted_evidence'/);
+  assert.match(currentExerciseMigration,/count\(DISTINCT evidence_family\)[\s\S]+<> 5/);
+  assert.match(currentExerciseMigration,/session_user IS DISTINCT FROM \(SELECT pg_get_userbyid\(datdba\)/);
+  assert.match(currentExerciseMigration,/FROM PUBLIC,anon,authenticated,service_role/);
+  assert.match(currentExerciseMigration,/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/);
+  assert.match(currentExerciseMigration,/HOSTED_EXERCISE_EVIDENCE_IMMUTABLE/);
+  assert.match(verifyScript,/count\(DISTINCT family\.evidence_family\)[\s\S]+exact_exercise_family_count/);
+  assert.match(verifyScript,/exact_exercise_family_count\)!==5/);
+  assert.doesNotMatch(currentExerciseMigration,/hosted_pilot_synthetic_subjects|hosted_pilot_provider_simulations|pilot_operations_recovery_evidence_ingestions/);
 });
 
 test('operational identity follows the DB-owned migration ledger instead of a stale literal tip',()=>{

@@ -77,6 +77,8 @@ The browser may display server projections but cannot mint tenant, environment, 
 
 The accessibility/performance gate is independent of generic hosted-browser success. It runs axe against the hosted application root on Desktop Chrome and Pixel 7 and rejects serious or critical findings. It also requires complete browser navigation metrics and enforces repository-owned ceilings of 15 seconds for navigation completion, 10 seconds for DOM content loaded, and 300 resource entries. Tooling, browser launch, navigation, metric, target, job, or artifact failure blocks the gate; caller input and the generic browser job cannot substitute a pass.
 
+Before the final service-authorized recorder runs, the controller/database owner must ingest each repository-executed hosted evidence family for the exact organization, workspace, exercise run, release, producer workflow run and attempt, database fingerprint, deployment fingerprint, and hosted target. Historical workspace rows, a different exercise, and disposable PostgreSQL evidence cannot be relabelled as hosted success. Browser roles and `service_role` cannot ingest raw evidence families; `service_role` may only consume the already-established exact-current proof through the final recorder.
+
 ## Hosted evidence manifest
 
 The sanitized `manifest.json` uses schema version 1 and binds:

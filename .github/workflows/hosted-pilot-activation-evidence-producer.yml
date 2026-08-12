@@ -64,7 +64,7 @@ jobs:
           umask 077
           npm run hosted-pilot:preflight -- "$RUNNER_TEMP/hosted-preflight.json"
           rm -f "$RUNNER_TEMP/hosted-preflight.json"
-      - name: Record only repository-validated executed hosted gate proof
+      - name: Consume controller-ingested exact-current hosted gate proof
         env:
           HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
           HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}

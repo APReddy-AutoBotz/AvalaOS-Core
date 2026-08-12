@@ -147,9 +147,36 @@ const deterministicDoRoutineStatements = statement => {
   const body = statement.slice(bodyStart, bodyEnd);
   const ddl = [];
   for (const fragment of splitSqlStatements(body)) {
-    const source = stripSqlComments(fragment);
-    const match = source.match(/(?:^|\b(?:BEGIN|THEN|ELSE|LOOP)\s+)((?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:FUNCTION|PROCEDURE)\b[\s\S]*)$/i);
-    if (match) ddl.push(match[1].trim());
+    // Match only code tokens. Keep offsets stable so the literal DDL can be
+    // sliced from the original fragment without ever scanning quoted payloads.
+    let masked = '', i = 0, state = 'code', dollar = '', blockDepth = 0;
+    while (i < fragment.length) {
+      const c = fragment[i], n = fragment[i + 1];
+      if (state === 'line') { masked += c === '\n' ? '\n' : ' '; if (c === '\n') state = 'code'; i++; continue; }
+      if (state === 'block') {
+        if (c === '/' && n === '*') { masked += '  '; blockDepth++; i += 2; continue; }
+        if (c === '*' && n === '/') { masked += '  '; if (--blockDepth === 0) state = 'code'; i += 2; continue; }
+        masked += c === '\n' ? '\n' : ' '; i++; continue;
+      }
+      if (state === 'single') { masked += c === '\n' ? '\n' : ' '; if (c === "'" && n === "'") { masked += ' '; i += 2; continue; } if (c === "'") state = 'code'; i++; continue; }
+      if (state === 'double') { masked += c === '\n' ? '\n' : ' '; if (c === '"' && n === '"') { masked += ' '; i += 2; continue; } if (c === '"') state = 'code'; i++; continue; }
+      if (state === 'dollar') {
+        if (fragment.startsWith(dollar, i)) { masked += ' '.repeat(dollar.length); i += dollar.length; state = 'code'; }
+        else { masked += c === '\n' ? '\n' : ' '; i++; }
+        continue;
+      }
+      if (c === '-' && n === '-') { masked += '  '; i += 2; state = 'line'; continue; }
+      if (c === '/' && n === '*') { masked += '  '; i += 2; state = 'block'; blockDepth = 1; continue; }
+      if (c === "'") { masked += ' '; i++; state = 'single'; continue; }
+      if (c === '"') { masked += ' '; i++; state = 'double'; continue; }
+      if (c === '$') { const token = fragment.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/)?.[0]; if (token) { masked += ' '.repeat(token.length); i += token.length; dollar = token; state = 'dollar'; continue; } }
+      masked += c; i++;
+    }
+    const match = /(?:^|\b(?:BEGIN|THEN|ELSE|LOOP)\s+)((?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:FUNCTION|PROCEDURE)\b[\s\S]*)$/i.exec(masked);
+    if (match) {
+      const start = match.index + match[0].length - match[1].length;
+      ddl.push(fragment.slice(start).trim());
+    }
   }
   return ddl;
 };

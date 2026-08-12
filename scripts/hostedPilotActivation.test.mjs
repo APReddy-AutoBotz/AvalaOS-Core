@@ -137,6 +137,15 @@ test('guarded DO blocks replay literal routine DDL generically while quoted cont
   }]);
 });
 
+test('guarded DO replay masks EXECUTE, PERFORM, comments, and nested dollar payloads',()=>{
+  for (const sql of [
+    `DO $$ BEGIN EXECUTE 'BEGIN DROP FUNCTION public.real(jsonb); --'; END $$;`,
+    `DO $$ BEGIN PERFORM 'THEN ALTER FUNCTION public.real(jsonb) RENAME TO phantom'; END $$;`,
+    `DO $outer$ BEGIN PERFORM $inner$LOOP CREATE FUNCTION public.phantom() RETURNS void$inner$; END $outer$;`,
+    `DO $$ BEGIN -- THEN DROP FUNCTION public.real(jsonb);\n PERFORM 1; END $$;`,
+  ]) assert.deepEqual(extractObjectOperations(sql),[]);
+});
+
 test('ambiguous generated routine DDL fails closed instead of disappearing from the catalog model',()=>{
   assert.throws(()=>extractObjectOperations(`DO $$BEGIN
     EXECUTE format('CREATE FUNCTION public.%I() RETURNS void LANGUAGE sql AS %L', current_setting('app.dynamic_name'), 'SELECT NULL');

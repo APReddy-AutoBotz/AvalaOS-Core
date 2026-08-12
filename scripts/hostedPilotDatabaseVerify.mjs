@@ -117,7 +117,13 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
         AND result.producer_run_id=$5 AND result.producer_run_attempt=$6 AND result.target_fingerprint=$7 AND result.deployment_fingerprint=$8
         AND result.tenant_adversarial AND result.provider_zero_egress AND result.canonical_journey
         AND result.backup_restore AND result.recovery_rollback AND result.production_authorized=false
-        AND result.customer_data_used=false AND result.real_provider_calls_used=false) AS exact_run_evidence_count`,
+        AND result.customer_data_used=false AND result.real_provider_calls_used=false) AS exact_run_evidence_count,
+    (SELECT count(DISTINCT family.evidence_family)::integer FROM public.hosted_pilot_exercise_evidence_families family
+      WHERE family.org_id=$2 AND family.workspace_id=$3 AND family.exercise_run_id=$4 AND family.release_sha=$1
+        AND family.producer_workflow_path='.github/workflows/hosted-pilot-activation-evidence-producer.yml'
+        AND family.producer_run_id=$5 AND family.producer_run_attempt=$6 AND family.target_fingerprint=$7
+        AND family.deployment_fingerprint=$8 AND family.hosted_target='hosted_nonproduction_pilot'
+        AND family.disposition='executed_hosted_evidence') AS exact_exercise_family_count`,
     [expectedReleaseSha,scope.organizationId,scope.workspaceId,scope.exerciseRunId,scope.producerRunId,Number(scope.producerRunAttempt),expectedTargetFingerprint,scope.deploymentFingerprint])).rows[0];
   if (Number(operations?.recovery_evidence_count)<1 || Number(operations?.rollback_event_count)<1)
     throw new Error('HOSTED_PILOT_RECOVERY_EVIDENCE_MISMATCH');
@@ -125,6 +131,7 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
     FROM public.role_capabilities WHERE role_id=(SELECT role_id FROM public.hosted_pilot_recovery_operators
       WHERE org_id=$1 AND workspace_id=$2 AND lifecycle='active')`,[scope.organizationId,scope.workspaceId])).rows[0]?.capabilities??[];
   if (Number(operations?.current_recovery_operator_count)!==1 || Number(operations?.exact_run_evidence_count)!==1
+    || Number(operations?.exact_exercise_family_count)!==5
     || JSON.stringify(recoveryCapabilities)!==JSON.stringify(['operations.read','release.promote']))
     throw new Error('HOSTED_PILOT_CURRENT_RECOVERY_OR_RUN_EVIDENCE_MISMATCH');
 

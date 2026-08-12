@@ -87,7 +87,7 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
-    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811190000');
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811200000');
     const digestArgs=['a'.repeat(40),'.github/workflows/hosted-pilot-activation-evidence-producer.yml','31565268188',1,
       `sha256:${'b'.repeat(64)}`,`sha256:${'c'.repeat(64)}`,'11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222',
       '33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444',7];
@@ -111,7 +111,7 @@ try {
     } finally { await db.query('ROLLBACK'); }
   };
   for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
-    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811190000_hosted_executed_evidence_convergence.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811200000_hosted_current_exercise_evidence_binding.sql'"),`${label}: missing latest ledger row must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
     await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);
@@ -263,6 +263,47 @@ try {
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_rollback_events WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n),1);
   await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
+
+  const hostedWorkflow='.github/workflows/hosted-pilot-activation-evidence-producer.yml';
+  const hostedRun='31587931745', hostedAttempt=1;
+  const databaseFingerprint=`sha256:${'1'.repeat(64)}`, deploymentFingerprint=`sha256:${'2'.repeat(64)}`;
+  const evidenceFamilies=['tenant-adversarial','provider-simulation-zero-egress','canonical-journey','backup-restore','recovery-rollback'];
+  const ingestExercise=async(exercise,overrides={})=>{
+    const selectors={release:candidatePayload.gitSha,workflow:hostedWorkflow,run:hostedRun,attempt:hostedAttempt,
+      database:databaseFingerprint,deployment:deploymentFingerprint,target:'hosted_nonproduction_pilot',...overrides};
+    for(const [index,family] of evidenceFamilies.entries()) await fresh.query(
+      'SELECT public.hosted_pilot_ingest_exercise_evidence_family($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+      [fixture.org,fixture.workspace,exercise,selectors.release,selectors.workflow,selectors.run,selectors.attempt,
+        selectors.database,selectors.deployment,selectors.target,family,String(index+1).repeat(64),'executed_hosted_evidence'],
+    );
+  };
+  const recordExercise=exercise=>fresh.query(
+    'SELECT public.hosted_pilot_record_verification_result($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
+    [fixture.org,fixture.workspace,exercise,candidatePayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+      databaseFingerprint,deploymentFingerprint,recoveryActor,recoveryAuthorizationVersion],
+  );
+  const oldExercise='97000000-0000-4000-8000-000000000091';
+  const currentExercise='97000000-0000-4000-8000-000000000092';
+  await ingestExercise(oldExercise);
+  await assert.rejects(recordExercise(currentExercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'old exercise evidence cannot satisfy a new exercise');
+  for(const [label,exercise,override] of [
+    ['wrong producer run','97000000-0000-4000-8000-000000000093',{run:'31587931746'}],
+    ['wrong producer attempt','97000000-0000-4000-8000-000000000094',{attempt:2}],
+    ['wrong release head','97000000-0000-4000-8000-000000000095',{release:'9'.repeat(40)}],
+    ['wrong hosted target','97000000-0000-4000-8000-000000000096',{target:'disposable_localhost'}],
+  ]) {
+    if(label==='wrong hosted target') {
+      await assert.rejects(ingestExercise(exercise,override),/HOSTED_EXERCISE_EVIDENCE_INVALID/,label);
+      continue;
+    }
+    await ingestExercise(exercise,override);
+    await assert.rejects(recordExercise(exercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,label);
+  }
+  await assert.rejects(recordExercise('97000000-0000-4000-8000-000000000097'),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'disposable and historical rows cannot substitute for hosted evidence families');
+  await ingestExercise(currentExercise);
+  const hostedRecorded=(await recordExercise(currentExercise)).rows[0].result;
+  assert.equal(hostedRecorded.status,'recorded');
+  assert.deepEqual((await recordExercise(currentExercise)).rows[0].result,{status:'exact_replay',exerciseRunId:currentExercise,productionAuthorized:false});
 
   const evidenceArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations','31329036283','3'.repeat(40),'4'.repeat(64),'5'.repeat(64),candidatePayload.schemaVersion,fixture.requester];
   const evidenceCount=async()=>Number((await fresh.query('SELECT count(*) n FROM pilot_operations_recovery_evidence_ingestions WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n);
