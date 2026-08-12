@@ -10,11 +10,11 @@ permissions:
   id-token: write
 
 jobs:
-  deploy-exact-main-to-stable-pilot:
+  diagnose-netlify-build-tuple:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout exact current main
+      - name: Checkout exact current main for controller provenance
         uses: actions/checkout@v4
         with:
           ref: 4a324422d7b8180940422e1f602a9aec52415a41
@@ -25,8 +25,6 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "4a324422d7b8180940422e1f602a9aec52415a41"
-          test -f netlify.toml
-          test -f package-lock.json
 
       - name: Request repository-scoped OIDC identity
         id: oidc
@@ -41,7 +39,7 @@ jobs:
           test "$token" != "null"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger current-main Git build after relay stabilization
+      - name: Trigger isolated Netlify branch tuple diagnostic
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
