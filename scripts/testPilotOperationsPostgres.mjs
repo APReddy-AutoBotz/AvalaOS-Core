@@ -5,6 +5,7 @@ import {
   applyMigrations, bootstrapAuth, connect, createDatabase, databaseUrlFor, dropDatabase, ensureClusterRoles,
   featureMigration, migrationNames,
 } from './pilotOperationsPostgresSupport.mjs';
+import {loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments} from './hostedPilotActivation.mjs';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
 
 const adminUrl = process.env.PILOT_OPERATIONS_DATABASE_URL;
@@ -21,10 +22,62 @@ const suffix = `${process.pid}_${Date.now()}`;
 const names = {fresh:`pilot_ops_fresh_${suffix}`, upgrade:`pilot_ops_upgrade_${suffix}`};
 const clients=[];
 let admin;
+
+const normalizedPublicRoutineIdentity = ({name,arguments: identityArguments}) =>
+  `public.${name}(${normalizeRoutineIdentityArguments(identityArguments)})`;
+
+const assertExactCatalogParity = (actual, expected, message) =>
+  assert.deepEqual([...new Set(actual)].sort(), [...new Set(expected)].sort(), message);
+
 try {
   admin=await connect(adminUrl); clients.push(admin); await ensureClusterRoles(admin);
   const fresh=await createDatabase(admin,adminUrl,names.fresh); clients.push(fresh); await bootstrapAuth(fresh); await applyMigrations(fresh,migrationNames);
   const upgrade=await createDatabase(admin,adminUrl,names.upgrade); clients.push(upgrade); await bootstrapAuth(upgrade); await applyMigrations(upgrade,baseline); await applyMigrations(upgrade,correction);
+  const canonical=await loadCanonicalMigrationInventory();
+  for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
+    const relations=(await db.query(`select 'public.'||c.relname||':'||(case c.relkind when 'r' then 'table' when 'p' then 'table' when 'v' then 'view' when 'm' then 'materialized_view' when 'S' then 'sequence' when 'f' then 'foreign_table' end) identity from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in('r','p','v','m','S','f') order by identity`)).rows.map(row=>row.identity);
+    const routineRows=(await db.query(`
+      select p.proname name, pg_get_function_identity_arguments(p.oid) arguments,
+        exists (
+          select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid
+          where d.classid='pg_proc'::regclass and d.objid=p.oid
+            and d.refclassid='pg_extension'::regclass and d.deptype='e'
+        ) extension_owned
+      from pg_proc p
+      where p.pronamespace='public'::regnamespace
+      order by p.proname, pg_get_function_identity_arguments(p.oid)
+    `)).rows;
+    const routines=routineRows.filter(row=>!row.extension_owned).map(normalizedPublicRoutineIdentity);
+    const canonicalRelations=canonical.relations.filter(value=>value.startsWith('public.'));
+    const canonicalRoutines=canonical.routines.filter(value=>value.startsWith('public.'));
+    assertExactCatalogParity(relations,canonicalRelations,`${label} relation catalog must equal checkout-derived final canonical state`);
+    assertExactCatalogParity(routines,canonicalRoutines,`${label} routine catalog must equal checkout-derived final canonical state`);
+
+    assert.equal(
+      normalizeRoutineIdentityArguments('p_org uuid, p_workspace uuid, p_note text DEFAULT NULL'),
+      normalizeRoutineIdentityArguments('uuid, uuid, text'),
+      `${label} named and type-only PostgreSQL identities must normalize identically`,
+    );
+    assert.ok(
+      routineRows.some(row=>row.extension_owned && row.name==='digest'),
+      `${label} must exercise an extension-owned pgcrypto routine`,
+    );
+    assert.equal(
+      routines.some(identity=>identity.startsWith('public.digest(')),
+      false,
+      `${label} extension-owned pgcrypto routines must not become application routines`,
+    );
+    assert.throws(
+      ()=>assertExactCatalogParity(routines.slice(1),canonicalRoutines,`${label} missing routine regression`),
+      /missing routine regression/,
+      `${label} a deliberately missing canonical application routine must fail parity`,
+    );
+    assert.throws(
+      ()=>assertExactCatalogParity([...routines,'public.unexpected_application_routine(uuid)'],canonicalRoutines,`${label} extra routine regression`),
+      /extra routine regression/,
+      `${label} a deliberately extra non-extension application routine must fail parity`,
+    );
+  }
   for (const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
     assert.equal(Number((await db.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000,true);
     const tables=['pilot_operations_environments','pilot_operations_release_candidates','pilot_operations_release_events','pilot_operations_provider_bindings','pilot_operations_tenants','pilot_operations_recovery_drills','pilot_operations_command_receipts','pilot_operations_audit_events','pilot_operations_evidence_manifests','pilot_operations_promotion_sequences','pilot_operations_promotion_history','pilot_operations_candidate_sequences','pilot_operations_candidate_history'];
@@ -34,11 +87,51 @@ try {
     for(const table of tables) assert.equal((await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false,table);
     assert.equal((await db.query("SELECT has_function_privilege('authenticated','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
     assert.equal((await db.query("SELECT has_function_privilege('service_role','public.pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,true);
+    assert.equal((await db.query('SELECT public.hosted_pilot_assert_current_identity() tip')).rows[0].tip,'20260811200000');
+    const digestArgs=['a'.repeat(40),'.github/workflows/hosted-pilot-activation-evidence-producer.yml','31565268188',1,
+      `sha256:${'b'.repeat(64)}`,`sha256:${'c'.repeat(64)}`,'11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222',
+      '33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444',7];
+    const evidenceDigest=async args=>(await db.query('SELECT public.hosted_pilot_executed_evidence_digest($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) digest',args)).rows[0].digest;
+    const originalDigest=await evidenceDigest(digestArgs);
+    assert.equal(await evidenceDigest(digestArgs),originalDigest,`${label}: identical executed-evidence selectors must hash identically`);
+    for(let index=0;index<digestArgs.length;index++) {
+      const changed=[...digestArgs];
+      changed[index]=index===3||index===10?Number(changed[index])+1:index>=6&&index<=9?String(changed[index]).replace(/.$/,String(index)):`${changed[index]}|boundary`;
+      if(index===0) changed[index]='d'.repeat(40);
+      if(index===4||index===5) changed[index]=`sha256:${(index===4?'e':'f').repeat(64)}`;
+      assert.notEqual(await evidenceDigest(changed),originalDigest,`${label}: selector ${index} must be digest-bound`);
+    }
     console.log(`POSTGRES PASS ${label}: applied schema, forced RLS, tenant-table denial, and service-only command authority`);
+  }
+  const assertIdentityMutationFails=async(db,mutation,label)=>{
+    await db.query('BEGIN');
+    try {
+      await mutation(db);
+      await assert.rejects(db.query('SELECT public.hosted_pilot_assert_current_identity()'),/HOSTED_PILOT_IDENTITY_MISMATCH/,label);
+    } finally { await db.query('ROLLBACK'); }
+  };
+  for(const [label,db] of [['fresh',fresh],['accepted-baseline upgrade',upgrade]]) {
+    await assertIdentityMutationFails(db,d=>d.query("DELETE FROM avalaos_migrations.applied WHERE filename='20260811200000_hosted_current_exercise_evidence_binding.sql'"),`${label}: missing latest ledger row must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='20260811170000'"); },`${label}: stale marker must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check'); await d.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'"); },`${label}: forged ahead marker must fail closed`);
+    await assertIdentityMutationFails(db,async d=>{ await d.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_environment_class_check'); await d.query("UPDATE hosted_pilot_environment_identity SET environment_class='wrong_environment'"); },`${label}: wrong environment must fail closed`);
   }
   const fixture=await createCommittedStudioFixture(fresh);
   await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','operations.manage','release.manage','release.validate','release.approve','release.promote','org.admin') ON CONFLICT DO NOTHING",[fixture.role]);
+  const reviewerRole='97000000-0000-4000-8000-000000000070';
+  await fresh.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Pilot approval reviewer','pilot-approval-reviewer','organization','[]')",[reviewerRole,fixture.org]);
+  await fresh.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('operations.read','release.approve') ON CONFLICT DO NOTHING",[reviewerRole]);
+  await fresh.query('UPDATE organization_members SET role_id=$1 WHERE org_id=$2 AND user_id=$3',[reviewerRole,fixture.org,fixture.reviewer]);
+  const recoveryActor='97000000-0000-4000-8000-000000000071', recoverySeedRole='97000000-0000-4000-8000-000000000072';
+  await fresh.query('INSERT INTO auth.users(id) VALUES($1)',[recoveryActor]);
+  await fresh.query("INSERT INTO profiles(id,email) VALUES($1,'recovery-operator@pilot.invalid')",[recoveryActor]);
+  await fresh.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Recovery seed','recovery-seed','organization','[]')",[recoverySeedRole,fixture.org]);
+  await fresh.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[fixture.org,recoveryActor,recoverySeedRole]);
+  await fresh.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[fixture.org,fixture.workspace,recoveryActor]);
   const authorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,fixture.requester])).rows[0].version);
+  const provisioned=(await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,recoveryActor])).rows[0].result;
+  assert.deepEqual(provisioned.capabilities,['operations.read','release.promote']); assert.equal(provisioned.approvalAuthority,false); assert.equal(provisioned.productionAuthorized,false);
+  let recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
   let ordinal=100;
   const command=(operation,key,payload,expectedVersion=0,requestPayload=JSON.stringify(payload),actor=fixture.requester,actorAuthorizationVersion=authorizationVersion)=>fresh.query(
     'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',
@@ -106,6 +199,18 @@ try {
   const nextValidated=(await command('validate_release_candidate','postgres-rollback-validate',{candidateId:next.resourceId},next.version)).rows[0].result;
   const nextApproved=(await command('approve_promotion','postgres-rollback-approve',{candidateId:next.resourceId},nextValidated.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
   const nextPromoted=(await command('simulate_promotion','postgres-rollback-promote',{candidateId:next.resourceId,target:'non_live'},nextApproved.version)).rows[0].result;
+  // Historical approval cannot be erased by later recovery provisioning. Rotation back to
+  // the dedicated operator must atomically fence the former owner and effective role.
+  await fresh.query("UPDATE profiles SET email='historical-approver@pilot.invalid' WHERE id=$1",[fixture.reviewer]);
+  await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,fixture.reviewer]);
+  const reviewerRecoveryVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,fixture.reviewer])).rows[0].version);
+  const rollbackPayloadForHistory={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-historical-approver',rollbackPayloadForHistory,nextPromoted.version,undefined,fixture.reviewer,reviewerRecoveryVersion),/SEPARATION_OF_DUTY_REQUIRED/);
+  await fresh.query('SELECT public.hosted_pilot_provision_recovery_operator($1,$2,$3,$4,$5)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  assert.equal(Number((await fresh.query("SELECT count(*) n FROM hosted_pilot_recovery_operators WHERE org_id=$1 AND workspace_id=$2 AND lifecycle='active'",[fixture.org,fixture.workspace])).rows[0].n),1);
+  assert.equal((await fresh.query('SELECT lifecycle FROM hosted_pilot_recovery_operators WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3',[fixture.org,fixture.workspace,fixture.reviewer])).rows[0].lifecycle,'revoked');
+  assert.equal((await fresh.query('SELECT role_id IS NULL AS fenced FROM workspace_memberships WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3',[fixture.org,fixture.workspace,fixture.reviewer])).rows[0].fenced,true);
   const rollbackProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
   assert.equal(rollbackProjection.release.id,candidate.resourceId,'the unrelated draft remains separately actionable');
   assert.equal(rollbackProjection.promotedRelease.id,next.resourceId,'current promoted truth must come from immutable promotion history');
@@ -119,12 +224,86 @@ try {
   assert.equal(readOnlyProjection.rollback.eligible,false); assert.equal(readOnlyProjection.rollback.reason,'READ_ONLY_MODE');
   await command('set_runtime_control','postgres-rollback-readonly-off',{environmentId:environment.resourceId,maintenance:false,readOnly:false},6);
   const rollbackPayload={candidateId:next.resourceId,environmentId:environment.resourceId,rollbackTargetCandidateId:valid.resourceId,rollbackTargetVersion:promoted.version};
-  const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
-  const replay=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
+  const assertNonDisclosingAuthorityDenial=(promise,label)=>assert.rejects(
+    promise,
+    error=>{
+      assert.match(String(error?.message),/PR1B_NOT_FOUND/,`${label} must use the canonical non-disclosing authority result`);
+      assert.doesNotMatch(String(error?.message),/PR1B_FORBIDDEN/,`${label} must not disclose capability membership`);
+      return true;
+    },
+  );
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-same-promoter',rollbackPayload,nextPromoted.version),'unprovisioned original promoter');
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion-1),/PR1B_AUTHORIZATION_STALE/);
+  const nonDisclosingRollbackCases=[
+    ['active in-tenant approval-only actor',()=>command('rollback_non_live_promotion','postgres-rollback-approver',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)],
+    ['cross-tenant actor',()=>fresh.query(
+      'SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',
+      [recoveryActor,'97000000-0000-4000-8000-000000000080','97000000-0000-4000-8000-000000000081','rollback_non_live_promotion','97000000-0000-4000-8000-000000000082','postgres-cross-tenant-rollback',JSON.stringify(rollbackPayload),recoveryAuthorizationVersion,nextPromoted.version,JSON.stringify(rollbackPayload)],
+    )],
+    ['nonexistent actor',()=>command('rollback_non_live_promotion','postgres-rollback-nonexistent-actor',rollbackPayload,nextPromoted.version,undefined,'97000000-0000-4000-8000-000000000083',1)],
+  ];
+  for(const [label,attempt] of nonDisclosingRollbackCases) await assertNonDisclosingAuthorityDenial(attempt(),label);
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='disabled' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-disabled-record',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'disabled provisioned operator record');
+  assert.equal(Number((await fresh.query("SELECT count(*) n FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND operation='rollback_non_live_promotion'",[fixture.org,fixture.workspace])).rows[0].n),0,'operator lifecycle denial must happen before receipt creation');
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='revoked' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-revoked-record',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'revoked provisioned operator record');
+  await fresh.query("UPDATE hosted_pilot_recovery_operators SET lifecycle='active' WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3",[fixture.org,fixture.workspace,recoveryActor]);
+  await fresh.query("UPDATE organization_members SET status='disabled',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-disabled-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'disabled recovery operator');
+  await fresh.query("UPDATE organization_members SET status='removed',disabled_at=now() WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  await assertNonDisclosingAuthorityDenial(command('rollback_non_live_promotion','postgres-rollback-revoked-operator',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),'revoked recovery operator');
+  await fresh.query("UPDATE organization_members SET status='active',disabled_at=NULL WHERE org_id=$1 AND user_id=$2",[fixture.org,recoveryActor]);
+  recoveryAuthorizationVersion=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,recoveryActor])).rows[0].version);
+  const rollback=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion)).rows[0].result;
+  const replay=(await command('rollback_non_live_promotion','postgres-rollback',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion)).rows[0].result;
   assert.deepEqual(replay,rollback); assert.equal(rollback.liveActivationAuthorized,false);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback',{...rollbackPayload,rollbackTargetVersion:promoted.version+1},nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/IDEMPOTENCY_CONFLICT/);
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_rollback_events WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n),1);
-  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,fixture.reviewer,reviewerAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
+  await assert.rejects(command('rollback_non_live_promotion','postgres-rollback-stale',rollbackPayload,nextPromoted.version,undefined,recoveryActor,recoveryAuthorizationVersion),/VERSION_CONFLICT|ROLLBACK_NOT_ELIGIBLE/);
+
+  const hostedWorkflow='.github/workflows/hosted-pilot-activation-evidence-producer.yml';
+  const hostedRun='31587931745', hostedAttempt=1;
+  const databaseFingerprint=`sha256:${'1'.repeat(64)}`, deploymentFingerprint=`sha256:${'2'.repeat(64)}`;
+  const evidenceFamilies=['tenant-adversarial','provider-simulation-zero-egress','canonical-journey','backup-restore','recovery-rollback'];
+  const ingestExercise=async(exercise,overrides={})=>{
+    const selectors={release:candidatePayload.gitSha,workflow:hostedWorkflow,run:hostedRun,attempt:hostedAttempt,
+      database:databaseFingerprint,deployment:deploymentFingerprint,target:'hosted_nonproduction_pilot',...overrides};
+    for(const [index,family] of evidenceFamilies.entries()) await fresh.query(
+      'SELECT public.hosted_pilot_ingest_exercise_evidence_family($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+      [fixture.org,fixture.workspace,exercise,selectors.release,selectors.workflow,selectors.run,selectors.attempt,
+        selectors.database,selectors.deployment,selectors.target,family,String(index+1).repeat(64),'executed_hosted_evidence'],
+    );
+  };
+  const recordExercise=exercise=>fresh.query(
+    'SELECT public.hosted_pilot_record_verification_result($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
+    [fixture.org,fixture.workspace,exercise,candidatePayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+      databaseFingerprint,deploymentFingerprint,recoveryActor,recoveryAuthorizationVersion],
+  );
+  const oldExercise='97000000-0000-4000-8000-000000000091';
+  const currentExercise='97000000-0000-4000-8000-000000000092';
+  await ingestExercise(oldExercise);
+  await assert.rejects(recordExercise(currentExercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'old exercise evidence cannot satisfy a new exercise');
+  for(const [label,exercise,override] of [
+    ['wrong producer run','97000000-0000-4000-8000-000000000093',{run:'31587931746'}],
+    ['wrong producer attempt','97000000-0000-4000-8000-000000000094',{attempt:2}],
+    ['wrong release head','97000000-0000-4000-8000-000000000095',{release:'9'.repeat(40)}],
+    ['wrong hosted target','97000000-0000-4000-8000-000000000096',{target:'disposable_localhost'}],
+  ]) {
+    if(label==='wrong hosted target') {
+      await assert.rejects(ingestExercise(exercise,override),/HOSTED_EXERCISE_EVIDENCE_INVALID/,label);
+      continue;
+    }
+    await ingestExercise(exercise,override);
+    await assert.rejects(recordExercise(exercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,label);
+  }
+  await assert.rejects(recordExercise('97000000-0000-4000-8000-000000000097'),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'disposable and historical rows cannot substitute for hosted evidence families');
+  await ingestExercise(currentExercise);
+  const hostedRecorded=(await recordExercise(currentExercise)).rows[0].result;
+  assert.equal(hostedRecorded.status,'recorded');
+  assert.deepEqual((await recordExercise(currentExercise)).rows[0].result,{status:'exact_replay',exerciseRunId:currentExercise,productionAuthorized:false});
 
   const evidenceArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations','31329036283','3'.repeat(40),'4'.repeat(64),'5'.repeat(64),candidatePayload.schemaVersion,fixture.requester];
   const evidenceCount=async()=>Number((await fresh.query('SELECT count(*) n FROM pilot_operations_recovery_evidence_ingestions WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n);
@@ -140,7 +319,7 @@ try {
   const recoveryReplay=(await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',evidenceArgs)).rows[0].result; assert.deepEqual(recoveryReplay,recoveryCommitted); assert.equal(await evidenceCount(),beforeEvidence+1);
 
   const tenant=(await command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0)).rows[0].result;
-  await assert.rejects(command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0,undefined,fixture.reviewer,reviewerAuthorizationVersion),/IDEMPOTENCY_CONFLICT/,'bootstrap replay must remain actor-bound');
+  await assertNonDisclosingAuthorityDenial(command('bootstrap_tenant','postgres-bootstrap',{environmentId:environment.resourceId},0,undefined,fixture.reviewer,reviewerAuthorizationVersion),'approval-only bootstrap replay actor');
   const pendingPayload={...candidatePayload,gitSha:'6'.repeat(40),buildIdentity:'postgres-pending-after-promotion',evidenceManifestSha256:'7'.repeat(64)};
   const pending=(await command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0)).rows[0].result;
   const pendingProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
@@ -170,6 +349,28 @@ try {
   assert.equal(reactivated.lifecycle,'active');
   const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
   assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
+
+  // Recovery rotation deliberately fenced the historical reviewer above. Keep the
+  // later serialization fixture independent so it cannot accidentally reuse that
+  // revoked actor or its stale authorization version.
+  const serializationReviewer='97000000-0000-4000-8000-000000000073';
+  await fresh.query('INSERT INTO auth.users(id) VALUES($1)',[serializationReviewer]);
+  await fresh.query("INSERT INTO profiles(id,email) VALUES($1,'serialization-reviewer@pilot.invalid')",[serializationReviewer]);
+  await fresh.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[fixture.org,serializationReviewer,reviewerRole]);
+  await fresh.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[fixture.org,fixture.workspace,serializationReviewer]);
+  const serializationReviewerAuthorizationVersion=Number((await fresh.query(
+    'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',
+    [fixture.org,serializationReviewer],
+  )).rows[0].version);
+  const serializationReviewerCapabilities=(await fresh.query(
+    "SELECT EXISTS(SELECT 1 FROM role_capabilities WHERE role_id=$1 AND capability_key='release.approve') approved, EXISTS(SELECT 1 FROM role_capabilities WHERE role_id=$1 AND capability_key='release.promote') promoted",
+    [reviewerRole],
+  )).rows[0];
+  assert.deepEqual(serializationReviewerCapabilities,{approved:true,promoted:false},'serialization reviewer must retain active approval-only authority');
+  assert.equal((await fresh.query(
+    "SELECT EXISTS(SELECT 1 FROM role_capabilities rc WHERE rc.capability_key='release.approve' AND rc.role_id IN (SELECT om.role_id FROM organization_members om WHERE om.org_id=$1 AND om.user_id=$3 AND om.status='active' UNION SELECT wm.role_id FROM workspace_memberships wm WHERE wm.org_id=$1 AND wm.workspace_id=$2 AND wm.user_id=$3 AND wm.status='active')) approved",
+    [fixture.org,fixture.workspace,recoveryActor],
+  )).rows[0].approved,false,'recovery operator must not gain workspace approval authority');
 
   // Registration transaction A starts first without taking the environment lock.
   // B registers first; A registers last and must own actionable-current truth even
@@ -201,7 +402,7 @@ try {
     const registered=(await command('register_release_candidate',`postgres-serialized-register-${label}`,payload,0)).rows[0].result;
     await fresh.query(`INSERT INTO pilot_operations_evidence_manifests(candidate_id,org_id,workspace_id,environment_id,git_sha,build_identity,workflow_name,workflow_run_id,workflow_head_sha,manifest_sha256,schema_version,migration_compatible,required_gates,status,verified_at) VALUES($1,$2,$3,$4,$5,$6,'Pilot Operations',$7,$5,$8,$9,true,$10::jsonb,'verified',now())`,[registered.resourceId,fixture.org,fixture.workspace,environment.resourceId,payload.gitSha,payload.buildIdentity,label==='delayed'?'31329036285':'31329036286',payload.evidenceManifestSha256,payload.schemaVersion,JSON.stringify(gates)]);
     const checked=(await command('validate_release_candidate',`postgres-serialized-validate-${label}`,{candidateId:registered.resourceId},registered.version)).rows[0].result;
-    const accepted=(await command('approve_promotion',`postgres-serialized-approve-${label}`,{candidateId:registered.resourceId},checked.version,undefined,fixture.reviewer,reviewerAuthorizationVersion)).rows[0].result;
+    const accepted=(await command('approve_promotion',`postgres-serialized-approve-${label}`,{candidateId:registered.resourceId},checked.version,undefined,serializationReviewer,serializationReviewerAuthorizationVersion)).rows[0].result;
     return {registered,accepted};
   };
   const delayed=await preparePromotion('delayed','4');

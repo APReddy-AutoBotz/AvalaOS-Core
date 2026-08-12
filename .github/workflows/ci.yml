@@ -59,6 +59,9 @@ jobs:
       - name: Secret hygiene scan
         run: npm run test:secret-hygiene
 
+      - name: Hosted non-production pilot contracts
+        run: npm run test:hosted-pilot
+
       - name: Regression and policy tests
         run: npm run test
 
@@ -95,6 +98,8 @@ jobs:
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
       - name: Run retained deterministic desktop and mobile browser gates
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run test:browser
       - name: Run PR 1D browser gates with the dedicated pilot-mode configuration
         run: npm run test:browser:pr1d

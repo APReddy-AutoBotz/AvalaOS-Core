@@ -179,7 +179,14 @@
     "test:recovery:pilot-operations:model": "node scripts/pilotOperationsRecovery.test.mjs",
     "test:recovery:pilot-operations:postgres": "node scripts/testPilotOperationsRecoveryPostgres.mjs",
     "test:recovery:pilot-operations": "npm run test:recovery:pilot-operations:model && npm run test:recovery:pilot-operations:postgres",
-    "test:browser:pilot-operations": "playwright test --config=playwright.pilot-operations.config.ts"
+    "test:browser:pilot-operations": "playwright test --config=playwright.pilot-operations.config.ts",
+    "hosted-pilot:preflight": "node scripts/hostedPilotDatabasePreflight.mjs",
+    "hosted-pilot:authorize": "node scripts/hostedPilotPreflight.mjs",
+    "hosted-pilot:apply": "node scripts/hostedPilotApply.mjs",
+    "hosted-pilot:verify-database": "node scripts/hostedPilotDatabaseVerify.mjs",
+    "verify:hosted-pilot-evidence": "node scripts/verify-hosted-pilot-evidence.mjs",
+    "test:browser:hosted-pilot": "playwright test --config=playwright.hosted-pilot.config.ts",
+    "test:hosted-pilot": "node --test scripts/hostedPilotActivation.test.mjs scripts/hostedPilotApplyEntrypoint.test.mjs scripts/hostedPilotApplySafety.test.mjs scripts/hostedPilotDatabaseContract.test.mjs scripts/verify-hosted-pilot-evidence.test.mjs && node scripts/checkWorkflowYaml.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
