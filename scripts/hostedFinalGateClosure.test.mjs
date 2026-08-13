@@ -46,13 +46,16 @@ test('forward migration revokes direct service-role table authority but retains 
   assert.match(migration,/migration_tip='20260812171000'/);
 });
 
-test('dispatch bridge is owner-only, current-main-only and passes exact non-production inputs',()=>{
+test('dispatch bridge is owner-only, current-main-only and dispatches the validated immutable branch',()=>{
   assert.match(bridge,/on:\s*\n\s*create:/);
   assert.match(bridge,/actions: write/);
   assert.match(bridge,/github\.actor == 'APReddy-AutoBotz'/);
   assert.match(bridge,/hosted-pilot-dispatch--/);
   assert.match(bridge,/HOSTED_PILOT_DISPATCH_NOT_CURRENT_MAIN/);
   assert.match(bridge,/git rev-parse origin\/main/);
+  assert.match(bridge,/--arg ref "\$CREATED_REF"/);
+  assert.doesNotMatch(bridge,/--arg ref "\$RELEASE_SHA"/);
+  assert.doesNotMatch(bridge,/--arg ref 'main'/);
   assert.match(bridge,/hosted-pilot-activation-evidence-producer\.yml\/dispatches/);
   for(const value of [
     'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed',
