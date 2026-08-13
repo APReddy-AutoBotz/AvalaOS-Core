@@ -9,6 +9,10 @@ const bridge=await readFile(new URL('../.github/workflows/hosted-pilot-dispatch-
 const closureMigration=await readFile(new URL('../supabase/migrations/20260812171000_hosted_evidence_execution_gate_closure.sql',import.meta.url),'utf8');
 const oidcMigration=await readFile(new URL('../supabase/migrations/20260813020000_hosted_oidc_verifier_bridge.sql',import.meta.url),'utf8');
 const oidcFunction=await readFile(new URL('../supabase/functions/hosted-pilot-github-verifier/index.ts',import.meta.url),'utf8');
+const supabaseConfig=await readFile(new URL('../supabase/config.toml',import.meta.url),'utf8');
+const netlifyProxy=await readFile(new URL('../netlify/functions/hosted-pilot-github-verifier-proxy.mjs',import.meta.url),'utf8');
+
+const forbiddenHostedProjectRef='fcsfvonhvyrevwhyvano';
 
 test('owner-controlled hosted evidence tables reject direct service-role mutation',()=>{
   const exact=['hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'].map(relname=>({
@@ -36,11 +40,11 @@ test('database verifier inspects PUBLIC ACLs without treating PUBLIC as a login 
   assert.match(verifier,/assertOwnerOnlyEvidenceTableCatalog/);
 });
 
-test('producer uses short-lived GitHub OIDC and never requires a database URL secret',()=>{
+test('producer uses short-lived GitHub OIDC through the same-site protected proxy and never requires a database URL secret',()=>{
   assert.match(workflow,/id-token: write/);
   assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_URL/);
   assert.match(workflow,/audience=avalaos-hosted-pilot/);
-  assert.match(workflow,/hosted-pilot-github-verifier/);
+  assert.match(workflow,/\.netlify\/functions\/hosted-pilot-github-verifier-proxy/);
   assert.match(workflow,/call_verifier preflight/);
   assert.match(workflow,/call_verifier status/);
   assert.match(workflow,/call_verifier finalize/);
@@ -48,6 +52,23 @@ test('producer uses short-lived GitHub OIDC and never requires a database URL se
   assert.ok(workflow.indexOf('call_verifier status')<workflow.indexOf('call_verifier finalize'));
   assert.doesNotMatch(workflow,/HOSTED_PILOT_DATABASE_URL/);
   assert.doesNotMatch(workflow,/secrets\.HOSTED_PILOT_DATABASE_URL/);
+  assert.doesNotMatch(workflow,/\.supabase\.co\/functions\/v1\/hosted-pilot-github-verifier/);
+  assert.ok(!workflow.includes(forbiddenHostedProjectRef));
+});
+
+test('Netlify proxy keeps the Supabase project identifier in protected Functions configuration only',()=>{
+  assert.match(netlifyProxy,/process\.env\.HOSTED_PILOT_VERIFIER_UPSTREAM/);
+  assert.match(netlifyProxy,/url\.hostname\.endsWith\('\.supabase\.co'\)/);
+  assert.match(netlifyProxy,/url\.pathname !== '\/functions\/v1\/hosted-pilot-github-verifier'/);
+  assert.match(netlifyProxy,/authorization/);
+  assert.match(netlifyProxy,/AbortSignal\.timeout/);
+  assert.ok(!netlifyProxy.includes(forbiddenHostedProjectRef));
+  assert.doesNotMatch(netlifyProxy,/console\.(?:log|error)\([^)]*authorization/i);
+});
+
+test('Supabase gateway delegates authentication only for the GitHub OIDC verifier function',()=>{
+  assert.match(supabaseConfig,/\[functions\.hosted-pilot-github-verifier\]\s*\nverify_jwt = false/);
+  assert.match(supabaseConfig,/\[functions\.studio-private-artifact-reconcile\]\s*\nverify_jwt = false/);
 });
 
 test('OIDC verifier binds the signed token to the exact repository, workflow, immutable ref, SHA and run',()=>{
@@ -64,12 +85,18 @@ test('OIDC verifier binds the signed token to the exact repository, workflow, im
   assert.doesNotMatch(oidcFunction,/console\.log\(token|console\.error\(token/);
 });
 
-test('OIDC database bridge validates migration truth, authority ACLs, fail-closed recovery and exact evidence',()=>{
+test('OIDC database bridge validates migration truth, table and privileged-RPC ACLs, fail-closed recovery and exact evidence',()=>{
   assert.match(oidcMigration,/hosted_pilot_oidc_preflight/);
   assert.match(oidcMigration,/HOSTED_PILOT_TARGET_FINGERPRINT_MISMATCH/);
   assert.match(oidcMigration,/HOSTED_PILOT_MIGRATION_LEDGER_MISMATCH/);
   assert.match(oidcMigration,/authority_table_count <> cardinality\(expected_authority_tables\)/);
   assert.match(oidcMigration,/evidence_service_mutation_count <> 0/);
+  assert.match(oidcMigration,/expected_service_routines/);
+  assert.match(oidcMigration,/pilot_operations_command\(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb\)/);
+  assert.match(oidcMigration,/has_function_privilege\('authenticated',p\.oid,'EXECUTE'\)/);
+  assert.match(oidcMigration,/NOT has_function_privilege\('service_role',p\.oid,'EXECUTE'\)/);
+  assert.match(oidcMigration,/service_routine_count <> cardinality\(expected_service_routines\)/);
+  assert.match(oidcMigration,/HOSTED_PILOT_RPC_ACL_MISMATCH/);
   assert.match(oidcMigration,/maintenance AND read_only/);
   assert.match(oidcMigration,/HOSTED_PILOT_RECOVERY_EVIDENCE_MISSING/);
   assert.match(oidcMigration,/HOSTED_PILOT_ROLLBACK_EVIDENCE_MISSING/);
