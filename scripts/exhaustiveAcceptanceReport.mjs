@@ -113,10 +113,11 @@ const results = (catalog.cases ?? []).map(testCase => {
 });
 
 const resultIndex = new Map(results.map(item => [item.testId, item]));
+const declared = inventory.filter(branch => branch.coverageStatus === 'DECLARED');
+const sourceBacked = inventory.filter(branch => branch.coverageStatus === 'SOURCE_BACKED');
 const uncovered = inventory.filter(branch => branch.coverageStatus === 'UNCOVERED').map(branch => ({ ...branch, status: 'UNCOVERED' }));
-const declaredCovered = inventory.filter(branch => branch.coverageStatus === 'COVERED');
-const executedBranches = declaredCovered.filter(branch => branch.testIds.some(id => ['PASS', 'FAIL'].includes(resultIndex.get(id)?.status)));
-const provenBranches = declaredCovered.filter(branch => branch.testIds.length > 0 && branch.testIds.every(id => resultIndex.get(id)?.status === 'PASS'));
+const executedBranches = sourceBacked.filter(branch => branch.testIds.some(id => ['PASS', 'FAIL'].includes(resultIndex.get(id)?.status)));
+const provenBranches = sourceBacked.filter(branch => branch.testIds.length > 0 && branch.testIds.every(id => resultIndex.get(id)?.status === 'PASS'));
 
 const counts = { PASS: 0, FAIL: 0, BLOCKED: 0, UNCOVERED: uncovered.length };
 for (const result of results) counts[result.status] += 1;
@@ -133,7 +134,7 @@ const retainedGateMissing = retainedGateState.filter(item => item.status === 'MI
 
 const overall = counts.FAIL > 0 || retainedGateFailures.length > 0
   ? 'FAILED'
-  : counts.BLOCKED > 0 || counts.UNCOVERED > 0 || retainedGateMissing.length > 0
+  : counts.BLOCKED > 0 || uncovered.length > 0 || declared.length > 0 || retainedGateMissing.length > 0
     ? 'INCOMPLETE_COVERAGE'
     : 'PASSED';
 
@@ -160,24 +161,26 @@ const summary = {
   ...counts,
   passPercentage: pct(counts.PASS, executedCases),
   totalBranches: inventory.length,
-  declaredCoveredBranches: declaredCovered.length,
-  declaredCoveragePercentage: pct(declaredCovered.length, inventory.length),
-  executedBranches: executedBranches.length,
-  executedBranchPercentage: pct(executedBranches.length, inventory.length),
-  provenBranches: provenBranches.length,
-  provenBranchPercentage: pct(provenBranches.length, inventory.length),
+  declaredBranches: declared.length,
+  sourceBackedBranches: sourceBacked.length,
+  sourceBackedCoveragePercentage: pct(sourceBacked.length, inventory.length),
+  executedSourceBackedBranches: executedBranches.length,
+  executedSourceBackedPercentage: pct(executedBranches.length, inventory.length),
+  provenSourceBackedBranches: provenBranches.length,
+  provenSourceBackedPercentage: pct(provenBranches.length, inventory.length),
   retainedGateState,
   moduleSummary: group(results, item => [item.module || 'Unassigned']),
   personaSummary: group(results, item => Array.isArray(item.persona) ? item.persona : [item.persona || 'Unassigned']),
 };
 
-fs.writeFileSync(path.join(out, 'acceptance-results.json'), `${JSON.stringify({ summary, results, uncovered }, null, 2)}\n`);
+fs.writeFileSync(path.join(out, 'acceptance-results.json'), `${JSON.stringify({ summary, results, declared, uncovered }, null, 2)}\n`);
 fs.writeFileSync(path.join(out, 'source-to-test-coverage.json'), `${JSON.stringify({
   releaseSha,
   totalBranches: inventory.length,
-  declaredCoveredBranches: declaredCovered.map(item => item.branchId),
-  executedBranches: executedBranches.map(item => item.branchId),
-  provenBranches: provenBranches.map(item => item.branchId),
+  declaredBranches: declared.map(item => item.branchId),
+  sourceBackedBranches: sourceBacked.map(item => item.branchId),
+  executedSourceBackedBranches: executedBranches.map(item => item.branchId),
+  provenSourceBackedBranches: provenBranches.map(item => item.branchId),
   uncoveredBranches: uncovered,
 }, null, 2)}\n`);
 
@@ -197,6 +200,7 @@ const moduleRows = summary.moduleSummary.map(item => `| ${item.name} | ${item.to
 const personaRows = summary.personaSummary.map(item => `| ${item.name} | ${item.total} | ${item.pass} | ${item.fail} | ${item.blocked} |`).join('\n');
 const failures = results.filter(item => item.status === 'FAIL').map(item => `- **${item.testId} — ${item.title}** (${item.module}; ${item.executionKind}): ${item.failureReason}`).join('\n') || 'None.';
 const blocked = results.filter(item => item.status === 'BLOCKED').map(item => `- **${item.testId} — ${item.title}** (${item.executionKind}): ${item.failureReason}`).join('\n') || 'None.';
+const declaredMd = declared.map(item => `- **${item.branchId}** — ${item.rule}: source proof not yet registered.`).join('\n') || 'None.';
 const uncoveredMd = uncovered.map(item => `- **${item.branchId}** — ${item.rule} (${item.sourceReferences.join(', ')}): ${item.uncoveredReason}`).join('\n') || 'None.';
 
 const markdown = `# Exhaustive AvalaOS Hosted Product Acceptance
@@ -211,11 +215,12 @@ const markdown = `# Exhaustive AvalaOS Hosted Product Acceptance
 - Workflow: \`${workflowRunId}\` attempt \`${workflowAttempt}\`
 - Tests: ${results.length}; PASS ${counts.PASS}; FAIL ${counts.FAIL}; BLOCKED ${counts.BLOCKED}; UNCOVERED ${counts.UNCOVERED}
 - Executed-case pass rate: ${summary.passPercentage}%
-- Declared branch coverage: ${summary.declaredCoveragePercentage}% (${declaredCovered.length}/${inventory.length})
-- Executed branch coverage: ${summary.executedBranchPercentage}% (${executedBranches.length}/${inventory.length})
-- Proven branch coverage: ${summary.provenBranchPercentage}% (${provenBranches.length}/${inventory.length})
+- Catalog-declared branches awaiting source proof: ${declared.length}/${inventory.length}
+- Source-backed branch coverage: ${summary.sourceBackedCoveragePercentage}% (${sourceBacked.length}/${inventory.length})
+- Executed source-backed branch coverage: ${summary.executedSourceBackedPercentage}% (${executedBranches.length}/${inventory.length})
+- Proven source-backed branch coverage: ${summary.provenSourceBackedPercentage}% (${provenBranches.length}/${inventory.length})
 
-A 100% pass rate among executed cases is **not** a full product pass while blocked or uncovered cases remain.
+A 100% pass rate among executed cases is **not** a full product pass while blocked, declared-only, or uncovered cases remain.
 
 ## Module Summary
 
@@ -240,6 +245,10 @@ ${failures}
 ## Blocked
 
 ${blocked}
+
+## Declared Branches Awaiting Source Proof
+
+${declaredMd}
 
 ## Uncovered Source / Business Requirements
 
