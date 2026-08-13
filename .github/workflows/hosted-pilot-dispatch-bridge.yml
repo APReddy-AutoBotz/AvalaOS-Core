@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
           request="$(jq -n \
-            --arg ref "$RELEASE_SHA" \
+            --arg ref 'main' \
             --arg expected_release_sha "$RELEASE_SHA" \
             --arg target_fingerprint 'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed' \
             --arg deployment_origin 'https://avalaos-pilot.netlify.app' \
