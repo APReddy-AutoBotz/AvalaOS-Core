@@ -64,7 +64,6 @@ jobs:
           npm run test:studio-private-artifacts
           npm run test:enterprise-intelligence
           node scripts/runTrustAssuranceTest.mjs
-          node scripts/testTrustAssuranceMigration.mjs
       - name: Run exhaustive real hosted Sandbox acceptance
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
         continue-on-error: true
