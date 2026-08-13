@@ -36,7 +36,7 @@
     {"testId":"SANDBOX-002","scenario":"persona-matrix","projects":["desktop-chromium"]},
     {"testId":"SANDBOX-003","scenario":"local-authority","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"SANDBOX-004","scenario":"network-safety","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SANDBOX-005","scenario":"refresh-boundary","projects":["desktop-chromium","pixel-7-chromium"]},
+    {"testId":"SANDBOX-005","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The existing refresh check reloads untouched access state and does not prove persistence of a prior mutation or selected identity. Keep this Test ID BLOCKED until a real state transition is made before reload."},
     {"testId":"SANDBOX-006","scenario":null,"projects":["desktop-chromium"],"blockedReason":"The hosted Sandbox route intentionally accepts /sandbox descendants. There is no source-backed denied Sandbox deep-link branch to execute, so a normal sign-in visit is not accepted as denial evidence."},
     {"testId":"SANDBOX-007","scenario":"desktop-layout","projects":["desktop-chromium"]},
     {"testId":"SANDBOX-008","scenario":"mobile-layout","projects":["pixel-7-chromium"]},
