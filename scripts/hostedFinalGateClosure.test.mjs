@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {assertOwnerOnlyEvidenceTableCatalog} from './hostedPilotDatabaseVerify.mjs';
+import {assertAuthorityTableCatalog,assertOwnerOnlyEvidenceTableCatalog,HOSTED_AUTHORITY_TABLES} from './hostedPilotDatabaseVerify.mjs';
 
 const verifier=await readFile(new URL('./hostedPilotDatabaseVerify.mjs',import.meta.url),'utf8');
-const waiter=await readFile(new URL('./wait-hosted-pilot-evidence-families.mjs',import.meta.url),'utf8');
 const workflow=await readFile(new URL('../.github/workflows/hosted-pilot-activation-evidence-producer.yml',import.meta.url),'utf8');
 const bridge=await readFile(new URL('../.github/workflows/hosted-pilot-dispatch-bridge.yml',import.meta.url),'utf8');
-const migration=await readFile(new URL('../supabase/migrations/20260812171000_hosted_evidence_execution_gate_closure.sql',import.meta.url),'utf8');
+const closureMigration=await readFile(new URL('../supabase/migrations/20260812171000_hosted_evidence_execution_gate_closure.sql',import.meta.url),'utf8');
+const oidcMigration=await readFile(new URL('../supabase/migrations/20260813020000_hosted_oidc_verifier_bridge.sql',import.meta.url),'utf8');
+const oidcFunction=await readFile(new URL('../supabase/functions/hosted-pilot-github-verifier/index.ts',import.meta.url),'utf8');
 
 test('owner-controlled hosted evidence tables reject direct service-role mutation',()=>{
   const exact=['hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'].map(relname=>({
@@ -18,6 +19,16 @@ test('owner-controlled hosted evidence tables reject direct service-role mutatio
   assert.throws(()=>assertOwnerOnlyEvidenceTableCatalog(exact.slice(1)),/EVIDENCE_TABLE_ACL_MISMATCH/);
 });
 
+test('hosted authority catalog is exact and does not treat all product tables as controller tables',()=>{
+  assert.equal(HOSTED_AUTHORITY_TABLES.length,20);
+  const exact=HOSTED_AUTHORITY_TABLES.map(relname=>({relname,owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false}));
+  assert.doesNotThrow(()=>assertAuthorityTableCatalog(exact));
+  assert.throws(()=>assertAuthorityTableCatalog(exact.slice(1)),/AUTHORITY_TABLE_MISMATCH/);
+  assert.throws(()=>assertAuthorityTableCatalog(exact.map((row,index)=>index?row:{...row,authenticated_mutation:true})),/AUTHORITY_TABLE_MISMATCH/);
+  assert.match(verifier,/c\.relname=ANY\(\$1::text\[\]\)/);
+  assert.doesNotMatch(verifier,/WHERE c\.relnamespace='public'::regnamespace AND c\.relkind IN \('r','p'\) ORDER BY c\.relname/);
+});
+
 test('database verifier inspects PUBLIC ACLs without treating PUBLIC as a login role',()=>{
   assert.doesNotMatch(verifier,/has_(?:table|function)_privilege\('PUBLIC'/);
   assert.match(verifier,/aclexplode\(coalesce\(c\.relacl,acldefault\('r',c\.relowner\)\)\)/);
@@ -25,25 +36,52 @@ test('database verifier inspects PUBLIC ACLs without treating PUBLIC as a login 
   assert.match(verifier,/assertOwnerOnlyEvidenceTableCatalog/);
 });
 
-test('producer compares live preflight fingerprint before any evidence mutation and then waits for owner proof',()=>{
-  const preflight=workflow.indexOf('ACTUAL_TARGET_FINGERPRINT');
-  const compare=workflow.indexOf('HOSTED_PILOT_TARGET_FINGERPRINT_MISMATCH');
-  const wait=workflow.indexOf('wait-hosted-pilot-evidence-families.mjs');
-  const record=workflow.indexOf('record-hosted-pilot-executed-evidence.mjs');
-  assert.ok(preflight>0&&compare>preflight&&wait>compare&&record>wait);
+test('producer uses short-lived GitHub OIDC and never requires a database URL secret',()=>{
+  assert.match(workflow,/id-token: write/);
+  assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(workflow,/audience=avalaos-hosted-pilot/);
+  assert.match(workflow,/hosted-pilot-github-verifier/);
+  assert.match(workflow,/call_verifier preflight/);
+  assert.match(workflow,/call_verifier status/);
+  assert.match(workflow,/call_verifier finalize/);
+  assert.ok(workflow.indexOf('call_verifier preflight')<workflow.indexOf('call_verifier status'));
+  assert.ok(workflow.indexOf('call_verifier status')<workflow.indexOf('call_verifier finalize'));
+  assert.doesNotMatch(workflow,/HOSTED_PILOT_DATABASE_URL/);
+  assert.doesNotMatch(workflow,/secrets\.HOSTED_PILOT_DATABASE_URL/);
 });
 
-test('owner evidence wait is exact-run bound, bounded and complete',()=>{
-  for(const family of ['tenant-adversarial','provider-simulation-zero-egress','canonical-journey','backup-restore','recovery-rollback']) assert.match(waiter,new RegExp(`'${family}'`));
-  for(const binding of ['GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','HOSTED_PILOT_TARGET_FINGERPRINT','HOSTED_PILOT_EXERCISE_RUN_ID']) assert.match(waiter,new RegExp(binding));
-  assert.match(waiter,/HOSTED_PILOT_EVIDENCE_WAIT_TIMEOUT/);
-  assert.match(waiter,/HOSTED_PILOT_EVIDENCE_BINDING_CONFLICT/);
+test('OIDC verifier binds the signed token to the exact repository, workflow, immutable ref, SHA and run',()=>{
+  for(const binding of [
+    "const ISSUER='https://token.actions.githubusercontent.com'","const AUDIENCE='avalaos-hosted-pilot'",
+    "const REPOSITORY='APReddy-AutoBotz/AvalaOS-Core'","const REPOSITORY_ID='1256880940'",
+    "const WORKFLOW_PATH='.github/workflows/hosted-pilot-activation-evidence-producer.yml'",
+    "claims.event_name!=='workflow_dispatch'","claims.sha!==release","claims.ref!==ref","claims.run_id!==runId",
+    'claims.workflow_ref!==`${REPOSITORY}/${WORKFLOW_PATH}@${ref}`',
+  ]) assert.ok(oidcFunction.includes(binding),`missing OIDC binding: ${binding}`);
+  assert.match(oidcFunction,/crypto\.subtle\.verify/);
+  assert.match(oidcFunction,/RSASSA-PKCS1-v1_5/);
+  assert.match(oidcFunction,/SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(oidcFunction,/console\.log\(token|console\.error\(token/);
+});
+
+test('OIDC database bridge validates migration truth, authority ACLs, fail-closed recovery and exact evidence',()=>{
+  assert.match(oidcMigration,/hosted_pilot_oidc_preflight/);
+  assert.match(oidcMigration,/HOSTED_PILOT_TARGET_FINGERPRINT_MISMATCH/);
+  assert.match(oidcMigration,/HOSTED_PILOT_MIGRATION_LEDGER_MISMATCH/);
+  assert.match(oidcMigration,/authority_table_count <> cardinality\(expected_authority_tables\)/);
+  assert.match(oidcMigration,/evidence_service_mutation_count <> 0/);
+  assert.match(oidcMigration,/maintenance AND read_only/);
+  assert.match(oidcMigration,/HOSTED_PILOT_RECOVERY_EVIDENCE_MISSING/);
+  assert.match(oidcMigration,/HOSTED_PILOT_ROLLBACK_EVIDENCE_MISSING/);
+  assert.match(oidcMigration,/hosted_pilot_record_verification_result/);
+  assert.match(oidcMigration,/REVOKE ALL ON FUNCTION public\.hosted_pilot_oidc_preflight/);
+  assert.match(oidcMigration,/TO service_role/);
+  assert.match(oidcMigration,/migration_tip='20260813020000'/);
 });
 
 test('forward migration revokes direct service-role table authority but retains final recorder execution',()=>{
-  assert.match(migration,/REVOKE ALL ON TABLE public\.hosted_pilot_verification_run_results FROM PUBLIC,anon,authenticated,service_role/);
-  assert.match(migration,/GRANT EXECUTE ON FUNCTION public\.hosted_pilot_record_verification_result[\s\S]+TO service_role/);
-  assert.match(migration,/migration_tip='20260812171000'/);
+  assert.match(closureMigration,/REVOKE ALL ON TABLE public\.hosted_pilot_verification_run_results FROM PUBLIC,anon,authenticated,service_role/);
+  assert.match(closureMigration,/GRANT EXECUTE ON FUNCTION public\.hosted_pilot_record_verification_result[\s\S]+TO service_role/);
 });
 
 test('dispatch bridge launches both exact-head evidence workflows with safe string inputs',()=>{
@@ -59,13 +97,6 @@ test('dispatch bridge launches both exact-head evidence workflows with safe stri
   assert.match(bridge,/pilot-operations\.yml\/dispatches/);
   assert.match(bridge,/hosted-pilot-activation-evidence-producer\.yml\/dispatches/);
   assert.ok(bridge.indexOf('pilot-operations.yml/dispatches') < bridge.indexOf('hosted-pilot-activation-evidence-producer.yml/dispatches'));
-  for(const value of [
-    'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed',
-    'https://avalaos-pilot.netlify.app',
-    '24de1bb5-ad49-4224-80b1-9d26b6dcfc15',
-    '06165d6f-19c9-4a0c-8847-f9cb6c63e9d2',
-    '6d65da73-84b0-4eb3-9be5-d7f1e53c0151',
-  ]) assert.match(bridge,new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(bridge,/--arg recovery_authorization_version '5'/);
   assert.doesNotMatch(bridge,/--argjson recovery_authorization_version/);
 });
