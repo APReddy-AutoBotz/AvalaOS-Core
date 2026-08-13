@@ -33,7 +33,7 @@ for (const [index, item] of cases.entries()) {
 }
 
 if (inventoryDocument.schemaVersion !== 2) fail('inventory schemaVersion must be 2');
-if (inventoryDocument.coveredBranchesSource !== 'tests/acceptance/catalog/test-catalog.json') fail('covered branches must derive from the canonical catalog');
+if (inventoryDocument.coveredBranchesSource !== 'tests/acceptance/catalog/test-catalog.json') fail('catalog branch declarations must derive from the canonical catalog');
 for (const branch of inventoryDocument.uncoveredBranches ?? []) {
   if (!branch.branchId || !branch.uncoveredReason || !branch.recommendedAction) fail('every explicit uncovered branch needs id, reason, and action');
   if (branch.provenance?.kind !== 'required-scenario' || !branch.provenance?.limitation) fail(`${branch.branchId} must declare required-scenario provenance`);
@@ -47,6 +47,7 @@ const branchIds = new Set();
 for (const branch of inventory) {
   if (branchIds.has(branch.branchId)) fail(`duplicate branch ${branch.branchId}`);
   branchIds.add(branch.branchId);
+  if (!['DECLARED','SOURCE_BACKED','UNCOVERED'].includes(branch.coverageStatus)) fail(`${branch.branchId} has unsupported coverage status ${branch.coverageStatus}`);
 }
 if (branchIds.has('STUDIO-LEASE_CONCURRENCY')) fail('invented Studio lease branch must not reappear');
 
@@ -76,13 +77,16 @@ const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds[
 const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'hosted').length;
 const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
 const blockedHosted = hostedTestIds - executableHosted;
+const declared = inventory.filter(item => item.coverageStatus === 'DECLARED');
+const sourceBacked = inventory.filter(item => item.coverageStatus === 'SOURCE_BACKED');
 const uncovered = inventory.filter(item => item.coverageStatus === 'UNCOVERED');
 
 console.log(JSON.stringify({
   status:'PASS',
   catalogTests: cases.length,
   inventoryBranches: inventory.length,
-  declaredCoveredBranches: inventory.length - uncovered.length,
+  declaredBranches: declared.length,
+  sourceBackedBranches: sourceBacked.length,
   uncoveredBranches: uncovered.length,
   retainedTestIds,
   oracleTestIds,
