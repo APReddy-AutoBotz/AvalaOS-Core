@@ -63,7 +63,7 @@ jobs:
             --arg workspace_id '06165d6f-19c9-4a0c-8847-f9cb6c63e9d2' \
             --arg exercise_run_id "$EXERCISE_RUN_ID" \
             --arg recovery_actor_id '6d65da73-84b0-4eb3-9be5-d7f1e53c0151' \
-            --argjson recovery_authorization_version 5 \
+            --arg recovery_authorization_version '5' \
             '{ref:$ref,inputs:{expected_release_sha:$expected_release_sha,target_fingerprint:$target_fingerprint,deployment_origin:$deployment_origin,deployment_id:$deployment_id,organization_id:$organization_id,workspace_id:$workspace_id,exercise_run_id:$exercise_run_id,recovery_actor_id:$recovery_actor_id,recovery_authorization_version:$recovery_authorization_version}}')"
           curl --fail-with-body --silent --show-error \
             -X POST \
