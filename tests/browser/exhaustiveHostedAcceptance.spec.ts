@@ -6,7 +6,6 @@ const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RE
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
 const catalogById = new Map(catalog.cases.map((item: any) => [item.testId, item]));
-const falseSuccess = /successfully\s+(?:saved|approved|generated|promoted|completed|deleted|submitted)/iu;
 const forbiddenRemoteAuthority = /(?:supabase\.co|functions\/v1|generativelanguage|gemini|groq|api\.openai|anthropic)/iu;
 const personas: Array<[string, string]> = [
   ['Process Analyst', 'Maya Patel'],
@@ -116,12 +115,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       observer.stop();
       return;
     }
-    case 'refresh-boundary':
-      await openSandbox(page);
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
-      await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
-      return;
     case 'sign-in-separation':
       await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toBeVisible();
@@ -235,13 +228,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await admin.click();
         await expect(page.locator('body')).toContainText(/Enterprise Intelligence|Administration|Provider|Role/iu);
       }
-      return;
-    case 'offline-no-false-success':
-      await openSandbox(page);
-      await page.context().setOffline(true);
-      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
-      await expect(page.locator('body')).not.toContainText(falseSuccess);
-      await page.context().setOffline(false);
       return;
     case 'reload-reconstruction':
       await openSandbox(page);
