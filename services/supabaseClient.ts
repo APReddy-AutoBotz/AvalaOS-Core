@@ -5,6 +5,7 @@ import {
   resolveRuntimeAuthority,
   resolveRuntimeMode,
 } from './runtimeMode';
+import { shouldUseHostedSyntheticSandbox } from './hostedSandboxRoute';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -28,10 +29,34 @@ export const isSupabaseConfigured = () => serverConfigured;
 
 export const getRuntimeModeResolution = () => runtimeModeResolution;
 
-export const getRuntimeAuthority = () => resolveRuntimeAuthority({
-  modeResolution: runtimeModeResolution,
-  serverConfigured,
-});
+const getRuntimePathname = () =>
+  typeof window === 'undefined' ? '' : window.location.pathname;
+
+export const getRuntimeAuthority = () => {
+  const baseAuthority = resolveRuntimeAuthority({
+    modeResolution: runtimeModeResolution,
+    serverConfigured,
+  });
+
+  const runtimeMode = runtimeModeResolution.status === 'resolved'
+    ? runtimeModeResolution.mode
+    : undefined;
+
+  if (shouldUseHostedSyntheticSandbox({
+    runtimeMode,
+    serverConfigured,
+    pathname: getRuntimePathname(),
+  })) {
+    return {
+      mode: 'local_demo' as const,
+      dataAccess: 'local' as const,
+      allowLocalAuthority: true,
+      requiresServerAuthority: false,
+    };
+  }
+
+  return baseAuthority;
+};
 
 export const getRuntimeDataAccess = () => getRuntimeAuthority().dataAccess;
 
