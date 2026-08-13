@@ -13,7 +13,11 @@ import {
   validateAttestation,
   validateGovernResolution,
 } from '../../../services/assessV2/reviewDomain';
-import { AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION } from '../../../services/assessV2/index';
+import {
+  AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION,
+  AP_INVOICE_EXCEPTION_V2_FIXTURE,
+  evaluateAssessmentV2,
+} from '../../../services/assessV2/index';
 
 const initialBinding: ReviewBinding = {
   organizationId: 'org-qa', workspaceId: 'ws-qa', caseId: 'case-qa', caseVersion: 4,
@@ -34,11 +38,28 @@ const resolutionFor = (binding: ReviewBinding, assignment: ReviewAssignment, sta
   requestId: `request-resolution-${assignment.reviewSequence}`, receiptId: `receipt-resolution-${assignment.reviewSequence}`,
   auditId: `audit-resolution-${assignment.reviewSequence}`,
 });
-const evidence = [
-  { id: 'ev-qa-1', claimIds: ['claim-qa-1'], sourceType: 'system-record' as const, status: 'submitted' as const, validated: false as const, submittedBy: 'submitter-qa-1' },
-  { id: 'ev-qa-2', claimIds: ['claim-qa-2'], sourceType: 'test' as const, status: 'submitted' as const, validated: false as const, submittedBy: 'submitter-qa-2' },
-];
-const claims = evidence.map((item, index) => ({ claimId: `claim-qa-${index + 1}`, evidenceIds: [item.id] }));
+
+const revisedCase = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
+const evidenceIdMap = new Map(revisedCase.evidence.map((item, index) => [item.id, `ev-qa-${index + 1}`]));
+const bindEvidenceIds = (value: unknown): void => {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) { value.forEach(bindEvidenceIds); return; }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'evidenceIds' && Array.isArray(child)) {
+      (value as Record<string, unknown>)[key] = child.map(id => evidenceIdMap.get(String(id)) ?? id);
+    } else if (key === 'id' && typeof child === 'string' && evidenceIdMap.has(child)) {
+      (value as Record<string, unknown>)[key] = evidenceIdMap.get(child)!;
+    } else bindEvidenceIds(child);
+  }
+};
+revisedCase.id = 'case-qa';
+revisedCase.organizationId = 'org-qa';
+revisedCase.workspaceId = 'ws-qa';
+revisedCase.version = 5;
+bindEvidenceIds(revisedCase);
+const revisedDecision = evaluateAssessmentV2(revisedCase);
+const evidence = revisedCase.evidence.map((item, index) => ({ ...item, submittedBy: `submitter-qa-${index + 1}` }));
+const claims = evidence.flatMap(item => item.claimIds.map(claimId => ({ claimId, evidenceIds: [item.id] })));
 
 const firstAssignment = assignmentFor(initialBinding, 1);
 const changes = resolveReview(firstAssignment, 'changes_requested', claims, evidence, [], resolutionFor(initialBinding, firstAssignment, 'changes_requested'));
@@ -72,7 +93,6 @@ const govern: GovernResolution = {
 };
 validateGovernResolution(secondAssignment, approved, actions, govern);
 
-const revisedDecision = { ...AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, caseId: revisedBinding.caseId, caseVersion: revisedBinding.caseVersion };
 const revisedEvidence = evidence.map(({ submittedBy: _submittedBy, ...item }) => item);
 const handoff = buildStudioHandoffPackage(
   revisedBinding, revisedDecision, revisedEvidence, attestations, approved, govern,
@@ -81,10 +101,20 @@ const handoff = buildStudioHandoffPackage(
 assert.equal(handoff.review.status, 'approved');
 assert.equal(handoff.binding.caseVersion, 5);
 assert.equal(handoff.binding.decisionId, 'decision-v5');
-assert.equal(handoff.decision.caseId, revisedBinding.caseId);
-assert.equal(handoff.decision.caseVersion, revisedBinding.caseVersion);
+assert.equal(handoff.decision.caseId, 'case-qa');
+assert.equal(handoff.decision.caseVersion, 5);
 assert.deepEqual(handoff.evidence.map(item => item.id), revisedEvidence.map(item => item.id));
-assert.deepEqual(handoff.attestations.map(item => item.evidenceId), revisedEvidence.map(item => item.id));
+assert.deepEqual(handoff.attestations.map(item => item.evidenceId), evidence.map(item => item.id));
 assert.equal(handoff.govern.actions.find(item => item.actionId === 'restricted-action')?.category, 'prohibited');
 assert.equal(handoff.decision.validationStatus, 'reviewer-ready');
+
+assert.throws(
+  () => buildStudioHandoffPackage(revisedBinding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, revisedEvidence, attestations, approved, govern, {}, [], '2026-08-13T15:00:00.000Z'),
+  /decision does not belong to the current reviewed case/,
+);
+assert.throws(
+  () => buildStudioHandoffPackage(revisedBinding, revisedDecision, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence, attestations, approved, govern, {}, [], '2026-08-13T15:00:00.000Z'),
+  /evidence/,
+);
+
 console.log('Requested-changes revision and handoff ancestry regression passed.');

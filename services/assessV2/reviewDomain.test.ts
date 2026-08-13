@@ -50,10 +50,26 @@ const run = () => {
   assert.throws(() => validateGovernResolution(assignment, approved, deterministic, { ...govern, resolverActorId: 'author' }), /case author/);
   assert.throws(() => validateGovernResolution(assignment, approved, deterministic, { ...govern, requiredControls: [{ controlId: 'Human Approval', status: 'unresolved' }] }), /explicit satisfied disposition/);
 
-  const pkg = buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence, accepted, approved, govern, { input: 'hash-i', output: 'hash-o' }, ['decision-4'], '2026-07-20T15:00:00.000Z');
+  const currentDecision = structuredClone(AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION);
+  const evidenceMap = new Map(AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence.map((item, index) => [item.id, evidence[index].id]));
+  const bindDecisionEvidence = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) { value.forEach(bindDecisionEvidence); return; }
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'evidenceIds' && Array.isArray(child)) (value as Record<string, unknown>)[key] = child.map(id => evidenceMap.get(String(id)) ?? id);
+      else bindDecisionEvidence(child);
+    }
+  };
+  currentDecision.caseId = binding.caseId;
+  currentDecision.caseVersion = binding.caseVersion;
+  bindDecisionEvidence(currentDecision);
+  const pkg = buildStudioHandoffPackage(binding, currentDecision, evidence, accepted, approved, govern, { input: 'hash-i', output: 'hash-o' }, ['decision-4'], '2026-07-20T15:00:00.000Z');
   assert.equal(pkg.review.status, 'approved');
   assert.equal(pkg.govern.actions.find(item => item.actionId === 'pay')?.category, 'prohibited');
   assert.equal(pkg.decision.validationStatus, 'reviewer-ready', 'handoff must preserve the immutable PR 1D decision');
+  assert.throws(() => buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /decision does not belong/);
+  assert.throws(() => buildStudioHandoffPackage(binding, { ...AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, caseId: binding.caseId, caseVersion: binding.caseVersion }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /references evidence outside/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /evidence/);
   assert.throws(() => buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, [], [], resolution('rejected'), govern, {}, [], '2026-07-20T15:00:00.000Z'), /requires current approval/);
   console.log('Assess V2 governed review domain tests passed.');
 };

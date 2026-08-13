@@ -77,6 +77,16 @@ const assertBinding = (expected: ReviewBinding, actual: ReviewBinding): void => 
 const exactSet = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
 
+const decisionEvidenceIds = (value: unknown, collected = new Set<string>()): Set<string> => {
+  if (!value || typeof value !== 'object') return collected;
+  if (Array.isArray(value)) { value.forEach(item => decisionEvidenceIds(item, collected)); return collected; }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'evidenceIds' && Array.isArray(child)) child.forEach(id => collected.add(String(id)));
+    else decisionEvidenceIds(child, collected);
+  }
+  return collected;
+};
+
 export const validateReviewAssignment = (assignment: ReviewAssignment): void => {
   if (assignment.reviewerActorId === assignment.authorActorId) throw new ReviewDomainError('SEPARATION_OF_DUTY', 'The case author cannot review or approve their own decision.');
   if (!Number.isSafeInteger(assignment.reviewerAuthorizationVersion) || assignment.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'A current reviewer authorization version is required.');
@@ -178,5 +188,15 @@ export interface StudioHandoffPackage {
 export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: DecisionPackV2, evidence: readonly EvidenceSubmission[], attestations: readonly EvidenceAttestation[], review: ReviewResolution, govern: GovernResolution, canonicalHashes: Readonly<Record<string, string>>, sourceReferences: readonly string[], createdAt: string): StudioHandoffPackage => {
   assertBinding(binding, review); assertBinding(binding, govern);
   if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id || !controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, Govern resolution, and satisfied controls.');
+  if (decision.caseId !== binding.caseId || decision.caseVersion !== binding.caseVersion) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision does not belong to the current reviewed case.');
+  const suppliedEvidenceIds = new Set(evidence.map(item => item.id));
+  if ([...decisionEvidenceIds(decision)].some(id => !suppliedEvidenceIds.has(id))) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision references evidence outside the current reviewed case.');
+  if (!evidence.length || evidence.some(item => {
+    const current = attestations.filter(attestation => {
+      try { assertBinding(binding, attestation); } catch { return false; }
+      return attestation.evidenceId === item.id && exactSet(attestation.claimIds, item.claimIds);
+    });
+    return current.length !== 1 || current[0].outcome !== 'accepted';
+  }) || attestations.length !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current reviewed case.');
   return Object.freeze({ binding: Object.freeze({ ...binding }), decision, evidence: Object.freeze([...evidence]), attestations: Object.freeze([...attestations]), review, govern, schemaVersion: decision.schemaVersion, ruleSetVersion: decision.ruleSetVersion, reviewSchemaVersion: review.reviewSchemaVersion, reviewSequence: review.reviewSequence, canonicalHashes: Object.freeze({ ...canonicalHashes }), sourceReferences: Object.freeze([...sourceReferences]), createdAt });
 };
