@@ -61,7 +61,6 @@ jobs:
       - name: Verify exact connected database through GitHub OIDC and finalize exact hosted proof
         timeout-minutes: 18
         env:
-          HOSTED_PILOT_VERIFIER_URL: https://fcsfvonhvyrevwhyvano.supabase.co/functions/v1/hosted-pilot-github-verifier
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
           DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
           DEPLOYMENT_ID: ${{ inputs.deployment_id }}
@@ -74,6 +73,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          HOSTED_PILOT_VERIFIER_URL="${HOSTED_PILOT_URL%/}/.netlify/functions/hosted-pilot-github-verifier-proxy"
+          if [ "$HOSTED_PILOT_VERIFIER_URL" != 'https://avalaos-pilot.netlify.app/.netlify/functions/hosted-pilot-github-verifier-proxy' ]; then
+            echo 'HOSTED_PILOT_VERIFIER_PROXY_TARGET_INVALID' >&2
+            exit 1
+          fi
           CANONICAL_PROOF="$(node --input-type=module <<'NODE'
           import {createHash} from 'node:crypto';
           import {loadCanonicalMigrationInventory} from './scripts/hostedPilotActivation.mjs';
@@ -130,7 +134,9 @@ jobs:
 
           PREFLIGHT_RESULT="$(call_verifier preflight)"
           jq -e --arg target "$TARGET_FINGERPRINT" --arg digest "$EXPECTED_LEDGER_DIGEST" --argjson count "$EXPECTED_MIGRATION_COUNT" \
-            '.status=="passed" and .targetFingerprint==$target and .ledgerDigest==$digest and .migrationCount==$count and .productionAuthorized==false' \
+            '.status=="passed" and .targetFingerprint==$target and .ledgerDigest==$digest and .migrationCount==$count
+              and .browserTableAuthority==false and .browserServiceRpcAuthority==false
+              and .serviceRoleEvidenceMutationAuthority==false and .productionAuthorized==false' \
             <<<"$PREFLIGHT_RESULT" >/dev/null
           echo 'Credentialless hosted database preflight passed before evidence finalization.'
 
