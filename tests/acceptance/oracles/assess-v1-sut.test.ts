@@ -56,11 +56,11 @@ const evaluate = (scenario: string) => {
   }
   if (scenario === 'governance-min') {
     const actual = score({ ...base, riskCriticality: 1, governanceSensitivity: 1, dataSensitivity: 1, errorReversibility: 5, goalAmbiguity: 1 });
-    return { governanceRisk: actual.supportingScores.governanceRisk, riskTier: actual.riskTier, gateDecision: actual.gateDecision };
+    return { riskTier: actual.riskTier, gateDecision: actual.gateDecision };
   }
   if (scenario === 'governance-max') {
     const actual = score({ ...base, riskCriticality: 5, governanceSensitivity: 5, dataSensitivity: 5, errorReversibility: 1, goalAmbiguity: 5 });
-    return { governanceRisk: actual.supportingScores.governanceRisk, riskTier: actual.riskTier, gateDecision: actual.gateDecision };
+    return { riskTier: actual.riskTier, gateDecision: actual.gateDecision };
   }
   const overrides: Record<string, any> = {
     'needs-discovery': { completionQuality: 49.9 },
