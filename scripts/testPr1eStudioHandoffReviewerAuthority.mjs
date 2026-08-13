@@ -265,7 +265,7 @@ try {
       caseId,
       sourceVersion,
       decisionId,
-      [{ claimId: 'claim.material', evidenceIds: [evidenceId] }],
+      JSON.stringify([{ claimId: 'claim.material', evidenceIds: [evidenceId] }]),
       reviewer,
       handoffActor,
       reviewerAuthorizationVersion,
@@ -437,7 +437,6 @@ try {
     /PR1E_REVIEW_AUTHORIZATION_STALE/,
     'restoring the capability does not revive an assignment bound to the old authorization version',
   );
-
   const replayKey = 'committed-handoff-response-loss-replay';
   const replayPayload = { reviewSequence: 1 };
   const replayHash = (
