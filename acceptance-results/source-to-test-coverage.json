@@ -1,0 +1,31 @@
+{
+  "releaseSha": "93ad37458fc5bbea6e15e8fc05956602269834ec",
+  "totalBranches": 109,
+  "coveredBranches": 107,
+  "uncoveredBranches": [
+    {
+      "branchId": "STUDIO-LEASE_CONCURRENCY",
+      "module": "Studio",
+      "rule": "lease concurrency",
+      "sourceReference": "services/studioArtifacts/contracts.ts",
+      "criticality": "standard",
+      "coverageStatus": "UNCOVERED",
+      "testIds": [],
+      "uncoveredReason": "Requires deterministic server fault/concurrency injection not exposed by hosted Sandbox; retained PostgreSQL evidence must be bound at execution.",
+      "recommendedAction": "Bind the retained server-backed scenario or add an authorized disposable fault injector.",
+      "status": "UNCOVERED"
+    },
+    {
+      "branchId": "SAFETY-RESPONSE_LOST_AFTER_COMMIT",
+      "module": "Cross-cutting",
+      "rule": "response lost after commit",
+      "sourceReference": "services/persistenceTransition.ts",
+      "criticality": "standard",
+      "coverageStatus": "UNCOVERED",
+      "testIds": [],
+      "uncoveredReason": "Requires deterministic server fault/concurrency injection not exposed by hosted Sandbox; retained PostgreSQL evidence must be bound at execution.",
+      "recommendedAction": "Bind the retained server-backed scenario or add an authorized disposable fault injector.",
+      "status": "UNCOVERED"
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+name: Exhaustive AvalaOS Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character release SHA served by the hosted pilot
+        required: true
+        type: string
+      netlify_deploy_id:
+        description: Sanitized Netlify deploy ID
+        required: true
+        type: string
+      hosted_url:
+        description: Canonical hosted non-production pilot origin
+        required: true
+        default: https://avalaos-pilot.netlify.app
+        type: string
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_SHA: ${{ inputs.release_sha || github.event.pull_request.head.sha }}
+  NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id || 'pull-request-not-deployed' }}
+  HOSTED_PILOT_URL: ${{ inputs.hosted_url || 'https://avalaos-pilot.netlify.app' }}
+  PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
+  ACCEPTANCE_RESULTS_DIR: acceptance-results
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - name: Fail closed on release and hosted target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$HOSTED_PILOT_URL" = "https://avalaos-pilot.netlify.app"
+          [[ "$NETLIFY_DEPLOY_ID" =~ ^[0-9a-f]{24}$|^pull-request-not-deployed$ ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate canonical catalog and source inventory
+        run: node scripts/exhaustiveAcceptanceValidate.mjs
+      - name: Install official Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run retained server-authority synthetic gates
+        run: |
+          npm run test:pr1b
+          npm run test:pr1d
+          npm run test:pr1e
+          npm run test:pr1g
+          npm run test:studio-private-artifacts
+          npm run test:enterprise-intelligence
+          node scripts/runTrustAssuranceTest.mjs
+          node scripts/testTrustAssuranceMigration.mjs
+      - name: Run exhaustive real hosted Sandbox acceptance
+        continue-on-error: true
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts
+      - name: Generate fail-closed unified results
+        id: report
+        continue-on-error: true
+        run: node scripts/exhaustiveAcceptanceReport.mjs
+      - name: Upload sanitized acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exhaustive-acceptance-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            tests/acceptance/catalog/
+            tests/acceptance/inventory.json
+            tests/acceptance/fixtures/
+            acceptance-results/
+            artifacts/exhaustive-acceptance/
+      - name: Enforce complete acceptance
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.report.outcome }}" = success
