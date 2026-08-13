@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { calculateAssessmentScores, CURRENT_SCORE_VERSION } from './scoringEngine';
 import { AssessmentResponses } from '../types';
 
@@ -61,6 +63,39 @@ try {
     assert(err.name === 'ScoringValidationError', `Wrong error type for out-of-bounds input: ${err.name}`);
 }
 console.log('Validation and gate safety passed.');
+
+const governanceMin = calculateAssessmentScores({
+    ...baseResponses,
+    dataProfile: { ...baseResponses.dataProfile, dataSensitivity: 1 },
+    judgment: { ...baseResponses.judgment, goalAmbiguity: 1 },
+    risk: { ...baseResponses.risk, riskCriticality: 1, governanceSensitivity: 1, errorReversibility: 5 },
+}, baseMetadata);
+const governanceMax = calculateAssessmentScores({
+    ...baseResponses,
+    dataProfile: { ...baseResponses.dataProfile, dataSensitivity: 5 },
+    judgment: { ...baseResponses.judgment, goalAmbiguity: 5 },
+    risk: { ...baseResponses.risk, riskCriticality: 5, governanceSensitivity: 5, errorReversibility: 1 },
+}, baseMetadata);
+assert(governanceMin.supportingScores.governanceRisk === 20, 'Minimum governance-risk fixture must remain exactly 20.');
+assert(governanceMin.riskTier === 'Minimal' && governanceMin.gateDecision === 'Go', 'Minimum governance-risk fixture must remain Minimal / Go.');
+assert(governanceMax.supportingScores.governanceRisk === 100, 'Maximum governance-risk fixture must remain exactly 100.');
+assert(governanceMax.riskTier === 'Unacceptable' && governanceMax.gateDecision === 'No-Go', 'Maximum governance-risk fixture must remain Unacceptable / No-Go.');
+
+if (process.env.SCORING_GOVERNANCE_RESULTS_MANIFEST) {
+    const manifestPath = path.resolve(process.env.SCORING_GOVERNANCE_RESULTS_MANIFEST);
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.writeFileSync(manifestPath, `${JSON.stringify({
+        schemaVersion: 1,
+        releaseSha: process.env.RELEASE_SHA || null,
+        workflowRunId: String(process.env.GITHUB_RUN_ID || 'local'),
+        workflowAttempt: String(process.env.GITHUB_RUN_ATTEMPT || 'local'),
+        results: [
+            { scenario: 'governance-min', actual: { governanceRisk: governanceMin.supportingScores.governanceRisk, riskTier: governanceMin.riskTier, gateDecision: governanceMin.gateDecision } },
+            { scenario: 'governance-max', actual: { governanceRisk: governanceMax.supportingScores.governanceRisk, riskTier: governanceMax.riskTier, gateDecision: governanceMax.gateDecision } },
+        ],
+    }, null, 2)}\n`);
+}
+console.log('Exact governance-risk boundaries passed.');
 
 const apInvoice = calculateAssessmentScores({
     processStructure: { standardization: 4, ruleDeterminism: 5, exceptionPredictability: 4, processMaturity: 4 },
