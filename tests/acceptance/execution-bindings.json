@@ -12,7 +12,8 @@
     {"suiteId":"ai-boundary","command":["npm","run","test:pr1a"],"testIds":["AI-001","AI-002","AI-003","AI-004","AI-005","AI-006"],"requiredGate":true},
     {"suiteId":"enterprise-intelligence","command":["npm","run","test:enterprise-intelligence"],"testIds":["EI-001","EI-002","EI-003","EI-004","EI-005"],"requiredGate":true},
     {"suiteId":"cross-cutting-false-success","command":["npm","run","test:false-success"],"testIds":["SAFETY-002"],"requiredGate":true},
-    {"suiteId":"canonical-pilot-journey","command":["npm","run","test:pilot-acceptance"],"testIds":["E2E-001","E2E-002","E2E-003","E2E-004"],"requiredGate":true},
+    {"suiteId":"canonical-pilot-journey","command":["npm","run","test:pilot-acceptance"],"testIds":["E2E-001","E2E-003","E2E-004"],"requiredGate":true},
+    {"suiteId":"requested-changes-journey","command":["node","scripts/runTypeScriptTest.mjs","types.ts","services/assessV2/types.ts","services/assessV2/canonical.ts","services/assessV2/reviewDomain.ts","tests/acceptance/journeys/requestedChangesJourney.test.ts"],"testIds":["E2E-002"],"requiredGate":true},
     {"suiteId":"pilot-operations","command":["npm","run","test:pilot-operations"],"testIds":["ADMIN-004"],"requiredGate":true}
   ],
   "oracleTests": [
