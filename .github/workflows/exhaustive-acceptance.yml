@@ -52,7 +52,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Validate canonical catalog and source inventory
-        run: node scripts/exhaustiveAcceptanceValidate.mjs
+        run: |
+          node scripts/exhaustiveAcceptanceValidate.mjs
+          node scripts/exhaustiveAcceptanceDispatchBridge.test.mjs
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
       - name: Run retained server-authority synthetic gates
