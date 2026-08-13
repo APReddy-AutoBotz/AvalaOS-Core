@@ -45,11 +45,11 @@ const runScenario = scenario => {
       catch (error) { return { pass: error instanceof RangeError, actual: { rejected: true } }; }
     case 'governance-min': {
       const actual = governanceOracle({ ...base, riskCriticality: 1, governanceSensitivity: 1, dataSensitivity: 1, errorReversibility: 5, goalAmbiguity: 1 });
-      return { pass: actual.score === 20 && actual.riskTier === 'Minimal' && actual.gateDecision === 'Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
+      return { pass: actual.score === 20 && actual.riskTier === 'Minimal' && actual.gateDecision === 'Go', actual: { riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
     }
     case 'governance-max': {
       const actual = governanceOracle({ ...base, riskCriticality: 5, governanceSensitivity: 5, dataSensitivity: 5, errorReversibility: 1, goalAmbiguity: 5 });
-      return { pass: actual.score === 100 && actual.riskTier === 'Unacceptable' && actual.gateDecision === 'No-Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
+      return { pass: actual.score === 100 && actual.riskTier === 'Unacceptable' && actual.gateDecision === 'No-Go', actual: { riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
     }
     case 'needs-discovery':
     case 'completion-below': return gateResult({ ...base, completionQuality: 49.9 }, 'Needs Discovery');
