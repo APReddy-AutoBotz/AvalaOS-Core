@@ -1,0 +1,67 @@
+name: Exhaustive Acceptance Dispatch Bridge
+
+on:
+  create:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-exact-exhaustive-acceptance:
+    if: >-
+      github.ref_type == 'branch' &&
+      startsWith(github.event.ref, 'exhaustive-acceptance-dispatch--') &&
+      github.actor == 'APReddy-AutoBotz'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.ref }}
+          fetch-depth: 0
+      - name: Validate controller bridge and dispatch exact exhaustive acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CREATED_REF: ${{ github.event.ref }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix='exhaustive-acceptance-dispatch--'
+          DEPLOYMENT_ID="${CREATED_REF#${prefix}}"
+          if [ "$DEPLOYMENT_ID" = "$CREATED_REF" ] || [[ ! "$DEPLOYMENT_ID" =~ ^[0-9a-f]{24}$ ]]; then
+            echo 'EXHAUSTIVE_ACCEPTANCE_DISPATCH_REF_INVALID' >&2
+            exit 1
+          fi
+
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'EXHAUSTIVE_ACCEPTANCE_RELEASE_SHA_INVALID' >&2
+            exit 1
+          fi
+
+          git fetch --quiet origin main
+          if [ "$RELEASE_SHA" != "$(git rev-parse origin/main)" ]; then
+            echo 'EXHAUSTIVE_ACCEPTANCE_DISPATCH_NOT_CURRENT_MAIN' >&2
+            exit 1
+          fi
+
+          common_headers=(
+            -H "Accept: application/vnd.github+json"
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+
+          request="$(jq -n \
+            --arg ref "$CREATED_REF" \
+            --arg release_sha "$RELEASE_SHA" \
+            --arg netlify_deploy_id "$DEPLOYMENT_ID" \
+            --arg hosted_url 'https://avalaos-pilot.netlify.app' \
+            '{ref:$ref,inputs:{release_sha:$release_sha,netlify_deploy_id:$netlify_deploy_id,hosted_url:$hosted_url}}')"
+
+          curl --fail-with-body --silent --show-error \
+            -X POST "${common_headers[@]}" \
+            "https://api.github.com/repos/${REPOSITORY}/actions/workflows/exhaustive-acceptance.yml/dispatches" \
+            -d "$request"
+
+          echo "Exhaustive acceptance dispatch accepted for exact main ${RELEASE_SHA}, deploy ${DEPLOYMENT_ID}, via immutable ref ${CREATED_REF}."
