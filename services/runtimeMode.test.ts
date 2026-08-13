@@ -9,11 +9,27 @@ import {
   resolveRuntimeDataAccess,
   resolveRuntimeMode,
 } from './runtimeMode';
+import {
+  isHostedSyntheticSandboxPath,
+  shouldUseHostedSyntheticSandbox,
+} from './hostedSandboxRoute';
 
 console.log('Starting runtime mode boundary regression suite...');
 
 assert.equal(isValidServerConfiguration('https://tenant.supabase.co','anon-key'),true);
 for(const [url,key] of [[undefined,'key'],['https://tenant.supabase.co',undefined],['junk','key'],['ftp://tenant.invalid','key'],[' https://tenant.supabase.co','key'],['https://tenant.supabase.co',' ']])assert.equal(isValidServerConfiguration(url,key),false);
+
+assert.equal(isHostedSyntheticSandboxPath('/sandbox'), true);
+assert.equal(isHostedSyntheticSandboxPath('/sandbox/'), true);
+assert.equal(isHostedSyntheticSandboxPath('/sandbox/process/123'), true);
+for (const pathname of ['/', '/sign-in', '/sandboxed', '', undefined]) {
+  assert.equal(isHostedSyntheticSandboxPath(pathname), false);
+}
+assert.equal(shouldUseHostedSyntheticSandbox({ runtimeMode: 'pilot', serverConfigured: true, pathname: '/sandbox' }), true);
+assert.equal(shouldUseHostedSyntheticSandbox({ runtimeMode: 'pilot', serverConfigured: true, pathname: '/sandbox/process/123' }), true);
+assert.equal(shouldUseHostedSyntheticSandbox({ runtimeMode: 'pilot', serverConfigured: false, pathname: '/sandbox' }), false);
+assert.equal(shouldUseHostedSyntheticSandbox({ runtimeMode: 'production', serverConfigured: true, pathname: '/sandbox' }), false);
+assert.equal(shouldUseHostedSyntheticSandbox({ runtimeMode: 'pilot', serverConfigured: true, pathname: '/sign-in' }), false);
 
 for (const mode of RUNTIME_MODES) {
   const resolution = resolveRuntimeMode({
