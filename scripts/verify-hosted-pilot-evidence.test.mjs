@@ -74,9 +74,13 @@ test('producer workflow executes trusted gates instead of accepting caller-decla
   const producer = await readFile('.github/workflows/hosted-pilot-activation-evidence-producer.yml', 'utf8');
   assert.doesNotMatch(producer, /gate_result_ids_json/i);
   for (const job of ['database-provider','recovery-operations','hosted-browser','accessibility-performance']) assert.match(producer, new RegExp(job));
-  assert.match(producer, /hosted-pilot:verify-database/);
-  assert.match(producer, /hosted-pilot:preflight/);
-  assert.match(producer, /HOSTED_PILOT_EXERCISE_RUN_ID/);
+  assert.match(producer, /id-token: write/);
+  assert.match(producer, /ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(producer, /call_verifier preflight/);
+  assert.match(producer, /call_verifier status/);
+  assert.match(producer, /call_verifier finalize/);
+  assert.doesNotMatch(producer, /HOSTED_PILOT_DATABASE_URL/);
+  assert.match(producer, /EXERCISE_RUN_ID/);
   assert.match(producer, /test:recovery:pilot-operations/);
   assert.match(producer, /test:migrations:pilot-operations:postgres/);
   assert.match(producer, /playwright\.hosted-pilot\.config\.ts --workers=1/);
