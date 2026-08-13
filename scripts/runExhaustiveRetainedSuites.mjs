@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
+import { validateRetainedProducerResults } from './exhaustiveAcceptanceEvidence.mjs';
 import { loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
 
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -13,12 +14,13 @@ if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('RETAINED_RELEASE_SHA_R
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   releaseSha,
   workflowRunId,
   workflowAttempt,
   generatedAt: new Date().toISOString(),
   suites: [],
+  results: [],
 };
 
 const writeAtomic = () => {
@@ -30,10 +32,19 @@ const writeAtomic = () => {
 for (const suite of bindings.retainedSuites ?? []) {
   const [executable, ...args] = suite.command;
   const started = Date.now();
+  const resultPath = path.join(path.dirname(manifestPath), `.retained-${suite.suiteId}-${process.pid}.json`);
+  fs.rmSync(resultPath, { force: true });
   console.log(`\n[acceptance-retained] ${suite.suiteId}: ${suite.command.join(' ')}`);
   const result = spawnSync(executable, args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      RELEASE_SHA: releaseSha,
+      GITHUB_RUN_ID: workflowRunId,
+      GITHUB_RUN_ATTEMPT: workflowAttempt,
+      RETAINED_SUITE_ID: suite.suiteId,
+      RETAINED_TEST_ID_RESULTS: resultPath,
+    },
     stdio: 'inherit',
     shell: false,
   });
@@ -47,6 +58,13 @@ for (const suite of bindings.retainedSuites ?? []) {
     testIds: suite.testIds ?? [],
     requiredGate: suite.requiredGate === true,
   });
+  if (fs.existsSync(resultPath)) {
+    const emitted = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+    const producerErrors = validateRetainedProducerResults({ suite, emitted });
+    fs.rmSync(resultPath, { force: true });
+    if (producerErrors.length) throw new Error(`RETAINED_TEST_ID_PRODUCER_INVALID:${suite.suiteId}:${producerErrors.join(',')}`);
+    manifest.results.push(...emitted.results);
+  }
   writeAtomic();
 }
 
@@ -55,6 +73,7 @@ console.log(JSON.stringify({
   retainedSuites: manifest.suites.length,
   passed: manifest.suites.length - failed.length,
   failed: failed.map(item => item.suiteId),
+  exactTestIdResults: manifest.results.length,
   manifest: manifestPath,
 }));
 if (failed.length) process.exitCode = 1;

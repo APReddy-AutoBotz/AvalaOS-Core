@@ -45,11 +45,12 @@ const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaus
 const executions = flattenPlaywright(playwright);
 
 const expectedBinding = { releaseSha, workflowRunId, workflowAttempt };
-const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding);
+const retainedMap = retainedBindingMap(bindings);
+const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
 const oracleErrors = validateOracleManifest(oracleManifest, expectedBinding);
 const suiteIndex = new Map((retainedManifest?.suites ?? []).map(item => [item.suiteId, item]));
+const retainedResultIndex = new Map((retainedManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
 const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
-const retainedMap = retainedBindingMap(bindings);
 const oracleMap = oracleBindingMap(bindings);
 const hostedMap = hostedBindingMap(bindings);
 
@@ -61,12 +62,19 @@ const results = (catalog.cases ?? []).map(testCase => {
 
   if (retainedMap.has(testCase.testId)) {
     executionKind = 'retained';
+    const requiredSuiteIds = retainedMap.get(testCase.testId);
     evaluation = evaluateRetainedTest({
-      requiredSuiteIds: retainedMap.get(testCase.testId),
+      testId: testCase.testId,
+      requiredSuiteIds,
       suiteIndex,
+      resultIndex: retainedResultIndex,
       manifestErrors: retainedErrors,
     });
-    actualResult = (retainedMap.get(testCase.testId) ?? []).map(id => ({ suiteId: id, status: suiteIndex.get(id)?.status ?? 'MISSING' }));
+    actualResult = (requiredSuiteIds ?? []).map(id => ({
+      suiteId: id,
+      suiteStatus: suiteIndex.get(id)?.status ?? 'MISSING',
+      exactTestIdStatus: retainedResultIndex.get(`${id}:${testCase.testId}`)?.status ?? 'MISSING',
+    }));
   } else if (oracleMap.has(testCase.testId)) {
     executionKind = 'oracle';
     if (oracleErrors.length) {

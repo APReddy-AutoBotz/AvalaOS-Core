@@ -14,6 +14,8 @@ Three execution dispositions are supported:
 
 Every canonical Test ID must have exactly one truthful execution disposition. Missing, stale, duplicate, failed or cross-run evidence is BLOCKED or FAIL.
 
+Retained evidence has two layers. Aggregate suite results remain mandatory framework gates. Canonical retained Test IDs can PASS only when the suite process emits an exact machine-readable `(suiteId, testId)` result bound to the same release SHA, workflow run and attempt. A green suite with no exact result leaves its configured Test IDs BLOCKED. The runner gives every retained suite its own result file and suite identity and rejects results that claim a different producer suite or a Test ID not owned by that suite.
+
 ## Inventory and provenance
 
 The catalog's `branchIds` are **declarations**, not proof that the referenced production source implements the declared business contract. `tests/acceptance/inventory.json` stores the explicitly discovered requirements and known unsupported requirements, while the derived inventory marks catalog mappings `DECLARED` until a separate machine-verifiable source-provenance contract exists.
