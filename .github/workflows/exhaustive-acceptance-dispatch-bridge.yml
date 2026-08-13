@@ -5,25 +5,26 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
-  dispatch-exact-exhaustive-acceptance:
+  validate-controller-bridge:
     if: >-
       github.ref_type == 'branch' &&
       startsWith(github.event.ref, 'exhaustive-acceptance-dispatch--') &&
       github.actor == 'APReddy-AutoBotz'
     runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.validate.outputs.release_sha }}
+      netlify_deploy_id: ${{ steps.validate.outputs.netlify_deploy_id }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.ref }}
           fetch-depth: 0
-      - name: Validate controller bridge and dispatch exact exhaustive acceptance
+      - id: validate
+        name: Validate controller bridge provenance
         env:
-          GH_TOKEN: ${{ github.token }}
           CREATED_REF: ${{ github.event.ref }}
-          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
@@ -46,22 +47,14 @@ jobs:
             exit 1
           fi
 
-          common_headers=(
-            -H "Accept: application/vnd.github+json"
-            -H "Authorization: Bearer ${GH_TOKEN}"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-          )
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "netlify_deploy_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "Controller bridge validated exact main ${RELEASE_SHA} and deploy ${DEPLOYMENT_ID}."
 
-          request="$(jq -n \
-            --arg ref "$CREATED_REF" \
-            --arg release_sha "$RELEASE_SHA" \
-            --arg netlify_deploy_id "$DEPLOYMENT_ID" \
-            --arg hosted_url 'https://avalaos-pilot.netlify.app' \
-            '{ref:$ref,inputs:{release_sha:$release_sha,netlify_deploy_id:$netlify_deploy_id,hosted_url:$hosted_url}}')"
-
-          curl --fail-with-body --silent --show-error \
-            -X POST "${common_headers[@]}" \
-            "https://api.github.com/repos/${REPOSITORY}/actions/workflows/exhaustive-acceptance.yml/dispatches" \
-            -d "$request"
-
-          echo "Exhaustive acceptance dispatch accepted for exact main ${RELEASE_SHA}, deploy ${DEPLOYMENT_ID}, via immutable ref ${CREATED_REF}."
+  run-exact-exhaustive-acceptance:
+    needs: validate-controller-bridge
+    uses: ./.github/workflows/exhaustive-acceptance.yml
+    with:
+      release_sha: ${{ needs.validate-controller-bridge.outputs.release_sha }}
+      netlify_deploy_id: ${{ needs.validate-controller-bridge.outputs.netlify_deploy_id }}
+      hosted_url: https://avalaos-pilot.netlify.app
