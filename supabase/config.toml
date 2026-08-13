@@ -84,3 +84,10 @@ backend = "postgres"
 
 [functions.studio-private-artifact-reconcile]
 verify_jwt = false
+
+# This verifier authenticates GitHub Actions OIDC tokens itself. Supabase gateway
+# JWT verification must therefore be disabled for this one function only; the
+# handler verifies the GitHub RS256 signature, issuer, audience, repository,
+# workflow path, immutable ref, exact SHA, run ID and run attempt before RPC use.
+[functions.hosted-pilot-github-verifier]
+verify_jwt = false
