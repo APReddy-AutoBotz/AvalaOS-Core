@@ -45,6 +45,7 @@ test('producer uses short-lived GitHub OIDC through the same-site protected prox
   assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_URL/);
   assert.match(workflow,/audience=avalaos-hosted-pilot/);
   assert.match(workflow,/\.netlify\/functions\/hosted-pilot-github-verifier-proxy/);
+  assert.match(workflow,/HOSTED_PILOT_VERIFIER_PROXY_TARGET_INVALID/);
   assert.match(workflow,/call_verifier preflight/);
   assert.match(workflow,/call_verifier status/);
   assert.match(workflow,/call_verifier finalize/);
@@ -56,10 +57,15 @@ test('producer uses short-lived GitHub OIDC through the same-site protected prox
   assert.ok(!workflow.includes(forbiddenHostedProjectRef));
 });
 
-test('Netlify proxy keeps the Supabase project identifier in protected Functions configuration only',()=>{
-  assert.match(netlifyProxy,/process\.env\.HOSTED_PILOT_VERIFIER_UPSTREAM/);
+test('Netlify proxy keeps the Supabase project identifier in protected Functions configuration only and binds exact deploy truth',()=>{
+  assert.match(netlifyProxy,/Netlify\.env\.get\('HOSTED_PILOT_VERIFIER_UPSTREAM'\)/);
   assert.match(netlifyProxy,/url\.hostname\.endsWith\('\.supabase\.co'\)/);
   assert.match(netlifyProxy,/url\.pathname !== '\/functions\/v1\/hosted-pilot-github-verifier'/);
+  assert.match(netlifyProxy,/context\?\.deploy\?\.context !== 'production'/);
+  assert.match(netlifyProxy,/context\?\.site\?\.name !== 'avalaos-pilot'/);
+  assert.match(netlifyProxy,/payload\.deploymentId !== context\.deploy\.id/);
+  assert.match(netlifyProxy,/x-avalaos-release/);
+  assert.match(netlifyProxy,/x-avalaos-environment/);
   assert.match(netlifyProxy,/authorization/);
   assert.match(netlifyProxy,/AbortSignal\.timeout/);
   assert.ok(!netlifyProxy.includes(forbiddenHostedProjectRef));
