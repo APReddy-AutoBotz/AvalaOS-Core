@@ -4,6 +4,7 @@ const REPOSITORY='APReddy-AutoBotz/AvalaOS-Core';
 const REPOSITORY_ID='1256880940';
 const WORKFLOW_PATH='.github/workflows/hosted-pilot-activation-evidence-producer.yml';
 const BRANCH_PREFIX='hosted-pilot-dispatch--';
+const HOSTED_PILOT_ORIGIN='https://avalaos-pilot.netlify.app';
 const ORGANIZATION_ID='24de1bb5-ad49-4224-80b1-9d26b6dcfc15';
 const WORKSPACE_ID='06165d6f-19c9-4a0c-8847-f9cb6c63e9d2';
 const RECOVERY_ACTOR_ID='6d65da73-84b0-4eb3-9be5-d7f1e53c0151';
@@ -71,6 +72,13 @@ async function verifyGithubOidc(token:string,body:Json):Promise<Claims>{
   return claims;
 }
 
+async function verifyStableHostedRelease(release:string){
+  const response=await fetch(`${HOSTED_PILOT_ORIGIN}/`,{method:'HEAD',redirect:'manual',signal:AbortSignal.timeout(8000)});
+  if(!response.ok||response.headers.get('x-avalaos-release')!==release
+    ||response.headers.get('x-avalaos-environment')!=='hosted_nonproduction_pilot')
+    throw new Error('OIDC_HOSTED_RELEASE_MISMATCH');
+}
+
 async function rpc(name:string,args:Json){
   const url=Deno.env.get('SUPABASE_URL'); const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if(!url||!key)throw new Error('SUPABASE_RUNTIME_CREDENTIALS_MISSING');
@@ -104,7 +112,7 @@ Deno.serve(async(req:Request)=>{
     if(Number(req.headers.get('content-length')??'0')>32768)return bad(413,'REQUEST_TOO_LARGE');
     const auth=req.headers.get('authorization')??''; if(!auth.startsWith('Bearer '))return bad(401,'OIDC_TOKEN_REQUIRED');
     const body=await req.json() as Json; await verifyGithubOidc(auth.slice(7),body);
-    const input=common(body); const operation=body.operation;
+    const input=common(body); await verifyStableHostedRelease(input.release); const operation=body.operation;
     if(operation==='preflight'){
       const result=await rpc('hosted_pilot_oidc_preflight',{p_expected_target_fingerprint:input.target,p_expected_migration_count:input.migrationCount,p_expected_ledger_digest:input.ledgerDigest});
       return new Response(JSON.stringify(result),{status:200,headers:jsonHeaders});
