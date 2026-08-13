@@ -46,7 +46,7 @@ test('forward migration revokes direct service-role table authority but retains 
   assert.match(migration,/migration_tip='20260812171000'/);
 });
 
-test('dispatch bridge is owner-only, current-main-only and dispatches the validated immutable branch',()=>{
+test('dispatch bridge launches both exact-head evidence workflows with safe string inputs',()=>{
   assert.match(bridge,/on:\s*\n\s*create:/);
   assert.match(bridge,/actions: write/);
   assert.match(bridge,/github\.actor == 'APReddy-AutoBotz'/);
@@ -56,7 +56,9 @@ test('dispatch bridge is owner-only, current-main-only and dispatches the valida
   assert.match(bridge,/--arg ref "\$CREATED_REF"/);
   assert.doesNotMatch(bridge,/--arg ref "\$RELEASE_SHA"/);
   assert.doesNotMatch(bridge,/--arg ref 'main'/);
+  assert.match(bridge,/pilot-operations\.yml\/dispatches/);
   assert.match(bridge,/hosted-pilot-activation-evidence-producer\.yml\/dispatches/);
+  assert.ok(bridge.indexOf('pilot-operations.yml/dispatches') < bridge.indexOf('hosted-pilot-activation-evidence-producer.yml/dispatches'));
   for(const value of [
     'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed',
     'https://avalaos-pilot.netlify.app',
@@ -64,5 +66,6 @@ test('dispatch bridge is owner-only, current-main-only and dispatches the valida
     '06165d6f-19c9-4a0c-8847-f9cb6c63e9d2',
     '6d65da73-84b0-4eb3-9be5-d7f1e53c0151',
   ]) assert.match(bridge,new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(bridge,/--argjson recovery_authorization_version 5/);
+  assert.match(bridge,/--arg recovery_authorization_version '5'/);
+  assert.doesNotMatch(bridge,/--argjson recovery_authorization_version/);
 });
