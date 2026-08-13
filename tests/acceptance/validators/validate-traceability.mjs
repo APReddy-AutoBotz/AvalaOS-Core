@@ -28,12 +28,18 @@ for (const item of catalog.cases ?? []) {
 }
 
 for (const branch of inventory) {
-  if (branch.coverageStatus === 'COVERED') {
-    if (!branch.testIds.length) errors.push(`${branch.branchId}: covered without Test ID`);
+  if (branch.coverageStatus === 'DECLARED') {
+    if (!branch.testIds.length) errors.push(`${branch.branchId}: declared without Test ID`);
     for (const testId of branch.testIds) if (!ids.has(testId)) errors.push(`${branch.branchId}: unknown Test ID ${testId}`);
-  } else {
+    if (!branch.uncoveredReason || !branch.recommendedAction) errors.push(`${branch.branchId}: declaration must state source-proof limitation and action`);
+  } else if (branch.coverageStatus === 'SOURCE_BACKED') {
+    if (!branch.testIds.length) errors.push(`${branch.branchId}: source-backed without Test ID`);
+    for (const testId of branch.testIds) if (!ids.has(testId)) errors.push(`${branch.branchId}: unknown Test ID ${testId}`);
+  } else if (branch.coverageStatus === 'UNCOVERED') {
     if (!branch.uncoveredReason || !branch.recommendedAction) errors.push(`${branch.branchId}: uncovered without reason/action`);
     if (branch.criticality === 'critical') errors.push(`${branch.branchId}: critical branch uncovered`);
+  } else {
+    errors.push(`${branch.branchId}: unsupported coverage status ${branch.coverageStatus}`);
   }
 }
 
@@ -44,11 +50,14 @@ for (const fixture of fixtures.fixtures) {
   }
 }
 
+const declared = inventory.filter(item => item.coverageStatus === 'DECLARED');
+const sourceBacked = inventory.filter(item => item.coverageStatus === 'SOURCE_BACKED');
 const uncovered = inventory.filter(item => item.coverageStatus === 'UNCOVERED');
 const summary = {
   branches: inventory.length,
   catalogCases: catalog.cases.length,
-  declaredCovered: inventory.length - uncovered.length,
+  declared: declared.length,
+  sourceBacked: sourceBacked.length,
   uncovered: uncovered.length,
   retainedCases: [...classification.values()].filter(kinds => kinds[0] === 'retained').length,
   oracleCases: [...classification.values()].filter(kinds => kinds[0] === 'oracle').length,
