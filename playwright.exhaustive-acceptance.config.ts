@@ -1,9 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
-import { validateResolvedHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
+import { validateHostedUrl, validateResolvedHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
 
 const rawUrl = process.env.HOSTED_PILOT_URL;
 if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; exhaustive hosted acceptance cannot silently use localhost');
-const hostedOrigin = await validateResolvedHostedUrl(rawUrl);
+const isExactHostedExecution = process.env.NETLIFY_DEPLOY_ID && process.env.NETLIFY_DEPLOY_ID !== 'pull-request-not-deployed';
+const hostedOrigin = isExactHostedExecution
+  ? await validateResolvedHostedUrl(rawUrl)
+  : validateHostedUrl(rawUrl);
 
 export default defineConfig({
   testDir: './tests/browser',
