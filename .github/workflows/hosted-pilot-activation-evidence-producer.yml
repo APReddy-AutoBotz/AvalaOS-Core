@@ -42,6 +42,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
@@ -57,54 +58,94 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Execute canonical bounded connected-target preflight and bind actual fingerprint
+      - name: Verify exact connected database through GitHub OIDC and finalize exact hosted proof
+        timeout-minutes: 18
         env:
-          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
-          EXPECTED_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          HOSTED_PILOT_VERIFIER_URL: https://fcsfvonhvyrevwhyvano.supabase.co/functions/v1/hosted-pilot-github-verifier
+          TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+          DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          ORGANIZATION_ID: ${{ inputs.organization_id }}
+          WORKSPACE_ID: ${{ inputs.workspace_id }}
+          EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
+          RECOVERY_ACTOR_ID: ${{ inputs.recovery_actor_id }}
+          RECOVERY_AUTHORIZATION_VERSION: ${{ inputs.recovery_authorization_version }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          PREFLIGHT_PATH="$RUNNER_TEMP/hosted-preflight.json"
-          trap 'rm -f "$PREFLIGHT_PATH"' EXIT
-          PREFLIGHT_RESULT="$(npm run --silent hosted-pilot:preflight -- "$PREFLIGHT_PATH")"
-          ACTUAL_TARGET_FINGERPRINT="$(PREFLIGHT_RESULT="$PREFLIGHT_RESULT" node --input-type=module -e 'const result=JSON.parse(process.env.PREFLIGHT_RESULT); if(!/^sha256:[0-9a-f]{64}$/.test(result.targetFingerprint??"")) process.exit(2); process.stdout.write(result.targetFingerprint)')"
-          if [ "$ACTUAL_TARGET_FINGERPRINT" != "$EXPECTED_TARGET_FINGERPRINT" ]; then
-            echo 'HOSTED_PILOT_TARGET_FINGERPRINT_MISMATCH' >&2
-            exit 1
-          fi
-          rm -f "$PREFLIGHT_PATH"
-          trap - EXIT
-          echo 'Hosted target fingerprint matched controller input before evidence mutation.'
-      - name: Wait for database-owner ingestion of exact-current hosted evidence families
-        timeout-minutes: 16
-        env:
-          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
-          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
-          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
-          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
-          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
-        run: node scripts/wait-hosted-pilot-evidence-families.mjs
-      - name: Consume controller-ingested exact-current hosted gate proof
-        env:
-          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
-          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
-          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
-          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
-          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
-          HOSTED_PILOT_RECOVERY_ACTOR_ID: ${{ inputs.recovery_actor_id }}
-          HOSTED_PILOT_RECOVERY_AUTHORIZATION_VERSION: ${{ inputs.recovery_authorization_version }}
-        run: node scripts/record-hosted-pilot-executed-evidence.mjs
-      - name: Verify exact run-bound hosted database, RLS, provider, recovery and service-only ACL truth
-        env:
-          HOSTED_PILOT_DATABASE_URL: ${{ secrets.HOSTED_PILOT_DATABASE_URL }}
-          HOSTED_PILOT_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
-          HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
-          HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
-          HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
-        run: |
-          export HOSTED_PILOT_DEPLOYMENT_FINGERPRINT="$(node --input-type=module -e 'import {safeHash,validateHostedUrl} from "./scripts/verify-hosted-pilot-evidence.mjs";process.stdout.write(safeHash(validateHostedUrl(process.env.HOSTED_PILOT_URL)))')"
-          npm run hosted-pilot:verify-database
+          CANONICAL_PROOF="$(node --input-type=module <<'NODE'
+          import {createHash} from 'node:crypto';
+          import {loadCanonicalMigrationInventory} from './scripts/hostedPilotActivation.mjs';
+          import {safeHash,validateHostedUrl} from './scripts/verify-hosted-pilot-evidence.mjs';
+          const canonical=await loadCanonicalMigrationInventory();
+          const migrations=[...canonical.migrations].sort((a,b)=>a.name.localeCompare(b.name));
+          const ledger=migrations.map(m=>`${m.name}:${m.sha256}`).join('\n');
+          process.stdout.write(JSON.stringify({migrationCount:migrations.length,ledgerDigest:`sha256:${createHash('sha256').update(ledger).digest('hex')}`,
+            deploymentFingerprint:safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN))}));
+          NODE
+          )"
+          EXPECTED_MIGRATION_COUNT="$(jq -r '.migrationCount' <<<"$CANONICAL_PROOF")"
+          EXPECTED_LEDGER_DIGEST="$(jq -r '.ledgerDigest' <<<"$CANONICAL_PROOF")"
+          DEPLOYMENT_FINGERPRINT="$(jq -r '.deploymentFingerprint' <<<"$CANONICAL_PROOF")"
+          [[ "$EXPECTED_MIGRATION_COUNT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_LEDGER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$DEPLOYMENT_FINGERPRINT" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+          oidc_token() {
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=avalaos-hosted-pilot" | jq -er '.value'
+          }
+          request_body() {
+            local operation="$1"
+            jq -n \
+              --arg operation "$operation" \
+              --arg expectedReleaseSha "$EXPECTED_RELEASE_SHA" \
+              --arg deploymentId "$DEPLOYMENT_ID" \
+              --arg exerciseRunId "$EXERCISE_RUN_ID" \
+              --arg producerRunId "$GITHUB_RUN_ID" \
+              --argjson producerRunAttempt "$GITHUB_RUN_ATTEMPT" \
+              --arg targetFingerprint "$TARGET_FINGERPRINT" \
+              --arg deploymentFingerprint "$DEPLOYMENT_FINGERPRINT" \
+              --argjson expectedMigrationCount "$EXPECTED_MIGRATION_COUNT" \
+              --arg expectedLedgerDigest "$EXPECTED_LEDGER_DIGEST" \
+              --arg organizationId "$ORGANIZATION_ID" \
+              --arg workspaceId "$WORKSPACE_ID" \
+              --arg recoveryActorId "$RECOVERY_ACTOR_ID" \
+              --argjson recoveryAuthorizationVersion "$RECOVERY_AUTHORIZATION_VERSION" \
+              '{operation:$operation,expectedReleaseSha:$expectedReleaseSha,deploymentId:$deploymentId,exerciseRunId:$exerciseRunId,
+                producerRunId:$producerRunId,producerRunAttempt:$producerRunAttempt,targetFingerprint:$targetFingerprint,
+                deploymentFingerprint:$deploymentFingerprint,expectedMigrationCount:$expectedMigrationCount,expectedLedgerDigest:$expectedLedgerDigest,
+                organizationId:$organizationId,workspaceId:$workspaceId,recoveryActorId:$recoveryActorId,recoveryAuthorizationVersion:$recoveryAuthorizationVersion}'
+          }
+          call_verifier() {
+            local operation="$1" token body
+            token="$(oidc_token)"
+            body="$(request_body "$operation")"
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+              --data "$body" "$HOSTED_PILOT_VERIFIER_URL"
+          }
+
+          PREFLIGHT_RESULT="$(call_verifier preflight)"
+          jq -e --arg target "$TARGET_FINGERPRINT" --arg digest "$EXPECTED_LEDGER_DIGEST" --argjson count "$EXPECTED_MIGRATION_COUNT" \
+            '.status=="passed" and .targetFingerprint==$target and .ledgerDigest==$digest and .migrationCount==$count and .productionAuthorized==false' \
+            <<<"$PREFLIGHT_RESULT" >/dev/null
+          echo 'Credentialless hosted database preflight passed before evidence finalization.'
+
+          ready=false
+          for _ in $(seq 1 90); do
+            STATUS_RESULT="$(call_verifier status)"
+            family_count="$(jq -r '.evidenceFamilyCount // 0' <<<"$STATUS_RESULT")"
+            if [ "$family_count" = '5' ]; then ready=true; break; fi
+            sleep 10
+          done
+          if [ "$ready" != 'true' ]; then echo 'HOSTED_PILOT_EVIDENCE_WAIT_TIMEOUT' >&2; exit 1; fi
+
+          FINAL_RESULT="$(call_verifier finalize)"
+          jq -e '.status=="passed" and .exactVerificationResultCount==1 and .productionAuthorized==false' <<<"$FINAL_RESULT" >/dev/null
+          echo 'Exact hosted database evidence and recovery verification passed through GitHub OIDC.'
 
   recovery-operations:
     environment: hosted-nonproduction-pilot
