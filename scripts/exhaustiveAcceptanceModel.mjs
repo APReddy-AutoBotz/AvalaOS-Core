@@ -27,29 +27,29 @@ export const retainedBindingMap = bindings => {
 export const oracleBindingMap = bindings => new Map((bindings.oracleTests ?? []).map(item => [item.testId, item]));
 export const hostedBindingMap = bindings => new Map((bindings.hostedTests ?? []).map(item => [item.testId, item]));
 
-// COVERED below means catalog-mapped only; executed/proven state is calculated from exact evidence later.
+// Catalog membership is a declaration only. Source-backed coverage requires a separate proven provenance contract.
 export const deriveInventory = (catalog, inventoryDocument) => {
   if (inventoryDocument.schemaVersion !== 2) throw new Error('ACCEPTANCE_INVENTORY_SCHEMA_V2_REQUIRED');
 
-  const coveredById = new Map();
+  const declaredById = new Map();
   for (const testCase of catalog.cases ?? []) {
     for (const branchId of testCase.branchIds ?? []) {
       const refs = [...new Set(testCase.sourceReference ?? [])];
-      const existing = coveredById.get(branchId);
+      const existing = declaredById.get(branchId);
       if (existing) {
         existing.testIds.push(testCase.testId);
         existing.sourceReferences = [...new Set([...existing.sourceReferences, ...refs])];
       } else {
-        coveredById.set(branchId, {
+        declaredById.set(branchId, {
           branchId,
           module: testCase.module,
           rule: testCase.ruleRequirement,
           sourceReferences: refs,
           criticality: testCase.criticality ?? 'standard',
-          coverageStatus: 'COVERED',
+          coverageStatus: 'DECLARED',
           testIds: [testCase.testId],
-          uncoveredReason: null,
-          recommendedAction: null,
+          uncoveredReason: 'Catalog-declared requirement has not yet been independently source-backed.',
+          recommendedAction: 'Add machine-verified source provenance before counting this branch as source/business coverage.',
         });
       }
     }
@@ -66,9 +66,9 @@ export const deriveInventory = (catalog, inventoryDocument) => {
     testIds: [],
   }));
 
-  const collisions = uncovered.filter(branch => coveredById.has(branch.branchId));
+  const collisions = uncovered.filter(branch => declaredById.has(branch.branchId));
   if (collisions.length) throw new Error(`ACCEPTANCE_INVENTORY_COLLISION:${collisions.map(item => item.branchId).join(',')}`);
-  return [...coveredById.values(), ...uncovered];
+  return [...declaredById.values(), ...uncovered];
 };
 
 export const classifyExecutionBindings = (catalog, bindings) => {
