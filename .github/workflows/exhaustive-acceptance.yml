@@ -27,8 +27,8 @@ env:
   HOSTED_PILOT_URL: ${{ inputs.hosted_url || 'https://avalaos-pilot.netlify.app' }}
   PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
   ACCEPTANCE_RESULTS_DIR: acceptance-results
-  RETAINED_RESULTS_MANIFEST: ${{ runner.temp }}/avalaos-retained-results.json
-  ORACLE_RESULTS_MANIFEST: ${{ runner.temp }}/avalaos-oracle-results.json
+  RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
+  ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
 
 jobs:
   acceptance:
