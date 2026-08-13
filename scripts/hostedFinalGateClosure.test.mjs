@@ -46,7 +46,7 @@ test('forward migration revokes direct service-role table authority but retains 
   assert.match(migration,/migration_tip='20260812171000'/);
 });
 
-test('dispatch bridge is owner-only, current-main-only and dispatches the validated immutable branch',()=>{
+test('dispatch bridge is owner-only, current-main-only, immutable-ref bound, and string-input safe',()=>{
   assert.match(bridge,/on:\s*\n\s*create:/);
   assert.match(bridge,/actions: write/);
   assert.match(bridge,/github\.actor == 'APReddy-AutoBotz'/);
@@ -64,5 +64,6 @@ test('dispatch bridge is owner-only, current-main-only and dispatches the valida
     '06165d6f-19c9-4a0c-8847-f9cb6c63e9d2',
     '6d65da73-84b0-4eb3-9be5-d7f1e53c0151',
   ]) assert.match(bridge,new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(bridge,/--argjson recovery_authorization_version 5/);
+  assert.match(bridge,/--arg recovery_authorization_version '5'/);
+  assert.doesNotMatch(bridge,/--argjson recovery_authorization_version/);
 });
