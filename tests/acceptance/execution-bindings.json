@@ -13,7 +13,7 @@
     {"suiteId":"enterprise-intelligence","command":["npm","run","test:enterprise-intelligence"],"testIds":["EI-001","EI-002","EI-003","EI-004","EI-005"],"requiredGate":true},
     {"suiteId":"cross-cutting-false-success","command":["npm","run","test:false-success"],"testIds":["SAFETY-002"],"requiredGate":true},
     {"suiteId":"canonical-pilot-journey","command":["npm","run","test:pilot-acceptance"],"testIds":["E2E-001","E2E-003","E2E-004"],"requiredGate":true},
-    {"suiteId":"requested-changes-journey","command":["node","scripts/runTypeScriptTest.mjs","types.ts","services/assessV2/types.ts","services/assessV2/canonical.ts","services/assessV2/reviewDomain.ts","tests/acceptance/journeys/requestedChangesJourney.test.ts"],"testIds":["E2E-002"],"requiredGate":true},
+    {"suiteId":"requested-changes-domain-regression","command":["node","scripts/runTypeScriptTest.mjs","types.ts","services/assessV2/types.ts","services/assessV2/canonical.ts","services/assessV2/reviewDomain.ts","tests/acceptance/journeys/requestedChangesJourney.test.ts"],"testIds":[],"requiredGate":true},
     {"suiteId":"pilot-operations","command":["npm","run","test:pilot-operations"],"testIds":["ADMIN-004"],"requiredGate":true}
   ],
   "oracleTests": [
@@ -29,10 +29,7 @@
     {"testId":"ASSESS-014","scenario":"no-go"},
     {"testId":"ASSESS-015","scenario":"completion-below"},
     {"testId":"ASSESS-016","scenario":"completion-exact"},
-    {"testId":"ASSESS-017","scenario":"completion-above"},
-    {"testId":"E2E-005","scenario":"fixture-low-suitability"},
-    {"testId":"E2E-006","scenario":"fixture-strong-automation"},
-    {"testId":"E2E-007","scenario":"fixture-hitl-compliance"}
+    {"testId":"ASSESS-017","scenario":"completion-above"}
   ],
   "hostedTests": [
     {"testId":"SANDBOX-001","scenario":"sandbox-access","projects":["desktop-chromium","pixel-7-chromium"]},
@@ -40,7 +37,7 @@
     {"testId":"SANDBOX-003","scenario":"local-authority","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"SANDBOX-004","scenario":"network-safety","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"SANDBOX-005","scenario":"refresh-boundary","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SANDBOX-006","scenario":"sign-in-separation","projects":["desktop-chromium","pixel-7-chromium"]},
+    {"testId":"SANDBOX-006","scenario":null,"projects":["desktop-chromium"],"blockedReason":"The hosted Sandbox route intentionally accepts /sandbox descendants. There is no source-backed denied Sandbox deep-link branch to execute, so a normal sign-in visit is not accepted as denial evidence."},
     {"testId":"SANDBOX-007","scenario":"desktop-layout","projects":["desktop-chromium"]},
     {"testId":"SANDBOX-008","scenario":"mobile-layout","projects":["pixel-7-chromium"]},
     {"testId":"SANDBOX-009","scenario":"keyboard-a11y","projects":["desktop-chromium"]},
@@ -60,7 +57,11 @@
     {"testId":"ADMIN-001","scenario":"admin-navigation","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"ADMIN-002","scenario":"non-admin-denial","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"ADMIN-003","scenario":"admin-capability-view","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SAFETY-001","scenario":"offline-no-false-success","projects":["desktop-chromium","pixel-7-chromium"]},
+    {"testId":"E2E-002","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The retained review-domain regression proves the requested-changes lifecycle mechanics but does not exercise the catalog-declared hosted ledger journey. Keep the canonical E2E Test ID BLOCKED until the Sandbox exposes that exact end-to-end path."},
+    {"testId":"E2E-005","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this low-suitability fixture through the full declared journey."},
+    {"testId":"E2E-006","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this strong-automation fixture through the full declared journey."},
+    {"testId":"E2E-007","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this HITL/compliance fixture through the full declared journey."},
+    {"testId":"SAFETY-001","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The hosted Sandbox uses local synthetic persistence, so going offline does not create a server-persistence failure. A reload-only check is not accepted as no-false-success mutation evidence."},
     {"testId":"SAFETY-003","scenario":null,"projects":["desktop-chromium"],"blockedReason":"Hosted Sandbox uses local synthetic authority and exposes no real server mutation whose timeout can be deterministically injected without adding a test-only product hook."},
     {"testId":"SAFETY-004","scenario":"reload-reconstruction","projects":["desktop-chromium","pixel-7-chromium"]},
     {"testId":"SAFETY-006","scenario":"horizontal-overflow","projects":["desktop-chromium","pixel-7-chromium"]},
