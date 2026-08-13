@@ -1,7 +1,7 @@
 name: Exhaustive AvalaOS Acceptance
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       release_sha:
         description: Exact 40-character release SHA served by the hosted pilot
@@ -14,7 +14,6 @@ on:
       hosted_url:
         description: Canonical hosted non-production pilot origin
         required: true
-        default: https://avalaos-pilot.netlify.app
         type: string
   pull_request:
 
@@ -68,7 +67,7 @@ jobs:
         continue-on-error: true
         run: node scripts/runExhaustiveRetainedSuites.mjs
 
-      - name: Run independent assessment and transcript oracles
+      - name: Run independent assessment oracle against production scoring
         id: oracle
         continue-on-error: true
         run: node scripts/runAssessV1AcceptanceOracle.mjs
