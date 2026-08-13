@@ -5,6 +5,33 @@ import { checkWorkflowYaml, parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 const files = await checkWorkflowYaml();
 assert.ok(files.includes('v1-release-candidate.yml'));
 
+const exhaustiveWorkflow = parseWorkflowYaml(
+  await readFile('.github/workflows/exhaustive-acceptance.yml', 'utf8'),
+  'exhaustive-acceptance.yml',
+);
+const exhaustiveSteps = exhaustiveWorkflow.jobs.acceptance.steps;
+const exhaustiveCheckout = exhaustiveSteps.find(step => step.uses === 'actions/checkout@v4');
+assert.equal(exhaustiveCheckout?.with?.['fetch-depth'], 0, 'retained PR1D authority requires immutable baseline history');
+const exhaustiveHostedStep = exhaustiveSteps.find(step => step.name === 'Run exhaustive real hosted Sandbox acceptance');
+assert.equal(
+  exhaustiveHostedStep?.if,
+  "env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'",
+  'a PR without an exact release-bound deployment must not contact the stable pilot',
+);
+
+const defaultPlaywrightConfig = await readFile('playwright.config.ts', 'utf8');
+assert.match(
+  defaultPlaywrightConfig,
+  /testIgnore: \[[^\]]*'exhaustiveHostedAcceptance\.spec\.ts'/u,
+  'default/local Playwright discovery must exclude the dedicated hosted exhaustive suite',
+);
+const exhaustivePlaywrightConfig = await readFile('playwright.exhaustive-acceptance.config.ts', 'utf8');
+assert.match(
+  exhaustivePlaywrightConfig,
+  /testMatch: 'exhaustiveHostedAcceptance\.spec\.ts'/u,
+  'the exhaustive hosted config must exclusively own its hosted specification',
+);
+
 assert.throws(
   () => parseWorkflowYaml(`jobs:\n  evidence:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n        ref: candidate-sha\n          fetch-depth: 0\n`, 'malformed-checkout.yml'),
   /malformed-checkout\.yml is not valid YAML/u,
