@@ -56,6 +56,9 @@ jobs:
       - name: Apply fresh and accepted-baseline upgrade to disposable PostgreSQL 16
         env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
         run: npm run test:migrations:pilot-operations
+      - name: Prove Studio handoff rejects stale approved-reviewer authority
+        env: {PR1E_REVIEW_AUTHORITY_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
+        run: node scripts/testPr1eStudioHandoffReviewerAuthority.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: 'pilot-operations-postgres-${{ env.CANDIDATE_SHA }}', path: artifacts/pilot-operations/postgres-execution.json, if-no-files-found: error, retention-days: 14}
