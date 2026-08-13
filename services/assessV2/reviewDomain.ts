@@ -189,14 +189,27 @@ export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: Deci
   assertBinding(binding, review); assertBinding(binding, govern);
   if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id || !controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, Govern resolution, and satisfied controls.');
   if (decision.caseId !== binding.caseId || decision.caseVersion !== binding.caseVersion) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision does not belong to the current reviewed case.');
-  const suppliedEvidenceIds = new Set(evidence.map(item => item.id));
-  if ([...decisionEvidenceIds(decision)].some(id => !suppliedEvidenceIds.has(id))) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision references evidence outside the current reviewed case.');
-  if (!evidence.length || evidence.some(item => {
-    const current = attestations.filter(attestation => {
-      try { assertBinding(binding, attestation); } catch { return false; }
-      return attestation.evidenceId === item.id && exactSet(attestation.claimIds, item.claimIds);
-    });
-    return current.length !== 1 || current[0].outcome !== 'accepted';
-  }) || attestations.length !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current reviewed case.');
+
+  const evidenceById = new Map(evidence.map(item => [item.id, item]));
+  if (!evidence.length || evidenceById.size !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence set must contain unique current evidence.');
+  if ([...decisionEvidenceIds(decision)].some(id => !evidenceById.has(id))) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision references evidence outside the current reviewed case.');
+
+  const attestationIds = new Set<string>();
+  const attestedEvidenceIds = new Set<string>();
+  for (const attestation of attestations) {
+    assertBinding(binding, attestation);
+    const item = evidenceById.get(attestation.evidenceId);
+    if (!item
+      || !exactSet(attestation.claimIds, item.claimIds)
+      || attestation.outcome !== 'accepted'
+      || attestationIds.has(attestation.id)
+      || attestedEvidenceIds.has(attestation.evidenceId)) {
+      throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current reviewed case.');
+    }
+    attestationIds.add(attestation.id);
+    attestedEvidenceIds.add(attestation.evidenceId);
+  }
+  if (attestedEvidenceIds.size !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current reviewed case.');
+
   return Object.freeze({ binding: Object.freeze({ ...binding }), decision, evidence: Object.freeze([...evidence]), attestations: Object.freeze([...attestations]), review, govern, schemaVersion: decision.schemaVersion, ruleSetVersion: decision.ruleSetVersion, reviewSchemaVersion: review.reviewSchemaVersion, reviewSequence: review.reviewSequence, canonicalHashes: Object.freeze({ ...canonicalHashes }), sourceReferences: Object.freeze([...sourceReferences]), createdAt });
 };
