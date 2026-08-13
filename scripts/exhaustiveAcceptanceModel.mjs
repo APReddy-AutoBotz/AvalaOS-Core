@@ -7,11 +7,9 @@ export const inventoryPath = process.env.ACCEPTANCE_INVENTORY || path.join(repoR
 export const bindingsPath = process.env.ACCEPTANCE_BINDINGS || path.join(repoRoot, 'tests/acceptance/execution-bindings.json');
 
 export const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
-
 export const loadCatalog = () => readJson(catalogPath);
 export const loadInventoryDocument = () => readJson(inventoryPath);
 export const loadExecutionBindings = () => readJson(bindingsPath);
-
 export const canonicalHostedTitle = testCase => `[${testCase.testId}] ${testCase.title}`;
 
 export const retainedBindingMap = bindings => {
@@ -26,12 +24,10 @@ export const retainedBindingMap = bindings => {
   return map;
 };
 
-export const oracleBindingMap = bindings =>
-  new Map((bindings.oracleTests ?? []).map(item => [item.testId, item]));
+export const oracleBindingMap = bindings => new Map((bindings.oracleTests ?? []).map(item => [item.testId, item]));
+export const hostedBindingMap = bindings => new Map((bindings.hostedTests ?? []).map(item => [item.testId, item]));
 
-export const hostedBindingMap = bindings =>
-  new Map((bindings.hostedTests ?? []).map(item => [item.testId, item]));
-
+// COVERED below means catalog-mapped only; executed/proven state is calculated from exact evidence later.
 export const deriveInventory = (catalog, inventoryDocument) => {
   if (inventoryDocument.schemaVersion !== 2) throw new Error('ACCEPTANCE_INVENTORY_SCHEMA_V2_REQUIRED');
 
@@ -71,10 +67,7 @@ export const deriveInventory = (catalog, inventoryDocument) => {
   }));
 
   const collisions = uncovered.filter(branch => coveredById.has(branch.branchId));
-  if (collisions.length) {
-    throw new Error(`ACCEPTANCE_INVENTORY_COLLISION:${collisions.map(item => item.branchId).join(',')}`);
-  }
-
+  if (collisions.length) throw new Error(`ACCEPTANCE_INVENTORY_COLLISION:${collisions.map(item => item.branchId).join(',')}`);
   return [...coveredById.values(), ...uncovered];
 };
 
@@ -83,7 +76,6 @@ export const classifyExecutionBindings = (catalog, bindings) => {
   const oracle = oracleBindingMap(bindings);
   const hosted = hostedBindingMap(bindings);
   const result = new Map();
-
   for (const testCase of catalog.cases ?? []) {
     const kinds = [];
     if (retained.has(testCase.testId)) kinds.push('retained');
