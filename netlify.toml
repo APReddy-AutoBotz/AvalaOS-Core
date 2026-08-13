@@ -2,6 +2,9 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+
 # Netlify's production deploy context is permitted only for the dedicated
 # avalaos-pilot stable URL. scripts/writeHostedPilotNetlifyHeaders.mjs fails
 # closed unless Netlify proves SITE_NAME=avalaos-pilot, BRANCH=main,

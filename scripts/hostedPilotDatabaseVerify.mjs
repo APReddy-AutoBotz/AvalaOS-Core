@@ -4,6 +4,16 @@ import pg from 'pg';
 import { loadCanonicalMigrationInventory } from './hostedPilotActivation.mjs';
 const { Client } = pg;
 
+export const HOSTED_AUTHORITY_TABLES = Object.freeze([
+  'hosted_pilot_environment_identity','hosted_pilot_exercise_evidence_families','hosted_pilot_provider_simulations',
+  'hosted_pilot_recovery_operators','hosted_pilot_synthetic_subjects','hosted_pilot_verification_run_results',
+  'pilot_operations_audit_events','pilot_operations_candidate_history','pilot_operations_candidate_sequences',
+  'pilot_operations_command_receipts','pilot_operations_environments','pilot_operations_evidence_manifests',
+  'pilot_operations_promotion_history','pilot_operations_promotion_sequences','pilot_operations_recovery_drills',
+  'pilot_operations_recovery_evidence_ingestions','pilot_operations_release_candidates','pilot_operations_release_events',
+  'pilot_operations_rollback_events','pilot_operations_tenant_rebind_results',
+]);
+
 // Service-only hosted closure routines are derived from the repository contract,
 // not from the live ACL (which may itself be the drift under investigation).
 export const SERVICE_ONLY_HOSTED_RPCS = Object.freeze([
@@ -11,6 +21,9 @@ export const SERVICE_ONLY_HOSTED_RPCS = Object.freeze([
   'hosted_pilot_simulate_provider(uuid,uuid,uuid,bigint,text,text,text)',
   'hosted_pilot_provision_recovery_operator(uuid,uuid,uuid,bigint,uuid)',
   'hosted_pilot_record_verification_result(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint)',
+  'hosted_pilot_oidc_preflight(text,bigint,text)',
+  'hosted_pilot_oidc_status(uuid,uuid,uuid,text,text,text,bigint,text,text,bigint,text)',
+  'hosted_pilot_oidc_finalize(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint,bigint,text)',
   'pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)',
   'pilot_operations_ingest_recovery_evidence(uuid,uuid,uuid,text,text,text,text,text,text,uuid)',
   'pilot_operations_projection(uuid,uuid,uuid,bigint)',
@@ -35,9 +48,15 @@ export function assertServiceOnlyRoutineCatalog(rows, expected = SERVICE_ONLY_HO
   }
 }
 
-export function assertAuthorityTableCatalog(rows) {
-  if (!rows.length || rows.some(row => row.owner !== 'postgres' || !row.rls_enabled || !row.force_rls
-    || row.public_mutation || row.anon_mutation || row.authenticated_mutation)) throw new Error('HOSTED_PILOT_AUTHORITY_TABLE_MISMATCH');
+export function assertAuthorityTableCatalog(rows, expected = HOSTED_AUTHORITY_TABLES) {
+  if (rows.length !== expected.length) throw new Error('HOSTED_PILOT_AUTHORITY_TABLE_MISMATCH');
+  const byName=new Map(rows.map(row=>[row.relname,row]));
+  for (const relname of expected) {
+    const row=byName.get(relname);
+    if (!row || row.owner !== 'postgres' || !row.rls_enabled || !row.force_rls
+      || row.public_mutation || row.anon_mutation || row.authenticated_mutation)
+      throw new Error('HOSTED_PILOT_AUTHORITY_TABLE_MISMATCH');
+  }
 }
 
 export function assertOwnerOnlyEvidenceTableCatalog(rows) {
@@ -90,7 +109,7 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
       has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') authenticated_mutation,
       has_table_privilege('service_role',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') service_role_mutation
     FROM pg_class c JOIN pg_roles owner ON owner.oid=c.relowner
-    WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') ORDER BY c.relname`)).rows;
+    WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') AND c.relname=ANY($1::text[]) ORDER BY c.relname`,[HOSTED_AUTHORITY_TABLES])).rows;
   assertAuthorityTableCatalog(authorityTables);
   assertOwnerOnlyEvidenceTableCatalog(authorityTables.filter(row=>
     row.relname==='hosted_pilot_exercise_evidence_families'||row.relname==='hosted_pilot_verification_run_results'));

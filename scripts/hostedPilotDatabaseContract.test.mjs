@@ -129,10 +129,10 @@ test('database verifier derives the expected tip from canonical migration invent
 });
 
 test('complete authority catalogs reject omitted or browser-mutable tables and unsafe definers',()=>{
-  const tables=[{owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false}];
-  assert.doesNotThrow(()=>assertAuthorityTableCatalog(tables));
-  assert.throws(()=>assertAuthorityTableCatalog([]),/AUTHORITY_TABLE/);
-  assert.throws(()=>assertAuthorityTableCatalog([{...tables[0],authenticated_mutation:true}]),/AUTHORITY_TABLE/);
+  const tables=[{relname:'safe_table',owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false}];
+  assert.doesNotThrow(()=>assertAuthorityTableCatalog(tables,['safe_table']));
+  assert.throws(()=>assertAuthorityTableCatalog([],['safe_table']),/AUTHORITY_TABLE/);
+  assert.throws(()=>assertAuthorityTableCatalog([{...tables[0],authenticated_mutation:true}],['safe_table']),/AUTHORITY_TABLE/);
   const definers=[{identity:'safe_rpc()',owner:'postgres',search_path:'pg_catalog',public_execute:false,anon_execute:false,authenticated_execute:false,service_role_execute:false}];
   assert.doesNotThrow(()=>assertSecurityDefinerCatalog(definers));
   assert.throws(()=>assertSecurityDefinerCatalog([{...definers[0],public_execute:true}]),/SECURITY_DEFINER/);
