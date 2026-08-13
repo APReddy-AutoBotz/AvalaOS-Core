@@ -8,12 +8,18 @@ export default defineConfig(() => {
       : process.env.STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD === 'true'
         ? { input: { main: path.resolve(__dirname, 'index.html'), studioPrivateArtifactsHarness: path.resolve(__dirname, 'tests/browser/studioPrivateArtifactsHarness.html') } }
         : {};
+    const hostedSandboxEnabled =
+      process.env.AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING === 'authorized' &&
+      process.env.SITE_NAME === 'avalaos-pilot';
     return {
       server: {
         port: 3000,
         host: '0.0.0.0',
       },
       plugins: [react()],
+      define: {
+        'import.meta.env.VITE_AVALA_HOSTED_SANDBOX_ENABLED': JSON.stringify(hostedSandboxEnabled ? 'true' : 'false'),
+      },
       build: {
         rollupOptions: {
           ...browserTestInput,
