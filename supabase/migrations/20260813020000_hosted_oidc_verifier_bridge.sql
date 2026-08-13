@@ -20,6 +20,8 @@ DECLARE
   authority_table_count bigint;
   authority_violation_count bigint;
   evidence_service_mutation_count bigint;
+  service_routine_count bigint;
+  service_routine_violation_count bigint;
   expected_authority_tables constant text[] := ARRAY[
     'hosted_pilot_environment_identity',
     'hosted_pilot_exercise_evidence_families',
@@ -41,6 +43,18 @@ DECLARE
     'pilot_operations_release_events',
     'pilot_operations_rollback_events',
     'pilot_operations_tenant_rebind_results'
+  ]::text[];
+  expected_service_routines constant text[] := ARRAY[
+    'hosted_pilot_bootstrap_synthetic(uuid,uuid,uuid,bigint,text)',
+    'hosted_pilot_simulate_provider(uuid,uuid,uuid,bigint,text,text,text)',
+    'hosted_pilot_provision_recovery_operator(uuid,uuid,uuid,bigint,uuid)',
+    'hosted_pilot_record_verification_result(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint)',
+    'pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)',
+    'pilot_operations_ingest_recovery_evidence(uuid,uuid,uuid,text,text,text,text,text,text,uuid)',
+    'pilot_operations_projection(uuid,uuid,uuid,bigint)',
+    'hosted_pilot_oidc_preflight(text,bigint,text)',
+    'hosted_pilot_oidc_status(uuid,uuid,uuid,text,text,text,bigint,text,text,bigint,text)',
+    'hosted_pilot_oidc_finalize(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint,bigint,text)'
   ]::text[];
 BEGIN
   IF p_expected_target_fingerprint IS NULL OR p_expected_target_fingerprint !~ '^sha256:[0-9a-f]{64}$'
@@ -83,11 +97,31 @@ BEGIN
     WHERE c.relnamespace='public'::regnamespace AND c.relname IN ('hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results');
   IF evidence_service_mutation_count <> 0 THEN RAISE EXCEPTION 'HOSTED_PILOT_EVIDENCE_TABLE_ACL_MISMATCH'; END IF;
 
+  -- Re-check the exact privileged RPC authority in the connected target. Static
+  -- source tests are not sufficient here: any PUBLIC/browser execution drift or
+  -- unsafe SECURITY DEFINER/search_path drift blocks hosted finalization.
+  SELECT count(*)::bigint,
+    count(*) FILTER (WHERE owner.rolname <> 'postgres' OR NOT p.prosecdef
+      OR NOT (coalesce(p.proconfig @> ARRAY['search_path=pg_catalog']::text[],false)
+        OR coalesce(p.proconfig @> ARRAY['search_path=pg_catalog, public']::text[],false))
+      OR EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE')
+      OR has_function_privilege('anon',p.oid,'EXECUTE')
+      OR has_function_privilege('authenticated',p.oid,'EXECUTE')
+      OR NOT has_function_privilege('service_role',p.oid,'EXECUTE'))::bigint
+    INTO service_routine_count,service_routine_violation_count
+    FROM pg_proc p JOIN pg_roles owner ON owner.oid=p.proowner
+    WHERE p.pronamespace='public'::regnamespace
+      AND (p.proname || '(' || replace(oidvectortypes(p.proargtypes),' ','') || ')')=ANY(expected_service_routines);
+  IF service_routine_count <> cardinality(expected_service_routines) OR service_routine_violation_count <> 0
+    THEN RAISE EXCEPTION 'HOSTED_PILOT_RPC_ACL_MISMATCH'; END IF;
+
   RETURN jsonb_build_object(
     'status','passed','targetFingerprint',actual_target_fingerprint,'migrationTip',actual_tip,
     'migrationCount',actual_migration_count,'ledgerDigest',actual_ledger_digest,
-    'authorityTableCount',authority_table_count,'serviceRoleEvidenceMutationAuthority',false,
-    'productionAuthorized',false
+    'authorityTableCount',authority_table_count,'serviceRoutineCount',service_routine_count,
+    'browserTableAuthority',false,'browserServiceRpcAuthority',false,
+    'serviceRoleEvidenceMutationAuthority',false,'productionAuthorized',false
   );
 END
 $function$;
