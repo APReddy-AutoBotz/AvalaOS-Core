@@ -70,6 +70,11 @@ const run = () => {
   assert.throws(() => buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /decision does not belong/);
   assert.throws(() => buildStudioHandoffPackage(binding, { ...AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, caseId: binding.caseId, caseVersion: binding.caseVersion }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /references evidence outside/);
   assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /evidence/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, [evidence[0], evidence[0]], [accepted[0], { ...accepted[1], workspaceId: 'foreign' }], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /unique current evidence/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, evidence, [accepted[0], accepted[0]], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /Studio evidence/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, evidence, [accepted[0], { ...accepted[1], claimIds: ['wrong-claim'] }], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /Studio evidence/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, evidence, [accepted[0], { ...accepted[1], caseVersion: binding.caseVersion - 1 }], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /not found/);
+  assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, evidence, accepted.slice(0, 1), approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /Studio evidence/);
   assert.throws(() => buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, [], [], resolution('rejected'), govern, {}, [], '2026-07-20T15:00:00.000Z'), /requires current approval/);
   console.log('Assess V2 governed review domain tests passed.');
 };
