@@ -53,6 +53,8 @@ test('dispatch bridge is owner-only, current-main-only and passes exact non-prod
   assert.match(bridge,/hosted-pilot-dispatch--/);
   assert.match(bridge,/HOSTED_PILOT_DISPATCH_NOT_CURRENT_MAIN/);
   assert.match(bridge,/git rev-parse origin\/main/);
+  assert.match(bridge,/--arg ref 'main'/);
+  assert.doesNotMatch(bridge,/--arg ref "\$RELEASE_SHA"/);
   assert.match(bridge,/hosted-pilot-activation-evidence-producer\.yml\/dispatches/);
   for(const value of [
     'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed',
