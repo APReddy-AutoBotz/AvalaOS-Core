@@ -796,17 +796,6 @@
       "recommendedAction": null
     },
     {
-      "branchId": "STUDIO-LEASE_CONCURRENCY",
-      "module": "Studio",
-      "rule": "lease concurrency",
-      "sourceReference": "services/studioArtifacts/contracts.ts",
-      "criticality": "standard",
-      "coverageStatus": "UNCOVERED",
-      "testIds": [],
-      "uncoveredReason": "Requires deterministic server fault/concurrency injection not exposed by hosted Sandbox; retained PostgreSQL evidence must be bound at execution.",
-      "recommendedAction": "Bind the retained server-backed scenario or add an authorized disposable fault injector."
-    },
-    {
       "branchId": "DELIVERY-HANDOFF_IMPORT",
       "module": "Delivery",
       "rule": "handoff import",
@@ -1386,8 +1375,12 @@
       "criticality": "standard",
       "coverageStatus": "UNCOVERED",
       "testIds": [],
-      "uncoveredReason": "Requires deterministic server fault/concurrency injection not exposed by hosted Sandbox; retained PostgreSQL evidence must be bound at execution.",
-      "recommendedAction": "Bind the retained server-backed scenario or add an authorized disposable fault injector."
+      "uncoveredReason": "No authoritative retained evidence proves recovery when a response is lost after persistence succeeds; services/persistenceTransition.ts only persists and then commits local success.",
+      "recommendedAction": "Keep uncovered until an authorized disposable server test proves response-loss-after-commit recovery with exact-run retained evidence.",
+      "provenance": {
+        "kind": "required-scenario",
+        "limitation": "services/persistenceTransition.ts defines persist-before-local-success ordering but no response-loss simulation, replay, or recovery contract."
+      }
     },
     {
       "branchId": "SAFETY-HORIZONTAL_OVERFLOW",

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test:acceptance:catalog": "node scripts/exhaustiveAcceptanceValidate.mjs && node tests/acceptance/validators/validate-traceability.mjs && node tests/acceptance/validators/acceptance-metadata.test.mjs",
+    "test:acceptance:catalog": "node scripts/exhaustiveAcceptanceValidate.mjs && node tests/acceptance/validators/validate-traceability.mjs && node tests/acceptance/validators/acceptance-metadata.test.mjs && node tests/acceptance/validators/inventory-provenance.test.mjs",
     "test:acceptance:hosted": "playwright test --config=playwright.exhaustive-acceptance.config.ts",
     "report:acceptance": "node scripts/exhaustiveAcceptanceReport.mjs",
     "dev": "vite",
