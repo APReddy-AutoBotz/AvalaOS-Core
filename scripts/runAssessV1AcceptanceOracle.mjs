@@ -9,6 +9,7 @@ const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
 const manifestPath = path.resolve(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const sutManifestPath = path.resolve(process.env.SUT_RESULTS_MANIFEST || 'acceptance-results/sut-oracle-results.json');
+const governanceManifestPath = path.resolve(process.env.GOVERNANCE_SUT_RESULTS_MANIFEST || 'acceptance-results/governance-sut-results.json');
 const fixtures = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/process-discovery-transcripts.json', 'utf8')).fixtures;
 const base = fixtures.find(item => item.slug === 'clean-straight-through')?.oracleInputs;
 const bindings = loadExecutionBindings();
@@ -30,6 +31,34 @@ if (sutRun.status !== 0) throw new Error('PRODUCTION_SCORING_COMPARATOR_FAILED')
 const sutManifest = JSON.parse(fs.readFileSync(sutManifestPath, 'utf8'));
 const sutIndex = new Map((sutManifest.results ?? []).map(item => [item.testId, item]));
 
+fs.mkdirSync(path.dirname(governanceManifestPath), { recursive: true });
+const governanceRun = spawnSync(process.execPath, [
+  'scripts/runTypeScriptTest.mjs',
+  'types.ts',
+  'services/scoringEngine.ts',
+  'services/scoringEngine.test.ts',
+], {
+  cwd: process.cwd(),
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    RELEASE_SHA: releaseSha,
+    GITHUB_RUN_ID: workflowRunId,
+    GITHUB_RUN_ATTEMPT: workflowAttempt,
+    SCORING_GOVERNANCE_RESULTS_MANIFEST: governanceManifestPath,
+  },
+});
+if (governanceRun.status !== 0) throw new Error('PRODUCTION_GOVERNANCE_SCORE_COMPARATOR_FAILED');
+const governanceManifest = JSON.parse(fs.readFileSync(governanceManifestPath, 'utf8'));
+if (governanceManifest?.schemaVersion !== 1
+  || governanceManifest?.releaseSha !== releaseSha
+  || String(governanceManifest?.workflowRunId) !== workflowRunId
+  || String(governanceManifest?.workflowAttempt) !== workflowAttempt
+  || !Array.isArray(governanceManifest?.results)) {
+  throw new Error('PRODUCTION_GOVERNANCE_SCORE_EVIDENCE_INVALID');
+}
+const governanceIndex = new Map(governanceManifest.results.map(item => [item.scenario, item]));
+
 const gateResult = (inputs, expected) => {
   const actual = gateOracle(inputs).primaryGatingOutcome;
   return { pass: actual === expected, actual: { primaryGatingOutcome: actual } };
@@ -45,11 +74,11 @@ const runScenario = scenario => {
       catch (error) { return { pass: error instanceof RangeError, actual: { rejected: true } }; }
     case 'governance-min': {
       const actual = governanceOracle({ ...base, riskCriticality: 1, governanceSensitivity: 1, dataSensitivity: 1, errorReversibility: 5, goalAmbiguity: 1 });
-      return { pass: actual.score === 20 && actual.riskTier === 'Minimal' && actual.gateDecision === 'Go', actual: { riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
+      return { pass: actual.score === 20 && actual.riskTier === 'Minimal' && actual.gateDecision === 'Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
     }
     case 'governance-max': {
       const actual = governanceOracle({ ...base, riskCriticality: 5, governanceSensitivity: 5, dataSensitivity: 5, errorReversibility: 1, goalAmbiguity: 5 });
-      return { pass: actual.score === 100 && actual.riskTier === 'Unacceptable' && actual.gateDecision === 'No-Go', actual: { riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
+      return { pass: actual.score === 100 && actual.riskTier === 'Unacceptable' && actual.gateDecision === 'No-Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
     }
     case 'needs-discovery':
     case 'completion-below': return gateResult({ ...base, completionQuality: 49.9 }, 'Needs Discovery');
@@ -70,12 +99,23 @@ for (const binding of bindings.oracleTests ?? []) {
   try {
     const evaluated = runScenario(binding.scenario);
     const sut = sutIndex.get(binding.testId);
-    const sutMatches = sut?.status === 'PASS' && same(sut.actual, evaluated.actual);
+    let sutMatches = sut?.status === 'PASS';
+    let productionActual = sut?.actual ?? 'missing';
+
+    if (binding.scenario === 'governance-min' || binding.scenario === 'governance-max') {
+      const exactGovernance = governanceIndex.get(binding.scenario)?.actual;
+      const bandExpected = { riskTier: evaluated.actual.riskTier, gateDecision: evaluated.actual.gateDecision };
+      sutMatches = sutMatches && same(sut?.actual, bandExpected) && same(exactGovernance, evaluated.actual);
+      productionActual = { band: sut?.actual ?? 'missing', exactGovernance: exactGovernance ?? 'missing' };
+    } else {
+      sutMatches = sutMatches && same(sut?.actual, evaluated.actual);
+    }
+
     results.push({
       testId: binding.testId,
       scenario: binding.scenario,
       status: evaluated.pass && sutMatches ? 'PASS' : 'FAIL',
-      actual: { oracle: evaluated.actual, production: sut?.actual ?? 'missing', matched: sutMatches },
+      actual: { oracle: evaluated.actual, production: productionActual, matched: sutMatches },
     });
   } catch (error) {
     results.push({ testId: binding.testId, scenario: binding.scenario, status: 'FAIL', actual: error instanceof Error ? error.message : String(error) });
