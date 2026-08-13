@@ -1,17 +1,251 @@
-import fs from 'node:fs'; import path from 'node:path';
-const root=process.cwd(), out=path.resolve(process.env.ACCEPTANCE_RESULTS_DIR||'acceptance-results'); fs.mkdirSync(out,{recursive:true});
-const load=(name,fallback=[])=>{const p=path.resolve(name);if(!fs.existsSync(p))return fallback;const v=JSON.parse(fs.readFileSync(p,'utf8'));return Array.isArray(v)?v:v.cases??v.tests??v.branches??v.items??fallback};
-const catalog=load(process.env.ACCEPTANCE_CATALOG||'tests/acceptance/catalog/test-catalog.json'); const inventory=load(process.env.ACCEPTANCE_INVENTORY||'tests/acceptance/inventory.json');
-const pwPath=path.resolve(process.env.PLAYWRIGHT_JSON||'acceptance-results/playwright-results.json'); const pw=fs.existsSync(pwPath)?JSON.parse(fs.readFileSync(pwPath,'utf8')):null;
-const flat=[]; const walk=s=>{for(const spec of s?.specs||[])for(const t of spec.tests||[])flat.push({title:spec.title,project:t.projectName,results:t.results||[],expected:t.expectedStatus});for(const child of s?.suites||[])walk(child)}; for(const suite of pw?.suites||[])walk(suite);
-const normalize=r=>r==='passed'?'PASS':r==='failed'||r==='timedOut'||r==='interrupted'?'FAIL':r==='skipped'?'BLOCKED':'BLOCKED';
-const releaseSha=process.env.RELEASE_SHA||process.env.GITHUB_SHA||'not-bound'; const deployId=process.env.NETLIFY_DEPLOY_ID||'not-available'; const runId=process.env.GITHUB_RUN_ID||'local'; const attempt=process.env.GITHUB_RUN_ATTEMPT||'local'; const timestamp=new Date().toISOString(); const executionDisposition=process.env.ACCEPTANCE_EXECUTION_DISPOSITION||'EXECUTED';
-const results=catalog.map(tc=>{const binding=tc.automation?.testTitle??tc.playwrightTitle??tc.title;const found=flat.find(t=>t.title===binding||t.title.includes(`[${tc.testId}]`)||t.title.includes(tc.testId));let status,reason,artifacts=[];if(found){const last=found.results.at(-1);status=normalize(last?.status);reason=last?.error?.message??(status==='BLOCKED'?'Playwright did not execute the case':null);artifacts=(last?.attachments||[]).map(a=>a.path).filter(Boolean).map(p=>path.relative(root,p));}else if((tc.automation?.kind??tc.automationKind)==='retained'){status='BLOCKED';reason='Retained test result was not supplied to this execution aggregator.';}else{status='BLOCKED';reason='No matching deterministic execution result was supplied.';}return {...tc,releaseSha,netlifyDeployId:deployId,workflowRunId:runId,workflowAttempt:attempt,executionTimestamp:timestamp,actualResult:found?.results.at(-1)?.status??null,status,failureReason:reason,evidenceReferences:artifacts};});
-const covered=new Set();for(const b of inventory){const refs=[...(Array.isArray(b.testIds)?b.testIds:b.testId?[b.testId]:[])];if(refs.some(id=>results.some(r=>r.testId===id)))covered.add(b.branchId??b.ruleId??b.id)}
-const uncovered=inventory.filter(b=>!covered.has(b.branchId??b.ruleId??b.id)||(b.coverageDisposition??b.coverageStatus??b.status)==='UNCOVERED').map(b=>({...b,status:'UNCOVERED'}));
-const counts={PASS:0,FAIL:0,BLOCKED:0,UNCOVERED:uncovered.length};for(const r of results)counts[r.status]++;const executed=counts.PASS+counts.FAIL;const pct=(n,d)=>d?Number((100*n/d).toFixed(2)):0;const overall=counts.FAIL?'FAILED':counts.BLOCKED||counts.UNCOVERED?'INCOMPLETE_COVERAGE':'PASSED';
-const group=(items,key)=>Object.values(items.reduce((a,x)=>{const k=x[key]||'Unassigned';a[k]??={name:k,total:0,pass:0,fail:0,blocked:0};a[k].total++;a[k][x.status.toLowerCase()]++;return a},{}));const summary={overall,executionDisposition,releaseSha,netlifyDeployId:deployId,target:executionDisposition==='NOT_EXECUTED'?'not-executed-no-exact-deployment':process.env.HOSTED_PILOT_URL||'not-bound',workflowRunId:runId,workflowAttempt:attempt,executionTimestamp:timestamp,totalTests:results.length,...counts,passPercentage:pct(counts.PASS,executed),coveragePercentage:pct(inventory.length-uncovered.length,inventory.length),inventoryBranches:inventory.length,moduleSummary:group(results,'module'),personaSummary:group(results,'persona')};
-fs.writeFileSync(path.join(out,'acceptance-results.json'),JSON.stringify({summary,results,uncovered},null,2)+'\n');fs.writeFileSync(path.join(out,'source-to-test-coverage.json'),JSON.stringify({releaseSha,totalBranches:inventory.length,coveredBranches:inventory.length-uncovered.length,uncoveredBranches:uncovered},null,2)+'\n');
-const esc=s=>String(s??'').replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));let xml=`<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="Exhaustive AvalaOS Acceptance" tests="${results.length+uncovered.length}" failures="${counts.FAIL+counts.UNCOVERED}" skipped="${counts.BLOCKED}"><testsuite name="acceptance">`;for(const r of results){xml+=`<testcase classname="${esc(r.module)}" name="${esc(r.testId+' '+r.title)}">`;if(r.status==='FAIL')xml+=`<failure message="${esc(r.failureReason)}"/>`;if(r.status==='BLOCKED')xml+=`<skipped message="${esc(r.failureReason)}"/>`;xml+='</testcase>'}for(const b of uncovered)xml+=`<testcase classname="coverage" name="${esc(b.branchId??b.ruleId??b.id)}"><failure message="UNCOVERED: ${esc(b.uncoveredReason??b.reason??'No Test ID mapping')}"/></testcase>`;xml+='</testsuite></testsuites>\n';fs.writeFileSync(path.join(out,'acceptance-junit.xml'),xml);
-let md=`# Exhaustive AvalaOS Hosted Product Acceptance\n\n## Executive Summary\n\n- Overall: **${overall}**\n- Hosted execution: **${executionDisposition}**\n- Release SHA: \`${releaseSha}\`\n- Netlify deploy: \`${deployId}\`\n- Target: ${summary.target}\n- Workflow: \`${runId}\` attempt \`${attempt}\`\n- Tests: ${results.length}; PASS ${counts.PASS}; FAIL ${counts.FAIL}; BLOCKED ${counts.BLOCKED}; UNCOVERED ${counts.UNCOVERED}\n- Pass percentage: ${summary.passPercentage}%\n- Source/business branch coverage: ${summary.coveragePercentage}% (${inventory.length-uncovered.length}/${inventory.length})\n\nA 100% executed pass rate is not a full pass while blocked or uncovered cases remain.\n\n## Module Summary\n\n| Module | Total | Pass | Fail | Blocked |\n|---|---:|---:|---:|---:|\n${summary.moduleSummary.map(x=>`| ${x.name} | ${x.total} | ${x.pass} | ${x.fail} | ${x.blocked} |`).join('\n')}\n\n## Persona Summary\n\n| Persona | Total | Pass | Fail | Blocked |\n|---|---:|---:|---:|---:|\n${summary.personaSummary.map(x=>`| ${x.name} | ${x.total} | ${x.pass} | ${x.fail} | ${x.blocked} |`).join('\n')}\n\n## Failures\n\n${results.filter(x=>x.status==='FAIL').map(x=>`- **${x.testId} — ${x.title}** (${x.module}; ${x.persona}): ${x.failureReason}`).join('\n')||'None executed.'}\n\n## Blocked\n\n${results.filter(x=>x.status==='BLOCKED').map(x=>`- **${x.testId}**: ${x.failureReason}`).join('\n')||'None.'}\n\n## Uncovered Branches\n\n${uncovered.map(x=>`- **${x.branchId??x.ruleId??x.id}** — ${x.rule??x.title??'Declared branch'} (${x.sourceReference??'source not recorded'}): ${x.uncoveredReason??x.reason??'No executable mapping'}`).join('\n')||'None.'}\n`;fs.writeFileSync(path.join(out,'acceptance-report.md'),md);
-console.log(JSON.stringify(summary));if(executionDisposition==='EXECUTED'&&overall!=='PASSED')process.exitCode=1;
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  canonicalHostedTitle,
+  deriveInventory,
+  loadCatalog,
+  loadExecutionBindings,
+  loadInventoryDocument,
+  oracleBindingMap,
+  retainedBindingMap,
+  hostedBindingMap,
+} from './exhaustiveAcceptanceModel.mjs';
+import {
+  evaluateHostedTest,
+  evaluateRetainedTest,
+  flattenPlaywright,
+  validateOracleManifest,
+  validateRetainedManifest,
+} from './exhaustiveAcceptanceEvidence.mjs';
+
+const root = process.cwd();
+const out = path.resolve(process.env.ACCEPTANCE_RESULTS_DIR || 'acceptance-results');
+fs.mkdirSync(out, { recursive: true });
+const loadOptional = file => {
+  const resolved = path.resolve(file);
+  return fs.existsSync(resolved) ? JSON.parse(fs.readFileSync(resolved, 'utf8')) : null;
+};
+
+const catalog = loadCatalog();
+const bindings = loadExecutionBindings();
+const inventory = deriveInventory(catalog, loadInventoryDocument());
+const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
+const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
+const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
+const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
+const executionDisposition = process.env.ACCEPTANCE_EXECUTION_DISPOSITION || 'EXECUTED';
+const target = executionDisposition === 'EXECUTED'
+  ? process.env.HOSTED_PILOT_URL || 'not-bound'
+  : 'not-executed-no-exact-deployment';
+const timestamp = new Date().toISOString();
+
+const retainedManifest = loadOptional(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
+const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
+const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
+const executions = flattenPlaywright(playwright);
+
+const expectedBinding = { releaseSha, workflowRunId, workflowAttempt };
+const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding);
+const oracleErrors = validateOracleManifest(oracleManifest, expectedBinding);
+const suiteIndex = new Map((retainedManifest?.suites ?? []).map(item => [item.suiteId, item]));
+const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
+const retainedMap = retainedBindingMap(bindings);
+const oracleMap = oracleBindingMap(bindings);
+const hostedMap = hostedBindingMap(bindings);
+
+const results = (catalog.cases ?? []).map(testCase => {
+  let evaluation;
+  let actualResult = null;
+  let evidenceReferences = [];
+  let executionKind = 'unbound';
+
+  if (retainedMap.has(testCase.testId)) {
+    executionKind = 'retained';
+    evaluation = evaluateRetainedTest({
+      requiredSuiteIds: retainedMap.get(testCase.testId),
+      suiteIndex,
+      manifestErrors: retainedErrors,
+    });
+    actualResult = (retainedMap.get(testCase.testId) ?? []).map(id => ({ suiteId: id, status: suiteIndex.get(id)?.status ?? 'MISSING' }));
+  } else if (oracleMap.has(testCase.testId)) {
+    executionKind = 'oracle';
+    if (oracleErrors.length) {
+      evaluation = { status: 'BLOCKED', reason: `Oracle evidence binding invalid: ${oracleErrors.join(', ')}` };
+    } else {
+      const item = oracleIndex.get(testCase.testId);
+      if (!item) evaluation = { status: 'BLOCKED', reason: 'Oracle result missing.' };
+      else evaluation = { status: item.status, reason: item.status === 'PASS' ? null : `Oracle scenario failed: ${item.scenario}` };
+      actualResult = item?.actual ?? null;
+    }
+  } else if (hostedMap.has(testCase.testId)) {
+    executionKind = 'hosted';
+    const binding = hostedMap.get(testCase.testId);
+    if (executionDisposition !== 'EXECUTED') {
+      evaluation = { status: 'BLOCKED', reason: 'Hosted browser execution was not run because this PR is not the exact stable deployment.', evidenceReferences: [] };
+    } else if (!binding.scenario) {
+      evaluation = { status: 'BLOCKED', reason: binding.blockedReason || 'No deterministic hosted scenario is exposed.', evidenceReferences: [] };
+    } else {
+      evaluation = evaluateHostedTest({
+        title: canonicalHostedTitle(testCase),
+        executions,
+        requiredProjects: binding.projects,
+      });
+    }
+    evidenceReferences = (evaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
+    actualResult = evaluation.status;
+  } else {
+    evaluation = { status: 'BLOCKED', reason: 'No execution binding declared.' };
+  }
+
+  return {
+    ...testCase,
+    executionKind,
+    releaseSha,
+    netlifyDeployId: deployId,
+    workflowRunId,
+    workflowAttempt,
+    executionTimestamp: timestamp,
+    actualResult,
+    status: evaluation.status,
+    failureReason: evaluation.reason ?? null,
+    evidenceReferences,
+  };
+});
+
+const resultIndex = new Map(results.map(item => [item.testId, item]));
+const uncovered = inventory.filter(branch => branch.coverageStatus === 'UNCOVERED').map(branch => ({ ...branch, status: 'UNCOVERED' }));
+const declaredCovered = inventory.filter(branch => branch.coverageStatus === 'COVERED');
+const executedBranches = declaredCovered.filter(branch => branch.testIds.some(id => ['PASS', 'FAIL'].includes(resultIndex.get(id)?.status)));
+const provenBranches = declaredCovered.filter(branch => branch.testIds.length > 0 && branch.testIds.every(id => resultIndex.get(id)?.status === 'PASS'));
+
+const counts = { PASS: 0, FAIL: 0, BLOCKED: 0, UNCOVERED: uncovered.length };
+for (const result of results) counts[result.status] += 1;
+const executedCases = counts.PASS + counts.FAIL;
+const pct = (n, d) => d ? Number((100 * n / d).toFixed(2)) : 0;
+
+const requiredGateSuites = (bindings.retainedSuites ?? []).filter(suite => suite.requiredGate);
+const retainedGateState = requiredGateSuites.map(suite => ({
+  suiteId: suite.suiteId,
+  status: suiteIndex.get(suite.suiteId)?.status ?? 'MISSING',
+}));
+const retainedGateFailures = retainedGateState.filter(item => item.status === 'FAIL');
+const retainedGateMissing = retainedGateState.filter(item => item.status === 'MISSING');
+
+const overall = counts.FAIL > 0 || retainedGateFailures.length > 0
+  ? 'FAILED'
+  : counts.BLOCKED > 0 || counts.UNCOVERED > 0 || retainedGateMissing.length > 0
+    ? 'INCOMPLETE_COVERAGE'
+    : 'PASSED';
+
+const group = (items, selector) => Object.values(items.reduce((acc, item) => {
+  const keys = selector(item);
+  for (const key of keys) {
+    acc[key] ??= { name: key, total: 0, pass: 0, fail: 0, blocked: 0 };
+    acc[key].total += 1;
+    acc[key][item.status.toLowerCase()] += 1;
+  }
+  return acc;
+}, {}));
+
+const summary = {
+  overall,
+  executionDisposition,
+  releaseSha,
+  netlifyDeployId: deployId,
+  target,
+  workflowRunId,
+  workflowAttempt,
+  executionTimestamp: timestamp,
+  totalTests: results.length,
+  ...counts,
+  passPercentage: pct(counts.PASS, executedCases),
+  totalBranches: inventory.length,
+  declaredCoveredBranches: declaredCovered.length,
+  declaredCoveragePercentage: pct(declaredCovered.length, inventory.length),
+  executedBranches: executedBranches.length,
+  executedBranchPercentage: pct(executedBranches.length, inventory.length),
+  provenBranches: provenBranches.length,
+  provenBranchPercentage: pct(provenBranches.length, inventory.length),
+  retainedGateState,
+  moduleSummary: group(results, item => [item.module || 'Unassigned']),
+  personaSummary: group(results, item => Array.isArray(item.persona) ? item.persona : [item.persona || 'Unassigned']),
+};
+
+fs.writeFileSync(path.join(out, 'acceptance-results.json'), `${JSON.stringify({ summary, results, uncovered }, null, 2)}\n`);
+fs.writeFileSync(path.join(out, 'source-to-test-coverage.json'), `${JSON.stringify({
+  releaseSha,
+  totalBranches: inventory.length,
+  declaredCoveredBranches: declaredCovered.map(item => item.branchId),
+  executedBranches: executedBranches.map(item => item.branchId),
+  provenBranches: provenBranches.map(item => item.branchId),
+  uncoveredBranches: uncovered,
+}, null, 2)}\n`);
+
+const esc = value => String(value ?? '').replace(/[<>&"']/g, char => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;' }[char]));
+let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="Exhaustive AvalaOS Acceptance" tests="${results.length + uncovered.length}" failures="${counts.FAIL + counts.UNCOVERED}" skipped="${counts.BLOCKED}"><testsuite name="acceptance">`;
+for (const result of results) {
+  xml += `<testcase classname="${esc(result.module)}" name="${esc(`${result.testId} ${result.title}`)}">`;
+  if (result.status === 'FAIL') xml += `<failure message="${esc(result.failureReason)}"/>`;
+  if (result.status === 'BLOCKED') xml += `<skipped message="${esc(result.failureReason)}"/>`;
+  xml += '</testcase>';
+}
+for (const branch of uncovered) xml += `<testcase classname="coverage" name="${esc(branch.branchId)}"><failure message="UNCOVERED: ${esc(branch.uncoveredReason)}"/></testcase>`;
+xml += '</testsuite></testsuites>\n';
+fs.writeFileSync(path.join(out, 'acceptance-junit.xml'), xml);
+
+const moduleRows = summary.moduleSummary.map(item => `| ${item.name} | ${item.total} | ${item.pass} | ${item.fail} | ${item.blocked} |`).join('\n');
+const personaRows = summary.personaSummary.map(item => `| ${item.name} | ${item.total} | ${item.pass} | ${item.fail} | ${item.blocked} |`).join('\n');
+const failures = results.filter(item => item.status === 'FAIL').map(item => `- **${item.testId} — ${item.title}** (${item.module}; ${item.executionKind}): ${item.failureReason}`).join('\n') || 'None.';
+const blocked = results.filter(item => item.status === 'BLOCKED').map(item => `- **${item.testId} — ${item.title}** (${item.executionKind}): ${item.failureReason}`).join('\n') || 'None.';
+const uncoveredMd = uncovered.map(item => `- **${item.branchId}** — ${item.rule} (${item.sourceReferences.join(', ')}): ${item.uncoveredReason}`).join('\n') || 'None.';
+
+const markdown = `# Exhaustive AvalaOS Hosted Product Acceptance
+
+## Executive Summary
+
+- Overall: **${overall}**
+- Hosted execution: **${executionDisposition}**
+- Release SHA: \`${releaseSha}\`
+- Netlify deploy: \`${deployId}\`
+- Target: ${target}
+- Workflow: \`${workflowRunId}\` attempt \`${workflowAttempt}\`
+- Tests: ${results.length}; PASS ${counts.PASS}; FAIL ${counts.FAIL}; BLOCKED ${counts.BLOCKED}; UNCOVERED ${counts.UNCOVERED}
+- Executed-case pass rate: ${summary.passPercentage}%
+- Declared branch coverage: ${summary.declaredCoveragePercentage}% (${declaredCovered.length}/${inventory.length})
+- Executed branch coverage: ${summary.executedBranchPercentage}% (${executedBranches.length}/${inventory.length})
+- Proven branch coverage: ${summary.provenBranchPercentage}% (${provenBranches.length}/${inventory.length})
+
+A 100% pass rate among executed cases is **not** a full product pass while blocked or uncovered cases remain.
+
+## Module Summary
+
+| Module | Total | Pass | Fail | Blocked |
+|---|---:|---:|---:|---:|
+${moduleRows}
+
+## Persona Summary
+
+| Persona | Total | Pass | Fail | Blocked |
+|---|---:|---:|---:|---:|
+${personaRows}
+
+## Retained Exact-Run Gates
+
+${retainedGateState.map(item => `- **${item.suiteId}**: ${item.status}`).join('\n')}
+
+## Failures
+
+${failures}
+
+## Blocked
+
+${blocked}
+
+## Uncovered Source / Business Requirements
+
+${uncoveredMd}
+`;
+fs.writeFileSync(path.join(out, 'acceptance-report.md'), markdown);
+
+console.log(JSON.stringify(summary));
+if (executionDisposition === 'EXECUTED' && overall !== 'PASSED') process.exitCode = 1;

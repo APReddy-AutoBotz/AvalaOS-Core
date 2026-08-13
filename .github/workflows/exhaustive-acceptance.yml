@@ -27,16 +27,19 @@ env:
   HOSTED_PILOT_URL: ${{ inputs.hosted_url || 'https://avalaos-pilot.netlify.app' }}
   PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
   ACCEPTANCE_RESULTS_DIR: acceptance-results
+  RETAINED_RESULTS_MANIFEST: ${{ runner.temp }}/avalaos-retained-results.json
+  ORACLE_RESULTS_MANIFEST: ${{ runner.temp }}/avalaos-oracle-results.json
 
 jobs:
   acceptance:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 0
+
       - name: Fail closed on release and hosted target
         shell: bash
         run: |
@@ -45,40 +48,66 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$HOSTED_PILOT_URL" = "https://avalaos-pilot.netlify.app"
           [[ "$NETLIFY_DEPLOY_ID" =~ ^[0-9a-f]{24}$|^pull-request-not-deployed$ ]]
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - name: Install locked dependencies
         run: npm ci
-      - name: Validate canonical catalog and source inventory
+
+      - name: Validate catalog, inventory, bindings and controller bridge
         run: |
-          node scripts/exhaustiveAcceptanceValidate.mjs
+          npm run test:acceptance:catalog
+          node scripts/exhaustiveAcceptanceEvidence.test.mjs
           node scripts/exhaustiveAcceptanceDispatchBridge.test.mjs
-      - name: Install official Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run retained server-authority synthetic gates
+
+      - name: Run exact-run retained server-authority suites
+        id: retained
+        continue-on-error: true
+        run: node scripts/runExhaustiveRetainedSuites.mjs
+
+      - name: Run independent assessment and transcript oracles
+        id: oracle
+        continue-on-error: true
+        run: node scripts/runAssessV1AcceptanceOracle.mjs
+
+      - name: Validate deterministic hosted declarations
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --list --reporter=list
+
+      - name: Stage sanitized non-browser manifests
+        if: always()
+        shell: bash
         run: |
-          npm run test:pr1b
-          npm run test:pr1d
-          npm run test:pr1e
-          npm run test:pr1g
-          npm run test:studio-private-artifacts
-          npm run test:enterprise-intelligence
-          node scripts/runTrustAssuranceTest.mjs
+          set -euo pipefail
+          mkdir -p acceptance-results
+          test -f "$RETAINED_RESULTS_MANIFEST" && cp "$RETAINED_RESULTS_MANIFEST" acceptance-results/retained-suite-results.json || true
+          test -f "$ORACLE_RESULTS_MANIFEST" && cp "$ORACLE_RESULTS_MANIFEST" acceptance-results/oracle-results.json || true
+
+      - name: Install official Chromium for exact hosted execution
+        if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
+        run: npx playwright install --with-deps chromium
+
       - name: Run exhaustive real hosted Sandbox acceptance
+        id: hosted
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
         continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts
-      - name: Generate fail-closed unified results
+
+      - name: Generate unified PASS FAIL BLOCKED UNCOVERED results
         id: report
         continue-on-error: true
         env:
           ACCEPTANCE_EXECUTION_DISPOSITION: ${{ env.NETLIFY_DEPLOY_ID == 'pull-request-not-deployed' && 'NOT_EXECUTED' || 'EXECUTED' }}
         run: node scripts/exhaustiveAcceptanceReport.mjs
+
       - name: Upload sanitized acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -89,11 +118,19 @@ jobs:
           path: |
             tests/acceptance/catalog/
             tests/acceptance/inventory.json
+            tests/acceptance/execution-bindings.json
             tests/acceptance/fixtures/
             acceptance-results/
             artifacts/exhaustive-acceptance/
-      - name: Enforce complete acceptance
+
+      - name: Enforce framework and release gates
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
+          test "${{ steps.retained.outcome }}" = success
+          test "${{ steps.oracle.outcome }}" = success
           test "${{ steps.report.outcome }}" = success
+          if [ "$NETLIFY_DEPLOY_ID" != "pull-request-not-deployed" ]; then
+            test "${{ steps.hosted.outcome }}" = success
+          fi

@@ -27,7 +27,7 @@ export default defineConfig({
     video: 'off',
   },
   projects: [
-    { name: 'hosted-desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'hosted-pixel-7-chromium', use: { ...devices['Pixel 7'] } },
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'pixel-7-chromium', use: { ...devices['Pixel 7'] } },
   ],
 });

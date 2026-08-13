@@ -1,53 +1,92 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  classifyExecutionBindings,
+  deriveInventory,
+  loadCatalog,
+  loadExecutionBindings,
+  loadInventoryDocument,
+  repoRoot,
+} from './exhaustiveAcceptanceModel.mjs';
 
-const root = process.cwd();
-const catalogPath = process.env.ACCEPTANCE_CATALOG || path.join(root, 'tests/acceptance/catalog/test-catalog.json');
-const inventoryPath = process.env.ACCEPTANCE_INVENTORY || path.join(root, 'tests/acceptance/inventory.json');
 const required = ['testId','title','module','feature','ruleRequirement','sourceReference','environment','persona','fixture','transcript','preconditions','actions','expectedResult','expectedMutation','expectedMutationCount','expectedDenial','expectedErrorCode','expectedStateBefore','expectedStateAfter','expectedScore','expectedClassification','expectedLineage','expectedEvidence','expectedAudit','viewport','browser','destructiveOrNonDestructive','realProviderAllowed','customerDataAllowed'];
 const fail = message => { throw new Error(`[acceptance-catalog] ${message}`); };
-const read = file => { if (!fs.existsSync(file)) fail(`missing ${path.relative(root,file)}`); try { return JSON.parse(fs.readFileSync(file,'utf8')); } catch (e) { fail(`invalid JSON in ${path.relative(root,file)}: ${e.message}`); } };
-const asArray = (value, label) => { const result = Array.isArray(value) ? value : value?.cases ?? value?.tests ?? value?.branches ?? value?.items; if (!Array.isArray(result)) fail(`${label} must be an array or contain an array`); return result; };
-const validateInventoryProvenance = (branch, id) => {
-  const provenance = branch.provenance;
-  if (provenance?.kind === 'source-backed') {
-    if (typeof provenance.contract !== 'string' || !provenance.contract.trim()) fail(`${id} source-backed provenance is missing an exact contract`);
-    if (typeof branch.sourceReference !== 'string' || !branch.sourceReference.trim()) fail(`${id} source-backed provenance is missing a sourceReference`);
-    const sourcePath = path.resolve(root, branch.sourceReference);
-    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) fail(`${id} source-backed provenance references missing source ${branch.sourceReference}`);
-    if (!fs.readFileSync(sourcePath, 'utf8').includes(provenance.contract)) fail(`${id} declared rule has no exact source-backed contract ${JSON.stringify(provenance.contract)} in ${branch.sourceReference}`);
-    return;
-  }
-  if (provenance?.kind === 'required-scenario') {
-    if (typeof provenance.limitation !== 'string' || !provenance.limitation.trim()) fail(`${id} required-scenario provenance is missing its source limitation`);
-    return;
-  }
-  fail(`${id} must declare source-backed or required-scenario provenance`);
-};
-const catalog = asArray(read(catalogPath), 'catalog');
-const inventory = asArray(read(inventoryPath), 'inventory');
+const catalog = loadCatalog();
+const inventoryDocument = loadInventoryDocument();
+const bindings = loadExecutionBindings();
+const cases = catalog.cases ?? [];
 const ids = new Set();
-const catalogById = new Map();
-for (const [index, item] of catalog.entries()) {
+
+for (const [index, item] of cases.entries()) {
   for (const key of required) if (!(key in item)) fail(`catalog[${index}] (${item.testId ?? 'unknown'}) missing ${key}`);
   if (!/^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d{3}$/.test(item.testId)) fail(`${item.testId} is not a stable deterministic Test ID`);
-  if (ids.has(item.testId)) fail(`duplicate Test ID ${item.testId}`); ids.add(item.testId);
-  catalogById.set(item.testId, item);
+  if (ids.has(item.testId)) fail(`duplicate Test ID ${item.testId}`);
+  ids.add(item.testId);
+  if (!Array.isArray(item.branchIds) || item.branchIds.length === 0) fail(`${item.testId} must declare at least one branchId`);
+  if (!Array.isArray(item.sourceReference) || item.sourceReference.length === 0) fail(`${item.testId} must declare sourceReference`);
+  for (const ref of item.sourceReference) {
+    const sourcePath = path.join(repoRoot, ref);
+    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) fail(`${item.testId} references missing source ${ref}`);
+  }
   if (item.realProviderAllowed !== false || item.customerDataAllowed !== false) fail(`${item.testId} violates synthetic-only safety flags`);
   if (!['destructive','non-destructive','nonDestructive','non_destructive','destructive_synthetic_disposable'].includes(item.destructiveOrNonDestructive)) fail(`${item.testId} has invalid destructive classification`);
 }
-const branchIds = new Set();
-for (const [index, branch] of inventory.entries()) {
-  const id = branch.branchId ?? branch.ruleId ?? branch.id; if (!id) fail(`inventory[${index}] missing branchId`);
-  if (branchIds.has(id)) fail(`duplicate branch ID ${id}`); branchIds.add(id);
-  const refs = branch.testIds ?? branch.testId ?? [];
-  for (const ref of Array.isArray(refs) ? refs : [refs]) if (ref && !ids.has(ref)) fail(`${id} references unknown Test ID ${ref}`);
-  const disposition = branch.coverageDisposition ?? branch.coverageStatus ?? branch.status;
-  if (disposition === 'UNCOVERED' && !(branch.uncoveredReason ?? branch.reason)) fail(`${id} is UNCOVERED without a reason`);
-  if (disposition === 'COVERED') {
-    const mapped = (Array.isArray(refs) ? refs : [refs]).map(ref => catalogById.get(ref)).filter(Boolean);
-    if (!mapped.some(item => item.branchIds?.includes(id) && item.sourceReference?.includes(branch.sourceReference))) fail(`${id} has no catalog declaration that maps the branch to its exact sourceReference`);
+
+if (inventoryDocument.schemaVersion !== 2) fail('inventory schemaVersion must be 2');
+if (inventoryDocument.coveredBranchesSource !== 'tests/acceptance/catalog/test-catalog.json') fail('covered branches must derive from the canonical catalog');
+for (const branch of inventoryDocument.uncoveredBranches ?? []) {
+  if (!branch.branchId || !branch.uncoveredReason || !branch.recommendedAction) fail('every explicit uncovered branch needs id, reason, and action');
+  if (branch.provenance?.kind !== 'required-scenario' || !branch.provenance?.limitation) fail(`${branch.branchId} must declare required-scenario provenance`);
+  for (const ref of branch.sourceReferences ?? []) {
+    const sourcePath = path.join(repoRoot, ref);
+    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) fail(`${branch.branchId} references missing source ${ref}`);
   }
-  if (disposition === 'UNCOVERED' || branch.provenance) validateInventoryProvenance(branch, id);
 }
-console.log(JSON.stringify({status:'PASS',catalogTests:catalog.length,inventoryBranches:inventory.length,catalogPath:path.relative(root,catalogPath),inventoryPath:path.relative(root,inventoryPath)}));
+const inventory = deriveInventory(catalog, inventoryDocument);
+const branchIds = new Set();
+for (const branch of inventory) {
+  if (branchIds.has(branch.branchId)) fail(`duplicate branch ${branch.branchId}`);
+  branchIds.add(branch.branchId);
+}
+if (branchIds.has('STUDIO-LEASE_CONCURRENCY')) fail('invented Studio lease branch must not reappear');
+
+const suiteIds = new Set();
+for (const suite of bindings.retainedSuites ?? []) {
+  if (!suite.suiteId || suiteIds.has(suite.suiteId)) fail(`duplicate or missing retained suite ${suite.suiteId ?? 'missing'}`);
+  suiteIds.add(suite.suiteId);
+  if (!Array.isArray(suite.command) || suite.command.length === 0 || suite.command.some(part => typeof part !== 'string' || !part)) fail(`${suite.suiteId} has invalid command`);
+  for (const testId of suite.testIds ?? []) if (!ids.has(testId)) fail(`${suite.suiteId} references unknown Test ID ${testId}`);
+}
+for (const item of bindings.oracleTests ?? []) if (!ids.has(item.testId) || !item.scenario) fail(`invalid oracle binding ${item.testId ?? 'missing'}`);
+for (const item of bindings.hostedTests ?? []) {
+  if (!ids.has(item.testId)) fail(`hosted binding references unknown Test ID ${item.testId}`);
+  if (!Array.isArray(item.projects) || item.projects.length === 0) fail(`${item.testId} hosted binding has no projects`);
+  for (const project of item.projects) if (!['desktop-chromium','pixel-7-chromium'].includes(project)) fail(`${item.testId} has unsupported project ${project}`);
+  if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
+}
+
+const classification = classifyExecutionBindings(catalog, bindings);
+for (const testCase of cases) {
+  const kinds = classification.get(testCase.testId) ?? [];
+  if (kinds.length !== 1) fail(`${testCase.testId} must have exactly one execution binding, found ${kinds.join(',') || 'none'}`);
+}
+
+const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'retained').length;
+const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'oracle').length;
+const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'hosted').length;
+const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
+const blockedHosted = hostedTestIds - executableHosted;
+const uncovered = inventory.filter(item => item.coverageStatus === 'UNCOVERED');
+
+console.log(JSON.stringify({
+  status:'PASS',
+  catalogTests: cases.length,
+  inventoryBranches: inventory.length,
+  declaredCoveredBranches: inventory.length - uncovered.length,
+  uncoveredBranches: uncovered.length,
+  retainedTestIds,
+  oracleTestIds,
+  hostedTestIds,
+  executableHosted,
+  blockedHosted,
+}, null, 2));
