@@ -4,6 +4,10 @@ const REPOSITORY='APReddy-AutoBotz/AvalaOS-Core';
 const REPOSITORY_ID='1256880940';
 const WORKFLOW_PATH='.github/workflows/hosted-pilot-activation-evidence-producer.yml';
 const BRANCH_PREFIX='hosted-pilot-dispatch--';
+const ORGANIZATION_ID='24de1bb5-ad49-4224-80b1-9d26b6dcfc15';
+const WORKSPACE_ID='06165d6f-19c9-4a0c-8847-f9cb6c63e9d2';
+const RECOVERY_ACTOR_ID='6d65da73-84b0-4eb3-9be5-d7f1e53c0151';
+const RECOVERY_AUTHORIZATION_VERSION=5;
 const jsonHeaders={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
 
 type Json=Record<string,unknown>;
@@ -77,9 +81,12 @@ async function rpc(name:string,args:Json){
 }
 
 function common(body:Json){
+  const org=exactString(body.organizationId,/^[0-9a-f-]{36}$/,'ORG_INVALID');
+  const workspace=exactString(body.workspaceId,/^[0-9a-f-]{36}$/,'WORKSPACE_INVALID');
+  if(org!==ORGANIZATION_ID||workspace!==WORKSPACE_ID)throw new Error('OIDC_SYNTHETIC_SCOPE_MISMATCH');
   return {
-    org:exactString(body.organizationId,/^[0-9a-f-]{36}$/,'ORG_INVALID'),
-    workspace:exactString(body.workspaceId,/^[0-9a-f-]{36}$/,'WORKSPACE_INVALID'),
+    org,
+    workspace,
     exercise:exactString(body.exerciseRunId,/^[0-9a-f-]{36}$/,'EXERCISE_INVALID'),
     release:exactString(body.expectedReleaseSha,/^[0-9a-f]{40}$/,'RELEASE_INVALID'),
     runId:exactString(body.producerRunId,/^[1-9][0-9]{0,19}$/,'RUN_ID_INVALID'),
@@ -111,6 +118,7 @@ Deno.serve(async(req:Request)=>{
     if(operation==='finalize'){
       const recoveryActor=exactString(body.recoveryActorId,/^[0-9a-f-]{36}$/,'RECOVERY_ACTOR_INVALID');
       const recoveryVersion=exactInt(body.recoveryAuthorizationVersion,1,'RECOVERY_VERSION_INVALID');
+      if(recoveryActor!==RECOVERY_ACTOR_ID||recoveryVersion!==RECOVERY_AUTHORIZATION_VERSION)throw new Error('OIDC_RECOVERY_SCOPE_MISMATCH');
       const result=await rpc('hosted_pilot_oidc_finalize',{...bound,p_recovery_actor:recoveryActor,p_recovery_authorization_version:recoveryVersion});
       return new Response(JSON.stringify(result),{status:200,headers:jsonHeaders});
     }
