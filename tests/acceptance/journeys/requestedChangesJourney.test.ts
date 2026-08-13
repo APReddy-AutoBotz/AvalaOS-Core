@@ -164,7 +164,8 @@ const handoff = buildStudioHandoffPackage(
 
 assert.equal(handoff.review.status, 'approved');
 assert.equal(handoff.review.reviewSequence, 2);
-assert.equal(handoff.sourceCaseVersion, 5);
+assert.equal(handoff.binding.caseVersion, 5);
+assert.equal(handoff.binding.decisionId, 'decision-v5');
 assert.equal(handoff.govern.actions.find(item => item.actionId === 'pay')?.category, 'prohibited');
 assert.equal(handoff.decision.validationStatus, 'reviewer-ready');
 
