@@ -21,6 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - run: node scripts/runTypeScriptTest.mjs services/hostedSandboxRoute.ts services/hostedSandboxRoute.test.ts
+      - run: node scripts/runTypeScriptTest.mjs types.ts services/hostedSandboxRoute.ts services/hostedSandboxRoute.test.ts
       - run: npm run typecheck
       - run: npm run build
