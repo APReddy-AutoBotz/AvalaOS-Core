@@ -36,6 +36,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
       - name: Fail closed on release and hosted target
         shell: bash
         run: |
@@ -65,6 +66,7 @@ jobs:
           node scripts/runTrustAssuranceTest.mjs
           node scripts/testTrustAssuranceMigration.mjs
       - name: Run exhaustive real hosted Sandbox acceptance
+        if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
         continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
@@ -73,6 +75,8 @@ jobs:
       - name: Generate fail-closed unified results
         id: report
         continue-on-error: true
+        env:
+          ACCEPTANCE_EXECUTION_DISPOSITION: ${{ env.NETLIFY_DEPLOY_ID == 'pull-request-not-deployed' && 'NOT_EXECUTED' || 'EXECUTED' }}
         run: node scripts/exhaustiveAcceptanceReport.mjs
       - name: Upload sanitized acceptance evidence
         if: always()
