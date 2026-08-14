@@ -141,6 +141,40 @@ test('every hosted navigation rechecks exact release environment and deployment 
   assert.match(spec, /x-avalaos-netlify-deploy-id/u);
   assert.ok((spec.match(/assertHostedResponseIdentity\(response\);/gu) ?? []).length >= 6, 'sandbox, sign-in, public, descendant, release identity and reload must each rebind hosted identity');
 });
+test('server sign-out failures fail closed before logged-out navigation', async () => {
+  const adapter = await readFile('services/adapters/authAdapter.ts', 'utf8');
+  const provider = await readFile('components/auth/AuthProvider.tsx', 'utf8');
+  assert.match(adapter, /const \{ error \} = await supabase\.auth\.signOut\(\);/u);
+  assert.match(adapter, /if \(error\) throw error;/u);
+  assert.match(provider, /await authAdapter\.signOut\(\);[\s\S]*window\.location\.assign\(target\);/u);
+});
+test('external hosted script allowlists are derived from exact index declarations', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /const indexHtml = fs\.readFileSync\('index\.html', 'utf8'\);/u);
+  assert.match(spec, /declaredJsDelivrScriptPaths/u);
+  assert.match(spec, /cdn\\\.jsdelivr\\\.net/u);
+  assert.match(spec, /declaredJsDelivrScriptPaths\.has\(url\.pathname\)/u);
+  assert.doesNotMatch(spec, /url\.pathname\.startsWith\('\/npm\/'\)/u);
+  assert.match(spec, /importMapMatch/u);
+  assert.match(spec, /Object\.values\(importMap\.imports \?\? \{\}\)/u);
+  assert.match(spec, /url\.origin === 'https:\/\/aistudiocdn\.com'/u);
+  assert.match(spec, /prefix: source\.endsWith\('\/'\)/u);
+  assert.match(spec, /isDeclaredAiStudioScript\(url\)/u);
+});
+test('mobile-safe Admin scenarios prove the Enterprise Intelligence destination directly', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  const adminNavigationStart = spec.indexOf("case 'admin-navigation':");
+  const adminNavigationEnd = spec.indexOf("case 'non-admin-denial':");
+  const adminCapabilityStart = spec.indexOf("case 'admin-capability-view':");
+  const adminCapabilityEnd = spec.indexOf("case 'reload-reconstruction':");
+  assert.ok(adminNavigationStart >= 0 && adminNavigationEnd > adminNavigationStart, 'admin-navigation scenario must remain present');
+  assert.ok(adminCapabilityStart >= 0 && adminCapabilityEnd > adminCapabilityStart, 'admin-capability-view scenario must remain present');
+  for (const scenario of [spec.slice(adminNavigationStart, adminNavigationEnd), spec.slice(adminCapabilityStart, adminCapabilityEnd)]) {
+    assert.match(scenario, /await admin\.click\(\);/u);
+    assert.match(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
+    assert.match(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
+  }
+});
 test('delivery pack scenarios enter the canonical project scope and open the project subnavigation', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   assert.match(spec, /const selectProjectScope[\s\S]*Switch workspace context/u);
