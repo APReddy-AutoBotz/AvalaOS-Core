@@ -92,7 +92,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Verify exact hosted deployment identity
+        id: deployment
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
+        continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
@@ -100,7 +102,7 @@ jobs:
 
       - name: Run exhaustive real hosted Sandbox acceptance
         id: hosted
-        if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
+        if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed' && steps.deployment.outcome == 'success'
         continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
@@ -109,9 +111,10 @@ jobs:
 
       - name: Generate unified PASS FAIL BLOCKED UNCOVERED results
         id: report
+        if: always()
         continue-on-error: true
         env:
-          ACCEPTANCE_EXECUTION_DISPOSITION: ${{ env.NETLIFY_DEPLOY_ID == 'pull-request-not-deployed' && 'NOT_EXECUTED' || 'EXECUTED' }}
+          ACCEPTANCE_EXECUTION_DISPOSITION: ${{ env.NETLIFY_DEPLOY_ID == 'pull-request-not-deployed' && 'NOT_EXECUTED' || steps.deployment.outcome != 'success' && 'BLOCKED' || 'EXECUTED' }}
         run: node scripts/exhaustiveAcceptanceReport.mjs
 
       - name: Upload sanitized acceptance evidence
@@ -138,5 +141,6 @@ jobs:
           test "${{ steps.oracle.outcome }}" = success
           test "${{ steps.report.outcome }}" = success
           if [ "$NETLIFY_DEPLOY_ID" != "pull-request-not-deployed" ]; then
+            test "${{ steps.deployment.outcome }}" = success
             test "${{ steps.hosted.outcome }}" = success
           fi
