@@ -228,7 +228,7 @@ export interface StudioHandoffPackage {
 export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: DecisionPackV2, evidence: readonly EvidenceSubmission[], attestations: readonly EvidenceAttestation[], review: ReviewResolution, govern: GovernResolution, canonicalHashes: Readonly<Record<string, string>>, sourceReferences: readonly string[], createdAt: string): StudioHandoffPackage => {
   assertBinding(binding, review); assertBinding(binding, govern);
   if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id || !controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, Govern resolution, and satisfied controls.');
-  if (decision.caseId !== binding.caseId || decision.caseVersion !== binding.caseVersion) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision does not belong to the current reviewed case.');
+  if (decision.caseId !== binding.caseId || decision.caseVersion !== binding.caseVersion || decision.decisionVersion !== binding.decisionVersion) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision does not belong to the current reviewed case.');
 
   const evidenceById = new Map(evidence.map(item => [item.id, item]));
   if (!evidence.length || evidenceById.size !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence set must contain unique current evidence.');
