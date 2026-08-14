@@ -4,10 +4,11 @@ import fs from 'node:fs';
 
 const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
 const deployId = process.env.NETLIFY_DEPLOY_ID;
+const rawHostedUrl = process.env.HOSTED_PILOT_URL;
+const hostedOrigin = rawHostedUrl ? new URL(rawHostedUrl).origin : null;
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
 const catalogById = new Map(catalog.cases.map((item: any) => [item.testId, item]));
-const forbiddenRemoteAuthority = /(?:supabase\.co|functions\/v1|generativelanguage|gemini|groq|api\.openai|anthropic)/iu;
 const personas: Array<[string, string]> = [
   ['Process Analyst', 'Maya Patel'],
   ['AP Process Owner', 'Priya Nair'],
@@ -18,9 +19,28 @@ const personas: Array<[string, string]> = [
   ['Platform Admin', 'Henry Wilson'],
 ];
 
+type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
+type NetworkViolation = { method: string; category: NetworkViolationCategory };
+const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
+const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
+const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
+  const method = request.method().toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') return 'non-read-method';
+  const headers = request.headers();
+  if (Object.keys(headers).some(name => /^(?:authorization|apikey|x-api-key)$/iu.test(name))) return 'credential-header';
+  const url = new URL(request.url());
+  if (!hostedOrigin || url.origin !== hostedOrigin) return 'unexpected-origin';
+  const resourceType = request.resourceType();
+  if (resourceType === 'document') return safeDocumentPath(url.pathname) ? null : 'unexpected-document-route';
+  if (resourceType === 'fetch' || resourceType === 'xhr' || resourceType === 'websocket' || resourceType === 'eventsource') return 'authority-request';
+  if (['script', 'stylesheet', 'font', 'image', 'media', 'other'].includes(resourceType) && safeStaticPath(url.pathname)) return null;
+  return 'unexpected-resource';
+};
+
 test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
   expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
+  expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
 });
 
 const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {
@@ -32,21 +52,14 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
 };
 
 const observeAuthorityRequests = (page: Page) => {
-  const forbidden: Array<{ method: string; url: string; sensitiveHeaders: string[] }> = [];
+  const violations: NetworkViolation[] = [];
   const inspect = (request: Request) => {
-    const headers = request.headers();
-    const sensitiveHeaders = Object.keys(headers).filter(name => /^(?:authorization|apikey|x-api-key)$/iu.test(name));
-    if (forbiddenRemoteAuthority.test(request.url()) || sensitiveHeaders.length) {
-      forbidden.push({
-        method: request.method(),
-        url: request.url().replace(/[?#].*$/u, ''),
-        sensitiveHeaders,
-      });
-    }
+    const category = classifyNetworkRequest(request);
+    if (category) violations.push({ method: request.method(), category });
   };
   page.on('request', inspect);
   return {
-    assertSafe: () => expect(forbidden, 'Sandbox must not contact server authority or real AI providers').toEqual([]),
+    assertSafe: () => expect(violations, 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual([]),
     stop: () => page.off('request', inspect),
   };
 };
