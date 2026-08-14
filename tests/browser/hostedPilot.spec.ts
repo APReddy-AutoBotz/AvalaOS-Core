@@ -1,13 +1,19 @@
 import { expect, test } from '@playwright/test';
 
 const expectedHead = process.env.EXPECTED_RELEASE_SHA;
-test.beforeAll(() => expect(expectedHead, 'EXPECTED_RELEASE_SHA must bind acceptance to an exact release').toMatch(/^[0-9a-f]{40}$/));
+const expectedDeployId = process.env.EXPECTED_NETLIFY_DEPLOY_ID;
 
-test('hosted shell is exact-release, non-production, responsive, and cannot mint authority', async ({ page }) => {
+test.beforeAll(() => {
+  expect(expectedHead, 'EXPECTED_RELEASE_SHA must bind acceptance to an exact release').toMatch(/^[0-9a-f]{40}$/);
+  expect(expectedDeployId, 'EXPECTED_NETLIFY_DEPLOY_ID must bind acceptance to an exact Netlify deploy').toMatch(/^[0-9a-f]{24}$/);
+});
+
+test('hosted shell is exact-release, exact-deploy, non-production, responsive, and cannot mint authority', async ({ page }) => {
   const response = await page.goto('/', { waitUntil: 'networkidle' });
   expect(response?.ok()).toBeTruthy();
   expect(response?.headers()['x-avalaos-release']).toBe(expectedHead);
   expect(response?.headers()['x-avalaos-environment']).toBe('hosted_nonproduction_pilot');
+  expect(response?.headers()['x-avalaos-netlify-deploy-id']).toBe(expectedDeployId);
   await expect(page.locator('#root')).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/production authorized|customer data loaded/i);
   const authority = await page.evaluate(() => ({
@@ -20,7 +26,11 @@ test('hosted shell is exact-release, non-production, responsive, and cannot mint
 });
 
 test('offline navigation never renders a false success', async ({ page, context }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const response = await page.goto('/', { waitUntil: 'domcontentloaded' });
+  expect(response?.ok()).toBeTruthy();
+  expect(response?.headers()['x-avalaos-release']).toBe(expectedHead);
+  expect(response?.headers()['x-avalaos-environment']).toBe('hosted_nonproduction_pilot');
+  expect(response?.headers()['x-avalaos-netlify-deploy-id']).toBe(expectedDeployId);
   await context.setOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
   await expect(page.locator('body')).not.toContainText(/successfully (saved|approved|promoted|completed)/i);
