@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, AP_INVOICE_EXCEPTION_V2_FIXTURE } from './index.ts';
 import { ASSESS_V2_REVIEW_VERSION, EvidenceAttestation, GovernAction, GovernResolution, ReviewAssignment, ReviewBinding, ReviewResolution, buildStudioHandoffPackage, deriveReviewedConfidence, resolveReview, startRevision, validateAttestation, validateGovernResolution, validateReviewAssignment } from './reviewDomain.ts';
 
-const binding: ReviewBinding = { organizationId: 'org-1', workspaceId: 'ws-1', caseId: 'case-1', caseVersion: 4, decisionId: 'decision-4', decisionVersion: 'decision-v4' };
+const binding: ReviewBinding = { organizationId: 'org-1', workspaceId: 'ws-1', caseId: 'case-1', caseVersion: 4, decisionId: 'decision-4', decisionVersion: AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION.decisionVersion };
 const assignment: ReviewAssignment = { ...binding, id: 'assignment-1', reviewSchemaVersion: ASSESS_V2_REVIEW_VERSION, reviewSequence: 1, authorActorId: 'author', reviewerActorId: 'reviewer', reviewerAuthorizationVersion: 7, assignedBy: 'lead', assignedAt: '2026-07-20T10:00:00.000Z', requestId: 'request-a', receiptId: 'receipt-a', auditId: 'audit-a' };
 const evidence = [
   { id: 'ev-1', claimIds: ['claim-1'], sourceType: 'system-record' as const, status: 'submitted' as const, validated: false as const, submittedBy: 'submitter', validUntil: '2027-01-01T00:00:00.000Z' },
@@ -98,7 +98,6 @@ const run = () => {
   };
   currentDecision.caseId = binding.caseId;
   currentDecision.caseVersion = binding.caseVersion;
-  currentDecision.decisionVersion = binding.decisionVersion;
   bindDecisionEvidence(currentDecision);
   const pkg = buildStudioHandoffPackage(binding, currentDecision, evidence, accepted, approved, govern, { input: 'hash-i', output: 'hash-o' }, ['decision-4'], '2026-07-20T15:00:00.000Z');
   assert.equal(pkg.review.status, 'approved');
@@ -113,9 +112,9 @@ const run = () => {
     /latest Studio attestation/,
   );
 
-  assert.throws(() => buildStudioHandoffPackage(binding, { ...currentDecision, decisionVersion: 'decision-substituted' }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /decision does not belong/);
+  assert.throws(() => buildStudioHandoffPackage(binding, { ...currentDecision, decisionVersion: 'decision-substituted' as unknown as typeof currentDecision.decisionVersion }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /decision does not belong/);
   assert.throws(() => buildStudioHandoffPackage(binding, AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /decision does not belong/);
-  assert.throws(() => buildStudioHandoffPackage(binding, { ...AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, caseId: binding.caseId, caseVersion: binding.caseVersion, decisionVersion: binding.decisionVersion }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /references evidence outside/);
+  assert.throws(() => buildStudioHandoffPackage(binding, { ...AP_INVOICE_EXCEPTION_V2_EXPECTED_DECISION, caseId: binding.caseId, caseVersion: binding.caseVersion }, evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /references evidence outside/);
   assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, AP_INVOICE_EXCEPTION_V2_FIXTURE.evidence, accepted, approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /evidence/);
   assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, [evidence[0], evidence[0]], [accepted[0], { ...accepted[1], workspaceId: 'foreign' }], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /unique current evidence/);
   assert.throws(() => buildStudioHandoffPackage(binding, currentDecision, evidence, [accepted[0], accepted[0]], approved, govern, {}, [], '2026-07-20T15:00:00.000Z'), /Studio evidence/);
