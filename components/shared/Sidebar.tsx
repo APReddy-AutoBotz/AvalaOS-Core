@@ -23,6 +23,7 @@ import {
   ViewBoardsIcon,
   BoltIcon,
   ClockIcon,
+  UserCircleIcon,
 } from './icons';
 import { AvalaLifecycleLockup, AvalaLogo } from './brand';
 
@@ -212,6 +213,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div className="border-t border-[var(--av-color-border)] px-3 py-3">
+        {user && <div data-testid="mobile-current-user" className="mb-3 flex min-w-0 items-center gap-2 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-surface)] px-2.5 py-2 lg:hidden">
+          <UserCircleIcon className="h-6 w-6 shrink-0 text-[var(--av-color-text-subtle)]" />
+          <div className="min-w-0">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">Signed in as</p>
+            <p className="truncate text-xs font-bold text-[var(--av-color-text)]">{user.name}</p>
+          </div>
+        </div>}
         {!collapsed && <p className="nav-section-label px-3 pb-2">Administration</p>}
         {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.ENTERPRISE_INTELLIGENCE); onMobileClose?.(); }} aria-current={currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Admin / Intelligence</span>}</button>}
       </div>
