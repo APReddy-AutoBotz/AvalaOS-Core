@@ -14,6 +14,8 @@ const fail = message => { throw new Error(`[acceptance-catalog] ${message}`); };
 const catalog = loadCatalog();
 const inventoryDocument = loadInventoryDocument();
 const bindings = loadExecutionBindings();
+const exhaustivePlaywrightConfig = fs.readFileSync(path.join(repoRoot, 'playwright.exhaustive-acceptance.config.ts'), 'utf8');
+if (!/\btrace:\s*['"]off['"]/u.test(exhaustivePlaywrightConfig)) fail('exhaustive hosted Playwright traces must remain disabled so raw request data cannot enter uploaded evidence');
 const cases = catalog.cases ?? [];
 const ids = new Set();
 
@@ -69,6 +71,10 @@ for (const item of bindings.hostedTests ?? []) {
   const boundProjects = [...item.projects].sort();
   if (JSON.stringify(boundProjects) !== JSON.stringify(requiredProjects)) fail(`${item.testId} hosted projects must exactly match catalog viewports`);
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
+}
+for (const testId of ['SANDBOX-007','SANDBOX-008','SANDBOX-009']) {
+  const binding = (bindings.hostedTests ?? []).find(item => item.testId === testId);
+  if (!binding || binding.scenario !== null || !binding.blockedReason) fail(`${testId} must remain explicitly BLOCKED until all-sandbox-persona post-entry coverage is executable`);
 }
 
 const classification = classifyExecutionBindings(catalog, bindings);
