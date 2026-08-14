@@ -78,9 +78,15 @@ const openSandbox = async (page: Page) => {
   await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
 };
 
+const personaChoice = (page: Page, label: string) => page
+  .getByRole('group', { name: 'Choose a sandbox persona' })
+  .getByRole('button')
+  .filter({ hasText: label });
+
 const enterPersona = async (page: Page, label: string) => {
   await openSandbox(page);
-  const choice = page.getByRole('button', { name: new RegExp(`^${label}\\b`, 'u') });
+  const choice = personaChoice(page, label);
+  await expect(choice).toHaveCount(1);
   await choice.click();
   await expect(choice).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: `Enter sandbox as ${label}` }).click();
@@ -118,7 +124,8 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     case 'persona-matrix':
       for (const [label, userName] of personas) {
         await openSandbox(page);
-        const choice = page.getByRole('button', { name: new RegExp(`^${label}\\b`, 'u') });
+        const choice = personaChoice(page, label);
+        await expect(choice).toHaveCount(1);
         await choice.click();
         await page.getByRole('button', { name: `Enter sandbox as ${label}` }).click();
         await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
