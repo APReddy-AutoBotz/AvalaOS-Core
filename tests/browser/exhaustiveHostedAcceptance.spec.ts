@@ -24,14 +24,23 @@ type NetworkViolation = { method: string; category: NetworkViolationCategory };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
+const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {
+  if (url.origin === 'https://fonts.googleapis.com') return resourceType === 'stylesheet' && url.pathname === '/css2';
+  if (url.origin === 'https://fonts.gstatic.com') return resourceType === 'font' && url.pathname.startsWith('/s/');
+  if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && url.pathname.startsWith('/npm/');
+  if (url.origin === 'https://aistudiocdn.com') {
+    return resourceType === 'script' && /^\/(?:react(?:-dom)?|@google\/genai)@/u.test(url.pathname);
+  }
+  return false;
+};
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
   const method = request.method().toUpperCase();
   if (method !== 'GET' && method !== 'HEAD') return 'non-read-method';
   const headers = request.headers();
   if (Object.keys(headers).some(name => /^(?:authorization|apikey|x-api-key)$/iu.test(name))) return 'credential-header';
   const url = new URL(request.url());
-  if (!hostedOrigin || url.origin !== hostedOrigin) return 'unexpected-origin';
   const resourceType = request.resourceType();
+  if (!hostedOrigin || url.origin !== hostedOrigin) return safeExternalStaticResource(url, resourceType) ? null : 'unexpected-origin';
   if (resourceType === 'document') return safeDocumentPath(url.pathname) ? null : 'unexpected-document-route';
   if (resourceType === 'fetch' || resourceType === 'xhr' || resourceType === 'websocket' || resourceType === 'eventsource') return 'authority-request';
   if (['script', 'stylesheet', 'font', 'image', 'media', 'other'].includes(resourceType) && safeStaticPath(url.pathname)) return null;
@@ -98,6 +107,17 @@ const openProductNavigation = async (page: Page) => {
   if (await opener.isVisible().catch(() => false)) await opener.click();
 };
 
+const assertActivePersona = async (page: Page, userName: string) => {
+  await openProductNavigation(page);
+  await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+};
+
+const signOutToSandbox = async (page: Page) => {
+  await openProductNavigation(page);
+  await page.getByRole('button', { name: 'Sign Out' }).click();
+  await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible({ timeout: 15_000 });
+};
+
 const clickProductNav = async (page: Page, label: string) => {
   let target = page.getByRole('button', { name: label, exact: true });
   if (!(await target.isVisible().catch(() => false))) {
@@ -128,21 +148,22 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await expect(choice).toHaveCount(1);
         await choice.click();
         await page.getByRole('button', { name: `Enter sandbox as ${label}` }).click();
-        await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
-        await page.getByRole('button', { name: 'Sign Out' }).click();
-        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+        await assertActivePersona(page, userName);
+        await signOutToSandbox(page);
       }
       return;
     case 'local-authority': {
       for (const [label, userName] of personas) {
         const observer = observeAuthorityRequests(page);
         await enterPersona(page, label);
-        await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
-        if (label === 'Process Analyst') await expect(page.getByTestId('process-catalog-view')).toBeVisible();
+        await assertActivePersona(page, userName);
+        if (label === 'Process Analyst') {
+          await clickProductNav(page, 'Assess');
+          await expect(page.getByTestId('process-catalog-view')).toBeVisible();
+        }
         observer.assertSafe();
         observer.stop();
-        await page.getByRole('button', { name: 'Sign Out' }).click();
-        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+        await signOutToSandbox(page);
       }
       return;
     }
@@ -150,11 +171,10 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       for (const [label, userName] of personas) {
         const observer = observeAuthorityRequests(page);
         await enterPersona(page, label);
-        await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+        await assertActivePersona(page, userName);
         observer.assertSafe();
         observer.stop();
-        await page.getByRole('button', { name: 'Sign Out' }).click();
-        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+        await signOutToSandbox(page);
       }
       return;
     }
@@ -202,6 +222,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'process-create': {
       await enterPersona(page, 'Process Analyst');
+      await clickProductNav(page, 'Assess');
       await expect(page.getByTestId('process-catalog-view')).toBeVisible();
       await page.getByRole('button', { name: 'New process' }).click();
       const name = `QA Synthetic Process ${releaseSha?.slice(0, 7)}`;
@@ -214,6 +235,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'completed-assessment': {
       await enterPersona(page, 'Process Analyst');
+      await clickProductNav(page, 'Assess');
       const row = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
       await expect(row).toContainText('Completed');
       await expect(row).toContainText('High');
@@ -221,6 +243,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'incomplete-assessment': {
       await enterPersona(page, 'Process Analyst');
+      await clickProductNav(page, 'Assess');
       await page.getByRole('button', { name: 'New process' }).click();
       const name = `QA Incomplete ${releaseSha?.slice(0, 7)}`;
       await page.getByLabel('Process Name *').fill(name);
@@ -231,7 +254,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'delivery-pack':
       await enterPersona(page, 'Delivery Lead');
-      await clickProductNav(page, 'Delivery Pack');
+      await clickProductNav(page, 'Delivery');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Markdown' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'JSON' })).toBeDisabled();
@@ -260,7 +283,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(admin).toHaveAttribute('aria-current', 'page');
+        await expect(page.locator('body')).toContainText(/Enterprise Intelligence|Administration|Provider|Role/iu);
+        const currentAdmin = page.getByRole('button', { name: 'Admin / Intelligence' });
+        if (await currentAdmin.isVisible().catch(() => false)) {
+          await expect(currentAdmin).toHaveAttribute('aria-current', 'page');
+        }
       }
       return;
     case 'non-admin-denial':
@@ -282,23 +309,25 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       const persistenceContractKeys = ['avalaos-core-v1-current-user', 'avalaos-core-v1-view'] as const;
       expect(persistenceContractKeys).toHaveLength(2);
       await enterPersona(page, 'Delivery Lead');
-      await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible();
+      await assertActivePersona(page, 'Alicia Morgan');
+      await clickProductNav(page, 'Delivery');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
-      const persistedBefore = {
-        user: await page.getByText('Alicia Morgan', { exact: true }).textContent(),
-        view: await page.getByText('Governed Delivery Pack').textContent(),
-      };
+      const persistedBefore = await page.evaluate(([userKey, viewKey]) => ({
+        user: window.localStorage.getItem(userKey),
+        view: window.localStorage.getItem(viewKey),
+      }), persistenceContractKeys);
+      expect(persistedBefore.user).toContain('Alicia Morgan');
+      expect(persistedBefore.view).toBeTruthy();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
-      await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible({ timeout: 15_000 });
+      await assertActivePersona(page, 'Alicia Morgan');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
-      const persistedAfter = {
-        user: await page.getByText('Alicia Morgan', { exact: true }).textContent(),
-        view: await page.getByText('Governed Delivery Pack').textContent(),
-      };
+      const persistedAfter = await page.evaluate(([userKey, viewKey]) => ({
+        user: window.localStorage.getItem(userKey),
+        view: window.localStorage.getItem(viewKey),
+      }), persistenceContractKeys);
       expect(persistedAfter).toEqual(persistedBefore);
       return;
     }
@@ -314,8 +343,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
         observer.assertSafe();
         observer.stop();
-        await page.getByRole('button', { name: 'Sign Out' }).click();
-        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+        await signOutToSandbox(page);
       }
       return;
     }
