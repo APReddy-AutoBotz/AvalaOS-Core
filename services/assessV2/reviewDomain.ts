@@ -77,6 +77,30 @@ const assertBinding = (expected: ReviewBinding, actual: ReviewBinding): void => 
 const exactSet = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
 
+const attestationInstant = (item: EvidenceAttestation): number => Date.parse(item.reviewedAt);
+const isLaterAttestation = (candidate: EvidenceAttestation, current: EvidenceAttestation): boolean => {
+  const candidateInstant = attestationInstant(candidate);
+  const currentInstant = attestationInstant(current);
+  if (candidateInstant !== currentInstant) return candidateInstant > currentInstant;
+  return candidate.id.localeCompare(current.id) > 0;
+};
+const latestAttestation = (rows: readonly EvidenceAttestation[]): EvidenceAttestation | undefined =>
+  rows.reduce<EvidenceAttestation | undefined>((latest, item) => {
+    if (!Number.isFinite(attestationInstant(item))) return latest;
+    if (!latest || isLaterAttestation(item, latest)) return item;
+    return latest;
+  }, undefined);
+
+const decisionEvidenceIds = (value: unknown, collected = new Set<string>()): Set<string> => {
+  if (!value || typeof value !== 'object') return collected;
+  if (Array.isArray(value)) { value.forEach(item => decisionEvidenceIds(item, collected)); return collected; }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'evidenceIds' && Array.isArray(child)) child.forEach(id => collected.add(String(id)));
+    else decisionEvidenceIds(child, collected);
+  }
+  return collected;
+};
+
 export const validateReviewAssignment = (assignment: ReviewAssignment): void => {
   if (assignment.reviewerActorId === assignment.authorActorId) throw new ReviewDomainError('SEPARATION_OF_DUTY', 'The case author cannot review or approve their own decision.');
   if (!Number.isSafeInteger(assignment.reviewerAuthorizationVersion) || assignment.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'A current reviewer authorization version is required.');
@@ -88,11 +112,16 @@ export const validateAttestation = (assignment: ReviewAssignment, evidence: Evid
   if (assignment.id !== attestation.assignmentId || evidence.id !== attestation.evidenceId || !exactSet(evidence.claimIds, attestation.claimIds)) {
     throw new ReviewDomainError('INVALID_BINDING', 'The review resource was not found.');
   }
-  if (attestation.reviewerActorId !== assignment.reviewerActorId || !Number.isSafeInteger(attestation.reviewerAuthorizationVersion) || attestation.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
+  if (attestation.reviewerActorId !== assignment.reviewerActorId
+    || !Number.isSafeInteger(attestation.reviewerAuthorizationVersion)
+    || attestation.reviewerAuthorizationVersion < 1
+    || attestation.reviewerAuthorizationVersion !== assignment.reviewerAuthorizationVersion) {
+    throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
+  }
   if (attestation.reviewerActorId === assignment.authorActorId || attestation.reviewerActorId === evidence.submittedBy || attestation.evidenceSubmitterActorId !== evidence.submittedBy) {
     throw new ReviewDomainError('SEPARATION_OF_DUTY', 'Independent evidence review is required.');
   }
-  if (!attestation.rationale.trim()) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Reviewer rationale is required.');
+  if (!attestation.rationale.trim() || !Number.isFinite(attestationInstant(attestation))) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Reviewer rationale and timestamp are required.');
 };
 
 export interface MaterialClaim { claimId: string; evidenceIds: readonly string[] }
@@ -106,7 +135,7 @@ export const deriveReviewedConfidence = (binding: ReviewBinding, claims: readonl
       try { assertBinding(binding, attestation); } catch { return false; }
       return attestation.evidenceId === evidenceId && attestation.claimIds.includes(claimId);
     });
-    return current.length > 0 && current[current.length - 1].outcome === 'accepted';
+    return latestAttestation(current)?.outcome === 'accepted';
   };
   if (claims.every(claim => claim.evidenceIds.some(id => accepted(id, claim.claimId)))) return 'Verified';
   if (claims.some(claim => claim.evidenceIds.some(id => accepted(id, claim.claimId)))) return 'Partially Evidenced';
@@ -117,11 +146,32 @@ export const resolveReview = (assignment: ReviewAssignment, status: ReviewResolu
   validateReviewAssignment(assignment);
   assertBinding(assignment, resolution);
   if (resolution.assignmentId !== assignment.id || resolution.reviewerActorId !== assignment.reviewerActorId) throw new ReviewDomainError('SEPARATION_OF_DUTY', 'Independent decision review is required.');
-  if (!Number.isSafeInteger(resolution.reviewerAuthorizationVersion) || resolution.reviewerAuthorizationVersion < 1) throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
+  if (!Number.isSafeInteger(resolution.reviewerAuthorizationVersion)
+    || resolution.reviewerAuthorizationVersion < 1
+    || resolution.reviewerAuthorizationVersion !== assignment.reviewerAuthorizationVersion) {
+    throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
+  }
   if (resolution.status !== status || !resolution.rationale.trim()) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'A valid resolution and rationale are required.');
+
+  const evidenceById = new Map(evidence.map(item => [item.id, item]));
+  const attestationIds = new Set<string>();
+  for (const item of attestations) {
+    assertBinding(assignment, item);
+    const currentEvidence = evidenceById.get(item.evidenceId);
+    if (!currentEvidence || !exactSet(item.claimIds, currentEvidence.claimIds) || attestationIds.has(item.id) || !Number.isFinite(attestationInstant(item))) {
+      throw new ReviewDomainError('INVALID_BINDING', 'Attestation history must contain unique current evidence records.');
+    }
+    if (item.assignmentId !== assignment.id
+      || item.reviewerActorId !== assignment.reviewerActorId
+      || item.reviewerAuthorizationVersion !== assignment.reviewerAuthorizationVersion) {
+      throw new ReviewDomainError('INCOMPLETE_REVIEW', 'All current material claims require attestation history from the current reviewer assignment.');
+    }
+    attestationIds.add(item.id);
+  }
+
   const confidence = deriveReviewedConfidence(assignment, claims, evidence, attestations, resolution.resolvedAt);
-  if (status === 'approved' && (confidence !== 'Verified' || attestations.some(item => { try { assertBinding(assignment, item); } catch { return false; } return item.outcome !== 'accepted'; }))) {
-    throw new ReviewDomainError('INCOMPLETE_REVIEW', 'All current material claims require accepted independent attestation.');
+  if (status === 'approved' && confidence !== 'Verified') {
+    throw new ReviewDomainError('INCOMPLETE_REVIEW', 'All current material claims require accepted independent attestation from the current reviewer assignment.');
   }
   return Object.freeze({ ...resolution, confidence });
 };
@@ -178,5 +228,33 @@ export interface StudioHandoffPackage {
 export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: DecisionPackV2, evidence: readonly EvidenceSubmission[], attestations: readonly EvidenceAttestation[], review: ReviewResolution, govern: GovernResolution, canonicalHashes: Readonly<Record<string, string>>, sourceReferences: readonly string[], createdAt: string): StudioHandoffPackage => {
   assertBinding(binding, review); assertBinding(binding, govern);
   if (review.status !== 'approved' || review.confidence !== 'Verified' || govern.reviewResolutionId !== review.id || !controlsComplete(govern.requiredControls)) throw new ReviewDomainError('INVALID_STATE', 'Studio handoff requires current approval, attestations, Govern resolution, and satisfied controls.');
+  if (decision.caseId !== binding.caseId || decision.caseVersion !== binding.caseVersion || decision.decisionVersion !== binding.decisionVersion) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision does not belong to the current reviewed case.');
+
+  const evidenceById = new Map(evidence.map(item => [item.id, item]));
+  if (!evidence.length || evidenceById.size !== evidence.length) throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence set must contain unique current evidence.');
+  if ([...decisionEvidenceIds(decision)].some(id => !evidenceById.has(id))) throw new ReviewDomainError('INVALID_BINDING', 'The Studio decision references evidence outside the current reviewed case.');
+
+  const attestationIds = new Set<string>();
+  const latestByEvidence = new Map<string, EvidenceAttestation>();
+  for (const attestation of attestations) {
+    assertBinding(binding, attestation);
+    const item = evidenceById.get(attestation.evidenceId);
+    if (!item
+      || attestation.assignmentId !== review.assignmentId
+      || attestation.reviewerActorId !== review.reviewerActorId
+      || attestation.reviewerAuthorizationVersion !== review.reviewerAuthorizationVersion
+      || !exactSet(attestation.claimIds, item.claimIds)
+      || !Number.isFinite(attestationInstant(attestation))
+      || attestationIds.has(attestation.id)) {
+      throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current approved reviewer assignment.');
+    }
+    attestationIds.add(attestation.id);
+    const latest = latestByEvidence.get(attestation.evidenceId);
+    if (!latest || isLaterAttestation(attestation, latest)) latestByEvidence.set(attestation.evidenceId, attestation);
+  }
+  if (evidence.some(item => latestByEvidence.get(item.id)?.outcome !== 'accepted')) {
+    throw new ReviewDomainError('INVALID_BINDING', 'The latest Studio attestation for every evidence item must be accepted by the current approved reviewer assignment.');
+  }
+
   return Object.freeze({ binding: Object.freeze({ ...binding }), decision, evidence: Object.freeze([...evidence]), attestations: Object.freeze([...attestations]), review, govern, schemaVersion: decision.schemaVersion, ruleSetVersion: decision.ruleSetVersion, reviewSchemaVersion: review.reviewSchemaVersion, reviewSequence: review.reviewSequence, canonicalHashes: Object.freeze({ ...canonicalHashes }), sourceReferences: Object.freeze([...sourceReferences]), createdAt });
 };

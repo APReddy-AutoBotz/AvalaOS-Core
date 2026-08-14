@@ -5,6 +5,63 @@ import { checkWorkflowYaml, parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 const files = await checkWorkflowYaml();
 assert.ok(files.includes('v1-release-candidate.yml'));
 
+const exhaustiveWorkflow = parseWorkflowYaml(
+  await readFile('.github/workflows/exhaustive-acceptance.yml', 'utf8'),
+  'exhaustive-acceptance.yml',
+);
+const exhaustiveSteps = exhaustiveWorkflow.jobs.acceptance.steps;
+const exhaustiveCheckout = exhaustiveSteps.find(step => step.uses === 'actions/checkout@v4');
+assert.equal(exhaustiveCheckout?.with?.['fetch-depth'], 0, 'retained PR1D authority requires immutable baseline history');
+const exhaustiveHostedStep = exhaustiveSteps.find(step => step.name === 'Run exhaustive real hosted Sandbox acceptance');
+assert.equal(
+  exhaustiveHostedStep?.if,
+  "env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed' && steps.deployment.outcome == 'success'",
+  'real hosted execution requires the exact deployment proof to succeed first',
+);
+const exactDeploymentStep = exhaustiveSteps.find(step => step.name === 'Verify exact hosted deployment identity');
+assert.equal(exactDeploymentStep?.id, 'deployment');
+assert.equal(exactDeploymentStep?.if, "env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'");
+assert.equal(exactDeploymentStep?.['continue-on-error'], true, 'deployment failure must remain inspectable so the unified report can run');
+assert.equal(exactDeploymentStep?.env?.EXPECTED_RELEASE_SHA, '${{ env.RELEASE_SHA }}');
+assert.equal(exactDeploymentStep?.env?.EXPECTED_NETLIFY_DEPLOY_ID, '${{ env.NETLIFY_DEPLOY_ID }}');
+assert.equal(exactDeploymentStep?.run, 'node scripts/verify-hosted-deployment.mjs');
+assert.ok(
+  exhaustiveSteps.indexOf(exactDeploymentStep) < exhaustiveSteps.indexOf(exhaustiveHostedStep),
+  'exact deployment identity must be verified before hosted Playwright execution',
+);
+const exhaustiveReportStep = exhaustiveSteps.find(step => step.name === 'Generate unified PASS FAIL BLOCKED UNCOVERED results');
+assert.equal(exhaustiveReportStep?.if, 'always()', 'preflight and deployment failures must still produce the unified report');
+assert.match(
+  exhaustiveReportStep?.env?.ACCEPTANCE_EXECUTION_DISPOSITION || '',
+  /steps\.deployment\.outcome != 'success'.*'BLOCKED'/u,
+  'a failed or skipped exact deployment proof must be represented as BLOCKED evidence',
+);
+const exhaustiveEnforcementStep = exhaustiveSteps.find(step => step.name === 'Enforce framework and release gates');
+assert.equal(exhaustiveEnforcementStep?.if, 'always()');
+assert.match(
+  exhaustiveEnforcementStep?.run || '',
+  /test "\$\{\{ steps\.deployment\.outcome \}\}" = success/u,
+  'release enforcement must fail closed when deployment provenance fails',
+);
+assert.match(
+  exhaustiveEnforcementStep?.run || '',
+  /test "\$\{\{ steps\.hosted\.outcome \}\}" = success/u,
+  'release enforcement must still require hosted browser success',
+);
+
+const defaultPlaywrightConfig = await readFile('playwright.config.ts', 'utf8');
+assert.match(
+  defaultPlaywrightConfig,
+  /testIgnore: \[[^\]]*'exhaustiveHostedAcceptance\.spec\.ts'/u,
+  'default/local Playwright discovery must exclude the dedicated hosted exhaustive suite',
+);
+const exhaustivePlaywrightConfig = await readFile('playwright.exhaustive-acceptance.config.ts', 'utf8');
+assert.match(
+  exhaustivePlaywrightConfig,
+  /testMatch: 'exhaustiveHostedAcceptance\.spec\.ts'/u,
+  'the exhaustive hosted config must exclusively own its hosted specification',
+);
+
 assert.throws(
   () => parseWorkflowYaml(`jobs:\n  evidence:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n        ref: candidate-sha\n          fetch-depth: 0\n`, 'malformed-checkout.yml'),
   /malformed-checkout\.yml is not valid YAML/u,

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "inventoryId": "avalaos-hosted-acceptance-2026-08",
+  "coveredBranchesSource": "tests/acceptance/catalog/test-catalog.json",
+  "uncoveredBranches": [
+    {
+      "branchId": "SAFETY-RESPONSE_LOST_AFTER_COMMIT",
+      "module": "Cross-cutting",
+      "rule": "response lost after commit",
+      "sourceReferences": ["services/persistenceTransition.ts"],
+      "criticality": "standard",
+      "uncoveredReason": "No authoritative retained evidence proves recovery when a response is lost after persistence succeeds; services/persistenceTransition.ts only persists and then commits local success.",
+      "recommendedAction": "Add an authorized disposable server test that commits durable state, drops the response, retries with the same idempotency identity, and proves exact recovery with zero duplicate effects.",
+      "provenance": {
+        "kind": "required-scenario",
+        "limitation": "services/persistenceTransition.ts defines persist-before-local-success ordering but no response-loss simulation, replay, or recovery contract."
+      }
+    }
+  ]
+}
