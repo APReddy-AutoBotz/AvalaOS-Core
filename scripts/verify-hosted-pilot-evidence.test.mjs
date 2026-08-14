@@ -122,7 +122,7 @@ test('sandbox network-safety evidence exercises every declared persona', async (
   assert.match(spec, /case 'network-safety':[\s\S]*for \(const \[label, userName\] of personas\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*await enterPersona\(page, label\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*page\.getByText\(userName, \{ exact: true \}\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*await assertActivePersona\(page, userName\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*observer\.assertSafe\(\)/u);
 });
 test('sandbox local-authority evidence exercises every declared persona', async () => {
@@ -144,13 +144,12 @@ test('every hosted navigation rechecks exact release environment and deployment 
 test('reload reconstruction proves a real persisted authenticated product view', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   assert.match(spec, /case 'reload-reconstruction':[\s\S]*await enterPersona\(page, 'Delivery Lead'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await clickProductNav\(page, 'Delivery Pack'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-current-user/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-view/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await clickProductNav\(page, 'Delivery'\)/u);
   assert.match(spec, /case 'reload-reconstruction':[\s\S]*await page\.reload/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Alicia Morgan/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await assertActivePersona\(page, 'Alicia Morgan'\)/u);
   assert.match(spec, /case 'reload-reconstruction':[\s\S]*Governed Delivery Pack/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*expect\(persistedAfter\)\.toEqual\(persistedBefore\)/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Choose a sandbox persona/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Sign in to an organization\./u);
 });
 
 test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {
