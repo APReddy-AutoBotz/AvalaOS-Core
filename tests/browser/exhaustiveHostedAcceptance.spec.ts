@@ -3,6 +3,7 @@ import { expect, test, type Page, type Request, type TestInfo } from '@playwrigh
 import fs from 'node:fs';
 
 const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
+const deployId = process.env.NETLIFY_DEPLOY_ID;
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
 const catalogById = new Map(catalog.cases.map((item: any) => [item.testId, item]));
@@ -19,7 +20,16 @@ const personas: Array<[string, string]> = [
 
 test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
+  expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
 });
+
+const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {
+  expect(response?.ok(), 'hosted response').toBeTruthy();
+  const headers = response?.headers() ?? {};
+  expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
+  expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
+  expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+};
 
 const observeAuthorityRequests = (page: Page) => {
   const forbidden: Array<{ method: string; url: string; sensitiveHeaders: string[] }> = [];
@@ -43,8 +53,7 @@ const observeAuthorityRequests = (page: Page) => {
 
 const openSandbox = async (page: Page) => {
   const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
-  expect(response?.ok(), 'hosted Sandbox response').toBeTruthy();
-  expect(response?.headers()['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
+  assertHostedResponseIdentity(response);
   await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
   await expect(page.getByText('Sandbox data is synthetic and local to this product exploration.')).toBeVisible();
@@ -100,11 +109,16 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       }
       return;
     case 'local-authority': {
-      const observer = observeAuthorityRequests(page);
-      await enterPersona(page, 'Process Analyst');
-      await expect(page.getByTestId('process-catalog-view')).toBeVisible();
-      observer.assertSafe();
-      observer.stop();
+      for (const [label, userName] of personas) {
+        const observer = observeAuthorityRequests(page);
+        await enterPersona(page, label);
+        await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+        if (label === 'Process Analyst') await expect(page.getByTestId('process-catalog-view')).toBeVisible();
+        observer.assertSafe();
+        observer.stop();
+        await page.getByRole('button', { name: 'Sign Out' }).click();
+        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+      }
       return;
     }
     case 'network-safety': {
@@ -119,12 +133,14 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       }
       return;
     }
-    case 'sign-in-separation':
-      await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+    case 'sign-in-separation': {
+      const response = await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(response);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByText('Server-authenticated access')).toBeVisible();
       return;
+    }
     case 'desktop-layout':
     case 'mobile-layout':
       await openSandbox(page);
@@ -140,19 +156,23 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
       return;
     }
-    case 'public-landing':
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
+    case 'public-landing': {
+      const response = await page.goto('/', { waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(response);
       await expect(page.getByRole('heading', { name: /Evaluate before you automate\./u })).toBeVisible();
       await expect(page.getByText('Synthetic sandbox for product exploration. No live execution.')).toBeVisible();
       return;
-    case 'sandbox-descendant':
-      await page.goto('/sandbox/unexpected-deep-link', { waitUntil: 'domcontentloaded' });
+    }
+    case 'sandbox-descendant': {
+      const response = await page.goto('/sandbox/unexpected-deep-link', { waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(response);
       await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
       return;
+    }
     case 'release-identity': {
       const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
-      expect(response?.headers()['x-avalaos-release']).toBe(releaseSha);
+      assertHostedResponseIdentity(response);
       return;
     }
     case 'process-create': {
@@ -233,12 +253,30 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await expect(page.locator('body')).toContainText(/Enterprise Intelligence|Administration|Provider|Role/iu);
       }
       return;
-    case 'reload-reconstruction':
-      await openSandbox(page);
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
+    case 'reload-reconstruction': {
+      await enterPersona(page, 'Delivery Lead');
+      await clickProductNav(page, 'Delivery Pack');
+      await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible();
+      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('avalaos-core-v1-current-user'))).not.toBeNull();
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('avalaos-core-v1-view'))).not.toBeNull();
+      const persistedBefore = await page.evaluate(() => ({
+        user: localStorage.getItem('avalaos-core-v1-current-user'),
+        view: localStorage.getItem('avalaos-core-v1-view'),
+      }));
+      const response = await page.reload({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(response);
+      await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
+      const persistedAfter = await page.evaluate(() => ({
+        user: localStorage.getItem('avalaos-core-v1-current-user'),
+        view: localStorage.getItem('avalaos-core-v1-view'),
+      }));
+      expect(persistedAfter).toEqual(persistedBefore);
       return;
+    }
     case 'horizontal-overflow':
       await enterPersona(page, 'Process Analyst');
       await assertNoOverflow(page);
