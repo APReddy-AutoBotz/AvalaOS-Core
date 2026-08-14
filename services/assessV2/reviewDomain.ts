@@ -77,9 +77,17 @@ const assertBinding = (expected: ReviewBinding, actual: ReviewBinding): void => 
 const exactSet = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
 
+const attestationInstant = (item: EvidenceAttestation): number => Date.parse(item.reviewedAt);
+const isLaterAttestation = (candidate: EvidenceAttestation, current: EvidenceAttestation): boolean => {
+  const candidateInstant = attestationInstant(candidate);
+  const currentInstant = attestationInstant(current);
+  if (candidateInstant !== currentInstant) return candidateInstant > currentInstant;
+  return candidate.id.localeCompare(current.id) > 0;
+};
 const latestAttestation = (rows: readonly EvidenceAttestation[]): EvidenceAttestation | undefined =>
   rows.reduce<EvidenceAttestation | undefined>((latest, item) => {
-    if (!latest || item.reviewedAt >= latest.reviewedAt) return item;
+    if (!Number.isFinite(attestationInstant(item))) return latest;
+    if (!latest || isLaterAttestation(item, latest)) return item;
     return latest;
   }, undefined);
 
@@ -113,7 +121,7 @@ export const validateAttestation = (assignment: ReviewAssignment, evidence: Evid
   if (attestation.reviewerActorId === assignment.authorActorId || attestation.reviewerActorId === evidence.submittedBy || attestation.evidenceSubmitterActorId !== evidence.submittedBy) {
     throw new ReviewDomainError('SEPARATION_OF_DUTY', 'Independent evidence review is required.');
   }
-  if (!attestation.rationale.trim() || !Number.isFinite(Date.parse(attestation.reviewedAt))) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Reviewer rationale and timestamp are required.');
+  if (!attestation.rationale.trim() || !Number.isFinite(attestationInstant(attestation))) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Reviewer rationale and timestamp are required.');
 };
 
 export interface MaterialClaim { claimId: string; evidenceIds: readonly string[] }
@@ -150,7 +158,7 @@ export const resolveReview = (assignment: ReviewAssignment, status: ReviewResolu
   for (const item of attestations) {
     assertBinding(assignment, item);
     const currentEvidence = evidenceById.get(item.evidenceId);
-    if (!currentEvidence || !exactSet(item.claimIds, currentEvidence.claimIds) || attestationIds.has(item.id) || !Number.isFinite(Date.parse(item.reviewedAt))) {
+    if (!currentEvidence || !exactSet(item.claimIds, currentEvidence.claimIds) || attestationIds.has(item.id) || !Number.isFinite(attestationInstant(item))) {
       throw new ReviewDomainError('INVALID_BINDING', 'Attestation history must contain unique current evidence records.');
     }
     if (item.assignmentId !== assignment.id
@@ -236,13 +244,13 @@ export const buildStudioHandoffPackage = (binding: ReviewBinding, decision: Deci
       || attestation.reviewerActorId !== review.reviewerActorId
       || attestation.reviewerAuthorizationVersion !== review.reviewerAuthorizationVersion
       || !exactSet(attestation.claimIds, item.claimIds)
-      || !Number.isFinite(Date.parse(attestation.reviewedAt))
+      || !Number.isFinite(attestationInstant(attestation))
       || attestationIds.has(attestation.id)) {
       throw new ReviewDomainError('INVALID_BINDING', 'The Studio evidence does not belong to the current approved reviewer assignment.');
     }
     attestationIds.add(attestation.id);
     const latest = latestByEvidence.get(attestation.evidenceId);
-    if (!latest || attestation.reviewedAt >= latest.reviewedAt) latestByEvidence.set(attestation.evidenceId, attestation);
+    if (!latest || isLaterAttestation(attestation, latest)) latestByEvidence.set(attestation.evidenceId, attestation);
   }
   if (evidence.some(item => latestByEvidence.get(item.id)?.outcome !== 'accepted')) {
     throw new ReviewDomainError('INVALID_BINDING', 'The latest Studio attestation for every evidence item must be accepted by the current approved reviewer assignment.');
