@@ -12,6 +12,10 @@ const indexHtml = fs.readFileSync('index.html', 'utf8');
 const importMapMatch = indexHtml.match(/<script\b[^>]*\btype=["']importmap["'][^>]*>([\s\S]*?)<\/script>/iu);
 if (!importMapMatch) throw new Error('Hosted acceptance requires the declared index.html import map.');
 const importMap = JSON.parse(importMapMatch[1]) as { imports?: Record<string, string> };
+const declaredGoogleStylesheetUrls = new Set(
+  [...indexHtml.matchAll(/<link\b[^>]*\bhref=["'](https:\/\/fonts\.googleapis\.com[^"']+)["'][^>]*>/giu)]
+    .map(([, source]) => new URL(source).toString()),
+);
 const declaredJsDelivrScriptPaths = new Set(
   [...indexHtml.matchAll(/<script\b[^>]*\bsrc=["'](https:\/\/cdn\.jsdelivr\.net[^"']+)["'][^>]*>/giu)]
     .map(([, source]) => new URL(source).pathname),
@@ -40,7 +44,7 @@ const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRu
   rule.prefix ? url.pathname.startsWith(rule.pathname) : url.pathname === rule.pathname
 ));
 const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {
-  if (url.origin === 'https://fonts.googleapis.com') return resourceType === 'stylesheet' && url.pathname === '/css2';
+  if (url.origin === 'https://fonts.googleapis.com') return resourceType === 'stylesheet' && declaredGoogleStylesheetUrls.has(url.toString());
   if (url.origin === 'https://fonts.gstatic.com') return resourceType === 'font' && url.pathname.startsWith('/s/');
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
@@ -64,6 +68,7 @@ test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
   expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
   expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
+  expect(declaredGoogleStylesheetUrls.size, 'hosted acceptance must bind Google Fonts to index.html stylesheet declarations').toBeGreaterThan(0);
   expect(declaredJsDelivrScriptPaths.size, 'hosted acceptance must bind jsDelivr to index.html script declarations').toBeGreaterThan(0);
   expect(declaredAiStudioScriptRules.length, 'hosted acceptance must bind AI Studio CDN to index.html import-map declarations').toBeGreaterThan(0);
 });
@@ -119,17 +124,29 @@ const enterPersona = async (page: Page, label: string) => {
 
 const openProductNavigation = async (page: Page) => {
   const opener = page.getByRole('button', { name: 'Open navigation' });
-  if (await opener.isVisible().catch(() => false)) await opener.click();
+  if (!(await opener.isVisible().catch(() => false))) return;
+  const mobileIdentity = page.getByTestId('mobile-current-user');
+  if (!(await mobileIdentity.isVisible().catch(() => false))) await opener.click();
 };
 
 const assertActivePersona = async (page: Page, userName: string) => {
   await openProductNavigation(page);
-  await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+  const mobileIdentity = page.getByTestId('mobile-current-user');
+  if (await mobileIdentity.isVisible().catch(() => false)) {
+    await expect(mobileIdentity.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  await expect(page.getByTestId('desktop-current-user').getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
 };
 
 const signOutToSandbox = async (page: Page) => {
   await openProductNavigation(page);
-  await page.getByRole('button', { name: 'Sign Out' }).click();
+  const mobileSignOut = page.getByTestId('mobile-sign-out');
+  if (await mobileSignOut.isVisible().catch(() => false)) {
+    await mobileSignOut.click();
+  } else {
+    await page.getByTestId('desktop-current-user').getByRole('button', { name: 'Sign Out' }).click();
+  }
   await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible({ timeout: 15_000 });
 };
 
