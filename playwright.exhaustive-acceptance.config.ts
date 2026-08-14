@@ -25,7 +25,7 @@ export default defineConfig({
   ],
   use: {
     baseURL: hostedOrigin,
-    trace: 'retain-on-failure',
+    trace: 'off',
     screenshot: 'only-on-failure',
     video: 'off',
   },
