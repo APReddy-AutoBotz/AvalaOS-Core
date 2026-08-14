@@ -8,6 +8,18 @@ const rawHostedUrl = process.env.HOSTED_PILOT_URL;
 const hostedOrigin = rawHostedUrl ? new URL(rawHostedUrl).origin : null;
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
+const indexHtml = fs.readFileSync('index.html', 'utf8');
+const importMapMatch = indexHtml.match(/<script\b[^>]*\btype=["']importmap["'][^>]*>([\s\S]*?)<\/script>/iu);
+if (!importMapMatch) throw new Error('Hosted acceptance requires the declared index.html import map.');
+const importMap = JSON.parse(importMapMatch[1]) as { imports?: Record<string, string> };
+const declaredJsDelivrScriptPaths = new Set(
+  [...indexHtml.matchAll(/<script\b[^>]*\bsrc=["'](https:\/\/cdn\.jsdelivr\.net[^"']+)["'][^>]*>/giu)]
+    .map(([, source]) => new URL(source).pathname),
+);
+const declaredAiStudioScriptRules = Object.values(importMap.imports ?? {})
+  .map(source => ({ source, url: new URL(source) }))
+  .filter(({ url }) => url.origin === 'https://aistudiocdn.com')
+  .map(({ source, url }) => ({ pathname: url.pathname, prefix: source.endsWith('/') }));
 const catalogById = new Map(catalog.cases.map((item: any) => [item.testId, item]));
 const personas: Array<[string, string]> = [
   ['Process Analyst', 'Maya Patel'],
@@ -24,13 +36,14 @@ type NetworkViolation = { method: string; category: NetworkViolationCategory };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
+const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
+  rule.prefix ? url.pathname.startsWith(rule.pathname) : url.pathname === rule.pathname
+));
 const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {
   if (url.origin === 'https://fonts.googleapis.com') return resourceType === 'stylesheet' && url.pathname === '/css2';
   if (url.origin === 'https://fonts.gstatic.com') return resourceType === 'font' && url.pathname.startsWith('/s/');
-  if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && url.pathname.startsWith('/npm/');
-  if (url.origin === 'https://aistudiocdn.com') {
-    return resourceType === 'script' && /^\/(?:react(?:-dom)?|@google\/genai)@/u.test(url.pathname);
-  }
+  if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
+  if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
 };
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
@@ -51,6 +64,8 @@ test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
   expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
   expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
+  expect(declaredJsDelivrScriptPaths.size, 'hosted acceptance must bind jsDelivr to index.html script declarations').toBeGreaterThan(0);
+  expect(declaredAiStudioScriptRules.length, 'hosted acceptance must bind AI Studio CDN to index.html import-map declarations').toBeGreaterThan(0);
 });
 
 const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {
@@ -294,11 +309,8 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.locator('body')).toContainText(/Enterprise Intelligence|Administration|Provider|Role/iu);
-        const currentAdmin = page.getByRole('button', { name: 'Admin / Intelligence' });
-        if (await currentAdmin.isVisible().catch(() => false)) {
-          await expect(currentAdmin).toHaveAttribute('aria-current', 'page');
-        }
+        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
     case 'non-admin-denial':
@@ -313,7 +325,8 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.locator('body')).toContainText(/Enterprise Intelligence|Administration|Provider|Role/iu);
+        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
     case 'reload-reconstruction': {
