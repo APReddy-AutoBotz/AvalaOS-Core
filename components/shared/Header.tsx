@@ -80,7 +80,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, currentView, curren
           {theme === 'light' ? <MoonIcon className="h-5 w-5" /> : <SunIcon className="h-5 w-5" />}
         </button>
 
-        <div className="hidden items-center gap-2 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-surface)] px-2.5 py-1.5 md:flex">
+        <div data-testid="desktop-current-user" className="hidden items-center gap-2 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-surface)] px-2.5 py-1.5 md:flex">
           <UserCircleIcon className="h-7 w-7 text-[var(--av-color-text-subtle)]" />
           <div className="min-w-0">
             <div className="max-w-[132px] truncate text-xs font-bold text-[var(--av-color-text)]">{currentUser.name}</div>
