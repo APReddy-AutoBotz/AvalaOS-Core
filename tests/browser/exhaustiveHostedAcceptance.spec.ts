@@ -21,6 +21,7 @@ const personas: Array<[string, string]> = [
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
 type NetworkViolation = { method: string; category: NetworkViolationCategory };
+const MAX_NETWORK_VIOLATION_SAMPLES = 25;
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
@@ -52,14 +53,18 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
 };
 
 const observeAuthorityRequests = (page: Page) => {
-  const violations: NetworkViolation[] = [];
+  const samples: NetworkViolation[] = [];
+  let totalViolations = 0;
   const inspect = (request: Request) => {
     const category = classifyNetworkRequest(request);
-    if (category) violations.push({ method: request.method(), category });
+    if (category) {
+      totalViolations += 1;
+      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) samples.push({ method: request.method(), category });
+    }
   };
   page.on('request', inspect);
   return {
-    assertSafe: () => expect(violations, 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual([]),
+    assertSafe: () => expect({ totalViolations, samples }, 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
     stop: () => page.off('request', inspect),
   };
 };
