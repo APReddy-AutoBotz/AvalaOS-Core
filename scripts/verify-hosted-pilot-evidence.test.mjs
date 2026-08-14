@@ -141,15 +141,34 @@ test('every hosted navigation rechecks exact release environment and deployment 
   assert.match(spec, /x-avalaos-netlify-deploy-id/u);
   assert.ok((spec.match(/assertHostedResponseIdentity\(response\);/gu) ?? []).length >= 6, 'sandbox, sign-in, public, descendant, release identity and reload must each rebind hosted identity');
 });
-test('reload reconstruction proves a real persisted authenticated product view', async () => {
+test('delivery pack scenarios enter the canonical project scope and open the project subnavigation', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await enterPersona\(page, 'Delivery Lead'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await clickProductNav\(page, 'Delivery'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await page\.reload/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await assertActivePersona\(page, 'Alicia Morgan'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Governed Delivery Pack/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Choose a sandbox persona/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Sign in to an organization\./u);
+  assert.match(spec, /const selectProjectScope[\s\S]*Switch workspace context/u);
+  const deliveryPackStart = spec.indexOf("case 'delivery-pack':");
+  const deliveryPackEnd = spec.indexOf("case 'monitor-lineage':");
+  assert.ok(deliveryPackStart >= 0 && deliveryPackEnd > deliveryPackStart, 'delivery-pack scenario must remain present');
+  const deliveryPackScenario = spec.slice(deliveryPackStart, deliveryPackEnd);
+  assert.match(deliveryPackScenario, /await enterPersona\(page, 'Delivery Lead'\)/u);
+  assert.match(deliveryPackScenario, /await selectProjectScope\(page, 'AP Invoice Exception Workflow'\)/u);
+  assert.match(deliveryPackScenario, /await clickProductNav\(page, 'Delivery'\)/u);
+  assert.match(deliveryPackScenario, /await clickProductNav\(page, 'Delivery Pack'\)/u);
+  assert.match(deliveryPackScenario, /Governed Delivery Pack/u);
+});
+test('reload reconstruction proves a real persisted authenticated project Delivery Pack view', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  const reloadStart = spec.indexOf("case 'reload-reconstruction':");
+  const reloadEnd = spec.indexOf("case 'horizontal-overflow':");
+  assert.ok(reloadStart >= 0 && reloadEnd > reloadStart, 'reload-reconstruction scenario must remain present');
+  const reloadScenario = spec.slice(reloadStart, reloadEnd);
+  assert.match(reloadScenario, /await enterPersona\(page, 'Delivery Lead'\)/u);
+  assert.match(reloadScenario, /await selectProjectScope\(page, 'AP Invoice Exception Workflow'\)/u);
+  assert.match(reloadScenario, /await clickProductNav\(page, 'Delivery'\)/u);
+  assert.match(reloadScenario, /await clickProductNav\(page, 'Delivery Pack'\)/u);
+  assert.match(reloadScenario, /await page\.reload/u);
+  assert.match(reloadScenario, /await assertActivePersona\(page, 'Alicia Morgan'\)/u);
+  assert.match(reloadScenario, /Governed Delivery Pack/u);
+  assert.match(reloadScenario, /Choose a sandbox persona/u);
+  assert.match(reloadScenario, /Sign in to an organization\./u);
 });
 
 test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {
