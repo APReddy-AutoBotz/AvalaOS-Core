@@ -73,7 +73,8 @@ for (const item of bindings.hostedTests ?? []) {
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
 }
 const requiredExplicitBlocks = [
-  'SANDBOX-007','SANDBOX-008','SANDBOX-009',
+  'SANDBOX-003','SANDBOX-004','SANDBOX-007','SANDBOX-008','SANDBOX-009',
+  'ASSESS-003',
   'DELIVERY-009',
   'MONITOR-001','MONITOR-002','MONITOR-003',
   'ADMIN-002','ADMIN-003',
