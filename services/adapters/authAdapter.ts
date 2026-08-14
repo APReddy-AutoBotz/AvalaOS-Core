@@ -45,10 +45,11 @@ export const authAdapter = {
 
   async signOut() {
     if (getRuntimeDataAccess() === 'server') {
-      await supabase.auth.signOut();
-    } else {
-      localStorage.removeItem(StorageKeys.CURRENT_USER);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      return;
     }
+    localStorage.removeItem(StorageKeys.CURRENT_USER);
   },
 
   async getCurrentUser(): Promise<User | null> {
