@@ -63,6 +63,11 @@ for (const item of bindings.hostedTests ?? []) {
   if (!ids.has(item.testId)) fail(`hosted binding references unknown Test ID ${item.testId}`);
   if (!Array.isArray(item.projects) || item.projects.length === 0) fail(`${item.testId} hosted binding has no projects`);
   for (const project of item.projects) if (!['desktop-chromium','pixel-7-chromium'].includes(project)) fail(`${item.testId} has unsupported project ${project}`);
+  if (new Set(item.projects).size !== item.projects.length) fail(`${item.testId} hosted binding has duplicate projects`);
+  const catalogCase = cases.find(testCase => testCase.testId === item.testId);
+  const requiredProjects = [...new Set(catalogCase?.viewport ?? [])].sort();
+  const boundProjects = [...item.projects].sort();
+  if (JSON.stringify(boundProjects) !== JSON.stringify(requiredProjects)) fail(`${item.testId} hosted projects must exactly match catalog viewports`);
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
 }
 

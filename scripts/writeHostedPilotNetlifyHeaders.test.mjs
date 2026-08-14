@@ -8,8 +8,10 @@ import test from 'node:test';
 
 const scriptPath = fileURLToPath(new URL('./writeHostedPilotNetlifyHeaders.mjs', import.meta.url));
 const release = 'a'.repeat(40);
+const deployId = 'b'.repeat(24);
 const exactStableTuple = {
   COMMIT_REF: release,
+  DEPLOY_ID: deployId,
   CONTEXT: 'production',
   SITE_NAME: 'avalaos-pilot',
   BRANCH: 'main',
@@ -51,6 +53,7 @@ async function expectAccepted(overrides = {}, options = {}) {
     assert.ok(result.headers, 'accepted build must emit dist/_headers');
     assert.match(result.headers, new RegExp(`X-AvalaOS-Release: ${release}`));
     assert.match(result.headers, /X-AvalaOS-Environment: hosted_nonproduction_pilot/);
+    assert.match(result.headers, new RegExp(`X-AvalaOS-Netlify-Deploy-ID: ${deployId}`));
   } finally {
     await result.cleanup();
   }
@@ -77,7 +80,7 @@ test('emits truthful exact release and environment headers', async () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(
       result.headers,
-      `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
+      `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
     );
   } finally {
     await result.cleanup();
@@ -87,15 +90,22 @@ test('emits truthful exact release and environment headers', async () => {
 test('accepts deploy-preview without stable-site authorization tuple', async () => {
   await expectAccepted(
     {},
-    { base: { COMMIT_REF: release, CONTEXT: 'deploy-preview' } },
+    { base: { COMMIT_REF: release, DEPLOY_ID: deployId, CONTEXT: 'deploy-preview' } },
   );
 });
 
 test('accepts branch-deploy without stable-site authorization tuple', async () => {
   await expectAccepted(
     {},
-    { base: { COMMIT_REF: release, CONTEXT: 'branch-deploy' } },
+    { base: { COMMIT_REF: release, DEPLOY_ID: deployId, CONTEXT: 'branch-deploy' } },
   );
+});
+
+test('rejects missing, malformed, or padded DEPLOY_ID', async () => {
+  await expectRejected({ DEPLOY_ID: undefined });
+  await expectRejected({ DEPLOY_ID: 'b'.repeat(23) });
+  await expectRejected({ DEPLOY_ID: `${deployId} ` });
+  await expectRejected({ DEPLOY_ID: 'B'.repeat(24) });
 });
 
 test('rejects padded COMMIT_REF', async () => {

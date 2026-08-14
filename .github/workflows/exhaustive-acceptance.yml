@@ -91,6 +91,13 @@ jobs:
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
         run: npx playwright install --with-deps chromium
 
+      - name: Verify exact hosted deployment identity
+        if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+        run: node scripts/verify-hosted-deployment.mjs
+
       - name: Run exhaustive real hosted Sandbox acceptance
         id: hosted
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'

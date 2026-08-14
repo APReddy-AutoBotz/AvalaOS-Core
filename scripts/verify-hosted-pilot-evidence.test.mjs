@@ -110,8 +110,21 @@ test('hosted accessibility and performance evidence owns executable bounded asse
   assert.match(config, /Desktop Chrome/);
   assert.match(config, /Pixel 7/);
 });
-test('deployment verification requires release and nonproduction headers', async () => {
-  const fetchImpl = async () => new Response('<div id="root"></div>', { headers: { 'x-avalaos-release': head, 'x-avalaos-environment': 'hosted_nonproduction_pilot' } });
-  assert.equal((await verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, fetchImpl })).release, head);
-  await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, fetchImpl: async () => new Response('<div id="root"></div>') }), /mismatch/);
+test('exhaustive accessibility evidence scans bounded post-entry persona surfaces', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label\] of personas\)/u);
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*await enterPersona\(page, label\)/u);
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*observer\.assertSafe\(\)/u);
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);
+});
+
+test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {
+  const deployId = 'b'.repeat(24);
+  const fetchImpl = async () => new Response('<div id="root"></div>', { headers: { 'x-avalaos-release': head, 'x-avalaos-environment': 'hosted_nonproduction_pilot', 'x-avalaos-netlify-deploy-id': deployId } });
+  const verified = await verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: deployId, fetchImpl });
+  assert.equal(verified.release, head);
+  assert.equal(verified.deployId, deployId);
+  await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: 'c'.repeat(24), fetchImpl }), /mismatch/);
+  await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: deployId, fetchImpl: async () => new Response('<div id="root"></div>') }), /mismatch/);
+  await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: 'invalid', fetchImpl }), /24-character lowercase hex/);
 });

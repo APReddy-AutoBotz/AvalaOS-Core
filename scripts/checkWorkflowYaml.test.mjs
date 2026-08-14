@@ -18,6 +18,15 @@ assert.equal(
   "env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'",
   'a PR without an exact release-bound deployment must not contact the stable pilot',
 );
+const exactDeploymentStep = exhaustiveSteps.find(step => step.name === 'Verify exact hosted deployment identity');
+assert.equal(exactDeploymentStep?.if, "env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'");
+assert.equal(exactDeploymentStep?.env?.EXPECTED_RELEASE_SHA, '${{ env.RELEASE_SHA }}');
+assert.equal(exactDeploymentStep?.env?.EXPECTED_NETLIFY_DEPLOY_ID, '${{ env.NETLIFY_DEPLOY_ID }}');
+assert.equal(exactDeploymentStep?.run, 'node scripts/verify-hosted-deployment.mjs');
+assert.ok(
+  exhaustiveSteps.indexOf(exactDeploymentStep) < exhaustiveSteps.indexOf(exhaustiveHostedStep),
+  'exact deployment identity must be verified before hosted Playwright execution',
+);
 
 const defaultPlaywrightConfig = await readFile('playwright.config.ts', 'utf8');
 assert.match(

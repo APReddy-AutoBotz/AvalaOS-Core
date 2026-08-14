@@ -240,9 +240,16 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertNoOverflow(page);
       return;
     case 'serious-critical-a11y': {
-      await openSandbox(page);
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+      for (const [label] of personas) {
+        const observer = observeAuthorityRequests(page);
+        await enterPersona(page, label);
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        observer.assertSafe();
+        observer.stop();
+        await page.getByRole('button', { name: 'Sign Out' }).click();
+        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+      }
       return;
     }
     default:

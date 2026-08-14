@@ -8,6 +8,8 @@ const root = process.cwd();
 const validator = path.join(root, 'scripts/exhaustiveAcceptanceValidate.mjs');
 const catalogPath = path.join(root, 'tests/acceptance/catalog/test-catalog.json');
 const bindingsPath = path.join(root, 'tests/acceptance/execution-bindings.json');
+const bindings = JSON.parse(readFileSync(bindingsPath, 'utf8'));
+const hostedSpec = readFileSync(path.join(root, 'tests/browser/exhaustiveHostedAcceptance.spec.ts'), 'utf8');
 const inventory = JSON.parse(readFileSync(path.join(root, 'tests/acceptance/inventory.json'), 'utf8'));
 
 assert.equal(inventory.schemaVersion, 2);
@@ -19,17 +21,19 @@ assert.equal(responseLoss.branchId, 'SAFETY-RESPONSE_LOST_AFTER_COMMIT');
 assert.equal(responseLoss.provenance?.kind, 'required-scenario');
 assert.match(responseLoss.provenance?.limitation ?? '', /no response-loss simulation, replay, or recovery contract/u);
 
-const run = document => {
+const run = (document, bindingsDocument = bindings) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'acceptance-inventory-v2-'));
   const inventoryPath = path.join(directory, 'inventory.json');
   writeFileSync(inventoryPath, JSON.stringify(document));
+  const generatedBindingsPath = path.join(directory, 'execution-bindings.json');
+  writeFileSync(generatedBindingsPath, JSON.stringify(bindingsDocument));
   return spawnSync(process.execPath, [validator], {
     cwd: root,
     encoding: 'utf8',
     env: {
       ...process.env,
       ACCEPTANCE_CATALOG: catalogPath,
-      ACCEPTANCE_BINDINGS: bindingsPath,
+      ACCEPTANCE_BINDINGS: generatedBindingsPath,
       ACCEPTANCE_INVENTORY: inventoryPath,
     },
   });
@@ -64,5 +68,22 @@ const missingSource = run({
 });
 assert.notEqual(missingSource.status, 0);
 assert.match(missingSource.stderr, /references missing source/u);
+
+const withoutPixel7 = structuredClone(bindings);
+withoutPixel7.hostedTests.find(item => item.testId === 'SANDBOX-009').projects = ['desktop-chromium'];
+const omittedProject = run(inventory, withoutPixel7);
+assert.notEqual(omittedProject.status, 0);
+assert.match(omittedProject.stderr, /SANDBOX-009 hosted projects must exactly match catalog viewports/u);
+
+const duplicateProjects = structuredClone(bindings);
+duplicateProjects.hostedTests.find(item => item.testId === 'SANDBOX-009').projects = ['desktop-chromium', 'pixel-7-chromium', 'pixel-7-chromium'];
+const duplicateProject = run(inventory, duplicateProjects);
+assert.notEqual(duplicateProject.status, 0);
+assert.match(duplicateProject.stderr, /SANDBOX-009 hosted binding has duplicate projects/u);
+
+assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label\] of personas\)/u, 'SAFETY-007 must enter every bounded canonical persona');
+assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*await enterPersona\(page, label\)/u, 'chooser-only axe coverage is insufficient');
+assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);
+assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*observer\.assertSafe\(\)/u, 'post-entry accessibility must retain network safety');
 
 console.log('Acceptance inventory provenance validation tests passed.');

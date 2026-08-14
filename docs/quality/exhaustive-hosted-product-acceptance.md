@@ -10,7 +10,7 @@ Three execution dispositions are supported:
 
 - **Retained**: repository-owned server-authority, RLS, replay, lifecycle, Trust, Pilot, AI-boundary and application-policy suites. Retained suites are mandatory framework gates, but an aggregate suite PASS is not automatically Test-ID-level proof.
 - **Independent oracle**: Assess scoring/gating outcomes calculated by the QA-only oracle and compared with the production scoring implementation for the same deterministic inputs.
-- **Hosted**: behavior demonstrably exposed by the real `/sandbox` route. Playwright uses the actual hosted accessibility/product contract and the exact canonical Test-ID title. Unsupported hosted requirements are explicit BLOCKED declarations rather than invented selectors or synthetic success.
+- **Hosted**: behavior demonstrably exposed by the real `/sandbox` route. Playwright uses the actual hosted accessibility/product contract and the exact canonical Test-ID title. Every hosted binding must exactly match the catalog-required desktop/Pixel 7 project set; omissions, duplicates, skipped projects, and partial project success remain non-success. `SAFETY-007` performs a bounded post-entry axe and network-safety pass across all seven canonical persona classes on each required project, rather than treating chooser-only accessibility as product proof. Unsupported hosted requirements are explicit BLOCKED declarations rather than invented selectors or synthetic success.
 
 Every canonical Test ID must have exactly one truthful execution disposition. Missing, stale, duplicate, failed or cross-run evidence is BLOCKED or FAIL.
 
@@ -49,9 +49,10 @@ A real release run requires:
 1. an exact 40-character release SHA,
 2. an exact 24-hex Netlify deployment ID,
 3. the canonical origin `https://avalaos-pilot.netlify.app`,
-4. the stable deployment serving the same release through `X-AvalaOS-Release`.
+4. the stable deployment serving the same release through `X-AvalaOS-Release`,
+5. the tested response serving the exact controller-selected 24-hex deployment identity through `X-AvalaOS-Netlify-Deploy-ID`.
 
-Release mode fails closed if any Test ID is FAIL or BLOCKED, or if source/business requirements remain declared-only or uncovered.
+Release mode verifies the response release, environment, and deployment identity before Playwright starts. A missing, malformed, stale, or syntactically valid-but-wrong deployment identity fails closed. Release mode also fails closed if any Test ID is FAIL or BLOCKED, any required project is absent or duplicated, or source/business requirements remain declared-only or uncovered.
 
 ## Controller dispatch
 
@@ -64,3 +65,7 @@ The hosted suite rejects requests to Supabase authority endpoints or real AI pro
 Retained and oracle manifests are generated outside repository source paths before browser artifacts are generated, then copied into the evidence directory after the authority suites complete. This prevents generated Playwright/report output from contaminating repository static-boundary scans.
 
 Generated `acceptance-results/` and Playwright output are workflow artifacts, not committed proof snapshots. The repository carries definitions and `.gitkeep`; exact-run evidence is uploaded by GitHub Actions with the release SHA, run ID, and attempt in the artifact name.
+
+## Rollback and read-only fallback
+
+If deployment identity, required-project execution, post-entry accessibility, reporter generation, or artifact upload cannot be proven, stop release acceptance and retain the sanitized result as BLOCKED/INCOMPLETE. Do not retry against localhost, a preview, another stable deployment, or a synthetic-only substitute; keep the hosted pilot unchanged and use repository-only/read-only verification until an exact candidate is available.
