@@ -108,11 +108,15 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       return;
     }
     case 'network-safety': {
-      const observer = observeAuthorityRequests(page);
-      await enterPersona(page, 'Process Analyst');
-      await expect(page.getByText('AP Invoice Exception Handling', { exact: true })).toBeVisible();
-      observer.assertSafe();
-      observer.stop();
+      for (const [label, userName] of personas) {
+        const observer = observeAuthorityRequests(page);
+        await enterPersona(page, label);
+        await expect(page.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+        observer.assertSafe();
+        observer.stop();
+        await page.getByRole('button', { name: 'Sign Out' }).click();
+        await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
+      }
       return;
     }
     case 'sign-in-separation':
