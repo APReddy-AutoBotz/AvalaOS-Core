@@ -68,8 +68,7 @@ assert.equal(revision.sourceCaseVersion, 4);
 assert.equal(revision.version, 5);
 assert.equal(revision.supersedesDecisionId, 'decision-v4');
 
-const revisedBinding: ReviewBinding = { ...initialBinding, caseVersion: revision.version, decisionId: 'decision-v5', decisionVersion: 'decision-version-v5' };
-revisedDecision.decisionVersion = revisedBinding.decisionVersion;
+const revisedBinding: ReviewBinding = { ...initialBinding, caseVersion: revision.version, decisionId: 'decision-v5', decisionVersion: revisedDecision.decisionVersion };
 const secondAssignment = assignmentFor(revisedBinding, 2);
 const attestations: EvidenceAttestation[] = evidence.map((item, index) => ({
   ...revisedBinding, id: `attestation-${index + 1}`, assignmentId: secondAssignment.id, evidenceId: item.id,
@@ -111,7 +110,7 @@ assert.equal(handoff.govern.actions.find(item => item.actionId === 'restricted-a
 assert.equal(handoff.decision.validationStatus, 'reviewer-ready');
 
 assert.throws(
-  () => buildStudioHandoffPackage(revisedBinding, { ...revisedDecision, decisionVersion: 'decision-version-substituted' }, revisedEvidence, attestations, approved, govern, {}, [], '2026-08-13T15:00:00.000Z'),
+  () => buildStudioHandoffPackage(revisedBinding, { ...revisedDecision, decisionVersion: 'decision-version-substituted' as unknown as typeof revisedDecision.decisionVersion }, revisedEvidence, attestations, approved, govern, {}, [], '2026-08-13T15:00:00.000Z'),
   /decision does not belong to the current reviewed case/,
 );
 assert.throws(
