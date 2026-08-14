@@ -125,6 +125,33 @@ test('sandbox network-safety evidence exercises every declared persona', async (
   assert.match(spec, /case 'network-safety':[\s\S]*page\.getByText\(userName, \{ exact: true \}\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*observer\.assertSafe\(\)/u);
 });
+test('sandbox local-authority evidence exercises every declared persona', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /case 'local-authority':[\s\S]*for \(const \[label, userName\] of personas\)/u);
+  assert.match(spec, /case 'local-authority':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
+  assert.match(spec, /case 'local-authority':[\s\S]*await enterPersona\(page, label\)/u);
+  assert.match(spec, /case 'local-authority':[\s\S]*observer\.assertSafe\(\)/u);
+});
+test('every hosted navigation rechecks exact release environment and deployment identity', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /const deployId = process\.env\.NETLIFY_DEPLOY_ID/u);
+  assert.match(spec, /const assertHostedResponseIdentity/u);
+  assert.match(spec, /x-avalaos-release/u);
+  assert.match(spec, /x-avalaos-environment/u);
+  assert.match(spec, /x-avalaos-netlify-deploy-id/u);
+  assert.ok((spec.match(/assertHostedResponseIdentity\(response\);/gu) ?? []).length >= 6, 'sandbox, sign-in, public, descendant, release identity and reload must each rebind hosted identity');
+});
+test('reload reconstruction proves a real persisted authenticated product view', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await enterPersona\(page, 'Delivery Lead'\)/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await clickProductNav\(page, 'Delivery Pack'\)/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-current-user/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-view/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await page\.reload/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Alicia Morgan/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Governed Delivery Pack/u);
+  assert.match(spec, /case 'reload-reconstruction':[\s\S]*expect\(persistedAfter\)\.toEqual\(persistedBefore\)/u);
+});
 
 test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {
   const deployId = 'b'.repeat(24);
