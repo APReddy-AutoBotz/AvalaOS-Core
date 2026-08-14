@@ -72,9 +72,15 @@ for (const item of bindings.hostedTests ?? []) {
   if (JSON.stringify(boundProjects) !== JSON.stringify(requiredProjects)) fail(`${item.testId} hosted projects must exactly match catalog viewports`);
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
 }
-for (const testId of ['SANDBOX-007','SANDBOX-008','SANDBOX-009']) {
+const requiredExplicitBlocks = [
+  'SANDBOX-007','SANDBOX-008','SANDBOX-009',
+  'DELIVERY-009',
+  'MONITOR-001','MONITOR-002','MONITOR-003',
+  'ADMIN-002','ADMIN-003',
+];
+for (const testId of requiredExplicitBlocks) {
   const binding = (bindings.hostedTests ?? []).find(item => item.testId === testId);
-  if (!binding || binding.scenario !== null || !binding.blockedReason) fail(`${testId} must remain explicitly BLOCKED until all-sandbox-persona post-entry coverage is executable`);
+  if (!binding || binding.scenario !== null || !binding.blockedReason) fail(`${testId} must remain explicitly BLOCKED until its full canonical authority/lineage/persona contract is executable`);
 }
 
 const classification = classifyExecutionBindings(catalog, bindings);
