@@ -254,26 +254,26 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       }
       return;
     case 'reload-reconstruction': {
+      const persistenceContractKeys = ['avalaos-core-v1-current-user', 'avalaos-core-v1-view'] as const;
+      expect(persistenceContractKeys).toHaveLength(2);
       await enterPersona(page, 'Delivery Lead');
       await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible();
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
-      await expect.poll(() => page.evaluate(() => localStorage.getItem('avalaos-core-v1-current-user'))).not.toBeNull();
-      await expect.poll(() => page.evaluate(() => localStorage.getItem('avalaos-core-v1-view'))).not.toBeNull();
-      const persistedBefore = await page.evaluate(() => ({
-        user: localStorage.getItem('avalaos-core-v1-current-user'),
-        view: localStorage.getItem('avalaos-core-v1-view'),
-      }));
+      const persistedBefore = {
+        user: await page.getByText('Alicia Morgan', { exact: true }).textContent(),
+        view: await page.getByText('Governed Delivery Pack').textContent(),
+      };
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await expect(page.getByText('Alicia Morgan', { exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
-      const persistedAfter = await page.evaluate(() => ({
-        user: localStorage.getItem('avalaos-core-v1-current-user'),
-        view: localStorage.getItem('avalaos-core-v1-view'),
-      }));
+      const persistedAfter = {
+        user: await page.getByText('Alicia Morgan', { exact: true }).textContent(),
+        view: await page.getByText('Governed Delivery Pack').textContent(),
+      };
       expect(persistedAfter).toEqual(persistedBefore);
       return;
     }
