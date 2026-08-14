@@ -55,7 +55,7 @@ const hostedPilotLiveJob = hostedPilotLiveWorkflow.jobs['live-hosted-acceptance'
 const hostedPilotLiveSteps = hostedPilotLiveJob.steps;
 assert.equal(
   hostedPilotLiveJob.if,
-  "github.event_name == 'workflow_dispatch'",
+  "${{ github.event_name == 'workflow_dispatch' }}",
   'real hosted acceptance must execute only from an explicit controller workflow dispatch',
 );
 assert.match(
