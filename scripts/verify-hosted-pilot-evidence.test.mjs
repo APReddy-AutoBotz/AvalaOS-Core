@@ -10,6 +10,14 @@ const activationRun = { id: '123456789', attempt: '2', workflow: '.github/workfl
 const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowConclusion: 'success', environment: 'hosted_nonproduction_pilot', targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), ...scope, resultId: `${gate}:1` }]));
 const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, ...scope, evidence };
 const context = { expectedHead: head, actualHead: head, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint: manifest.deploymentTargetFingerprint, expectedScope:scope };
+const assertOrderedTokens = (source, tokens, label) => {
+  let cursor = -1;
+  for (const token of tokens) {
+    const next = source.indexOf(token, cursor + 1);
+    assert.ok(next > cursor, `${label}: expected ${JSON.stringify(token)} after prior step`);
+    cursor = next;
+  }
+};
 test('accepts exact-head complete hosted evidence bound to the selected activation run', () => assert.equal(verifyManifest(manifest, context), true));
 test('fails closed for wrong head, missing gate, production authority, and unsafe URL', () => {
   assert.throws(() => verifyManifest(manifest, { ...context, actualHead: 'b'.repeat(40) }), /exact head/);
@@ -122,7 +130,7 @@ test('sandbox network-safety evidence exercises every declared persona', async (
   assert.match(spec, /case 'network-safety':[\s\S]*for \(const \[label, userName\] of personas\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*await enterPersona\(page, label\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*page\.getByText\(userName, \{ exact: true \}\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*await assertActivePersona\(page, userName\)/u);
   assert.match(spec, /case 'network-safety':[\s\S]*observer\.assertSafe\(\)/u);
 });
 test('sandbox local-authority evidence exercises every declared persona', async () => {
@@ -141,16 +149,91 @@ test('every hosted navigation rechecks exact release environment and deployment 
   assert.match(spec, /x-avalaos-netlify-deploy-id/u);
   assert.ok((spec.match(/assertHostedResponseIdentity\(response\);/gu) ?? []).length >= 6, 'sandbox, sign-in, public, descendant, release identity and reload must each rebind hosted identity');
 });
-test('reload reconstruction proves a real persisted authenticated product view', async () => {
+test('server sign-out failures fail closed before logged-out navigation', async () => {
+  const adapter = await readFile('services/adapters/authAdapter.ts', 'utf8');
+  const provider = await readFile('components/auth/AuthProvider.tsx', 'utf8');
+  assert.match(adapter, /const \{ error \} = await supabase\.auth\.signOut\(\);/u);
+  assert.match(adapter, /if \(error\) throw error;/u);
+  assert.match(provider, /await authAdapter\.signOut\(\);[\s\S]*window\.location\.assign\(target\);/u);
+});
+test('mobile and desktop persona surfaces are explicit and mobile sign-out is actionable', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await enterPersona\(page, 'Delivery Lead'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await clickProductNav\(page, 'Delivery Pack'\)/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-current-user/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*avalaos-core-v1-view/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*await page\.reload/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Alicia Morgan/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*Governed Delivery Pack/u);
-  assert.match(spec, /case 'reload-reconstruction':[\s\S]*expect\(persistedAfter\)\.toEqual\(persistedBefore\)/u);
+  const sidebar = await readFile('components/shared/Sidebar.tsx', 'utf8');
+  const header = await readFile('components/shared/Header.tsx', 'utf8');
+  assert.match(sidebar, /data-testid="mobile-current-user"/u);
+  assert.match(sidebar, /data-testid="mobile-sign-out"/u);
+  assert.match(sidebar, /lg:hidden/u);
+  assert.match(sidebar, /\{user\.name\}/u);
+  assert.match(header, /data-testid="desktop-current-user"/u);
+  assert.match(spec, /getByTestId\('mobile-current-user'\)/u);
+  assert.match(spec, /getByTestId\('desktop-current-user'\)/u);
+  assert.match(spec, /getByTestId\('mobile-sign-out'\)/u);
+});
+test('external hosted resource allowlists are derived from exact index declarations', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /const indexHtml = fs\.readFileSync\('index\.html', 'utf8'\);/u);
+  assert.match(spec, /declaredGoogleStylesheetUrls/u);
+  assert.match(spec, /fonts\\\.googleapis\\\.com/u);
+  assert.match(spec, /declaredGoogleStylesheetUrls\.has\(url\.toString\(\)\)/u);
+  assert.doesNotMatch(spec, /url\.pathname === '\/css2'/u);
+  assert.match(spec, /declaredJsDelivrScriptPaths/u);
+  assert.match(spec, /cdn\\\.jsdelivr\\\.net/u);
+  assert.match(spec, /declaredJsDelivrScriptPaths\.has\(url\.pathname\)/u);
+  assert.doesNotMatch(spec, /url\.pathname\.startsWith\('\/npm\/'\)/u);
+  assert.match(spec, /importMapMatch/u);
+  assert.match(spec, /Object\.values\(importMap\.imports \?\? \{\}\)/u);
+  assert.match(spec, /url\.origin === 'https:\/\/aistudiocdn\.com'/u);
+  assert.match(spec, /prefix: source\.endsWith\('\/'\)/u);
+  assert.match(spec, /isDeclaredAiStudioScript\(url\)/u);
+});
+test('mobile-safe Admin scenarios prove the Enterprise Intelligence destination directly', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  const adminNavigationStart = spec.indexOf("case 'admin-navigation':");
+  const adminNavigationEnd = spec.indexOf("case 'non-admin-denial':");
+  const adminCapabilityStart = spec.indexOf("case 'admin-capability-view':");
+  const adminCapabilityEnd = spec.indexOf("case 'reload-reconstruction':");
+  assert.ok(adminNavigationStart >= 0 && adminNavigationEnd > adminNavigationStart, 'admin-navigation scenario must remain present');
+  assert.ok(adminCapabilityStart >= 0 && adminCapabilityEnd > adminCapabilityStart, 'admin-capability-view scenario must remain present');
+  for (const scenario of [spec.slice(adminNavigationStart, adminNavigationEnd), spec.slice(adminCapabilityStart, adminCapabilityEnd)]) {
+    assert.match(scenario, /await admin\.click\(\);/u);
+    assert.match(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
+    assert.match(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
+  }
+});
+test('delivery pack scenarios enter the canonical project scope and open project subnavigation in order', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /const selectProjectScope[\s\S]*Switch workspace context/u);
+  const deliveryPackStart = spec.indexOf("case 'delivery-pack':");
+  const deliveryPackEnd = spec.indexOf("case 'monitor-lineage':");
+  assert.ok(deliveryPackStart >= 0 && deliveryPackEnd > deliveryPackStart, 'delivery-pack scenario must remain present');
+  const deliveryPackScenario = spec.slice(deliveryPackStart, deliveryPackEnd);
+  assertOrderedTokens(deliveryPackScenario, [
+    "await enterPersona(page, 'Delivery Lead')",
+    "await selectProjectScope(page, 'AP Invoice Exception Workflow')",
+    "await clickProductNav(page, 'Delivery')",
+    "await clickProductNav(page, 'Delivery Pack')",
+    "Governed Delivery Pack",
+  ], 'delivery-pack navigation');
+});
+test('reload reconstruction proves a real persisted authenticated project Delivery Pack view in order', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  const reloadStart = spec.indexOf("case 'reload-reconstruction':");
+  const reloadEnd = spec.indexOf("case 'horizontal-overflow':");
+  assert.ok(reloadStart >= 0 && reloadEnd > reloadStart, 'reload-reconstruction scenario must remain present');
+  const reloadScenario = spec.slice(reloadStart, reloadEnd);
+  assertOrderedTokens(reloadScenario, [
+    "await enterPersona(page, 'Delivery Lead')",
+    "await selectProjectScope(page, 'AP Invoice Exception Workflow')",
+    "await assertActivePersona(page, 'Alicia Morgan')",
+    "await clickProductNav(page, 'Delivery')",
+    "await clickProductNav(page, 'Delivery Pack')",
+    "Governed Delivery Pack",
+    'await page.reload',
+    "await assertActivePersona(page, 'Alicia Morgan')",
+    "Governed Delivery Pack",
+    'Choose a sandbox persona',
+    'Sign in to an organization.',
+  ], 'reload reconstruction');
 });
 
 test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {

@@ -23,6 +23,7 @@ import {
   ViewBoardsIcon,
   BoltIcon,
   ClockIcon,
+  UserCircleIcon,
 } from './icons';
 import { AvalaLifecycleLockup, AvalaLogo } from './brand';
 
@@ -107,7 +108,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onMobileClose,
 }) => {
   const sidebarRef = useRef<HTMLElement>(null);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const { currentOrganization, loading: orgLoading } = useOrganizationContext();
   const guardLoading = authLoading || orgLoading;
   const canAccessAdmin = adminAccessOverride ?? Boolean(user?.orgRole === 'Admin' || user?.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission)));
@@ -192,19 +193,19 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return <>
     {mobileOpen && <button type="button" aria-label="Close primary navigation" onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" />}
-    <aside ref={sidebarRef} id="primary-navigation" aria-label="Primary navigation" className={`premium-sidebar fixed inset-y-0 left-0 z-50 flex h-screen flex-col transition-transform duration-200 lg:static lg:z-30 lg:h-auto lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'w-20' : 'w-64'}`}>
-      <div className={`flex min-h-[76px] items-center border-b border-[var(--av-color-border)] px-4 ${collapsed ? 'justify-center' : 'justify-between gap-3'}`}>
-        {collapsed ? <AvalaLogo className="h-10 w-10" /> : <div className="brand-lockup min-w-0"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div>}
+    <aside ref={sidebarRef} id="primary-navigation" aria-label="Primary navigation" className={`premium-sidebar fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col transition-transform duration-200 lg:static lg:z-30 lg:h-auto lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}>
+      <div className={`flex min-h-[76px] items-center border-b border-[var(--av-color-border)] px-4 ${collapsed ? 'lg:justify-center' : 'justify-between gap-3'}`}>
+        {collapsed ? <><AvalaLogo className="hidden h-10 w-10 lg:block" /><div className="brand-lockup min-w-0 lg:hidden"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div></> : <div className="brand-lockup min-w-0"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div>}
         <button type="button" onClick={onToggleCollapse} className={`av-icon-button hidden lg:grid ${collapsed ? 'absolute left-[4.2rem]' : ''}`} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{collapsed ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}</button>
       </div>
 
       <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 py-4" aria-label="Product lifecycle">
         <div className="space-y-1">{renderNavItem({ view: View.DASHBOARD, icon: HomeIcon, label: 'Home' })}</div>
         {!collapsed && <p className="nav-section-label px-3 pb-2 pt-6">Lifecycle</p>}
-        {collapsed && <div className="my-3 border-t border-[var(--av-color-border)]" />}
+        {collapsed && <div className="my-3 hidden border-t border-[var(--av-color-border)] lg:block" />}
         <div className="space-y-1">
           {renderNavItem(lifecycleItems[0])}
-          {canAccessGovern && <button type="button" onClick={() => { onOpenGovern(); onMobileClose?.(); }} aria-current={governOpen ? 'page' : undefined} title={collapsed ? 'Govern' : undefined} className={`nav-item group flex w-full shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${governOpen ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><ClipboardDocumentListIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Govern</span>}</button>}
+          {canAccessGovern && <button type="button" onClick={() => { onOpenGovern(); onMobileClose?.(); }} aria-current={governOpen ? 'page' : undefined} title={collapsed ? 'Govern' : undefined} className={`nav-item group flex w-full shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${governOpen ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'lg:justify-center' : ''}`}><ClipboardDocumentListIcon className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:hidden' : ''}>Govern</span></button>}
           {lifecycleItems.slice(1).map(item => renderNavItem(item))}
         </div>
 
@@ -212,8 +213,16 @@ const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div className="border-t border-[var(--av-color-border)] px-3 py-3">
+        {user && <div data-testid="mobile-current-user" className="mb-3 flex min-w-0 items-center gap-2 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-surface)] px-2.5 py-2 lg:hidden">
+          <UserCircleIcon className="h-6 w-6 shrink-0 text-[var(--av-color-text-subtle)]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">Signed in as</p>
+            <p className="truncate text-xs font-bold text-[var(--av-color-text)]">{user.name}</p>
+          </div>
+          <button data-testid="mobile-sign-out" type="button" onClick={signOut} className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold text-[var(--av-color-brand-primary)] transition-colors hover:bg-[var(--av-color-bg-subtle)]">Sign Out</button>
+        </div>}
         {!collapsed && <p className="nav-section-label px-3 pb-2">Administration</p>}
-        {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.ENTERPRISE_INTELLIGENCE); onMobileClose?.(); }} aria-current={currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" />{!collapsed && <span>Admin / Intelligence</span>}</button>}
+        {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.ENTERPRISE_INTELLIGENCE); onMobileClose?.(); }} aria-current={currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'lg:justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:hidden' : ''}>Admin / Intelligence</span></button>}
       </div>
     </aside>
   </>;

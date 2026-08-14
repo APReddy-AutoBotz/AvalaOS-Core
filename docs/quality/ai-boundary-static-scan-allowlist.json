@@ -200,9 +200,9 @@
       "path": "services/adapters/authAdapter.ts",
       "lines": [
         34,
-        50,
-        56,
-        62
+        52,
+        57,
+        63
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep current-user/demo state classified separately from provider-key storage."

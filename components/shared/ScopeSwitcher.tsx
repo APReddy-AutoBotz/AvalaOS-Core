@@ -56,7 +56,7 @@ const ScopeSwitcher: React.FC<ScopeSwitcherProps> = ({ currentScope, onScopeChan
                         <ScopeIcon scopeType={currentScope.type} className="h-4 w-4" />
                     </span>
                     <span className="hidden min-w-0 flex-1 md:block">
-                        <span className="block text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Workspace</span>
+                        <span className="block text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">Workspace</span>
                         <span className="block max-w-[150px] truncate text-xs font-extrabold">{renderScopeName()}</span>
                     </span>
                     <ChevronDownIcon className="h-4 w-4 text-slate-500" />
