@@ -117,6 +117,14 @@ test('exhaustive accessibility evidence scans bounded post-entry persona surface
   assert.match(spec, /case 'serious-critical-a11y':[\s\S]*observer\.assertSafe\(\)/u);
   assert.match(spec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);
 });
+test('sandbox network-safety evidence exercises every declared persona', async () => {
+  const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
+  assert.match(spec, /case 'network-safety':[\s\S]*for \(const \[label, userName\] of personas\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*await enterPersona\(page, label\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*page\.getByText\(userName, \{ exact: true \}\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*observer\.assertSafe\(\)/u);
+});
 
 test('deployment verification requires exact release, nonproduction, and deployment identity headers', async () => {
   const deployId = 'b'.repeat(24);
