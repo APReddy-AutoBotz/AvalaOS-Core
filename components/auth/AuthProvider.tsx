@@ -38,6 +38,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await authAdapter.signOut();
+    if (typeof window !== 'undefined') {
+      const target = window.location.pathname === '/sandbox' || window.location.pathname.startsWith('/sandbox/')
+        ? '/sandbox'
+        : '/sign-in';
+      window.location.assign(target);
+      return;
+    }
     setUser(null);
   };
 
