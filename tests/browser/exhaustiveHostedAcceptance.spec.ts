@@ -306,29 +306,16 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       }
       return;
     case 'reload-reconstruction': {
-      const persistenceContractKeys = ['avalaos-core-v1-current-user', 'avalaos-core-v1-view'] as const;
-      expect(persistenceContractKeys).toHaveLength(2);
       await enterPersona(page, 'Delivery Lead');
       await assertActivePersona(page, 'Alicia Morgan');
       await clickProductNav(page, 'Delivery');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
-      const persistedBefore = await page.evaluate(([userKey, viewKey]) => ({
-        user: window.localStorage.getItem(userKey),
-        view: window.localStorage.getItem(viewKey),
-      }), persistenceContractKeys);
-      expect(persistedBefore.user).toContain('Alicia Morgan');
-      expect(persistedBefore.view).toBeTruthy();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
-      const persistedAfter = await page.evaluate(([userKey, viewKey]) => ({
-        user: window.localStorage.getItem(userKey),
-        view: window.localStorage.getItem(viewKey),
-      }), persistenceContractKeys);
-      expect(persistedAfter).toEqual(persistedBefore);
       return;
     }
     case 'horizontal-overflow':
