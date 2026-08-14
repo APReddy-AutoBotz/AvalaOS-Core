@@ -59,6 +59,7 @@ jobs:
       - name: Validate catalog, inventory, bindings and controller bridge
         run: |
           npm run test:acceptance:catalog
+          node scripts/runExhaustiveAcceptanceReport.test.mjs
           node scripts/exhaustiveAcceptanceEvidence.test.mjs
           node scripts/exhaustiveAcceptanceDispatchBridge.test.mjs
 
@@ -115,7 +116,7 @@ jobs:
         continue-on-error: true
         env:
           ACCEPTANCE_EXECUTION_DISPOSITION: ${{ env.NETLIFY_DEPLOY_ID == 'pull-request-not-deployed' && 'NOT_EXECUTED' || steps.deployment.outcome != 'success' && 'BLOCKED' || 'EXECUTED' }}
-        run: node scripts/exhaustiveAcceptanceReport.mjs
+        run: node scripts/runExhaustiveAcceptanceReport.mjs
 
       - name: Upload sanitized acceptance evidence
         if: always()
