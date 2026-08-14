@@ -118,6 +118,15 @@ const signOutToSandbox = async (page: Page) => {
   await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible({ timeout: 15_000 });
 };
 
+const selectProjectScope = async (page: Page, projectName: string) => {
+  const switcher = page.getByRole('button', { name: 'Switch workspace context' });
+  await expect(switcher).toBeVisible();
+  await switcher.click();
+  const project = page.getByRole('button', { name: projectName, exact: true });
+  await expect(project).toBeVisible();
+  await project.click();
+};
+
 const clickProductNav = async (page: Page, label: string) => {
   let target = page.getByRole('button', { name: label, exact: true });
   if (!(await target.isVisible().catch(() => false))) {
@@ -254,7 +263,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'delivery-pack':
       await enterPersona(page, 'Delivery Lead');
+      await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await clickProductNav(page, 'Delivery');
+      await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Markdown' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'JSON' })).toBeDisabled();
@@ -307,8 +318,10 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       return;
     case 'reload-reconstruction': {
       await enterPersona(page, 'Delivery Lead');
+      await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await assertActivePersona(page, 'Alicia Morgan');
       await clickProductNav(page, 'Delivery');
+      await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
