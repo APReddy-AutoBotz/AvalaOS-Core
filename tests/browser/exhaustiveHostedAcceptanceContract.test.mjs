@@ -27,13 +27,18 @@ assert.equal(
   'hosted acceptance must not depend on the removed Enterprise Intelligence test id',
 );
 assert.ok(
-  hostedSpec.match(/getByRole\('heading', \{ name: 'Governed Delivery Pack', exact: true \}\)/gu)?.length >= 3,
-  'Delivery Pack acceptance must target the unique semantic heading rather than duplicate visible text',
+  hostedSpec.match(/getByRole\('heading', \{ name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true \}\)/gu)?.length >= 3,
+  'Delivery Pack acceptance must target the actual project-qualified semantic heading',
 );
 assert.equal(
   hostedSpec.includes("getByText('Governed Delivery Pack')"),
   false,
-  'Delivery Pack acceptance must not regress to the ambiguous text locator',
+  'Delivery Pack acceptance must not regress to the ambiguous badge/text locator',
+);
+assert.equal(
+  hostedSpec.includes("getByRole('heading', { name: 'Governed Delivery Pack', exact: true })"),
+  false,
+  'Delivery Pack acceptance must not regress to the incorrect short heading',
 );
 
 const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
