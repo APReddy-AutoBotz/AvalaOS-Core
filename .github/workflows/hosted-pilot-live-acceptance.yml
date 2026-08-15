@@ -9,6 +9,10 @@ on:
         description: Exact 40-character Git SHA deployed to the hosted pilot
         required: true
         type: string
+      expected_netlify_deploy_id:
+        description: Exact 24-character lowercase Netlify deploy ID selected for acceptance
+        required: true
+        type: string
       hosted_url:
         description: Credential-free HTTPS hosted pilot origin
         required: true
@@ -19,11 +23,12 @@ permissions:
 
 env:
   EXPECTED_RELEASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.expected_release_sha }}
+  EXPECTED_NETLIFY_DEPLOY_ID: ${{ inputs.expected_netlify_deploy_id }}
   HOSTED_PILOT_URL: ${{ github.event_name == 'pull_request' && format('https://deploy-preview-{0}--avalaos-pilot.netlify.app', github.event.number) || inputs.hosted_url }}
 
 jobs:
   live-hosted-acceptance:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.head_ref == 'codex/hosted-nonproduction-pilot-activation' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

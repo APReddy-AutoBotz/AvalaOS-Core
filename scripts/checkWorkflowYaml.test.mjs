@@ -49,6 +49,41 @@ assert.match(
   'release enforcement must still require hosted browser success',
 );
 
+const hostedPilotLiveWorkflowSource = await readFile('.github/workflows/hosted-pilot-live-acceptance.yml', 'utf8');
+const hostedPilotLiveWorkflow = parseWorkflowYaml(hostedPilotLiveWorkflowSource, 'hosted-pilot-live-acceptance.yml');
+const hostedPilotLiveJob = hostedPilotLiveWorkflow.jobs['live-hosted-acceptance'];
+const hostedPilotLiveSteps = hostedPilotLiveJob.steps;
+assert.equal(
+  hostedPilotLiveJob.if,
+  "${{ github.event_name == 'workflow_dispatch' }}",
+  'real hosted acceptance must execute only from an explicit controller workflow dispatch',
+);
+assert.match(
+  hostedPilotLiveWorkflowSource,
+  /expected_netlify_deploy_id:\n\s+description: Exact 24-character lowercase Netlify deploy ID selected for acceptance\n\s+required: true\n\s+type: string/u,
+  'manual hosted acceptance must require the controller-selected exact Netlify deploy ID',
+);
+assert.match(
+  hostedPilotLiveWorkflowSource,
+  /EXPECTED_NETLIFY_DEPLOY_ID: \$\{\{ inputs\.expected_netlify_deploy_id \}\}/u,
+  'manual hosted acceptance must pass the selected Netlify deploy ID to the exact deployment verifier',
+);
+const hostedVerifierStep = hostedPilotLiveSteps.find(step => step.name === 'Wait for exact-head Netlify deployment identity');
+const hostedBrowserStep = hostedPilotLiveSteps.find(
+  step => step.name === 'Run real hosted Desktop Chrome and Pixel 7 acceptance serially',
+);
+assert.ok(hostedVerifierStep, 'manual hosted acceptance must retain the exact deployment verifier step');
+assert.ok(hostedBrowserStep, 'manual hosted acceptance must retain the live hosted browser step');
+assert.match(
+  hostedVerifierStep?.run || '',
+  /node scripts\/verify-hosted-deployment\.mjs/u,
+  'the exact deployment verifier step must invoke the repository verifier',
+);
+assert.ok(
+  hostedPilotLiveSteps.indexOf(hostedVerifierStep) < hostedPilotLiveSteps.indexOf(hostedBrowserStep),
+  'the exact deployment verifier must execute before live hosted browser acceptance',
+);
+
 const defaultPlaywrightConfig = await readFile('playwright.config.ts', 'utf8');
 assert.match(
   defaultPlaywrightConfig,

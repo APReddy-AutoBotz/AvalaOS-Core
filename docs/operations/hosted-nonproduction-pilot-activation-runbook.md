@@ -68,8 +68,8 @@ Do not disable maintenance/read-only behavior merely because migrations complete
 The hosted application must return `x-avalaos-release: <exact-head>` and `x-avalaos-environment: hosted_nonproduction_pilot`. Verify without exposing target credentials:
 
 ```bash
-EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> node scripts/verify-hosted-deployment.mjs
-EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> npx playwright test --config=playwright.hosted-pilot.config.ts
+EXPECTED_RELEASE_SHA=<exact-head> EXPECTED_NETLIFY_DEPLOY_ID=<exact-24-hex-id> HOSTED_PILOT_URL=<https-origin> node scripts/verify-hosted-deployment.mjs
+EXPECTED_RELEASE_SHA=<exact-head> EXPECTED_NETLIFY_DEPLOY_ID=<exact-24-hex-id> HOSTED_PILOT_URL=<https-origin> npx playwright test --config=playwright.hosted-pilot.config.ts
 EXPECTED_RELEASE_SHA=<exact-head> HOSTED_PILOT_URL=<https-origin> npx playwright test --config=playwright.hosted-accessibility-performance.config.ts
 ```
 
