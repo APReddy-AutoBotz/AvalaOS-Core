@@ -22,8 +22,13 @@ assert.equal(
   'hosted acceptance must not depend on the removed Enterprise Intelligence test id',
 );
 assert.ok(
-  hostedSpec.match(/getByText\('Governed Delivery Pack', \{ exact: true \}\)/gu)?.length >= 3,
-  'Delivery Pack acceptance must use an unambiguous exact semantic text locator',
+  hostedSpec.match(/getByRole\('heading', \{ name: 'Governed Delivery Pack', exact: true \}\)/gu)?.length >= 3,
+  'Delivery Pack acceptance must target the unique semantic heading rather than duplicate visible text',
+);
+assert.equal(
+  hostedSpec.includes("getByText('Governed Delivery Pack')"),
+  false,
+  'Delivery Pack acceptance must not regress to the ambiguous text locator',
 );
 
 const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
