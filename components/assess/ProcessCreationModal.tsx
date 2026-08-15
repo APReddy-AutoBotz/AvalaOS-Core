@@ -89,28 +89,28 @@ const ProcessCreationModal: React.FC<ProcessCreationModalProps> = ({ isOpen, onC
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Process Name *</label>
-                                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                                <label htmlFor="process-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Process Name *</label>
+                                <input id="process-name" type="text" value={name} onChange={e => setName(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="e.g., Monthly Expense Reconciliation" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-                                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+                                <label htmlFor="process-description" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                                <textarea id="process-description" value={description} onChange={e => setDescription(e.target.value)} rows={3}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Brief overview of the process goals." />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Department</label>
-                                <input type="text" value={department} onChange={e => setDepartment(e.target.value)}
+                                <label htmlFor="process-department" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Department</label>
+                                <input id="process-department" type="text" value={department} onChange={e => setDepartment(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="e.g., Finance, HR, IT" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                <label htmlFor="process-criticality" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                     Assessed Criticality <span className="text-slate-400 font-normal ml-1">(Defaults to Medium)</span>
                                 </label>
-                                <select value={criticality} onChange={e => setCriticality(e.target.value as CriticalityLevel)}
+                                <select id="process-criticality" value={criticality} onChange={e => setCriticality(e.target.value as CriticalityLevel)}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                                     <option value="Low">Low - Minimal operational impact</option>
                                     <option value="Medium">Medium - Standard operational process</option>
