@@ -38,7 +38,7 @@ const personas: Array<[string, string]> = [
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
 type NetworkViolation = { method: string; category: NetworkViolationCategory; origin: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
-const INVALID_NETWORK_ORIGIN = 'invalid-url';
+const UNAVAILABLE_NETWORK_ORIGIN = 'unavailable-origin';
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
 const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
@@ -53,9 +53,11 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
 };
 const diagnosticOrigin = (requestUrl: string): string => {
   try {
-    return new URL(requestUrl).origin;
+    const url = new URL(requestUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return UNAVAILABLE_NETWORK_ORIGIN;
+    return url.origin;
   } catch {
-    return INVALID_NETWORK_ORIGIN;
+    return UNAVAILABLE_NETWORK_ORIGIN;
   }
 };
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
@@ -97,7 +99,7 @@ const observeAuthorityRequests = (page: Page) => {
     if (category) {
       totalViolations += 1;
       if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
-        samples.push({ method: request.method(), category, origin: diagnosticOrigin(request.url()) });
+        samples.push({ method: request.method().toUpperCase(), category, origin: diagnosticOrigin(request.url()) });
       }
     }
   };
@@ -280,6 +282,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Process Name *').fill(name);
       await page.getByLabel('Description').fill('Deterministic synthetic acceptance fixture; no customer data.');
       await page.getByLabel('Department').fill('Synthetic QA');
+      await page.getByLabel('Assessed Criticality').selectOption('High');
       await page.getByRole('button', { name: 'Create Process' }).click();
       await expect(page.getByText(name, { exact: true })).toBeVisible();
       return;
