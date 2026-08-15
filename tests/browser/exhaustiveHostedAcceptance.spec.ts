@@ -36,9 +36,11 @@ const personas: Array<[string, string]> = [
 ];
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
-type NetworkViolation = { method: string; category: NetworkViolationCategory; origin: string };
+type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
-const UNAVAILABLE_NETWORK_ORIGIN = 'unavailable-origin';
+const UNAVAILABLE_NETWORK_ORIGIN_CLASS = 'unavailable-origin';
+const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
+const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
 const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
@@ -51,14 +53,23 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
 };
-const diagnosticOrigin = (requestUrl: string): string => {
-  try {
-    const url = new URL(requestUrl);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return UNAVAILABLE_NETWORK_ORIGIN;
-    return url.origin;
-  } catch {
-    return UNAVAILABLE_NETWORK_ORIGIN;
-  }
+const createDiagnosticOriginClassifier = () => {
+  const externalOriginClasses = new Map<string, string>();
+  return (requestUrl: string): string => {
+    try {
+      const url = new URL(requestUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return UNAVAILABLE_NETWORK_ORIGIN_CLASS;
+      if (hostedOrigin && url.origin === hostedOrigin) return HOSTED_NETWORK_ORIGIN_CLASS;
+      const existing = externalOriginClasses.get(url.origin);
+      if (existing) return existing;
+      if (externalOriginClasses.size >= MAX_NETWORK_VIOLATION_SAMPLES) return EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS;
+      const originClass = `external-origin-${externalOriginClasses.size + 1}`;
+      externalOriginClasses.set(url.origin, originClass);
+      return originClass;
+    } catch {
+      return UNAVAILABLE_NETWORK_ORIGIN_CLASS;
+    }
+  };
 };
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
   const method = request.method().toUpperCase();
@@ -93,13 +104,19 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
 
 const observeAuthorityRequests = (page: Page) => {
   const samples: NetworkViolation[] = [];
+  const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
   let totalViolations = 0;
   const inspect = (request: Request) => {
     const category = classifyNetworkRequest(request);
     if (category) {
       totalViolations += 1;
       if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
-        samples.push({ method: request.method().toUpperCase(), category, origin: diagnosticOrigin(request.url()) });
+        samples.push({
+          method: request.method().toUpperCase(),
+          category,
+          resourceType: request.resourceType(),
+          originClass: classifyDiagnosticOrigin(request.url()),
+        });
       }
     }
   };
