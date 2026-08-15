@@ -55,33 +55,33 @@ assert.deepEqual(
   'diagnostic changes must not broaden the explicit external static-resource allowlist',
 );
 
-const diagnosticBody = hostedSpec.match(/const diagnosticOrigin = \(requestUrl: string\): string => \{([\s\S]*?)\n\};/u);
-assert.ok(diagnosticBody, 'origin-only diagnostic sanitizer must remain present');
-assert.match(diagnosticBody[1], /const url = new URL\(requestUrl\);/u, 'diagnostics must parse the request URL before extracting evidence');
-assert.match(diagnosticBody[1], /url\.protocol !== 'http:' && url\.protocol !== 'https:'/u, 'diagnostics must reject non-HTTP(S) schemes');
-assert.match(diagnosticBody[1], /return url\.origin;/u, 'diagnostics must retain only URL origin');
-assert.ok(
-  diagnosticBody[1].match(/return UNAVAILABLE_NETWORK_ORIGIN;/gu)?.length >= 2,
-  'non-HTTP(S) and malformed URLs must collapse to the fixed non-sensitive sentinel',
+assert.match(hostedSpec, /const createDiagnosticOriginClassifier = \(\) => \{/u, 'network diagnostics must use an opaque origin classifier');
+assert.match(hostedSpec, /const externalOriginClasses = new Map<string, string>\(\);/u, 'raw origins may only be grouped in ephemeral in-memory state');
+assert.match(hostedSpec, /url\.protocol !== 'http:' && url\.protocol !== 'https:'/u, 'diagnostics must reject non-HTTP(S) schemes');
+assert.match(hostedSpec, /return UNAVAILABLE_NETWORK_ORIGIN_CLASS;/u, 'malformed or non-HTTP(S) URLs must collapse to a fixed sentinel');
+assert.match(hostedSpec, /return HOSTED_NETWORK_ORIGIN_CLASS;/u, 'same-origin violations must use a fixed hosted-origin class');
+assert.match(hostedSpec, /const originClass = `external-origin-\$\{externalOriginClasses\.size \+ 1\}`;/u, 'unexpected external origins must receive opaque per-observer labels');
+assert.match(hostedSpec, /externalOriginClasses\.set\(url\.origin, originClass\);/u, 'origin-to-label mapping must stay inside ephemeral classifier state');
+assert.doesNotMatch(hostedSpec, /return url\.origin;/u, 'literal origins must never be returned into retained diagnostic evidence');
+assert.doesNotMatch(hostedSpec, /\.(?:search|hash|username|password)\b/u, 'diagnostics must not retain query, fragment, or userinfo fields');
+
+const sampleBody = hostedSpec.match(/samples\.push\(\{([\s\S]*?)\}\);/u);
+assert.ok(sampleBody, 'violation sample construction must remain structurally inspectable');
+assert.match(sampleBody[1], /method: request\.method\(\)\.toUpperCase\(\)/u, 'violation evidence may retain only normalized method metadata');
+assert.match(sampleBody[1], /category,/u, 'violation evidence must retain the fail-closed category');
+assert.match(sampleBody[1], /resourceType: request\.resourceType\(\)/u, 'violation evidence may retain the non-sensitive Playwright resource type');
+assert.match(sampleBody[1], /originClass: classifyDiagnosticOrigin\(request\.url\(\)\)/u, 'violation evidence must retain only the opaque origin class');
+assert.doesNotMatch(sampleBody[1], /\borigin\s*:/u, 'violation evidence must never retain a literal origin field');
+assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'violation evidence must never retain headers or request bodies');
+assert.match(
+  hostedSpec,
+  /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,
+  'violation evidence schema must remain limited to non-sensitive method, category, resource type, and opaque origin class',
 );
 assert.doesNotMatch(
-  diagnosticBody[1], /\.(?:pathname|search|hash|username|password)\b/u,
-  'diagnostics must not extract path, query, fragment, or userinfo fields',
-);
-assert.equal(
-  new URL('https://user:password@example.com:8443/private/path?token=secret#fragment').origin,
-  'https://example.com:8443',
-  'WHATWG URL origin must exclude userinfo, path, query, and fragment from the exact expression used by diagnostics',
-);
-assert.match(
   hostedSpec,
-  /samples\.push\(\{ method: request\.method\(\)\.toUpperCase\(\), category, origin: diagnosticOrigin\(request\.url\(\)\) \}\);/u,
-  'violation samples must retain only normalized method, category, and sanitized origin',
-);
-assert.match(
-  hostedSpec,
-  /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; origin: string \};/u,
-  'violation evidence schema must not acquire raw URL or header fields',
+  /type NetworkViolation = \{[^\n]*\borigin:\s*string/u,
+  'violation evidence schema must not acquire a literal origin field',
 );
 
 console.log('Exhaustive hosted acceptance contract checks passed.');
