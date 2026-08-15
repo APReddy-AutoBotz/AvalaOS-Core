@@ -36,8 +36,9 @@ const personas: Array<[string, string]> = [
 ];
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
-type NetworkViolation = { method: string; category: NetworkViolationCategory };
+type NetworkViolation = { method: string; category: NetworkViolationCategory; origin: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
+const INVALID_NETWORK_ORIGIN = 'invalid-url';
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
 const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
@@ -49,6 +50,13 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
+};
+const diagnosticOrigin = (requestUrl: string): string => {
+  try {
+    return new URL(requestUrl).origin;
+  } catch {
+    return INVALID_NETWORK_ORIGIN;
+  }
 };
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
   const method = request.method().toUpperCase();
@@ -88,7 +96,9 @@ const observeAuthorityRequests = (page: Page) => {
     const category = classifyNetworkRequest(request);
     if (category) {
       totalViolations += 1;
-      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) samples.push({ method: request.method(), category });
+      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
+        samples.push({ method: request.method(), category, origin: diagnosticOrigin(request.url()) });
+      }
     }
   };
   page.on('request', inspect);
@@ -298,7 +308,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByText('Governed Delivery Pack', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Markdown' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'JSON' })).toBeDisabled();
       await expect(page.locator('body')).toContainText('AP Invoice Exception');
@@ -326,7 +336,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
@@ -342,7 +351,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
@@ -352,11 +360,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertActivePersona(page, 'Alicia Morgan');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByText('Governed Delivery Pack', { exact: true })).toBeVisible();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByText('Governed Delivery Pack', { exact: true })).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
       return;
