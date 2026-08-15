@@ -16,6 +16,11 @@ for (const [id, control] of fieldAssociations) {
   assert.match(processModal, new RegExp(`<${control}\\s+id="${id}"`, 'u'), `${id} label must target its rendered control`);
 }
 
+assert.match(
+  hostedSpec,
+  /getByLabel\('Assessed Criticality'\)\.selectOption\('High'\)/u,
+  'hosted process creation must exercise the criticality control through its accessible label',
+);
 assert.equal(
   hostedSpec.includes("getByTestId('enterprise-intelligence-view')"),
   false,
@@ -47,16 +52,26 @@ assert.deepEqual(
 
 const diagnosticBody = hostedSpec.match(/const diagnosticOrigin = \(requestUrl: string\): string => \{([\s\S]*?)\n\};/u);
 assert.ok(diagnosticBody, 'origin-only diagnostic sanitizer must remain present');
-assert.match(diagnosticBody[1], /return new URL\(requestUrl\)\.origin;/u, 'diagnostics must retain only URL origin');
-assert.match(diagnosticBody[1], /return INVALID_NETWORK_ORIGIN;/u, 'malformed URLs must use the fixed sentinel');
+assert.match(diagnosticBody[1], /const url = new URL\(requestUrl\);/u, 'diagnostics must parse the request URL before extracting evidence');
+assert.match(diagnosticBody[1], /url\.protocol !== 'http:' && url\.protocol !== 'https:'/u, 'diagnostics must reject non-HTTP(S) schemes');
+assert.match(diagnosticBody[1], /return url\.origin;/u, 'diagnostics must retain only URL origin');
+assert.ok(
+  diagnosticBody[1].match(/return UNAVAILABLE_NETWORK_ORIGIN;/gu)?.length >= 2,
+  'non-HTTP(S) and malformed URLs must collapse to the fixed non-sensitive sentinel',
+);
 assert.doesNotMatch(
   diagnosticBody[1], /\.(?:pathname|search|hash|username|password)\b/u,
   'diagnostics must not extract path, query, fragment, or userinfo fields',
 );
+assert.equal(
+  new URL('https://user:password@example.com:8443/private/path?token=secret#fragment').origin,
+  'https://example.com:8443',
+  'WHATWG URL origin must exclude userinfo, path, query, and fragment from the exact expression used by diagnostics',
+);
 assert.match(
   hostedSpec,
-  /samples\.push\(\{ method: request\.method\(\), category, origin: diagnosticOrigin\(request\.url\(\)\) \}\);/u,
-  'violation samples must retain only method, category, and sanitized origin',
+  /samples\.push\(\{ method: request\.method\(\)\.toUpperCase\(\), category, origin: diagnosticOrigin\(request\.url\(\)\) \}\);/u,
+  'violation samples must retain only normalized method, category, and sanitized origin',
 );
 assert.match(
   hostedSpec,
