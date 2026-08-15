@@ -311,7 +311,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByRole('heading', { name: 'Governed Delivery Pack', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Markdown' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'JSON' })).toBeDisabled();
       await expect(page.locator('body')).toContainText('AP Invoice Exception');
@@ -363,11 +363,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertActivePersona(page, 'Alicia Morgan');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByRole('heading', { name: 'Governed Delivery Pack', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
-      await expect(page.getByRole('heading', { name: 'Governed Delivery Pack', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
       return;
