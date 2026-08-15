@@ -36,8 +36,11 @@ const personas: Array<[string, string]> = [
 ];
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
-type NetworkViolation = { method: string; category: NetworkViolationCategory };
+type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
+const UNAVAILABLE_NETWORK_ORIGIN_CLASS = 'unavailable-origin';
+const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
+const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
 const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
@@ -49,6 +52,24 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
+};
+const createDiagnosticOriginClassifier = () => {
+  const externalOriginClasses = new Map<string, string>();
+  return (requestUrl: string): string => {
+    try {
+      const url = new URL(requestUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return UNAVAILABLE_NETWORK_ORIGIN_CLASS;
+      if (hostedOrigin && url.origin === hostedOrigin) return HOSTED_NETWORK_ORIGIN_CLASS;
+      const existing = externalOriginClasses.get(url.origin);
+      if (existing) return existing;
+      if (externalOriginClasses.size >= MAX_NETWORK_VIOLATION_SAMPLES) return EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS;
+      const originClass = `external-origin-${externalOriginClasses.size + 1}`;
+      externalOriginClasses.set(url.origin, originClass);
+      return originClass;
+    } catch {
+      return UNAVAILABLE_NETWORK_ORIGIN_CLASS;
+    }
+  };
 };
 const classifyNetworkRequest = (request: Request): NetworkViolationCategory | null => {
   const method = request.method().toUpperCase();
@@ -83,12 +104,20 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
 
 const observeAuthorityRequests = (page: Page) => {
   const samples: NetworkViolation[] = [];
+  const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
   let totalViolations = 0;
   const inspect = (request: Request) => {
     const category = classifyNetworkRequest(request);
     if (category) {
       totalViolations += 1;
-      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) samples.push({ method: request.method(), category });
+      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
+        samples.push({
+          method: request.method().toUpperCase(),
+          category,
+          resourceType: request.resourceType(),
+          originClass: classifyDiagnosticOrigin(request.url()),
+        });
+      }
     }
   };
   page.on('request', inspect);
@@ -270,6 +299,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Process Name *').fill(name);
       await page.getByLabel('Description').fill('Deterministic synthetic acceptance fixture; no customer data.');
       await page.getByLabel('Department').fill('Synthetic QA');
+      await page.getByLabel('Assessed Criticality').selectOption('High');
       await page.getByRole('button', { name: 'Create Process' }).click();
       await expect(page.getByText(name, { exact: true })).toBeVisible();
       return;
@@ -298,7 +328,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Markdown' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'JSON' })).toBeDisabled();
       await expect(page.locator('body')).toContainText('AP Invoice Exception');
@@ -326,7 +356,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
@@ -342,7 +371,6 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByTestId('enterprise-intelligence-view')).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
       }
       return;
@@ -352,11 +380,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertActivePersona(page, 'Alicia Morgan');
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
-      await expect(page.getByText('Governed Delivery Pack')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
       return;

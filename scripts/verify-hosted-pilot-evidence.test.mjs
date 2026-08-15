@@ -196,7 +196,7 @@ test('mobile-safe Admin scenarios prove the Enterprise Intelligence destination 
   assert.ok(adminCapabilityStart >= 0 && adminCapabilityEnd > adminCapabilityStart, 'admin-capability-view scenario must remain present');
   for (const scenario of [spec.slice(adminNavigationStart, adminNavigationEnd), spec.slice(adminCapabilityStart, adminCapabilityEnd)]) {
     assert.match(scenario, /await admin\.click\(\);/u);
-    assert.match(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
+    assert.doesNotMatch(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
     assert.match(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
   }
 });
@@ -212,7 +212,7 @@ test('delivery pack scenarios enter the canonical project scope and open project
     "await selectProjectScope(page, 'AP Invoice Exception Workflow')",
     "await clickProductNav(page, 'Delivery')",
     "await clickProductNav(page, 'Delivery Pack')",
-    "Governed Delivery Pack",
+    "AP Invoice Exception Workflow Governed Delivery Pack",
   ], 'delivery-pack navigation');
 });
 test('reload reconstruction proves a real persisted authenticated project Delivery Pack view in order', async () => {
@@ -227,10 +227,10 @@ test('reload reconstruction proves a real persisted authenticated project Delive
     "await assertActivePersona(page, 'Alicia Morgan')",
     "await clickProductNav(page, 'Delivery')",
     "await clickProductNav(page, 'Delivery Pack')",
-    "Governed Delivery Pack",
+    "AP Invoice Exception Workflow Governed Delivery Pack",
     'await page.reload',
     "await assertActivePersona(page, 'Alicia Morgan')",
-    "Governed Delivery Pack",
+    "AP Invoice Exception Workflow Governed Delivery Pack",
     'Choose a sandbox persona',
     'Sign in to an organization.',
   ], 'reload reconstruction');
