@@ -38,6 +38,12 @@
       "futureAction": "Keep the one-way historical provider-key cleanup assertion confined to the Enterprise Intelligence browser test."
     },
     {
+      "pattern": "localStorage",
+      "pathPrefix": "tests/browser/exhaustiveHostedAcceptance.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep reload-durability inspection of non-secret navigation state confined to hosted acceptance tests; do not treat it as runtime authority."
+    },
+    {
       "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
       "reason": "test/control documentation",
       "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
