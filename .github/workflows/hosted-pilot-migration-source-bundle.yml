@@ -7,6 +7,7 @@ on:
       - 'config/hosted-nonproduction-pilot-activation.json'
       - '.github/workflows/hosted-pilot-migration-source-bundle.yml'
 
+# Controller-only checksum proof trigger. No migration content is changed.
 permissions:
   contents: read
 
