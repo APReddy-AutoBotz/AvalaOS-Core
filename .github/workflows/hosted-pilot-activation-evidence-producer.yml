@@ -46,6 +46,7 @@ permissions:
 
 env:
   EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+  EXPECTED_NETLIFY_DEPLOY_ID: ${{ inputs.deployment_id }}
   HOSTED_PILOT_URL: ${{ inputs.deployment_origin }}
 
 jobs:
