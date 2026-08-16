@@ -160,7 +160,9 @@ const openProductNavigation = async (page: Page) => {
   const opener = page.getByRole('button', { name: 'Open navigation' });
   if (!(await opener.isVisible().catch(() => false))) return;
   const mobileIdentity = page.getByTestId('mobile-current-user');
-  if (!(await mobileIdentity.isVisible().catch(() => false))) await opener.click();
+  if (await mobileIdentity.isVisible().catch(() => false)) return;
+  await opener.click();
+  await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
 };
 const assertActivePersona = async (page: Page, userName: string) => {
   await openProductNavigation(page);
@@ -385,6 +387,26 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
+      await expect.poll(async () => {
+        const url = new URL(page.url());
+        const persisted = await page.evaluate(() => ({
+          view: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
+          scope: JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null'),
+        }));
+        return {
+          urlView: url.searchParams.get('view'),
+          urlScope: url.searchParams.get('scope'),
+          hasProjectId: Boolean(url.searchParams.get('projectId')),
+          persistedView: persisted.view,
+          persistedScopeType: persisted.scope?.type ?? null,
+        };
+      }, { message: 'Delivery Pack navigation must be durable before reload.' }).toEqual({
+        urlView: 'delivery_pack',
+        urlScope: 'project',
+        hasProjectId: true,
+        persistedView: 'delivery_pack',
+        persistedScopeType: 'project',
+      });
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
