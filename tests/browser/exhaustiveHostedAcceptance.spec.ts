@@ -110,7 +110,12 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
 
 const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
   const url = new URL(window.location.href);
-  const persistedScope = JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null');
+  let persistedScope = null;
+  try {
+    persistedScope = JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null');
+  } catch {
+    // Malformed storage is deliberately represented as absent, never repaired evidence.
+  }
   const urlProjectId = url.searchParams.get('projectId');
   const persistedProjectId = persistedScope?.id ?? null;
   return {
@@ -423,24 +428,30 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
 
       const canonicalPersistedScope = await page.evaluate(() => localStorage.getItem('avalaos-core-v1-scope'));
       expect(canonicalPersistedScope, 'the canonical project scope must exist before stale-scope rejection coverage').not.toBeNull();
-      await page.evaluate(() => {
-        localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
-          type: 'project',
-          id: 'stale-different-project',
-          name: 'Stale Different Project',
-        }));
-      });
-      expect(await readDurableProjectNavigation(page), 'a correct URL must not mask a stale persisted project identity').toEqual({
-        ...canonicalDeliveryPackNavigation,
-        persistedProjectId: 'stale-different-project',
-        persistedProjectName: 'Stale Different Project',
-        projectRepresentationsConverged: false,
-      });
-      await page.evaluate(scope => localStorage.setItem('avalaos-core-v1-scope', scope!), canonicalPersistedScope);
-      await expect.poll(
-        () => readDurableProjectNavigation(page),
-        { message: 'The newest canonical project scope must deterministically replace the stale test write.' },
-      ).toEqual(canonicalDeliveryPackNavigation);
+      const canonicalUrl = page.url();
+      const invalidPersistedScopes = [
+        JSON.stringify({ type: 'project', id: 'stale-different-project', name: 'Stale Different Project' }),
+        null,
+        '{malformed',
+      ];
+      for (const invalidScope of invalidPersistedScopes) {
+        await page.evaluate(scope => {
+          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
+          else localStorage.setItem('avalaos-core-v1-scope', scope);
+        }, invalidScope);
+        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(invalidResponse);
+        await expect(page).not.toHaveURL(/projectId=/u);
+        await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
+
+        await page.evaluate(scope => {
+          localStorage.setItem('avalaos-core-v1-scope', scope!);
+          localStorage.setItem('avalaos-core-v1-view', JSON.stringify('delivery_pack'));
+        }, canonicalPersistedScope);
+        const setupResponse = await page.goto(canonicalUrl, { waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(setupResponse);
+        await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalDeliveryPackNavigation);
+      }
 
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);

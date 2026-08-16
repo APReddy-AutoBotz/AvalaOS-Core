@@ -112,6 +112,25 @@ export function hasProductNavigationSearch(search: string | URLSearchParams) {
   return PRODUCT_NAVIGATION_KEYS.some(key => params.has(key));
 }
 
+export function hasDurableProductNavigationAgreement(
+  search: string | URLSearchParams,
+  persistedView: unknown,
+  persistedScope: unknown,
+) {
+  const target = parseProductNavigationSearch(search);
+  if (!productNavigationViewUsesProject(normalizePersistedView(target.view))) return true;
+  if (typeof persistedView !== 'string' || persistedView !== target.view) return false;
+  if (!persistedScope || typeof persistedScope !== 'object' || Array.isArray(persistedScope)) return false;
+
+  const scope = persistedScope as Record<string, unknown>;
+  const targetScope = normalizePersistedScope(target.scope);
+  return targetScope?.type === ScopeType.PROJECT
+    && scope.type === ScopeType.PROJECT
+    && scope.id === target.projectId
+    && scope.id === targetScope.id
+    && scope.name === targetScope.name;
+}
+
 export function parseProductNavigationSearch(search: string | URLSearchParams): ProductNavigationTarget {
   const params = searchParamsFrom(search);
   const scopeType = cleanString(params.get('scope'));

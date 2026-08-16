@@ -31,6 +31,7 @@ import {
 } from './services/viewStatePersistence';
 import {
   buildProductNavigationSearch,
+  hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
@@ -511,6 +512,17 @@ function App() {
     if (!explicitNavigationIntent || navigationHydrated.current) return;
     if (processesLoading) return;
 
+    if (!hasDurableProductNavigationAgreement(window.location.search, persistedView, persistedScope)) {
+      navigationWriteSuppressed.current = true;
+      setCurrentScope(DEFAULT_PERSISTED_SCOPE);
+      setCurrentView(DEFAULT_PERSISTED_VIEW);
+      setSelectedProcessId(null);
+      setActiveGenerationId(null);
+      replaceProductNavigationSearch('');
+      navigationHydrated.current = true;
+      return;
+    }
+
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
       user: currentUser,
@@ -549,6 +561,8 @@ function App() {
     guardLoading,
     processes,
     processesLoading,
+    persistedScope,
+    persistedView,
     projects,
     replaceProductNavigationSearch,
     setCurrentView,

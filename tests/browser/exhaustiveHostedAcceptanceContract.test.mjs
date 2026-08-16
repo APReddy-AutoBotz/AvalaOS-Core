@@ -47,13 +47,14 @@ assert.match(
 );
 assert.match(
   hostedSpec,
-  /id: 'stale-different-project',[\s\S]*name: 'Stale Different Project',[\s\S]*projectRepresentationsConverged: false,/u,
-  'SAFETY-004 must reject a stale persisted project even when the URL retains the canonical project',
+  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*page\.reload/u,
+  'SAFETY-004 must retain stale, missing, and malformed persisted projects through reconstruction',
 );
 assert.ok(
   hostedSpec.match(/\.toEqual\(canonicalDeliveryPackNavigation\)/gu)?.length >= 3,
-  'SAFETY-004 must prove exact identity before stale injection, after restoration, and after reload',
+  'SAFETY-004 must prove exact identity before invalid reconstruction, after setup restoration, and after reload',
 );
+assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=/u, 'invalid persisted scope must remove URL-only project evidence');
 
 const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
 assert.ok(allowlistBody, 'safeExternalStaticResource must remain structurally inspectable');

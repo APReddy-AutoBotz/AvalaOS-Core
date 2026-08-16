@@ -13,6 +13,7 @@ import {
 } from './viewStatePersistence';
 import {
   buildProductNavigationSearch,
+  hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
@@ -252,6 +253,28 @@ const parsedWorkspaceSearch = parseProductNavigationSearch(workspaceSearch);
 assert.deepEqual(parsedWorkspaceSearch.scope, { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name });
 assert.equal(parsedWorkspaceSearch.projectId, navigationProject.id);
 assert.equal(parsedWorkspaceSearch.documentGenerationId, navigationGeneration.id);
+
+const deliveryPackSearch = buildProductNavigationSearch({
+  view: View.DELIVERY_PACK,
+  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+});
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DELIVERY_PACK,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), true);
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DELIVERY_PACK,
+  { type: ScopeType.PROJECT, id: otherNavigationProject.id, name: otherNavigationProject.name },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(deliveryPackSearch, View.DELIVERY_PACK, null), false);
+assert.equal(hasDurableProductNavigationAgreement(deliveryPackSearch, View.DELIVERY_PACK, '{malformed'), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DASHBOARD,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), false);
 
 const buyerPortfolioNavigation = resolveProductNavigationState({
   ...navigationContext,
