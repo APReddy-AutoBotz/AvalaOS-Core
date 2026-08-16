@@ -320,7 +320,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Process Name *').fill(name);
       await page.getByRole('button', { name: 'Create Process' }).click();
       const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toContainText('Not Started');
+      await expect(row).toContainText('Draft');
       return;
     }
     case 'delivery-pack':
