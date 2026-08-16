@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import fs from 'node:fs';
+import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
 
 const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
 const deployId = process.env.NETLIFY_DEPLOY_ID;
@@ -105,6 +106,34 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
   expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
   expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
   expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+};
+
+const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
+  const url = new URL(window.location.href);
+  const persistedScope = JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null');
+  const urlProjectId = url.searchParams.get('projectId');
+  const persistedProjectId = persistedScope?.id ?? null;
+  return {
+    urlView: url.searchParams.get('view'),
+    urlScope: url.searchParams.get('scope'),
+    urlProjectId,
+    persistedView: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
+    persistedScopeType: persistedScope?.type ?? null,
+    persistedProjectId,
+    persistedProjectName: persistedScope?.name ?? null,
+    projectRepresentationsConverged: urlProjectId !== null && urlProjectId === persistedProjectId,
+  };
+});
+
+const canonicalDeliveryPackNavigation = {
+  urlView: 'delivery_pack',
+  urlScope: 'project',
+  urlProjectId: CANONICAL_AP_PROJECT_ID,
+  persistedView: 'delivery_pack',
+  persistedScopeType: 'project',
+  persistedProjectId: CANONICAL_AP_PROJECT_ID,
+  persistedProjectName: CANONICAL_AP_WORKFLOW_NAME,
+  projectRepresentationsConverged: true,
 };
 
 const observeAuthorityRequests = (page: Page) => {
@@ -387,30 +416,40 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
-      await expect.poll(async () => {
-        const url = new URL(page.url());
-        const persisted = await page.evaluate(() => ({
-          view: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
-          scope: JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null'),
+      await expect.poll(
+        () => readDurableProjectNavigation(page),
+        { message: 'The exact Delivery Pack project identity must be durable in the URL and persisted scope before reload.' },
+      ).toEqual(canonicalDeliveryPackNavigation);
+
+      const canonicalPersistedScope = await page.evaluate(() => localStorage.getItem('avalaos-core-v1-scope'));
+      expect(canonicalPersistedScope, 'the canonical project scope must exist before stale-scope rejection coverage').not.toBeNull();
+      await page.evaluate(() => {
+        localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
+          type: 'project',
+          id: 'stale-different-project',
+          name: 'Stale Different Project',
         }));
-        return {
-          urlView: url.searchParams.get('view'),
-          urlScope: url.searchParams.get('scope'),
-          hasProjectId: Boolean(url.searchParams.get('projectId')),
-          persistedView: persisted.view,
-          persistedScopeType: persisted.scope?.type ?? null,
-        };
-      }, { message: 'Delivery Pack navigation must be durable before reload.' }).toEqual({
-        urlView: 'delivery_pack',
-        urlScope: 'project',
-        hasProjectId: true,
-        persistedView: 'delivery_pack',
-        persistedScopeType: 'project',
       });
+      expect(await readDurableProjectNavigation(page), 'a correct URL must not mask a stale persisted project identity').toEqual({
+        ...canonicalDeliveryPackNavigation,
+        persistedProjectId: 'stale-different-project',
+        persistedProjectName: 'Stale Different Project',
+        projectRepresentationsConverged: false,
+      });
+      await page.evaluate(scope => localStorage.setItem('avalaos-core-v1-scope', scope!), canonicalPersistedScope);
+      await expect.poll(
+        () => readDurableProjectNavigation(page),
+        { message: 'The newest canonical project scope must deterministically replace the stale test write.' },
+      ).toEqual(canonicalDeliveryPackNavigation);
+
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await assertActivePersona(page, 'Alicia Morgan');
       await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
+      await expect.poll(
+        () => readDurableProjectNavigation(page),
+        { message: 'Reload must reconstruct the same exact Delivery Pack project identity in both representations.' },
+      ).toEqual(canonicalDeliveryPackNavigation);
       await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toHaveCount(0);
       return;

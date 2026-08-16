@@ -40,6 +40,20 @@ assert.equal(
   false,
   'Delivery Pack acceptance must not regress to the incorrect short heading',
 );
+assert.match(
+  hostedSpec,
+  /urlProjectId: CANONICAL_AP_PROJECT_ID,[\s\S]*persistedProjectId: CANONICAL_AP_PROJECT_ID,[\s\S]*persistedProjectName: CANONICAL_AP_WORKFLOW_NAME,[\s\S]*projectRepresentationsConverged: true,/u,
+  'SAFETY-004 must require the exact canonical URL and persisted project identities to converge',
+);
+assert.match(
+  hostedSpec,
+  /id: 'stale-different-project',[\s\S]*name: 'Stale Different Project',[\s\S]*projectRepresentationsConverged: false,/u,
+  'SAFETY-004 must reject a stale persisted project even when the URL retains the canonical project',
+);
+assert.ok(
+  hostedSpec.match(/\.toEqual\(canonicalDeliveryPackNavigation\)/gu)?.length >= 3,
+  'SAFETY-004 must prove exact identity before stale injection, after restoration, and after reload',
+);
 
 const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
 assert.ok(allowlistBody, 'safeExternalStaticResource must remain structurally inspectable');
