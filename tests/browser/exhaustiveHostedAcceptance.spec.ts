@@ -47,7 +47,12 @@ const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRu
   rule.prefix ? url.pathname.startsWith(rule.pathname) : url.pathname === rule.pathname
 ));
 const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {
-  if (url.origin === 'https://fonts.googleapis.com') return resourceType === 'stylesheet' && declaredGoogleStylesheetUrls.has(url.toString());
+  if (url.origin === 'https://fonts.googleapis.com') {
+    // Axe re-reads the exact declared cross-origin stylesheet through XHR while
+    // inspecting accessibility. The request remains a read-only static asset
+    // and must still match the URL declared in index.html exactly.
+    return (resourceType === 'stylesheet' || resourceType === 'xhr') && declaredGoogleStylesheetUrls.has(url.toString());
+  }
   if (url.origin === 'https://fonts.gstatic.com') return resourceType === 'font' && url.pathname.startsWith('/s/');
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
@@ -157,7 +162,6 @@ const openProductNavigation = async (page: Page) => {
   const mobileIdentity = page.getByTestId('mobile-current-user');
   if (!(await mobileIdentity.isVisible().catch(() => false))) await opener.click();
 };
-
 const assertActivePersona = async (page: Page, userName: string) => {
   await openProductNavigation(page);
   const mobileIdentity = page.getByTestId('mobile-current-user');
@@ -320,7 +324,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Process Name *').fill(name);
       await page.getByRole('button', { name: 'Create Process' }).click();
       const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toContainText('Not Started');
+      await expect(row).toContainText('Draft');
       return;
     }
     case 'delivery-pack':
