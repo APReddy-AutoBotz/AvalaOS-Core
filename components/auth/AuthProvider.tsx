@@ -11,6 +11,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const asRestoredSessionUser = (currentUser: User | null): User | null => (
+  currentUser
+    ? { ...currentUser, defaultScope: undefined, defaultView: undefined }
+    : null
+);
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +25,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       try {
         const currentUser = await authAdapter.getCurrentUser();
-        setUser(currentUser);
+        setUser(asRestoredSessionUser(currentUser));
       } catch (error) {
         console.error('Runtime authentication boundary unavailable:', error);
         setUser(null);
