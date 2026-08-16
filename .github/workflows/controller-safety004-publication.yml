@@ -1,0 +1,58 @@
+name: Controller Safety004 Publication
+
+on:
+  push:
+    branches:
+      - controller/reload-reconstruction-closure
+    paths:
+      - .github/workflows/controller-safety004-publication.yml
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify publication base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "e3742e657dbd6d64bae6e6876c0da3cdb5a59f65"
+          test "$(git diff --name-only HEAD^..HEAD)" = ".github/workflows/controller-safety004-publication.yml"
+      - name: Recover and verify exact target files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/${GITHUB_REPOSITORY}/issues/comments/5308608492 --jq .body > /tmp/recovery-comment.md
+          grep -E '^[1-6]:' /tmp/recovery-comment.md | sed -E 's/^[1-6]://' | tr -d '\n' > /tmp/recovery.b64
+          test "$(wc -c < /tmp/recovery.b64)" -eq 10280
+          base64 -d /tmp/recovery.b64 > /tmp/safety004.tar.gz
+          echo 'a81fc9cf452202be4ed2b2db52f9ad365af159a4e0334cd1a5101a473f499244  /tmp/safety004.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/safety004.tar.gz -C .
+          test "$(wc -c < tests/browser/exhaustiveHostedAcceptance.spec.ts)" -eq 24777
+          test "$(sha256sum tests/browser/exhaustiveHostedAcceptance.spec.ts | cut -d' ' -f1)" = "d5fbc634753169adf52e0c412b0a88a2e05a13bb6aa15a9464e4b1b37670198c"
+          test "$(git hash-object tests/browser/exhaustiveHostedAcceptance.spec.ts)" = "be052dcde126a6f9acab44ff89d11efa530927b3"
+          test "$(wc -c < tests/browser/exhaustiveHostedAcceptanceContract.test.mjs)" -eq 5969
+          test "$(sha256sum tests/browser/exhaustiveHostedAcceptanceContract.test.mjs | cut -d' ' -f1)" = "ae32cc012df711149aea083a472925ca034656957cd9c05c18834893d5f8850d"
+          test "$(git hash-object tests/browser/exhaustiveHostedAcceptanceContract.test.mjs)" = "15856fd4eb5e5804caf929a119679dcbebf84702"
+      - name: Publish exact correction and remove transport scaffold
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/controller-safety004-publication.yml
+          git add tests/browser/exhaustiveHostedAcceptance.spec.ts tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          mapfile -t paths < <(git diff --cached --name-only | sort)
+          expected=(.github/workflows/controller-safety004-publication.yml tests/browser/exhaustiveHostedAcceptance.spec.ts tests/browser/exhaustiveHostedAcceptanceContract.test.mjs)
+          mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
+          test "${paths[*]}" = "${expected_sorted[*]}"
+          git config user.name 'portfolio-controller[bot]'
+          git config user.email 'portfolio-controller[bot]@users.noreply.github.com'
+          git commit -m 'test: bind hosted reload to exact project identity'
+          git push origin HEAD:controller/reload-reconstruction-closure
