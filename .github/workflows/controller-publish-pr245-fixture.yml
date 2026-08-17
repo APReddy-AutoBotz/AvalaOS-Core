@@ -1,0 +1,61 @@
+name: Controller publish PR245 retained reload fixture correction
+
+on:
+  push:
+    branches:
+      - controller/reload-reconstruction-closure
+    paths:
+      - .github/workflows/controller-publish-pr245-fixture.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Apply exact approved fixture correction
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('tests/browser/pr1d.spec.ts')
+          s = p.read_text()
+          old = """    localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));\n    localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({ type:'my_work' }));"""
+          new = """    if (!localStorage.getItem('avalaos-core-v1-view')) {\n      localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));\n    }\n    if (!localStorage.getItem('avalaos-core-v1-scope')) {\n      localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({ type:'my_work' }));\n    }"""
+          assert s.count(old) == 1, f'PR1D init seed match count {s.count(old)}'
+          s = s.replace(old, new)
+          old_reload = """  await page.reload();\n  await expectProcessCatalog(page);\n  await page.getByRole('button',{name:'View'}).first().click();"""
+          new_reload = """  await page.reload();\n  await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));"""
+          assert s.count(old_reload) == 2, f'PR1D reload match count {s.count(old_reload)}'
+          s = s.replace(old_reload, new_reload)
+          p.write_text(s)
+
+          p = Path('tests/browser/pr1f.spec.ts')
+          s = p.read_text()
+          old = "await page.addInitScript(({user})=>{const now=Math.floor(Date.now()/1000);localStorage.setItem('sb-127-auth-token',JSON.stringify({access_token:'browser-fixture-token',refresh_token:'browser-fixture-refresh',token_type:'bearer',expires_in:3600,expires_at:now+3600,user}));localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({type:'my_work'}));},{user});"
+          new = "await page.addInitScript(({user})=>{const now=Math.floor(Date.now()/1000);localStorage.setItem('sb-127-auth-token',JSON.stringify({access_token:'browser-fixture-token',refresh_token:'browser-fixture-refresh',token_type:'bearer',expires_in:3600,expires_at:now+3600,user}));if(!localStorage.getItem('avalaos-core-v1-view'))localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));if(!localStorage.getItem('avalaos-core-v1-scope'))localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({type:'my_work'}));},{user});"
+          assert s.count(old) == 1, f'PR1F init seed match count {s.count(old)}'
+          s = s.replace(old, new)
+          old_reload = "await page.reload();await expect(page.getByRole('heading',{name:'Process Catalog'})).toBeVisible();await page.getByRole('button',{name:'View'}).first().click();await expect(workspace).toBeVisible();"
+          new_reload = "await page.reload();await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));await expect(workspace).toBeVisible();"
+          assert s.count(old_reload) == 1, f'PR1F reload match count {s.count(old_reload)}'
+          s = s.replace(old_reload, new_reload)
+          p.write_text(s)
+          PY
+          test "$(git hash-object tests/browser/pr1d.spec.ts)" = "2264f1b1af7a7c2cc97e55e90020bb524f324c55"
+          test "$(git hash-object tests/browser/pr1f.spec.ts)" = "9f9991a1f22fda3d36f33bfd237b00ae09fc7a1d"
+          git diff --check
+      - name: Publish corrected clean tree to existing branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/controller-publish-pr245-fixture.yml
+          git add tests/browser/pr1d.spec.ts tests/browser/pr1f.spec.ts
+          git commit -m "test(browser): preserve navigation state across reload"
+          git push origin HEAD:controller/reload-reconstruction-closure
