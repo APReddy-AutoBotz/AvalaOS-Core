@@ -117,18 +117,38 @@ export function hasDurableProductNavigationAgreement(
   persistedView: unknown,
   persistedScope: unknown,
 ) {
+  const params = searchParamsFrom(search);
   const target = parseProductNavigationSearch(search);
-  if (!productNavigationViewUsesProject(normalizePersistedView(target.view))) return true;
+  const carriesScopedIdentity = ['scope', 'scopeId', 'scopeName', 'projectId'].some(key => params.has(key));
+  if (!carriesScopedIdentity) return true;
+  if (!target.scope) return false;
   if (typeof persistedView !== 'string' || persistedView !== target.view) return false;
   if (!persistedScope || typeof persistedScope !== 'object' || Array.isArray(persistedScope)) return false;
 
   const scope = persistedScope as Record<string, unknown>;
   const targetScope = normalizePersistedScope(target.scope);
-  return targetScope?.type === ScopeType.PROJECT
-    && scope.type === ScopeType.PROJECT
-    && scope.id === target.projectId
-    && scope.id === targetScope.id
-    && scope.name === targetScope.name;
+  if (scope.type !== targetScope.type) return false;
+
+  if (targetScope.type === ScopeType.PROJECT) {
+    return Object.keys(scope).sort().join(',') === 'id,name,type'
+      && Boolean(target.projectId)
+      && target.projectId === targetScope.id
+      && scope.id === targetScope.id
+      && scope.name === targetScope.name;
+  }
+
+  // Non-project scopes must not carry a project identity. Organization and My
+  // Work deliberately have no persisted entity identity; team identity remains
+  // exact in both representations.
+  if (target.projectId || params.has('projectId')) return false;
+  if (targetScope.type === ScopeType.TEAM) {
+    return Object.keys(scope).sort().join(',') === 'id,name,type'
+      && scope.id === targetScope.id
+      && scope.name === targetScope.name;
+  }
+  if (params.has('scopeId') || params.has('scopeName')) return false;
+  return Object.keys(scope).length === 1
+    && (targetScope.type === ScopeType.ORGANIZATION || targetScope.type === ScopeType.MY_WORK);
 }
 
 export function parseProductNavigationSearch(search: string | URLSearchParams): ProductNavigationTarget {

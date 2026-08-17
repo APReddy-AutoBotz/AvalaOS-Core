@@ -141,6 +141,12 @@ const canonicalDeliveryPackNavigation = {
   projectRepresentationsConverged: true,
 };
 
+const canonicalBoardsNavigation = {
+  ...canonicalDeliveryPackNavigation,
+  urlView: 'boards',
+  persistedView: 'boards',
+};
+
 const observeAuthorityRequests = (page: Page) => {
   const samples: NetworkViolation[] = [];
   const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
@@ -418,6 +424,20 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await enterPersona(page, 'Delivery Lead');
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await assertActivePersona(page, 'Alicia Morgan');
+      await expect.poll(
+        () => readDurableProjectNavigation(page),
+        { message: 'The project-switch Boards destination must persist the exact URL and project identity.' },
+      ).toEqual(canonicalBoardsNavigation);
+      await page.evaluate(() => localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
+        type: 'project',
+        id: 'stale-different-project',
+        name: 'Stale Different Project',
+      })));
+      const invalidBoardsResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(invalidBoardsResponse);
+      await expect(page).not.toHaveURL(/projectId=/u);
+      await selectProjectScope(page, 'AP Invoice Exception Workflow');
+      await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalBoardsNavigation);
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
       await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
