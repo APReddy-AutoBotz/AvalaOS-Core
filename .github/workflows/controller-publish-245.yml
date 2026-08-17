@@ -1,0 +1,207 @@
+name: Controller publish PR 245 correction
+
+on:
+  push:
+    branches:
+      - controller/reload-reconstruction-closure
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - name: Apply exact approved correction and remove scaffold
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "9cb25a09ef6f5f6e55c77fec5c37ac5024365221"
+          cat > /tmp/pr245.patch <<'PATCH'
+          diff --git a/services/productNavigationState.ts b/services/productNavigationState.ts
+          index af4416c979497829347b679c45961b8df45ebce9..a703b602c8cbbd3bc4fae1478be6e4796d7d6b32 100644
+          --- a/services/productNavigationState.ts
+          +++ b/services/productNavigationState.ts
+          @@ -117,18 +117,38 @@ export function hasDurableProductNavigationAgreement(
+             persistedView: unknown,
+             persistedScope: unknown,
+           ) {
+          +  const params = searchParamsFrom(search);
+             const target = parseProductNavigationSearch(search);
+          -  if (!productNavigationViewUsesProject(normalizePersistedView(target.view))) return true;
+          +  const carriesScopedIdentity = ['scope', 'scopeId', 'scopeName', 'projectId'].some(key => params.has(key));
+          +  if (!carriesScopedIdentity) return true;
+          +  if (!target.scope) return false;
+             if (typeof persistedView !== 'string' || persistedView !== target.view) return false;
+             if (!persistedScope || typeof persistedScope !== 'object' || Array.isArray(persistedScope)) return false;
+           
+             const scope = persistedScope as Record<string, unknown>;
+             const targetScope = normalizePersistedScope(target.scope);
+          -  return targetScope?.type === ScopeType.PROJECT
+          -    && scope.type === ScopeType.PROJECT
+          -    && scope.id === target.projectId
+          -    && scope.id === targetScope.id
+          -    && scope.name === targetScope.name;
+          +  if (scope.type !== targetScope.type) return false;
+          +
+          +  if (targetScope.type === ScopeType.PROJECT) {
+          +    return Object.keys(scope).sort().join(',') === 'id,name,type'
+          +      && Boolean(target.projectId)
+          +      && target.projectId === targetScope.id
+          +      && scope.id === targetScope.id
+          +      && scope.name === targetScope.name;
+          +  }
+          +
+          +  // Non-project scopes must not carry a project identity. Organization and My
+          +  // Work deliberately have no persisted entity identity; team identity remains
+          +  // exact in both representations.
+          +  if (target.projectId || params.has('projectId')) return false;
+          +  if (targetScope.type === ScopeType.TEAM) {
+          +    return Object.keys(scope).sort().join(',') === 'id,name,type'
+          +      && scope.id === targetScope.id
+          +      && scope.name === targetScope.name;
+          +  }
+          +  if (params.has('scopeId') || params.has('scopeName')) return false;
+          +  return Object.keys(scope).length === 1
+          +    && (targetScope.type === ScopeType.ORGANIZATION || targetScope.type === ScopeType.MY_WORK);
+           }
+           
+           export function parseProductNavigationSearch(search: string | URLSearchParams): ProductNavigationTarget {
+          diff --git a/services/viewStatePersistence.test.ts b/services/viewStatePersistence.test.ts
+          index e793c6c756a7f84d04f2527bee5f63cbfd0a0936..5fd08507138258d789c4d89f8da834c22343dbde 100644
+          --- a/services/viewStatePersistence.test.ts
+          +++ b/services/viewStatePersistence.test.ts
+          @@ -276,6 +276,65 @@ assert.equal(hasDurableProductNavigationAgreement(
+             { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+           ), false);
+           
+          +const boardsSearch = buildProductNavigationSearch({
+          +  view: View.BOARDS,
+          +  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+          +});
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  boardsSearch,
+          +  View.BOARDS,
+          +  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+          +), true);
+          +assert.equal(hasDurableProductNavigationAgreement(boardsSearch, View.BOARDS, null), false);
+          +assert.equal(hasDurableProductNavigationAgreement(boardsSearch, View.BOARDS, '{malformed'), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  boardsSearch,
+          +  View.BOARDS,
+          +  { type: ScopeType.PROJECT, id: otherNavigationProject.id, name: otherNavigationProject.name },
+          +), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  boardsSearch,
+          +  View.BOARDS,
+          +  { type: ScopeType.PROJECT, id: navigationProject.id, name: 'Stale Project Name' },
+          +), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  boardsSearch,
+          +  View.BOARDS,
+          +  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name, stale: true },
+          +), false);
+          +
+          +const organizationWorkspaceSearch = buildProductNavigationSearch({
+          +  view: View.WORKSPACE,
+          +  scope: { type: ScopeType.ORGANIZATION },
+          +});
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  organizationWorkspaceSearch,
+          +  View.WORKSPACE,
+          +  { type: ScopeType.ORGANIZATION },
+          +), true);
+          +assert.equal(hasDurableProductNavigationAgreement(organizationWorkspaceSearch, View.WORKSPACE, null), false);
+          +assert.equal(hasDurableProductNavigationAgreement(organizationWorkspaceSearch, View.WORKSPACE, '{malformed'), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  organizationWorkspaceSearch,
+          +  View.WORKSPACE,
+          +  { type: ScopeType.ORGANIZATION, stale: true },
+          +), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  organizationWorkspaceSearch,
+          +  View.BOARDS,
+          +  { type: ScopeType.ORGANIZATION },
+          +), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  `${organizationWorkspaceSearch}&projectId=${navigationProject.id}`,
+          +  View.WORKSPACE,
+          +  { type: ScopeType.ORGANIZATION },
+          +), false);
+          +assert.equal(hasDurableProductNavigationAgreement(
+          +  `?view=boards&scope=project&scopeId=${navigationProject.id}&scopeName=${encodeURIComponent(navigationProject.name)}&projectId=${otherNavigationProject.id}`,
+          +  View.BOARDS,
+          +  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+          +), false);
+          +
+           const buyerPortfolioNavigation = resolveProductNavigationState({
+             ...navigationContext,
+             user: buyerViewer,
+          diff --git a/tests/browser/exhaustiveHostedAcceptance.spec.ts b/tests/browser/exhaustiveHostedAcceptance.spec.ts
+          index 135de93eb2929626c3a4d2667631e2628f7bfb19..9bdad03a7e9db73bfc3e3eda48ae8a5ce5ae6baf 100644
+          --- a/tests/browser/exhaustiveHostedAcceptance.spec.ts
+          +++ b/tests/browser/exhaustiveHostedAcceptance.spec.ts
+          @@ -141,6 +141,12 @@ const canonicalDeliveryPackNavigation = {
+             projectRepresentationsConverged: true,
+           };
+           
+          +const canonicalBoardsNavigation = {
+          +  ...canonicalDeliveryPackNavigation,
+          +  urlView: 'boards',
+          +  persistedView: 'boards',
+          +};
+          +
+           const observeAuthorityRequests = (page: Page) => {
+             const samples: NetworkViolation[] = [];
+             const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
+          @@ -418,6 +424,20 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) =>
+                 await enterPersona(page, 'Delivery Lead');
+                 await selectProjectScope(page, 'AP Invoice Exception Workflow');
+                 await assertActivePersona(page, 'Alicia Morgan');
+          +      await expect.poll(
+          +        () => readDurableProjectNavigation(page),
+          +        { message: 'The project-switch Boards destination must persist the exact URL and project identity.' },
+          +      ).toEqual(canonicalBoardsNavigation);
+          +      await page.evaluate(() => localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
+          +        type: 'project',
+          +        id: 'stale-different-project',
+          +        name: 'Stale Different Project',
+          +      })));
+          +      const invalidBoardsResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+          +      assertHostedResponseIdentity(invalidBoardsResponse);
+          +      await expect(page).not.toHaveURL(/projectId=/u);
+          +      await selectProjectScope(page, 'AP Invoice Exception Workflow');
+          +      await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalBoardsNavigation);
+                 await clickProductNav(page, 'Delivery');
+                 await clickProductNav(page, 'Delivery Pack');
+                 await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toBeVisible();
+          diff --git a/tests/browser/exhaustiveHostedAcceptanceContract.test.mjs b/tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          index 3707503395d8950cc687d82e3eeb3b76f37f708f..42b207e64cad18cd39d5ca7ebc5c3773c0fff019 100644
+          --- a/tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          +++ b/tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          @@ -55,6 +55,11 @@ assert.ok(
+             'SAFETY-004 must prove exact identity before invalid reconstruction, after setup restoration, and after reload',
+           );
+           assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=/u, 'invalid persisted scope must remove URL-only project evidence');
+          +assert.match(
+          +  hostedSpec,
+          +  /canonicalBoardsNavigation[\s\S]*stale-different-project[\s\S]*invalidBoardsResponse = await page\.reload[\s\S]*not\.toHaveURL\(\/projectId=/u,
+          +  'SAFETY-004 must enforce exact persisted project agreement on the canonical Boards destination through reload',
+          +);
+           
+           const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
+           assert.ok(allowlistBody, 'safeExternalStaticResource must remain structurally inspectable');
+          PATCH
+          sed -i 's/^          //' /tmp/pr245.patch
+          git apply --check /tmp/pr245.patch
+          git apply /tmp/pr245.patch
+          rm .github/workflows/controller-publish-245.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: converge hosted navigation reconstruction"
+          git push origin HEAD:controller/reload-reconstruction-closure
