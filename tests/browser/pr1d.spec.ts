@@ -115,8 +115,12 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
       expires_at:now+3600,
       user,
     }));
-    localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));
-    localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({ type:'my_work' }));
+    if (!localStorage.getItem('avalaos-core-v1-view')) {
+      localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));
+    }
+    if (!localStorage.getItem('avalaos-core-v1-scope')) {
+      localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({ type:'my_work' }));
+    }
   },{ user });
 
   const fail = async (route: any, code: string, status = 409) => route.fulfill({
@@ -489,8 +493,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   expect(violations.violations.filter(item=>['serious','critical'].includes(item.impact || ''))).toEqual([]);
   expect(errors.filter(item=>!item.includes('Failed to load resource: net::ERR_FAILED'))).toEqual([]);
   await page.reload();
-  await expectProcessCatalog(page);
-  await page.getByRole('button',{name:'View'}).first().click();
+  await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
@@ -611,8 +614,7 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   await page.getByRole('button',{name:'Save V2 draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   await page.reload();
-  await expectProcessCatalog(page);
-  await page.getByRole('button',{name:'View'}).first().click();
+  await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Persisted restore primitive');
   await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
