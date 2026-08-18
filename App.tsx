@@ -478,6 +478,12 @@ function App() {
 
   useEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
+    // Explicit URL reconstruction owns the whole navigation tuple until React
+    // commits it. Persisted view/scope normalization must not race that
+    // transition and replace process_detail with a fallback computed from the
+    // pre-hydration render.
+    if (explicitNavigationIntent && !navigationHydrated.current) return;
+    if (navigationWriteSuppressed.current) return;
 
     const resolvedState = resolvePersistedViewScopeState({
       view: persistedView,
@@ -506,6 +512,7 @@ function App() {
     authoritativeViewCapabilities,
     currentView,
     enabledModules,
+    explicitNavigationIntent,
     guardLoading,
     persistedScope,
     persistedView,

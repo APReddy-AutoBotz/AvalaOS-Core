@@ -17,6 +17,11 @@ assert.match(
   /const hydrationCommitted = Boolean\(pending[\s\S]*currentView === pending\.view[\s\S]*areScopesEqual\(currentScope, pending\.scope\)[\s\S]*selectedProcessId === pending\.selectedProcessId[\s\S]*activeGenerationId === pending\.activeGenerationId\);[\s\S]*if \(!hydrationCommitted\) return;[\s\S]*navigationWriteSuppressed\.current = false;/,
   'pre-hydration effects must not release reconciliation suppression before the full navigation tuple commits',
 );
+assert.match(
+  appSource,
+  /if \(explicitNavigationIntent && !navigationHydrated\.current\) return;\s*if \(navigationWriteSuppressed\.current\) return;[\s\S]*resolvePersistedViewScopeState/,
+  'persisted view/scope normalization must not race explicit URL hydration or its commit',
+);
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');
 assert.match(providerSource, /Promise<DocumentGeneration>/);
