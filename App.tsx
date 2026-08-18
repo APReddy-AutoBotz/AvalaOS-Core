@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { persistBeforeCommit } from './services/persistenceTransition';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
@@ -520,7 +520,7 @@ function App() {
     setCurrentView,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (!explicitNavigationIntent || navigationHydrated.current) return;
     if (processesLoading) return;

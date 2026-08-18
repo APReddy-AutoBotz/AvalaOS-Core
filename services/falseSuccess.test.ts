@@ -22,6 +22,11 @@ assert.match(
   /if \(explicitNavigationIntent && !navigationHydrated\.current\) return;\s*if \(navigationWriteSuppressed\.current\) return;[\s\S]*resolvePersistedViewScopeState/,
   'persisted view/scope normalization must not race explicit URL hydration or its commit',
 );
+assert.match(
+  appSource,
+  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| navigationHydrated\.current\) return;\s*if \(processesLoading\) return;/,
+  'explicit URL hydration must commit in the layout phase before passive reconciliation can observe a stale render',
+);
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');
 assert.match(providerSource, /Promise<DocumentGeneration>/);
