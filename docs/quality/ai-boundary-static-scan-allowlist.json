@@ -313,10 +313,11 @@
       "pattern": "localStorage",
       "path": "tests/browser/pr1f.spec.ts",
       "lines": [
-        44
+        44,
+        104
       ],
       "reason": "test/control documentation",
-      "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup confined to PR 1F browser tests; do not treat it as runtime authority."
+      "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup and bounded navigation-durability inspection confined to PR 1F browser tests; do not treat either as runtime authority."
     },
     {
       "pattern": "localStorage",
