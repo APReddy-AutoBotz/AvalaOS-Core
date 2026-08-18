@@ -293,7 +293,9 @@
       "lines": [
         110,
         118,
-        119
+        119,
+        121,
+        122
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
