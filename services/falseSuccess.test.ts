@@ -7,6 +7,16 @@ assert.doesNotMatch(appSource, /setTempArtifacts\(artifacts\)[\s\S]{0,450}applyG
 assert.match(appSource, /await persistBeforeCommit/);
 assert.match(appSource, /\(\) => deliverySaveGeneration\(newGeneration\)/);
 assert.match(appSource, /Document generation requires an active project/);
+assert.match(
+  appSource,
+  /pendingNavigationHydration\.current = \{[\s\S]*selectedProcessId: resolvedNavigation\.selectedProcessId,[\s\S]*activeGenerationId: resolvedNavigation\.activeGenerationId,/,
+  'URL hydration must retain the complete expected navigation tuple until React commits it',
+);
+assert.match(
+  appSource,
+  /const hydrationCommitted = Boolean\(pending[\s\S]*currentView === pending\.view[\s\S]*areScopesEqual\(currentScope, pending\.scope\)[\s\S]*selectedProcessId === pending\.selectedProcessId[\s\S]*activeGenerationId === pending\.activeGenerationId\);[\s\S]*if \(!hydrationCommitted\) return;[\s\S]*navigationWriteSuppressed\.current = false;/,
+  'pre-hydration effects must not release reconciliation suppression before the full navigation tuple commits',
+);
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');
 assert.match(providerSource, /Promise<DocumentGeneration>/);
