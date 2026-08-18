@@ -574,6 +574,15 @@ function App() {
     if (explicitNavigationIntent && !navigationHydrated.current) return;
     if (processesLoading) return;
 
+    // URL hydration commits the view, scope, and entity selection as one
+    // navigation transition. Do not reconcile the pre-hydration render (where
+    // the process selection is still null) or it can downgrade a valid
+    // process-detail route to the catalog before React commits that selection.
+    if (navigationWriteSuppressed.current) {
+      navigationWriteSuppressed.current = false;
+      return;
+    }
+
     if (tempArtifacts && currentView === View.WORKSPACE) {
       replaceProductNavigationSearch(buildProductNavigationSearch({
         view: currentView,
@@ -611,11 +620,6 @@ function App() {
     }
     if (!tempArtifacts && activeGenerationId !== resolvedNavigation.activeGenerationId) {
       setActiveGenerationId(resolvedNavigation.activeGenerationId);
-    }
-
-    if (navigationWriteSuppressed.current) {
-      navigationWriteSuppressed.current = false;
-      return;
     }
 
     replaceProductNavigationSearch(buildProductNavigationSearch({
