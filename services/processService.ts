@@ -4,27 +4,36 @@ import { useOrganizationContext } from '../components/auth/OrganizationProvider'
 import { ALL_TEMPLATE_PACKS } from '../constants/starterPacks';
 import { assessAdapter } from './adapters/assessAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
-import { createContextRequestGate } from './contextRequestGate';
+import { clientRequestContextIsLoading, clientRequestContextKey, createContextRequestGate } from './contextRequestGate';
 
 export function useProcessService() {
     const { currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
     const { user } = useAuth();
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
+    const [settledContextKey, setSettledContextKey] = useState<string | null>(null);
     const requestGate = useRef(createContextRequestGate()).current;
 
-    const fetchProcesses = useCallback(async () => {
-        if (!currentOrganization || !currentWorkspace || !['ready', 'read_only'].includes(sessionState)) {
-            requestGate.invalidate();
-            setProcesses([]);
-            setLoading(false);
-            return;
-        }
-        const requestContext = {
+    const requestContext = currentOrganization && currentWorkspace && ['ready', 'read_only'].includes(sessionState)
+        ? {
             actorId: user?.id,
             organizationId: currentOrganization.id,
             workspaceId: currentWorkspace.id,
-        };
+        }
+        : null;
+    // Effects start after render. Treat a newly authorized or changed context as
+    // loading immediately so route hydration cannot validate an entity against
+    // the previous context's empty process collection before the fetch begins.
+    const contextLoading = clientRequestContextIsLoading(requestContext, settledContextKey, loading);
+
+    const fetchProcesses = useCallback(async () => {
+        if (!requestContext) {
+            requestGate.invalidate();
+            setProcesses([]);
+            setLoading(false);
+            setSettledContextKey(null);
+            return;
+        }
         const ticket = requestGate.start(requestContext);
         setProcesses([]);
         setLoading(true);
@@ -34,7 +43,10 @@ export function useProcessService() {
         } catch (err) {
             console.error('Failed to fetch processes:', err);
         } finally {
-            if (requestGate.accepts(ticket, requestContext)) setLoading(false);
+            if (requestGate.accepts(ticket, requestContext)) {
+                setSettledContextKey(clientRequestContextKey(requestContext));
+                setLoading(false);
+            }
         }
     }, [currentOrganization, currentWorkspace, requestGate, sessionState, user?.id]);
 
@@ -105,7 +117,7 @@ export function useProcessService() {
 
     return {
         processes,
-        loading,
+        loading: contextLoading,
         createProcess,
         createProcessFromTemplate,
         getProcessById,

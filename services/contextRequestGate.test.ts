@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createContextRequestGate } from './contextRequestGate';
+import { clientRequestContextIsLoading, clientRequestContextKey, createContextRequestGate } from './contextRequestGate';
 
 const gate = createContextRequestGate();
 const workspaceA = { actorId: 'user-a', organizationId: 'org-a', workspaceId: 'workspace-a' };
@@ -20,4 +20,10 @@ gate.invalidate();
 assert.equal(gate.accepts(requestOtherTenant, otherTenant), false, 'context removal invalidates in-flight work');
 assert.equal(gate.activeContext(), null);
 
-console.log('context request gate: 8 rapid-switch, late-response, and cross-tenant assertions passed');
+assert.equal(clientRequestContextIsLoading(null, null, false), false, 'an unavailable context has no request to await');
+assert.equal(clientRequestContextIsLoading(workspaceA, null, false), true, 'a newly authorized context is loading before its passive fetch starts');
+assert.equal(clientRequestContextIsLoading(workspaceA, clientRequestContextKey(workspaceA), false), false, 'the exact settled context is ready');
+assert.equal(clientRequestContextIsLoading(workspaceA, clientRequestContextKey(workspaceA), true), true, 'an explicit refresh remains loading');
+assert.equal(clientRequestContextIsLoading(workspaceB, clientRequestContextKey(workspaceA), false), true, 'a context switch is loading before its replacement fetch starts');
+
+console.log('context request gate: rapid-switch, readiness, late-response, and cross-tenant assertions passed');

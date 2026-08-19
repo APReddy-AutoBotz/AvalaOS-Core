@@ -12,6 +12,14 @@ export interface ClientRequestTicket {
 export const clientRequestContextKey = (context: ClientRequestContext) =>
   `${context.actorId ?? 'anonymous'}:${context.organizationId}:${context.workspaceId}`;
 
+export const clientRequestContextIsLoading = (
+  context: ClientRequestContext | null,
+  settledContextKey: string | null,
+  requestInFlight: boolean,
+) => Boolean(context && (
+  requestInFlight || settledContextKey !== clientRequestContextKey(context)
+));
+
 /** In-memory stale-response suppression; no context or response is persisted. */
 export function createContextRequestGate() {
   let sequence = 0;
