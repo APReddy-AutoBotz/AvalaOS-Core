@@ -13,6 +13,7 @@ import {
 } from './viewStatePersistence';
 import {
   buildProductNavigationSearch,
+  hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
@@ -252,6 +253,87 @@ const parsedWorkspaceSearch = parseProductNavigationSearch(workspaceSearch);
 assert.deepEqual(parsedWorkspaceSearch.scope, { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name });
 assert.equal(parsedWorkspaceSearch.projectId, navigationProject.id);
 assert.equal(parsedWorkspaceSearch.documentGenerationId, navigationGeneration.id);
+
+const deliveryPackSearch = buildProductNavigationSearch({
+  view: View.DELIVERY_PACK,
+  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+});
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DELIVERY_PACK,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), true);
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DELIVERY_PACK,
+  { type: ScopeType.PROJECT, id: otherNavigationProject.id, name: otherNavigationProject.name },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(deliveryPackSearch, View.DELIVERY_PACK, null), false);
+assert.equal(hasDurableProductNavigationAgreement(deliveryPackSearch, View.DELIVERY_PACK, '{malformed'), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  deliveryPackSearch,
+  View.DASHBOARD,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), false);
+
+const boardsSearch = buildProductNavigationSearch({
+  view: View.BOARDS,
+  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+});
+assert.equal(hasDurableProductNavigationAgreement(
+  boardsSearch,
+  View.BOARDS,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), true);
+assert.equal(hasDurableProductNavigationAgreement(boardsSearch, View.BOARDS, null), false);
+assert.equal(hasDurableProductNavigationAgreement(boardsSearch, View.BOARDS, '{malformed'), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  boardsSearch,
+  View.BOARDS,
+  { type: ScopeType.PROJECT, id: otherNavigationProject.id, name: otherNavigationProject.name },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  boardsSearch,
+  View.BOARDS,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: 'Stale Project Name' },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  boardsSearch,
+  View.BOARDS,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name, stale: true },
+), false);
+
+const organizationWorkspaceSearch = buildProductNavigationSearch({
+  view: View.WORKSPACE,
+  scope: { type: ScopeType.ORGANIZATION },
+});
+assert.equal(hasDurableProductNavigationAgreement(
+  organizationWorkspaceSearch,
+  View.WORKSPACE,
+  { type: ScopeType.ORGANIZATION },
+), true);
+assert.equal(hasDurableProductNavigationAgreement(organizationWorkspaceSearch, View.WORKSPACE, null), false);
+assert.equal(hasDurableProductNavigationAgreement(organizationWorkspaceSearch, View.WORKSPACE, '{malformed'), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  organizationWorkspaceSearch,
+  View.WORKSPACE,
+  { type: ScopeType.ORGANIZATION, stale: true },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  organizationWorkspaceSearch,
+  View.BOARDS,
+  { type: ScopeType.ORGANIZATION },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  `${organizationWorkspaceSearch}&projectId=${navigationProject.id}`,
+  View.WORKSPACE,
+  { type: ScopeType.ORGANIZATION },
+), false);
+assert.equal(hasDurableProductNavigationAgreement(
+  `?view=boards&scope=project&scopeId=${navigationProject.id}&scopeName=${encodeURIComponent(navigationProject.name)}&projectId=${otherNavigationProject.id}`,
+  View.BOARDS,
+  { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+), false);
 
 const buyerPortfolioNavigation = resolveProductNavigationState({
   ...navigationContext,

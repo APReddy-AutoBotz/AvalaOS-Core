@@ -38,6 +38,12 @@
       "futureAction": "Keep the one-way historical provider-key cleanup assertion confined to the Enterprise Intelligence browser test."
     },
     {
+      "pattern": "localStorage",
+      "pathPrefix": "tests/browser/exhaustiveHostedAcceptance.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep reload-durability inspection of non-secret navigation state confined to hosted acceptance tests; do not treat it as runtime authority."
+    },
+    {
       "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
       "reason": "test/control documentation",
       "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
@@ -287,7 +293,9 @@
       "lines": [
         110,
         118,
-        119
+        119,
+        121,
+        122
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."
@@ -305,10 +313,11 @@
       "pattern": "localStorage",
       "path": "tests/browser/pr1f.spec.ts",
       "lines": [
-        44
+        44,
+        104
       ],
       "reason": "test/control documentation",
-      "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup confined to PR 1F browser tests; do not treat it as runtime authority."
+      "futureAction": "Keep deterministic non-hosted pilot-fixture session/view setup and bounded navigation-durability inspection confined to PR 1F browser tests; do not treat either as runtime authority."
     },
     {
       "pattern": "localStorage",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { persistBeforeCommit } from './services/persistenceTransition';
 import Sidebar from './components/shared/Sidebar';
 import Header from './components/shared/Header';
@@ -31,6 +31,7 @@ import {
 } from './services/viewStatePersistence';
 import {
   buildProductNavigationSearch,
+  hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
@@ -173,6 +174,12 @@ function App() {
   );
   const navigationHydrated = useRef(false);
   const navigationWriteSuppressed = useRef(false);
+  const pendingNavigationHydration = useRef<{
+    view: View;
+    scope: Scope;
+    selectedProcessId: string | null;
+    activeGenerationId: string | null;
+  } | null>(null);
   const marketingCapture = useMemo(() => resolveMarketingCapture(
     typeof window === 'undefined' ? '' : window.location.search,
     {
@@ -471,6 +478,12 @@ function App() {
 
   useEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
+    // Explicit URL reconstruction owns the whole navigation tuple until React
+    // commits it. Persisted view/scope normalization must not race that
+    // transition and replace process_detail with a fallback computed from the
+    // pre-hydration render.
+    if (explicitNavigationIntent && !navigationHydrated.current) return;
+    if (navigationWriteSuppressed.current) return;
 
     const resolvedState = resolvePersistedViewScopeState({
       view: persistedView,
@@ -499,6 +512,7 @@ function App() {
     authoritativeViewCapabilities,
     currentView,
     enabledModules,
+    explicitNavigationIntent,
     guardLoading,
     persistedScope,
     persistedView,
@@ -506,10 +520,27 @@ function App() {
     setCurrentView,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (!explicitNavigationIntent || navigationHydrated.current) return;
     if (processesLoading) return;
+
+    if (!hasDurableProductNavigationAgreement(window.location.search, persistedView, persistedScope)) {
+      navigationWriteSuppressed.current = true;
+      pendingNavigationHydration.current = {
+        view: DEFAULT_PERSISTED_VIEW,
+        scope: DEFAULT_PERSISTED_SCOPE,
+        selectedProcessId: null,
+        activeGenerationId: null,
+      };
+      setCurrentScope(DEFAULT_PERSISTED_SCOPE);
+      setCurrentView(DEFAULT_PERSISTED_VIEW);
+      setSelectedProcessId(null);
+      setActiveGenerationId(null);
+      replaceProductNavigationSearch('');
+      navigationHydrated.current = true;
+      return;
+    }
 
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
@@ -525,6 +556,12 @@ function App() {
     });
 
     navigationWriteSuppressed.current = true;
+    pendingNavigationHydration.current = {
+      view: resolvedNavigation.view,
+      scope: resolvedNavigation.scope,
+      selectedProcessId: resolvedNavigation.selectedProcessId,
+      activeGenerationId: resolvedNavigation.activeGenerationId,
+    };
     setScopeIfChanged(resolvedNavigation.scope);
     setCurrentView(resolvedNavigation.view);
     setSelectedProcessId(resolvedNavigation.selectedProcessId);
@@ -549,6 +586,8 @@ function App() {
     guardLoading,
     processes,
     processesLoading,
+    persistedScope,
+    persistedView,
     projects,
     replaceProductNavigationSearch,
     setCurrentView,
@@ -559,6 +598,24 @@ function App() {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (explicitNavigationIntent && !navigationHydrated.current) return;
     if (processesLoading) return;
+
+    // Effects later in the same flush can observe ref writes from URL hydration
+    // while still closing over the pre-hydration render. Keep reconciliation
+    // suppressed until a committed render contains the complete hydrated
+    // navigation tuple; otherwise a null process selection can downgrade a
+    // valid process-detail route to the catalog.
+    if (navigationWriteSuppressed.current) {
+      const pending = pendingNavigationHydration.current;
+      const hydrationCommitted = Boolean(pending
+        && currentView === pending.view
+        && areScopesEqual(currentScope, pending.scope)
+        && selectedProcessId === pending.selectedProcessId
+        && activeGenerationId === pending.activeGenerationId);
+      if (!hydrationCommitted) return;
+      pendingNavigationHydration.current = null;
+      navigationWriteSuppressed.current = false;
+      return;
+    }
 
     if (tempArtifacts && currentView === View.WORKSPACE) {
       replaceProductNavigationSearch(buildProductNavigationSearch({
@@ -597,11 +654,6 @@ function App() {
     }
     if (!tempArtifacts && activeGenerationId !== resolvedNavigation.activeGenerationId) {
       setActiveGenerationId(resolvedNavigation.activeGenerationId);
-    }
-
-    if (navigationWriteSuppressed.current) {
-      navigationWriteSuppressed.current = false;
-      return;
     }
 
     replaceProductNavigationSearch(buildProductNavigationSearch({
