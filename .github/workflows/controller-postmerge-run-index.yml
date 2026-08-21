@@ -1,0 +1,42 @@
+name: Controller Post-Merge Run Index
+
+on:
+  push:
+    branches:
+      - controller/postmerge-run-index-20260821
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query exact dispatch branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXHAUSTIVE_BRANCH: exhaustive-acceptance-dispatch--6a887700bf74ce0008a81dbb
+          HOSTED_BRANCH: hosted-pilot-dispatch--6a887700bf74ce0008a81dbb--23358fc7-aef5-4a3b-a00a-41913f70b3ac
+        run: |
+          set -euo pipefail
+          mkdir -p controller-evidence
+          exhaustive="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" -f branch="$EXHAUSTIVE_BRANCH" -f per_page=100)"
+          hosted="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" -f branch="$HOSTED_BRANCH" -f per_page=100)"
+          jq -n \
+            --arg releaseSha '77e24dee8cb107b9db0ae0b0a2b30a0c0705de84' \
+            --arg deployId '6a887700bf74ce0008a81dbb' \
+            --arg exerciseRunId '23358fc7-aef5-4a3b-a00a-41913f70b3ac' \
+            --argjson exhaustive "$exhaustive" \
+            --argjson hosted "$hosted" \
+            '{releaseSha:$releaseSha,deployId:$deployId,exerciseRunId:$exerciseRunId,exhaustiveRuns:[$exhaustive.workflow_runs[]|{id,name,event,status,conclusion,head_sha,head_branch,run_attempt,created_at,updated_at}],hostedRuns:[$hosted.workflow_runs[]|{id,name,event,status,conclusion,head_sha,head_branch,run_attempt,created_at,updated_at}]}' \
+            > controller-evidence/postmerge-run-index.json
+      - name: Commit run index
+        run: |
+          set -euo pipefail
+          git config user.name 'avalaos-controller'
+          git config user.email 'avalaos-controller@users.noreply.github.com'
+          git add controller-evidence/postmerge-run-index.json
+          git commit -m 'chore(controller): record post-merge workflow run index'
+          git push
