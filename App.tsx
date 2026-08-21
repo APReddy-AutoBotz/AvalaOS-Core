@@ -523,7 +523,6 @@ function App() {
   useLayoutEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (!explicitNavigationIntent || navigationHydrated.current) return;
-    if (processesLoading) return;
 
     if (!hasDurableProductNavigationAgreement(window.location.search, persistedView, persistedScope)) {
       navigationWriteSuppressed.current = true;
@@ -541,6 +540,10 @@ function App() {
       navigationHydrated.current = true;
       return;
     }
+
+    // Invalid durable navigation is rejected immediately. Only valid entity
+    // reconstruction waits for process data required by route resolution.
+    if (processesLoading) return;
 
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
