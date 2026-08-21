@@ -42,13 +42,13 @@ export const clearLegacyBrowserProviderKey = () => {
 };
 
 export class StorageService {
-    static load<T>(key: string, defaultValue: T): T {
+    static load<T>(key: string, defaultValue: T, preserveMissing = false): T {
         try {
             const stored = localStorage.getItem(key);
-            return stored ? JSON.parse(stored) : defaultValue;
+            return stored ? JSON.parse(stored) : preserveMissing ? null as T : defaultValue;
         } catch (e) {
             console.error(`Failed to load key ${key}`, e);
-            return defaultValue;
+            return preserveMissing ? null as T : defaultValue;
         }
     }
 
@@ -73,7 +73,7 @@ export function usePersistentState<T>(
 ) {
     const enabled = options.enabled ?? true;
     const [state, setState] = useState<T>(() => (
-        enabled ? StorageService.load(key, defaultValue) : defaultValue
+        enabled ? StorageService.load(key, defaultValue, key === StorageKeys.SCOPE || key === StorageKeys.VIEW) : defaultValue
     ));
     const latestState = useRef(state);
 
