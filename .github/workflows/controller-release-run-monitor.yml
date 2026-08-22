@@ -1,0 +1,62 @@
+name: Controller Release Run Monitor
+
+on:
+  push:
+    branches:
+      - controller/release-monitor-862351f9
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  report-release-runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report exact release workflow runs to merged PR 252
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: 862351f9150e013a075a630401b9405dd34d0df8
+          DEPLOY_ID: 6a89a409b6afaf00082eb33f
+          EXHAUSTIVE_REF: exhaustive-acceptance-dispatch--6a89a409b6afaf00082eb33f
+          HOSTED_REF: hosted-pilot-dispatch--6a89a409b6afaf00082eb33f--f5ec5528-13ac-4480-ae34-fb550e5acc2a
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflows=(
+            exhaustive-acceptance-dispatch-bridge.yml
+            exhaustive-acceptance.yml
+            hosted-pilot-dispatch-bridge.yml
+            hosted-pilot-activation-evidence-producer.yml
+            pilot-operations.yml
+            hosted-pilot-live-acceptance.yml
+          )
+          {
+            echo 'CONTROLLER RELEASE-RUN MONITOR — stable pilot release evidence only.'
+            echo
+            echo "- release SHA: \`${RELEASE_SHA}\`"
+            echo "- stable Netlify deploy: \`${DEPLOY_ID}\`"
+            echo "- exhaustive control ref: \`${EXHAUSTIVE_REF}\`"
+            echo "- hosted evidence control ref: \`${HOSTED_REF}\`"
+            echo
+            echo '```json'
+            printf '{"releaseSha":"%s","deployId":"%s","workflows":[' "$RELEASE_SHA" "$DEPLOY_ID"
+            first_workflow=true
+            for workflow in "${workflows[@]}"; do
+              data="$(gh api --paginate "repos/${REPOSITORY}/actions/workflows/${workflow}/runs?per_page=30")"
+              filtered="$(jq -c --arg sha "$RELEASE_SHA" --arg ex "$EXHAUSTIVE_REF" --arg ho "$HOSTED_REF" --arg wf "$workflow" '
+                [.workflow_runs[]
+                  | select(.head_sha==$sha or .head_branch==$ex or .head_branch==$ho)
+                  | {id,name,event,status,conclusion,head_sha,head_branch,run_number,run_attempt,created_at,updated_at,html_url}]
+                | sort_by(.created_at) | reverse | .[:8]
+                | {workflow:$wf,runs:.}' <<<"$data")"
+              if [ "$first_workflow" = true ]; then first_workflow=false; else printf ','; fi
+              printf '%s' "$filtered"
+            done
+            echo ']}'
+            echo '```'
+          } > /tmp/release-runs.md
+          gh issue comment 252 --repo "$REPOSITORY" --body-file /tmp/release-runs.md
