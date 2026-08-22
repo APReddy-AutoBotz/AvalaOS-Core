@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Check out exact PR head with controller ancestry
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 4
+          fetch-depth: 2
 
       - name: Verify exact controller authority
         env:
@@ -31,8 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          test "$(git rev-parse HEAD^)" = "16f1bebe8454d70498a6d2e6daff76903e1ad8fc"
-          test "$(git rev-parse HEAD^^^)" = "90760085554ebe73a0a1a958da9cbd59ff044db7"
+          test "$(git rev-parse HEAD^)" = "596ed82888c1855c3448d10d773efef61290ee29"
           test "${{ github.event.pull_request.base.sha }}" = "862351f9150e013a075a630401b9405dd34d0df8"
 
       - name: Recover and verify durable Worker B patch
@@ -121,18 +120,27 @@ jobs:
                   raise SystemExit(f'Blob mismatch for {path}: {got} != {wanted}')
           print('All Worker B after-state blobs verified')
           PY
+          cp .github/workflows/hosted-pilot-activation-evidence-producer.yml /tmp/worker-b-hosted-pilot-activation-evidence-producer.yml
+          test "$(git hash-object /tmp/worker-b-hosted-pilot-activation-evidence-producer.yml)" = "d23e5d11957c5f88f4d9080a365df36c3099bc5b"
 
-      - name: Commit verified integration and remove transport helper
+      - name: Export verified workflow after-state
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-b-workflow-after-state
+          path: /tmp/worker-b-hosted-pilot-activation-evidence-producer.yml
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Push verified non-workflow Worker B files
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/controller-apply-worker-b-255.yml
+          git restore --source=HEAD -- .github/workflows/hosted-pilot-activation-evidence-producer.yml
           git add -A
           git diff --cached --check
           python - <<'PY'
           import subprocess
           expected = {
-              '.github/workflows/hosted-pilot-activation-evidence-producer.yml',
               'package.json',
               'scripts/exhaustiveAcceptanceValidate.mjs',
               'scripts/hostedEvidenceFamilyAttestation.mjs',
@@ -144,12 +152,12 @@ jobs:
               'tests/acceptance/inventory.json',
               'tests/acceptance/validators/inventory-provenance.test.mjs',
           }
-          out = subprocess.check_output(['git', 'diff', '--cached', '--name-only', '90760085554ebe73a0a1a958da9cbd59ff044db7'], text=True)
+          out = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True)
           observed = {line for line in out.splitlines() if line}
           if observed != expected:
-              raise SystemExit(f'Final staged file set mismatch: {sorted(observed)}')
+              raise SystemExit(f'Staged non-workflow file set mismatch: {sorted(observed)}')
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Controller: integrate verified Worker B evidence package'
+          git commit -m 'Controller: integrate verified Worker B source evidence'
           git push origin HEAD:controller/acceptance-evidence-closure-20260822
