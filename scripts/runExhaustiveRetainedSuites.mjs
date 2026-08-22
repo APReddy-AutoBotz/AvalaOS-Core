@@ -7,6 +7,8 @@ import { loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
+const environment = process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'pull-request';
+const workflowPath = process.env.GITHUB_WORKFLOW_REF?.split('@')[0]?.replace(`${process.env.GITHUB_REPOSITORY}/`, '') || '.github/workflows/exhaustive-acceptance.yml';
 const manifestPath = path.resolve(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
 const bindings = loadExecutionBindings();
 
@@ -14,10 +16,13 @@ if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('RETAINED_RELEASE_SHA_R
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  manifestKind: 'retained',
   releaseSha,
   workflowRunId,
   workflowAttempt,
+  environment,
+  workflowPath,
   generatedAt: new Date().toISOString(),
   suites: [],
   results: [],
@@ -42,6 +47,8 @@ for (const suite of bindings.retainedSuites ?? []) {
       RELEASE_SHA: releaseSha,
       GITHUB_RUN_ID: workflowRunId,
       GITHUB_RUN_ATTEMPT: workflowAttempt,
+      ACCEPTANCE_EVIDENCE_ENVIRONMENT: environment,
+      ACCEPTANCE_WORKFLOW_PATH: workflowPath,
       RETAINED_SUITE_ID: suite.suiteId,
       RETAINED_TEST_ID_RESULTS: resultPath,
     },
@@ -57,7 +64,25 @@ for (const suite of bindings.retainedSuites ?? []) {
     durationMs: Date.now() - started,
     testIds: suite.testIds ?? [],
     requiredGate: suite.requiredGate === true,
+    command: suite.command.join(' '),
   });
+  if (status === 'PASS' && (suite.testIds ?? []).length) {
+    const producer = spawnSync(process.execPath, ['scripts/produceRetainedAcceptanceEvidence.mjs'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        RELEASE_SHA: releaseSha,
+        GITHUB_RUN_ID: workflowRunId,
+        GITHUB_RUN_ATTEMPT: workflowAttempt,
+        ACCEPTANCE_EVIDENCE_ENVIRONMENT: environment,
+        ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+        RETAINED_SUITE_CONTRACT: JSON.stringify(suite),
+        RETAINED_TEST_ID_RESULTS: resultPath,
+      },
+      stdio: 'inherit',
+    });
+    if (producer.status !== 0) throw new Error(`RETAINED_TEST_ID_PRODUCER_FAILED:${suite.suiteId}`);
+  }
   if (fs.existsSync(resultPath)) {
     const emitted = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
     const producerErrors = validateRetainedProducerResults({ suite, emitted });

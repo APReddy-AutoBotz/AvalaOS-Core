@@ -73,7 +73,6 @@ for (const item of bindings.hostedTests ?? []) {
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
 }
 const requiredExplicitBlocks = [
-  'SANDBOX-003','SANDBOX-004','SANDBOX-007','SANDBOX-008','SANDBOX-009',
   'ASSESS-003',
   'DELIVERY-009',
   'MONITOR-001','MONITOR-002','MONITOR-003',
@@ -93,6 +92,7 @@ for (const testCase of cases) {
 const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'retained').length;
 const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'oracle').length;
 const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'hosted').length;
+const serverTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'server').length;
 const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
 const blockedHosted = hostedTestIds - executableHosted;
 const declared = inventory.filter(item => item.coverageStatus === 'DECLARED');
@@ -109,6 +109,7 @@ console.log(JSON.stringify({
   retainedTestIds,
   oracleTestIds,
   hostedTestIds,
+  serverTestIds,
   executableHosted,
   blockedHosted,
 }, null, 2));

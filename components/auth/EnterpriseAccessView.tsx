@@ -67,7 +67,7 @@ const EnterpriseAccessView: React.FC = () => {
         </div>
       </header>
 
-      <main id="access-main" className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(390px,0.72fr)] lg:items-center lg:gap-20 lg:py-16">
+      <main id="access-main" tabIndex={-1} className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(390px,0.72fr)] lg:items-center lg:gap-20 lg:py-16">
         <section aria-labelledby="access-title" className="max-w-2xl">
           <p className="av-eyebrow">{isDemoMode ? 'Controlled product sandbox' : 'Enterprise workspace'}</p>
           <h1 id="access-title" className="av-display-title mt-4">{isDemoMode ? 'Explore with synthetic data.' : 'Sign in to an organization.'}</h1>

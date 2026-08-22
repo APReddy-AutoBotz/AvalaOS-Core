@@ -28,6 +28,8 @@ env:
   ACCEPTANCE_RESULTS_DIR: acceptance-results
   RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
   ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
+  SERVER_RESULTS_MANIFEST: /tmp/avalaos-server-results.json
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
 
 jobs:
   acceptance:

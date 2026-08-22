@@ -12,16 +12,22 @@ export const validateRetainedProducerResults = ({ suite, emitted }) => {
     const key = `${item?.suiteId ?? 'missing'}:${item?.testId ?? 'missing'}`;
     if (item?.suiteId !== suite?.suiteId) errors.push(`producer-suite-mismatch:${key}`);
     if (!allowedTestIds.has(item?.testId)) errors.push(`producer-test-id-mismatch:${key}`);
+    if (!Array.isArray(item?.assertionIds) || !item.assertionIds.length) errors.push(`producer-assertions-missing:${key}`);
+    if (!Array.isArray(item?.scenarioIds) || !item.scenarioIds.length) errors.push(`producer-scenarios-missing:${key}`);
+    if (!Array.isArray(item?.branchIds) || !item.branchIds.length) errors.push(`producer-branches-missing:${key}`);
+    if (!Array.isArray(item?.sourceReferences) || !item.sourceReferences.length) errors.push(`producer-sources-missing:${key}`);
   }
   return errors;
 };
 
 export const validateRetainedManifest = (manifest, expected, retainedBindings = new Map()) => {
   const errors = [];
-  if (!manifest || manifest.schemaVersion !== 2) errors.push('manifest-schema');
+  if (!manifest || manifest.schemaVersion !== 3) errors.push('manifest-schema');
   if (manifest?.releaseSha !== expected.releaseSha) errors.push('release-sha');
   if (String(manifest?.workflowRunId) !== String(expected.workflowRunId)) errors.push('workflow-run');
   if (String(manifest?.workflowAttempt) !== String(expected.workflowAttempt)) errors.push('workflow-attempt');
+  if (manifest?.environment !== expected.environment) errors.push('environment');
+  if (manifest?.workflowPath !== expected.workflowPath) errors.push('workflow-path');
   if (!Array.isArray(manifest?.suites)) errors.push('suite-array');
   if (!Array.isArray(manifest?.results)) errors.push('result-array');
   const seen = new Set();
@@ -40,9 +46,36 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (item?.releaseSha !== expected.releaseSha) errors.push(`result-release-sha:${key}`);
     if (String(item?.workflowRunId) !== String(expected.workflowRunId)) errors.push(`result-workflow-run:${key}`);
     if (String(item?.workflowAttempt) !== String(expected.workflowAttempt)) errors.push(`result-workflow-attempt:${key}`);
+    if (item?.environment !== expected.environment) errors.push(`result-environment:${key}`);
+    if (item?.workflowPath !== expected.workflowPath) errors.push(`result-workflow-path:${key}`);
+    if (!item?.jobId || item?.jobId !== item?.suiteId) errors.push(`result-job:${key}`);
+    const declaredSuite = (manifest?.suites ?? []).find(value => value.suiteId === item?.suiteId);
+    if (!item?.command || item.command !== declaredSuite?.command) errors.push(`result-command:${key}`);
+    for (const field of ['assertionIds', 'scenarioIds', 'branchIds', 'sourceReferences']) {
+      const values = item?.[field];
+      if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length) errors.push(`result-${field}:${key}`);
+    }
+    if ((item?.sourceReferences ?? []).some(ref => typeof ref !== 'string' || ref.startsWith('/') || ref.includes('..') || /https?:|secret|token|password/iu.test(ref))) errors.push(`result-unsafe-source:${key}`);
     if (!(retainedBindings.get(item?.testId) ?? []).includes(item?.suiteId)) errors.push(`result-binding-mismatch:${key}`);
+    const expectedBranches = expected.branchIdsByTestId?.get(item?.testId);
+    if (expectedBranches && JSON.stringify([...item.branchIds].sort()) !== JSON.stringify([...expectedBranches].sort())) errors.push(`result-branch-mismatch:${key}`);
   }
   return errors;
+};
+
+export const validateServerManifest = (manifest, expected, serverBindings = new Map()) => {
+  const errors = validateRetainedManifest(manifest, expected, serverBindings);
+  if (manifest?.manifestKind !== 'server') errors.push('server-manifest-kind');
+  return errors;
+};
+
+export const evaluateCompositeTest = components => {
+  if (!Array.isArray(components) || !components.length) return { status: 'BLOCKED', reason: 'No evidence components declared.' };
+  const failed = components.filter(item => item?.status === 'FAIL');
+  if (failed.length) return { status: 'FAIL', reason: `Required component failed: ${failed.map(item => item.name).join(', ')}` };
+  const blocked = components.filter(item => item?.status !== 'PASS');
+  if (blocked.length) return { status: 'BLOCKED', reason: `Required component missing or blocked: ${blocked.map(item => item.name).join(', ')}` };
+  return { status: 'PASS', reason: null };
 };
 
 export const validateOracleManifest = (manifest, expected) => {

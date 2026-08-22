@@ -455,11 +455,17 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         '{malformed',
       ];
       for (const invalidScope of invalidPersistedScopes) {
+        const invalidNavigationResponse = page.waitForResponse(response => (
+          response.request().isNavigationRequest()
+          && response.request().frame() === page.mainFrame()
+        ));
         await page.evaluate(scope => {
           if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
           else localStorage.setItem('avalaos-core-v1-scope', scope);
+          window.location.reload();
         }, invalidScope);
-        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        const invalidResponse = await invalidNavigationResponse;
+        await page.waitForLoadState('domcontentloaded');
         assertHostedResponseIdentity(invalidResponse);
         await expect(page).not.toHaveURL(/projectId=/u);
         await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);

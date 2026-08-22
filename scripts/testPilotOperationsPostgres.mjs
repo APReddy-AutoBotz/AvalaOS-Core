@@ -350,6 +350,39 @@ try {
   const postReactivation=(await command('register_release_candidate','postgres-reactivation-authorized',{...candidatePayload,gitSha:'c'.repeat(40)},0)).rows[0].result;
   assert.equal(postReactivation.lifecycle,'draft','reactivation must restore the governed authorized mutation path');
 
+  // SAFETY-005 / SAFETY-RESPONSE_LOST_AFTER_COMMIT: execute the production
+  // command in its own committed transaction, deliberately discard its only
+  // client response, then recover the exact canonical response by identity.
+  const responseLossPayload={...candidatePayload,gitSha:'6'.repeat(40),buildIdentity:'safety-005-response-loss',evidenceManifestSha256:'6'.repeat(64)};
+  const responseLossRequest='99000000-0000-4000-8000-000000000505';
+  const responseLossKey='safety-005-response-lost-after-commit';
+  const responseLossArgs=[fixture.requester,fixture.org,fixture.workspace,'register_release_candidate',responseLossRequest,responseLossKey,JSON.stringify(responseLossPayload),authorizationVersion,0,JSON.stringify(responseLossPayload)];
+  const effectsBefore=Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n);
+  await fresh.query('BEGIN');
+  await fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',responseLossArgs); // response intentionally discarded
+  await fresh.query('COMMIT');
+  const receiptRows=(await fresh.query('SELECT id,response_body,resource_id,status,initial_request_id FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND operation=$3 AND idempotency_key=$4',[fixture.org,fixture.workspace,'register_release_candidate',responseLossKey])).rows;
+  assert.equal(receiptRows.length,1,'SAFETY-005 must retain exactly one immutable receipt after the discarded response');
+  const receipt=receiptRows[0];
+  assert.equal(receipt.status,'committed');
+  assert.equal(receipt.initial_request_id,responseLossRequest);
+  const recovered=(await fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',responseLossArgs)).rows[0].result;
+  assert.deepEqual(recovered,receipt.response_body,'SAFETY-005 retry must recover the exact canonical committed response');
+  assert.equal(recovered.resourceId,receipt.resource_id,'SAFETY-005 canonical response and receipt must bind the same resource');
+  const persisted=(await fresh.query('SELECT id,git_sha,build_identity,evidence_manifest_sha256,schema_version,lifecycle,version FROM pilot_operations_release_candidates WHERE id=$1 AND org_id=$2 AND workspace_id=$3',[recovered.resourceId,fixture.org,fixture.workspace])).rows[0];
+  assert.ok(persisted,'SAFETY-005 canonical resource must resolve to the persisted candidate');
+  assert.equal(persisted.build_identity,responseLossPayload.buildIdentity);
+  assert.equal(persisted.git_sha,responseLossPayload.gitSha);
+  assert.equal(persisted.evidence_manifest_sha256,responseLossPayload.evidenceManifestSha256);
+  assert.equal(persisted.schema_version,responseLossPayload.schemaVersion);
+  assert.equal(persisted.lifecycle,'draft');
+  assert.equal(Number(persisted.version),Number(recovered.version));
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),effectsBefore+1,'SAFETY-005 must commit exactly one business effect');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1 AND candidate_id=$2',[environment.resourceId,recovered.resourceId])).rows[0].n),1,'SAFETY-005 candidate history must contain the committed resource exactly once');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_audit_events WHERE receipt_id=$1 AND action=$2 AND resource_id=$3 AND result=$4',[receipt.id,'register_release_candidate',recovered.resourceId,'committed'])).rows[0].n),1,'SAFETY-005 must retain exactly one canonical audit event');
+  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[...responseLossArgs.slice(0,6),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'}),...responseLossArgs.slice(7,9),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'})]),/IDEMPOTENCY_CONFLICT/);
+  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[fixture.requester,'99000000-0000-4000-8000-000000000999','99000000-0000-4000-8000-000000000998','register_release_candidate',responseLossRequest,responseLossKey,JSON.stringify(responseLossPayload),authorizationVersion,0,JSON.stringify(responseLossPayload)]),/PR1B_NOT_FOUND/,'SAFETY-005 foreign tenant replay must be non-disclosing');
+
   // Recovery rotation deliberately fenced the historical reviewer above. Keep the
   // later serialization fixture independent so it cannot accidentally reuse that
   // revoked actor or its stale authorization version.
@@ -434,7 +467,7 @@ try {
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
     promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,pendingRegistrationSerialized:true,invertedRegistrationOrderVerified:true,gapFreeCandidateSequenceVerified:true,
-    crossTenantDisclosureDenied:true,liveActivationAuthorized:false,
+    crossTenantDisclosureDenied:true,responseLossAfterCommitTestId:'SAFETY-005',responseLossAfterCommitBranch:'SAFETY-RESPONSE_LOST_AFTER_COMMIT',responseLossExactReplayVerified:true,responseLossExactlyOneEffectVerified:true,responseLossConflictRejected:true,responseLossForeignTenantNonDisclosure:true,liveActivationAuthorized:false,
   },null,2)+'\n');
 } finally {
   for(const client of clients.slice(1).reverse()) await client.end().catch(()=>{});
