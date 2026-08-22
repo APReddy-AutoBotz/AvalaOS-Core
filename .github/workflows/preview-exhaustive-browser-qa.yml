@@ -1,0 +1,92 @@
+name: Preview Exhaustive Browser QA
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_SHA: ea80fc70d12ddb2a9854eb3ba73830a038c205cb
+  HOSTED_PILOT_URL: https://6a899fd8c782d50008f40bb1--avalaos-pilot.netlify.app
+  NETLIFY_DEPLOY_ID: 6a899fd8c782d50008f40bb1
+  EXPECTED_RELEASE_SHA: ea80fc70d12ddb2a9854eb3ba73830a038c205cb
+  ACCEPTANCE_RELEASE_SHA: ea80fc70d12ddb2a9854eb3ba73830a038c205cb
+
+jobs:
+  preview-exhaustive-browser-qa:
+    if: github.event.pull_request.number == 248
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact product source under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact checkout
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Instrument SAFETY-004 loop in runner only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/browser/exhaustiveHostedAcceptance.spec.ts')
+          s = p.read_text()
+          old = """      for (const invalidScope of invalidPersistedScopes) {
+        await page.evaluate(scope => {
+          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
+          else localStorage.setItem('avalaos-core-v1-scope', scope);
+        }, invalidScope);
+        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(invalidResponse);
+        await expect(page).not.toHaveURL(/projectId=/u);
+        await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
+
+        await page.evaluate(scope => {
+"""
+          new = """      for (const invalidScope of invalidPersistedScopes) {
+        const diagnosticCase = invalidScope === null ? 'missing' : invalidScope === '{malformed' ? 'malformed' : 'stale-project';
+        await page.evaluate(scope => {
+          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
+          else localStorage.setItem('avalaos-core-v1-scope', scope);
+        }, invalidScope);
+        console.log(`[SAFETY004-DIAG][${testInfo.project.name}][${diagnosticCase}] BEFORE=${JSON.stringify(await page.evaluate(() => ({ url: location.href, scope: localStorage.getItem('avalaos-core-v1-scope'), view: localStorage.getItem('avalaos-core-v1-view'), historyLength: history.length })))}`);
+        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(invalidResponse);
+        await page.waitForTimeout(1500);
+        console.log(`[SAFETY004-DIAG][${testInfo.project.name}][${diagnosticCase}] AFTER=${JSON.stringify(await page.evaluate(() => ({ url: location.href, scope: localStorage.getItem('avalaos-core-v1-scope'), view: localStorage.getItem('avalaos-core-v1-view'), historyLength: history.length, hasDeliveryPackHeading: document.body.innerText.includes('AP Invoice Exception Workflow Governed Delivery Pack') })))}`);
+
+        await page.evaluate(scope => {
+"""
+          if old not in s:
+              raise SystemExit('SAFETY-004 loop anchor not found')
+          p.write_text(s.replace(old, new))
+          PY
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run focused SAFETY-004 diagnostic on Desktop and Pixel
+        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1 --grep 'SAFETY-004'
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety004-case-diagnostic-ea80-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 2
+          path: |
+            test-results/
+            artifacts/exhaustive-acceptance/
