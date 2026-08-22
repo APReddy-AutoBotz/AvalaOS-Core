@@ -7,6 +7,8 @@ import { loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
+const environment = process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release';
+const workflowPath = process.env.GITHUB_WORKFLOW_REF?.split('@')[0]?.replace(`${process.env.GITHUB_REPOSITORY}/`, '') || '.github/workflows/exhaustive-acceptance.yml';
 const manifestPath = path.resolve(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
 const bindings = loadExecutionBindings();
 
@@ -14,10 +16,13 @@ if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('RETAINED_RELEASE_SHA_R
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  manifestKind: 'retained',
   releaseSha,
   workflowRunId,
   workflowAttempt,
+  environment,
+  workflowPath,
   generatedAt: new Date().toISOString(),
   suites: [],
   results: [],
@@ -42,6 +47,8 @@ for (const suite of bindings.retainedSuites ?? []) {
       RELEASE_SHA: releaseSha,
       GITHUB_RUN_ID: workflowRunId,
       GITHUB_RUN_ATTEMPT: workflowAttempt,
+      ACCEPTANCE_EVIDENCE_ENVIRONMENT: environment,
+      ACCEPTANCE_WORKFLOW_PATH: workflowPath,
       RETAINED_SUITE_ID: suite.suiteId,
       RETAINED_TEST_ID_RESULTS: resultPath,
     },

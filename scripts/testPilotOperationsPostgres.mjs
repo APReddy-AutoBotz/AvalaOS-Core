@@ -361,10 +361,25 @@ try {
   await fresh.query('BEGIN');
   await fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',responseLossArgs); // response intentionally discarded
   await fresh.query('COMMIT');
+  const receiptRows=(await fresh.query('SELECT id,response_body,resource_id,status,initial_request_id FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND operation=$3 AND idempotency_key=$4',[fixture.org,fixture.workspace,'register_release_candidate',responseLossKey])).rows;
+  assert.equal(receiptRows.length,1,'SAFETY-005 must retain exactly one immutable receipt after the discarded response');
+  const receipt=receiptRows[0];
+  assert.equal(receipt.status,'committed');
+  assert.equal(receipt.initial_request_id,responseLossRequest);
   const recovered=(await fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',responseLossArgs)).rows[0].result;
-  assert.equal(recovered.buildIdentity,responseLossPayload.buildIdentity);
+  assert.deepEqual(recovered,receipt.response_body,'SAFETY-005 retry must recover the exact canonical committed response');
+  assert.equal(recovered.resourceId,receipt.resource_id,'SAFETY-005 canonical response and receipt must bind the same resource');
+  const persisted=(await fresh.query('SELECT id,git_sha,build_identity,evidence_manifest_sha256,schema_version,lifecycle,version FROM pilot_operations_release_candidates WHERE id=$1 AND org_id=$2 AND workspace_id=$3',[recovered.resourceId,fixture.org,fixture.workspace])).rows[0];
+  assert.ok(persisted,'SAFETY-005 canonical resource must resolve to the persisted candidate');
+  assert.equal(persisted.build_identity,responseLossPayload.buildIdentity);
+  assert.equal(persisted.git_sha,responseLossPayload.gitSha);
+  assert.equal(persisted.evidence_manifest_sha256,responseLossPayload.evidenceManifestSha256);
+  assert.equal(persisted.schema_version,responseLossPayload.schemaVersion);
+  assert.equal(persisted.lifecycle,'draft');
+  assert.equal(Number(persisted.version),Number(recovered.version));
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),effectsBefore+1,'SAFETY-005 must commit exactly one business effect');
-  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_command_receipts WHERE org_id=$1 AND workspace_id=$2 AND idempotency_key=$3',[fixture.org,fixture.workspace,responseLossKey])).rows[0].n),1,'SAFETY-005 must retain exactly one receipt');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1 AND candidate_id=$2',[environment.resourceId,recovered.resourceId])).rows[0].n),1,'SAFETY-005 candidate history must contain the committed resource exactly once');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_audit_events WHERE receipt_id=$1 AND action=$2 AND resource_id=$3 AND result=$4',[receipt.id,'register_release_candidate',recovered.resourceId,'committed'])).rows[0].n),1,'SAFETY-005 must retain exactly one canonical audit event');
   await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[...responseLossArgs.slice(0,6),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'}),...responseLossArgs.slice(7,9),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'})]),/IDEMPOTENCY_CONFLICT/);
   await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[fixture.requester,'99000000-0000-4000-8000-000000000999','99000000-0000-4000-8000-000000000998','register_release_candidate',responseLossRequest,responseLossKey,JSON.stringify(responseLossPayload),authorizationVersion,0,JSON.stringify(responseLossPayload)]),/PR1B_NOT_FOUND/,'SAFETY-005 foreign tenant replay must be non-disclosing');
 

@@ -1,23 +1,27 @@
 import assert from 'node:assert/strict';
 import {
   evaluateHostedTest,
+  evaluateCompositeTest,
   evaluateRetainedTest,
   validateOracleManifest,
   validateRetainedManifest,
   validateRetainedProducerResults,
 } from './exhaustiveAcceptanceEvidence.mjs';
 
-const expected = { releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1' };
+const expected = { releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1', environment: 'stable-release', workflowPath: '.github/workflows/exhaustive-acceptance.yml' };
 const retainedBindings = new Map([
   ['TEST-001', ['suite-a']],
   ['TEST-002', ['suite-a']],
   ['TEST-B', ['suite-b']],
 ]);
 const retained = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  manifestKind: 'retained',
   releaseSha: expected.releaseSha,
   workflowRunId: expected.workflowRunId,
   workflowAttempt: expected.workflowAttempt,
+  environment: expected.environment,
+  workflowPath: expected.workflowPath,
   suites: [
     { suiteId: 'suite-a', status: 'PASS' },
     { suiteId: 'suite-b', status: 'PASS' },
@@ -29,6 +33,13 @@ const retained = {
     releaseSha: expected.releaseSha,
     workflowRunId: expected.workflowRunId,
     workflowAttempt: expected.workflowAttempt,
+    environment: expected.environment,
+    workflowPath: expected.workflowPath,
+    jobId: 'suite-a',
+    assertionIds: ['assertion-1'],
+    scenarioIds: ['scenario-1'],
+    branchIds: ['BRANCH-1'],
+    sourceReferences: ['tests/example.test.ts#assertion-1'],
   }],
 };
 assert.deepEqual(validateRetainedManifest(retained, expected, retainedBindings), []);
@@ -38,6 +49,9 @@ assert.ok(validateRetainedManifest({ ...retained, results: [...retained.results,
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], releaseSha: 'b'.repeat(40) }] }, expected, retainedBindings).some(item => item.startsWith('result-release-sha:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], workflowRunId: 'stale' }] }, expected, retainedBindings).some(item => item.startsWith('result-workflow-run:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], workflowAttempt: '2' }] }, expected, retainedBindings).some(item => item.startsWith('result-workflow-attempt:')));
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], environment: 'preview' }] }, expected, retainedBindings).some(item => item.startsWith('result-environment:')));
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], sourceReferences: ['https://unsafe.invalid/raw'] }] }, expected, retainedBindings).some(item => item.startsWith('result-unsafe-source:')));
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], assertionIds: [] }] }, expected, retainedBindings).some(item => item.startsWith('result-assertionIds:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], testId: 'UNBOUND-001' }] }, expected, retainedBindings).some(item => item.startsWith('result-binding-mismatch:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], suiteId: 'missing-suite' }] }, expected, retainedBindings).some(item => item.startsWith('result-suite-missing:')));
 
@@ -89,5 +103,9 @@ assert.equal(evaluateHostedTest({
   executions: [{ ...passedExecution, results: [{ status: 'failed', error: { message: 'deterministic failure' }, attachments: [] }] }],
   requiredProjects: ['desktop-chromium'],
 }).status, 'FAIL');
+
+assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'PASS' }]).status, 'PASS');
+assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'BLOCKED' }]).status, 'BLOCKED');
+assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'FAIL' }]).status, 'FAIL');
 
 console.log('Exhaustive acceptance evidence adversarial tests passed.');

@@ -44,7 +44,13 @@ const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acce
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
 const executions = flattenPlaywright(playwright);
 
-const expectedBinding = { releaseSha, workflowRunId, workflowAttempt };
+const expectedBinding = {
+  releaseSha,
+  workflowRunId,
+  workflowAttempt,
+  environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
+  workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml',
+};
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
 const oracleErrors = validateOracleManifest(oracleManifest, expectedBinding);
