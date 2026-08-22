@@ -35,7 +35,9 @@ import {
   hasProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
+  isStructurallyValidProductNavigationSearch,
 } from './services/productNavigationState';
+import { createProductNavigationController, type ProductNavigationTransition, type ProductNavigationWrite } from './services/productNavigationController';
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
@@ -180,6 +182,10 @@ function App() {
     selectedProcessId: string | null;
     activeGenerationId: string | null;
   } | null>(null);
+  const navigationController = useRef(createProductNavigationController());
+  const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
+  const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
+  const previousNavigationAuthorityKey = useRef(navigationAuthorityKey);
   const marketingCapture = useMemo(() => resolveMarketingCapture(
     typeof window === 'undefined' ? '' : window.location.search,
     {
@@ -249,8 +255,14 @@ function App() {
     governContextKey.current = governPresentationAccess.contextKey;
   }, [governPresentationAccess, guardLoading, isGovernViewOpen]);
 
-  const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope) => {
+  const applyGuardedView = useCallback((view: View, requestedScope: Scope = currentScope, origin: 'user' | 'authority-rebind' = 'user') => {
     if (guardLoading) return false;
+
+    pendingNavigationTransition.current = origin === 'user'
+      ? navigationController.current.begin('user')
+      : navigationController.current.rebind();
+    navigationWriteSuppressed.current = false;
+    pendingNavigationHydration.current = null;
 
     if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && hasAdminAccess) {
       setScopeIfChanged(requestedScope);
@@ -258,6 +270,8 @@ function App() {
       return true;
     }
 
+    // A real selection supersedes fail-closed hydration settlement. The next
+    // committed tuple must therefore be allowed to reconverge the URL.
     const access = resolveAppViewAccess(view, requestedScope);
     if (access.guardSeverity === 'wait') return false;
 
@@ -270,12 +284,12 @@ function App() {
     return access.allowed;
   }, [currentScope, currentUser, guardLoading, hasAdminAccess, resolveAppViewAccess, setCurrentView, setScopeIfChanged]);
 
-  const replaceProductNavigationSearch = useCallback((nextSearch: string) => {
+  const writeProductNavigationSearch = useCallback((nextSearch: string, mode: ProductNavigationWrite = 'replace') => {
     if (typeof window === 'undefined') return;
     const protectedSearch = preserveMarketingCaptureSearch(nextSearch, marketingCapture);
     const nextUrl = `${window.location.pathname}${protectedSearch}${window.location.hash}`;
     if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
-      window.history.replaceState(null, '', nextUrl);
+      window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', nextUrl);
     }
   }, [marketingCapture]);
 
@@ -294,7 +308,7 @@ function App() {
     setScopeIfChanged(defaultScope);
 
     if (currentUser.defaultView) {
-      applyGuardedView(currentUser.defaultView, defaultScope);
+      applyGuardedView(currentUser.defaultView, defaultScope, 'authority-rebind');
     }
 
     lastAppliedUserId.current = currentUser.id;
@@ -536,7 +550,8 @@ function App() {
       setCurrentView(DEFAULT_PERSISTED_VIEW);
       setSelectedProcessId(null);
       setActiveGenerationId(null);
-      replaceProductNavigationSearch('');
+      pendingNavigationTransition.current = navigationController.current.begin('hydrate');
+      writeProductNavigationSearch('');
       navigationHydrated.current = true;
       return;
     }
@@ -572,7 +587,8 @@ function App() {
     if (resolvedNavigation.activeGenerationId) {
       setTempArtifacts(null);
     }
-    replaceProductNavigationSearch(buildProductNavigationSearch({
+    pendingNavigationTransition.current = navigationController.current.begin('hydrate');
+    writeProductNavigationSearch(buildProductNavigationSearch({
       view: resolvedNavigation.view,
       scope: resolvedNavigation.scope,
       selectedProcessId: resolvedNavigation.selectedProcessId,
@@ -592,7 +608,7 @@ function App() {
     persistedScope,
     persistedView,
     projects,
-    replaceProductNavigationSearch,
+    writeProductNavigationSearch,
     setCurrentView,
     setScopeIfChanged,
   ]);
@@ -617,11 +633,10 @@ function App() {
       if (!hydrationCommitted) return;
       pendingNavigationHydration.current = null;
       navigationWriteSuppressed.current = false;
-      return;
     }
 
     if (tempArtifacts && currentView === View.WORKSPACE) {
-      replaceProductNavigationSearch(buildProductNavigationSearch({
+      writeProductNavigationSearch(buildProductNavigationSearch({
         view: currentView,
         scope: currentScope,
         selectedProcessId: null,
@@ -659,12 +674,15 @@ function App() {
       setActiveGenerationId(resolvedNavigation.activeGenerationId);
     }
 
-    replaceProductNavigationSearch(buildProductNavigationSearch({
+    const transition = pendingNavigationTransition.current ?? navigationController.current.begin('hydrate');
+    const writeMode = navigationController.current.writeFor(transition);
+    pendingNavigationTransition.current = null;
+    if (writeMode) writeProductNavigationSearch(buildProductNavigationSearch({
       view: resolvedNavigation.view,
       scope: resolvedNavigation.scope,
       selectedProcessId: resolvedNavigation.selectedProcessId,
       activeGenerationId: resolvedNavigation.activeGenerationId,
-    }));
+    }), writeMode);
   }, [
     activeGenerationId,
     authoritativeViewCapabilities,
@@ -679,12 +697,38 @@ function App() {
     processes,
     processesLoading,
     projects,
-    replaceProductNavigationSearch,
+    writeProductNavigationSearch,
     selectedProcessId,
     setCurrentView,
     setScopeIfChanged,
     tempArtifacts,
   ]);
+
+  useEffect(() => {
+    if (previousNavigationAuthorityKey.current === navigationAuthorityKey) return;
+    previousNavigationAuthorityKey.current = navigationAuthorityKey;
+    pendingNavigationTransition.current = navigationController.current.rebind();
+  }, [navigationAuthorityKey]);
+
+  useEffect(() => {
+    if (guardLoading || !currentUser || !currentOrganization || processesLoading) return;
+    const handlePopState = () => {
+      const search = window.location.search;
+      pendingNavigationTransition.current = navigationController.current.begin('popstate');
+      const target = isStructurallyValidProductNavigationSearch(search)
+        ? parseProductNavigationSearch(search)
+        : { view: DEFAULT_PERSISTED_VIEW, scope: DEFAULT_PERSISTED_SCOPE };
+      const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, preserveOrganizationWorkspace: true });
+      navigationWriteSuppressed.current = true;
+      pendingNavigationHydration.current = { view: resolved.view, scope: resolved.scope, selectedProcessId: resolved.selectedProcessId, activeGenerationId: resolved.activeGenerationId };
+      setScopeIfChanged(resolved.scope);
+      setCurrentView(resolved.view);
+      setSelectedProcessId(resolved.selectedProcessId);
+      setActiveGenerationId(resolved.activeGenerationId);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [authoritativeViewCapabilities, currentOrganization, currentUser, documentGenerations, enabledModules, guardLoading, processes, processesLoading, projects, setCurrentView, setScopeIfChanged]);
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     const task = tasks.find(item => item.id === taskIdToMove);
     if (!ensureProductAction('project.task.reorder', { projectId: task?.projectId })) return;

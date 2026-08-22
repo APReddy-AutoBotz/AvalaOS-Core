@@ -10,7 +10,7 @@ const hostedOrigin = isExactHostedExecution
 
 export default defineConfig({
   testDir: './tests/browser',
-  testMatch: ['exhaustiveHostedAcceptance.spec.ts', 'controllerNavigationHistory.spec.ts'],
+  testMatch: 'exhaustiveHostedAcceptance.spec.ts',
   forbidOnly: true,
   fullyParallel: false,
   workers: 1,

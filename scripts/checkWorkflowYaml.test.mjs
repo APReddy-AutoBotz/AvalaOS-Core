@@ -96,6 +96,10 @@ assert.match(
   /testMatch: 'exhaustiveHostedAcceptance\.spec\.ts'/u,
   'the exhaustive hosted config must exclusively own its hosted specification',
 );
+const controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');
+assert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\.spec\.ts'/u, 'the controller QA config must exclusively own its history specification');
+const previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');
+assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controller-navigation-history\.config\.ts/u, 'controller history QA must execute only after immutable preview identity binding');
 
 assert.throws(
   () => parseWorkflowYaml(`jobs:\n  evidence:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n        ref: candidate-sha\n          fetch-depth: 0\n`, 'malformed-checkout.yml'),

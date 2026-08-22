@@ -92,6 +92,13 @@ jobs:
           NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1
 
+      - name: Run controller navigation history on Desktop Chrome and Pixel 7
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+        run: npx playwright test --config=playwright.controller-navigation-history.config.ts --workers=1
+
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,3 +109,4 @@ jobs:
           path: |
             test-results/
             artifacts/exhaustive-acceptance/
+            artifacts/controller-navigation-history/
