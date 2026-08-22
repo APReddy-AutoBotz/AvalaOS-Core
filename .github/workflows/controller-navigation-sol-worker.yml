@@ -1,0 +1,180 @@
+name: Controller Navigation Sol Worker
+
+on:
+  push:
+    branches:
+      - controller/navigation-durability-249-sol-worker
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  materialize-sol-result:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout frozen QA base
+        uses: actions/checkout@v4
+        with:
+          ref: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
+          fetch-depth: 0
+
+      - name: Materialize exact Sol after-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
+          RETAINED_PATCH_BLOB_SHA: ec6bf087a97732cb1f23e9f7d2256488e796c76a
+          RESULT_BRANCH: controller/navigation-durability-249-sol-result
+          CONTROLLER_PR: '252'
+        shell: bash
+        run: |
+          set -euo pipefail
+          LAST_STEP='initialization'
+          report_failure() {
+            code=$?
+            set +e
+            {
+              echo '### Sol worker diagnostic'
+              echo
+              echo "- frozen base: ${EXPECTED_BASE_SHA}"
+              echo "- failed step: ${LAST_STEP}"
+              echo "- exit: ${code}"
+              echo "- workflow run: ${GITHUB_RUN_ID:-unknown}"
+              echo
+              echo 'Working paths:'
+              echo '```text'
+              git status --short 2>&1 || true
+              echo '```'
+              echo
+              echo 'Target hashes at failure:'
+              echo '```text'
+              for p in '.github/workflows/preview-exhaustive-browser-qa.yml' 'App.tsx' 'package.json' 'playwright.config.ts' 'playwright.controller-navigation-history.config.ts' 'playwright.exhaustive-acceptance.config.ts' 'scripts/checkWorkflowYaml.test.mjs' 'services/productNavigationController.test.ts' 'services/productNavigationController.ts' 'services/productNavigationState.ts' 'services/viewStatePersistence.test.ts'; do
+                if test -f "$p"; then printf '%s %s\n' "$(git hash-object "$p")" "$p"; else printf 'MISSING %s\n' "$p"; fi
+              done
+              echo '```'
+            } > /tmp/sol-worker-diagnostic.md
+            gh issue comment "$CONTROLLER_PR" --body-file /tmp/sol-worker-diagnostic.md || true
+            exit "$code"
+          }
+          trap report_failure ERR
+
+          LAST_STEP='verify exact frozen QA base'
+          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
+
+          LAST_STEP='recover retained Sol patch blob'
+          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${RETAINED_PATCH_BLOB_SHA}" --jq .content | tr -d '\n' | base64 -d > /tmp/navigation.raw
+
+          LAST_STEP='split eleven-file Sol manifest'
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          raw = Path('/tmp/navigation.raw').read_bytes()
+          if not raw.endswith(b'\n'):
+              raw += b'\n'
+          starts = [m.start() for m in re.finditer(br'(?m)^diff --git ', raw)]
+          out = Path('/tmp/sol-parts')
+          out.mkdir()
+          manifest = []
+          for idx, start in enumerate(starts):
+              end = starts[idx + 1] if idx + 1 < len(starts) else len(raw)
+              section = raw[start:end]
+              first = section.split(b'\n', 1)[0].decode('utf-8')
+              match = re.match(r'diff --git a/(.+) b/(.+)$', first)
+              if not match or match.group(1) != match.group(2):
+                  raise SystemExit(f'bad diff header: {first}')
+              path = match.group(1)
+              manifest.append(path)
+              if path == 'scripts/checkWorkflowYaml.test.mjs':
+                  continue
+              if not section.endswith(b'\n'):
+                  section += b'\n'
+              (out / f'{idx:02d}.patch').write_bytes(section)
+          expected = [
+              '.github/workflows/preview-exhaustive-browser-qa.yml',
+              'App.tsx', 'package.json', 'playwright.config.ts',
+              'playwright.controller-navigation-history.config.ts',
+              'playwright.exhaustive-acceptance.config.ts',
+              'scripts/checkWorkflowYaml.test.mjs',
+              'services/productNavigationController.test.ts',
+              'services/productNavigationController.ts',
+              'services/productNavigationState.ts',
+              'services/viewStatePersistence.test.ts',
+          ]
+          if manifest != expected:
+              raise SystemExit(f'unexpected Sol patch manifest: {manifest}')
+          print('[worker] verified 11-file Sol manifest')
+          PY
+
+          LAST_STEP='apply ten non-regex Sol hunks'
+          for patch in /tmp/sol-parts/*.patch; do
+            echo "[worker] applying $(basename "$patch")"
+            git apply --check "$patch"
+            git apply "$patch"
+          done
+
+          LAST_STEP='reconstruct exact workflow-test Sol hunk'
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/checkWorkflowYaml.test.mjs')
+          source = path.read_text(encoding='utf-8')
+          marker = "  'the exhaustive hosted config must exclusively own its hosted specification',\n);\n"
+          addition = r"""const controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');
+assert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\.spec\.ts'/u, 'the controller QA config must exclusively own its history specification');
+const previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');
+assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controller-navigation-history\.config\.ts/u, 'controller history QA must execute only after immutable preview identity binding');
+"""
+          if source.count(marker) != 1:
+              raise SystemExit(f'expected one workflow-test insertion marker, found {source.count(marker)}')
+          path.write_text(source.replace(marker, marker + addition, 1), encoding='utf-8')
+          PY
+
+          LAST_STEP='verify byte-identical Sol target blobs'
+          verify_blob() {
+            path="$1"; expected="$2"; actual="$(git hash-object "$path")"
+            echo "[worker] ${path}: ${actual} expected-prefix=${expected}"
+            case "$actual" in "$expected"*) ;; *) return 1 ;; esac
+          }
+          verify_blob '.github/workflows/preview-exhaustive-browser-qa.yml' '01920e1'
+          verify_blob 'App.tsx' '6fe17b4'
+          verify_blob 'package.json' 'af280b2'
+          verify_blob 'playwright.config.ts' '866a02a'
+          verify_blob 'playwright.controller-navigation-history.config.ts' '6b4b0af'
+          verify_blob 'playwright.exhaustive-acceptance.config.ts' '36c2b60'
+          verify_blob 'scripts/checkWorkflowYaml.test.mjs' 'd605ba9'
+          verify_blob 'services/productNavigationController.test.ts' '291e783'
+          verify_blob 'services/productNavigationController.ts' '0242432'
+          verify_blob 'services/productNavigationState.ts' '563195a'
+          verify_blob 'services/viewStatePersistence.test.ts' '213931b'
+
+          LAST_STEP='validate exact changed-file set'
+          git add -A
+          git diff --cached --check
+          cat > /tmp/expected-paths <<'EOF'
+          .github/workflows/preview-exhaustive-browser-qa.yml
+          App.tsx
+          package.json
+          playwright.config.ts
+          playwright.controller-navigation-history.config.ts
+          playwright.exhaustive-acceptance.config.ts
+          scripts/checkWorkflowYaml.test.mjs
+          services/productNavigationController.test.ts
+          services/productNavigationController.ts
+          services/productNavigationState.ts
+          services/viewStatePersistence.test.ts
+          EOF
+          sort /tmp/expected-paths -o /tmp/expected-paths
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+
+          LAST_STEP='commit clean Sol result'
+          git config user.name 'AvalaOS Controller'
+          git config user.email 'controller@users.noreply.github.com'
+          git commit -m 'Harden governed navigation history'
+          result_sha="$(git rev-parse HEAD)"
+
+          LAST_STEP='push clean Sol result branch'
+          git push origin "HEAD:refs/heads/${RESULT_BRANCH}"
+          trap - ERR
+          gh issue comment "$CONTROLLER_PR" --body "### Sol result published\n\n- clean result SHA: \`${result_sha}\`\n- parent: \`${EXPECTED_BASE_SHA}\`\n- all 11 target Git blob hashes matched the Sol manifest\n- result branch: \`${RESULT_BRANCH}\`\n\nNo stable, Supabase, DNS or provider mutation was performed."
