@@ -78,9 +78,11 @@ export function usePersistentState<T>(
     const latestState = useRef(state);
 
     const setPersistentState = useCallback((nextState: T | ((previous: T) => T)) => {
+        const previous = latestState.current;
         const resolved = typeof nextState === 'function'
-            ? (nextState as (previous: T) => T)(latestState.current)
+            ? (nextState as (previous: T) => T)(previous)
             : nextState;
+        if (Object.is(resolved, previous)) return;
         latestState.current = resolved;
         if (enabled) StorageService.save(key, resolved);
         setState(resolved);

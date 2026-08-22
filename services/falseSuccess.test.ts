@@ -9,6 +9,11 @@ assert.doesNotMatch(
 );
 assert.match(
   storageSource,
+  /const previous = latestState\.current;[\s\S]*if \(Object\.is\(resolved, previous\)\) return;[\s\S]*if \(enabled\) StorageService\.save\(key, resolved\);/,
+  'no-op state transitions must not rewrite independently changed browser reconstruction evidence',
+);
+assert.match(
+  storageSource,
   /const setPersistentState = useCallback\([\s\S]*if \(enabled\) StorageService\.save\(key, resolved\);[\s\S]*setState\(resolved\);/,
   'persistent storage writes must remain coupled to explicit application state transitions',
 );
