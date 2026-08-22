@@ -46,30 +46,26 @@ jobs:
           end_marker = b'diff --git a/services/productNavigationController.test.ts b/services/productNavigationController.test.ts\n'
           start = raw.index(start_marker)
           end = raw.index(end_marker, start)
-          section = raw[start:end].replace(b'\\\\', b'\\')
-          raw = raw[:start] + section + raw[end:]
-          Path('/tmp/navigation.patch').write_bytes(raw)
-          print(f'[transport] normalized retained patch bytes={len(raw)}')
+          Path('/tmp/navigation.patch').write_bytes(raw[:start] + raw[end:])
+          print('[transport] isolated regex-bearing workflow-test hunk for direct exact-source insertion')
           PY
-          grep '^diff --git ' /tmp/navigation.patch | sed -E 's#^diff --git a/([^ ]+) b/.*#\1#' | sort > /tmp/patch-paths
-          cat > /tmp/expected-patch-paths <<'EOF'
-          .github/workflows/preview-exhaustive-browser-qa.yml
-          App.tsx
-          package.json
-          playwright.config.ts
-          playwright.controller-navigation-history.config.ts
-          playwright.exhaustive-acceptance.config.ts
-          scripts/checkWorkflowYaml.test.mjs
-          services/productNavigationController.test.ts
-          services/productNavigationController.ts
-          services/productNavigationState.ts
-          services/viewStatePersistence.test.ts
-          EOF
-          sort /tmp/expected-patch-paths > /tmp/expected-patch-paths.sorted
-          diff -u /tmp/expected-patch-paths.sorted /tmp/patch-paths
-          echo "[transport] validating retained Sol patch"
+          echo "[transport] validating remaining Sol diff"
           git apply --check /tmp/navigation.patch
           git apply /tmp/navigation.patch
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/checkWorkflowYaml.test.mjs')
+          source = path.read_text(encoding='utf-8')
+          marker = "  'the exhaustive hosted config must exclusively own its hosted specification',\n);\n"
+          addition = r"""const controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');
+assert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\.spec\.ts'/u, 'the controller QA config must exclusively own its history specification');
+const previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');
+assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controller-navigation-history\.config\.ts/u, 'controller history QA must execute only after immutable preview identity binding');
+"""
+          if source.count(marker) != 1:
+              raise SystemExit(f'expected one workflow-test insertion marker, found {source.count(marker)}')
+          path.write_text(source.replace(marker, marker + addition, 1), encoding='utf-8')
+          PY
           echo "[transport] verifying byte-identical Sol after-state"
           verify_blob() { path="$1"; expected="$2"; actual="$(git hash-object "$path")"; echo "${path}: ${actual} expected-prefix=${expected}"; test "${actual#${expected}}" != "$actual"; }
           verify_blob '.github/workflows/preview-exhaustive-browser-qa.yml' '01920e1'
@@ -86,7 +82,21 @@ jobs:
           rm .github/workflows/controller-navigation-patch-transport.yml
           git add -A
           git diff --cached --check
-          { cat /tmp/expected-patch-paths.sorted; echo '.github/workflows/controller-navigation-patch-transport.yml'; } | sort > /tmp/expected-staged-paths
+          cat > /tmp/expected-staged-paths <<'EOF'
+          .github/workflows/controller-navigation-patch-transport.yml
+          .github/workflows/preview-exhaustive-browser-qa.yml
+          App.tsx
+          package.json
+          playwright.config.ts
+          playwright.controller-navigation-history.config.ts
+          playwright.exhaustive-acceptance.config.ts
+          scripts/checkWorkflowYaml.test.mjs
+          services/productNavigationController.test.ts
+          services/productNavigationController.ts
+          services/productNavigationState.ts
+          services/viewStatePersistence.test.ts
+          EOF
+          sort /tmp/expected-staged-paths -o /tmp/expected-staged-paths
           git diff --cached --name-only | sort > /tmp/actual-staged-paths
           diff -u /tmp/expected-staged-paths /tmp/actual-staged-paths
           git config user.name 'AvalaOS Controller'
