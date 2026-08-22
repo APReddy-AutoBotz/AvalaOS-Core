@@ -26,6 +26,7 @@ export const retainedBindingMap = bindings => {
 
 export const oracleBindingMap = bindings => new Map((bindings.oracleTests ?? []).map(item => [item.testId, item]));
 export const hostedBindingMap = bindings => new Map((bindings.hostedTests ?? []).map(item => [item.testId, item]));
+export const serverBindingMap = bindings => new Map((bindings.serverTests ?? []).map(item => [item.testId, item]));
 
 // Catalog membership is a declaration only. Source-backed coverage requires a separate proven provenance contract.
 export const deriveInventory = (catalog, inventoryDocument) => {
@@ -75,12 +76,14 @@ export const classifyExecutionBindings = (catalog, bindings) => {
   const retained = retainedBindingMap(bindings);
   const oracle = oracleBindingMap(bindings);
   const hosted = hostedBindingMap(bindings);
+  const server = serverBindingMap(bindings);
   const result = new Map();
   for (const testCase of catalog.cases ?? []) {
     const kinds = [];
     if (retained.has(testCase.testId)) kinds.push('retained');
     if (oracle.has(testCase.testId)) kinds.push('oracle');
     if (hosted.has(testCase.testId)) kinds.push('hosted');
+    if (server.has(testCase.testId)) kinds.push('server');
     result.set(testCase.testId, kinds);
   }
   return result;

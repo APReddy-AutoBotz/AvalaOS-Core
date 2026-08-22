@@ -203,10 +203,16 @@
         "test:pilot-operations"
       ],
       "testIds": [
-        "ADMIN-004",
-        "SAFETY-005"
+        "ADMIN-004"
       ],
       "requiredGate": true
+    }
+  ],
+  "serverTests": [
+    {
+      "testId": "SAFETY-005",
+      "suiteId": "server-disposable-postgresql",
+      "components": ["server"]
     }
   ],
   "oracleTests": [

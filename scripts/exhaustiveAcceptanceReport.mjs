@@ -9,6 +9,7 @@ import {
   oracleBindingMap,
   retainedBindingMap,
   hostedBindingMap,
+  serverBindingMap,
 } from './exhaustiveAcceptanceModel.mjs';
 import {
   evaluateHostedTest,
@@ -16,6 +17,8 @@ import {
   flattenPlaywright,
   validateOracleManifest,
   validateRetainedManifest,
+  validateServerManifest,
+  evaluateCompositeTest,
 } from './exhaustiveAcceptanceEvidence.mjs';
 
 const root = process.cwd();
@@ -42,6 +45,7 @@ const timestamp = new Date().toISOString();
 const retainedManifest = loadOptional(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
 const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
+const serverManifest = loadOptional(process.env.SERVER_RESULTS_MANIFEST || 'acceptance-results/server-results.json');
 const executions = flattenPlaywright(playwright);
 
 const expectedBinding = {
@@ -50,12 +54,19 @@ const expectedBinding = {
   workflowAttempt,
   environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
   workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml',
+  branchIdsByTestId: new Map((catalog.cases ?? []).map(item => [item.testId, item.branchIds ?? []])),
 };
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
+const serverMap = serverBindingMap(bindings);
+const serverExpected = { ...expectedBinding, environment: 'disposable-ci' };
+const serverSuiteMap = new Map([...serverMap].map(([testId, binding]) => [testId, [binding.suiteId]]));
+const serverErrors = validateServerManifest(serverManifest, serverExpected, serverSuiteMap);
 const oracleErrors = validateOracleManifest(oracleManifest, expectedBinding);
 const suiteIndex = new Map((retainedManifest?.suites ?? []).map(item => [item.suiteId, item]));
 const retainedResultIndex = new Map((retainedManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
+const serverSuiteIndex = new Map((serverManifest?.suites ?? []).map(item => [item.suiteId, item]));
+const serverResultIndex = new Map((serverManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
 const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
 const oracleMap = oracleBindingMap(bindings);
 const hostedMap = hostedBindingMap(bindings);
@@ -66,7 +77,25 @@ const results = (catalog.cases ?? []).map(testCase => {
   let evidenceReferences = [];
   let executionKind = 'unbound';
 
-  if (retainedMap.has(testCase.testId)) {
+  if (serverMap.has(testCase.testId)) {
+    const binding = serverMap.get(testCase.testId);
+    executionKind = binding.components?.length > 1 ? 'composite' : 'server';
+    const serverEvaluation = evaluateRetainedTest({
+      testId: testCase.testId,
+      requiredSuiteIds: [binding.suiteId],
+      suiteIndex: serverSuiteIndex,
+      resultIndex: serverResultIndex,
+      manifestErrors: serverErrors,
+    });
+    if (binding.components?.includes('hosted')) {
+      const hostedBinding = hostedMap.get(testCase.testId);
+      const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
+        ? evaluateHostedTest({ title: canonicalHostedTitle(testCase), executions, requiredProjects: hostedBinding.projects })
+        : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
+      evaluation = evaluateCompositeTest([{ name: 'server', ...serverEvaluation }, { name: 'hosted', ...hostedEvaluation }]);
+    } else evaluation = serverEvaluation;
+    actualResult = { server: serverResultIndex.get(`${binding.suiteId}:${testCase.testId}`)?.status ?? 'MISSING' };
+  } else if (retainedMap.has(testCase.testId)) {
     executionKind = 'retained';
     const requiredSuiteIds = retainedMap.get(testCase.testId);
     evaluation = evaluateRetainedTest({

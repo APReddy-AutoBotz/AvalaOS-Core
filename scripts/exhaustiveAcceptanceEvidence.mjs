@@ -49,12 +49,16 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (item?.environment !== expected.environment) errors.push(`result-environment:${key}`);
     if (item?.workflowPath !== expected.workflowPath) errors.push(`result-workflow-path:${key}`);
     if (!item?.jobId || item?.jobId !== item?.suiteId) errors.push(`result-job:${key}`);
+    const declaredSuite = (manifest?.suites ?? []).find(value => value.suiteId === item?.suiteId);
+    if (!item?.command || item.command !== declaredSuite?.command) errors.push(`result-command:${key}`);
     for (const field of ['assertionIds', 'scenarioIds', 'branchIds', 'sourceReferences']) {
       const values = item?.[field];
       if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length) errors.push(`result-${field}:${key}`);
     }
     if ((item?.sourceReferences ?? []).some(ref => typeof ref !== 'string' || ref.startsWith('/') || ref.includes('..') || /https?:|secret|token|password/iu.test(ref))) errors.push(`result-unsafe-source:${key}`);
     if (!(retainedBindings.get(item?.testId) ?? []).includes(item?.suiteId)) errors.push(`result-binding-mismatch:${key}`);
+    const expectedBranches = expected.branchIdsByTestId?.get(item?.testId);
+    if (expectedBranches && JSON.stringify([...item.branchIds].sort()) !== JSON.stringify([...expectedBranches].sort())) errors.push(`result-branch-mismatch:${key}`);
   }
   return errors;
 };

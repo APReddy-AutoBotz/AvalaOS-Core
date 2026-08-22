@@ -92,6 +92,7 @@ for (const testCase of cases) {
 const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'retained').length;
 const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'oracle').length;
 const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'hosted').length;
+const serverTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'server').length;
 const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
 const blockedHosted = hostedTestIds - executableHosted;
 const declared = inventory.filter(item => item.coverageStatus === 'DECLARED');
@@ -108,6 +109,7 @@ console.log(JSON.stringify({
   retainedTestIds,
   oracleTestIds,
   hostedTestIds,
+  serverTestIds,
   executableHosted,
   blockedHosted,
 }, null, 2));

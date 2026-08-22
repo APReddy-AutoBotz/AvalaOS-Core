@@ -6,9 +6,10 @@ import {
   validateOracleManifest,
   validateRetainedManifest,
   validateRetainedProducerResults,
+  validateServerManifest,
 } from './exhaustiveAcceptanceEvidence.mjs';
 
-const expected = { releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1', environment: 'stable-release', workflowPath: '.github/workflows/exhaustive-acceptance.yml' };
+const expected = { releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1', environment: 'stable-release', workflowPath: '.github/workflows/exhaustive-acceptance.yml', branchIdsByTestId: new Map([['TEST-001', ['BRANCH-1']]]) };
 const retainedBindings = new Map([
   ['TEST-001', ['suite-a']],
   ['TEST-002', ['suite-a']],
@@ -23,8 +24,8 @@ const retained = {
   environment: expected.environment,
   workflowPath: expected.workflowPath,
   suites: [
-    { suiteId: 'suite-a', status: 'PASS' },
-    { suiteId: 'suite-b', status: 'PASS' },
+    { suiteId: 'suite-a', status: 'PASS', command: 'node suite-a' },
+    { suiteId: 'suite-b', status: 'PASS', command: 'node suite-b' },
   ],
   results: [{
     suiteId: 'suite-a',
@@ -36,6 +37,7 @@ const retained = {
     environment: expected.environment,
     workflowPath: expected.workflowPath,
     jobId: 'suite-a',
+    command: 'node suite-a',
     assertionIds: ['assertion-1'],
     scenarioIds: ['scenario-1'],
     branchIds: ['BRANCH-1'],
@@ -52,8 +54,22 @@ assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.result
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], environment: 'preview' }] }, expected, retainedBindings).some(item => item.startsWith('result-environment:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], sourceReferences: ['https://unsafe.invalid/raw'] }] }, expected, retainedBindings).some(item => item.startsWith('result-unsafe-source:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], assertionIds: [] }] }, expected, retainedBindings).some(item => item.startsWith('result-assertionIds:')));
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], branchIds: ['WRONG'] }] }, expected, retainedBindings).some(item => item.startsWith('result-branch-mismatch:')));
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], command: 'node wrong' }] }, expected, retainedBindings).some(item => item.startsWith('result-command:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], testId: 'UNBOUND-001' }] }, expected, retainedBindings).some(item => item.startsWith('result-binding-mismatch:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], suiteId: 'missing-suite' }] }, expected, retainedBindings).some(item => item.startsWith('result-suite-missing:')));
+const serverExpected = { ...expected, environment: 'disposable-ci' };
+const serverManifest = {
+  ...retained,
+  manifestKind: 'server',
+  environment: 'disposable-ci',
+  suites: [{ suiteId: 'suite-a', status: 'PASS', command: 'node suite-a' }],
+  results: [{ ...retained.results[0], environment: 'disposable-ci' }],
+};
+assert.deepEqual(validateServerManifest(serverManifest, serverExpected, retainedBindings), []);
+assert.ok(validateServerManifest({ ...serverManifest, manifestKind: 'retained' }, serverExpected, retainedBindings).includes('server-manifest-kind'));
+assert.ok(validateServerManifest({ ...serverManifest, workflowRunId: 'other-run' }, serverExpected, retainedBindings).includes('workflow-run'));
+assert.ok(validateServerManifest({ ...serverManifest, results: [...serverManifest.results, serverManifest.results[0]] }, serverExpected, retainedBindings).some(item => item.startsWith('duplicate-or-missing-result:')));
 
 const suiteIndex = new Map(retained.suites.map(item => [item.suiteId, item]));
 const resultIndex = new Map(retained.results.map(item => [`${item.suiteId}:${item.testId}`, item]));
