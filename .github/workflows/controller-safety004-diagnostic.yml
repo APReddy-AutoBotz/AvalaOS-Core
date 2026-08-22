@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   safety004-diagnostic:
@@ -63,7 +65,32 @@ jobs:
           PY
       - run: npx playwright install --with-deps chromium
       - name: Run only SAFETY-004 against exact immutable preview
-        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1 --grep 'SAFETY-004'
+        id: safety
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1 --grep 'SAFETY-004' 2>&1 | tee /tmp/safety004.log
+      - name: Post bounded diagnostic to PR 252
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SAFETY_OUTCOME: ${{ steps.safety.outcome }}
+        shell: bash
+        run: |
+          {
+            echo 'CONTROLLER SAFETY-004 READ-ONLY DIAGNOSTIC — immutable exact preview only.'
+            echo
+            echo '- source under test: `e732920b8b8e08c6307c79b25436881dd5623df3`'
+            echo '- immutable deploy: `6a899555d54e2200073eb0a4`'
+            echo "- focused outcome: \`${SAFETY_OUTCOME}\`"
+            echo '- diagnostic branch does not modify PR #252 product source.'
+            echo
+            echo '```text'
+            grep -E '^\[SAFETY-004\]' /tmp/safety004.log || true
+            echo '```'
+          } > /tmp/comment.md
+          gh issue comment 252 --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
       - name: Upload diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
