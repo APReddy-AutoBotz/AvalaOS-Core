@@ -1,0 +1,149 @@
+name: Controller Apply Worker B 255
+
+on:
+  push:
+    branches:
+      - controller/acceptance-evidence-closure-20260822
+    paths:
+      - .github/workflows/controller-apply-worker-b-255.yml
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  apply-worker-b:
+    if: github.event.head_commit.message == 'Controller: stage Worker B transport executor'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact controller branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify controller staging ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "90760085554ebe73a0a1a958da9cbd59ff044db7"
+          test "$(git branch --show-current)" = "controller/acceptance-evidence-closure-20260822"
+
+      - name: Recover and verify durable Worker B patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/5381353673" --jq .body > /tmp/worker-b-comment.md
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, hashlib, re
+
+          body = Path('/tmp/worker-b-comment.md').read_text()
+          match = re.search(
+              r'`BEGIN_WORKER_B_PATCH_GZIP_BASE64`\s*```text\s*(.*?)\s*```\s*`END_WORKER_B_PATCH_GZIP_BASE64`',
+              body,
+              re.S,
+          )
+          if not match:
+              raise SystemExit('Worker B payload markers missing or malformed')
+          payload = re.sub(r'\s+', '', match.group(1))
+          compressed = base64.b64decode(payload, validate=True)
+          if len(compressed) != 11318:
+              raise SystemExit(f'Unexpected gzip byte count: {len(compressed)}')
+          gzip_sha = hashlib.sha256(compressed).hexdigest()
+          if gzip_sha != '61daebcde2989920587442aeccc926469d53e17e55218f73cf5cc6dab1713ce1':
+              raise SystemExit(f'Gzip SHA mismatch: {gzip_sha}')
+          patch = gzip.decompress(compressed)
+          if len(patch) != 50897:
+              raise SystemExit(f'Unexpected patch byte count: {len(patch)}')
+          patch_sha = hashlib.sha256(patch).hexdigest()
+          if patch_sha != '93af330ebe4118da66995ba99dcbfff0d81301206f6f824c74d82b6400d407bc':
+              raise SystemExit(f'Patch SHA mismatch: {patch_sha}')
+          Path('/tmp/worker-b.patch').write_bytes(patch)
+
+          text = patch.decode('utf-8')
+          observed = set()
+          for left, right in re.findall(r'^diff --git a/(.*?) b/(.*?)$', text, re.M):
+              if left != right:
+                  raise SystemExit(f'Rename/mismatched path not authorized: {left} -> {right}')
+              observed.add(right)
+          expected = {
+              '.github/workflows/hosted-pilot-activation-evidence-producer.yml',
+              'package.json',
+              'scripts/exhaustiveAcceptanceValidate.mjs',
+              'scripts/hostedEvidenceFamilyAttestation.mjs',
+              'scripts/hostedEvidenceFamilyAttestation.test.mjs',
+              'scripts/produceHostedEvidenceFamilyAttestation.mjs',
+              'scripts/testPilotOperationsPostgres.mjs',
+              'tests/acceptance/catalog/test-catalog.json',
+              'tests/acceptance/execution-bindings.json',
+              'tests/acceptance/inventory.json',
+              'tests/acceptance/validators/inventory-provenance.test.mjs',
+          }
+          if observed != expected:
+              raise SystemExit(f'Patch file set mismatch: observed={sorted(observed)}')
+          print(f'Verified Worker B durable patch: {patch_sha}')
+          PY
+
+      - name: Apply patch and verify exact after-state blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/worker-b.patch
+          git apply /tmp/worker-b.patch
+          git diff --check
+          python - <<'PY'
+          import subprocess
+          expected = {
+              '.github/workflows/hosted-pilot-activation-evidence-producer.yml': 'd23e5d11957c5f88f4d9080a365df36c3099bc5b',
+              'package.json': '118868b39bd2865c740ad053320e47bd4f8c9945',
+              'scripts/exhaustiveAcceptanceValidate.mjs': 'fa5cc1b7c803d30fc876e534d3b10e15a1aa7684',
+              'scripts/hostedEvidenceFamilyAttestation.mjs': '1550ec14e79cd64ecc556e98f2a34b68f52dc301',
+              'scripts/hostedEvidenceFamilyAttestation.test.mjs': '81bb7ed82c226f7c638fce55471018c251b7552a',
+              'scripts/produceHostedEvidenceFamilyAttestation.mjs': 'ecd348ab4ce32eb4e95d22bab5177050053ccc5f',
+              'scripts/testPilotOperationsPostgres.mjs': '2830815b2e31cf10bf2caa580189377d736f1ef1',
+              'tests/acceptance/catalog/test-catalog.json': '5a81f907adeb2b6be5703c14e1efa8f1e4cf2527',
+              'tests/acceptance/execution-bindings.json': '56e1953e07f6cd55b4a890082600d99776050e63',
+              'tests/acceptance/inventory.json': 'e2fdb5dfb19d28358b20bd0fc54156c35f696c93',
+              'tests/acceptance/validators/inventory-provenance.test.mjs': 'f7683854d96bb256f1de2b755112ba94ea733992',
+          }
+          for path, wanted in expected.items():
+              got = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+              if got != wanted:
+                  raise SystemExit(f'Blob mismatch for {path}: {got} != {wanted}')
+          print('All Worker B after-state blobs verified')
+          PY
+
+      - name: Commit verified integration and remove transport helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/controller-apply-worker-b-255.yml
+          git add -A
+          git diff --cached --check
+          python - <<'PY'
+          import subprocess
+          expected = {
+              '.github/workflows/hosted-pilot-activation-evidence-producer.yml',
+              'package.json',
+              'scripts/exhaustiveAcceptanceValidate.mjs',
+              'scripts/hostedEvidenceFamilyAttestation.mjs',
+              'scripts/hostedEvidenceFamilyAttestation.test.mjs',
+              'scripts/produceHostedEvidenceFamilyAttestation.mjs',
+              'scripts/testPilotOperationsPostgres.mjs',
+              'tests/acceptance/catalog/test-catalog.json',
+              'tests/acceptance/execution-bindings.json',
+              'tests/acceptance/inventory.json',
+              'tests/acceptance/validators/inventory-provenance.test.mjs',
+          }
+          out = subprocess.check_output(['git', 'diff', '--cached', '--name-only', '90760085554ebe73a0a1a958da9cbd59ff044db7'], text=True)
+          observed = {line for line in out.splitlines() if line}
+          if observed != expected:
+              raise SystemExit(f'Final staged file set mismatch: {sorted(observed)}')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Controller: integrate verified Worker B evidence package'
+          git push origin HEAD:controller/acceptance-evidence-closure-20260822
