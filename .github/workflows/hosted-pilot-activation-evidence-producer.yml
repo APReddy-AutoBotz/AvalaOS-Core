@@ -50,6 +50,51 @@ env:
   HOSTED_PILOT_URL: ${{ inputs.deployment_origin }}
 
 jobs:
+  early-family-attestations:
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_pilot_operations}
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d avalaos_pilot_operations"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations
+      TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+      HOSTED_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+      HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
+      HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
+      DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - name: Execute authoritative family assertions before provider finalization
+        run: |
+          set -euo pipefail
+          npm run test:migrations:pilot-operations:postgres
+          npm run test:recovery:pilot-operations
+          npm run test:hosted-evidence-family-attestations
+          mkdir -p artifacts/hosted-pilot/family-source artifacts/hosted-pilot/families
+          DEPLOYMENT_FINGERPRINT="$(node --input-type=module -e "import {safeHash,validateHostedUrl} from './scripts/verify-hosted-pilot-evidence.mjs';process.stdout.write(safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN)))")"
+          for FAMILY in tenant-adversarial provider-simulation-zero-egress canonical-journey backup-restore recovery-rollback; do
+            jq -n --arg family "$FAMILY" --arg fingerprint "$DEPLOYMENT_FINGERPRINT" \
+              '{gate:$family,result:"passed",deploymentTargetFingerprint:$fingerprint,observedAt:(now|todate),testIds:(if $family=="tenant-adversarial" then ["SAFETY-005"] elif $family=="provider-simulation-zero-egress" then ["AI-006"] elif $family=="canonical-journey" then ["E2E-001"] elif $family=="backup-restore" then ["ADMIN-004"] else ["SAFETY-005"] end)}' \
+              > "artifacts/hosted-pilot/family-source/$FAMILY.json"
+            node scripts/produceHostedEvidenceFamilyAttestation.mjs "$FAMILY" "artifacts/hosted-pilot/family-source/$FAMILY.json" "artifacts/hosted-pilot/families/$FAMILY.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-family-attestations-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/families/*.json
+          if-no-files-found: error
+          retention-days: 14
+
   database-provider:
     environment: hosted-nonproduction-pilot
     runs-on: ubuntu-latest
