@@ -26,9 +26,11 @@ jobs:
 
       - name: Recover and apply retained Sol patch
         env:
+          GH_TOKEN: ${{ github.token }}
           EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
-          PATCH_COMMENT_ID: '5379494218'
+          RETAINED_PATCH_BLOB_SHA: ec6bf087a97732cb1f23e9f7d2256488e796c76a
           EXPECTED_PATCH_BYTES: '27572'
+          EXPECTED_PATCH_LINES: '420'
           CONTROLLER_BRANCH: controller/navigation-durability-release-hardening-249
         shell: bash
         run: |
@@ -36,42 +38,13 @@ jobs:
           echo "[transport] controller head=$(git rev-parse HEAD)"
           git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
           git rev-list HEAD | grep -Fx "$EXPECTED_BASE_SHA" >/dev/null
-          echo "[transport] fetching retained GitHub comment ${PATCH_COMMENT_ID}"
-          curl --fail --silent --show-error --location \
-            -H 'Accept: application/vnd.github.full+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" \
-            -o /tmp/controller-comment.json
-          python - <<'PY'
-          import html, json, re
-          from pathlib import Path
-          payload = json.loads(Path('/tmp/controller-comment.json').read_text(encoding='utf-8'))
-          raw = (payload.get('body') or '').replace('\r\n', '\n')
-          patch = None
-          if 'diff --git a/' in raw:
-              start = raw.index('diff --git a/')
-              fence_end = raw.find('\n```', start)
-              patch = raw[start:] if fence_end < 0 else raw[start:fence_end]
-              source = 'raw-body'
-          else:
-              rendered = payload.get('body_html') or ''
-              candidates = re.findall(r'data-snippet-clipboard-copy-content="([\s\S]*?)"', rendered)
-              for candidate in candidates:
-                  decoded = html.unescape(candidate).replace('\r\n', '\n')
-                  if decoded.startswith('diff --git a/'):
-                      patch = decoded
-                      source = 'rendered-clipboard-payload'
-                      break
-          if patch is None:
-              raise SystemExit(f'no retained diff payload found; keys={sorted(payload)} raw_len={len(raw)} html_len={len(payload.get("body_html") or "")}')
-          if not patch.endswith('\n'):
-              patch += '\n'
-          Path('/tmp/navigation.patch').write_text(patch, encoding='utf-8')
-          print(f'[transport] source={source} chars={len(patch)} utf8_bytes={len(patch.encode("utf-8"))}')
-          PY
+          echo "[transport] recovering retained controller blob ${RETAINED_PATCH_BLOB_SHA}"
+          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${RETAINED_PATCH_BLOB_SHA}" --jq .content | tr -d '\n' | base64 -d > /tmp/navigation.patch
           actual_bytes="$(wc -c < /tmp/navigation.patch | tr -d ' ')"
-          echo "[transport] retained patch bytes=${actual_bytes} expected=${EXPECTED_PATCH_BYTES}"
+          actual_lines="$(wc -l < /tmp/navigation.patch | tr -d ' ')"
+          echo "[transport] bytes=${actual_bytes}/${EXPECTED_PATCH_BYTES} lines=${actual_lines}/${EXPECTED_PATCH_LINES}"
           test "$actual_bytes" = "$EXPECTED_PATCH_BYTES"
+          test "$actual_lines" = "$EXPECTED_PATCH_LINES"
           grep '^diff --git ' /tmp/navigation.patch | sed -E 's#^diff --git a/([^ ]+) b/.*#\1#' | sort > /tmp/patch-paths
           cat > /tmp/expected-patch-paths <<'EOF'
           .github/workflows/preview-exhaustive-browser-qa.yml
@@ -88,7 +61,7 @@ jobs:
           EOF
           sort /tmp/expected-patch-paths > /tmp/expected-patch-paths.sorted
           diff -u /tmp/expected-patch-paths.sorted /tmp/patch-paths
-          echo "[transport] validating exact retained diff against current tree"
+          echo "[transport] validating exact Sol patch against published QA base"
           git apply --check /tmp/navigation.patch
           git apply /tmp/navigation.patch
           rm .github/workflows/controller-navigation-patch-transport.yml
@@ -97,7 +70,7 @@ jobs:
           { cat /tmp/expected-patch-paths.sorted; echo '.github/workflows/controller-navigation-patch-transport.yml'; } | sort > /tmp/expected-staged-paths
           git diff --cached --name-only | sort > /tmp/actual-staged-paths
           diff -u /tmp/expected-staged-paths /tmp/actual-staged-paths
-          echo "[transport] committing validated staged tree"
+          echo "[transport] committing validated product/QA tree"
           git config user.name 'AvalaOS Controller'
           git config user.email 'controller@users.noreply.github.com'
           git commit -m 'Harden governed navigation history'
