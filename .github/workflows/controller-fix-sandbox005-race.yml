@@ -1,0 +1,63 @@
+name: Controller Fix SANDBOX 005 Reload Race
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/controller-fix-sandbox005-race.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test:
+    if: >-
+      github.event.pull_request.number == 255 &&
+      github.event.pull_request.head.ref == 'controller/acceptance-evidence-closure-20260822'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+      - name: Verify exact controller staging ancestry
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD^)" = "a15b75ca883b68de188fce844dfde1f61c2e71e6"
+      - name: Remove the storage-to-reload race without weakening the assertion
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/browser/exhaustiveHostedAcceptance.spec.ts')
+          text=p.read_text()
+          old="""        await page.evaluate(scope => {\n          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');\n          else localStorage.setItem('avalaos-core-v1-scope', scope);\n        }, invalidScope);\n        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });\n        assertHostedResponseIdentity(invalidResponse);\n"""
+          new="""        const invalidNavigationResponse = page.waitForResponse(response => (\n          response.request().isNavigationRequest()\n          && response.request().frame() === page.mainFrame()\n        ));\n        await page.evaluate(scope => {\n          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');\n          else localStorage.setItem('avalaos-core-v1-scope', scope);\n          window.location.reload();\n        }, invalidScope);\n        const invalidResponse = await invalidNavigationResponse;\n        await page.waitForLoadState('domcontentloaded');\n        assertHostedResponseIdentity(invalidResponse);\n"""
+          if text.count(old)!=1:
+              raise SystemExit(f'expected exact SANDBOX-005 reload block once, found {text.count(old)}')
+          p.write_text(text.replace(old,new))
+          PY
+          git diff --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate browser contract and TypeScript
+        run: |
+          node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          npm run typecheck
+          git diff --check
+      - name: Publish test-only correction
+        run: |
+          set -euo pipefail
+          git add tests/browser/exhaustiveHostedAcceptance.spec.ts
+          test "$(git diff --cached --name-only)" = "tests/browser/exhaustiveHostedAcceptance.spec.ts"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Make SANDBOX-005 stale-scope reload deterministic'
+          git push origin HEAD:controller/acceptance-evidence-closure-20260822
