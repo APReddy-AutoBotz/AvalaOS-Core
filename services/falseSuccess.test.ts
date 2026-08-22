@@ -41,6 +41,11 @@ assert.match(
 );
 assert.match(
   appSource,
+  /if \(!canApplyDefaultNavigation\(\{[\s\S]*explicitNavigationIntent,[\s\S]*navigationHydrated: navigationHydrated\.current,[\s\S]*navigationSettlementPending: navigationWriteSuppressed\.current,[\s\S]*\}\)\) return;/,
+  'authority defaults must not race a classified but not-yet-committed fail-closed navigation settlement',
+);
+assert.match(
+  appSource,
   /if \(explicitNavigationIntent && !navigationHydrated\.current\) return;\s*if \(navigationWriteSuppressed\.current\) return;[\s\S]*resolvePersistedViewScopeState/,
   'persisted view/scope normalization must not race explicit URL hydration or its commit',
 );

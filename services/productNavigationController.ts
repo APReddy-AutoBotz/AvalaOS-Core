@@ -6,6 +6,23 @@ export interface ProductNavigationTransition {
   origin: ProductNavigationOrigin;
 }
 
+export interface DefaultNavigationGate {
+  explicitNavigationIntent: boolean;
+  navigationHydrated: boolean;
+  navigationSettlementPending: boolean;
+}
+
+/**
+ * Authority defaults may initialize an ordinary session, but they must not
+ * participate in durable URL reconstruction. The layout-phase rejection of a
+ * mismatched URL/persistence tuple is not complete until React commits the safe
+ * state, even though the tuple has already been classified as invalid.
+ */
+export function canApplyDefaultNavigation(input: DefaultNavigationGate) {
+  return !input.explicitNavigationIntent
+    || (input.navigationHydrated && !input.navigationSettlementPending);
+}
+
 /**
  * Finite coordinator for URL writes. An epoch makes completion of stale async
  * navigation work harmless, while origin classification prevents hydration and

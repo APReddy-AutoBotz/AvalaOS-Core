@@ -1,5 +1,26 @@
 import assert from 'node:assert/strict';
-import { createProductNavigationController } from './productNavigationController';
+import { canApplyDefaultNavigation, createProductNavigationController } from './productNavigationController';
+
+assert.equal(canApplyDefaultNavigation({
+  explicitNavigationIntent: false,
+  navigationHydrated: false,
+  navigationSettlementPending: false,
+}), true, 'an ordinary session may apply its authority default');
+assert.equal(canApplyDefaultNavigation({
+  explicitNavigationIntent: true,
+  navigationHydrated: false,
+  navigationSettlementPending: false,
+}), false, 'an explicit durable URL owns initialization until it is classified');
+assert.equal(canApplyDefaultNavigation({
+  explicitNavigationIntent: true,
+  navigationHydrated: true,
+  navigationSettlementPending: true,
+}), false, 'classification must not let an authority default race the pending safe commit');
+assert.equal(canApplyDefaultNavigation({
+  explicitNavigationIntent: true,
+  navigationHydrated: true,
+  navigationSettlementPending: false,
+}), true, 'authority defaults may run again only after durable settlement completes');
 
 const controller = createProductNavigationController();
 const hydration = controller.begin('hydrate');

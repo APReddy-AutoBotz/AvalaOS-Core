@@ -37,7 +37,7 @@ import {
   resolveProductNavigationState,
   isStructurallyValidProductNavigationSearch,
 } from './services/productNavigationState';
-import { createProductNavigationController, type ProductNavigationTransition, type ProductNavigationWrite } from './services/productNavigationController';
+import { canApplyDefaultNavigation, createProductNavigationController, type ProductNavigationTransition, type ProductNavigationWrite } from './services/productNavigationController';
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
@@ -302,7 +302,11 @@ function App() {
   useEffect(() => {
     if (guardLoading) return;
     if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
-    if (explicitNavigationIntent && !navigationHydrated.current) return;
+    if (!canApplyDefaultNavigation({
+      explicitNavigationIntent,
+      navigationHydrated: navigationHydrated.current,
+      navigationSettlementPending: navigationWriteSuppressed.current,
+    })) return;
 
     const defaultScope = currentUser.defaultScope ?? currentScope;
     setScopeIfChanged(defaultScope);
