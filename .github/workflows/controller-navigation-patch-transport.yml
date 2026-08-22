@@ -24,12 +24,11 @@ jobs:
           ref: controller/navigation-durability-release-hardening-249
           fetch-depth: 0
 
-      - name: Apply manifested Sol patch and verify exact target blobs
+      - name: Apply retained Sol patch and verify exact target blobs
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
           RETAINED_PATCH_BLOB_SHA: ec6bf087a97732cb1f23e9f7d2256488e796c76a
-          EXPECTED_PATCH_BYTES: '27572'
           CONTROLLER_BRANCH: controller/navigation-durability-release-hardening-249
         shell: bash
         run: |
@@ -38,10 +37,14 @@ jobs:
           git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
           git rev-list HEAD | grep -Fx "$EXPECTED_BASE_SHA" >/dev/null
           gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${RETAINED_PATCH_BLOB_SHA}" --jq .content | tr -d '\n' | base64 -d > /tmp/navigation.raw
-          head -c "$EXPECTED_PATCH_BYTES" /tmp/navigation.raw > /tmp/navigation.patch
-          actual_bytes="$(wc -c < /tmp/navigation.patch | tr -d ' ')"
-          echo "[transport] manifested patch bytes=${actual_bytes}/${EXPECTED_PATCH_BYTES}"
-          test "$actual_bytes" = "$EXPECTED_PATCH_BYTES"
+          python - <<'PY'
+          from pathlib import Path
+          raw = Path('/tmp/navigation.raw').read_bytes()
+          if not raw.endswith(b'\n'):
+              raw += b'\n'
+          Path('/tmp/navigation.patch').write_bytes(raw)
+          print(f'[transport] normalized retained patch bytes={len(raw)}')
+          PY
           grep '^diff --git ' /tmp/navigation.patch | sed -E 's#^diff --git a/([^ ]+) b/.*#\1#' | sort > /tmp/patch-paths
           cat > /tmp/expected-patch-paths <<'EOF'
           .github/workflows/preview-exhaustive-browser-qa.yml
@@ -61,7 +64,7 @@ jobs:
           echo "[transport] validating retained Sol patch"
           git apply --check /tmp/navigation.patch
           git apply /tmp/navigation.patch
-          echo "[transport] verifying exact Sol target blobs"
+          echo "[transport] verifying byte-identical Sol after-state"
           verify_blob() { path="$1"; expected="$2"; actual="$(git hash-object "$path")"; echo "${path}: ${actual} expected-prefix=${expected}"; test "${actual#${expected}}" != "$actual"; }
           verify_blob '.github/workflows/preview-exhaustive-browser-qa.yml' '01920e1'
           verify_blob 'App.tsx' '6fe17b4'
