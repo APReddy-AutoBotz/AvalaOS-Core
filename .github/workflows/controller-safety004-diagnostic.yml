@@ -1,0 +1,76 @@
+name: Controller SAFETY-004 Diagnostic
+
+on:
+  push:
+    branches:
+      - controller/diagnose-safety004-e732
+
+permissions:
+  contents: read
+
+jobs:
+  safety004-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOSTED_PILOT_URL: https://6a899555d54e2200073eb0a4--avalaos-pilot.netlify.app
+      NETLIFY_DEPLOY_ID: 6a899555d54e2200073eb0a4
+      EXPECTED_RELEASE_SHA: e732920b8b8e08c6307c79b25436881dd5623df3
+      ACCEPTANCE_RELEASE_SHA: e732920b8b8e08c6307c79b25436881dd5623df3
+    steps:
+      - name: Checkout immutable source under test
+        uses: actions/checkout@v4
+        with:
+          ref: e732920b8b8e08c6307c79b25436881dd5623df3
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Instrument SAFETY-004 invalid-scope loop in runner only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/browser/exhaustiveHostedAcceptance.spec.ts')
+          s = p.read_text()
+          old = """      for (const invalidScope of invalidPersistedScopes) {
+        await page.evaluate(scope => {
+          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
+          else localStorage.setItem('avalaos-core-v1-scope', scope);
+        }, invalidScope);
+        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(invalidResponse);
+        await expect(page).not.toHaveURL(/projectId=/u);
+"""
+          new = """      for (const invalidScope of invalidPersistedScopes) {
+        console.log(`[SAFETY-004][${testInfo.project.name}] CASE=${invalidScope === null ? 'missing' : invalidScope.startsWith('{malformed') ? 'malformed' : 'stale-project'}`);
+        await page.evaluate(scope => {
+          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
+          else localStorage.setItem('avalaos-core-v1-scope', scope);
+        }, invalidScope);
+        console.log(`[SAFETY-004][${testInfo.project.name}] BEFORE_RELOAD=${JSON.stringify(await page.evaluate(() => ({ url: location.href, scope: localStorage.getItem('avalaos-core-v1-scope'), view: localStorage.getItem('avalaos-core-v1-view') })))}`);
+        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        assertHostedResponseIdentity(invalidResponse);
+        await page.waitForTimeout(1000);
+        console.log(`[SAFETY-004][${testInfo.project.name}] AFTER_RELOAD=${JSON.stringify(await page.evaluate(() => ({ url: location.href, scope: localStorage.getItem('avalaos-core-v1-scope'), view: localStorage.getItem('avalaos-core-v1-view') })))}`);
+        await expect(page).not.toHaveURL(/projectId=/u);
+"""
+          if old not in s:
+              raise SystemExit('SAFETY-004 loop anchor not found')
+          p.write_text(s.replace(old, new))
+          PY
+      - run: npx playwright install --with-deps chromium
+      - name: Run only SAFETY-004 against exact immutable preview
+        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1 --grep 'SAFETY-004'
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety004-diagnostic-e732
+          if-no-files-found: ignore
+          retention-days: 2
+          path: |
+            artifacts/exhaustive-acceptance/
+            test-results/
