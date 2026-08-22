@@ -36,23 +36,38 @@ jobs:
           echo "[transport] controller head=$(git rev-parse HEAD)"
           git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
           git rev-list HEAD | grep -Fx "$EXPECTED_BASE_SHA" >/dev/null
-          echo "[transport] fetching retained public GitHub comment ${PATCH_COMMENT_ID}"
+          echo "[transport] fetching retained GitHub comment ${PATCH_COMMENT_ID}"
           curl --fail --silent --show-error --location \
-            -H 'Accept: application/vnd.github+json' \
+            -H 'Accept: application/vnd.github.full+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" \
             -o /tmp/controller-comment.json
           python - <<'PY'
-          import json
+          import html, json, re
           from pathlib import Path
           payload = json.loads(Path('/tmp/controller-comment.json').read_text(encoding='utf-8'))
-          text = payload['body']
-          marker = '```diff\n'
-          start = text.index(marker) + len(marker)
-          end = text.index('\n```', start)
-          patch = text[start:end] + '\n'
+          raw = (payload.get('body') or '').replace('\r\n', '\n')
+          patch = None
+          if 'diff --git a/' in raw:
+              start = raw.index('diff --git a/')
+              fence_end = raw.find('\n```', start)
+              patch = raw[start:] if fence_end < 0 else raw[start:fence_end]
+              source = 'raw-body'
+          else:
+              rendered = payload.get('body_html') or ''
+              candidates = re.findall(r'data-snippet-clipboard-copy-content="([\s\S]*?)"', rendered)
+              for candidate in candidates:
+                  decoded = html.unescape(candidate).replace('\r\n', '\n')
+                  if decoded.startswith('diff --git a/'):
+                      patch = decoded
+                      source = 'rendered-clipboard-payload'
+                      break
+          if patch is None:
+              raise SystemExit(f'no retained diff payload found; keys={sorted(payload)} raw_len={len(raw)} html_len={len(payload.get("body_html") or "")}')
+          if not patch.endswith('\n'):
+              patch += '\n'
           Path('/tmp/navigation.patch').write_text(patch, encoding='utf-8')
-          print(f'[transport] extracted chars={len(patch)} utf8_bytes={len(patch.encode("utf-8"))}')
+          print(f'[transport] source={source} chars={len(patch)} utf8_bytes={len(patch.encode("utf-8"))}')
           PY
           actual_bytes="$(wc -c < /tmp/navigation.patch | tr -d ' ')"
           echo "[transport] retained patch bytes=${actual_bytes} expected=${EXPECTED_PATCH_BYTES}"
