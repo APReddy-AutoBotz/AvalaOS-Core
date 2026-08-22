@@ -2,12 +2,8 @@ name: Controller Navigation Target Artifact
 
 on:
   pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - synchronize
-      - reopened
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -51,7 +47,6 @@ jobs:
             path="$1"
             git show "${SOL_RESULT_BRANCH}:${path}" > "$path"
           }
-
           copy_sol_blob '.github/workflows/preview-exhaustive-browser-qa.yml'
           copy_sol_blob 'playwright.config.ts'
           copy_sol_blob 'playwright.controller-navigation-history.config.ts'
@@ -77,37 +72,45 @@ jobs:
             git apply --check "$out"
             git apply "$out"
           }
-
           extract_and_apply 'App.tsx' '/tmp/app.patch'
           extract_and_apply 'package.json' '/tmp/package.patch'
-          extract_and_apply 'scripts/checkWorkflowYaml.test.mjs' '/tmp/workflow-contract.patch'
 
           node <<'NODE'
           const fs = require('node:fs');
-          const path = 'services/viewStatePersistence.test.ts';
-          let text = fs.readFileSync(path, 'utf8');
-          const importBefore = "  hasProductNavigationSearch,\n  parseProductNavigationSearch,";
-          const importAfter = "  hasProductNavigationSearch,\n  isStructurallyValidProductNavigationSearch,\n  parseProductNavigationSearch,";
-          if (!text.includes(importBefore)) throw new Error('view-state import anchor missing');
-          text = text.replace(importBefore, importAfter);
-          const anchor = "} from './productNavigationState';\n\nconst makeOrganization";
-          const assertions = "} from './productNavigationState';\n\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&view=delivery_pack&scope=my_work'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&scope=project&scopeId=project-1&scopeName=One&projectId=project-2'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=workspace&scope=my_work&generationId=one&documentGenerationId=two'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=not-a-view&scope=my_work'), false);\n\nconst makeOrganization";
-          if (!text.includes(anchor)) throw new Error('view-state assertion anchor missing');
-          text = text.replace(anchor, assertions);
-          fs.writeFileSync(path, text);
+
+          {
+            const path = 'scripts/checkWorkflowYaml.test.mjs';
+            let text = fs.readFileSync(path, 'utf8');
+            const needle = "\nassert.throws(\n  () => parseWorkflowYaml(`jobs:";
+            const insertion = "\nconst controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');\nassert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\\.spec\\.ts'/u, 'the controller QA config must exclusively own its history specification');\nconst previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');\nassert.match(previewQaWorkflow, /Wait for exact PR preview[\\s\\S]*playwright\\.controller-navigation-history\\.config\\.ts/u, 'controller history QA must execute only after immutable preview identity binding');\n";
+            const at = text.indexOf(needle);
+            if (at < 0) throw new Error('workflow-contract insertion anchor missing');
+            text = text.slice(0, at) + insertion + text.slice(at);
+            fs.writeFileSync(path, text);
+          }
+
+          {
+            const path = 'services/viewStatePersistence.test.ts';
+            let text = fs.readFileSync(path, 'utf8');
+            const importBefore = "  hasProductNavigationSearch,\n  parseProductNavigationSearch,";
+            const importAfter = "  hasProductNavigationSearch,\n  isStructurallyValidProductNavigationSearch,\n  parseProductNavigationSearch,";
+            if (!text.includes(importBefore)) throw new Error('view-state import anchor missing');
+            text = text.replace(importBefore, importAfter);
+            const anchor = "} from './productNavigationState';\n\nconst makeOrganization";
+            const assertions = "} from './productNavigationState';\n\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&view=delivery_pack&scope=my_work'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&scope=project&scopeId=project-1&scopeName=One&projectId=project-2'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=workspace&scope=my_work&generationId=one&documentGenerationId=two'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=not-a-view&scope=my_work'), false);\n\nconst makeOrganization";
+            if (!text.includes(anchor)) throw new Error('view-state assertion anchor missing');
+            text = text.replace(anchor, assertions);
+            fs.writeFileSync(path, text);
+          }
           NODE
 
           verify_blob() {
             path="$1"
             expected="$2"
             actual="$(git hash-object "$path")"
-            printf '%s %s expected-prefix=%s\n' "$path" "$actual" "$expected"
-            case "$actual" in
-              "$expected"*) ;;
-              *) echo "unexpected target blob for ${path}" >&2; exit 1 ;;
-            esac
+            echo "${path} ${actual} expected-prefix=${expected}"
+            case "$actual" in "$expected"*) ;; *) exit 1 ;; esac
           }
-
           verify_blob '.github/workflows/preview-exhaustive-browser-qa.yml' '01920e1'
           verify_blob 'App.tsx' '6fe17b4'
           verify_blob 'package.json' 'af280b2'
@@ -131,8 +134,7 @@ jobs:
             reason: 'test/control documentation',
             futureAction: 'Keep bounded inspection of non-secret persisted navigation evidence confined to controller browser QA; do not treat browser storage as runtime authority.'
           };
-          const exists = data.entries.some((item) => item.pattern === entry.pattern && item.path === entry.path);
-          if (!exists) data.entries.push(entry);
+          if (!data.entries.some((item) => item.pattern === entry.pattern && item.path === entry.path)) data.entries.push(entry);
           fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
           NODE
 
@@ -145,8 +147,8 @@ jobs:
 
           mkdir -p artifacts/controller-navigation-target
           {
-            printf 'base=e5a628f288534fa1d1d8d0d82057f9fecfe3167c\n'
-            printf 'retained_patch_blob=%s\n' "${RETAINED_PATCH_BLOB_SHA}"
+            echo 'base=e5a628f288534fa1d1d8d0d82057f9fecfe3167c'
+            echo "retained_patch_blob=${RETAINED_PATCH_BLOB_SHA}"
             for path in \
               '.github/workflows/preview-exhaustive-browser-qa.yml' \
               'App.tsx' \
@@ -160,7 +162,7 @@ jobs:
               'services/productNavigationState.ts' \
               'services/viewStatePersistence.test.ts' \
               'docs/quality/ai-boundary-static-scan-allowlist.json'; do
-              printf '%s %s\n' "$(git hash-object "$path")" "$path"
+              echo "$(git hash-object "$path") $path"
             done
           } > artifacts/controller-navigation-target/manifest.txt
 
