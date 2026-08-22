@@ -1,0 +1,103 @@
+name: Controller Navigation Clean Publisher
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-clean-target:
+    if: github.event.pull_request.head.ref == 'controller/navigation-durability-release-hardening-249'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download previously verified exact-target artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/controller-target
+          mkdir -p /tmp/controller-target
+          gh run download 32572681104 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name controller-navigation-target-final \
+            --dir /tmp/controller-target
+          test -f /tmp/controller-target/artifacts/controller-navigation-target/manifest.txt
+
+      - name: Re-prove artifact against clean source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/clean-target e5a628f288534fa1d1d8d0d82057f9fecfe3167c
+
+          while read -r expected path; do
+            test -f "/tmp/controller-target/$path"
+            actual="$(git hash-object "/tmp/controller-target/$path")"
+            echo "$path $actual"
+            test "$actual" = "$expected"
+            mkdir -p "/tmp/clean-target/$(dirname "$path")"
+            cp "/tmp/controller-target/$path" "/tmp/clean-target/$path"
+          done < /tmp/controller-target/artifacts/controller-navigation-target/manifest.txt
+
+          cd /tmp/clean-target
+          npm ci
+          npm run test:workflow-yaml
+          npm run test:product-navigation-controller
+          npm run test:view-state-persistence
+          npm run test:ai-boundary-static
+          npm run typecheck
+          git diff --check
+
+      - name: Publish clean fast-forward tree and remove controller transport
+        env:
+          EXPECTED_EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_EVENT_HEAD"
+
+          git config user.name 'AvalaOS Controller'
+          git config user.email 'controller@users.noreply.github.com'
+
+          # Reset the staged/worktree tree to the last clean pre-transport PR tree while
+          # keeping the current PR head as the commit parent. This makes every temporary
+          # transport/finalizer workflow disappear from the resulting commit.
+          git read-tree --reset -u e5a628f288534fa1d1d8d0d82057f9fecfe3167c
+
+          while read -r expected path; do
+            mkdir -p "$(dirname "$path")"
+            cp "/tmp/controller-target/$path" "$path"
+            actual="$(git hash-object "$path")"
+            test "$actual" = "$expected"
+          done < /tmp/controller-target/artifacts/controller-navigation-target/manifest.txt
+
+          git add -A
+          git diff --cached --check
+
+          test ! -e .github/workflows/controller-navigation-clean-publisher.yml
+          test ! -e .github/workflows/controller-navigation-target-final.yml
+          test ! -e .github/workflows/controller-navigation-patch-transport.yml
+
+          git commit -m 'Fix governed navigation history and structural deep-link validation'
+          new_head="$(git rev-parse HEAD)"
+          echo "Publishing clean target $new_head"
+          git push origin "HEAD:${TARGET_BRANCH}"
