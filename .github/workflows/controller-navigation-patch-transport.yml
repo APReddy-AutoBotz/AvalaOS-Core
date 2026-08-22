@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout exact pull request head
+      - name: Checkout exact Sol patch base
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
           fetch-depth: 0
 
       - name: Set up Node
@@ -32,23 +32,70 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Apply retained Sol patch and classify controller QA storage inspection
+      - name: Reconstruct and validate exact navigation target
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_ANCESTOR_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
           RETAINED_PATCH_BLOB_SHA: ec6bf087a97732cb1f23e9f7d2256488e796c76a
+          SOL_RESULT_BRANCH: controller/navigation-durability-249-sol-result
         shell: bash
         run: |
           set -euo pipefail
-          git cat-file -e "${EXPECTED_ANCESTOR_SHA}^{commit}"
-          git merge-base --is-ancestor "${EXPECTED_ANCESTOR_SHA}" HEAD
+          test "$(git rev-parse HEAD)" = "e5a628f288534fa1d1d8d0d82057f9fecfe3167c"
+          git fetch origin "${SOL_RESULT_BRANCH}:${SOL_RESULT_BRANCH}"
 
           gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${RETAINED_PATCH_BLOB_SHA}" --jq .content \
             | tr -d '\n' \
             | base64 -d > /tmp/navigation.patch
 
-          git apply --check /tmp/navigation.patch
-          git apply /tmp/navigation.patch
+          copy_sol_blob() {
+            path="$1"
+            git show "${SOL_RESULT_BRANCH}:${path}" > "$path"
+          }
+
+          copy_sol_blob '.github/workflows/preview-exhaustive-browser-qa.yml'
+          copy_sol_blob 'playwright.config.ts'
+          copy_sol_blob 'playwright.controller-navigation-history.config.ts'
+          copy_sol_blob 'playwright.exhaustive-acceptance.config.ts'
+          copy_sol_blob 'services/productNavigationController.test.ts'
+          copy_sol_blob 'services/productNavigationController.ts'
+          copy_sol_blob 'services/productNavigationState.ts'
+
+          extract_and_apply() {
+            path="$1"
+            out="$2"
+            python - "$path" "$out" <<'PY'
+          import pathlib, sys
+          path, out = sys.argv[1], sys.argv[2]
+          lines = pathlib.Path('/tmp/navigation.patch').read_text().splitlines(keepends=True)
+          marker = f'diff --git a/{path} b/{path}'
+          start = next((i for i, line in enumerate(lines) if line.rstrip('\n') == marker), None)
+          if start is None:
+              raise SystemExit(f'missing patch section for {path}')
+          end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith('diff --git ')), len(lines))
+          pathlib.Path(out).write_text(''.join(lines[start:end]))
+          PY
+            git apply --check "$out"
+            git apply "$out"
+          }
+
+          extract_and_apply 'App.tsx' '/tmp/app.patch'
+          extract_and_apply 'package.json' '/tmp/package.patch'
+          extract_and_apply 'scripts/checkWorkflowYaml.test.mjs' '/tmp/workflow-contract.patch'
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'services/viewStatePersistence.test.ts';
+          let text = fs.readFileSync(path, 'utf8');
+          const importBefore = "  hasProductNavigationSearch,\n  parseProductNavigationSearch,";
+          const importAfter = "  hasProductNavigationSearch,\n  isStructurallyValidProductNavigationSearch,\n  parseProductNavigationSearch,";
+          if (!text.includes(importBefore)) throw new Error('view-state import anchor missing');
+          text = text.replace(importBefore, importAfter);
+          const anchor = "} from './productNavigationState';\n\nconst makeOrganization";
+          const assertions = "} from './productNavigationState';\n\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&view=delivery_pack&scope=my_work'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=boards&scope=project&scopeId=project-1&scopeName=One&projectId=project-2'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=workspace&scope=my_work&generationId=one&documentGenerationId=two'), false);\nassert.equal(isStructurallyValidProductNavigationSearch('?view=not-a-view&scope=my_work'), false);\n\nconst makeOrganization";
+          if (!text.includes(anchor)) throw new Error('view-state assertion anchor missing');
+          text = text.replace(anchor, assertions);
+          fs.writeFileSync(path, text);
+          NODE
 
           verify_blob() {
             path="$1"
@@ -57,7 +104,7 @@ jobs:
             printf '%s %s expected-prefix=%s\n' "$path" "$actual" "$expected"
             case "$actual" in
               "$expected"*) ;;
-              *) echo "unexpected retained target blob for ${path}" >&2; exit 1 ;;
+              *) echo "unexpected target blob for ${path}" >&2; exit 1 ;;
             esac
           }
 
@@ -96,10 +143,9 @@ jobs:
           npm run typecheck
           git diff --check
 
-          rm .github/workflows/controller-navigation-patch-transport.yml
           mkdir -p artifacts/controller-navigation-target
           {
-            printf 'source_head=%s\n' "$(git rev-parse HEAD)"
+            printf 'base=e5a628f288534fa1d1d8d0d82057f9fecfe3167c\n'
             printf 'retained_patch_blob=%s\n' "${RETAINED_PATCH_BLOB_SHA}"
             for path in \
               '.github/workflows/preview-exhaustive-browser-qa.yml' \
