@@ -5253,6 +5253,56 @@
       }
     },
     {
+      "testId": "SAFETY-005",
+      "title": "Safety: response lost after durable commit",
+      "module": "Cross-cutting",
+      "feature": "response-loss recovery",
+      "ruleRequirement": "same request identity recovers the exact canonical response with exactly one durable effect",
+      "sourceReference": [
+        "scripts/testPilotOperationsPostgres.mjs"
+      ],
+      "branchIds": [
+        "SAFETY-RESPONSE_LOST_AFTER_COMMIT"
+      ],
+      "environment": "disposable_postgresql_16",
+      "persona": [
+        "authorized_synthetic_operator",
+        "foreign_tenant_operator"
+      ],
+      "fixture": "synthetic-pilot-operations-response-loss",
+      "transcript": null,
+      "preconditions": [
+        "Synthetic data only",
+        "Real providers disabled"
+      ],
+      "actions": [
+        "Commit production Pilot Operations command and discard its response",
+        "Replay the exact request identity",
+        "Reject conflicting and foreign-tenant replay"
+      ],
+      "expectedResult": "Exact canonical response recovered without duplicate effects or tenant disclosure",
+      "expectedMutation": "one release-candidate registration",
+      "expectedMutationCount": 1,
+      "expectedDenial": true,
+      "expectedErrorCode": "IDEMPOTENCY_CONFLICT|PR1B_NOT_FOUND",
+      "expectedStateBefore": "no SAFETY-005 receipt or candidate history effect",
+      "expectedStateAfter": "one receipt and one candidate history effect",
+      "expectedScore": null,
+      "expectedClassification": null,
+      "expectedLineage": null,
+      "expectedEvidence": "sanitized exact Test-ID and branch assertion artifact",
+      "expectedAudit": "exactly one authoritative audit/effect chain",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "realProviderAllowed": false,
+      "customerDataAllowed": false,
+      "automation": {
+        "kind": "acceptance",
+        "status": "automated"
+      }
+    },
+    {
       "testId": "SAFETY-006",
       "title": "Cross-cutting: horizontal overflow",
       "module": "Cross-cutting",

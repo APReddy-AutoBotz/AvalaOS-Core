@@ -15,11 +15,8 @@ const inventory = JSON.parse(readFileSync(path.join(root, 'tests/acceptance/inve
 assert.equal(inventory.schemaVersion, 2);
 assert.equal(inventory.coveredBranchesSource, 'tests/acceptance/catalog/test-catalog.json');
 assert.equal(inventory.uncoveredBranches.some(branch => branch.branchId === 'STUDIO-LEASE_CONCURRENCY'), false);
-assert.equal(inventory.uncoveredBranches.length, 1);
-const responseLoss = inventory.uncoveredBranches[0];
-assert.equal(responseLoss.branchId, 'SAFETY-RESPONSE_LOST_AFTER_COMMIT');
-assert.equal(responseLoss.provenance?.kind, 'required-scenario');
-assert.match(responseLoss.provenance?.limitation ?? '', /no response-loss simulation, replay, or recovery contract/u);
+assert.equal(inventory.uncoveredBranches.length, 0);
+assert.equal(JSON.parse(readFileSync(catalogPath, 'utf8')).cases.some(item => item.testId === 'SAFETY-005' && item.branchIds.includes('SAFETY-RESPONSE_LOST_AFTER_COMMIT')), true);
 
 const run = (document, bindingsDocument = bindings) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'acceptance-inventory-v2-'));
@@ -62,7 +59,7 @@ assert.match(inventedLease.stderr, /required-scenario provenance|invented Studio
 const missingSource = run({
   ...inventory,
   uncoveredBranches: [{
-    ...responseLoss,
+    branchId:'TEST-MISSING-SOURCE', module:'Test', rule:'missing source', criticality:'standard', uncoveredReason:'test', recommendedAction:'test', provenance:{kind:'required-scenario',limitation:'test'},
     sourceReferences: ['services/not-present.ts'],
   }],
 });

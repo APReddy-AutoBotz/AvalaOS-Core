@@ -2,69 +2,554 @@
   "schemaVersion": 1,
   "bindingId": "avalaos-exhaustive-acceptance-bindings-v1",
   "retainedSuites": [
-    {"suiteId":"assess-v2-authority","command":["npm","run","test:pr1d"],"testIds":["ASSESS-018","ASSESS-019","ASSESS-020","ASSESS-021","ASSESS-022"],"requiredGate":true},
-    {"suiteId":"application-portfolio","command":["npm","run","test:pr1g"],"testIds":["APPS-001","APPS-002","APPS-003","APPS-004","APPS-005"],"requiredGate":true},
-    {"suiteId":"govern-authority","command":["npm","run","test:pr1e"],"testIds":["GOVERN-001","GOVERN-002","GOVERN-003","GOVERN-004","GOVERN-005","GOVERN-006","GOVERN-007","GOVERN-008","GOVERN-009","GOVERN-010"],"requiredGate":true},
-    {"suiteId":"studio-governed","command":["npm","run","test:studio-artifacts"],"testIds":["STUDIO-001","STUDIO-002","STUDIO-003","STUDIO-004","STUDIO-005"],"requiredGate":true},
-    {"suiteId":"studio-private","command":["npm","run","test:studio-private-artifacts"],"testIds":["STUDIO-006","STUDIO-007","STUDIO-008","STUDIO-009","STUDIO-010","STUDIO-011"],"requiredGate":true},
-    {"suiteId":"delivery-policy","command":["npm","run","test:delivery-workflow-policy"],"testIds":["DELIVERY-001","DELIVERY-002","DELIVERY-003","DELIVERY-004","DELIVERY-005","DELIVERY-006","DELIVERY-007","DELIVERY-008"],"requiredGate":true},
-    {"suiteId":"trust-authority","command":["node","scripts/runTrustAssuranceTest.mjs"],"testIds":["TRUST-001","TRUST-002","TRUST-003","TRUST-004","TRUST-005"],"requiredGate":true},
-    {"suiteId":"ai-boundary","command":["npm","run","test:pr1a"],"testIds":["AI-001","AI-002","AI-003","AI-004","AI-005","AI-006"],"requiredGate":true},
-    {"suiteId":"enterprise-intelligence","command":["npm","run","test:enterprise-intelligence"],"testIds":["EI-001","EI-002","EI-003","EI-004","EI-005"],"requiredGate":true},
-    {"suiteId":"cross-cutting-false-success","command":["npm","run","test:false-success"],"testIds":["SAFETY-002"],"requiredGate":true},
-    {"suiteId":"canonical-pilot-journey","command":["npm","run","test:pilot-acceptance"],"testIds":["E2E-001","E2E-003","E2E-004"],"requiredGate":true},
-    {"suiteId":"requested-changes-domain-regression","command":["node","scripts/runTypeScriptTest.mjs","types.ts","services/assessV2/types.ts","services/assessV2/canonical.ts","services/assessV2/reviewDomain.ts","tests/acceptance/journeys/requestedChangesJourney.test.ts"],"testIds":[],"requiredGate":true},
-    {"suiteId":"pilot-operations","command":["npm","run","test:pilot-operations"],"testIds":["ADMIN-004"],"requiredGate":true}
+    {
+      "suiteId": "assess-v2-authority",
+      "command": [
+        "npm",
+        "run",
+        "test:pr1d"
+      ],
+      "testIds": [
+        "ASSESS-018",
+        "ASSESS-019",
+        "ASSESS-020",
+        "ASSESS-021",
+        "ASSESS-022"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "application-portfolio",
+      "command": [
+        "npm",
+        "run",
+        "test:pr1g"
+      ],
+      "testIds": [
+        "APPS-001",
+        "APPS-002",
+        "APPS-003",
+        "APPS-004",
+        "APPS-005"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "govern-authority",
+      "command": [
+        "npm",
+        "run",
+        "test:pr1e"
+      ],
+      "testIds": [
+        "GOVERN-001",
+        "GOVERN-002",
+        "GOVERN-003",
+        "GOVERN-004",
+        "GOVERN-005",
+        "GOVERN-006",
+        "GOVERN-007",
+        "GOVERN-008",
+        "GOVERN-009",
+        "GOVERN-010"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "studio-governed",
+      "command": [
+        "npm",
+        "run",
+        "test:studio-artifacts"
+      ],
+      "testIds": [
+        "STUDIO-001",
+        "STUDIO-002",
+        "STUDIO-003",
+        "STUDIO-004",
+        "STUDIO-005"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "studio-private",
+      "command": [
+        "npm",
+        "run",
+        "test:studio-private-artifacts"
+      ],
+      "testIds": [
+        "STUDIO-006",
+        "STUDIO-007",
+        "STUDIO-008",
+        "STUDIO-009",
+        "STUDIO-010",
+        "STUDIO-011"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "delivery-policy",
+      "command": [
+        "npm",
+        "run",
+        "test:delivery-workflow-policy"
+      ],
+      "testIds": [
+        "DELIVERY-001",
+        "DELIVERY-002",
+        "DELIVERY-003",
+        "DELIVERY-004",
+        "DELIVERY-005",
+        "DELIVERY-006",
+        "DELIVERY-007",
+        "DELIVERY-008"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "trust-authority",
+      "command": [
+        "node",
+        "scripts/runTrustAssuranceTest.mjs"
+      ],
+      "testIds": [
+        "TRUST-001",
+        "TRUST-002",
+        "TRUST-003",
+        "TRUST-004",
+        "TRUST-005"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "ai-boundary",
+      "command": [
+        "npm",
+        "run",
+        "test:pr1a"
+      ],
+      "testIds": [
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "enterprise-intelligence",
+      "command": [
+        "npm",
+        "run",
+        "test:enterprise-intelligence"
+      ],
+      "testIds": [
+        "EI-001",
+        "EI-002",
+        "EI-003",
+        "EI-004",
+        "EI-005"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "cross-cutting-false-success",
+      "command": [
+        "npm",
+        "run",
+        "test:false-success"
+      ],
+      "testIds": [
+        "SAFETY-002"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "canonical-pilot-journey",
+      "command": [
+        "npm",
+        "run",
+        "test:pilot-acceptance"
+      ],
+      "testIds": [
+        "E2E-001",
+        "E2E-003",
+        "E2E-004"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "requested-changes-domain-regression",
+      "command": [
+        "node",
+        "scripts/runTypeScriptTest.mjs",
+        "types.ts",
+        "services/assessV2/types.ts",
+        "services/assessV2/canonical.ts",
+        "services/assessV2/reviewDomain.ts",
+        "tests/acceptance/journeys/requestedChangesJourney.test.ts"
+      ],
+      "testIds": [],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "pilot-operations",
+      "command": [
+        "npm",
+        "run",
+        "test:pilot-operations"
+      ],
+      "testIds": [
+        "ADMIN-004",
+        "SAFETY-005"
+      ],
+      "requiredGate": true
+    }
   ],
   "oracleTests": [
-    {"testId":"ASSESS-005","scenario":"missing-input"},
-    {"testId":"ASSESS-006","scenario":"invalid-input"},
-    {"testId":"ASSESS-007","scenario":"governance-min"},
-    {"testId":"ASSESS-008","scenario":"governance-max"},
-    {"testId":"ASSESS-009","scenario":"needs-discovery"},
-    {"testId":"ASSESS-010","scenario":"process-redesign"},
-    {"testId":"ASSESS-011","scenario":"low-value"},
-    {"testId":"ASSESS-012","scenario":"human-led"},
-    {"testId":"ASSESS-013","scenario":"governance-review"},
-    {"testId":"ASSESS-014","scenario":"no-go"},
-    {"testId":"ASSESS-015","scenario":"completion-below"},
-    {"testId":"ASSESS-016","scenario":"completion-exact"},
-    {"testId":"ASSESS-017","scenario":"completion-above"}
+    {
+      "testId": "ASSESS-005",
+      "scenario": "missing-input"
+    },
+    {
+      "testId": "ASSESS-006",
+      "scenario": "invalid-input"
+    },
+    {
+      "testId": "ASSESS-007",
+      "scenario": "governance-min"
+    },
+    {
+      "testId": "ASSESS-008",
+      "scenario": "governance-max"
+    },
+    {
+      "testId": "ASSESS-009",
+      "scenario": "needs-discovery"
+    },
+    {
+      "testId": "ASSESS-010",
+      "scenario": "process-redesign"
+    },
+    {
+      "testId": "ASSESS-011",
+      "scenario": "low-value"
+    },
+    {
+      "testId": "ASSESS-012",
+      "scenario": "human-led"
+    },
+    {
+      "testId": "ASSESS-013",
+      "scenario": "governance-review"
+    },
+    {
+      "testId": "ASSESS-014",
+      "scenario": "no-go"
+    },
+    {
+      "testId": "ASSESS-015",
+      "scenario": "completion-below"
+    },
+    {
+      "testId": "ASSESS-016",
+      "scenario": "completion-exact"
+    },
+    {
+      "testId": "ASSESS-017",
+      "scenario": "completion-above"
+    }
   ],
   "hostedTests": [
-    {"testId":"SANDBOX-001","scenario":"sandbox-access","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SANDBOX-002","scenario":"persona-matrix","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SANDBOX-003","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current local-authority observer stops after persona entry and does not prove that delayed or post-entry authority/provider traffic remains absent through a bounded product workflow and sign-out. Keep SANDBOX-003 BLOCKED until that full boundary is observed."},
-    {"testId":"SANDBOX-004","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current network-safety observer stops after persona entry and does not prove that delayed, retried, or lazy post-entry provider/authority traffic remains absent through a bounded product workflow and sign-out. Keep SANDBOX-004 BLOCKED until that full boundary is observed."},
-    {"testId":"SANDBOX-005","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The existing refresh check reloads untouched access state and does not prove persistence of a prior mutation or selected identity. Keep this Test ID BLOCKED until a real state transition is made before reload."},
-    {"testId":"SANDBOX-006","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The hosted Sandbox route intentionally accepts /sandbox descendants. There is no source-backed denied Sandbox deep-link branch to execute, so a normal sign-in visit is not accepted as denial evidence."},
-    {"testId":"SANDBOX-007","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current desktop layout scenario checks only the public Sandbox access surface while the canonical contract declares all_sandbox_personas. Keep SANDBOX-007 BLOCKED until post-entry layout/overflow is exercised for every declared persona."},
-    {"testId":"SANDBOX-008","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current mobile layout scenario checks only the public Sandbox access surface while the canonical contract declares all_sandbox_personas. Keep SANDBOX-008 BLOCKED until post-entry mobile layout/overflow is exercised for every declared persona."},
-    {"testId":"SANDBOX-009","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current keyboard-accessibility scenario checks only the public Sandbox access surface while the canonical contract declares all_sandbox_personas. Keep SANDBOX-009 BLOCKED until post-entry keyboard accessibility is exercised for every declared persona."},
-    {"testId":"PUBLIC-001","scenario":"public-landing","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"PUBLIC-002","scenario":"sign-in-separation","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"PUBLIC-003","scenario":"sandbox-descendant","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"PUBLIC-004","scenario":"release-identity","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"ASSESS-001","scenario":"process-create","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"ASSESS-002","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The Sandbox exposes process creation authority but no deterministic process-edit control matching this rule; create denial is not accepted as edit-denial evidence."},
-    {"testId":"ASSESS-003","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The current hosted assessment check reads a seeded Completed/High row and does not execute the catalog-declared discovery transition or production scoring. Keep ASSESS-003 BLOCKED until the hosted discovery flow is driven to completion and its production result is asserted."},
-    {"testId":"ASSESS-004","scenario":"incomplete-assessment","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"DELIVERY-009","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The hosted Delivery Pack scenario proves rendering and export controls but does not prove exact ancestry identifiers or a negative tenant-scope boundary. Keep DELIVERY-009 BLOCKED until tenant-scoped lineage is exercised authoritatively."},
-    {"testId":"MONITOR-001","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"Rendering the Handoff lineage label does not prove exact ancestry identifiers or a negative tenant boundary. Keep MONITOR-001 BLOCKED until exact synthetic lineage and cross-tenant denial are exercised authoritatively."},
-    {"testId":"MONITOR-002","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The existing Monitor value check can pass on the Recorded outcome fallback when no real outcome signal exists. Keep MONITOR-002 BLOCKED until the exact seeded outcome label, detail, status, and required tenant lineage are asserted."},
-    {"testId":"MONITOR-003","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"Blocker labels alone do not prove the canonical preserved-and-tenant-scoped lineage contract. Keep MONITOR-003 BLOCKED until exact blocker data, ancestry, and tenant scope are exercised authoritatively."},
-    {"testId":"MONITOR-004","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The canonical Sandbox seed does not expose a deterministic missing/unavailable Monitor projection toggle; do not infer this failure branch from a populated projection."},
-    {"testId":"ADMIN-001","scenario":"admin-navigation","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"ADMIN-002","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"Hiding Admin / Intelligence navigation for a non-admin persona is UI evidence, not server-authoritative denial. Keep ADMIN-002 BLOCKED until an unauthorized admin read or mutation is rejected by the authoritative boundary."},
-    {"testId":"ADMIN-003","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"A generic Admin page text match does not prove the canonical role/capability matrix. Keep ADMIN-003 BLOCKED until exact authorized and unauthorized capabilities are asserted against the governed Admin model."},
-    {"testId":"E2E-002","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The retained review-domain regression proves the requested-changes lifecycle mechanics but does not exercise the catalog-declared hosted ledger journey. Keep the canonical E2E Test ID BLOCKED until the Sandbox exposes that exact end-to-end path."},
-    {"testId":"E2E-005","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this low-suitability fixture through the full declared journey."},
-    {"testId":"E2E-006","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this strong-automation fixture through the full declared journey."},
-    {"testId":"E2E-007","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this HITL/compliance fixture through the full declared journey."},
-    {"testId":"SAFETY-001","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"The hosted Sandbox uses local synthetic persistence, so going offline does not create a server-persistence failure. A reload-only check is not accepted as no-false-success mutation evidence."},
-    {"testId":"SAFETY-003","scenario":null,"projects":["desktop-chromium","pixel-7-chromium"],"blockedReason":"Hosted Sandbox uses local synthetic authority and exposes no real server mutation whose timeout can be deterministically injected without adding a test-only product hook."},
-    {"testId":"SAFETY-004","scenario":"reload-reconstruction","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SAFETY-006","scenario":"horizontal-overflow","projects":["desktop-chromium","pixel-7-chromium"]},
-    {"testId":"SAFETY-007","scenario":"serious-critical-a11y","projects":["desktop-chromium","pixel-7-chromium"]}
+    {
+      "testId": "SANDBOX-001",
+      "scenario": "sandbox-access",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-002",
+      "scenario": "persona-matrix",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-003",
+      "scenario": "local-authority",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-004",
+      "scenario": "network-safety",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-005",
+      "scenario": "reload-reconstruction",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-006",
+      "scenario": "sandbox-descendant",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-007",
+      "scenario": "desktop-layout",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-008",
+      "scenario": "mobile-layout",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SANDBOX-009",
+      "scenario": "keyboard-a11y",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "PUBLIC-001",
+      "scenario": "public-landing",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "PUBLIC-002",
+      "scenario": "sign-in-separation",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "PUBLIC-003",
+      "scenario": "sandbox-descendant",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "PUBLIC-004",
+      "scenario": "release-identity",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "ASSESS-001",
+      "scenario": "process-create",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "ASSESS-002",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The Sandbox exposes process creation authority but no deterministic process-edit control matching this rule; create denial is not accepted as edit-denial evidence."
+    },
+    {
+      "testId": "ASSESS-003",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The current hosted assessment check reads a seeded Completed/High row and does not execute the catalog-declared discovery transition or production scoring. Keep ASSESS-003 BLOCKED until the hosted discovery flow is driven to completion and its production result is asserted."
+    },
+    {
+      "testId": "ASSESS-004",
+      "scenario": "incomplete-assessment",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "DELIVERY-009",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The hosted Delivery Pack scenario proves rendering and export controls but does not prove exact ancestry identifiers or a negative tenant-scope boundary. Keep DELIVERY-009 BLOCKED until tenant-scoped lineage is exercised authoritatively."
+    },
+    {
+      "testId": "MONITOR-001",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "Rendering the Handoff lineage label does not prove exact ancestry identifiers or a negative tenant boundary. Keep MONITOR-001 BLOCKED until exact synthetic lineage and cross-tenant denial are exercised authoritatively."
+    },
+    {
+      "testId": "MONITOR-002",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The existing Monitor value check can pass on the Recorded outcome fallback when no real outcome signal exists. Keep MONITOR-002 BLOCKED until the exact seeded outcome label, detail, status, and required tenant lineage are asserted."
+    },
+    {
+      "testId": "MONITOR-003",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "Blocker labels alone do not prove the canonical preserved-and-tenant-scoped lineage contract. Keep MONITOR-003 BLOCKED until exact blocker data, ancestry, and tenant scope are exercised authoritatively."
+    },
+    {
+      "testId": "MONITOR-004",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The canonical Sandbox seed does not expose a deterministic missing/unavailable Monitor projection toggle; do not infer this failure branch from a populated projection."
+    },
+    {
+      "testId": "ADMIN-001",
+      "scenario": "admin-navigation",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "ADMIN-002",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "Hiding Admin / Intelligence navigation for a non-admin persona is UI evidence, not server-authoritative denial. Keep ADMIN-002 BLOCKED until an unauthorized admin read or mutation is rejected by the authoritative boundary."
+    },
+    {
+      "testId": "ADMIN-003",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "A generic Admin page text match does not prove the canonical role/capability matrix. Keep ADMIN-003 BLOCKED until exact authorized and unauthorized capabilities are asserted against the governed Admin model."
+    },
+    {
+      "testId": "E2E-002",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The retained review-domain regression proves the requested-changes lifecycle mechanics but does not exercise the catalog-declared hosted ledger journey. Keep the canonical E2E Test ID BLOCKED until the Sandbox exposes that exact end-to-end path."
+    },
+    {
+      "testId": "E2E-005",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this low-suitability fixture through the full declared journey."
+    },
+    {
+      "testId": "E2E-006",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this strong-automation fixture through the full declared journey."
+    },
+    {
+      "testId": "E2E-007",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this HITL/compliance fixture through the full declared journey."
+    },
+    {
+      "testId": "SAFETY-001",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "The hosted Sandbox uses local synthetic persistence, so going offline does not create a server-persistence failure. A reload-only check is not accepted as no-false-success mutation evidence."
+    },
+    {
+      "testId": "SAFETY-003",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "Hosted Sandbox uses local synthetic authority and exposes no real server mutation whose timeout can be deterministically injected without adding a test-only product hook."
+    },
+    {
+      "testId": "SAFETY-004",
+      "scenario": "reload-reconstruction",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SAFETY-006",
+      "scenario": "horizontal-overflow",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    },
+    {
+      "testId": "SAFETY-007",
+      "scenario": "serious-critical-a11y",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ]
+    }
   ]
 }
