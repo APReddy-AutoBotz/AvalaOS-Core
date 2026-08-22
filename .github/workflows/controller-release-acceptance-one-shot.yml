@@ -1,0 +1,103 @@
+name: Controller Release Acceptance One Shot
+
+on:
+  push:
+    branches:
+      - controller-release-acceptance-6a895979f44a15984f9c9f86
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+env:
+  RELEASE_SHA: fdfb68033bf4bae96ef2b4a1ec075d4cc91257be
+  NETLIFY_DEPLOY_ID: 6a895979f44a15984f9c9f86
+  HOSTED_PILOT_URL: https://avalaos-pilot.netlify.app
+  EXERCISE_RUN_ID: af49c3d2-e979-4d72-98ed-415a13f06a18
+
+jobs:
+  guard-current-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prove controller target is still exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          test "$(git rev-parse origin/main)" = "$RELEASE_SHA"
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$NETLIFY_DEPLOY_ID" =~ ^[0-9a-f]{24}$ ]]
+          test "$HOSTED_PILOT_URL" = 'https://avalaos-pilot.netlify.app'
+          [[ "$EXERCISE_RUN_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+
+  dispatch-hosted-evidence:
+    needs: guard-current-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch exact-main Pilot Operations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n '{ref:"main"}' | gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/pilot-operations.yml/dispatches" --input -
+      - name: Dispatch exact hosted activation evidence producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg ref 'main' \
+            --arg expected_release_sha "$RELEASE_SHA" \
+            --arg target_fingerprint 'sha256:865561c471b54b7df5e92a5ee29cc66a7a739d39c6b27bef93781830b7c7aaed' \
+            --arg deployment_origin "$HOSTED_PILOT_URL" \
+            --arg deployment_id "$NETLIFY_DEPLOY_ID" \
+            --arg organization_id '24de1bb5-ad49-4224-80b1-9d26b6dcfc15' \
+            --arg workspace_id '06165d6f-19c9-4a0c-8847-f9cb6c63e9d2' \
+            --arg exercise_run_id "$EXERCISE_RUN_ID" \
+            --arg recovery_actor_id '6d65da73-84b0-4eb3-9be5-d7f1e53c0151' \
+            --arg recovery_authorization_version '5' \
+            '{ref:$ref,inputs:{expected_release_sha:$expected_release_sha,target_fingerprint:$target_fingerprint,deployment_origin:$deployment_origin,deployment_id:$deployment_id,organization_id:$organization_id,workspace_id:$workspace_id,exercise_run_id:$exercise_run_id,recovery_actor_id:$recovery_actor_id,recovery_authorization_version:$recovery_authorization_version}}' \
+            | gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/hosted-pilot-activation-evidence-producer.yml/dispatches" --input -
+
+  exhaustive-hosted-acceptance:
+    needs: guard-current-release
+    uses: ./.github/workflows/exhaustive-acceptance.yml
+    with:
+      release_sha: fdfb68033bf4bae96ef2b4a1ec075d4cc91257be
+      netlify_deploy_id: 6a895979f44a15984f9c9f86
+      hosted_url: https://avalaos-pilot.netlify.app
+
+  record-controller-run:
+    if: always()
+    needs:
+      - guard-current-release
+      - dispatch-hosted-evidence
+      - exhaustive-hosted-acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record durable controller run locator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GUARD_RESULT: ${{ needs.guard-current-release.result }}
+          DISPATCH_RESULT: ${{ needs.dispatch-hosted-evidence.result }}
+          EXHAUSTIVE_RESULT: ${{ needs.exhaustive-hosted-acceptance.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="Controller one-shot release acceptance run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+Exact release SHA: \`${RELEASE_SHA}\`
+Immutable Netlify deploy: \`${NETLIFY_DEPLOY_ID}\`
+Hosted pilot: \`${HOSTED_PILOT_URL}\`
+Hosted evidence exercise: \`${EXERCISE_RUN_ID}\`
+
+Guard: **${GUARD_RESULT}**
+Hosted evidence dispatch: **${DISPATCH_RESULT}**
+Exhaustive hosted acceptance: **${EXHAUSTIVE_RESULT}**"
+          gh issue comment 253 --repo "$GITHUB_REPOSITORY" --body "$body"
