@@ -29,12 +29,25 @@ env:
   RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
   ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
   SERVER_RESULTS_MANIFEST: /tmp/avalaos-server-results.json
-  ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: ${{ inputs.release_sha && 'stable-release' || 'pull-request' }}
 
 jobs:
   acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avalaos_exhaustive
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +89,17 @@ jobs:
         continue-on-error: true
         run: node scripts/runAssessV1AcceptanceOracle.mjs
 
+      - name: Run same-run disposable PostgreSQL server evidence
+        id: server
+        continue-on-error: true
+        env:
+          PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          CANDIDATE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
+        run: |
+          npm run test:migrations:pilot-operations:postgres
+          node scripts/produceExhaustiveServerEvidence.mjs
+
       - name: Validate deterministic hosted declarations
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
@@ -90,6 +114,7 @@ jobs:
           mkdir -p acceptance-results
           test -f "$RETAINED_RESULTS_MANIFEST" && cp "$RETAINED_RESULTS_MANIFEST" acceptance-results/retained-suite-results.json || true
           test -f "$ORACLE_RESULTS_MANIFEST" && cp "$ORACLE_RESULTS_MANIFEST" acceptance-results/oracle-results.json || true
+          test -f "$SERVER_RESULTS_MANIFEST" && cp "$SERVER_RESULTS_MANIFEST" acceptance-results/server-results.json || true
 
       - name: Install official Chromium for exact hosted execution
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
@@ -143,6 +168,7 @@ jobs:
           set -euo pipefail
           test "${{ steps.retained.outcome }}" = success
           test "${{ steps.oracle.outcome }}" = success
+          test "${{ steps.server.outcome }}" = success
           test "${{ steps.report.outcome }}" = success
           if [ "$NETLIFY_DEPLOY_ID" != "pull-request-not-deployed" ]; then
             test "${{ steps.deployment.outcome }}" = success
