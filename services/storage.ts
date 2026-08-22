@@ -88,7 +88,7 @@ export function usePersistentState<T>(
 
     useLayoutEffect(() => {
         latestState.current = state;
-    }, [enabled, key, state]);
+    }, [state]);
 
     return [state, setPersistentState] as const;
 }
