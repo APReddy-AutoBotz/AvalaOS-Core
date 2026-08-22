@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - controller/navigation-durability-release-hardening-249
+  pull_request:
+    types: [synchronize]
+    branches: [main]
 
 permissions:
   contents: write
@@ -12,14 +15,14 @@ permissions:
 
 jobs:
   apply-retained-sol-patch:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'controller/navigation-durability-release-hardening-249')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout exact controller head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
+          ref: controller/navigation-durability-release-hardening-249
           fetch-depth: 0
 
       - name: Recover and apply retained Sol patch
@@ -28,10 +31,11 @@ jobs:
           EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
           PATCH_COMMENT_ID: '5379494218'
           EXPECTED_PATCH_BYTES: '27572'
+          CONTROLLER_BRANCH: controller/navigation-durability-release-hardening-249
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "$EXPECTED_BASE_SHA"
+          test "$(git rev-parse HEAD^^)" = "$EXPECTED_BASE_SHA"
           gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" --jq .body > /tmp/controller-comment.md
           grep -F 'Exact published input SHA: `e5a628f288534fa1d1d8d0d82057f9fecfe3167c`' /tmp/controller-comment.md
           python - <<'PY'
@@ -70,4 +74,4 @@ jobs:
           git config user.name 'AvalaOS Controller'
           git config user.email 'controller@users.noreply.github.com'
           git commit -m 'Harden governed navigation history'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${CONTROLLER_BRANCH}"
