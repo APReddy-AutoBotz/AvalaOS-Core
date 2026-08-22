@@ -42,6 +42,12 @@ jobs:
           raw = Path('/tmp/navigation.raw').read_bytes()
           if not raw.endswith(b'\n'):
               raw += b'\n'
+          start_marker = b'diff --git a/scripts/checkWorkflowYaml.test.mjs b/scripts/checkWorkflowYaml.test.mjs\n'
+          end_marker = b'diff --git a/services/productNavigationController.test.ts b/services/productNavigationController.test.ts\n'
+          start = raw.index(start_marker)
+          end = raw.index(end_marker, start)
+          section = raw[start:end].replace(b'\\\\', b'\\')
+          raw = raw[:start] + section + raw[end:]
           Path('/tmp/navigation.patch').write_bytes(raw)
           print(f'[transport] normalized retained patch bytes={len(raw)}')
           PY
