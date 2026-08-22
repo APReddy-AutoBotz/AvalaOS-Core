@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+const storageSource = readFileSync('services/storage.ts', 'utf8');
+assert.doesNotMatch(
+  storageSource,
+  /useLayoutEffect/,
+  'persistent reconstruction evidence must not be rewritten by mount/render effects',
+);
+assert.match(
+  storageSource,
+  /const setPersistentState = useCallback\([\s\S]*if \(enabled\) StorageService\.save\(key, resolved\);[\s\S]*setState\(resolved\);/,
+  'persistent storage writes must remain coupled to explicit application state transitions',
+);
+assert.doesNotMatch(
+  storageSource,
+  /StorageService\.save\(key, state\)/,
+  'rendered state must never overwrite independently changed browser reconstruction evidence',
+);
+
 const appSource = readFileSync('App.tsx', 'utf8');
 assert.doesNotMatch(appSource, /savedGeneration\s*\|\|\s*newGeneration/);
 assert.doesNotMatch(appSource, /setTempArtifacts\(artifacts\)[\s\S]{0,450}applyGuardedView\(View\.WORKSPACE\)/);
