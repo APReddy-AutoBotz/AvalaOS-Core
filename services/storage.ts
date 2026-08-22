@@ -1,5 +1,5 @@
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 const APP_PREFIX = 'avalaos-core-v1';
 
@@ -76,6 +76,7 @@ export function usePersistentState<T>(
         enabled ? StorageService.load(key, defaultValue, key === StorageKeys.SCOPE || key === StorageKeys.VIEW) : defaultValue
     ));
     const latestState = useRef(state);
+    latestState.current = state;
 
     const setPersistentState = useCallback((nextState: T | ((previous: T) => T)) => {
         const resolved = typeof nextState === 'function'
@@ -85,10 +86,6 @@ export function usePersistentState<T>(
         if (enabled) StorageService.save(key, resolved);
         setState(resolved);
     }, [enabled, key]);
-
-    useLayoutEffect(() => {
-        latestState.current = state;
-    }, [state]);
 
     return [state, setPersistentState] as const;
 }
