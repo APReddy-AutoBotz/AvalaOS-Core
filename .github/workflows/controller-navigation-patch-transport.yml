@@ -24,13 +24,11 @@ jobs:
           ref: controller/navigation-durability-release-hardening-249
           fetch-depth: 0
 
-      - name: Recover and apply retained Sol patch
+      - name: Apply Sol patch and verify exact target blobs
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
           RETAINED_PATCH_BLOB_SHA: ec6bf087a97732cb1f23e9f7d2256488e796c76a
-          EXPECTED_PATCH_BYTES: '27572'
-          EXPECTED_PATCH_LINES: '420'
           CONTROLLER_BRANCH: controller/navigation-durability-release-hardening-249
         shell: bash
         run: |
@@ -38,13 +36,8 @@ jobs:
           echo "[transport] controller head=$(git rev-parse HEAD)"
           git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
           git rev-list HEAD | grep -Fx "$EXPECTED_BASE_SHA" >/dev/null
-          echo "[transport] recovering retained controller blob ${RETAINED_PATCH_BLOB_SHA}"
           gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${RETAINED_PATCH_BLOB_SHA}" --jq .content | tr -d '\n' | base64 -d > /tmp/navigation.patch
-          actual_bytes="$(wc -c < /tmp/navigation.patch | tr -d ' ')"
-          actual_lines="$(wc -l < /tmp/navigation.patch | tr -d ' ')"
-          echo "[transport] bytes=${actual_bytes}/${EXPECTED_PATCH_BYTES} lines=${actual_lines}/${EXPECTED_PATCH_LINES}"
-          test "$actual_bytes" = "$EXPECTED_PATCH_BYTES"
-          test "$actual_lines" = "$EXPECTED_PATCH_LINES"
+          echo "[transport] captured patch bytes=$(wc -c < /tmp/navigation.patch) lines=$(wc -l < /tmp/navigation.patch)"
           grep '^diff --git ' /tmp/navigation.patch | sed -E 's#^diff --git a/([^ ]+) b/.*#\1#' | sort > /tmp/patch-paths
           cat > /tmp/expected-patch-paths <<'EOF'
           .github/workflows/preview-exhaustive-browser-qa.yml
@@ -61,18 +54,28 @@ jobs:
           EOF
           sort /tmp/expected-patch-paths > /tmp/expected-patch-paths.sorted
           diff -u /tmp/expected-patch-paths.sorted /tmp/patch-paths
-          echo "[transport] validating exact Sol patch against published QA base"
           git apply --check /tmp/navigation.patch
           git apply /tmp/navigation.patch
+          echo "[transport] verifying byte-identical Sol after-state by Git blob IDs"
+          verify_blob() { path="$1"; expected="$2"; actual="$(git hash-object "$path")"; echo "${path}: ${actual} expected-prefix=${expected}"; test "${actual#${expected}}" != "$actual"; }
+          verify_blob '.github/workflows/preview-exhaustive-browser-qa.yml' '01920e1'
+          verify_blob 'App.tsx' '6fe17b4'
+          verify_blob 'package.json' 'af280b2'
+          verify_blob 'playwright.config.ts' '866a02a'
+          verify_blob 'playwright.controller-navigation-history.config.ts' '6b4b0af'
+          verify_blob 'playwright.exhaustive-acceptance.config.ts' '36c2b60'
+          verify_blob 'scripts/checkWorkflowYaml.test.mjs' 'd605ba9'
+          verify_blob 'services/productNavigationController.test.ts' '291e783'
+          verify_blob 'services/productNavigationController.ts' '0242432'
+          verify_blob 'services/productNavigationState.ts' '563195a'
+          verify_blob 'services/viewStatePersistence.test.ts' '213931b'
           rm .github/workflows/controller-navigation-patch-transport.yml
           git add -A
           git diff --cached --check
           { cat /tmp/expected-patch-paths.sorted; echo '.github/workflows/controller-navigation-patch-transport.yml'; } | sort > /tmp/expected-staged-paths
           git diff --cached --name-only | sort > /tmp/actual-staged-paths
           diff -u /tmp/expected-staged-paths /tmp/actual-staged-paths
-          echo "[transport] committing validated product/QA tree"
           git config user.name 'AvalaOS Controller'
           git config user.email 'controller@users.noreply.github.com'
           git commit -m 'Harden governed navigation history'
-          echo "[transport] pushing clean implementation head"
           git push origin "HEAD:${CONTROLLER_BRANCH}"
