@@ -112,12 +112,36 @@ export function hasProductNavigationSearch(search: string | URLSearchParams) {
   return PRODUCT_NAVIGATION_KEYS.some(key => params.has(key));
 }
 
+export function isStructurallyValidProductNavigationSearch(search: string | URLSearchParams) {
+  const params = searchParamsFrom(search);
+  if (PRODUCT_NAVIGATION_KEYS.some(key => params.getAll(key).length > 1)) return false;
+  if (!params.has('view') || !params.has('scope')) return false;
+  if (normalizePersistedView(params.get('view')) !== params.get('view')) return false;
+  const scopeType = params.get('scope');
+  if (!Object.values(ScopeType).includes(scopeType as ScopeType)) return false;
+  const generation = cleanString(params.get('generationId'));
+  const documentGeneration = cleanString(params.get('documentGenerationId'));
+  if (generation && documentGeneration && generation !== documentGeneration) return false;
+  const scopeId = cleanString(params.get('scopeId'));
+  const projectId = cleanString(params.get('projectId'));
+  if (scopeType === ScopeType.PROJECT) {
+    if (!scopeId || !projectId || scopeId !== projectId || !cleanString(params.get('scopeName'))) return false;
+  } else if (projectId || params.has('projectId')) {
+    return false;
+  }
+  if (scopeType === ScopeType.TEAM && (!scopeId || !cleanString(params.get('scopeName')))) return false;
+  if ((scopeType === ScopeType.MY_WORK || scopeType === ScopeType.ORGANIZATION)
+    && (params.has('scopeId') || params.has('scopeName'))) return false;
+  return true;
+}
+
 export function hasDurableProductNavigationAgreement(
   search: string | URLSearchParams,
   persistedView: unknown,
   persistedScope: unknown,
 ) {
   const params = searchParamsFrom(search);
+  if (!isStructurallyValidProductNavigationSearch(params)) return false;
   const target = parseProductNavigationSearch(search);
   const carriesScopedIdentity = ['scope', 'scopeId', 'scopeName', 'projectId'].some(key => params.has(key));
   if (!carriesScopedIdentity) return true;

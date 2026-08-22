@@ -15,9 +15,15 @@ import {
   buildProductNavigationSearch,
   hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
+  isStructurallyValidProductNavigationSearch,
   parseProductNavigationSearch,
   resolveProductNavigationState,
 } from './productNavigationState';
+
+assert.equal(isStructurallyValidProductNavigationSearch('?view=boards&view=delivery_pack&scope=my_work'), false);
+assert.equal(isStructurallyValidProductNavigationSearch('?view=boards&scope=project&scopeId=project-1&scopeName=One&projectId=project-2'), false);
+assert.equal(isStructurallyValidProductNavigationSearch('?view=workspace&scope=my_work&generationId=one&documentGenerationId=two'), false);
+assert.equal(isStructurallyValidProductNavigationSearch('?view=not-a-view&scope=my_work'), false);
 
 const makeOrganization = (enabledModules: ProductModuleKey[] = ['assess', 'docs', 'delivery', 'monitor']): Organization => ({
   id: 'org-1',

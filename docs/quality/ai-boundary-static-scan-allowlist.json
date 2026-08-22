@@ -348,6 +348,16 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the no-persistence source assertion confined to client context-safety tests; do not treat it as runtime authority."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/controllerNavigationHistory.spec.ts",
+      "lines": [
+        35,
+        43
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep bounded inspection of non-secret persisted navigation evidence confined to controller browser QA; do not treat browser storage as runtime authority."
     }
   ]
 }
