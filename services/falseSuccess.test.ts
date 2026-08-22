@@ -24,8 +24,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| navigationHydrated\.current\) return;\s*if \(processesLoading\) return;/,
-  'explicit URL hydration must commit in the layout phase before passive reconciliation can observe a stale render',
+  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| navigationHydrated\.current\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?navigationHydrated\.current = true;\s*return;\s*\}\s*[^]*?if \(processesLoading\) return;/,
+  'invalid durable navigation must be rejected in the layout phase before product hydration can observe a stale render',
+);
+assert.match(
+  appSource,
+  /if \(processesLoading\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
+  'valid durable navigation must wait for product data before canonical route reconstruction',
 );
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');
