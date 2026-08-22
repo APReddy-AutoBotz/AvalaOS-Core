@@ -1,0 +1,73 @@
+name: Controller Navigation Patch Transport
+
+on:
+  push:
+    branches:
+      - controller/navigation-durability-release-hardening-249
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  apply-retained-sol-patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact controller head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Recover and apply retained Sol patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BASE_SHA: e5a628f288534fa1d1d8d0d82057f9fecfe3167c
+          PATCH_COMMENT_ID: '5379494218'
+          EXPECTED_PATCH_BYTES: '27572'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_BASE_SHA"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" --jq .body > /tmp/controller-comment.md
+          grep -F 'Exact published input SHA: `e5a628f288534fa1d1d8d0d82057f9fecfe3167c`' /tmp/controller-comment.md
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/controller-comment.md').read_text(encoding='utf-8')
+          marker = '```diff\n'
+          start = text.index(marker) + len(marker)
+          end = text.index('\n```', start)
+          patch = text[start:end]
+          Path('/tmp/navigation.patch').write_text(patch, encoding='utf-8')
+          PY
+          actual_bytes="$(wc -c < /tmp/navigation.patch | tr -d ' ')"
+          test "$actual_bytes" = "$EXPECTED_PATCH_BYTES"
+          git apply --check /tmp/navigation.patch
+          git apply /tmp/navigation.patch
+          rm .github/workflows/controller-navigation-patch-transport.yml
+          git add -A
+          git diff --cached --check
+          cat > /tmp/expected-paths <<'EOF'
+          .github/workflows/controller-navigation-patch-transport.yml
+          .github/workflows/preview-exhaustive-browser-qa.yml
+          App.tsx
+          package.json
+          playwright.config.ts
+          playwright.controller-navigation-history.config.ts
+          playwright.exhaustive-acceptance.config.ts
+          scripts/checkWorkflowYaml.test.mjs
+          services/productNavigationController.test.ts
+          services/productNavigationController.ts
+          services/productNavigationState.ts
+          services/viewStatePersistence.test.ts
+          EOF
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          sort /tmp/expected-paths > /tmp/expected-paths.sorted
+          diff -u /tmp/expected-paths.sorted /tmp/actual-paths
+          git config user.name 'AvalaOS Controller'
+          git config user.email 'controller@users.noreply.github.com'
+          git commit -m 'Harden governed navigation history'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
