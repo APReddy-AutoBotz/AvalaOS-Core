@@ -9,7 +9,7 @@ permissions:
 
 env:
   RELEASE_SHA: ${{ github.event.pull_request.head.sha }}
-  HOSTED_PILOT_URL: https://deploy-preview-${{ github.event.number }}--avalaos-pilot.netlify.app
+  PREVIEW_ALIAS_URL: https://deploy-preview-${{ github.event.number }}--avalaos-pilot.netlify.app
 
 jobs:
   preview-exhaustive-browser-qa:
@@ -50,13 +50,22 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 60); do
-            headers="$(curl -fsSIL --max-redirs 5 "$HOSTED_PILOT_URL/" 2>/dev/null || true)"
+            headers="$(curl -fsSIL --max-redirs 5 "$PREVIEW_ALIAS_URL/" 2>/dev/null || true)"
             served_release="$(printf '%s\n' "$headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-release:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
             served_deploy="$(printf '%s\n' "$headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-netlify-deploy-id:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
             served_environment="$(printf '%s\n' "$headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-environment:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
             if [ "$served_release" = "$RELEASE_SHA" ] && [[ "$served_deploy" =~ ^[0-9a-f]{24}$ ]] && [ "$served_environment" = "hosted_nonproduction_pilot" ]; then
+              immutable_url="https://${served_deploy}--avalaos-pilot.netlify.app"
+              immutable_headers="$(curl -fsSIL --max-redirs 5 "$immutable_url/" 2>/dev/null || true)"
+              immutable_release="$(printf '%s\n' "$immutable_headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-release:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
+              immutable_deploy="$(printf '%s\n' "$immutable_headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-netlify-deploy-id:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
+              immutable_environment="$(printf '%s\n' "$immutable_headers" | awk 'BEGIN{IGNORECASE=1} /^x-avalaos-environment:/ {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); value=$0} END{print value}')"
+              test "$immutable_release" = "$RELEASE_SHA"
+              test "$immutable_deploy" = "$served_deploy"
+              test "$immutable_environment" = "hosted_nonproduction_pilot"
               echo "NETLIFY_DEPLOY_ID=$served_deploy" >> "$GITHUB_ENV"
-              echo "Preview identity verified for exact PR head."
+              echo "HOSTED_PILOT_URL=$immutable_url" >> "$GITHUB_ENV"
+              echo "Preview identity verified; browser QA is bound to the immutable deploy permalink without the Netlify Drawer."
               exit 0
             fi
             if [ "$attempt" -eq 60 ]; then
