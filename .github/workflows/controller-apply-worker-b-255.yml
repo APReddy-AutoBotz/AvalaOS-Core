@@ -1,9 +1,8 @@
 name: Controller Apply Worker B 255
 
 on:
-  push:
-    branches:
-      - controller/acceptance-evidence-closure-20260822
+  pull_request:
+    types: [synchronize]
     paths:
       - .github/workflows/controller-apply-worker-b-255.yml
 
@@ -13,21 +12,27 @@ permissions:
 
 jobs:
   apply-worker-b:
-    if: github.event.head_commit.message == 'Controller: stage Worker B transport executor'
+    if: >-
+      github.event.pull_request.number == 255 &&
+      github.event.pull_request.head.ref == 'controller/acceptance-evidence-closure-20260822'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Check out exact controller branch
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
 
-      - name: Verify controller staging ancestry
+      - name: Verify exact controller authority
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "90760085554ebe73a0a1a958da9cbd59ff044db7"
-          test "$(git branch --show-current)" = "controller/acceptance-evidence-closure-20260822"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD^)" = "8de5c8e9adb1d8e51cef9713c791febcbcb0f949"
+          test "${{ github.event.pull_request.base.sha }}" = "862351f9150e013a075a630401b9405dd34d0df8"
 
       - name: Recover and verify durable Worker B patch
         env:
