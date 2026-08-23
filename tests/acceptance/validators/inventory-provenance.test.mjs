@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { canonicalSourceSha256 } from '../../../scripts/exhaustiveAcceptanceModel.mjs';
 
 const root = process.cwd();
 const validator = path.join(root, 'scripts/exhaustiveAcceptanceValidate.mjs');
@@ -21,6 +22,11 @@ assert.equal(inventory.sourceProvenanceSource, 'tests/acceptance/source-provenan
 assert.equal(inventory.uncoveredBranches.some(branch => branch.branchId === 'STUDIO-LEASE_CONCURRENCY'), false);
 assert.equal(inventory.uncoveredBranches.length, 0);
 assert.equal(JSON.parse(readFileSync(catalogPath, 'utf8')).cases.some(item => item.testId === 'SAFETY-005' && item.branchIds.includes('SAFETY-RESPONSE_LOST_AFTER_COMMIT')), true);
+assert.equal(
+  canonicalSourceSha256('line one\r\nline two\r\n'),
+  canonicalSourceSha256('line one\nline two\n'),
+  'source provenance must hash canonical Git text independently of checkout line endings',
+);
 
 const run = (document, bindingsDocument = bindings, provenanceDocument = provenance) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'acceptance-inventory-v3-'));

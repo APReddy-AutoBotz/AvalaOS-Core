@@ -2,21 +2,21 @@
   "schemaVersion": 1,
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "sourceDigests": {
-    "App.tsx": "sha256:cac64c4d2ccfbd8576acefc88fa397f7df79a224f27e760a1780d55313461b6f",
-    "scripts/testPilotOperationsPostgres.mjs": "sha256:642639f9b78d6176878b25dced219c8f11b803a2efea7db9f130840f052e0916",
-    "services/adminWorkbenchModel.ts": "sha256:a0f7bb76a9fa4c20728b1764af9971c9523cbf520a7cb27c5aaaeec1ad3138cf",
+    "App.tsx": "sha256:3ebf3eeee32b6c56b692e795f79c1094177b26a94b3040b2bc19ec66597800c0",
+    "scripts/testPilotOperationsPostgres.mjs": "sha256:35d0632e9728a5b5ba791eae4d428ec557ba962c628a0e6750da639875520048",
+    "services/adminWorkbenchModel.ts": "sha256:65a48174ae1e0ee6bafbb7796f5ad3bb82851ff0a60edbc9b67d4e8b29c89156",
     "services/aiMode.ts": "sha256:f73136224dd913662ad82698a15010d5eb8886ca2289204fbcf7e8dd3bb116a6",
     "services/assessV2/applicationPortfolio.ts": "sha256:f2ad28154480e62cce6ad5cc9e74440ac1e3de216fbc4e2ec97d6cd98df7eb6a",
-    "services/assessV2/reviewDomain.ts": "sha256:51901c0d4163851d2f71e25d023e66a10c10516359745e3a5a6673d5baaec551",
+    "services/assessV2/reviewDomain.ts": "sha256:2ebdfdd9d598c4d29e35ce57953a2c2a48964319182003a3a7dbb4f2914904b6",
     "services/deliveryWorkflowPolicy.ts": "sha256:1a86a44c5f2b807a93f10944fe4e2fc776dc4ba507ecdb160d8001fdfc6c0e8e",
     "services/docsToDeliveryLineage.ts": "sha256:316c63c8532a90feb70a6dc3cb76cf45f883abd32b6f27769ead9495c4607aa2",
-    "services/enterpriseIntelligence.ts": "sha256:64854c9c211ee8a8df9793f8335a1b5cedf6ff65ae786a356cb75bc3cba78967",
-    "services/handoffLedgerService.ts": "sha256:4f1eed3f50dffda2451df43ee4b78cef6d07d7fd9d199adbbb44df40e8fd70d1",
-    "services/hostedSandboxRoute.ts": "sha256:5726162b5d84d50b5cfb4889aa21cbb9583e4a7c028e3a52490985e877c37726",
+    "services/enterpriseIntelligence.ts": "sha256:a4c461c00899e537595c1ff1454bf918964469f43105165d898fbc2159f7fdb7",
+    "services/handoffLedgerService.ts": "sha256:f44606025c75519f3befad71a7ea96c2101809f909922291ba8d5592717d515d",
+    "services/hostedSandboxRoute.ts": "sha256:31b5a5e97e0f430bee5ca66846e4a1c91c4cb49d5d0ec17dcc3dbb37ff214fb5",
     "services/persistenceTransition.ts": "sha256:190843d1c54e84f2bfc2d448a48539b44baa06adc8ea934ba96bb384ed3aeb2c",
     "services/scoringEngine.ts": "sha256:5361966c91e6492ac69b3f79841365decc6de96472d345ed0472c24f9bd27f04",
     "services/studioArtifacts/contracts.ts": "sha256:998049662ba843b2812fa3a656f2abf5e98e5a2c27e12eedd8936ff38a1ca594",
-    "services/trustAssurance/domain.ts": "sha256:e9775d90e01bbce9dc9eec9f6a0559105344215adc66bac16ea30cf293a2efaf"
+    "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864"
   },
   "contracts": [
     {

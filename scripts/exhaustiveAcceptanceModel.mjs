@@ -39,7 +39,11 @@ const normalize = value => Array.isArray(value)
     ? Object.fromEntries(Object.keys(value).sort().map(key => [key, normalize(value[key])]))
     : value;
 const canonicalValue = value => JSON.stringify(normalize(value));
-const fileSha256 = file => `sha256:${createHash('sha256').update(fs.readFileSync(file)).digest('hex')}`;
+export const canonicalSourceSha256 = bytes => {
+  const text = Buffer.isBuffer(bytes) ? bytes.toString('utf8') : String(bytes);
+  return `sha256:${createHash('sha256').update(text.replace(/\r\n/gu, '\n'), 'utf8').digest('hex')}`;
+};
+const fileSha256 = file => canonicalSourceSha256(fs.readFileSync(file));
 
 export const expectedExecutionOwnership = (testId, bindings) => {
   const owners = [];
