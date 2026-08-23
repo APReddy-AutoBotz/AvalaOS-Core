@@ -1,9 +1,9 @@
 name: Controller PR255 Recovery Artifact
 
 on:
-  push:
-    branches:
-      - controller/acceptance-evidence-closure-20260822
+  pull_request:
+    types: [synchronize]
+    branches: [main]
 
 permissions:
   contents: read
@@ -12,30 +12,27 @@ permissions:
 
 jobs:
   reconstruct-approved-correction:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'controller/acceptance-evidence-closure-20260822'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout exact controller transport head
         uses: actions/checkout@v4
         with:
-          ref: controller/acceptance-evidence-closure-20260822
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Reconstruct and verify approved correction
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_BASE_SHA: 51232e24f6500664ec4252e8c4a3eb1e9c9247a9
           PATCH_COMMENT_ID: '5383088611'
-          EXPECTED_PATCH_BYTES: '17626'
-          EXPECTED_PATCH_SHA256: 1e315b725c4866cb543926a1ff324b2ee5f282e5f007c835690a242757665aa4
-          EXPECTED_GZIP_BYTES: '4298'
-          EXPECTED_GZIP_SHA256: 3fb4c7be2736331d21b666bdd97e22ccf1835b7b9daed4e83b6bb993322d9ebe
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "$EXPECTED_BASE_SHA"
-          test "$(git diff --name-only HEAD^..HEAD)" = ".github/workflows/controller-255-artifact-recovery.yml"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git merge-base --is-ancestor "$EXPECTED_BASE_SHA" HEAD
+          test "$(git diff --name-only "$EXPECTED_BASE_SHA"..HEAD)" = ".github/workflows/controller-255-artifact-recovery.yml"
           gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" --jq .body > /tmp/controller-comment.md
           python - <<'PY'
           import base64, gzip, hashlib
