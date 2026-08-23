@@ -111,6 +111,7 @@ assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate
 assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
 assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
+assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'the seven-persona keyboard and axe scenario needs an explicit bounded budget without skipped assertions');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,

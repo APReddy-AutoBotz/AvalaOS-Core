@@ -536,6 +536,7 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
   test(title, async ({ page }, testInfo) => {
     test.skip(!binding.projects.includes(testInfo.project.name), `Not required in ${testInfo.project.name}`);
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');
+    if (binding.scenario === 'keyboard-a11y') testInfo.setTimeout(180_000);
     await runScenario(binding.scenario!, page, testInfo);
   });
 }
