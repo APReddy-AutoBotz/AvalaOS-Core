@@ -452,7 +452,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       })));
       const invalidBoardsResponse = await page.reload({ waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(invalidBoardsResponse);
-      await expect(page).not.toHaveURL(/projectId=/u);
+      await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalBoardsNavigation);
       await clickProductNav(page, 'Delivery');
@@ -484,7 +484,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const invalidResponse = await invalidNavigationResponse;
         await page.waitForLoadState('domcontentloaded');
         assertHostedResponseIdentity(invalidResponse);
-        await expect(page).not.toHaveURL(/projectId=/u);
+        await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
         await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
 
         await page.evaluate(scope => {

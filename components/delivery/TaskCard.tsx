@@ -18,13 +18,13 @@ interface TaskCardProps {
 
 const priorityMap: Record<TaskPriority, { icon: React.FC<{ className?: string }>; color: string; badge: string; label: string }> = {
     High: { icon: ArrowUpIcon, color: 'text-red-500', badge: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/20', label: 'High' },
-    Medium: { icon: MinusIcon, color: 'text-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20', label: 'Medium' },
+    Medium: { icon: MinusIcon, color: 'text-amber-500', badge: 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20', label: 'Medium' },
     Low: { icon: ArrowDownIcon, color: 'text-slate-400', badge: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', label: 'Low' },
 };
 
 const statusBadgeMap: Partial<Record<TaskStatus, string>> = {
     Blocked: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/20',
-    'On Hold': 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
+    'On Hold': 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
     Done: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/20',
 };
 
@@ -120,7 +120,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <div>
                 <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{task.title}</p>
                 {task.description && (
-                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-[1.15rem] text-slate-500 dark:text-slate-400">{task.description}</p>
+                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-[1.15rem] text-slate-600 dark:text-slate-400">{task.description}</p>
                 )}
             </div>
 

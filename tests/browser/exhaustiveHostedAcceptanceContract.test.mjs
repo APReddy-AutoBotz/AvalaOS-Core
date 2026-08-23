@@ -7,6 +7,7 @@ const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'ut
 const adminWorkbenchSource = fs.readFileSync(new URL('../../components/admin/AdminWorkbench.tsx', import.meta.url), 'utf8');
 const taskCardSource = fs.readFileSync(new URL('../../components/delivery/TaskCard.tsx', import.meta.url), 'utf8');
 const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
+const processCatalogSource = fs.readFileSync(new URL('../../components/assess/ProcessCatalogView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
@@ -106,6 +107,10 @@ assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain t
 assert.match(adminWorkbenchSource, /<span className="[^"]*text-slate-600[^"]*">[\s\S]*Sectioned admin structure/u, 'the Platform Admin badge must retain AA-capable foreground contrast');
 assert.match(taskCardSource, /text-slate-700 dark:text-slate-200" style=\{\{ backgroundColor: `\$\{epic\.color\}18` \}\}/u, 'dynamic epic color may tint only the background, never become low-contrast foreground text');
 assert.match(boardsSource, /overflow-auto[^"]*" tabIndex=\{0\} aria-label="Delivery work board"/u, 'the mobile scrollable board region must be named and keyboard focusable');
+assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate-400">\{label\}/u, 'mobile board summary labels must retain AA-capable contrast');
+assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
+assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
+assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,
