@@ -118,7 +118,7 @@ assert.doesNotMatch(taskCardSource, /text-\[(?:10|11)px\][^"'`]*text-slate-(?:40
 assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
 assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
-assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'the seven-persona keyboard and axe scenario needs an explicit bounded budget without skipped assertions');
+assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y' \|\| binding\.scenario === 'serious-critical-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'both seven-persona accessibility scenarios need an explicit bounded budget without skipped assertions');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,
