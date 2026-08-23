@@ -212,7 +212,84 @@
     {
       "testId": "SAFETY-005",
       "suiteId": "server-disposable-postgresql",
+      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "assertionIds": [
+        "pilot-operations-postgres--responseLossExactReplayVerified",
+        "pilot-operations-postgres--responseLossExactlyOneEffectVerified",
+        "pilot-operations-postgres--responseLossConflictRejected",
+        "pilot-operations-postgres--responseLossForeignTenantNonDisclosure"
+      ],
       "components": ["server"]
+    },
+    {
+      "testId": "ASSESS-002",
+      "suiteId": "server-assess-process-edit-denial",
+      "command": ["npm", "run", "test:migrations:pr1b"],
+      "assertionIds": ["assess-postgres--process-edit-authority-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "DELIVERY-009",
+      "suiteId": "server-delivery-lineage-tenant-boundary",
+      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
+      "assertionIds": ["delivery-postgres--exact-pack-ancestry", "delivery-postgres--foreign-tenant-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "MONITOR-001",
+      "suiteId": "server-monitor-lineage",
+      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
+      "assertionIds": ["monitor-postgres--lineage-projection", "monitor-postgres--foreign-tenant-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "MONITOR-002",
+      "suiteId": "server-monitor-outcome",
+      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
+      "assertionIds": ["monitor-postgres--outcome-projection", "monitor-postgres--foreign-tenant-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "MONITOR-003",
+      "suiteId": "server-monitor-blocker",
+      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
+      "assertionIds": ["monitor-postgres--blocker-projection", "monitor-postgres--foreign-tenant-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "MONITOR-004",
+      "suiteId": "server-monitor-unavailable",
+      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
+      "assertionIds": ["monitor-postgres--unavailable-projection", "monitor-postgres--foreign-tenant-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "ADMIN-002",
+      "suiteId": "server-admin-non-admin-denial",
+      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "assertionIds": ["admin-postgres--non-admin-denied"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "ADMIN-003",
+      "suiteId": "server-admin-capability-matrix",
+      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "assertionIds": ["admin-postgres--capability-matrix"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "SAFETY-001",
+      "suiteId": "server-offline-false-success",
+      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "assertionIds": ["safety-postgres--offline-mutation-no-false-success"],
+      "components": ["server", "hosted"]
+    },
+    {
+      "testId": "SAFETY-003",
+      "suiteId": "server-timeout-false-success",
+      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "assertionIds": ["safety-postgres--timeout-mutation-no-false-success"],
+      "components": ["server", "hosted"]
     }
   ],
   "oracleTests": [
@@ -312,7 +389,7 @@
     },
     {
       "testId": "SANDBOX-006",
-      "scenario": "sandbox-descendant",
+      "scenario": "sandbox-accepted-descendant",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
@@ -360,7 +437,7 @@
     },
     {
       "testId": "PUBLIC-003",
-      "scenario": "sandbox-descendant",
+      "scenario": "sandbox-accepted-descendant",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"

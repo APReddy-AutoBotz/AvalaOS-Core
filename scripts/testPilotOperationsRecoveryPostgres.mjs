@@ -13,8 +13,10 @@ import {
 
 const adminUrl=process.env.PILOT_OPERATIONS_DATABASE_URL;
 if(!adminUrl){if(process.env.CI)throw new Error('PILOT_OPERATIONS_DATABASE_URL is required in CI.');console.log('Pilot Operations PostgreSQL recovery skipped: PILOT_OPERATIONS_DATABASE_URL is not set.');process.exit(0)}
+const pgDumpTool=process.env.PILOT_OPERATIONS_PG_DUMP??'pg_dump',pgRestoreTool=process.env.PILOT_OPERATIONS_PG_RESTORE??'pg_restore';
+const shellForTool=tool=>process.platform==='win32'&&/\.cmd$/iu.test(tool);
 const suffix=`${process.pid}_${Date.now()}`,names={source:`pilot_recovery_source_${suffix}`,restore:`pilot_recovery_restore_${suffix}`};
-const directory=await mkdtemp(join(tmpdir(),'avalaos-pilot-recovery-'));
+const directory=await mkdtemp(join(process.env.PILOT_OPERATIONS_TEMP_DIR??tmpdir(),'avalaos-pilot-recovery-'));
 const dump=join(directory,'synthetic.dump'),corrupt=join(directory,'synthetic-corrupt.dump'),manifestPath=join(directory,'manifest.json');
 const sha256=buffer=>createHash('sha256').update(buffer).digest('hex');
 const validateManifest=(value,buffer)=>{
@@ -36,7 +38,7 @@ try{
   await source.query("INSERT INTO pilot_operations_command_receipts(id,org_id,workspace_id,actor_id,operation,idempotency_key,initial_request_id,request_hash,status,response_body,resource_id) VALUES($1,$2,$3,$4,'validate_release_candidate','synthetic-response-loss',$5,$6,'committed',$7::jsonb,$8)",[receipt,fixture.org,fixture.workspace,fixture.requester,'98000000-0000-4000-8000-000000000005','c'.repeat(64),JSON.stringify(response),candidate]);
   await source.query("INSERT INTO pilot_operations_audit_events(id,org_id,workspace_id,actor_id,action,resource_id,receipt_id,result,metadata) VALUES($1,$2,$3,$4,'validate_release_candidate',$5,$6,'committed','{\"synthetic\":true}'::jsonb)",[audit,fixture.org,fixture.workspace,fixture.requester,candidate,receipt]);
   const invariants=(await source.query("SELECT (SELECT count(*) FROM assess_v2_studio_handoffs)::int handoffs,(SELECT count(*) FROM studio_artifact_command_receipts)::int artifact_receipts,(SELECT count(*) FROM pilot_operations_command_receipts)::int operation_receipts,(SELECT count(*) FROM pilot_operations_audit_events)::int operation_audits")).rows[0];
-  execFileSync('pg_dump',['--format=custom','--no-owner','--no-acl','--file',dump,databaseUrlFor(adminUrl,names.source)],{stdio:'inherit'});
+  execFileSync(pgDumpTool,['--format=custom','--no-owner','--no-acl','--file',dump,databaseUrlFor(adminUrl,names.source)],{stdio:'inherit',shell:shellForTool(pgDumpTool)});
   const bytes=await readFile(dump);const manifest={schemaVersion:'pilot-operations-backup-v1',sha256:sha256(bytes),byteLength:bytes.length,syntheticOnly:true,sourceEnvironment:'disposable_ci'};await writeFile(manifestPath,JSON.stringify(manifest));
   const readManifest=JSON.parse(await readFile(manifestPath,'utf8'));validateManifest(readManifest,await readFile(dump));
   assert.throws(()=>validateManifest({...readManifest,schemaVersion:'pilot-operations-backup-v0'},bytes),/wrong backup schema version/);
@@ -44,9 +46,9 @@ try{
   assert.throws(()=>validateManifest({...readManifest,sha256:'0'.repeat(64)},bytes),/backup digest mismatch/);
   await writeFile(corrupt,bytes);await truncate(corrupt,Math.max(1,bytes.length-1024));assert.notEqual(sha256(await readFile(corrupt)),readManifest.sha256,'truncated backup must fail manifest integrity');
   restored=await createDatabase(admin,adminUrl,names.restore);await restored.end();restored=null;
-  const interrupted=spawnSync('pg_restore',['--exit-on-error','--no-owner','--no-acl','--dbname',databaseUrlFor(adminUrl,names.restore),corrupt],{encoding:'utf8'});assert.notEqual(interrupted.status,0,'truncated restore must fail closed');
+  const interrupted=spawnSync(pgRestoreTool,['--exit-on-error','--no-owner','--no-acl','--dbname',databaseUrlFor(adminUrl,names.restore),corrupt],{encoding:'utf8',shell:shellForTool(pgRestoreTool)});assert.notEqual(interrupted.status,0,'truncated restore must fail closed');
   await dropDatabase(admin,names.restore);restored=await createDatabase(admin,adminUrl,names.restore);await restored.end();restored=null;
-  execFileSync('pg_restore',['--exit-on-error','--no-owner','--no-acl','--dbname',databaseUrlFor(adminUrl,names.restore),dump],{stdio:'inherit'});
+  execFileSync(pgRestoreTool,['--exit-on-error','--no-owner','--no-acl','--dbname',databaseUrlFor(adminUrl,names.restore),dump],{stdio:'inherit',shell:shellForTool(pgRestoreTool)});
   restored=await connect(databaseUrlFor(adminUrl,names.restore));
   const restoredInvariants=(await restored.query("SELECT (SELECT count(*) FROM assess_v2_studio_handoffs)::int handoffs,(SELECT count(*) FROM studio_artifact_command_receipts)::int artifact_receipts,(SELECT count(*) FROM pilot_operations_command_receipts)::int operation_receipts,(SELECT count(*) FROM pilot_operations_audit_events)::int operation_audits")).rows[0];assert.deepEqual(restoredInvariants,invariants);
   const canonical=(await restored.query('SELECT response_body FROM pilot_operations_command_receipts WHERE id=$1',[receipt])).rows[0];assert.deepEqual(canonical.response_body,response);
@@ -56,8 +58,18 @@ try{
   await mkdir('artifacts/pilot-operations',{recursive:true});
   await writeFile('artifacts/pilot-operations/postgres-recovery.json',JSON.stringify({
     kind:'executed_disposable_postgresql_recovery',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
+    runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT??0),workflowPath:process.env.ACCEPTANCE_WORKFLOW_PATH??null,environment:'disposable-ci',
+    scope:{evidenceScope:'executed-fixture',fixtureId:'synthetic-pilot-operations-recovery',organizationId:fixture.org,workspaceId:fixture.workspace},
     backupSha256:manifest.sha256,backupByteLength:manifest.byteLength,cleanRestoreVerified:true,corruptionRejected:true,
     incompleteBackupRejected:true,wrongVersionRejected:true,interruptedRetryVerified:true,canonicalReceiptVerified:true,
+    assertionResults:[
+      {assertionId:'pilot-recovery--cleanRestoreVerified',status:'PASS'},
+      {assertionId:'pilot-recovery--corruptionRejected',status:'PASS'},
+      {assertionId:'pilot-recovery--incompleteBackupRejected',status:'PASS'},
+      {assertionId:'pilot-recovery--wrongVersionRejected',status:'PASS'},
+      {assertionId:'pilot-recovery--interruptedRetryVerified',status:'PASS'},
+      {assertionId:'pilot-recovery--canonicalReceiptVerified',status:'PASS'},
+    ],
     syntheticOnly:true,liveActivationAuthorized:false,
   },null,2)+'\n');
   console.log('POSTGRES RECOVERY PASS backup -> clean restore, canonical lineage/control invariants, corruption rejection, interrupted restore retry, and canonical response-loss receipt');

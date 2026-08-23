@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
+const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
@@ -85,14 +86,17 @@ assert.match(hostedSpec, /externalOriginClasses\.set\(url\.origin, originClass\)
 assert.doesNotMatch(hostedSpec, /return url\.origin;/u, 'literal origins must never be returned into retained diagnostic evidence');
 assert.doesNotMatch(hostedSpec, /\.(?:search|hash|username|password)\b/u, 'diagnostics must not retain query, fragment, or userinfo fields');
 
-const sampleBody = hostedSpec.match(/samples\.push\(\{([\s\S]*?)\}\);/u);
+const sampleBody = hostedSpec.match(/sample: \(request, category\) => \(\{([\s\S]*?)\}\),/u);
 assert.ok(sampleBody, 'violation sample construction must remain structurally inspectable');
 assert.match(sampleBody[1], /method: request\.method\(\)\.toUpperCase\(\)/u, 'violation evidence may retain only normalized method metadata');
-assert.match(sampleBody[1], /category,/u, 'violation evidence must retain the fail-closed category');
+assert.match(sampleBody[1], /category: category as NetworkViolationCategory,/u, 'violation evidence must retain the fail-closed category');
 assert.match(sampleBody[1], /resourceType: request\.resourceType\(\)/u, 'violation evidence may retain the non-sensitive Playwright resource type');
 assert.match(sampleBody[1], /originClass: classifyDiagnosticOrigin\(request\.url\(\)\)/u, 'violation evidence must retain only the opaque origin class');
 assert.doesNotMatch(sampleBody[1], /\borigin\s*:/u, 'violation evidence must never retain a literal origin field');
 assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'violation evidence must never retain headers or request bodies');
+assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
+assert.match(observerSource, /samples\.length<maxSamples/u, 'retained violation samples must remain bounded');
+assert.match(observerSource, /stop:\(\)=>page\.off\('request',inspect\)/u, 'the observer must expose one explicit stop boundary');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,

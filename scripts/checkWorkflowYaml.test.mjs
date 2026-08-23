@@ -49,7 +49,7 @@ assert.match(
   'release enforcement must still require hosted browser success',
 );
 
-const hostedPilotLiveWorkflowSource = await readFile('.github/workflows/hosted-pilot-live-acceptance.yml', 'utf8');
+const hostedPilotLiveWorkflowSource = (await readFile('.github/workflows/hosted-pilot-live-acceptance.yml', 'utf8')).replaceAll('\r\n', '\n');
 const hostedPilotLiveWorkflow = parseWorkflowYaml(hostedPilotLiveWorkflowSource, 'hosted-pilot-live-acceptance.yml');
 const hostedPilotLiveJob = hostedPilotLiveWorkflow.jobs['live-hosted-acceptance'];
 const hostedPilotLiveSteps = hostedPilotLiveJob.steps;

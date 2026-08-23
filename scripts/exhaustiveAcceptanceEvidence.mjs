@@ -4,18 +4,43 @@ export const normalizePlaywrightStatus = status => {
   return 'BLOCKED';
 };
 
-export const validateRetainedProducerResults = ({ suite, emitted }) => {
+const sorted = values => [...values].sort();
+const sameValues = (left, right) => JSON.stringify(sorted(left ?? [])) === JSON.stringify(sorted(right ?? []));
+const sameObject = (left, right) => JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
+const passEligibleScope = scope => scope?.evidenceScope === 'executed-fixture' && Boolean(scope.organizationId) && Boolean(scope.workspaceId);
+
+export const validateRetainedProducerResults = ({ suite, emitted, identity, provenanceByTestId = new Map() }) => {
   const errors = [];
+  if (emitted?.schemaVersion !== 2) errors.push(`producer-schema:${suite?.suiteId ?? 'missing'}`);
   if (!Array.isArray(emitted?.results)) return [`producer-result-array:${suite?.suiteId ?? 'missing'}`];
   const allowedTestIds = new Set(suite?.testIds ?? []);
   for (const item of emitted.results) {
     const key = `${item?.suiteId ?? 'missing'}:${item?.testId ?? 'missing'}`;
     if (item?.suiteId !== suite?.suiteId) errors.push(`producer-suite-mismatch:${key}`);
     if (!allowedTestIds.has(item?.testId)) errors.push(`producer-test-id-mismatch:${key}`);
+    if (!['PASS', 'FAIL', 'BLOCKED'].includes(item?.status)) errors.push(`producer-status:${key}`);
+    if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`producer-assertion-outcomes:${key}`);
+    if ((item?.assertionOutcomes ?? []).some(outcome => !outcome?.assertionId || !['PASS', 'FAIL', 'BLOCKED'].includes(outcome?.status))) errors.push(`producer-assertion-outcome-invalid:${key}`);
+    const derivedStatus = (item?.assertionOutcomes ?? []).some(outcome => outcome.status === 'FAIL')
+      ? 'FAIL'
+      : (item?.assertionOutcomes ?? []).some(outcome => outcome.status !== 'PASS')
+        ? 'BLOCKED'
+        : 'PASS';
+    if (item?.status !== derivedStatus) errors.push(`producer-status-not-derived:${key}`);
     if (!Array.isArray(item?.assertionIds) || !item.assertionIds.length) errors.push(`producer-assertions-missing:${key}`);
     if (!Array.isArray(item?.scenarioIds) || !item.scenarioIds.length) errors.push(`producer-scenarios-missing:${key}`);
     if (!Array.isArray(item?.branchIds) || !item.branchIds.length) errors.push(`producer-branches-missing:${key}`);
     if (!Array.isArray(item?.sourceReferences) || !item.sourceReferences.length) errors.push(`producer-sources-missing:${key}`);
+    for (const field of ['releaseSha', 'workflowRunId', 'workflowAttempt', 'environment', 'workflowPath']) {
+      if (String(item?.[field]) !== String(identity?.[field])) errors.push(`producer-${field}:${key}`);
+    }
+    const provenance = provenanceByTestId.get(item?.testId);
+    const owner = provenance?.ownership?.find(value => value.kind === 'retained-assertion' && value.ownerId === suite?.suiteId);
+    if (!owner || !sameValues(item?.assertionIds, [owner.assertionId]) || !sameValues(item?.scenarioIds, [owner.scenarioId])) errors.push(`producer-ownership:${key}`);
+    if (!sameValues(item?.branchIds, provenance ? [provenance.branchId] : [])) errors.push(`producer-branches:${key}`);
+    if (!sameValues(item?.sourceReferences, provenance?.sourceReferences ?? [])) errors.push(`producer-sources:${key}`);
+    if (!sameObject(item?.scope, provenance?.scope)) errors.push(`producer-scope:${key}`);
+    if (item?.status === 'PASS' && !passEligibleScope(item?.scope)) errors.push(`producer-scope-not-executed:${key}`);
   }
   return errors;
 };
@@ -35,6 +60,8 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (!suite?.suiteId || seen.has(suite.suiteId)) errors.push(`duplicate-or-missing-suite:${suite?.suiteId ?? 'missing'}`);
     seen.add(suite?.suiteId);
     if (!['PASS', 'FAIL'].includes(suite?.status)) errors.push(`invalid-suite-status:${suite?.suiteId ?? 'missing'}`);
+    const canonical = expected.canonicalCommandBySuiteId?.get(suite?.suiteId);
+    if (!canonical || suite?.command !== canonical) errors.push(`suite-command:${suite?.suiteId ?? 'missing'}`);
   }
   const resultSeen = new Set();
   for (const item of manifest?.results ?? []) {
@@ -42,15 +69,15 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (!item?.suiteId || !item?.testId || resultSeen.has(key)) errors.push(`duplicate-or-missing-result:${key}`);
     resultSeen.add(key);
     if (!seen.has(item?.suiteId)) errors.push(`result-suite-missing:${key}`);
-    if (!['PASS', 'FAIL'].includes(item?.status)) errors.push(`invalid-result-status:${key}`);
+    if (!['PASS', 'FAIL', 'BLOCKED'].includes(item?.status)) errors.push(`invalid-result-status:${key}`);
     if (item?.releaseSha !== expected.releaseSha) errors.push(`result-release-sha:${key}`);
     if (String(item?.workflowRunId) !== String(expected.workflowRunId)) errors.push(`result-workflow-run:${key}`);
     if (String(item?.workflowAttempt) !== String(expected.workflowAttempt)) errors.push(`result-workflow-attempt:${key}`);
     if (item?.environment !== expected.environment) errors.push(`result-environment:${key}`);
     if (item?.workflowPath !== expected.workflowPath) errors.push(`result-workflow-path:${key}`);
     if (!item?.jobId || item?.jobId !== item?.suiteId) errors.push(`result-job:${key}`);
-    const declaredSuite = (manifest?.suites ?? []).find(value => value.suiteId === item?.suiteId);
-    if (!item?.command || item.command !== declaredSuite?.command) errors.push(`result-command:${key}`);
+    const canonical = expected.canonicalCommandBySuiteId?.get(item?.suiteId);
+    if (!canonical || item?.command !== canonical) errors.push(`result-command:${key}`);
     for (const field of ['assertionIds', 'scenarioIds', 'branchIds', 'sourceReferences']) {
       const values = item?.[field];
       if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length) errors.push(`result-${field}:${key}`);
@@ -59,6 +86,24 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (!(retainedBindings.get(item?.testId) ?? []).includes(item?.suiteId)) errors.push(`result-binding-mismatch:${key}`);
     const expectedBranches = expected.branchIdsByTestId?.get(item?.testId);
     if (expectedBranches && JSON.stringify([...item.branchIds].sort()) !== JSON.stringify([...expectedBranches].sort())) errors.push(`result-branch-mismatch:${key}`);
+    const provenance = expected.provenanceByTestId?.get(item?.testId);
+    const expectedKind = manifest?.manifestKind === 'server' ? 'server-assertion' : 'retained-assertion';
+    const owner = provenance?.ownership?.find(value => value.kind === expectedKind && value.ownerId === item?.suiteId);
+    const expectedAssertionIds = owner?.assertionIds ?? (owner?.assertionId ? [owner.assertionId] : []);
+    const expectedScenarioIds = owner?.scenarioId ? [owner.scenarioId] : item?.scenarioIds;
+    if (!owner || !sameValues(item?.assertionIds, expectedAssertionIds) || !sameValues(item?.scenarioIds, expectedScenarioIds)) errors.push(`result-ownership:${key}`);
+    if (!sameValues(item?.sourceReferences, provenance?.sourceReferences ?? [])) errors.push(`result-source-binding:${key}`);
+    if (!sameObject(item?.scope, provenance?.scope)) errors.push(`result-scope-binding:${key}`);
+    if (item?.status === 'PASS' && !passEligibleScope(item?.scope)) errors.push(`result-scope-not-executed:${key}`);
+    if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`result-assertion-outcomes:${key}`);
+    const outcomeIds = (item?.assertionOutcomes ?? []).map(outcome => outcome?.assertionId);
+    if (!sameValues(outcomeIds, item?.assertionIds)) errors.push(`result-assertion-outcome-ids:${key}`);
+    const derivedStatus = (item?.assertionOutcomes ?? []).some(outcome => outcome?.status === 'FAIL')
+      ? 'FAIL'
+      : (item?.assertionOutcomes ?? []).some(outcome => outcome?.status !== 'PASS')
+        ? 'BLOCKED'
+        : 'PASS';
+    if (item?.status !== derivedStatus) errors.push(`result-status-not-derived:${key}`);
   }
   return errors;
 };
@@ -105,6 +150,8 @@ export const evaluateRetainedTest = ({ testId, requiredSuiteIds, suiteIndex, res
   if (missingResults.length) return { status: 'BLOCKED', reason: `Exact retained Test ID evidence missing: ${missingResults.join(', ')}` };
   const failedResults = requiredSuiteIds.filter(id => resultIndex.get(`${id}:${testId}`)?.status === 'FAIL');
   if (failedResults.length) return { status: 'FAIL', reason: `Exact retained Test ID evidence failed: ${failedResults.join(', ')}` };
+  const blockedResults = requiredSuiteIds.filter(id => resultIndex.get(`${id}:${testId}`)?.status !== 'PASS');
+  if (blockedResults.length) return { status: 'BLOCKED', reason: `Exact retained Test ID assertions were skipped or blocked: ${blockedResults.join(', ')}` };
   return { status: 'PASS', reason: null };
 };
 

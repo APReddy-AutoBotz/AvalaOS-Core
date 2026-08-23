@@ -68,6 +68,8 @@ jobs:
       HOSTED_PILOT_WORKSPACE_ID: ${{ inputs.workspace_id }}
       HOSTED_PILOT_EXERCISE_RUN_ID: ${{ inputs.exercise_run_id }}
       DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
+      CANDIDATE_SHA: ${{ inputs.expected_release_sha }}
+      ACCEPTANCE_WORKFLOW_PATH: .github/workflows/hosted-pilot-activation-evidence-producer.yml
     steps:
       - uses: actions/checkout@v4
         with: {ref: '${{ inputs.expected_release_sha }}', fetch-depth: 0}
@@ -77,15 +79,21 @@ jobs:
       - name: Execute authoritative family assertions before provider finalization
         run: |
           set -euo pipefail
+          mkdir -p artifacts/pilot-operations artifacts/hosted-pilot/family-source artifacts/hosted-pilot/families
           npm run test:migrations:pilot-operations:postgres
           npm run test:recovery:pilot-operations
+          PROVIDER_EVIDENCE_OUTPUT=artifacts/hosted-pilot/provider-execution.json npm run test:provider-resolver-integration
+          CANONICAL_JOURNEY_EVIDENCE_OUTPUT=artifacts/hosted-pilot/canonical-journey.json npm run test:pilot-acceptance-model
           npm run test:hosted-evidence-family-attestations
-          mkdir -p artifacts/hosted-pilot/family-source artifacts/hosted-pilot/families
           DEPLOYMENT_FINGERPRINT="$(node --input-type=module -e "import {safeHash,validateHostedUrl} from './scripts/verify-hosted-pilot-evidence.mjs';process.stdout.write(safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN)))")"
+          export DEPLOYMENT_FINGERPRINT
+          node scripts/deriveHostedEvidenceFamilyAssertions.mjs \
+            artifacts/pilot-operations/postgres-execution.json \
+            artifacts/pilot-operations/postgres-recovery.json \
+            artifacts/hosted-pilot/provider-execution.json \
+            artifacts/hosted-pilot/canonical-journey.json \
+            artifacts/hosted-pilot/family-source
           for FAMILY in tenant-adversarial provider-simulation-zero-egress canonical-journey backup-restore recovery-rollback; do
-            jq -n --arg family "$FAMILY" --arg fingerprint "$DEPLOYMENT_FINGERPRINT" \
-              '{gate:$family,result:"passed",deploymentTargetFingerprint:$fingerprint,observedAt:(now|todate),testIds:(if $family=="tenant-adversarial" then ["SAFETY-005"] elif $family=="provider-simulation-zero-egress" then ["AI-006"] elif $family=="canonical-journey" then ["E2E-001"] elif $family=="backup-restore" then ["ADMIN-004"] else ["SAFETY-005"] end)}' \
-              > "artifacts/hosted-pilot/family-source/$FAMILY.json"
             node scripts/produceHostedEvidenceFamilyAttestation.mjs "$FAMILY" "artifacts/hosted-pilot/family-source/$FAMILY.json" "artifacts/hosted-pilot/families/$FAMILY.json"
           done
       - uses: actions/upload-artifact@v4

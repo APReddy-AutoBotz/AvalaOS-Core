@@ -31,6 +31,22 @@ Observed framework result:
 
 The framework failure is therefore an evidence/coverage failure, not permission to describe the release as passed.
 
+## PR #255 controller remediation position
+
+The controller remediation based on PR #255 head `8677548c25e8870029bdfb91b36b33ccedcdd7a3` separates three claims that were previously conflated:
+
+- `SOURCE_BACKED` now means a catalog branch is bound through an independently hashed provenance registry to an exact Test ID, repository source, and assertion/scenario/contract owner. All 108 catalog branches satisfy that source-ownership contract; catalog membership alone no longer grants the classification.
+- executed evidence now requires exact assertion outcomes, canonical command ownership, release/workflow/run-attempt identity, and an executed fixture scope. The 107 contracts without a currently executed tenant/workspace fixture are explicitly `planned-fixture` with null tenant identifiers and cannot produce PASS evidence.
+- composite evidence is explicit for the ten cases that require both server and hosted proof. Missing, skipped, stale, substituted, or partially declared components remain BLOCKED; a hosted PASS cannot promote a missing server component.
+
+The retained controller no longer synthesizes per-Test-ID PASS from aggregate suite success. A clean local controller run records 13/13 aggregate suites passing and zero exact retained Test-ID results, so all 60 retained Test IDs remain honestly BLOCKED until their authoritative suites emit exact scoped assertion artifacts.
+
+The one locally executed server contract, `SAFETY-005`, is bound to the actual disposable PostgreSQL fixture (`97000000-0000-4000-8000-000000000010` / `97000000-0000-4000-8000-000000000011`), exact workflow run attempt, canonical command, four explicit assertion outcomes, and the response-loss branch. Five hosted activation evidence families are derived from PostgreSQL, recovery, provider-simulation, and canonical-journey assertion artifacts rather than hard-coded success values.
+
+Hosted remediation also corrects `SANDBOX-006` to the source-backed accepted-descendant contract, keeps the `SANDBOX-004` observer active through post-entry and sign-out, and executes `SANDBOX-007/008/009` after entry for every bounded persona. Desktop Chrome and Pixel 7 declarations enumerate 68 exact hosted cases locally; live hosted execution remains planned verification until the remediated exact head has a verifiable deployment.
+
+Rollback is the single remediation commit. Reverting it restores the prior schema-2 inventory and permissive evidence behavior, so any rollback must also stop exhaustive/activation evidence publication; schema-3 provenance, schema-2 explicit assertion output, or composite manifests must never be silently downgraded or accepted by an older validator.
+
 ### Pilot Operations
 
 Run `32575966445` is fully green and exact-head bound. Its authoritative manifest proves:

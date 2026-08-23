@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   AllowedProviderResolverDecision,
   MembershipRoleContext,
@@ -438,6 +440,29 @@ const main = async () => {
   });
   assert.equal(resolvedGemini.status, 'resolved');
   if (resolvedGemini.status === 'resolved') assert.equal(resolvedGemini.apiKey, 'mock-provider-key');
+
+  if (process.env.PROVIDER_EVIDENCE_OUTPUT) {
+    const outputPath = process.env.PROVIDER_EVIDENCE_OUTPUT;
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, `${JSON.stringify({
+      schemaVersion: 'provider-simulation-execution-v1',
+      head: process.env.CANDIDATE_SHA ?? null,
+      runId: process.env.GITHUB_RUN_ID ?? null,
+      runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT ?? 0),
+      workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH ?? null,
+      environment: 'disposable-ci-simulation',
+      scope: { kind: 'synthetic-organization-policy', organizationId: orgId },
+      assertionResults: [
+        { assertionId: 'provider-simulation--denied-path-zero-provider-calls', status: 'PASS' },
+        { assertionId: 'provider-simulation--audit-failure-zero-provider-calls', status: 'PASS' },
+        { assertionId: 'provider-simulation--secret-failure-zero-provider-calls', status: 'PASS' },
+        { assertionId: 'provider-simulation--resolver-failure-zero-provider-calls', status: 'PASS' },
+        { assertionId: 'provider-simulation--allowed-path-injected-executor-only', status: 'PASS' },
+      ],
+      realNetworkEgressObserved: false,
+      providerExecutionBoundary: 'injected-test-executor',
+    }, null, 2)}\n`, { mode: 0o600 });
+  }
 
   console.log('M3.2n resolver Edge Function integration regression suite passed.');
 };

@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import fs from 'node:fs';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
+import { createAuthorityRequestObserver } from './authorityRequestObserver';
 
 const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
 const deployId = process.env.NETLIFY_DEPLOY_ID;
@@ -148,27 +149,21 @@ const canonicalBoardsNavigation = {
 };
 
 const observeAuthorityRequests = (page: Page) => {
-  const samples: NetworkViolation[] = [];
   const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
-  let totalViolations = 0;
-  const inspect = (request: Request) => {
-    const category = classifyNetworkRequest(request);
-    if (category) {
-      totalViolations += 1;
-      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
-        samples.push({
-          method: request.method().toUpperCase(),
-          category,
-          resourceType: request.resourceType(),
-          originClass: classifyDiagnosticOrigin(request.url()),
-        });
-      }
-    }
-  };
-  page.on('request', inspect);
+  const observer = createAuthorityRequestObserver<Request,NetworkViolation>({
+    page,
+    classify: classifyNetworkRequest,
+    sample: (request, category) => ({
+      method: request.method().toUpperCase(),
+      category: category as NetworkViolationCategory,
+      resourceType: request.resourceType(),
+      originClass: classifyDiagnosticOrigin(request.url()),
+    }),
+    maxSamples: MAX_NETWORK_VIOLATION_SAMPLES,
+  });
   return {
-    assertSafe: () => expect({ totalViolations, samples }, 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
-    stop: () => page.off('request', inspect),
+    assertSafe: () => expect(observer.snapshot(), 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
+    stop: observer.stop,
   };
 };
 
@@ -277,9 +272,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
           await clickProductNav(page, 'Assess');
           await expect(page.getByTestId('process-catalog-view')).toBeVisible();
         }
+        await signOutToSandbox(page);
         observer.assertSafe();
         observer.stop();
-        await signOutToSandbox(page);
       }
       return;
     }
@@ -288,9 +283,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const observer = observeAuthorityRequests(page);
         await enterPersona(page, label);
         await assertActivePersona(page, userName);
+        await signOutToSandbox(page);
         observer.assertSafe();
         observer.stop();
-        await signOutToSandbox(page);
       }
       return;
     }
@@ -304,17 +299,26 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'desktop-layout':
     case 'mobile-layout':
-      await openSandbox(page);
-      await assertNoOverflow(page);
+      for (const [label, userName] of personas) {
+        await enterPersona(page, label);
+        await assertActivePersona(page, userName);
+        await assertNoOverflow(page);
+        await signOutToSandbox(page);
+      }
       return;
     case 'keyboard-a11y': {
-      await openSandbox(page);
-      await page.keyboard.press('Tab');
-      await expect(page.getByRole('link', { name: 'Skip to access' })).toBeFocused();
-      await page.keyboard.press('Enter');
-      await expect(page.locator('#access-main')).toBeFocused();
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+      for (const [label, userName] of personas) {
+        await enterPersona(page, label);
+        await assertActivePersona(page, userName);
+        await page.locator('body').focus();
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#app-main')).toBeFocused();
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        await signOutToSandbox(page);
+      }
       return;
     }
     case 'public-landing': {
@@ -324,7 +328,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await expect(page.getByText('Synthetic sandbox for product exploration. No live execution.')).toBeVisible();
       return;
     }
-    case 'sandbox-descendant': {
+    case 'sandbox-accepted-descendant': {
       const response = await page.goto('/sandbox/unexpected-deep-link', { waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
@@ -501,9 +505,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await enterPersona(page, label);
         const results = await new AxeBuilder({ page }).analyze();
         expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        await signOutToSandbox(page);
         observer.assertSafe();
         observer.stop();
-        await signOutToSandbox(page);
       }
       return;
     }

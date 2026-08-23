@@ -254,15 +254,15 @@
     },
     {
       "testId": "SANDBOX-006",
-      "title": "Sandbox: unauthorized deep link",
+      "title": "Sandbox: accepted descendant remains synthetic",
       "module": "Sandbox",
-      "feature": "unauthorized",
-      "ruleRequirement": "unauthorized deep link",
+      "feature": "accepted descendant routing",
+      "ruleRequirement": "sandbox descendants remain inside the synthetic sandbox boundary",
       "sourceReference": [
         "services/hostedSandboxRoute.ts"
       ],
       "branchIds": [
-        "SANDBOX-UNAUTHORIZED_DEEP_LINK"
+        "SANDBOX-ACCEPTED_DESCENDANT_ROUTE"
       ],
       "environment": "hosted_sandbox",
       "persona": [
@@ -275,11 +275,11 @@
         "Real providers disabled"
       ],
       "actions": [
-        "Exercise unauthorized deep link through the declared environment"
+        "Open an intentionally accepted sandbox descendant route"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "The descendant resolves to the synthetic sandbox and never to authenticated organization access",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",

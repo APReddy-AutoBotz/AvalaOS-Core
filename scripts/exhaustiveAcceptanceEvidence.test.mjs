@@ -9,7 +9,20 @@ import {
   validateServerManifest,
 } from './exhaustiveAcceptanceEvidence.mjs';
 
-const expected = { releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1', environment: 'stable-release', workflowPath: '.github/workflows/exhaustive-acceptance.yml', branchIdsByTestId: new Map([['TEST-001', ['BRANCH-1']]]) };
+const scope = { evidenceScope: 'executed-fixture', fixtureId: 'fixture-1', organizationId: '10000000-0000-4000-8000-000000000001', workspaceId: '20000000-0000-4000-8000-000000000001' };
+const provenance = {
+  branchId: 'BRANCH-1', testId: 'TEST-001', sourceReferences: ['tests/example.test.ts#assertion-1'], scope,
+  ownership: [
+    { kind: 'retained-assertion', ownerId: 'suite-a', assertionId: 'assertion-1', scenarioId: 'scenario-1' },
+    { kind: 'server-assertion', ownerId: 'suite-a', assertionIds: ['assertion-1'] },
+  ],
+};
+const expected = {
+  releaseSha: 'a'.repeat(40), workflowRunId: '123', workflowAttempt: '1', environment: 'stable-release', workflowPath: '.github/workflows/exhaustive-acceptance.yml',
+  branchIdsByTestId: new Map([['TEST-001', ['BRANCH-1']]]),
+  provenanceByTestId: new Map([['TEST-001', provenance]]),
+  canonicalCommandBySuiteId: new Map([['suite-a', 'node suite-a'], ['suite-b', 'node suite-b']]),
+};
 const retainedBindings = new Map([
   ['TEST-001', ['suite-a']],
   ['TEST-002', ['suite-a']],
@@ -42,6 +55,8 @@ const retained = {
     scenarioIds: ['scenario-1'],
     branchIds: ['BRANCH-1'],
     sourceReferences: ['tests/example.test.ts#assertion-1'],
+    scope,
+    assertionOutcomes: [{ assertionId: 'assertion-1', status: 'PASS' }],
   }],
 };
 assert.deepEqual(validateRetainedManifest(retained, expected, retainedBindings), []);
@@ -56,6 +71,10 @@ assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.result
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], assertionIds: [] }] }, expected, retainedBindings).some(item => item.startsWith('result-assertionIds:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], branchIds: ['WRONG'] }] }, expected, retainedBindings).some(item => item.startsWith('result-branch-mismatch:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], command: 'node wrong' }] }, expected, retainedBindings).some(item => item.startsWith('result-command:')));
+assert.ok(validateRetainedManifest({ ...retained, suites: [{ ...retained.suites[0], command: 'node substituted' }, retained.suites[1]] }, expected, retainedBindings).some(item => item.startsWith('suite-command:')), 'manifest cannot redefine the canonical command');
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], scope: { ...scope, workspaceId: '20000000-0000-4000-8000-000000000099' } }] }, expected, retainedBindings).some(item => item.startsWith('result-scope-binding:')), 'wrong tenant/workspace scope must fail closed');
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], scope: { evidenceScope:'planned-fixture',fixtureId:'fixture-1',organizationId:null,workspaceId:null } }] }, expected, retainedBindings).some(item => item.startsWith('result-scope-')), 'planned scope can never support an exact PASS');
+assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], assertionOutcomes: [{ assertionId: 'assertion-1', status: 'BLOCKED' }] }] }, expected, retainedBindings).some(item => item.startsWith('result-status-not-derived:')), 'green result cannot hide a skipped assertion');
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], testId: 'UNBOUND-001' }] }, expected, retainedBindings).some(item => item.startsWith('result-binding-mismatch:')));
 assert.ok(validateRetainedManifest({ ...retained, results: [{ ...retained.results[0], suiteId: 'missing-suite' }] }, expected, retainedBindings).some(item => item.startsWith('result-suite-missing:')));
 const serverExpected = { ...expected, environment: 'disposable-ci' };
@@ -69,6 +88,7 @@ const serverManifest = {
 assert.deepEqual(validateServerManifest(serverManifest, serverExpected, retainedBindings), []);
 assert.ok(validateServerManifest({ ...serverManifest, manifestKind: 'retained' }, serverExpected, retainedBindings).includes('server-manifest-kind'));
 assert.ok(validateServerManifest({ ...serverManifest, workflowRunId: 'other-run' }, serverExpected, retainedBindings).includes('workflow-run'));
+assert.ok(validateServerManifest({ ...serverManifest, workflowAttempt: '2' }, serverExpected, retainedBindings).includes('workflow-attempt'));
 assert.ok(validateServerManifest({ ...serverManifest, results: [...serverManifest.results, serverManifest.results[0]] }, serverExpected, retainedBindings).some(item => item.startsWith('duplicate-or-missing-result:')));
 
 const suiteIndex = new Map(retained.suites.map(item => [item.suiteId, item]));
@@ -78,11 +98,13 @@ assert.equal(evaluateRetainedTest({ testId: 'TEST-002', requiredSuiteIds: ['suit
 assert.equal(evaluateRetainedTest({ testId: 'TEST-001', requiredSuiteIds: ['missing'], suiteIndex, resultIndex, manifestErrors: [] }).status, 'BLOCKED');
 assert.equal(evaluateRetainedTest({ testId: 'TEST-001', requiredSuiteIds: ['suite-a'], suiteIndex: new Map([['suite-a', { suiteId: 'suite-a', status: 'FAIL' }]]), resultIndex, manifestErrors: [] }).status, 'FAIL');
 assert.equal(evaluateRetainedTest({ testId: 'TEST-001', requiredSuiteIds: ['suite-a'], suiteIndex, resultIndex: new Map([['suite-a:TEST-001', { ...retained.results[0], status: 'FAIL' }]]), manifestErrors: [] }).status, 'FAIL');
+assert.equal(evaluateRetainedTest({ testId: 'TEST-001', requiredSuiteIds: ['suite-a'], suiteIndex, resultIndex: new Map([['suite-a:TEST-001', { ...retained.results[0], status: 'BLOCKED' }]]), manifestErrors: [] }).status, 'BLOCKED');
 
 const suiteA = { suiteId: 'suite-a', testIds: ['TEST-001', 'TEST-002'] };
-assert.deepEqual(validateRetainedProducerResults({ suite: suiteA, emitted: { results: [retained.results[0]] } }), []);
-assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { results: [{ ...retained.results[0], suiteId: 'suite-b', testId: 'TEST-B' }] } }).some(item => item.startsWith('producer-suite-mismatch:')), 'suite-a process cannot impersonate suite-b evidence');
-assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { results: [{ ...retained.results[0], testId: 'TEST-B' }] } }).some(item => item.startsWith('producer-test-id-mismatch:')), 'producer cannot emit a Test ID outside its own configured suite');
+const emitted = { schemaVersion: 2, results: [retained.results[0]] };
+assert.deepEqual(validateRetainedProducerResults({ suite: suiteA, emitted, identity: expected, provenanceByTestId: expected.provenanceByTestId }), []);
+assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], suiteId: 'suite-b', testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-suite-mismatch:')), 'suite-a process cannot impersonate suite-b evidence');
+assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-test-id-mismatch:')), 'producer cannot emit a Test ID outside its own configured suite');
 
 const oracle = {
   schemaVersion: 1,

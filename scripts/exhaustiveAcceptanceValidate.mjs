@@ -6,7 +6,9 @@ import {
   loadCatalog,
   loadExecutionBindings,
   loadInventoryDocument,
+  loadSourceProvenance,
   repoRoot,
+  validateSourceProvenance,
 } from './exhaustiveAcceptanceModel.mjs';
 
 const required = ['testId','title','module','feature','ruleRequirement','sourceReference','environment','persona','fixture','transcript','preconditions','actions','expectedResult','expectedMutation','expectedMutationCount','expectedDenial','expectedErrorCode','expectedStateBefore','expectedStateAfter','expectedScore','expectedClassification','expectedLineage','expectedEvidence','expectedAudit','viewport','browser','destructiveOrNonDestructive','realProviderAllowed','customerDataAllowed'];
@@ -14,6 +16,7 @@ const fail = message => { throw new Error(`[acceptance-catalog] ${message}`); };
 const catalog = loadCatalog();
 const inventoryDocument = loadInventoryDocument();
 const bindings = loadExecutionBindings();
+const provenanceDocument = loadSourceProvenance();
 const exhaustivePlaywrightConfig = fs.readFileSync(path.join(repoRoot, 'playwright.exhaustive-acceptance.config.ts'), 'utf8');
 if (!/\btrace:\s*['"]off['"]/u.test(exhaustivePlaywrightConfig)) fail('exhaustive hosted Playwright traces must remain disabled so raw request data cannot enter uploaded evidence');
 const cases = catalog.cases ?? [];
@@ -34,8 +37,9 @@ for (const [index, item] of cases.entries()) {
   if (!['destructive','non-destructive','nonDestructive','non_destructive','destructive_synthetic_disposable'].includes(item.destructiveOrNonDestructive)) fail(`${item.testId} has invalid destructive classification`);
 }
 
-if (inventoryDocument.schemaVersion !== 2) fail('inventory schemaVersion must be 2');
+if (inventoryDocument.schemaVersion !== 3) fail('inventory schemaVersion must be 3');
 if (inventoryDocument.coveredBranchesSource !== 'tests/acceptance/catalog/test-catalog.json') fail('catalog branch declarations must derive from the canonical catalog');
+if (inventoryDocument.sourceProvenanceSource !== 'tests/acceptance/source-provenance.json') fail('source provenance must come from the independent canonical registry');
 for (const branch of inventoryDocument.uncoveredBranches ?? []) {
   if (!branch.branchId || !branch.uncoveredReason || !branch.recommendedAction) fail('every explicit uncovered branch needs id, reason, and action');
   if (branch.provenance?.kind !== 'required-scenario' || !branch.provenance?.limitation) fail(`${branch.branchId} must declare required-scenario provenance`);
@@ -44,7 +48,9 @@ for (const branch of inventoryDocument.uncoveredBranches ?? []) {
     if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) fail(`${branch.branchId} references missing source ${ref}`);
   }
 }
-const inventory = deriveInventory(catalog, inventoryDocument);
+const provenanceErrors = validateSourceProvenance(catalog, bindings, provenanceDocument);
+if (provenanceErrors.length) fail(`source provenance invalid: ${provenanceErrors.join(', ')}`);
+const inventory = deriveInventory(catalog, inventoryDocument, provenanceDocument, bindings);
 const branchIds = new Set();
 for (const branch of inventory) {
   if (branchIds.has(branch.branchId)) fail(`duplicate branch ${branch.branchId}`);
@@ -59,6 +65,13 @@ for (const suite of bindings.retainedSuites ?? []) {
   suiteIds.add(suite.suiteId);
   if (!Array.isArray(suite.command) || suite.command.length === 0 || suite.command.some(part => typeof part !== 'string' || !part)) fail(`${suite.suiteId} has invalid command`);
   for (const testId of suite.testIds ?? []) if (!ids.has(testId)) fail(`${suite.suiteId} references unknown Test ID ${testId}`);
+}
+for (const item of bindings.serverTests ?? []) {
+  if (!ids.has(item.testId) || !item.suiteId) fail(`invalid server binding ${item.testId ?? 'missing'}`);
+  if (!Array.isArray(item.command) || !item.command.length || item.command.some(part => typeof part !== 'string' || !part)) fail(`${item.testId} server binding has invalid canonical command`);
+  if (!Array.isArray(item.assertionIds) || !item.assertionIds.length || new Set(item.assertionIds).size !== item.assertionIds.length) fail(`${item.testId} server binding has invalid assertion ownership`);
+  if (!Array.isArray(item.components) || !item.components.length || item.components.some(kind => !['server', 'hosted'].includes(kind))) fail(`${item.testId} server binding has invalid components`);
+  if (new Set(item.components).size !== item.components.length) fail(`${item.testId} server binding has duplicate components`);
 }
 for (const item of bindings.oracleTests ?? []) if (!ids.has(item.testId) || !item.scenario) fail(`invalid oracle binding ${item.testId ?? 'missing'}`);
 for (const item of bindings.hostedTests ?? []) {
@@ -75,7 +88,7 @@ for (const item of bindings.hostedTests ?? []) {
 const requiredExplicitBlocks = [
   'ASSESS-003',
   'DELIVERY-009',
-  'MONITOR-001','MONITOR-002','MONITOR-003',
+  'MONITOR-001','MONITOR-002','MONITOR-003','MONITOR-004',
   'ADMIN-002','ADMIN-003',
 ];
 for (const testId of requiredExplicitBlocks) {
@@ -86,13 +99,20 @@ for (const testId of requiredExplicitBlocks) {
 const classification = classifyExecutionBindings(catalog, bindings);
 for (const testCase of cases) {
   const kinds = classification.get(testCase.testId) ?? [];
-  if (kinds.length !== 1) fail(`${testCase.testId} must have exactly one execution binding, found ${kinds.join(',') || 'none'}`);
+  if (!kinds.length) fail(`${testCase.testId} must have at least one execution binding`);
+  if (kinds.length > 1) {
+    const server = (bindings.serverTests ?? []).find(item => item.testId === testCase.testId);
+    if (!server || JSON.stringify([...server.components].sort()) !== JSON.stringify([...kinds].sort())) {
+      fail(`${testCase.testId} composite execution kinds must exactly match its explicit component contract`);
+    }
+  }
 }
 
-const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'retained').length;
-const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'oracle').length;
-const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'hosted').length;
-const serverTestIds = [...classification.entries()].filter(([, kinds]) => kinds[0] === 'server').length;
+const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('retained')).length;
+const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('oracle')).length;
+const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('hosted')).length;
+const serverTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('server')).length;
+const compositeTestIds = [...classification.entries()].filter(([, kinds]) => kinds.length > 1).length;
 const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
 const blockedHosted = hostedTestIds - executableHosted;
 const declared = inventory.filter(item => item.coverageStatus === 'DECLARED');
@@ -110,6 +130,7 @@ console.log(JSON.stringify({
   oracleTestIds,
   hostedTestIds,
   serverTestIds,
+  compositeTestIds,
   executableHosted,
   blockedHosted,
 }, null, 2));

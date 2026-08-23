@@ -6,6 +6,7 @@ import {
   loadCatalog,
   loadExecutionBindings,
   loadInventoryDocument,
+  loadSourceProvenance,
   oracleBindingMap,
   retainedBindingMap,
   hostedBindingMap,
@@ -31,7 +32,9 @@ const loadOptional = file => {
 
 const catalog = loadCatalog();
 const bindings = loadExecutionBindings();
-const inventory = deriveInventory(catalog, loadInventoryDocument());
+const provenanceDocument = loadSourceProvenance();
+const inventory = deriveInventory(catalog, loadInventoryDocument(), provenanceDocument, bindings);
+const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
 const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
 const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
@@ -55,6 +58,11 @@ const expectedBinding = {
   environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
   workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml',
   branchIdsByTestId: new Map((catalog.cases ?? []).map(item => [item.testId, item.branchIds ?? []])),
+  provenanceByTestId,
+  canonicalCommandBySuiteId: new Map([
+    ...(bindings.retainedSuites ?? []).map(item => [item.suiteId, item.command.join(' ')]),
+    ...(bindings.serverTests ?? []).map(item => [item.suiteId, item.command.join(' ')]),
+  ]),
 };
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
@@ -87,14 +95,22 @@ const results = (catalog.cases ?? []).map(testCase => {
       resultIndex: serverResultIndex,
       manifestErrors: serverErrors,
     });
+    const serverActual = serverResultIndex.get(`${binding.suiteId}:${testCase.testId}`)?.status ?? 'MISSING';
     if (binding.components?.includes('hosted')) {
       const hostedBinding = hostedMap.get(testCase.testId);
       const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
         ? evaluateHostedTest({ title: canonicalHostedTitle(testCase), executions, requiredProjects: hostedBinding.projects })
         : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
       evaluation = evaluateCompositeTest([{ name: 'server', ...serverEvaluation }, { name: 'hosted', ...hostedEvaluation }]);
-    } else evaluation = serverEvaluation;
-    actualResult = { server: serverResultIndex.get(`${binding.suiteId}:${testCase.testId}`)?.status ?? 'MISSING' };
+      actualResult = {
+        server: { status: serverActual, reason: serverEvaluation.reason ?? null },
+        hosted: { status: hostedEvaluation.status, reason: hostedEvaluation.reason ?? null },
+      };
+      evidenceReferences = (hostedEvaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
+    } else {
+      evaluation = serverEvaluation;
+      actualResult = { server: { status: serverActual, reason: serverEvaluation.reason ?? null } };
+    }
   } else if (retainedMap.has(testCase.testId)) {
     executionKind = 'retained';
     const requiredSuiteIds = retainedMap.get(testCase.testId);

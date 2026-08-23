@@ -463,11 +463,19 @@ try {
   await mkdir('artifacts/pilot-operations',{recursive:true});
   await writeFile('artifacts/pilot-operations/postgres-execution.json',JSON.stringify({
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
+    runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT??0),workflowPath:process.env.ACCEPTANCE_WORKFLOW_PATH??null,environment:'disposable-ci',
+    scope:{evidenceScope:'executed-fixture',fixtureId:'synthetic-pilot-operations-response-loss',organizationId:fixture.org,workspaceId:fixture.workspace},
     freshApplied:true,acceptedBaselineUpgradeApplied:true,forcedRlsVerified:true,maintenanceDenied:true,concurrentReplayVerified:true,
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
     promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,pendingRegistrationSerialized:true,invertedRegistrationOrderVerified:true,gapFreeCandidateSequenceVerified:true,
     crossTenantDisclosureDenied:true,responseLossAfterCommitTestId:'SAFETY-005',responseLossAfterCommitBranch:'SAFETY-RESPONSE_LOST_AFTER_COMMIT',responseLossExactReplayVerified:true,responseLossExactlyOneEffectVerified:true,responseLossConflictRejected:true,responseLossForeignTenantNonDisclosure:true,liveActivationAuthorized:false,
+    assertionResults:[
+      {assertionId:'pilot-operations-postgres--responseLossExactReplayVerified',status:'PASS'},
+      {assertionId:'pilot-operations-postgres--responseLossExactlyOneEffectVerified',status:'PASS'},
+      {assertionId:'pilot-operations-postgres--responseLossConflictRejected',status:'PASS'},
+      {assertionId:'pilot-operations-postgres--responseLossForeignTenantNonDisclosure',status:'PASS'},
+    ],
   },null,2)+'\n');
 } finally {
   for(const client of clients.slice(1).reverse()) await client.end().catch(()=>{});

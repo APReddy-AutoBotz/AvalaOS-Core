@@ -76,6 +76,9 @@ jobs:
           npm run test:acceptance:catalog
           node scripts/runExhaustiveAcceptanceReport.test.mjs
           node scripts/exhaustiveAcceptanceEvidence.test.mjs
+          node scripts/produceExhaustiveServerEvidence.test.mjs
+          npm run test:hosted-evidence-family-attestations
+          npm run test:acceptance:network-observer
           node scripts/exhaustiveAcceptanceDispatchBridge.test.mjs
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
 

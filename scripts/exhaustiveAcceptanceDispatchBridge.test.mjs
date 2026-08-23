@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const bridge = await readFile('.github/workflows/exhaustive-acceptance-dispatch-bridge.yml', 'utf8');
-const acceptance = await readFile('.github/workflows/exhaustive-acceptance.yml', 'utf8');
+const normalizedSource = async file => (await readFile(file, 'utf8')).replaceAll('\r\n', '\n');
+const bridge = await normalizedSource('.github/workflows/exhaustive-acceptance-dispatch-bridge.yml');
+const acceptance = await normalizedSource('.github/workflows/exhaustive-acceptance.yml');
 
 assert.match(bridge, /^name: Exhaustive Acceptance Dispatch Bridge$/mu);
 assert.match(bridge, /^on:\n  create:$/mu);

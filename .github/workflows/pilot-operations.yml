@@ -12,6 +12,7 @@ permissions:
 env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   LIVE_ACTIVATION_STATE: LIVE_ACTIVATION_NOT_AUTHORIZED
+  ACCEPTANCE_WORKFLOW_PATH: .github/workflows/pilot-operations.yml
 
 jobs:
   operations-source:

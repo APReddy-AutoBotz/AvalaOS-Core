@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { executePilotJourney, runAdversarialMatrix, runRecoveryAndControlDrills } from './pilotAcceptanceJourney.mjs';
 
 const journey = executePilotJourney();
@@ -24,4 +26,24 @@ const drills = runRecoveryAndControlDrills();
 for (const drill of Object.values(drills)) assert.equal(drill.delta ?? drill.effectDelta ?? 0, 0);
 assert.deepEqual({ claimed: drills.workerRetry.claimed, pending: drills.workerRetry.pending }, { claimed: 0, pending: 0 });
 assert.equal(drills.rollback.destructiveRewrite, false);
+
+if (process.env.CANONICAL_JOURNEY_EVIDENCE_OUTPUT) {
+  const outputPath = process.env.CANONICAL_JOURNEY_EVIDENCE_OUTPUT;
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, `${JSON.stringify({
+    schemaVersion: 'canonical-journey-execution-v1',
+    head: process.env.CANDIDATE_SHA ?? null,
+    runId: process.env.GITHUB_RUN_ID ?? null,
+    runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT ?? 0),
+    workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH ?? null,
+    environment: 'disposable-ci-model',
+    scope: { kind: 'synthetic-contract-model' },
+    assertionResults: [
+      { assertionId: 'canonical-journey--score-version-unchanged', status: 'PASS' },
+      { assertionId: 'canonical-journey--lineage-unique', status: 'PASS' },
+      { assertionId: 'canonical-journey--private-artifact-no-raw-url', status: 'PASS' },
+      { assertionId: 'canonical-journey--adversarial-and-recovery-invariants', status: 'PASS' },
+    ],
+  }, null, 2)}\n`, { mode: 0o600 });
+}
 console.log('Pilot acceptance model: canonical lineage, 11 adversarial cases, and 14 recovery/control drills passed.');
