@@ -109,6 +109,7 @@ assert.match(taskCardSource, /text-slate-700 dark:text-slate-200" style=\{\{ bac
 assert.match(boardsSource, /overflow-auto[^"]*" tabIndex=\{0\} aria-label="Delivery work board"/u, 'the mobile scrollable board region must be named and keyboard focusable');
 assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate-400">\{label\}/u, 'mobile board summary labels must retain AA-capable contrast');
 assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
+assert.doesNotMatch(taskCardSource, /text-\[(?:10|11)px\][^"'`]*text-slate-(?:400|500)/u, 'small TaskCard metadata may not use marginal slate foregrounds');
 assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
 assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');

@@ -140,7 +140,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                             </span>
                         </>
                     ) : (
-                        <span className="text-[11px] font-semibold text-slate-400">Unassigned</span>
+                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Unassigned</span>
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -149,14 +149,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
                             Lineage
                         </span>
                     )}
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                         {task.type}
                     </span>
                 </div>
             </div>
 
             <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
-                <div className="flex min-w-0 items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                <div className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300">
                     <span title={`${priorityConfig.label} priority`} className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold ${priorityConfig.badge}`}>
                         <priorityConfig.icon className={`h-3 w-3 ${priorityConfig.color}`} />
                         {priorityConfig.label}
@@ -173,7 +173,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         </span>
                     )}
                 </div>
-                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
                     <ClockIcon className="h-3 w-3" />
                     <span>{overdue ? 'Overdue' : 'Due'} {formatDate(task.dueDate)}</span>
                 </div>
