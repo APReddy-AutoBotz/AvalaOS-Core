@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "sourceDigests": {
-    "App.tsx": "sha256:3ebf3eeee32b6c56b692e795f79c1094177b26a94b3040b2bc19ec66597800c0",
+    "App.tsx": "sha256:80a85007c7bacd56db32e3bab9d3b7a1ded72551afc8f5d33f5e7f549455261e",
     "scripts/testPilotOperationsPostgres.mjs": "sha256:35d0632e9728a5b5ba791eae4d428ec557ba962c628a0e6750da639875520048",
     "services/adminWorkbenchModel.ts": "sha256:65a48174ae1e0ee6bafbb7796f5ad3bb82851ff0a60edbc9b67d4e8b29c89156",
     "services/aiMode.ts": "sha256:f73136224dd913662ad82698a15010d5eb8886ca2289204fbcf7e8dd3bb116a6",

@@ -168,8 +168,10 @@ const observeAuthorityRequests = (page: Page) => {
 };
 
 const openSandbox = async (page: Page) => {
-  const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
-  assertHostedResponseIdentity(response);
+  if (new URL(page.url()).pathname !== '/sandbox') {
+    const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
+    assertHostedResponseIdentity(response);
+  }
   await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
   await expect(page.getByText('Sandbox data is synthetic and local to this product exploration.')).toBeVisible();
@@ -310,7 +312,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       for (const [label, userName] of personas) {
         await enterPersona(page, label);
         await assertActivePersona(page, userName);
-        await page.locator('body').focus();
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('Tab');
         await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
         await page.keyboard.press('Enter');

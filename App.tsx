@@ -1488,7 +1488,7 @@ function App() {
           onToggleNavigation={() => setMobileNavigationOpen(open => !open)}
         />
         {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
-        <main id="app-main" className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+        <main id="app-main" tabIndex={-1} className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           <React.Suspense fallback={<ViewLoadingFallback />}>
             {renderCurrentView()}
           </React.Suspense>

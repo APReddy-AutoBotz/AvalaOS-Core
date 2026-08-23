@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
 const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
+const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
@@ -97,6 +98,8 @@ assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'viola
 assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
 assert.match(observerSource, /samples\.length<maxSamples/u, 'retained violation samples must remain bounded');
 assert.match(observerSource, /stop:\(\)=>page\.off\('request',inspect\)/u, 'the observer must expose one explicit stop boundary');
+assert.match(appSource, /<main id="app-main" tabIndex=\{-1\}/u, 'the post-entry skip-link target must accept programmatic focus');
+assert.match(hostedSpec, /document\.activeElement as HTMLElement \| null\)\?\.blur\(\)\);[\s\S]*page\.keyboard\.press\('Tab'\)/u, 'keyboard traversal must start from a neutral focus state for every persona');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,
