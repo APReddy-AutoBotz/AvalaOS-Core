@@ -53,8 +53,13 @@ assert.match(
 );
 assert.match(
   hostedSpec,
-  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*page\.reload/u,
+  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*reloadWithPersistedScopeAtDocumentStart\(page, invalidScope\)/u,
   'SAFETY-004 must retain stale, missing, and malformed persisted projects through reconstruction',
+);
+assert.match(
+  hostedSpec,
+  /reloadWithPersistedScopeAtDocumentStart[\s\S]*page\.addInitScript[\s\S]*sessionStorage\.getItem\(marker\) !== 'armed'[\s\S]*localStorage\.(?:removeItem|setItem)[\s\S]*page\.reload[\s\S]*the adversarial persisted scope mutation must execute before application startup/u,
+  'SAFETY-004 must inject corrupt persisted scope at document start and prove the mutation ran before application startup',
 );
 assert.ok(
   hostedSpec.match(/\.toEqual\(canonicalDeliveryPackNavigation\)/gu)?.length >= 3,
@@ -63,7 +68,7 @@ assert.ok(
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=/u, 'invalid persisted scope must remove URL-only project evidence');
 assert.match(
   hostedSpec,
-  /canonicalBoardsNavigation[\s\S]*stale-different-project[\s\S]*invalidBoardsResponse = await page\.reload[\s\S]*not\.toHaveURL\(\/projectId=/u,
+  /canonicalBoardsNavigation[\s\S]*invalidBoardsResponse = await reloadWithPersistedScopeAtDocumentStart\(page, JSON\.stringify\(\{[\s\S]*stale-different-project[\s\S]*not\.toHaveURL\(\/projectId=/u,
   'SAFETY-004 must enforce exact persisted project agreement on the canonical Boards destination through reload',
 );
 

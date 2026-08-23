@@ -109,6 +109,23 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
   expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
 };
 
+let startupScopeMutationSequence = 0;
+const reloadWithPersistedScopeAtDocumentStart = async (page: Page, persistedScope: string | null) => {
+  const marker = `avalaos-safety-004-scope-mutation-${++startupScopeMutationSequence}`;
+  await page.addInitScript(({ marker, persistedScope }) => {
+    if (sessionStorage.getItem(marker) !== 'armed') return;
+    if (persistedScope === null) localStorage.removeItem('avalaos-core-v1-scope');
+    else localStorage.setItem('avalaos-core-v1-scope', persistedScope);
+    sessionStorage.setItem(`${marker}:applied`, localStorage.getItem('avalaos-core-v1-scope') ?? '<missing>');
+    sessionStorage.removeItem(marker);
+  }, { marker, persistedScope });
+  await page.evaluate(value => sessionStorage.setItem(value, 'armed'), marker);
+  const response = await page.reload({ waitUntil: 'domcontentloaded' });
+  const appliedScope = await page.evaluate(value => sessionStorage.getItem(`${value}:applied`), marker);
+  expect(appliedScope, 'the adversarial persisted scope mutation must execute before application startup').toBe(persistedScope ?? '<missing>');
+  return response;
+};
+
 const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
   const url = new URL(window.location.href);
   let persistedScope = null;
@@ -445,12 +462,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         () => readDurableProjectNavigation(page),
         { message: 'The project-switch Boards destination must persist the exact URL and project identity.' },
       ).toEqual(canonicalBoardsNavigation);
-      await page.evaluate(() => localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
+      const invalidBoardsResponse = await reloadWithPersistedScopeAtDocumentStart(page, JSON.stringify({
         type: 'project',
         id: 'stale-different-project',
         name: 'Stale Different Project',
-      })));
-      const invalidBoardsResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+      }));
       assertHostedResponseIdentity(invalidBoardsResponse);
       await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
@@ -472,17 +488,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         '{malformed',
       ];
       for (const invalidScope of invalidPersistedScopes) {
-        const invalidNavigationResponse = page.waitForResponse(response => (
-          response.request().isNavigationRequest()
-          && response.request().frame() === page.mainFrame()
-        ));
-        await page.evaluate(scope => {
-          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
-          else localStorage.setItem('avalaos-core-v1-scope', scope);
-          window.location.reload();
-        }, invalidScope);
-        const invalidResponse = await invalidNavigationResponse;
-        await page.waitForLoadState('domcontentloaded');
+        const invalidResponse = await reloadWithPersistedScopeAtDocumentStart(page, invalidScope);
         assertHostedResponseIdentity(invalidResponse);
         await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
         await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
