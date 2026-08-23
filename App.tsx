@@ -174,15 +174,13 @@ function App() {
     () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
     [],
   );
-  const navigationHydrated = useRef(false);
-  const navigationWriteSuppressed = useRef(false);
   const pendingNavigationHydration = useRef<{
     view: View;
     scope: Scope;
     selectedProcessId: string | null;
     activeGenerationId: string | null;
   } | null>(null);
-  const navigationController = useRef(createProductNavigationController());
+  const navigationController = useRef(createProductNavigationController(explicitNavigationIntent));
   const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
   const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
   const previousNavigationAuthorityKey = useRef(navigationAuthorityKey);
@@ -261,8 +259,8 @@ function App() {
     pendingNavigationTransition.current = origin === 'user'
       ? navigationController.current.begin('user')
       : navigationController.current.rebind();
-    navigationWriteSuppressed.current = false;
     pendingNavigationHydration.current = null;
+    if (origin === 'user' && currentUser) lastAppliedUserId.current = currentUser.id;
 
     if (requestedScope.type === ScopeType.ORGANIZATION && view === View.WORKSPACE && hasAdminAccess) {
       setScopeIfChanged(requestedScope);
@@ -304,8 +302,7 @@ function App() {
     if (!currentUser || lastAppliedUserId.current === currentUser.id) return;
     if (!canApplyDefaultNavigation({
       explicitNavigationIntent,
-      navigationHydrated: navigationHydrated.current,
-      navigationSettlementPending: navigationWriteSuppressed.current,
+      settlement: navigationController.current.settlement(),
     })) return;
 
     const defaultScope = currentUser.defaultScope ?? currentScope;
@@ -500,8 +497,8 @@ function App() {
     // commits it. Persisted view/scope normalization must not race that
     // transition and replace process_detail with a fallback computed from the
     // pre-hydration render.
-    if (explicitNavigationIntent && !navigationHydrated.current) return;
-    if (navigationWriteSuppressed.current) return;
+    if (navigationController.current.needsClassification()) return;
+    if (navigationController.current.settlementPending()) return;
 
     const resolvedState = resolvePersistedViewScopeState({
       view: persistedView,
@@ -540,10 +537,9 @@ function App() {
 
   useLayoutEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
-    if (!explicitNavigationIntent || navigationHydrated.current) return;
+    if (!explicitNavigationIntent || !navigationController.current.needsClassification()) return;
 
     if (!hasDurableProductNavigationAgreement(window.location.search, persistedView, persistedScope)) {
-      navigationWriteSuppressed.current = true;
       pendingNavigationHydration.current = {
         view: DEFAULT_PERSISTED_VIEW,
         scope: DEFAULT_PERSISTED_SCOPE,
@@ -554,9 +550,8 @@ function App() {
       setCurrentView(DEFAULT_PERSISTED_VIEW);
       setSelectedProcessId(null);
       setActiveGenerationId(null);
-      pendingNavigationTransition.current = navigationController.current.begin('hydrate');
+      pendingNavigationTransition.current = navigationController.current.beginSettlement(false);
       writeProductNavigationSearch('');
-      navigationHydrated.current = true;
       return;
     }
 
@@ -577,7 +572,6 @@ function App() {
       preserveOrganizationWorkspace: true,
     });
 
-    navigationWriteSuppressed.current = true;
     pendingNavigationHydration.current = {
       view: resolvedNavigation.view,
       scope: resolvedNavigation.scope,
@@ -591,14 +585,13 @@ function App() {
     if (resolvedNavigation.activeGenerationId) {
       setTempArtifacts(null);
     }
-    pendingNavigationTransition.current = navigationController.current.begin('hydrate');
+    pendingNavigationTransition.current = navigationController.current.beginSettlement(true);
     writeProductNavigationSearch(buildProductNavigationSearch({
       view: resolvedNavigation.view,
       scope: resolvedNavigation.scope,
       selectedProcessId: resolvedNavigation.selectedProcessId,
       activeGenerationId: resolvedNavigation.activeGenerationId,
     }));
-    navigationHydrated.current = true;
   }, [
     currentOrganization,
     currentUser,
@@ -619,7 +612,7 @@ function App() {
 
   useEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
-    if (explicitNavigationIntent && !navigationHydrated.current) return;
+    if (navigationController.current.needsClassification()) return;
     if (processesLoading) return;
 
     // Effects later in the same flush can observe ref writes from URL hydration
@@ -627,7 +620,7 @@ function App() {
     // suppressed until a committed render contains the complete hydrated
     // navigation tuple; otherwise a null process selection can downgrade a
     // valid process-detail route to the catalog.
-    if (navigationWriteSuppressed.current) {
+    if (navigationController.current.settlementPending()) {
       const pending = pendingNavigationHydration.current;
       const hydrationCommitted = Boolean(pending
         && currentView === pending.view
@@ -636,7 +629,9 @@ function App() {
         && activeGenerationId === pending.activeGenerationId);
       if (!hydrationCommitted) return;
       pendingNavigationHydration.current = null;
-      navigationWriteSuppressed.current = false;
+      const transition = pendingNavigationTransition.current;
+      if (!transition || !navigationController.current.commitSettlement(transition)) return;
+      if (currentUser) lastAppliedUserId.current = currentUser.id;
     }
 
     if (tempArtifacts && currentView === View.WORKSPACE) {
@@ -711,6 +706,12 @@ function App() {
   useEffect(() => {
     if (previousNavigationAuthorityKey.current === navigationAuthorityKey) return;
     previousNavigationAuthorityKey.current = navigationAuthorityKey;
+    // Auth, organization, and workspace data commonly finish in separate
+    // renders during cold start. Those completions belong to the current
+    // durable-classification epoch and must not cancel it as an identity
+    // switch. A later authority change is a new replace-only epoch.
+    if (navigationController.current.needsClassification()
+      || navigationController.current.settlementPending()) return;
     pendingNavigationTransition.current = navigationController.current.rebind();
   }, [navigationAuthorityKey]);
 
@@ -718,12 +719,14 @@ function App() {
     if (guardLoading || !currentUser || !currentOrganization || processesLoading) return;
     const handlePopState = () => {
       const search = window.location.search;
-      pendingNavigationTransition.current = navigationController.current.begin('popstate');
       const target = isStructurallyValidProductNavigationSearch(search)
         ? parseProductNavigationSearch(search)
         : { view: DEFAULT_PERSISTED_VIEW, scope: DEFAULT_PERSISTED_SCOPE };
       const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, preserveOrganizationWorkspace: true });
-      navigationWriteSuppressed.current = true;
+      pendingNavigationTransition.current = navigationController.current.beginSettlement(
+        isStructurallyValidProductNavigationSearch(search),
+        'popstate',
+      );
       pendingNavigationHydration.current = { view: resolved.view, scope: resolved.scope, selectedProcessId: resolved.selectedProcessId, activeGenerationId: resolved.activeGenerationId };
       setScopeIfChanged(resolved.scope);
       setCurrentView(resolved.view);
