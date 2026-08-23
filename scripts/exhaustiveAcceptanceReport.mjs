@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  canonicalCommand,
   canonicalHostedTitle,
   deriveInventory,
   loadCatalog,
@@ -63,6 +64,10 @@ const expectedBinding = {
     ...(bindings.retainedSuites ?? []).map(item => [item.suiteId, item.command.join(' ')]),
     ...(bindings.serverTests ?? []).map(item => [item.suiteId, item.command.join(' ')]),
   ]),
+  oracleEnvironment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
+  oracleWorkflowPath: bindings.oracleExecution?.workflowPath,
+  oracleCommand: canonicalCommand(bindings.oracleExecution?.command ?? []),
+  oracleBindingByTestId: new Map((bindings.oracleTests ?? []).map(item => [item.testId, item])),
 };
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
@@ -101,6 +106,10 @@ const results = (catalog.cases ?? []).map(testCase => {
       const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
         ? evaluateHostedTest({ title: canonicalHostedTitle(testCase), executions, requiredProjects: hostedBinding.projects })
         : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
+      if (hostedEvaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
+        hostedEvaluation.status = 'BLOCKED';
+        hostedEvaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
+      }
       evaluation = evaluateCompositeTest([{ name: 'server', ...serverEvaluation }, { name: 'hosted', ...hostedEvaluation }]);
       actualResult = {
         server: { status: serverActual, reason: serverEvaluation.reason ?? null },
@@ -133,7 +142,12 @@ const results = (catalog.cases ?? []).map(testCase => {
     } else {
       const item = oracleIndex.get(testCase.testId);
       if (!item) evaluation = { status: 'BLOCKED', reason: 'Oracle result missing.' };
-      else evaluation = { status: item.status, reason: item.status === 'PASS' ? null : `Oracle scenario failed: ${item.scenario}` };
+      else evaluation = {
+        status: item.status,
+        reason: item.status === 'PASS' ? null
+          : item.status === 'FAIL' ? `Oracle scenario failed: ${item.scenario}`
+            : 'Oracle assertions executed, but no separately validated same-run executed fixture scope was supplied.',
+      };
       actualResult = item?.actual ?? null;
     }
   } else if (hostedMap.has(testCase.testId)) {
@@ -149,6 +163,10 @@ const results = (catalog.cases ?? []).map(testCase => {
         executions,
         requiredProjects: binding.projects,
       });
+      if (evaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
+        evaluation.status = 'BLOCKED';
+        evaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
+      }
     }
     evidenceReferences = (evaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
     actualResult = evaluation.status;

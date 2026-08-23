@@ -14,7 +14,7 @@ const provenance = {
   branchId: 'BRANCH-1', testId: 'TEST-001', sourceReferences: ['tests/example.test.ts#assertion-1'], scope,
   ownership: [
     { kind: 'retained-assertion', ownerId: 'suite-a', assertionId: 'assertion-1', scenarioId: 'scenario-1' },
-    { kind: 'server-assertion', ownerId: 'suite-a', assertionIds: ['assertion-1'] },
+    { kind: 'server-assertion', ownerId: 'suite-a', assertionIds: ['assertion-1'], scenarioIds: ['scenario-1'] },
   ],
 };
 const expected = {
@@ -90,6 +90,9 @@ assert.ok(validateServerManifest({ ...serverManifest, manifestKind: 'retained' }
 assert.ok(validateServerManifest({ ...serverManifest, workflowRunId: 'other-run' }, serverExpected, retainedBindings).includes('workflow-run'));
 assert.ok(validateServerManifest({ ...serverManifest, workflowAttempt: '2' }, serverExpected, retainedBindings).includes('workflow-attempt'));
 assert.ok(validateServerManifest({ ...serverManifest, results: [...serverManifest.results, serverManifest.results[0]] }, serverExpected, retainedBindings).some(item => item.startsWith('duplicate-or-missing-result:')));
+assert.ok(validateServerManifest({ ...serverManifest, results: [{ ...serverManifest.results[0], scenarioIds: ['manifest-self-declared-fake-scenario'] }] }, serverExpected, retainedBindings).some(item => item.startsWith('result-ownership:')), 'server scenario identity must come from canonical ownership, never from the manifest itself');
+assert.ok(validateServerManifest({ ...serverManifest, results: [{ ...serverManifest.results[0], workflowPath: '.github/workflows/substituted.yml' }] }, serverExpected, retainedBindings).some(item => item.startsWith('result-workflow-path:')), 'wrong server workflow must fail closed');
+assert.ok(validateServerManifest({ ...serverManifest, results: [{ ...serverManifest.results[0], branchIds: ['FAKE-FAMILY-LIKE-PROOF'] }] }, serverExpected, retainedBindings).some(item => item.startsWith('result-branch-mismatch:')), 'family-like server proof cannot substitute for the exact branch');
 
 const suiteIndex = new Map(retained.suites.map(item => [item.suiteId, item]));
 const resultIndex = new Map(retained.results.map(item => [`${item.suiteId}:${item.testId}`, item]));
@@ -106,15 +109,56 @@ assert.deepEqual(validateRetainedProducerResults({ suite: suiteA, emitted, ident
 assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], suiteId: 'suite-b', testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-suite-mismatch:')), 'suite-a process cannot impersonate suite-b evidence');
 assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-test-id-mismatch:')), 'producer cannot emit a Test ID outside its own configured suite');
 
+const oracleScope = { evidenceScope: 'planned-fixture', fixtureId: 'synthetic-default', organizationId: null, workspaceId: null };
+const oracleProvenance = {
+  branchId: 'ASSESS-V1_VALIDATION_MISSING',
+  testId: 'ASSESS-005',
+  sourceReferences: ['services/scoringEngine.ts'],
+  scope: oracleScope,
+  ownership: [{
+    kind: 'oracle-scenario', ownerId: 'missing-input',
+    assertionIds: ['assess-v1-oracle::ASSESS-005::missing-input'], scenarioIds: ['missing-input'],
+  }],
+};
+const oracleExpected = {
+  ...expected,
+  oracleEnvironment: 'stable-release',
+  oracleWorkflowPath: expected.workflowPath,
+  oracleCommand: 'node scripts/runAssessV1AcceptanceOracle.mjs',
+  oracleBindingByTestId: new Map([['ASSESS-005', { testId: 'ASSESS-005', scenario: 'missing-input' }]]),
+  provenanceByTestId: new Map([['ASSESS-005', oracleProvenance]]),
+};
+const oracleResult = {
+  testId: 'ASSESS-005', scenario: 'missing-input', status: 'BLOCKED',
+  releaseSha: expected.releaseSha, workflowRunId: expected.workflowRunId, workflowAttempt: expected.workflowAttempt,
+  environment: oracleExpected.oracleEnvironment, workflowPath: oracleExpected.oracleWorkflowPath, command: oracleExpected.oracleCommand,
+  assertionIds: ['assess-v1-oracle::ASSESS-005::missing-input'],
+  assertionOutcomes: [{ assertionId: 'assess-v1-oracle::ASSESS-005::missing-input', status: 'PASS' }],
+  scenarioIds: ['missing-input'], branchIds: ['ASSESS-V1_VALIDATION_MISSING'], sourceReferences: ['services/scoringEngine.ts'], scope: oracleScope,
+};
 const oracle = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   releaseSha: expected.releaseSha,
   workflowRunId: expected.workflowRunId,
   workflowAttempt: expected.workflowAttempt,
-  results: [{ testId: 'ASSESS-005', status: 'PASS' }],
+  environment: oracleExpected.oracleEnvironment,
+  workflowPath: oracleExpected.oracleWorkflowPath,
+  command: oracleExpected.oracleCommand,
+  results: [oracleResult],
 };
-assert.deepEqual(validateOracleManifest(oracle, expected), []);
-assert.ok(validateOracleManifest({ ...oracle, results: [...oracle.results, oracle.results[0]] }, expected).some(item => item.startsWith('duplicate-or-missing-oracle:')));
+assert.deepEqual(validateOracleManifest(oracle, oracleExpected), []);
+assert.ok(validateOracleManifest({ ...oracle, command: 'node substituted.mjs', results: [{ ...oracleResult, command: 'node substituted.mjs' }] }, oracleExpected).some(item => item.startsWith('oracle-command')), 'substituted oracle command must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, workflowAttempt: '2', results: [{ ...oracleResult, workflowAttempt: '2' }] }, oracleExpected).some(item => item.startsWith('oracle-workflow-attempt')), 'stale oracle run attempt must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, environment: 'preview', results: [{ ...oracleResult, environment: 'preview' }] }, oracleExpected).some(item => item.startsWith('oracle-environment')), 'wrong oracle environment must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, workflowPath: '.github/workflows/substitute.yml', results: [{ ...oracleResult, workflowPath: '.github/workflows/substitute.yml' }] }, oracleExpected).some(item => item.startsWith('oracle-workflow-path')), 'wrong oracle workflow must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, scenario: 'invalid-input', scenarioIds: ['invalid-input'] }] }, oracleExpected).some(item => item.startsWith('oracle-scenario:')), 'wrong oracle scenario must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, branchIds: ['ASSESS-FAKE-FAMILY-LIKE-PROOF'] }] }, oracleExpected).some(item => item.startsWith('oracle-branches:')), 'family-like proof cannot substitute for the exact branch');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, sourceReferences: ['services/fakeScoringEngine.ts'] }] }, oracleExpected).some(item => item.startsWith('oracle-sources:')), 'fake source proof must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, assertionIds: ['aggregate-suite-green'], assertionOutcomes: [{ assertionId: 'aggregate-suite-green', status: 'PASS' }] }] }, oracleExpected).some(item => item.startsWith('oracle-ownership:')), 'aggregate or substituted assertion cannot promote the exact Test ID');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, status: 'PASS' }] }, oracleExpected).some(item => item.startsWith('oracle-status-not-derived:')), 'planned fixture scope cannot be promoted to PASS');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, status: 'PASS', assertionOutcomes: [{ ...oracleResult.assertionOutcomes[0], status: 'BLOCKED' }] }] }, oracleExpected).some(item => item.startsWith('oracle-status-not-derived:')), 'green status cannot hide a skipped assertion');
+assert.ok(validateOracleManifest({ ...oracle, results: [...oracle.results, oracle.results[0]] }, oracleExpected).some(item => item.startsWith('duplicate-or-missing-oracle:')));
+assert.ok(validateOracleManifest({ ...oracle, results: [] }, oracleExpected).some(item => item.startsWith('oracle-result-missing:')), 'missing exact oracle result must fail closed');
 
 const passedExecution = {
   title: '[SANDBOX-001] Sandbox: access',

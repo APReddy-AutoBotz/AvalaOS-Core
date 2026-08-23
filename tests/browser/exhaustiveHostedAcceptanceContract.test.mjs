@@ -106,7 +106,24 @@ assert.doesNotMatch(sampleBody[1], /\borigin\s*:/u, 'violation evidence must nev
 assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'violation evidence must never retain headers or request bodies');
 assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
 assert.match(observerSource, /samples\.length<maxSamples/u, 'retained violation samples must remain bounded');
-assert.match(observerSource, /stop:\(\)=>page\.off\('request',inspect\)/u, 'the observer must expose one explicit stop boundary');
+assert.match(observerSource, /const stopAfterQuiescence=async\(\{quietPeriodMs,timeoutMs\}:QuiescenceOptions\)=>/u, 'the observer must expose a bounded asynchronous quiescence boundary');
+assert.match(observerSource, /requestSequence\+=1;[\s\S]*lastRequestAt=now\(\);/u, 'every request, including allowed resources, must restart quiescence');
+assert.match(observerSource, /const startedAt=now\(\);[\s\S]*lastRequestAt=Math\.max\(lastRequestAt,startedAt\);/u, 'pre-sign-out quiet time must never shorten the post-sign-out observation window');
+assert.match(observerSource, /if\(sequenceBeforeWait!==requestSequence\)continue;[\s\S]*stop\(\);/u, 'listener removal must follow the final synchronous request-sequence check');
+assert.doesNotMatch(hostedSpec, /observer\.stop\(\)/u, 'hosted journeys must never detach the observer without bounded quiescence');
+assert.match(
+  hostedSpec,
+  /runObservedPersonaJourney[\s\S]*enterPersona\(page, label\)[\s\S]*assertActivePersona\(page, userName\)[\s\S]*exerciseRepresentativePersonaPath\(page, label\)[\s\S]*signOutToSandbox\(page\)[\s\S]*page\.waitForLoadState\('networkidle'\)[\s\S]*observer\.stopAfterQuiescence/u,
+  'the observer must cover persona entry, representative feature settlement, sign-out, and post-sign-out quiescence',
+);
+assert.match(hostedSpec, /page\.waitForLoadState\('networkidle'\)[\s\S]*requestAnimationFrame/u, 'representative lazy-loaded surfaces must settle before sign-out');
+for (const persona of ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin']) {
+  assert.match(hostedSpec, new RegExp(`label === '${persona.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}'`, 'u'), `${persona} must have an explicit representative feature-path branch`);
+}
+assert.match(hostedSpec, /Process Analyst'[\s\S]*AP Process Owner'[\s\S]*clickProductNav\(page, 'Assess'\)[\s\S]*process-catalog-view/u, 'Assess personas must settle the Process Catalog');
+assert.match(hostedSpec, /Delivery Lead'[\s\S]*Control Reviewer'[\s\S]*Automation Contributor'[\s\S]*clickProductNav\(page, 'Delivery'\)[\s\S]*Delivery work board/u, 'Delivery personas must settle the Delivery board');
+assert.match(hostedSpec, /Buyer Viewer'[\s\S]*closeProductNavigation\(page\)[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Monitor'\)[\s\S]*monitor-overview/u, 'Buyer Viewer must close mobile navigation, restore the required My Work scope, and settle Monitor');
+assert.match(hostedSpec, /Platform Admin'[\s\S]*Admin \/ Intelligence[\s\S]*Enterprise Intelligence/u, 'Platform Admin must settle Admin / Intelligence');
 assert.match(appSource, /<main id="app-main" tabIndex=\{0\}/u, 'the post-entry skip-link target and primary scroll region must accept sequential keyboard focus');
 assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain the first sequential keyboard target[\s\S]*skipLink\.focus\(\)[\s\S]*page\.keyboard\.press\('Enter'\)/u, 'every persona must prove first-tab-stop ordering and real keyboard skip-link activation');
 assert.match(adminWorkbenchSource, /<span className="[^"]*text-slate-600[^"]*">[\s\S]*Sectioned admin structure/u, 'the Platform Admin badge must retain AA-capable foreground contrast');

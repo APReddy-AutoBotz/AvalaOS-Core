@@ -27,6 +27,23 @@ for (const drill of Object.values(drills)) assert.equal(drill.delta ?? drill.eff
 assert.deepEqual({ claimed: drills.workerRetry.claimed, pending: drills.workerRetry.pending }, { claimed: 0, pending: 0 });
 assert.equal(drills.rollback.destructiveRewrite, false);
 
+const adversarialDenialsPassed = ['wrongTenant','wrongWorkspace','unauthorizedId','revokedBetweenReadMutate','browserClaimsIgnored','serviceRoleWithoutActorAuthority']
+  .every(key => matrix[key].ok === false && matrix[key].disclosed === false && matrix[key].delta === 0);
+const responseLossReplayPassed = matrix.responseLostExactReplay.receiptId === matrix.restoredExactReplay.receiptId
+  && matrix.responseLostExactReplay.effectId === matrix.restoredExactReplay.effectId
+  && matrix.changedPayloadReplay.code === 'IDEMPOTENCY_CONFLICT';
+const recoveryInvariantsPassed = Object.values(drills).every(drill => (drill.delta ?? drill.effectDelta ?? 0) === 0)
+  && drills.workerRetry.claimed === 0 && drills.workerRetry.pending === 0 && drills.rollback.destructiveRewrite === false;
+const assertionChecks=[
+  ['canonical-journey--score-version-unchanged',journey.scoreVersion==='assess-core-2026-05'&&journey.hardStopLawChanged===false],
+  ['canonical-journey--lineage-unique',new Set(journey.lineage).size===journey.lineage.length],
+  ['canonical-journey--private-artifact-no-raw-url',journey.artifact.private===true&&journey.artifact.rawUrlDisclosed===false],
+  ['canonical-journey--adversarial-and-recovery-invariants',adversarialDenialsPassed&&responseLossReplayPassed&&recoveryInvariantsPassed],
+];
+const assertionResults=assertionChecks.map(([assertionId,passed])=>({assertionId,status:passed?'PASS':'FAIL'}));
+const assertionDisposition=assertionResults.every(item=>item.status==='PASS')?'passed':'failed';
+assert.equal(assertionDisposition,'passed','canonical journey assertion artifact must derive from executed model checks');
+
 if (process.env.CANONICAL_JOURNEY_EVIDENCE_OUTPUT) {
   const outputPath = process.env.CANONICAL_JOURNEY_EVIDENCE_OUTPUT;
   mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -38,12 +55,8 @@ if (process.env.CANONICAL_JOURNEY_EVIDENCE_OUTPUT) {
     workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH ?? null,
     environment: 'disposable-ci-model',
     scope: { kind: 'synthetic-contract-model' },
-    assertionResults: [
-      { assertionId: 'canonical-journey--score-version-unchanged', status: 'PASS' },
-      { assertionId: 'canonical-journey--lineage-unique', status: 'PASS' },
-      { assertionId: 'canonical-journey--private-artifact-no-raw-url', status: 'PASS' },
-      { assertionId: 'canonical-journey--adversarial-and-recovery-invariants', status: 'PASS' },
-    ],
+    assertionDisposition,
+    assertionResults,
   }, null, 2)}\n`, { mode: 0o600 });
 }
 console.log('Pilot acceptance model: canonical lineage, 11 adversarial cases, and 14 recovery/control drills passed.');

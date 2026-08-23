@@ -238,12 +238,63 @@ const allowedDecision = (provider: 'groq' | 'gemini' = 'groq'): AllowedProviderR
   },
 });
 
+const DENIED_OPERATIONS = ['generate_document', 'refine_section', 'test_provider_connection'] as const;
+const RESOLVER_THROW_POINTS = ['membership', 'policy', 'config', 'keyRef'] as const;
+
+const exactExecutedCoverage = <T extends string>(registered: readonly T[], executed: ReadonlyMap<T, boolean>) =>
+  executed.size === registered.length
+  && registered.every(scenario => executed.get(scenario) === true)
+  && [...executed.keys()].every(scenario => registered.includes(scenario));
+
+const deriveProviderAssertionArtifact = ({
+  deniedScenarios,
+  resolverFailureScenarios,
+  auditFailureZeroProviderCalls,
+  secretFailureZeroProviderCalls,
+  allowedPathInjectedExecutorOnly,
+}: {
+  deniedScenarios: ReadonlyMap<(typeof DENIED_OPERATIONS)[number], boolean>;
+  resolverFailureScenarios: ReadonlyMap<(typeof RESOLVER_THROW_POINTS)[number], boolean>;
+  auditFailureZeroProviderCalls: boolean;
+  secretFailureZeroProviderCalls: boolean;
+  allowedPathInjectedExecutorOnly: boolean;
+}) => {
+  const assertionChecks: Array<[string, boolean]> = [
+    ['provider-simulation--denied-path-zero-provider-calls', exactExecutedCoverage(DENIED_OPERATIONS, deniedScenarios)],
+    ['provider-simulation--audit-failure-zero-provider-calls', auditFailureZeroProviderCalls],
+    ['provider-simulation--secret-failure-zero-provider-calls', secretFailureZeroProviderCalls],
+    ['provider-simulation--resolver-failure-zero-provider-calls', exactExecutedCoverage(RESOLVER_THROW_POINTS, resolverFailureScenarios)],
+    ['provider-simulation--allowed-path-injected-executor-only', allowedPathInjectedExecutorOnly],
+  ];
+  const assertionResults = assertionChecks.map(([assertionId, passed]) => ({ assertionId, status: passed ? 'PASS' : 'FAIL' }));
+  return {
+    assertionResults,
+    assertionDisposition: assertionResults.every(item => item.status === 'PASS') ? 'passed' : 'failed',
+  };
+};
+
+// Adversarial coverage guard: a green subset may never satisfy a registered scenario family.
+const missingDeniedScenario = new Map<(typeof DENIED_OPERATIONS)[number], boolean>([
+  ['generate_document', true],
+  ['refine_section', true],
+]);
+const completeResolverScenarios = new Map(RESOLVER_THROW_POINTS.map(point => [point, true] as const));
+assert.equal(deriveProviderAssertionArtifact({
+  deniedScenarios: missingDeniedScenario,
+  resolverFailureScenarios: completeResolverScenarios,
+  auditFailureZeroProviderCalls: true,
+  secretFailureZeroProviderCalls: true,
+  allowedPathInjectedExecutorOnly: true,
+}).assertionDisposition, 'failed');
+
 const main = async () => {
-  for (const operation of ['generate_document', 'refine_section', 'test_provider_connection'] as ProviderResolverOperation[]) {
+  const deniedScenarios = new Map<(typeof DENIED_OPERATIONS)[number], boolean>();
+  for (const operation of DENIED_OPERATIONS) {
     const blocked = await runScenario(operation, { policies: [] });
     assert.equal(blocked.result.status, 'blocked');
     assert.equal(blocked.createJobCalls, 0);
     assert.equal(blocked.providerCalls, 0);
+    deniedScenarios.set(operation, blocked.result.status === 'blocked' && blocked.providerCalls === 0 && blocked.createJobCalls === 0);
     assert.equal(blocked.secretCalls, 0);
     assert.equal(blocked.auditCalls, 1);
     assert.equal(blocked.result.body.error, 'AI provider governance controls blocked this request.');
@@ -266,12 +317,14 @@ const main = async () => {
   ]);
   assert.equal(allowed.createJobCalls, 1);
   assert.equal(allowed.providerCalls, 1);
+  const allowedPathInjectedExecutorOnly=allowed.result.status==='allowed'&&allowed.providerCalls===1&&allowed.createJobCalls===1;
 
   const auditFailure = await runScenario('generate_document', { auditFails: true });
   assert.equal(auditFailure.result.status, 'blocked');
   assert.equal(auditFailure.secretCalls, 0);
   assert.equal(auditFailure.createJobCalls, 0);
   assert.equal(auditFailure.providerCalls, 0);
+  const auditFailureZeroProviderCalls=auditFailure.result.status==='blocked'&&auditFailure.providerCalls===0&&auditFailure.secretCalls===0;
   assert.equal(auditFailure.result.body.failureClass, 'audit_context_unsafe');
 
   const secretFailure = await runScenario('generate_document', { secretFails: true });
@@ -279,6 +332,7 @@ const main = async () => {
   assert.equal(secretFailure.secretCalls, 1);
   assert.equal(secretFailure.createJobCalls, 0);
   assert.equal(secretFailure.providerCalls, 0);
+  const secretFailureZeroProviderCalls=secretFailure.result.status==='blocked'&&secretFailure.providerCalls===0;
   assert.equal(secretFailure.result.body.failureClass, 'key_reference_ineligible');
 
   const injectedSecretException = await runScenario('generate_document', { secretThrows: true });
@@ -299,7 +353,8 @@ const main = async () => {
   assert.equal(defaultSecretException.result.body.failureClass, 'key_reference_ineligible');
   assertNoSensitiveFields(defaultSecretException.result);
 
-  for (const throwAt of ['membership', 'policy', 'config', 'keyRef'] as const) {
+  const resolverFailureScenarios = new Map<(typeof RESOLVER_THROW_POINTS)[number], boolean>();
+  for (const throwAt of RESOLVER_THROW_POINTS) {
     const resolverFailure = await runScenario('generate_document', { throwAt });
     assert.equal(resolverFailure.result.status, 'blocked');
     assert.equal(resolverFailure.result.body.error, 'AI provider governance controls blocked this request.');
@@ -308,6 +363,7 @@ const main = async () => {
     assert.equal(resolverFailure.secretCalls, 0);
     assert.equal(resolverFailure.createJobCalls, 0);
     assert.equal(resolverFailure.providerCalls, 0);
+    resolverFailureScenarios.set(throwAt, resolverFailure.result.status === 'blocked' && resolverFailure.providerCalls === 0 && resolverFailure.createJobCalls === 0);
     assert.equal(resolverFailure.auditCalls, 0);
     assertNoSensitiveFields(resolverFailure.result);
   }
@@ -442,6 +498,14 @@ const main = async () => {
   if (resolvedGemini.status === 'resolved') assert.equal(resolvedGemini.apiKey, 'mock-provider-key');
 
   if (process.env.PROVIDER_EVIDENCE_OUTPUT) {
+    const { assertionResults, assertionDisposition } = deriveProviderAssertionArtifact({
+      deniedScenarios,
+      resolverFailureScenarios,
+      auditFailureZeroProviderCalls,
+      secretFailureZeroProviderCalls,
+      allowedPathInjectedExecutorOnly,
+    });
+    assert.equal(assertionDisposition,'passed','provider assertion artifact must derive from the executed injected-provider checks');
     const outputPath = process.env.PROVIDER_EVIDENCE_OUTPUT;
     mkdirSync(path.dirname(outputPath), { recursive: true });
     writeFileSync(outputPath, `${JSON.stringify({
@@ -452,13 +516,8 @@ const main = async () => {
       workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH ?? null,
       environment: 'disposable-ci-simulation',
       scope: { kind: 'synthetic-organization-policy', organizationId: orgId },
-      assertionResults: [
-        { assertionId: 'provider-simulation--denied-path-zero-provider-calls', status: 'PASS' },
-        { assertionId: 'provider-simulation--audit-failure-zero-provider-calls', status: 'PASS' },
-        { assertionId: 'provider-simulation--secret-failure-zero-provider-calls', status: 'PASS' },
-        { assertionId: 'provider-simulation--resolver-failure-zero-provider-calls', status: 'PASS' },
-        { assertionId: 'provider-simulation--allowed-path-injected-executor-only', status: 'PASS' },
-      ],
+      assertionDisposition,
+      assertionResults,
       realNetworkEgressObserved: false,
       providerExecutionBoundary: 'injected-test-executor',
     }, null, 2)}\n`, { mode: 0o600 });

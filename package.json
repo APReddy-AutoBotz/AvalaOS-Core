@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test:hosted-evidence-family-attestations": "node scripts/hostedEvidenceFamilyAttestation.test.mjs && node scripts/deriveHostedEvidenceFamilyAssertions.test.mjs",
-    "test:acceptance:catalog": "node scripts/exhaustiveAcceptanceValidate.mjs && node tests/acceptance/validators/validate-traceability.mjs && node tests/acceptance/validators/acceptance-metadata.test.mjs && node tests/acceptance/validators/inventory-provenance.test.mjs",
+    "test:acceptance:catalog": "node scripts/exhaustiveAcceptanceValidate.mjs && node tests/acceptance/validators/validate-traceability.mjs && node tests/acceptance/validators/acceptance-metadata.test.mjs && node tests/acceptance/validators/inventory-provenance.test.mjs && node tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs && node scripts/runAssessV1AcceptanceOracle.test.mjs",
     "test:acceptance:hosted": "playwright test --config=playwright.exhaustive-acceptance.config.ts",
     "test:acceptance:network-observer": "node scripts/runPr1fTypeScriptTest.mjs tests/browser/authorityRequestObserver.ts tests/browser/authorityRequestObserver.test.ts",
     "report:acceptance": "node scripts/exhaustiveAcceptanceReport.mjs",

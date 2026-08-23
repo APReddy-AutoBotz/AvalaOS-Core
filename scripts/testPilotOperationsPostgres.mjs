@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import process from 'node:process';
+import {createHash} from 'node:crypto';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {
   applyMigrations, bootstrapAuth, connect, createDatabase, databaseUrlFor, dropDatabase, ensureClusterRoles,
@@ -7,6 +8,10 @@ import {
 } from './pilotOperationsPostgresSupport.mjs';
 import {loadCanonicalMigrationInventory, normalizeRoutineIdentityArguments} from './hostedPilotActivation.mjs';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
+import {
+  HOSTED_EVIDENCE_FAMILIES,HOSTED_EVIDENCE_FAMILY_CONTRACTS,HOSTED_SCENARIO_SOURCE_PATH,HOSTED_SCENARIO_SOURCE_SHA256,
+  hostedEvidenceFamilyContractSha256,
+} from './hostedEvidenceFamilyAttestation.mjs';
 
 const adminUrl = process.env.PILOT_OPERATIONS_DATABASE_URL;
 if (!adminUrl) {
@@ -266,44 +271,301 @@ try {
 
   const hostedWorkflow='.github/workflows/hosted-pilot-activation-evidence-producer.yml';
   const hostedRun='31587931745', hostedAttempt=1;
-  const databaseFingerprint=`sha256:${'1'.repeat(64)}`, deploymentFingerprint=`sha256:${'2'.repeat(64)}`;
-  const evidenceFamilies=['tenant-adversarial','provider-simulation-zero-egress','canonical-journey','backup-restore','recovery-rollback'];
-  const ingestExercise=async(exercise,overrides={})=>{
-    const selectors={release:candidatePayload.gitSha,workflow:hostedWorkflow,run:hostedRun,attempt:hostedAttempt,
-      database:databaseFingerprint,deployment:deploymentFingerprint,target:'hosted_nonproduction_pilot',...overrides};
-    for(const [index,family] of evidenceFamilies.entries()) await fresh.query(
-      'SELECT public.hosted_pilot_ingest_exercise_evidence_family($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
-      [fixture.org,fixture.workspace,exercise,selectors.release,selectors.workflow,selectors.run,selectors.attempt,
-        selectors.database,selectors.deployment,selectors.target,family,String(index+1).repeat(64),'executed_hosted_evidence'],
-    );
+  const databaseFingerprint=(await fresh.query(`SELECT 'sha256:'||encode(public.digest(
+    convert_to((SELECT system_identifier::text FROM pg_control_system()),'UTF8')||decode('00','hex')||
+    convert_to(current_database(),'UTF8')||decode('00','hex')||convert_to(current_user,'UTF8'),'sha256'),'hex') fingerprint`)).rows[0].fingerprint;
+  const deploymentFingerprint=`sha256:${'2'.repeat(64)}`;
+  const evidenceFamilies=[...HOSTED_EVIDENCE_FAMILIES];
+  const constructedFamilyProvenance=family=>{
+    const contract=HOSTED_EVIDENCE_FAMILY_CONTRACTS[family];
+    const sources=[...new Map(contract.assertions.map(item=>[item.sourcePath,{path:item.sourcePath,sha256:item.sourceSha256}])).values()];
+    return {testIds:[...contract.testIds],contractSha256:hostedEvidenceFamilyContractSha256(family),
+      assertionOutcomes:contract.assertions.map(item=>({assertionId:item.assertionId,status:'PASS',sourceArtifactSha256:item.sourceSha256,observationSha256:`sha256:${'a'.repeat(64)}`})),sourceArtifacts:sources};
   };
+  for(const family of evidenceFamilies){
+    const sqlContract=(await fresh.query('SELECT public.hosted_pilot_evidence_family_contract($1) contract',[family])).rows[0].contract;
+    assert.deepEqual(sqlContract,{family,testIds:[...HOSTED_EVIDENCE_FAMILY_CONTRACTS[family].testIds],assertions:HOSTED_EVIDENCE_FAMILY_CONTRACTS[family].assertions.map(item=>({...item})),contractSha256:hostedEvidenceFamilyContractSha256(family)},`${family} SQL and JS contracts must be byte-for-byte equivalent`);
+  }
+  await assert.rejects(fresh.query('SELECT public.hosted_pilot_ingest_exercise_evidence_family($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+    [fixture.org,fixture.workspace,'97000000-0000-4000-8000-000000000090',nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+      databaseFingerprint,deploymentFingerprint,'hosted_nonproduction_pilot','tenant-adversarial','a'.repeat(64),'executed_hosted_evidence']),/HOSTED_EVIDENCE_LEGACY_INGEST_DISABLED/);
+  const tenantProvenance=constructedFamilyProvenance('tenant-adversarial');
+  const v2IngestIdentity='public.hosted_pilot_ingest_exercise_evidence_family_v2(uuid,uuid,uuid,text,text,text,bigint,text,text,text,text,text,jsonb,text,jsonb,jsonb)';
+  const callerPassArgs=[fixture.org,fixture.workspace,'97000000-0000-4000-8000-000000000082',nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+    databaseFingerprint,deploymentFingerprint,'hosted_nonproduction_pilot','tenant-adversarial','hosted_nonproduction_pilot',JSON.stringify(tenantProvenance.testIds),
+    tenantProvenance.contractSha256,JSON.stringify(tenantProvenance.assertionOutcomes),JSON.stringify(tenantProvenance.sourceArtifacts)];
+  await assert.rejects(fresh.query(
+    'SELECT public.hosted_pilot_ingest_exercise_evidence_family_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15::jsonb,$16::jsonb)',callerPassArgs),
+    /HOSTED_EVIDENCE_CALLER_ASSERTIONS_DISABLED/,'even the database owner cannot submit constructed PASS outcomes');
+  const internalExecutorIdentity='public.hosted_pilot_execute_evidence_families_internal(uuid,uuid,uuid,text,text,text,bigint,text,text)';
+  await fresh.query(`GRANT EXECUTE ON FUNCTION ${internalExecutorIdentity} TO service_role`);
+  await fresh.query('SET SESSION AUTHORIZATION service_role');
+  try{
+    await assert.rejects(fresh.query(
+      'SELECT public.hosted_pilot_execute_evidence_families_internal($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [fixture.org,fixture.workspace,'97000000-0000-4000-8000-000000000082',nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint]),
+      /HOSTED_EVIDENCE_EXECUTOR_OWNER_REQUIRED/,'true non-owner session_user must not execute hosted proof derivation');
+  }finally{
+    await fresh.query('RESET SESSION AUTHORIZATION');
+    await fresh.query(`REVOKE ALL ON FUNCTION ${internalExecutorIdentity} FROM service_role`);
+  }
+  await fresh.query('SELECT public.hosted_pilot_bootstrap_synthetic($1,$2,$3,$4,$5)',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,'bootstrap']);
+  const crossScopeExercise='97000000-0000-4000-8000-000000000110';
+  const crossScopeObservation=(await fresh.query(
+    'SELECT public.hosted_pilot_execute_assertion_scenario($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',[
+      'hosted-database--cross-tenant-nondisclosure',fixture.org,fixture.workspace,crossScopeExercise,nextPayload.gitSha,
+      hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint,
+    ])).rows[0].result;
+  assert.equal(crossScopeObservation.passed,true,'cross-tenant proof must deny a positively authorized source actor against an existing foreign scope');
+  for(const fact of ['sourceScopeProjectionAuthorized','foreignScopeExists','foreignProtectedResourceExists',
+    'foreignOrganizationMembershipAbsent','foreignWorkspaceMembershipAbsent','unauthorizedReadDenied','unauthorizedMutationDenied'])
+    assert.equal(crossScopeObservation.predicate[fact],true,`${fact} must be observed`);
+  assert.equal(Number((await fresh.query(`SELECT count(*) n FROM organizations foreign_org
+    JOIN workspaces foreign_workspace ON foreign_workspace.org_id=foreign_org.id
+    JOIN pilot_operations_release_candidates protected ON protected.org_id=foreign_org.id AND protected.workspace_id=foreign_workspace.id
+    WHERE foreign_org.settings->>'exerciseRunId'=$1`,[crossScopeExercise])).rows[0].n),1,
+  'the denied foreign scope must contain one real protected candidate');
+  for(const scenario of ['success','failure','timeout','revoked','rotated']) {
+    const providerArgs=[fixture.requester,fixture.org,fixture.workspace,authorizationVersion,`postgres-hosted-${scenario}`,scenario,JSON.stringify({scenario,synthetic:true})];
+    const first=(await fresh.query('SELECT public.hosted_pilot_simulate_provider($1,$2,$3,$4,$5,$6,$7) result',providerArgs)).rows[0].result;
+    const responseLossReplay=(await fresh.query('SELECT public.hosted_pilot_simulate_provider($1,$2,$3,$4,$5,$6,$7) result',providerArgs)).rows[0].result;
+    assert.deepEqual(responseLossReplay,first,`${scenario} provider observation must converge after response loss`);
+  }
+  const hostedRecoveryArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations',hostedRun,nextPayload.gitSha,'4'.repeat(64),'5'.repeat(64),nextPayload.schemaVersion,fixture.requester];
+  await fresh.query('SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',hostedRecoveryArgs);
+
+  const executeExercise=exercise=>fresh.query(
+    'SELECT public.hosted_pilot_execute_evidence_families_internal($1,$2,$3,$4,$5,$6,$7,$8,$9) result',
+    [fixture.org,fixture.workspace,exercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint],
+  );
   const recordExercise=exercise=>fresh.query(
     'SELECT public.hosted_pilot_record_verification_result($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',
-    [fixture.org,fixture.workspace,exercise,candidatePayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+    [fixture.org,fixture.workspace,exercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
       databaseFingerprint,deploymentFingerprint,recoveryActor,recoveryAuthorizationVersion],
   );
-  const oldExercise='97000000-0000-4000-8000-000000000091';
   const currentExercise='97000000-0000-4000-8000-000000000092';
-  await ingestExercise(oldExercise);
-  await assert.rejects(recordExercise(currentExercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'old exercise evidence cannot satisfy a new exercise');
-  for(const [label,exercise,override] of [
-    ['wrong producer run','97000000-0000-4000-8000-000000000093',{run:'31587931746'}],
-    ['wrong producer attempt','97000000-0000-4000-8000-000000000094',{attempt:2}],
-    ['wrong release head','97000000-0000-4000-8000-000000000095',{release:'9'.repeat(40)}],
-    ['wrong hosted target','97000000-0000-4000-8000-000000000096',{target:'disposable_localhost'}],
-  ]) {
-    if(label==='wrong hosted target') {
-      await assert.rejects(ingestExercise(exercise,override),/HOSTED_EXERCISE_EVIDENCE_INVALID/,label);
-      continue;
-    }
-    await ingestExercise(exercise,override);
-    await assert.rejects(recordExercise(exercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,label);
+  await assert.rejects(recordExercise(currentExercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'successful jobs without derived families cannot finalize');
+  const wrongReleaseExercise='97000000-0000-4000-8000-000000000095';
+  await assert.rejects(fresh.query(
+    'SELECT public.hosted_pilot_execute_evidence_families_internal($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [fixture.org,fixture.workspace,wrongReleaseExercise,'9'.repeat(40),hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint]),
+    /HOSTED_ASSERTION_EXECUTION_FAILED_/,'a release without executable state must not derive PASS');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_evidence_observations WHERE exercise_run_id=$1',[wrongReleaseExercise])).rows[0].n),0,'failed derivation must roll back partial observations');
+
+  const fakeExercise='97000000-0000-4000-8000-000000000097';
+  for(const family of evidenceFamilies) {
+    const provenance=constructedFamilyProvenance(family);
+    await fresh.query(`INSERT INTO hosted_pilot_exercise_evidence_families(
+      org_id,workspace_id,exercise_run_id,release_sha,producer_workflow_path,producer_run_id,producer_run_attempt,
+      target_fingerprint,deployment_fingerprint,hosted_target,evidence_family,evidence_sha256,disposition,
+      provenance_schema_version,environment,test_ids,contract_sha256,assertion_outcomes,source_artifacts,
+      observation_schema_version,observation_binding,observation_set_sha256)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'hosted_nonproduction_pilot',$10,$11,'executed_hosted_evidence',
+        'hosted-family-assertion-v2','hosted_nonproduction_pilot',$12::jsonb,$13,$14::jsonb,$15::jsonb,
+        'hosted-family-derived-observation-v1',$16::jsonb,$17)`,[
+      fixture.org,fixture.workspace,fakeExercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+      databaseFingerprint,deploymentFingerprint,family,'b'.repeat(64),JSON.stringify(provenance.testIds),provenance.contractSha256,
+      JSON.stringify(provenance.assertionOutcomes),JSON.stringify(provenance.sourceArtifacts),JSON.stringify({family,constructed:true}),'c'.repeat(64),
+    ]);
   }
-  await assert.rejects(recordExercise('97000000-0000-4000-8000-000000000097'),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'disposable and historical rows cannot substitute for hosted evidence families');
-  await ingestExercise(currentExercise);
+  assert.equal((await fresh.query('SELECT bool_or(public.hosted_pilot_evidence_family_derived_valid(org_id,workspace_id,exercise_run_id,evidence_family)) valid FROM hosted_pilot_exercise_evidence_families WHERE exercise_run_id=$1',[fakeExercise])).rows[0].valid,false,'constructed PASS identifiers without observations must be invalid');
+  await assert.rejects(recordExercise(fakeExercise),/HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'constructed all-PASS rows without executable observations cannot finalize');
+
+  const prepareArgs=[fixture.org,fixture.workspace,currentExercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint];
+  const responseLossCommitPhase=(await fresh.query(
+    'SELECT public.hosted_pilot_prepare_response_loss_scenario($1,$2,$3,$4,$5,$6,$7,$8,$9) result',prepareArgs)).rows[0].result;
+  assert.deepEqual(responseLossCommitPhase,{status:'response_loss_committed',businessResponseExposed:false,productionAuthorized:false},
+    'first exact-run invocation must commit while withholding the business response');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_response_loss_preparations WHERE exercise_run_id=$1 AND preparation_txid<>txid_current()',
+    [currentExercise])).rows[0].n),1,'retry must observe an immutable preparation committed by an earlier transaction');
+  await assert.rejects(executeExercise(currentExercise),/HOSTED_ASSERTION_EXECUTION_FAILED_HOSTED_JOURNEY_RECOVERY_EVIDENCE_BOUND/,
+    'ambient same-release recovery/rollback rows must not be wrapped as current-run evidence');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_evidence_observations WHERE exercise_run_id=$1',[currentExercise])).rows[0].n),0,
+    'missing exact-run operational preparation must roll back every partial family observation');
+
+  const selectorMaterial=[fixture.org,fixture.workspace,currentExercise,nextPayload.gitSha,hostedWorkflow,hostedRun,String(hostedAttempt),databaseFingerprint,deploymentFingerprint].join('|');
+  const selectorSha=label=>createHash('sha256').update(`${label}|${selectorMaterial}`).digest('hex');
+  const exactRecoveryArtifact=selectorSha('hosted-exact-recovery-artifact');
+  const exactRecoveryEvidence=selectorSha('hosted-exact-recovery-evidence');
+  const exactRecovery=(await fresh.query(
+    'SELECT public.pilot_operations_ingest_recovery_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result',[
+      fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations',hostedRun,nextPayload.gitSha,
+      exactRecoveryArtifact,exactRecoveryEvidence,nextPayload.schemaVersion,fixture.requester,
+    ])).rows[0].result;
+  const exactRecoveryDrill=exactRecovery.resourceId;
+
+  const exactReviewer='97000000-0000-4000-8000-000000000074';
+  await fresh.query('INSERT INTO auth.users(id) VALUES($1)',[exactReviewer]);
+  await fresh.query("INSERT INTO profiles(id,email) VALUES($1,'exact-run-reviewer@pilot.invalid')",[exactReviewer]);
+  await fresh.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",[fixture.org,exactReviewer,reviewerRole]);
+  await fresh.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",[fixture.org,fixture.workspace,exactReviewer]);
+  const exactReviewerAuthorizationVersion=Number((await fresh.query(
+    'SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[fixture.org,exactReviewer])).rows[0].version);
+  const beforeExactPromotion=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',
+    [fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
+  const exactRollbackPayload={...nextPayload,buildIdentity:`hosted-exact-rollback-${hostedRun}-${hostedAttempt}`,
+    evidenceManifestSha256:selectorSha('hosted-exact-rollback-manifest')};
+  const exactRollbackCandidate=(await command('register_release_candidate',`hosted-exact-register-${hostedRun}-${hostedAttempt}`,exactRollbackPayload,0)).rows[0].result;
+  await fresh.query(`INSERT INTO pilot_operations_evidence_manifests(candidate_id,org_id,workspace_id,environment_id,git_sha,build_identity,
+    workflow_name,workflow_run_id,workflow_head_sha,manifest_sha256,schema_version,migration_compatible,required_gates,status,verified_at)
+    VALUES($1,$2,$3,$4,$5,$6,'Pilot Operations',$7,$5,$8,$9,true,$10::jsonb,'verified',now())`,[
+      exactRollbackCandidate.resourceId,fixture.org,fixture.workspace,environment.resourceId,nextPayload.gitSha,exactRollbackPayload.buildIdentity,
+      hostedRun,exactRollbackPayload.evidenceManifestSha256,nextPayload.schemaVersion,JSON.stringify(gates),
+    ]);
+  const exactRollbackValidated=(await command('validate_release_candidate',`hosted-exact-validate-${hostedRun}-${hostedAttempt}`,
+    {candidateId:exactRollbackCandidate.resourceId},exactRollbackCandidate.version)).rows[0].result;
+  const exactRollbackApproved=(await command('approve_promotion',`hosted-exact-approve-${hostedRun}-${hostedAttempt}`,
+    {candidateId:exactRollbackCandidate.resourceId},exactRollbackValidated.version,undefined,exactReviewer,exactReviewerAuthorizationVersion)).rows[0].result;
+  const exactRollbackPromoted=(await command('simulate_promotion',`hosted-exact-promote-${hostedRun}-${hostedAttempt}`,
+    {candidateId:exactRollbackCandidate.resourceId,target:'non_live'},exactRollbackApproved.version)).rows[0].result;
+  const exactRollbackKey=`hosted-exact-rollback-${currentExercise.replaceAll('-','')}-${hostedRun}-${hostedAttempt}`;
+  const exactRollbackCommandPayload={candidateId:exactRollbackCandidate.resourceId,environmentId:environment.resourceId,
+    rollbackTargetCandidateId:beforeExactPromotion.promotedRelease.id,rollbackTargetVersion:beforeExactPromotion.promotedRelease.version};
+  await command('rollback_non_live_promotion',exactRollbackKey,exactRollbackCommandPayload,exactRollbackPromoted.version,
+    undefined,recoveryActor,recoveryAuthorizationVersion);
+  const exactRollbackReceipt=(await fresh.query(`SELECT * FROM pilot_operations_command_receipts
+    WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND operation='rollback_non_live_promotion' AND idempotency_key=$4`,
+  [fixture.org,fixture.workspace,recoveryActor,exactRollbackKey])).rows[0];
+  const exactRollbackEvent=(await fresh.query('SELECT * FROM pilot_operations_rollback_events WHERE request_id=$1',
+    [exactRollbackReceipt.initial_request_id])).rows[0];
+  const bindArgs=[...prepareArgs,exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id];
+  const exactBinding=(await fresh.query(
+    'SELECT public.hosted_pilot_bind_exact_run_operational_execution($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) result',bindArgs)).rows[0].result;
+  assert.equal(exactBinding.status,'bound');
+  assert.equal((await fresh.query(
+    'SELECT public.hosted_pilot_exact_run_operational_execution_valid($1,$2,$3,$4,$5,$6,$7,$8,$9) valid',prepareArgs)).rows[0].valid,true);
+
+  for(const [label,args] of [
+    ['wrong scope',['97000000-0000-4000-8000-999999999991',...prepareArgs.slice(1),exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]],
+    ['wrong release',[...prepareArgs.slice(0,3),'9'.repeat(40),...prepareArgs.slice(4),exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]],
+    ['wrong attempt',[...prepareArgs.slice(0,6),hostedAttempt+1,...prepareArgs.slice(7),exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]],
+    ['wrong target',[...prepareArgs.slice(0,7),`sha256:${'7'.repeat(64)}`,...prepareArgs.slice(8),exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]],
+    ['wrong deployment',[...prepareArgs.slice(0,8),`sha256:${'8'.repeat(64)}`,exactRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]],
+  ]) await assert.rejects(fresh.query(
+    'SELECT public.hosted_pilot_bind_exact_run_operational_execution($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',args),
+  /HOSTED_EXACT_RUN_OPERATIONAL_PREPARATION_INVALID/,`${label} must not bind canonical operations`);
+  const staleRecoveryDrill=(await fresh.query(`SELECT recovery_drill_id FROM pilot_operations_recovery_evidence_ingestions
+    WHERE org_id=$1 AND workspace_id=$2 AND artifact_sha256=$3`,[fixture.org,fixture.workspace,'4'.repeat(64)])).rows[0].recovery_drill_id;
+  await assert.rejects(fresh.query(
+    'SELECT public.hosted_pilot_bind_exact_run_operational_execution($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+    [...prepareArgs,staleRecoveryDrill,exactRollbackEvent.id,exactRollbackReceipt.id]),
+  /HOSTED_EXACT_RUN_OPERATIONAL_PREPARATION_INVALID/,'ambient pre-preparation recovery evidence must not bind');
+
+  const ownerWrapperExercise='97000000-0000-4000-8000-000000000111';
+  await fresh.query(`INSERT INTO hosted_pilot_exact_run_operational_executions(org_id,workspace_id,exercise_run_id,release_sha,
+    producer_workflow_path,producer_run_id,producer_run_attempt,target_fingerprint,deployment_fingerprint,response_loss_receipt_id,
+    response_loss_resource_id,recovery_drill_id,rollback_event_id,rollback_receipt_id,binding_txid)
+    SELECT org_id,workspace_id,$1,release_sha,producer_workflow_path,producer_run_id,producer_run_attempt,target_fingerprint,
+      deployment_fingerprint,response_loss_receipt_id,response_loss_resource_id,recovery_drill_id,rollback_event_id,rollback_receipt_id,txid_current()
+    FROM hosted_pilot_exact_run_operational_executions WHERE exercise_run_id=$2`,[ownerWrapperExercise,currentExercise]);
+  assert.equal((await fresh.query(
+    'SELECT public.hosted_pilot_exact_run_operational_execution_valid($1,$2,$3,$4,$5,$6,$7,$8,$9) valid',[
+      fixture.org,fixture.workspace,ownerWrapperExercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,databaseFingerprint,deploymentFingerprint,
+    ])).rows[0].valid,false,'an owner-written wrapper over current canonical rows must not validate for another exercise');
+  assert.equal((await fresh.query(`SELECT public.hosted_pilot_assertion_predicate_valid(
+    'hosted-recovery--recovery-evidence-bound',$1::jsonb) valid`,[JSON.stringify({
+      exactReleaseRecoveryEvidenceCount:99,exactRunRecoveryExecutionCount:0,exactRunRecoveryExecutionBound:false,
+      historicalRecoveryRowsExcluded:true,
+    })])).rows[0].valid,false,'ambient same-release recovery counts must not satisfy the exact-run predicate');
+  assert.equal((await fresh.query(`SELECT public.hosted_pilot_assertion_predicate_valid(
+    'hosted-recovery--exact-release-rollback-event',$1::jsonb) valid`,[JSON.stringify({
+      exactReleaseRollbackEventCount:99,exactRunRollbackExecutionCount:0,exactRunRollbackExecutionBound:false,
+      historicalRollbackRowsExcluded:true,
+    })])).rows[0].valid,false,'ambient same-release rollback counts must not satisfy the exact-run predicate');
+
+  const executed=(await executeExercise(currentExercise)).rows[0].result;
+  assert.equal(executed.status,'derived'); assert.equal(executed.evidenceFamilyCount,5); assert.equal(executed.productionAuthorized,false);
+  const expectedObservationCount=evidenceFamilies.reduce((count,family)=>count+HOSTED_EVIDENCE_FAMILY_CONTRACTS[family].assertions.length,0);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_evidence_observations WHERE exercise_run_id=$1',[currentExercise])).rows[0].n),expectedObservationCount);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_evidence_scenario_observations WHERE exercise_run_id=$1',[currentExercise])).rows[0].n),expectedObservationCount,'every family observation must have one DB-owned exact-run scenario observation');
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_exercise_evidence_families WHERE exercise_run_id=$1 AND public.hosted_pilot_evidence_family_derived_valid(org_id,workspace_id,exercise_run_id,evidence_family)',[currentExercise])).rows[0].n),5);
+  assert.equal(Number((await fresh.query("SELECT count(DISTINCT scenario) n FROM hosted_pilot_provider_simulations WHERE idempotency_key LIKE $1",
+    [`hosted-provider-${currentExercise.replaceAll('-','')}-${hostedRun}-${hostedAttempt}-%`])).rows[0].n),5,'provider family must execute the exact current-run scenario set');
+  assert.deepEqual((await executeExercise(currentExercise)).rows[0].result,executed,'response-loss retry must converge on the immutable derived observation set');
+
+  const insertForgedScenario=async({exercise,assertionId='hosted-database--synthetic-subject-role-matrix',predicate={subjectCount:5,distinctRoleCount:5},
+    runAttempt=hostedAttempt,deployment=deploymentFingerprint,bindingOverrides={},sourcePath=HOSTED_SCENARIO_SOURCE_PATH,sourceSha=HOSTED_SCENARIO_SOURCE_SHA256})=>{
+    const binding={family:'tenant-adversarial',releaseSha:nextPayload.gitSha,producerWorkflowPath:hostedWorkflow,producerRunId:hostedRun,
+      producerRunAttempt:runAttempt,organizationId:fixture.org,workspaceId:fixture.workspace,exerciseRunId:exercise,
+      targetFingerprint:databaseFingerprint,deploymentFingerprint:deployment,...bindingOverrides};
+    const scenarioPayload={schemaVersion:'hosted-exact-run-scenario-v1',binding,assertionId,result:'PASS',predicate,sourcePath,sourceSha256:sourceSha};
+    await fresh.query(`INSERT INTO hosted_pilot_evidence_scenario_observations(
+      org_id,workspace_id,exercise_run_id,release_sha,producer_workflow_path,producer_run_id,producer_run_attempt,
+      target_fingerprint,deployment_fingerprint,evidence_family,assertion_id,source_path,source_sha256,
+      scenario_schema_version,scenario_payload,scenario_sha256)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'tenant-adversarial',$10,$11,$12,
+        'hosted-exact-run-scenario-v1',$13::jsonb,encode(public.digest(convert_to($13::jsonb::text,'UTF8'),'sha256'),'hex'))`,[
+      fixture.org,fixture.workspace,exercise,nextPayload.gitSha,hostedWorkflow,hostedRun,runAttempt,databaseFingerprint,deployment,
+      assertionId,sourcePath,sourceSha.slice(7),JSON.stringify(scenarioPayload),
+    ]);
+  };
+  const assertForgedScenarioRejected=async(exercise,message,{attempt=hostedAttempt,deployment=deploymentFingerprint}={})=>{
+    await assert.rejects(fresh.query(
+      'SELECT public.hosted_pilot_execute_evidence_families_internal($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [fixture.org,fixture.workspace,exercise,nextPayload.gitSha,hostedWorkflow,hostedRun,attempt,databaseFingerprint,deployment]),
+      /HOSTED_SCENARIO_OBSERVATION_CONFLICT/,message);
+    assert.equal(Number((await fresh.query('SELECT count(*) n FROM hosted_pilot_exercise_evidence_families WHERE exercise_run_id=$1',[exercise])).rows[0].n),0,`${message}: no family wrapper may survive`);
+  };
+  const staleScenario='97000000-0000-4000-8000-000000000101';
+  await insertForgedScenario({exercise:staleScenario,runAttempt:hostedAttempt+1});
+  await assertForgedScenarioRejected(staleScenario,'stale run-attempt scenario must fail closed');
+  const wrongDeploymentScenario='97000000-0000-4000-8000-000000000102';
+  await insertForgedScenario({exercise:wrongDeploymentScenario,deployment:`sha256:${'3'.repeat(64)}`});
+  await assertForgedScenarioRejected(wrongDeploymentScenario,'wrong-deployment scenario must fail closed');
+  const wrongScopeScenario='97000000-0000-4000-8000-000000000103';
+  await insertForgedScenario({exercise:wrongScopeScenario,bindingOverrides:{organizationId:'97000000-0000-4000-8000-999999999999'}});
+  await assertForgedScenarioRejected(wrongScopeScenario,'wrong-scope scenario payload must fail closed');
+  const incompleteDenialScenario='97000000-0000-4000-8000-000000000104';
+  await insertForgedScenario({exercise:incompleteDenialScenario,assertionId:'hosted-database--cross-tenant-nondisclosure',predicate:{
+    unauthorizedReadDenied:true,unauthorizedMutationDenied:false,readErrorNondisclosing:true,mutationErrorNondisclosing:true,
+    activeForeignScopeActor:true,sourceScopeProjectionAuthorized:true,foreignScopeExists:true,foreignProtectedResourceExists:true,
+    foreignOrganizationMembershipAbsent:true,foreignWorkspaceMembershipAbsent:true,
+    rowsDisclosed:0,receiptSideEffects:0,auditSideEffects:0,businessSideEffects:0,
+  }});
+  await assertForgedScenarioRejected(incompleteDenialScenario,'incomplete cross-tenant denial must fail closed');
+  const replayPredicate={responseDiscardedBeforeRetry:true,durableCommitBeforeRetry:true,exactReplayResponseMatched:true,committedReceiptCount:1,businessEffectDelta:1,
+    resourceBusinessEffectCount:1,canonicalAuditEventCount:1,changedPayloadConflictRejected:true};
+  for(const [exercise,field,message] of [
+    ['97000000-0000-4000-8000-000000000105','exactReplayResponseMatched','missing replay equality'],
+    ['97000000-0000-4000-8000-000000000106','resourceBusinessEffectCount','missing single business effect'],
+    ['97000000-0000-4000-8000-000000000107','changedPayloadConflictRejected','missing changed-payload conflict'],
+    ['97000000-0000-4000-8000-000000000109','durableCommitBeforeRetry','missing prior durable commit'],
+  ]){
+    const predicate={...replayPredicate,[field]:field==='resourceBusinessEffectCount'?0:false};
+    await insertForgedScenario({exercise,assertionId:'hosted-database--response-loss-exact-replay',predicate});
+    await assertForgedScenarioRejected(exercise,`${message} must fail closed`);
+  }
+  const substitutedSourceScenario='97000000-0000-4000-8000-000000000108';
+  await insertForgedScenario({exercise:substitutedSourceScenario,sourcePath:'supabase/migrations/20260813020000_hosted_oidc_verifier_bridge.sql',sourceSha:`sha256:${'4'.repeat(64)}`});
+  await assertForgedScenarioRejected(substitutedSourceScenario,'substituted proof source must fail closed');
+    const ledgerText=[...canonical.migrations].sort((a,b)=>a.name.localeCompare(b.name)).map(item=>
+      `${item.name}:${createHash('sha256').update(item.sql.replace(/\r\n/gu,'\n')).digest('hex')}`
+    ).join('\n');
+  const expectedLedgerDigest=`sha256:${createHash('sha256').update(ledgerText).digest('hex')}`;
+  await fresh.query('CREATE SCHEMA extensions AUTHORIZATION postgres');
+  await fresh.query("CREATE FUNCTION extensions.digest(bytea,text) RETURNS bytea LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog AS 'SELECT public.digest($1,$2)'");
+  await fresh.query('REVOKE ALL ON SCHEMA extensions FROM PUBLIC,anon,authenticated,service_role');
+  await fresh.query('REVOKE ALL ON FUNCTION extensions.digest(bytea,text) FROM PUBLIC,anon,authenticated,service_role');
+  const oidcExecuteArgs=[fixture.org,fixture.workspace,currentExercise,nextPayload.gitSha,hostedWorkflow,hostedRun,hostedAttempt,
+    databaseFingerprint,deploymentFingerprint,canonical.migrations.length,expectedLedgerDigest];
+  const oidcExecuted=(await fresh.query('SELECT public.hosted_pilot_oidc_execute($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) result',oidcExecuteArgs)).rows[0].result;
+  assert.equal(oidcExecuted.status,'derived'); assert.equal(oidcExecuted.preflight.status,'passed');
+  const oidcExecuteIdentity='public.hosted_pilot_oidc_execute(uuid,uuid,uuid,text,text,text,bigint,text,text,bigint,text)';
+  await fresh.query(`GRANT EXECUTE ON FUNCTION ${oidcExecuteIdentity} TO anon`);
+  try {
+    await assert.rejects(fresh.query('SELECT public.hosted_pilot_oidc_execute($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',oidcExecuteArgs),/HOSTED_OIDC_EXECUTOR_ACL_MISMATCH/,'OIDC executor must detect browser ACL drift before derivation');
+  } finally {
+    await fresh.query(`REVOKE ALL ON FUNCTION ${oidcExecuteIdentity} FROM anon`);
+  }
+  await assert.rejects(fresh.query(
+    'SELECT public.hosted_pilot_record_verification_result($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+    [fixture.org,fixture.workspace,currentExercise,nextPayload.gitSha,hostedWorkflow,'31587931746',hostedAttempt,databaseFingerprint,deploymentFingerprint,recoveryActor,recoveryAuthorizationVersion]),
+    /HOSTED_CURRENT_EXERCISE_PROOF_MISSING/,'a substituted producer run cannot consume exact-run evidence');
   const hostedRecorded=(await recordExercise(currentExercise)).rows[0].result;
   assert.equal(hostedRecorded.status,'recorded');
-  assert.deepEqual((await recordExercise(currentExercise)).rows[0].result,{status:'exact_replay',exerciseRunId:currentExercise,productionAuthorized:false});
+  assert.equal(hostedRecorded.familyDigest.length,5);
+  const hostedReplay=(await recordExercise(currentExercise)).rows[0].result;
+  assert.equal(hostedReplay.status,'exact_replay');assert.equal(hostedReplay.exerciseRunId,currentExercise);assert.equal(hostedReplay.productionAuthorized,false);assert.equal(hostedReplay.familyDigest.length,5);
 
   const evidenceArgs=[fixture.org,fixture.workspace,environment.resourceId,'Pilot Operations','31329036283','3'.repeat(40),'4'.repeat(64),'5'.repeat(64),candidatePayload.schemaVersion,fixture.requester];
   const evidenceCount=async()=>Number((await fresh.query('SELECT count(*) n FROM pilot_operations_recovery_evidence_ingestions WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0].n);
@@ -324,7 +586,8 @@ try {
   const pending=(await command('register_release_candidate','postgres-pending-after-promotion',pendingPayload,0)).rows[0].result;
   const pendingProjection=(await fresh.query('SELECT public.pilot_operations_projection($1,$2,$3,$4) result',[fixture.requester,fixture.org,fixture.workspace,authorizationVersion])).rows[0].result;
   assert.equal(pendingProjection.release.id,pending.resourceId); assert.equal(pendingProjection.promotedRelease.id,valid.resourceId);
-  assert.equal(pendingProjection.rollback.eligible,true); assert.equal(pendingProjection.rollback.targetCandidateId,next.resourceId,'post-rollback history must select the immediately preceding promoted release');
+  assert.equal(pendingProjection.rollback.eligible,true); assert.equal(pendingProjection.rollback.targetCandidateId,exactRollbackCandidate.resourceId,
+    'post-rollback history must select the immediately preceding exact-run promoted release');
   assert.equal(pendingProjection.health.schemaCompatible,false); assert.ok(pendingProjection.blockers.includes('SCHEMA_INCOMPATIBLE'));
   assert.equal(pendingProjection.recovery.backupState,'completed'); assert.equal(pendingProjection.recovery.restoreState,'completed');
   const deprovisioned=(await command('deprovision_tenant','postgres-deprovision',{},tenant.version??1)).rows[0].result;
@@ -369,6 +632,7 @@ try {
   const recovered=(await fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) result',responseLossArgs)).rows[0].result;
   assert.deepEqual(recovered,receipt.response_body,'SAFETY-005 retry must recover the exact canonical committed response');
   assert.equal(recovered.resourceId,receipt.resource_id,'SAFETY-005 canonical response and receipt must bind the same resource');
+  const responseLossExactReplayVerified=JSON.stringify(recovered)===JSON.stringify(receipt.response_body)&&recovered.resourceId===receipt.resource_id;
   const persisted=(await fresh.query('SELECT id,git_sha,build_identity,evidence_manifest_sha256,schema_version,lifecycle,version FROM pilot_operations_release_candidates WHERE id=$1 AND org_id=$2 AND workspace_id=$3',[recovered.resourceId,fixture.org,fixture.workspace])).rows[0];
   assert.ok(persisted,'SAFETY-005 canonical resource must resolve to the persisted candidate');
   assert.equal(persisted.build_identity,responseLossPayload.buildIdentity);
@@ -377,11 +641,15 @@ try {
   assert.equal(persisted.schema_version,responseLossPayload.schemaVersion);
   assert.equal(persisted.lifecycle,'draft');
   assert.equal(Number(persisted.version),Number(recovered.version));
-  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n),effectsBefore+1,'SAFETY-005 must commit exactly one business effect');
-  assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1 AND candidate_id=$2',[environment.resourceId,recovered.resourceId])).rows[0].n),1,'SAFETY-005 candidate history must contain the committed resource exactly once');
+  const effectsAfter=Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1',[environment.resourceId])).rows[0].n);
+  const resourceEffects=Number((await fresh.query('SELECT count(*) n FROM pilot_operations_candidate_history WHERE environment_id=$1 AND candidate_id=$2',[environment.resourceId,recovered.resourceId])).rows[0].n);
+  assert.equal(effectsAfter,effectsBefore+1,'SAFETY-005 must commit exactly one business effect');
+  assert.equal(resourceEffects,1,'SAFETY-005 candidate history must contain the committed resource exactly once');
+  const responseLossExactlyOneEffectVerified=effectsAfter===effectsBefore+1&&resourceEffects===1;
   assert.equal(Number((await fresh.query('SELECT count(*) n FROM pilot_operations_audit_events WHERE receipt_id=$1 AND action=$2 AND resource_id=$3 AND result=$4',[receipt.id,'register_release_candidate',recovered.resourceId,'committed'])).rows[0].n),1,'SAFETY-005 must retain exactly one canonical audit event');
-  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[...responseLossArgs.slice(0,6),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'}),...responseLossArgs.slice(7,9),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'})]),/IDEMPOTENCY_CONFLICT/);
-  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[fixture.requester,'99000000-0000-4000-8000-000000000999','99000000-0000-4000-8000-000000000998','register_release_candidate',responseLossRequest,responseLossKey,JSON.stringify(responseLossPayload),authorizationVersion,0,JSON.stringify(responseLossPayload)]),/PR1B_NOT_FOUND/,'SAFETY-005 foreign tenant replay must be non-disclosing');
+  let responseLossConflictRejected=false,responseLossForeignTenantNonDisclosure=false;
+  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[...responseLossArgs.slice(0,6),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'}),...responseLossArgs.slice(7,9),JSON.stringify({...responseLossPayload,buildIdentity:'conflict'})]),/IDEMPOTENCY_CONFLICT/);responseLossConflictRejected=true;
+  await assert.rejects(fresh.query('SELECT public.pilot_operations_command($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[fixture.requester,'99000000-0000-4000-8000-000000000999','99000000-0000-4000-8000-000000000998','register_release_candidate',responseLossRequest,responseLossKey,JSON.stringify(responseLossPayload),authorizationVersion,0,JSON.stringify(responseLossPayload)]),/PR1B_NOT_FOUND/,'SAFETY-005 foreign tenant replay must be non-disclosing');responseLossForeignTenantNonDisclosure=true;
 
   // Recovery rotation deliberately fenced the historical reviewer above. Keep the
   // later serialization fixture independent so it cannot accidentally reuse that
@@ -461,6 +729,14 @@ try {
   await fresh.query('RESET ROLE');
   console.log('POSTGRES PASS exact evidence, lifecycle/SoD, required versions, maintenance, replay, deprovision/reactivation, and tenant non-disclosure');
   await mkdir('artifacts/pilot-operations',{recursive:true});
+  const assertionResults=[
+    ['pilot-operations-postgres--responseLossExactReplayVerified',responseLossExactReplayVerified],
+    ['pilot-operations-postgres--responseLossExactlyOneEffectVerified',responseLossExactlyOneEffectVerified],
+    ['pilot-operations-postgres--responseLossConflictRejected',responseLossConflictRejected],
+    ['pilot-operations-postgres--responseLossForeignTenantNonDisclosure',responseLossForeignTenantNonDisclosure],
+  ].map(([assertionId,passed])=>({assertionId,status:passed?'PASS':'FAIL'}));
+  const assertionDisposition=assertionResults.every(item=>item.status==='PASS')?'passed':'failed';
+  assert.equal(assertionDisposition,'passed','machine assertion artifact must derive from the executed response-loss checks');
   await writeFile('artifacts/pilot-operations/postgres-execution.json',JSON.stringify({
     kind:'executed_disposable_postgresql',postgresMajor:16,head:process.env.CANDIDATE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,
     runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT??0),workflowPath:process.env.ACCEPTANCE_WORKFLOW_PATH??null,environment:'disposable-ci',
@@ -469,13 +745,8 @@ try {
     expectedVersionVerified:true,staleAuthorizationDenied:true,evidenceBindingVerified:true,separationOfDutyVerified:true,deprovisionRevocationVerified:true,
     deprovisionLifecycleDisclosureBounded:true,deprovisionNonDisclosureVerified:true,deprovisionReplayDenied:true,recoveryDeprovisionDenied:true,actorBoundBootstrapReplayVerified:true,pendingCandidateProjectionVerified:true,canonicalRecoveryProjectionVerified:true,schemaReadinessConsistent:true,reactivationAuthorizedPathVerified:true,rollbackEligibleVerified:true,rollbackReplayVerified:true,rollbackZeroHostedMutationVerified:true,recoveryRuntimeControlsVerified:true,recoveryZeroMutationOnDenialVerified:true,liveActivationStopVerified:true,
     promotionHistorySerialized:true,invertedTransactionOrderVerified:true,gapFreePromotionSequenceVerified:true,pendingRegistrationSerialized:true,invertedRegistrationOrderVerified:true,gapFreeCandidateSequenceVerified:true,
-    crossTenantDisclosureDenied:true,responseLossAfterCommitTestId:'SAFETY-005',responseLossAfterCommitBranch:'SAFETY-RESPONSE_LOST_AFTER_COMMIT',responseLossExactReplayVerified:true,responseLossExactlyOneEffectVerified:true,responseLossConflictRejected:true,responseLossForeignTenantNonDisclosure:true,liveActivationAuthorized:false,
-    assertionResults:[
-      {assertionId:'pilot-operations-postgres--responseLossExactReplayVerified',status:'PASS'},
-      {assertionId:'pilot-operations-postgres--responseLossExactlyOneEffectVerified',status:'PASS'},
-      {assertionId:'pilot-operations-postgres--responseLossConflictRejected',status:'PASS'},
-      {assertionId:'pilot-operations-postgres--responseLossForeignTenantNonDisclosure',status:'PASS'},
-    ],
+    crossTenantDisclosureDenied:true,responseLossAfterCommitTestId:'SAFETY-005',responseLossAfterCommitBranch:'SAFETY-RESPONSE_LOST_AFTER_COMMIT',responseLossExactReplayVerified,responseLossExactlyOneEffectVerified,responseLossConflictRejected,responseLossForeignTenantNonDisclosure,liveActivationAuthorized:false,
+    assertionDisposition,assertionResults,
   },null,2)+'\n');
 } finally {
   for(const client of clients.slice(1).reverse()) await client.end().catch(()=>{});

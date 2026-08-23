@@ -52,7 +52,7 @@ export async function applyMigrations(client, names) {
     )`);
   for (const name of names) {
     const sql=await readFile(join('supabase/migrations', name), 'utf8');
-    const contentSha256=createHash('sha256').update(sql).digest('hex');
+    const contentSha256=createHash('sha256').update(sql.replace(/\r\n/gu,'\n')).digest('hex');
     await client.query('BEGIN');
     try {
       await client.query(sql);

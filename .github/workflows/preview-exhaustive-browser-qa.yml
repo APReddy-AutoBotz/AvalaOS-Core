@@ -44,6 +44,8 @@ jobs:
           node scripts/runExhaustiveAcceptanceReport.test.mjs
           node scripts/exhaustiveAcceptanceEvidence.test.mjs
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          node tests/browser/previewExhaustiveBrowserQaWorkflowContract.test.mjs
+          node tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs
 
       - name: Wait for exact PR preview and bind immutable deploy identity
         shell: bash
@@ -78,6 +80,13 @@ jobs:
 
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Run exact immutable-preview accessibility and performance
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+          NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+        run: npx playwright test --config=playwright.hosted-accessibility-performance.config.ts --workers=1
 
       - name: Run strict hosted shell and offline acceptance
         env:

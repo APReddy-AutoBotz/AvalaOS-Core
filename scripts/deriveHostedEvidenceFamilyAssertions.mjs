@@ -6,12 +6,19 @@ import {deriveHostedAssertionDisposition} from './hostedEvidenceFamilyAttestatio
 
 const sha256 = bytes => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const allowedStatuses = new Set(['PASS', 'FAIL', 'BLOCKED', 'SKIPPED']);
+const deriveArtifactDisposition=value=>{
+  if(!Array.isArray(value?.assertionResults)||!value.assertionResults.length)return 'blocked';
+  if(value.assertionResults.some(item=>item.status==='FAIL'))return 'failed';
+  if(value.assertionResults.some(item=>item.status!=='PASS'))return 'blocked';
+  return 'passed';
+};
 
 const exactExecution = (value, expected, label) => {
   for (const key of ['head', 'runId', 'runAttempt', 'workflowPath']) {
     if (String(value?.[key]) !== String(expected[key])) throw new Error(`${label}_${key.toUpperCase()}_MISMATCH`);
   }
   if (!String(value.environment ?? '').startsWith('disposable-ci')) throw new Error(`${label}_ENVIRONMENT_INVALID`);
+  if(value.assertionDisposition!==deriveArtifactDisposition(value))throw new Error(`${label}_ASSERTION_DISPOSITION_NOT_DERIVED`);
 };
 
 const exactScope = (value, expected, label, workspaceRequired = true) => {
@@ -82,7 +89,9 @@ export async function deriveHostedEvidenceFamilyAssertions({postgresPath, recove
   for (const spec of specs) {
     const result = deriveHostedAssertionDisposition(spec.assertions);
     const value = {
-      schemaVersion:'hosted-family-assertion-v2', family:spec.family, result,
+      schemaVersion:'disposable-family-regression-v1', family:spec.family, result,
+      eligibility:'disposable_regression_only', hostedEvidenceEligible:false,
+      environment:'disposable_ci', hostedTarget:null,
       deploymentTargetFingerprint:deploymentFingerprint, observedAt, testIds:spec.testIds,
       execution:{releaseSha:expected.head,producerWorkflowPath:expected.workflowPath,producerRunId:expected.runId,producerRunAttempt:Number(expected.runAttempt)},
       scope:{organizationId:expected.organizationId,workspaceId:expected.workspaceId,exerciseRunId:expected.exerciseRunId},

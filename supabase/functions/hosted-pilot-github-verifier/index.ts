@@ -120,6 +120,9 @@ Deno.serve(async(req:Request)=>{
     const bound={p_org:input.org,p_workspace:input.workspace,p_exercise_run:input.exercise,p_release_sha:input.release,
       p_producer_workflow_path:WORKFLOW_PATH,p_producer_run_id:input.runId,p_producer_run_attempt:input.attempt,
       p_target_fingerprint:input.target,p_deployment_fingerprint:input.deployment,p_expected_migration_count:input.migrationCount,p_expected_ledger_digest:input.ledgerDigest};
+    if(operation==='execute'){
+      const result=await rpc('hosted_pilot_oidc_execute',bound); return new Response(JSON.stringify(result),{status:200,headers:jsonHeaders});
+    }
     if(operation==='status'){
       const result=await rpc('hosted_pilot_oidc_status',bound); return new Response(JSON.stringify(result),{status:200,headers:jsonHeaders});
     }

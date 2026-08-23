@@ -3859,7 +3859,8 @@
       "feature": "pilot",
       "ruleRequirement": "pilot operations read only",
       "sourceReference": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "ADMIN-PILOT_OPERATIONS_READ_ONLY"
@@ -4409,7 +4410,8 @@
       "feature": "no",
       "ruleRequirement": "no browser secret",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "AI-NO_BROWSER_SECRET"
@@ -4709,7 +4711,8 @@
       "feature": "canonical",
       "ruleRequirement": "canonical happy",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "E2E-CANONICAL_HAPPY"
@@ -5259,7 +5262,8 @@
       "feature": "response-loss recovery",
       "ruleRequirement": "same request identity recovers the exact canonical response with exactly one durable effect",
       "sourceReference": [
-        "scripts/testPilotOperationsPostgres.mjs"
+        "scripts/testPilotOperationsPostgres.mjs",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "SAFETY-RESPONSE_LOST_AFTER_COMMIT"

@@ -40,6 +40,8 @@ const personas: Array<[string, string]> = [
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
 type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
+const POST_SIGN_OUT_QUIET_PERIOD_MS = 750;
+const POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS = 5_000;
 const UNAVAILABLE_NETWORK_ORIGIN_CLASS = 'unavailable-origin';
 const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
 const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
@@ -180,7 +182,7 @@ const observeAuthorityRequests = (page: Page) => {
   });
   return {
     assertSafe: () => expect(observer.snapshot(), 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
-    stop: observer.stop,
+    stopAfterQuiescence: observer.stopAfterQuiescence,
   };
 };
 
@@ -218,6 +220,10 @@ const openProductNavigation = async (page: Page) => {
   await opener.click();
   await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
 };
+const closeProductNavigation = async (page: Page) => {
+  const close = page.getByRole('button', { name: 'Close primary navigation' });
+  if (await close.isVisible().catch(() => false)) await close.click();
+};
 const assertActivePersona = async (page: Page, userName: string) => {
   await openProductNavigation(page);
   const mobileIdentity = page.getByTestId('mobile-current-user');
@@ -248,6 +254,17 @@ const selectProjectScope = async (page: Page, projectName: string) => {
   await project.click();
 };
 
+const selectMyWorkScope = async (page: Page) => {
+  const switcher = page.getByRole('button', { name: 'Switch workspace context' });
+  await expect(switcher).toBeVisible();
+  await switcher.click();
+  const myWork = page.getByRole('button').filter({
+    has: page.getByText('Tasks and decisions assigned to you', { exact: true }),
+  });
+  await expect(myWork).toBeVisible();
+  await myWork.click();
+};
+
 const clickProductNav = async (page: Page, label: string) => {
   let target = page.getByRole('button', { name: label, exact: true });
   if (!(await target.isVisible().catch(() => false))) {
@@ -264,6 +281,57 @@ const assertNoOverflow = async (page: Page) => {
     document.body.scrollWidth - document.body.clientWidth,
   ));
   expect(overflow).toBeLessThanOrEqual(1);
+};
+
+const settleLazyLoadedSurface = async (page: Page) => {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+};
+
+const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
+  if (label === 'Process Analyst' || label === 'AP Process Owner') {
+    await clickProductNav(page, 'Assess');
+    await expect(page.getByTestId('process-catalog-view')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Delivery Lead' || label === 'Control Reviewer' || label === 'Automation Contributor') {
+    await clickProductNav(page, 'Delivery');
+    await expect(page.getByLabel('Delivery work board')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Buyer Viewer') {
+    await closeProductNavigation(page);
+    await selectMyWorkScope(page);
+    await clickProductNav(page, 'Monitor');
+    await expect(page.getByTestId('monitor-overview')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Platform Admin') {
+    await openProductNavigation(page);
+    const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
+    await expect(admin).toBeVisible({ timeout: 15_000 });
+    await admin.click();
+    await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible({ timeout: 15_000 });
+  } else {
+    throw new Error(`No representative feature path is bound to persona ${label}`);
+  }
+  await settleLazyLoadedSurface(page);
+};
+
+const runObservedPersonaJourney = async (
+  page: Page,
+  label: string,
+  userName: string,
+  assertSurface?: () => Promise<void>,
+) => {
+  const observer = observeAuthorityRequests(page);
+  await enterPersona(page, label);
+  await assertActivePersona(page, userName);
+  await exerciseRepresentativePersonaPath(page, label);
+  await assertSurface?.();
+  await signOutToSandbox(page);
+  await page.waitForLoadState('networkidle');
+  await observer.stopAfterQuiescence({
+    quietPeriodMs: POST_SIGN_OUT_QUIET_PERIOD_MS,
+    timeoutMs: POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS,
+  });
+  observer.assertSafe();
 };
 
 const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => {
@@ -284,27 +352,13 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       return;
     case 'local-authority': {
       for (const [label, userName] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        await assertActivePersona(page, userName);
-        if (label === 'Process Analyst') {
-          await clickProductNav(page, 'Assess');
-          await expect(page.getByTestId('process-catalog-view')).toBeVisible();
-        }
-        await signOutToSandbox(page);
-        observer.assertSafe();
-        observer.stop();
+        await runObservedPersonaJourney(page, label, userName);
       }
       return;
     }
     case 'network-safety': {
       for (const [label, userName] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        await assertActivePersona(page, userName);
-        await signOutToSandbox(page);
-        observer.assertSafe();
-        observer.stop();
+        await runObservedPersonaJourney(page, label, userName);
       }
       return;
     }
@@ -519,14 +573,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertNoOverflow(page);
       return;
     case 'serious-critical-a11y': {
-      for (const [label] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        const results = await new AxeBuilder({ page }).analyze();
-        expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
-        await signOutToSandbox(page);
-        observer.assertSafe();
-        observer.stop();
+      for (const [label, userName] of personas) {
+        await runObservedPersonaJourney(page, label, userName, async () => {
+          const results = await new AxeBuilder({ page }).analyze();
+          expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        });
       }
       return;
     }

@@ -8,6 +8,11 @@ const sorted = values => [...values].sort();
 const sameValues = (left, right) => JSON.stringify(sorted(left ?? [])) === JSON.stringify(sorted(right ?? []));
 const sameObject = (left, right) => JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
 const passEligibleScope = scope => scope?.evidenceScope === 'executed-fixture' && Boolean(scope.organizationId) && Boolean(scope.workspaceId);
+const assertionStatus = outcomes => (outcomes ?? []).some(outcome => outcome?.status === 'FAIL')
+  ? 'FAIL'
+  : (outcomes ?? []).some(outcome => outcome?.status !== 'PASS')
+    ? 'BLOCKED'
+    : 'PASS';
 
 export const validateRetainedProducerResults = ({ suite, emitted, identity, provenanceByTestId = new Map() }) => {
   const errors = [];
@@ -21,11 +26,7 @@ export const validateRetainedProducerResults = ({ suite, emitted, identity, prov
     if (!['PASS', 'FAIL', 'BLOCKED'].includes(item?.status)) errors.push(`producer-status:${key}`);
     if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`producer-assertion-outcomes:${key}`);
     if ((item?.assertionOutcomes ?? []).some(outcome => !outcome?.assertionId || !['PASS', 'FAIL', 'BLOCKED'].includes(outcome?.status))) errors.push(`producer-assertion-outcome-invalid:${key}`);
-    const derivedStatus = (item?.assertionOutcomes ?? []).some(outcome => outcome.status === 'FAIL')
-      ? 'FAIL'
-      : (item?.assertionOutcomes ?? []).some(outcome => outcome.status !== 'PASS')
-        ? 'BLOCKED'
-        : 'PASS';
+    const derivedStatus = assertionStatus(item?.assertionOutcomes);
     if (item?.status !== derivedStatus) errors.push(`producer-status-not-derived:${key}`);
     if (!Array.isArray(item?.assertionIds) || !item.assertionIds.length) errors.push(`producer-assertions-missing:${key}`);
     if (!Array.isArray(item?.scenarioIds) || !item.scenarioIds.length) errors.push(`producer-scenarios-missing:${key}`);
@@ -90,7 +91,7 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     const expectedKind = manifest?.manifestKind === 'server' ? 'server-assertion' : 'retained-assertion';
     const owner = provenance?.ownership?.find(value => value.kind === expectedKind && value.ownerId === item?.suiteId);
     const expectedAssertionIds = owner?.assertionIds ?? (owner?.assertionId ? [owner.assertionId] : []);
-    const expectedScenarioIds = owner?.scenarioId ? [owner.scenarioId] : item?.scenarioIds;
+    const expectedScenarioIds = owner?.scenarioIds ?? (owner?.scenarioId ? [owner.scenarioId] : []);
     if (!owner || !sameValues(item?.assertionIds, expectedAssertionIds) || !sameValues(item?.scenarioIds, expectedScenarioIds)) errors.push(`result-ownership:${key}`);
     if (!sameValues(item?.sourceReferences, provenance?.sourceReferences ?? [])) errors.push(`result-source-binding:${key}`);
     if (!sameObject(item?.scope, provenance?.scope)) errors.push(`result-scope-binding:${key}`);
@@ -98,11 +99,7 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`result-assertion-outcomes:${key}`);
     const outcomeIds = (item?.assertionOutcomes ?? []).map(outcome => outcome?.assertionId);
     if (!sameValues(outcomeIds, item?.assertionIds)) errors.push(`result-assertion-outcome-ids:${key}`);
-    const derivedStatus = (item?.assertionOutcomes ?? []).some(outcome => outcome?.status === 'FAIL')
-      ? 'FAIL'
-      : (item?.assertionOutcomes ?? []).some(outcome => outcome?.status !== 'PASS')
-        ? 'BLOCKED'
-        : 'PASS';
+    const derivedStatus = assertionStatus(item?.assertionOutcomes);
     if (item?.status !== derivedStatus) errors.push(`result-status-not-derived:${key}`);
   }
   return errors;
@@ -125,17 +122,43 @@ export const evaluateCompositeTest = components => {
 
 export const validateOracleManifest = (manifest, expected) => {
   const errors = [];
-  if (!manifest || manifest.schemaVersion !== 1) errors.push('oracle-schema');
+  if (!manifest || manifest.schemaVersion !== 2) errors.push('oracle-schema');
   if (manifest?.releaseSha !== expected.releaseSha) errors.push('oracle-release-sha');
   if (String(manifest?.workflowRunId) !== String(expected.workflowRunId)) errors.push('oracle-workflow-run');
   if (String(manifest?.workflowAttempt) !== String(expected.workflowAttempt)) errors.push('oracle-workflow-attempt');
+  if (manifest?.environment !== expected.oracleEnvironment) errors.push('oracle-environment');
+  if (manifest?.workflowPath !== expected.oracleWorkflowPath) errors.push('oracle-workflow-path');
+  if (manifest?.command !== expected.oracleCommand) errors.push('oracle-command');
   if (!Array.isArray(manifest?.results)) errors.push('oracle-result-array');
   const seen = new Set();
   for (const item of manifest?.results ?? []) {
-    if (!item?.testId || seen.has(item.testId)) errors.push(`duplicate-or-missing-oracle:${item?.testId ?? 'missing'}`);
+    const key = item?.testId ?? 'missing';
+    if (!item?.testId || seen.has(item.testId)) errors.push(`duplicate-or-missing-oracle:${key}`);
     seen.add(item?.testId);
-    if (!['PASS', 'FAIL'].includes(item?.status)) errors.push(`invalid-oracle-status:${item?.testId ?? 'missing'}`);
+    const binding = expected.oracleBindingByTestId?.get(item?.testId);
+    const provenance = expected.provenanceByTestId?.get(item?.testId);
+    if (!binding || !provenance) errors.push(`oracle-binding:${key}`);
+    if (!['PASS', 'FAIL', 'BLOCKED'].includes(item?.status)) errors.push(`invalid-oracle-status:${key}`);
+    for (const field of ['releaseSha', 'workflowRunId', 'workflowAttempt', 'environment', 'workflowPath', 'command']) {
+      const expectedValue = field === 'environment' ? expected.oracleEnvironment
+        : field === 'workflowPath' ? expected.oracleWorkflowPath
+          : field === 'command' ? expected.oracleCommand
+            : expected[field];
+      if (String(item?.[field]) !== String(expectedValue)) errors.push(`oracle-${field}:${key}`);
+    }
+    if (item?.scenario !== binding?.scenario || !sameValues(item?.scenarioIds, binding ? [binding.scenario] : [])) errors.push(`oracle-scenario:${key}`);
+    const owner = provenance?.ownership?.find(value => value.kind === 'oracle-scenario' && value.ownerId === binding?.scenario);
+    if (!owner || !sameValues(item?.assertionIds, owner.assertionIds) || !sameValues(item?.scenarioIds, owner.scenarioIds)) errors.push(`oracle-ownership:${key}`);
+    if (!sameValues(item?.branchIds, provenance ? [provenance.branchId] : [])) errors.push(`oracle-branches:${key}`);
+    if (!sameValues(item?.sourceReferences, provenance?.sourceReferences ?? [])) errors.push(`oracle-sources:${key}`);
+    if (!sameObject(item?.scope, provenance?.scope)) errors.push(`oracle-scope:${key}`);
+    if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`oracle-assertion-outcomes:${key}`);
+    if (!sameValues((item?.assertionOutcomes ?? []).map(outcome => outcome?.assertionId), item?.assertionIds)) errors.push(`oracle-assertion-outcome-ids:${key}`);
+    const derived = assertionStatus(item?.assertionOutcomes);
+    const scopeBoundStatus = derived === 'FAIL' ? 'FAIL' : derived === 'PASS' && passEligibleScope(item?.scope) ? 'PASS' : 'BLOCKED';
+    if (item?.status !== scopeBoundStatus) errors.push(`oracle-status-not-derived:${key}`);
   }
+  for (const testId of expected.oracleBindingByTestId?.keys() ?? []) if (!seen.has(testId)) errors.push(`oracle-result-missing:${testId}`);
   return errors;
 };
 

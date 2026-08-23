@@ -160,6 +160,9 @@ jobs:
             tests/acceptance/catalog/
             tests/acceptance/inventory.json
             tests/acceptance/execution-bindings.json
+            tests/acceptance/source-provenance.json
+            tests/acceptance/proof-owner-registry.json
+            tests/acceptance/proof-owner-source-contracts.mjs
             tests/acceptance/fixtures/
             acceptance-results/
             artifacts/exhaustive-acceptance/

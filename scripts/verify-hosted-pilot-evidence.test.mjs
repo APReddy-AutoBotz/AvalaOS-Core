@@ -1,14 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { REQUIRED_GATES, safeHash, validateHostedUrl, validateResolvedHostedUrl, verifyActivationRun, verifyManifest } from './verify-hosted-pilot-evidence.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
+import {HOSTED_EVIDENCE_FAMILIES,HOSTED_EVIDENCE_FAMILY_CONTRACTS,hostedEvidenceFamilyContractSha256,hostedEvidenceObservationSetSha256} from './hostedEvidenceFamilyAttestation.mjs';
+import { loadCanonicalMigrationInventory } from './hostedPilotActivation.mjs';
 const head = 'a'.repeat(40), canonicalMigrationDigest = 'c'.repeat(64);
 const scope={organizationId:'11111111-1111-4111-8111-111111111111',workspaceId:'22222222-2222-4222-8222-222222222222',exerciseRunId:'33333333-3333-4333-8333-333333333333'};
 const activationRun = { id: '123456789', attempt: '2', workflow: '.github/workflows/hosted-pilot-activation-evidence-producer.yml', repository: 'APReddy-AutoBotz/AvalaOS-Core', event: 'workflow_dispatch', head, conclusion: 'success' };
+const hostedEvidenceFamilyState=HOSTED_EVIDENCE_FAMILIES.map((family,familyIndex)=>{
+  const contract=HOSTED_EVIDENCE_FAMILY_CONTRACTS[family],paths=[...new Set(contract.assertions.map(item=>item.sourcePath))];
+  const sourceArtifacts=paths.map(path=>({path,sha256:contract.assertions.find(item=>item.sourcePath===path).sourceSha256})),byPath=new Map(sourceArtifacts.map(item=>[item.path,item.sha256]));
+  const assertionOutcomes=contract.assertions.map(item=>({assertionId:item.assertionId,status:'PASS',sourceArtifactSha256:byPath.get(item.sourcePath),observationSha256:`sha256:${String(familyIndex+1).slice(-1).repeat(64)}`}));
+  const observationBinding={family,releaseSha:head,producerWorkflowPath:activationRun.workflow,producerRunId:activationRun.id,producerRunAttempt:2,...scope,targetFingerprint:safeHash('dedicated-target'),deploymentFingerprint:safeHash('dedicated-web-target')};
+  return {schemaVersion:'hosted-family-assertion-v2',family,result:'passed',disposition:'executed_hosted_evidence',environment:'hosted_nonproduction_pilot',
+    targetFingerprint:safeHash('dedicated-target'),deploymentTargetFingerprint:safeHash('dedicated-web-target'),testIds:[...contract.testIds],contractSha256:hostedEvidenceFamilyContractSha256(family),
+    execution:{releaseSha:head,producerWorkflowPath:activationRun.workflow,producerRunId:activationRun.id,producerRunAttempt:2},scope,
+    assertionOutcomes,sourceArtifacts,observationSchemaVersion:'hosted-family-derived-observation-v1',observationBinding,
+    observationSetSha256:hostedEvidenceObservationSetSha256(observationBinding,assertionOutcomes),observedAt:'2026-08-23T00:00:00.000Z'};
+});
 const evidence = Object.fromEntries(REQUIRED_GATES.map((gate) => [gate, { result: 'passed', gitCommit: head, workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowConclusion: 'success', environment: 'hosted_nonproduction_pilot', targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), ...scope, resultId: `${gate}:1` }]));
-const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, ...scope, evidence };
+for(const state of hostedEvidenceFamilyState) evidence[state.family].hostedFamilyAssertion=state;
+const manifest = { schemaVersion: 1, gitCommit: head, environment: 'hosted_nonproduction_pilot', hostedNonproductionVerified: true, productionAuthorized: false, liveActivationAuthorized: false, customerDataAuthorized: false, customerDataUsed: false, externalUsersAuthorized: false, externalUsersUsed: false, realProviderCallsAuthorized: false, realProviderCallsUsed: false, targetFingerprint: safeHash('dedicated-target'), deploymentTargetFingerprint: safeHash('dedicated-web-target'), migrationChainHash: `sha256:${canonicalMigrationDigest}`, hostedEvidenceFamilyState, deploymentId: 'deploy-1', workflowRunId: activationRun.id, workflowRunAttempt: 2, workflowPath: activationRun.workflow, workflowRepository: activationRun.repository, workflowEvent: activationRun.event, workflowConclusion: activationRun.conclusion, ...scope, evidence };
 const context = { expectedHead: head, actualHead: head, canonicalMigrationDigest, activationRun, expectedDeploymentFingerprint: manifest.deploymentTargetFingerprint, expectedScope:scope };
 const assertOrderedTokens = (source, tokens, label) => {
   let cursor = -1;
@@ -22,6 +38,10 @@ test('accepts exact-head complete hosted evidence bound to the selected activati
 test('fails closed for wrong head, missing gate, production authority, and unsafe URL', () => {
   assert.throws(() => verifyManifest(manifest, { ...context, actualHead: 'b'.repeat(40) }), /exact head/);
   assert.throws(() => verifyManifest({ ...manifest, evidence: {} }, context), /missing/);
+  const omittedFamily={...manifest,evidence:{...manifest.evidence,'tenant-adversarial':{...manifest.evidence['tenant-adversarial'],hostedFamilyAssertion:undefined}}};
+  assert.throws(()=>verifyManifest(omittedFamily,context),/did not consume authoritative/);
+  const substitutedState=structuredClone(manifest);substitutedState.hostedEvidenceFamilyState[0].testIds=['FAKE-001'];
+  assert.throws(()=>verifyManifest(substitutedState,context),/TEST_IDS_MISMATCH/);
   assert.throws(() => verifyManifest({ ...manifest, productionAuthorized: true }, context), /stop state/);
   for (const field of ['liveActivationAuthorized','customerDataAuthorized','customerDataUsed','externalUsersAuthorized','externalUsersUsed','realProviderCallsAuthorized','realProviderCallsUsed']) assert.throws(() => verifyManifest({...manifest,[field]:true},context),/stop state/);
   assert.throws(() => verifyManifest(manifest,{...context,expectedDeploymentFingerprint:safeHash('other-deployment')}),/tested origin/);
@@ -93,14 +113,18 @@ test('producer workflow executes trusted gates instead of accepting caller-decla
   assert.match(producer, /test:migrations:pilot-operations:postgres/);
   assert.match(producer, /playwright\.hosted-pilot\.config\.ts --workers=1/);
   assert.match(producer, /playwright\.hosted-accessibility-performance\.config\.ts --workers=1/);
-  assert.match(producer, /needs: \[database-provider, recovery-operations, hosted-browser, accessibility-performance\]/);
+  assert.match(producer, /needs: \[disposable-family-regressions, database-provider, recovery-operations, hosted-browser, accessibility-performance\]/);
   assert.match(producer, /'accessibility-performance':'accessibility-performance'/);
   assert.doesNotMatch(producer, /'accessibility-performance':'hosted-browser'/);
   assert.match(producer, /name: hosted-accessibility-performance-result-\$\{\{ github\.run_attempt \}\}/);
   assert.match(producer, /missing or mismatched accessibility\/performance assertion artifact/);
   assert.match(producer, /accessibility-performance-artifact:/);
   assert.match(producer, /TRUSTED_GATE_RESULTS_JSON/);
-  for(const gate of ['tenant-adversarial','backup-restore','canonical-journey'])
+  assert.match(producer,/authoritative-hosted-family-state/);
+  assert.match(producer,/validateAuthoritativeHostedFamilyState/);
+  assert.match(producer,/result:family\?family\.result:g==='accessibility-performance'\?accessibility\.result:'passed'/);
+  assert.doesNotMatch(producer,/hosted-family-attestations-/);
+  for(const gate of ['tenant-adversarial','backup-restore','canonical-journey','provider-simulation-zero-egress','recovery-rollback'])
     assert.match(producer,new RegExp(`'${gate}':'database-provider'`));
   assert.doesNotMatch(producer,/'(?:tenant-adversarial|backup-restore|canonical-journey)':'recovery-operations'/);
 });
@@ -120,25 +144,20 @@ test('hosted accessibility and performance evidence owns executable bounded asse
 });
 test('exhaustive accessibility evidence scans bounded post-entry persona surfaces', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
-  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label\] of personas\)/u);
-  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*await enterPersona\(page, label\)/u);
-  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*observer\.assertSafe\(\)/u);
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label, userName\] of personas\)/u);
+  assert.match(spec, /case 'serious-critical-a11y':[\s\S]*runObservedPersonaJourney\(page, label, userName/u);
+  assert.match(spec, /const runObservedPersonaJourney[\s\S]*observeAuthorityRequests\(page\)[\s\S]*enterPersona\(page, label\)[\s\S]*signOutToSandbox\(page\)[\s\S]*stopAfterQuiescence[\s\S]*observer\.assertSafe\(\)/u);
   assert.match(spec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);
 });
 test('sandbox network-safety evidence exercises every declared persona', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   assert.match(spec, /case 'network-safety':[\s\S]*for \(const \[label, userName\] of personas\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*await enterPersona\(page, label\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*await assertActivePersona\(page, userName\)/u);
-  assert.match(spec, /case 'network-safety':[\s\S]*observer\.assertSafe\(\)/u);
+  assert.match(spec, /case 'network-safety':[\s\S]*runObservedPersonaJourney\(page, label, userName\)/u);
 });
 test('sandbox local-authority evidence exercises every declared persona', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   assert.match(spec, /case 'local-authority':[\s\S]*for \(const \[label, userName\] of personas\)/u);
-  assert.match(spec, /case 'local-authority':[\s\S]*const observer = observeAuthorityRequests\(page\)/u);
-  assert.match(spec, /case 'local-authority':[\s\S]*await enterPersona\(page, label\)/u);
-  assert.match(spec, /case 'local-authority':[\s\S]*observer\.assertSafe\(\)/u);
+  assert.match(spec, /case 'local-authority':[\s\S]*runObservedPersonaJourney\(page, label, userName\)/u);
 });
 test('every hosted navigation rechecks exact release environment and deployment identity', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
@@ -245,4 +264,71 @@ test('deployment verification requires exact release, nonproduction, and deploym
   await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: 'c'.repeat(24), fetchImpl }), /mismatch/);
   await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: deployId, fetchImpl: async () => new Response('<div id="root"></div>') }), /mismatch/);
   await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: 'invalid', fetchImpl }), /24-character lowercase hex/);
+});
+test('manifest producer and verifier entrypoints reach repository-bound source validation', async () => {
+  const actualHead = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  const canonical = await loadCanonicalMigrationInventory();
+  const entrypointDeploymentFingerprint = safeHash('https://pilot.example.test');
+  const currentState = structuredClone(hostedEvidenceFamilyState);
+  for (const family of currentState) {
+    family.execution.releaseSha = actualHead;
+    family.deploymentTargetFingerprint = entrypointDeploymentFingerprint;
+    family.observationBinding={...family.observationBinding,releaseSha:actualHead,deploymentFingerprint:entrypointDeploymentFingerprint};
+    family.observationSetSha256=hostedEvidenceObservationSetSha256(family.observationBinding,family.assertionOutcomes);
+  }
+  const currentEvidence = structuredClone(evidence);
+  for (const item of Object.values(currentEvidence)) {
+    item.gitCommit = actualHead;
+    item.deploymentTargetFingerprint = entrypointDeploymentFingerprint;
+    if (item.hostedFamilyAssertion) {
+      item.hostedFamilyAssertion.execution.releaseSha = actualHead;
+      item.hostedFamilyAssertion.deploymentTargetFingerprint = entrypointDeploymentFingerprint;
+      item.hostedFamilyAssertion.observationBinding={...item.hostedFamilyAssertion.observationBinding,releaseSha:actualHead,deploymentFingerprint:entrypointDeploymentFingerprint};
+      item.hostedFamilyAssertion.observationSetSha256=hostedEvidenceObservationSetSha256(item.hostedFamilyAssertion.observationBinding,item.hostedFamilyAssertion.assertionOutcomes);
+    }
+  }
+  const currentManifest = {
+    ...structuredClone(manifest),
+    gitCommit: actualHead,
+    migrationChainHash: `sha256:${canonical.digest}`,
+    deploymentTargetFingerprint: entrypointDeploymentFingerprint,
+    hostedEvidenceFamilyState: currentState,
+    evidence: currentEvidence,
+  };
+  const working = await mkdtemp(path.join(tmpdir(), 'avalaos-hosted-entrypoint-'));
+  try {
+    const manifestPath = path.join(working, 'manifest.json');
+    await writeFile(manifestPath, JSON.stringify(currentManifest));
+    const commonEnv = {
+      ...process.env,
+      EXPECTED_RELEASE_SHA: actualHead,
+      TARGET_FINGERPRINT: manifest.targetFingerprint,
+      DEPLOYMENT_ORIGIN: 'https://pilot.example.test',
+      WORKFLOW_RUN_ID: activationRun.id,
+      WORKFLOW_RUN_ATTEMPT: activationRun.attempt,
+      HOSTED_PILOT_ORGANIZATION_ID: scope.organizationId,
+      HOSTED_PILOT_WORKSPACE_ID: scope.workspaceId,
+      HOSTED_PILOT_EXERCISE_RUN_ID: scope.exerciseRunId,
+      DEPLOYMENT_ID: 'deploy-1',
+      WORKFLOW_REPOSITORY: activationRun.repository,
+      TRUSTED_GATE_RESULTS_JSON: JSON.stringify({ ...currentEvidence, __hostedEvidenceFamilyState: currentState }),
+    };
+    const produced = spawnSync(process.execPath, ['scripts/produce-hosted-pilot-activation-manifest.mjs'], { encoding: 'utf8', env: commonEnv });
+    assert.equal(produced.status, 0,produced.stderr);
+    assert.doesNotMatch(produced.stderr, /readSource is not defined|ReferenceError/);
+    const verified = spawnSync(process.execPath, [
+      'scripts/verify-hosted-pilot-evidence.mjs', '--manifest', manifestPath, '--expected-head', actualHead,
+      '--expected-deployment-fingerprint', entrypointDeploymentFingerprint,
+      '--organization-id', scope.organizationId, '--workspace-id', scope.workspaceId, '--exercise-run-id', scope.exerciseRunId,
+      '--activation-run-id', activationRun.id, '--activation-run-attempt', activationRun.attempt,
+      '--activation-workflow', activationRun.workflow, '--activation-repository', activationRun.repository,
+      '--activation-event', activationRun.event, '--activation-head', actualHead, '--activation-conclusion', activationRun.conclusion,
+      '--output', path.join(working, 'verified.json'),
+    ], { encoding: 'utf8' });
+    assert.equal(verified.status, 0,verified.stderr);
+    assert.match(verified.stdout,/Hosted non-production evidence verified/);
+    assert.doesNotMatch(verified.stderr, /readSource is not defined|ReferenceError/);
+  } finally {
+    await rm(working, { recursive: true, force: true });
+  }
 });

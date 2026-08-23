@@ -16,9 +16,13 @@ try {
   assert.equal(run().status,0);
   const manifest=JSON.parse(readFileSync(output,'utf8'));
   assert.equal(manifest.results[0].status,'PASS');
+  assert.equal(manifest.suites[0].status,manifest.results[0].assertionOutcomes.every(item=>item.status==='PASS')?'PASS':'BLOCKED','suite status must derive from bound assertion outputs');
+  assert.deepEqual(manifest.results[0].scenarioIds,binding.scenarioIds,'server scenario IDs must come from the canonical binding');
   assert.equal(manifest.workflowAttempt,identity.workflowAttempt);
   assert.equal(run({...proof,runAttempt:1}).status,1,'stale workflow attempt must be rejected');
   assert.equal(run({...proof,scope:{...proof.scope,workspaceId:'wrong'}}).status,1,'wrong workspace must be rejected');
   assert.equal(run({...proof,assertionResults:proof.assertionResults.map((item,index)=>index?item:{...item,status:'BLOCKED'})}).status,1,'skipped assertion must be rejected even when the process itself runs');
+  assert.equal(run(proof,{ACCEPTANCE_SERVER_EVIDENCE_ENVIRONMENT:'substituted-ci'}).status,1,'wrong server environment must fail closed');
+  assert.equal(run(proof,{ACCEPTANCE_WORKFLOW_PATH:'.github/workflows/substituted.yml'}).status,1,'wrong server workflow must fail closed');
 } finally {rmSync(root,{recursive:true,force:true});}
 console.log('exhaustive server evidence: exact run attempt, scope, and assertion outputs passed');

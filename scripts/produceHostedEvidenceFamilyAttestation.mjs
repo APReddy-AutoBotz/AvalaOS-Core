@@ -1,4 +1,3 @@
-import {createHash} from 'node:crypto';
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {createHostedEvidenceFamilyAttestation, validateHostedEvidenceFamilyAssertion} from './hostedEvidenceFamilyAttestation.mjs';
@@ -18,6 +17,7 @@ validateHostedEvidenceFamilyAssertion(assertion, {
   organizationId: env.HOSTED_PILOT_ORGANIZATION_ID,
   workspaceId: env.HOSTED_PILOT_WORKSPACE_ID,
   exerciseRunId: env.HOSTED_PILOT_EXERCISE_RUN_ID,
+  targetFingerprint: env.TARGET_FINGERPRINT,
   deploymentFingerprint: env.DEPLOYMENT_FINGERPRINT,
 });
 const attestation = createHostedEvidenceFamilyAttestation({
@@ -26,12 +26,10 @@ const attestation = createHostedEvidenceFamilyAttestation({
   producerWorkflowPath: workflowPath,
   producerRunId: env.GITHUB_RUN_ID, producerRunAttempt: Number(env.GITHUB_RUN_ATTEMPT),
   targetFingerprint: env.TARGET_FINGERPRINT, deploymentFingerprint: assertion.deploymentTargetFingerprint,
-  hostedTarget: 'hosted_nonproduction_pilot', family, disposition: assertion.result,
+  hostedTarget: 'hosted_nonproduction_pilot', environment: assertion.environment, family, disposition: assertion.result,
+  testIds: assertion.testIds, contractSha256: assertion.contractSha256,
   assertions: assertion.assertionOutcomes,
-  sourceArtifacts: [
-    ...assertion.sourceArtifacts,
-    {path: assertionPath, sha256: `sha256:${createHash('sha256').update(assertionBytes).digest('hex')}`},
-  ],
+  sourceArtifacts: assertion.sourceArtifacts,
   observedAt: assertion.observedAt ?? new Date().toISOString(),
 });
 await mkdir(path.dirname(outputPath), {recursive:true});

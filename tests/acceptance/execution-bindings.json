@@ -1,6 +1,22 @@
 {
-  "schemaVersion": 1,
-  "bindingId": "avalaos-exhaustive-acceptance-bindings-v1",
+  "schemaVersion": 2,
+  "bindingId": "avalaos-exhaustive-acceptance-bindings-v2",
+  "oracleExecution": {
+    "command": [
+      "node",
+      "scripts/runAssessV1AcceptanceOracle.mjs"
+    ],
+    "environments": [
+      "pull-request",
+      "stable-release"
+    ],
+    "workflowPath": ".github/workflows/exhaustive-acceptance.yml",
+    "assertionIdFormat": "assess-v1-oracle::{testId}::{scenario}"
+  },
+  "serverExecution": {
+    "environment": "disposable-ci",
+    "workflowPath": ".github/workflows/exhaustive-acceptance.yml"
+  },
   "retainedSuites": [
     {
       "suiteId": "assess-v2-authority",
@@ -219,6 +235,7 @@
         "pilot-operations-postgres--responseLossConflictRejected",
         "pilot-operations-postgres--responseLossForeignTenantNonDisclosure"
       ],
+      "scenarioIds": ["production-command-response-lost-after-durable-commit"],
       "components": ["server"]
     },
     {
@@ -226,6 +243,7 @@
       "suiteId": "server-assess-process-edit-denial",
       "command": ["npm", "run", "test:migrations:pr1b"],
       "assertionIds": ["assess-postgres--process-edit-authority-denied"],
+      "scenarioIds": ["assess-process-edit-authority-denial"],
       "components": ["server", "hosted"]
     },
     {
@@ -233,6 +251,7 @@
       "suiteId": "server-delivery-lineage-tenant-boundary",
       "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
       "assertionIds": ["delivery-postgres--exact-pack-ancestry", "delivery-postgres--foreign-tenant-denied"],
+      "scenarioIds": ["delivery-lineage-tenant-boundary"],
       "components": ["server", "hosted"]
     },
     {
@@ -240,6 +259,7 @@
       "suiteId": "server-monitor-lineage",
       "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
       "assertionIds": ["monitor-postgres--lineage-projection", "monitor-postgres--foreign-tenant-denied"],
+      "scenarioIds": ["monitor-lineage-tenant-boundary"],
       "components": ["server", "hosted"]
     },
     {
@@ -247,6 +267,7 @@
       "suiteId": "server-monitor-outcome",
       "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
       "assertionIds": ["monitor-postgres--outcome-projection", "monitor-postgres--foreign-tenant-denied"],
+      "scenarioIds": ["monitor-outcome-tenant-boundary"],
       "components": ["server", "hosted"]
     },
     {
@@ -254,6 +275,7 @@
       "suiteId": "server-monitor-blocker",
       "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
       "assertionIds": ["monitor-postgres--blocker-projection", "monitor-postgres--foreign-tenant-denied"],
+      "scenarioIds": ["monitor-blocker-tenant-boundary"],
       "components": ["server", "hosted"]
     },
     {
@@ -261,6 +283,7 @@
       "suiteId": "server-monitor-unavailable",
       "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
       "assertionIds": ["monitor-postgres--unavailable-projection", "monitor-postgres--foreign-tenant-denied"],
+      "scenarioIds": ["monitor-unavailable-tenant-boundary"],
       "components": ["server", "hosted"]
     },
     {
@@ -268,6 +291,7 @@
       "suiteId": "server-admin-non-admin-denial",
       "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
       "assertionIds": ["admin-postgres--non-admin-denied"],
+      "scenarioIds": ["admin-non-admin-authority-denial"],
       "components": ["server", "hosted"]
     },
     {
@@ -275,6 +299,7 @@
       "suiteId": "server-admin-capability-matrix",
       "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
       "assertionIds": ["admin-postgres--capability-matrix"],
+      "scenarioIds": ["admin-capability-matrix"],
       "components": ["server", "hosted"]
     },
     {
@@ -282,6 +307,7 @@
       "suiteId": "server-offline-false-success",
       "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
       "assertionIds": ["safety-postgres--offline-mutation-no-false-success"],
+      "scenarioIds": ["offline-mutation-no-false-success"],
       "components": ["server", "hosted"]
     },
     {
@@ -289,6 +315,7 @@
       "suiteId": "server-timeout-false-success",
       "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
       "assertionIds": ["safety-postgres--timeout-mutation-no-false-success"],
+      "scenarioIds": ["timeout-mutation-no-false-success"],
       "components": ["server", "hosted"]
     }
   ],

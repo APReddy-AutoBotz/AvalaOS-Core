@@ -50,7 +50,7 @@ env:
   HOSTED_PILOT_URL: ${{ inputs.deployment_origin }}
 
 jobs:
-  early-family-attestations:
+  disposable-family-regressions:
     environment: hosted-nonproduction-pilot
     runs-on: ubuntu-latest
     services:
@@ -76,10 +76,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
-      - name: Execute authoritative family assertions before provider finalization
+      - name: Execute disposable family regressions without hosted-proof eligibility
         run: |
           set -euo pipefail
-          mkdir -p artifacts/pilot-operations artifacts/hosted-pilot/family-source artifacts/hosted-pilot/families
+          mkdir -p artifacts/pilot-operations artifacts/hosted-pilot/disposable-family-regressions
           npm run test:migrations:pilot-operations:postgres
           npm run test:recovery:pilot-operations
           PROVIDER_EVIDENCE_OUTPUT=artifacts/hosted-pilot/provider-execution.json npm run test:provider-resolver-integration
@@ -92,14 +92,11 @@ jobs:
             artifacts/pilot-operations/postgres-recovery.json \
             artifacts/hosted-pilot/provider-execution.json \
             artifacts/hosted-pilot/canonical-journey.json \
-            artifacts/hosted-pilot/family-source
-          for FAMILY in tenant-adversarial provider-simulation-zero-egress canonical-journey backup-restore recovery-rollback; do
-            node scripts/produceHostedEvidenceFamilyAttestation.mjs "$FAMILY" "artifacts/hosted-pilot/family-source/$FAMILY.json" "artifacts/hosted-pilot/families/$FAMILY.json"
-          done
+            artifacts/hosted-pilot/disposable-family-regressions
       - uses: actions/upload-artifact@v4
         with:
-          name: hosted-family-attestations-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/hosted-pilot/families/*.json
+          name: disposable-family-regressions-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/disposable-family-regressions/*.json
           if-no-files-found: error
           retention-days: 14
 
@@ -113,7 +110,7 @@ jobs:
         with: {node-version: 22, cache: npm}
       - run: npm ci
       - name: Verify exact connected database through GitHub OIDC and finalize exact hosted proof
-        timeout-minutes: 18
+        timeout-minutes: 40
         env:
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
           DEPLOYMENT_ORIGIN: ${{ inputs.deployment_origin }}
@@ -146,6 +143,7 @@ jobs:
           EXPECTED_MIGRATION_COUNT="$(jq -r '.migrationCount' <<<"$CANONICAL_PROOF")"
           EXPECTED_LEDGER_DIGEST="$(jq -r '.ledgerDigest' <<<"$CANONICAL_PROOF")"
           DEPLOYMENT_FINGERPRINT="$(jq -r '.deploymentFingerprint' <<<"$CANONICAL_PROOF")"
+          export DEPLOYMENT_FINGERPRINT
           [[ "$EXPECTED_MIGRATION_COUNT" =~ ^[1-9][0-9]*$ ]]
           [[ "$EXPECTED_LEDGER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$DEPLOYMENT_FINGERPRINT" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -194,18 +192,74 @@ jobs:
             <<<"$PREFLIGHT_RESULT" >/dev/null
           echo 'Credentialless hosted database preflight passed before evidence finalization.'
 
+          EXECUTE_COMMIT_RESULT="$(call_verifier execute)"
+          EXECUTE_PHASE="$(jq -r '.status // empty' <<<"$EXECUTE_COMMIT_RESULT")"
+          if [ "$EXECUTE_PHASE" = 'response_loss_committed' ]; then
+            jq -e '.businessResponseExposed==false and .evidenceFamilyCount==0 and .productionAuthorized==false' <<<"$EXECUTE_COMMIT_RESULT" >/dev/null
+            echo 'Committed the exact-run command while deliberately withholding its business response.'
+            echo 'Waiting for controller-authorized canonical recovery/rollback preparation and the owner-only exact-run binding.'
+            operational_ready=false
+            for _ in $(seq 1 180); do
+              PREPARATION_STATUS="$(call_verifier status)"
+              if [ "$(jq -r '.operationalPreparationReady // false' <<<"$PREPARATION_STATUS")" = 'true' ]; then
+                operational_ready=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "$operational_ready" != 'true' ]; then
+              echo 'HOSTED_EXACT_RUN_OPERATIONAL_PREPARATION_TIMEOUT' >&2
+              exit 1
+            fi
+            EXECUTE_RESULT="$(call_verifier execute)"
+          elif [ "$EXECUTE_PHASE" = 'derived' ]; then
+            # A prior caller may have lost this phase response after the durable
+            # commit. Re-entry is safe only when the exact-run replay already
+            # converged to the immutable derived state.
+            EXECUTE_RESULT="$EXECUTE_COMMIT_RESULT"
+          else
+            echo 'HOSTED_RESPONSE_LOSS_COMMIT_PHASE_INVALID' >&2
+            exit 1
+          fi
+          jq -e '.status=="derived" and .evidenceFamilyCount==5 and .productionAuthorized==false' <<<"$EXECUTE_RESULT" >/dev/null
+          echo 'Database-owned hosted assertion executor retried after the durable commit and derived five exact-run families.'
+
           ready=false
           for _ in $(seq 1 90); do
             STATUS_RESULT="$(call_verifier status)"
             family_count="$(jq -r '.evidenceFamilyCount // 0' <<<"$STATUS_RESULT")"
-            if [ "$family_count" = '5' ]; then ready=true; break; fi
+            if [ "$family_count" = '5' ] && [ "$(jq -r '.status' <<<"$STATUS_RESULT")" = 'ready' ]; then ready=true; break; fi
             sleep 10
           done
           if [ "$ready" != 'true' ]; then echo 'HOSTED_PILOT_EVIDENCE_WAIT_TIMEOUT' >&2; exit 1; fi
 
+          mkdir -p artifacts/hosted-pilot/authoritative-family-state
+          printf '%s\n' "$STATUS_RESULT" > artifacts/hosted-pilot/authoritative-family-state/status.json
+          node --input-type=module <<'NODE'
+          import {readFile,writeFile} from 'node:fs/promises';
+          import path from 'node:path';
+          import {validateAuthoritativeHostedFamilyState} from './scripts/hostedEvidenceFamilyAttestation.mjs';
+          const readSource=sourcePath=>{if(path.isAbsolute(sourcePath)||sourcePath.includes('..')||!sourcePath.startsWith('supabase/migrations/'))throw new Error('HOSTED_FAMILY_SOURCE_PATH_INVALID');return readFile(sourcePath);};
+          const response=JSON.parse(await readFile('artifacts/hosted-pilot/authoritative-family-state/status.json','utf8'));
+          const expected={releaseSha:process.env.EXPECTED_RELEASE_SHA,producerWorkflowPath:'.github/workflows/hosted-pilot-activation-evidence-producer.yml',
+            producerRunId:process.env.GITHUB_RUN_ID,producerRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
+            organizationId:process.env.ORGANIZATION_ID,workspaceId:process.env.WORKSPACE_ID,exerciseRunId:process.env.EXERCISE_RUN_ID,
+            targetFingerprint:process.env.TARGET_FINGERPRINT,deploymentFingerprint:process.env.DEPLOYMENT_FINGERPRINT};
+          const state=await validateAuthoritativeHostedFamilyState(response.evidenceFamilyState,expected,{readSource});
+          await writeFile('artifacts/hosted-pilot/authoritative-family-state/families.json',`${JSON.stringify(state,null,2)}\n`,{mode:0o600});
+          NODE
+
           FINAL_RESULT="$(call_verifier finalize)"
-          jq -e '.status=="passed" and .exactVerificationResultCount==1 and .productionAuthorized==false' <<<"$FINAL_RESULT" >/dev/null
+          jq -e '.status=="passed" and .exactVerificationResultCount==1 and .productionAuthorized==false
+            and (.recording.familyDigest|length)==5' <<<"$FINAL_RESULT" >/dev/null
+          printf '%s\n' "$FINAL_RESULT" > artifacts/hosted-pilot/authoritative-family-state/finalization.json
           echo 'Exact hosted database evidence and recovery verification passed through GitHub OIDC.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: authoritative-hosted-family-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/authoritative-family-state/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   recovery-operations:
     environment: hosted-nonproduction-pilot
@@ -286,7 +340,7 @@ jobs:
           retention-days: 14
 
   produce-sanitized-manifest:
-    needs: [database-provider, recovery-operations, hosted-browser, accessibility-performance]
+    needs: [disposable-family-regressions, database-provider, recovery-operations, hosted-browser, accessibility-performance]
     environment: hosted-nonproduction-pilot
     runs-on: ubuntu-latest
     steps:
@@ -298,6 +352,10 @@ jobs:
         with:
           name: hosted-accessibility-performance-result-${{ github.run_attempt }}
           path: artifacts/hosted-pilot/accessibility-performance
+      - uses: actions/download-artifact@v4
+        with:
+          name: authoritative-hosted-family-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/hosted-pilot/authoritative-family-state
       - name: Compose results only from required successful jobs in this immutable run
         env:
           TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
@@ -309,11 +367,18 @@ jobs:
         run: |
           TRUSTED_GATE_RESULTS_JSON="$(node --input-type=module <<'NODE'
           import {readFile} from 'node:fs/promises';
+          import path from 'node:path';
           import {safeHash,validateHostedUrl,ACTIVATION_PRODUCER_WORKFLOW,REQUIRED_GATES} from './scripts/verify-hosted-pilot-evidence.mjs';
+          import {validateAuthoritativeHostedFamilyState} from './scripts/hostedEvidenceFamilyAttestation.mjs';
+          const readSource=sourcePath=>{if(path.isAbsolute(sourcePath)||sourcePath.includes('..')||!sourcePath.startsWith('supabase/migrations/'))throw new Error('HOSTED_FAMILY_SOURCE_PATH_INVALID');return readFile(sourcePath);};
           const target=process.env.TARGET_FINGERPRINT;
           const scope={organizationId:process.env.HOSTED_PILOT_ORGANIZATION_ID,workspaceId:process.env.HOSTED_PILOT_WORKSPACE_ID,exerciseRunId:process.env.HOSTED_PILOT_EXERCISE_RUN_ID};
           const deployment=safeHash(validateHostedUrl(process.env.DEPLOYMENT_ORIGIN));
           const accessibility=JSON.parse(await readFile('artifacts/hosted-pilot/accessibility-performance/result.json','utf8'));
+          const familyState=JSON.parse(await readFile('artifacts/hosted-pilot/authoritative-family-state/families.json','utf8'));
+          await validateAuthoritativeHostedFamilyState(familyState,{releaseSha:process.env.EXPECTED_RELEASE_SHA,
+            producerWorkflowPath:ACTIVATION_PRODUCER_WORKFLOW,producerRunId:process.env.GITHUB_RUN_ID,
+            producerRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),...scope,targetFingerprint:target,deploymentFingerprint:deployment},{readSource});
           if(accessibility.gate!=='accessibility-performance' || accessibility.result!=='passed'
             || accessibility.gitCommit!==process.env.EXPECTED_RELEASE_SHA || accessibility.workflowRunId!==process.env.GITHUB_RUN_ID
             || Number(accessibility.workflowRunAttempt)!==Number(process.env.GITHUB_RUN_ATTEMPT) || accessibility.workflowPath!==ACTIVATION_PRODUCER_WORKFLOW
@@ -325,15 +390,20 @@ jobs:
           const jobFor={
             'database-preflight':'database-provider','migration-chain':'database-provider',
             'provider-simulation-zero-egress':'database-provider','runtime-fail-closed':'database-provider',
-            'tenant-adversarial':'database-provider','backup-restore':'database-provider','canonical-journey':'database-provider',
+            'tenant-adversarial':'database-provider','backup-restore':'database-provider','canonical-journey':'database-provider','recovery-rollback':'database-provider',
             'browser-desktop':'hosted-browser','browser-pixel':'hosted-browser','accessibility-performance':'accessibility-performance',
           };
-          const results=Object.fromEntries(REQUIRED_GATES.map(g=>[g,{result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
+          const familyByName=new Map(familyState.map(item=>[item.family,item]));
+          const familyForGate={'tenant-adversarial':'tenant-adversarial','provider-simulation-zero-egress':'provider-simulation-zero-egress',
+            'canonical-journey':'canonical-journey','backup-restore':'backup-restore','recovery-rollback':'recovery-rollback'};
+          const results=Object.fromEntries(REQUIRED_GATES.map(g=>{const family=familyForGate[g]?familyByName.get(familyForGate[g]):undefined;return [g,{result:family?family.result:g==='accessibility-performance'?accessibility.result:'passed',gitCommit:process.env.EXPECTED_RELEASE_SHA,
             workflowRunId:process.env.GITHUB_RUN_ID,workflowRunAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
             workflowPath:ACTIVATION_PRODUCER_WORKFLOW,workflowConclusion:'success',environment:'hosted_nonproduction_pilot',
             targetFingerprint:target,deploymentTargetFingerprint:deployment,...scope,resultId:g==='accessibility-performance'
               ? `accessibility-performance-artifact:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`
-              : `${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`}]))
+              : family?`hosted-family:${family.family}:${family.evidenceSha256.slice(7,23)}`:`${jobFor[g]}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}`,
+            ...(family?{hostedFamilyAssertion:family}:{})}]}));
+          results.__hostedEvidenceFamilyState=familyState;
           process.stdout.write(JSON.stringify(results));
           NODE
           )"

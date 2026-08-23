@@ -12,6 +12,8 @@ const bindingsPath = path.join(root, 'tests/acceptance/execution-bindings.json')
 const bindings = JSON.parse(readFileSync(bindingsPath, 'utf8'));
 const provenancePath = path.join(root, 'tests/acceptance/source-provenance.json');
 const provenance = JSON.parse(readFileSync(provenancePath, 'utf8'));
+const proofOwnersPath = path.join(root, 'tests/acceptance/proof-owner-registry.json');
+const proofOwners = JSON.parse(readFileSync(proofOwnersPath, 'utf8'));
 const hostedSpec = readFileSync(path.join(root, 'tests/browser/exhaustiveHostedAcceptance.spec.ts'), 'utf8');
 const hostedRouteSource = readFileSync(path.join(root, 'services/hostedSandboxRoute.ts'), 'utf8');
 const inventory = JSON.parse(readFileSync(path.join(root, 'tests/acceptance/inventory.json'), 'utf8'));
@@ -28,7 +30,7 @@ assert.equal(
   'source provenance must hash canonical Git text independently of checkout line endings',
 );
 
-const run = (document, bindingsDocument = bindings, provenanceDocument = provenance) => {
+const run = (document, bindingsDocument = bindings, provenanceDocument = provenance, proofOwnerDocument = proofOwners) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'acceptance-inventory-v3-'));
   const inventoryPath = path.join(directory, 'inventory.json');
   writeFileSync(inventoryPath, JSON.stringify(document));
@@ -36,6 +38,8 @@ const run = (document, bindingsDocument = bindings, provenanceDocument = provena
   writeFileSync(generatedBindingsPath, JSON.stringify(bindingsDocument));
   const generatedProvenancePath = path.join(directory, 'source-provenance.json');
   writeFileSync(generatedProvenancePath, JSON.stringify(provenanceDocument));
+  const generatedProofOwnersPath = path.join(directory, 'proof-owner-registry.json');
+  writeFileSync(generatedProofOwnersPath, JSON.stringify(proofOwnerDocument));
   return spawnSync(process.execPath, [validator], {
     cwd: root,
     encoding: 'utf8',
@@ -45,6 +49,7 @@ const run = (document, bindingsDocument = bindings, provenanceDocument = provena
       ACCEPTANCE_BINDINGS: generatedBindingsPath,
       ACCEPTANCE_INVENTORY: inventoryPath,
       ACCEPTANCE_PROVENANCE: generatedProvenancePath,
+      ACCEPTANCE_PROOF_OWNERS: generatedProofOwnersPath,
     },
   });
 };
@@ -103,6 +108,42 @@ const fakeOwnerResult = run(inventory, bindings, fakeOwner);
 assert.notEqual(fakeOwnerResult.status, 0);
 assert.match(fakeOwnerResult.stderr, /source-provenance-ownership/u, 'fake scenario ownership must fail closed');
 
+const coordinatedBindings = structuredClone(bindings);
+const coordinatedProvenance = structuredClone(provenance);
+const coordinatedProofOwners = structuredClone(proofOwners);
+coordinatedBindings.hostedTests.find(item => item.testId === 'SANDBOX-004').scenario = 'network-observer-ended-early';
+coordinatedProvenance.contracts.find(item => item.testId === 'SANDBOX-004').ownership[0].ownerId = 'network-observer-ended-early';
+coordinatedProofOwners.contracts.find(item => item.testId === 'SANDBOX-004').ownership[0].ownerId = 'network-observer-ended-early';
+const coordinatedSubstitution = run(inventory, coordinatedBindings, coordinatedProvenance, coordinatedProofOwners);
+assert.notEqual(coordinatedSubstitution.status, 0);
+assert.match(coordinatedSubstitution.stderr, /proof-owner-source-contract/u, 'coordinated binding, provenance, and registry substitution must fail against the independent source contract');
+
+const missingOwner = structuredClone(proofOwners);
+missingOwner.contracts.find(item => item.testId === 'SANDBOX-004').ownership = [];
+const missingOwnerResult = run(inventory, bindings, provenance, missingOwner);
+assert.notEqual(missingOwnerResult.status, 0);
+assert.match(missingOwnerResult.stderr, /proof-owner-(?:source-contract|ownership)/u, 'missing proof owner must fail closed');
+
+const missingAnchor = structuredClone(proofOwners);
+missingAnchor.contracts.find(item => item.testId === 'SANDBOX-004').sourceAnchorIds = ['missing-source-anchor'];
+const missingAnchorResult = run(inventory, bindings, provenance, missingAnchor);
+assert.notEqual(missingAnchorResult.status, 0);
+assert.match(missingAnchorResult.stderr, /proof-owner-(?:anchor-missing|source-contract)/u, 'missing source anchor must fail closed');
+
+const fakeFamilyAnchor = structuredClone(proofOwners);
+fakeFamilyAnchor.sourceAnchors.find(item => item.anchorId === 'hosted-sandbox-route').selector = 'Sandbox';
+const fakeFamilyAnchorResult = run(inventory, bindings, provenance, fakeFamilyAnchor);
+assert.notEqual(fakeFamilyAnchorResult.status, 0);
+assert.match(fakeFamilyAnchorResult.stderr, /proof-owner-anchor-(?:source-contract|selector|resolution)/u, 'a generic family-like source token is not an exact source ownership anchor');
+
+const substitutedCommands = structuredClone(bindings);
+const substitutedCommandRegistry = structuredClone(proofOwners);
+substitutedCommands.retainedSuites.find(item => item.suiteId === 'pilot-operations').command = ['node', 'fake-green-suite.mjs'];
+substitutedCommandRegistry.commandContracts.retainedCommands['pilot-operations'] = ['node', 'fake-green-suite.mjs'];
+const substitutedCommand = run(inventory, substitutedCommands, provenance, substitutedCommandRegistry);
+assert.notEqual(substitutedCommand.status, 0);
+assert.match(substitutedCommand.stderr, /proof-owner-command-source-contract/u, 'coordinated canonical command substitution must fail against the independent source contract');
+
 const partialComposite = structuredClone(bindings);
 partialComposite.serverTests.find(item => item.testId === 'ASSESS-002').components = ['server'];
 const partialCompositeResult = run(inventory, partialComposite);
@@ -113,15 +154,15 @@ const sandboxDescendant = JSON.parse(readFileSync(catalogPath, 'utf8')).cases.fi
 assert.equal(sandboxDescendant.branchIds[0], 'SANDBOX-ACCEPTED_DESCENDANT_ROUTE');
 assert.equal(sandboxDescendant.expectedDenial, false, 'an accepted descendant cannot be relabeled as denied evidence');
 assert.match(hostedRouteSource, /pathname\.startsWith\(`\$\{HOSTED_SANDBOX_ROUTE\}\/`\)/u, 'source routing explicitly accepts sandbox descendants');
-assert.match(hostedSpec, /case 'network-safety':[\s\S]*await signOutToSandbox\(page\);[\s\S]*observer\.assertSafe\(\);[\s\S]*observer\.stop\(\);/u, 'SANDBOX-004 must observe the complete post-entry and sign-out workflow');
+assert.match(hostedSpec, /const runObservedPersonaJourney[\s\S]*await signOutToSandbox\(page\);[\s\S]*await observer\.stopAfterQuiescence\([\s\S]*observer\.assertSafe\(\);/u, 'SANDBOX-004 must observe the complete post-entry and sign-out workflow through network quiescence');
+assert.match(hostedSpec, /case 'network-safety':[\s\S]*await runObservedPersonaJourney\(page, label, userName\);/u, 'SANDBOX-004 must use the full observed persona journey');
 for (const scenario of ['desktop-layout', 'mobile-layout', 'keyboard-a11y']) {
   const block = new RegExp(`case '${scenario}':[\\s\\S]*for \\(const \\[label, userName\\] of personas\\)[\\s\\S]*await enterPersona\\(page, label\\)`, 'u');
   assert.match(hostedSpec, block, `${scenario} must enter every bounded persona post-entry`);
 }
 
-assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label\] of personas\)/u, 'SAFETY-007 must enter every bounded canonical persona');
-assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*await enterPersona\(page, label\)/u, 'chooser-only axe coverage is insufficient');
+assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label, userName\] of personas\)[\s\S]*await runObservedPersonaJourney\(page, label, userName/u, 'SAFETY-007 must enter every bounded canonical persona through the observed journey');
 assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);
-assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*observer\.assertSafe\(\)/u, 'post-entry accessibility must retain network safety');
+assert.match(hostedSpec, /const runObservedPersonaJourney[\s\S]*observer\.assertSafe\(\)/u, 'post-entry accessibility must retain network safety through the observed journey');
 
 console.log('Acceptance inventory provenance validation tests passed.');

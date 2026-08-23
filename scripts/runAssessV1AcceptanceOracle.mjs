@@ -2,19 +2,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { gateOracle, governanceOracle, validateOracleInputs } from '../tests/acceptance/oracles/assess-v1-oracle.mjs';
-import { loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
+import { canonicalCommand, loadCatalog, loadExecutionBindings, loadSourceProvenance, validateSourceProvenance } from './exhaustiveAcceptanceModel.mjs';
 
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
+const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml';
+const environment = process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release';
 const manifestPath = path.resolve(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const sutManifestPath = path.resolve(process.env.SUT_RESULTS_MANIFEST || 'acceptance-results/sut-oracle-results.json');
 const governanceManifestPath = path.resolve(process.env.GOVERNANCE_SUT_RESULTS_MANIFEST || 'acceptance-results/governance-sut-results.json');
 const fixtures = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/process-discovery-transcripts.json', 'utf8')).fixtures;
 const base = fixtures.find(item => item.slug === 'clean-straight-through')?.oracleInputs;
 const bindings = loadExecutionBindings();
+const provenanceDocument = loadSourceProvenance();
+const catalog = loadCatalog();
+const provenanceErrors = validateSourceProvenance(catalog, bindings, provenanceDocument);
+if (provenanceErrors.length) throw new Error(`ORACLE_PROVENANCE_INVALID:${provenanceErrors.join(',')}`);
+const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
+const catalogByTestId = new Map(catalog.cases.map(item => [item.testId, item]));
+const oracleContext = bindings.oracleExecution;
+const command = canonicalCommand(oracleContext?.command ?? []);
 if (!base) throw new Error('ORACLE_BASE_FIXTURE_MISSING');
 if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('ORACLE_RELEASE_SHA_REQUIRED');
+if (!oracleContext || !oracleContext.environments?.includes(environment) || oracleContext.workflowPath !== workflowPath || !command) throw new Error('ORACLE_CANONICAL_EXECUTION_CONTEXT_REQUIRED');
 
 fs.mkdirSync(path.dirname(sutManifestPath), { recursive: true });
 const sutRun = spawnSync(process.execPath, [
@@ -29,7 +40,16 @@ const sutRun = spawnSync(process.execPath, [
 });
 if (sutRun.status !== 0) throw new Error('PRODUCTION_SCORING_COMPARATOR_FAILED');
 const sutManifest = JSON.parse(fs.readFileSync(sutManifestPath, 'utf8'));
-const sutIndex = new Map((sutManifest.results ?? []).map(item => [item.testId, item]));
+const exactIndex = (items, field, errorCode) => {
+  const index = new Map();
+  for (const item of items ?? []) {
+    const key = item?.[field];
+    if (!key || index.has(key)) throw new Error(errorCode);
+    index.set(key, item);
+  }
+  return index;
+};
+const sutIndex = exactIndex(sutManifest.results, 'testId', 'PRODUCTION_SCORING_COMPARATOR_DUPLICATE_RESULT');
 
 fs.mkdirSync(path.dirname(governanceManifestPath), { recursive: true });
 const governanceRun = spawnSync(process.execPath, [
@@ -57,7 +77,7 @@ if (governanceManifest?.schemaVersion !== 1
   || !Array.isArray(governanceManifest?.results)) {
   throw new Error('PRODUCTION_GOVERNANCE_SCORE_EVIDENCE_INVALID');
 }
-const governanceIndex = new Map(governanceManifest.results.map(item => [item.scenario, item]));
+const governanceIndex = exactIndex(governanceManifest.results, 'scenario', 'PRODUCTION_GOVERNANCE_SCORE_DUPLICATE_RESULT');
 
 const gateResult = (inputs, expected) => {
   const actual = gateOracle(inputs).primaryGatingOutcome;
@@ -96,7 +116,11 @@ const runScenario = scenario => {
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const results = [];
 for (const binding of bindings.oracleTests ?? []) {
+  const provenance = provenanceByTestId.get(binding.testId);
+  const testCase = catalogByTestId.get(binding.testId);
+  const owner = provenance?.ownership?.find(item => item.kind === 'oracle-scenario' && item.ownerId === binding.scenario);
   try {
+    if (!provenance || !testCase || !owner || owner.assertionIds?.length !== 1 || owner.scenarioIds?.length !== 1) throw new Error('ORACLE_PROOF_OWNER_MISSING');
     const evaluated = runScenario(binding.scenario);
     const sut = sutIndex.get(binding.testId);
     let sutMatches = sut?.status === 'PASS';
@@ -111,22 +135,58 @@ for (const binding of bindings.oracleTests ?? []) {
       sutMatches = sutMatches && same(sut?.actual, evaluated.actual);
     }
 
+    const assertionOutcomes = [{ assertionId: owner.assertionIds[0], status: evaluated.pass && sutMatches ? 'PASS' : 'FAIL' }];
+    const status = assertionOutcomes[0].status === 'FAIL'
+      ? 'FAIL'
+      : provenance.scope?.evidenceScope === 'executed-fixture' && provenance.scope.organizationId && provenance.scope.workspaceId
+        ? 'PASS'
+        : 'BLOCKED';
     results.push({
       testId: binding.testId,
       scenario: binding.scenario,
-      status: evaluated.pass && sutMatches ? 'PASS' : 'FAIL',
+      status,
+      releaseSha,
+      workflowRunId,
+      workflowAttempt,
+      environment,
+      workflowPath,
+      command,
+      assertionIds: [...owner.assertionIds],
+      assertionOutcomes,
+      scenarioIds: [...owner.scenarioIds],
+      branchIds: [...testCase.branchIds],
+      sourceReferences: [...testCase.sourceReference],
+      scope: { ...provenance.scope },
       actual: { oracle: evaluated.actual, production: productionActual, matched: sutMatches },
     });
   } catch (error) {
-    results.push({ testId: binding.testId, scenario: binding.scenario, status: 'FAIL', actual: error instanceof Error ? error.message : String(error) });
+    results.push({
+      testId: binding.testId,
+      scenario: binding.scenario,
+      status: 'FAIL',
+      releaseSha,
+      workflowRunId,
+      workflowAttempt,
+      environment,
+      workflowPath,
+      command,
+      assertionIds: owner?.assertionIds ?? ['missing-owner'],
+      assertionOutcomes: [{ assertionId: owner?.assertionIds?.[0] ?? 'missing-owner', status: 'FAIL' }],
+      scenarioIds: owner?.scenarioIds ?? [binding.scenario],
+      branchIds: testCase?.branchIds ?? ['missing-branch'],
+      sourceReferences: testCase?.sourceReference ?? ['missing-source'],
+      scope: provenance?.scope ?? { evidenceScope: 'planned-fixture', fixtureId: testCase?.fixture ?? 'missing-fixture', organizationId: null, workspaceId: null },
+      actual: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
-const manifest = { schemaVersion: 1, releaseSha, workflowRunId, workflowAttempt, generatedAt: new Date().toISOString(), results };
+const manifest = { schemaVersion: 2, releaseSha, workflowRunId, workflowAttempt, environment, workflowPath, command, generatedAt: new Date().toISOString(), results };
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 const temp = `${manifestPath}.tmp`;
 fs.writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);
 fs.renameSync(temp, manifestPath);
-const failures = results.filter(item => item.status !== 'PASS');
-console.log(JSON.stringify({ oracleTests: results.length, passed: results.length - failures.length, failed: failures.map(item => item.testId), manifest: manifestPath }));
+const failures = results.filter(item => item.status === 'FAIL');
+const blocked = results.filter(item => item.status === 'BLOCKED');
+console.log(JSON.stringify({ oracleTests: results.length, passed: results.length - failures.length - blocked.length, blocked: blocked.map(item => item.testId), failed: failures.map(item => item.testId), manifest: manifestPath }));
 if (failures.length) process.exitCode = 1;
