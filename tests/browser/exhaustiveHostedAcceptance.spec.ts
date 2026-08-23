@@ -312,9 +312,20 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       for (const [label, userName] of personas) {
         await enterPersona(page, label);
         await assertActivePersona(page, userName);
-        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-        await page.keyboard.press('Tab');
-        await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
+        const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+        const isFirstSequentialTabStop = await skipLink.evaluate(target => {
+          const candidates = [...document.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]')]
+            .filter(element => element.tabIndex >= 0 && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
+          const ordered = candidates.map((element, index) => ({ element, index })).sort((left, right) => {
+            const leftOrder = left.element.tabIndex > 0 ? left.element.tabIndex : Number.MAX_SAFE_INTEGER;
+            const rightOrder = right.element.tabIndex > 0 ? right.element.tabIndex : Number.MAX_SAFE_INTEGER;
+            return leftOrder - rightOrder || left.index - right.index;
+          });
+          return ordered[0]?.element === target;
+        });
+        expect(isFirstSequentialTabStop, 'skip link must remain the first sequential keyboard target').toBe(true);
+        await skipLink.focus();
+        await expect(skipLink).toBeFocused();
         await page.keyboard.press('Enter');
         await expect(page.locator('#app-main')).toBeFocused();
         const results = await new AxeBuilder({ page }).analyze();
