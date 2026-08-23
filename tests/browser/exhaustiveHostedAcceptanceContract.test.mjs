@@ -102,7 +102,7 @@ assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'viola
 assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
 assert.match(observerSource, /samples\.length<maxSamples/u, 'retained violation samples must remain bounded');
 assert.match(observerSource, /stop:\(\)=>page\.off\('request',inspect\)/u, 'the observer must expose one explicit stop boundary');
-assert.match(appSource, /<main id="app-main" tabIndex=\{-1\}/u, 'the post-entry skip-link target must accept programmatic focus');
+assert.match(appSource, /<main id="app-main" tabIndex=\{0\}/u, 'the post-entry skip-link target and primary scroll region must accept sequential keyboard focus');
 assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain the first sequential keyboard target[\s\S]*skipLink\.focus\(\)[\s\S]*page\.keyboard\.press\('Enter'\)/u, 'every persona must prove first-tab-stop ordering and real keyboard skip-link activation');
 assert.match(adminWorkbenchSource, /<span className="[^"]*text-slate-600[^"]*">[\s\S]*Sectioned admin structure/u, 'the Platform Admin badge must retain AA-capable foreground contrast');
 assert.match(taskCardSource, /text-slate-700 dark:text-slate-200" style=\{\{ backgroundColor: `\$\{epic\.color\}18` \}\}/u, 'dynamic epic color may tint only the background, never become low-contrast foreground text');
@@ -110,6 +110,7 @@ assert.match(boardsSource, /overflow-auto[^"]*" tabIndex=\{0\} aria-label="Deliv
 assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate-400">\{label\}/u, 'mobile board summary labels must retain AA-capable contrast');
 assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
 assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
+assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
 assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'the seven-persona keyboard and axe scenario needs an explicit bounded budget without skipped assertions');
 assert.match(

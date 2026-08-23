@@ -90,7 +90,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                     </div>
                     <StatusBadge tone="neutral">Enterprise scope</StatusBadge>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Process catalog table">
                 <table className="w-full min-w-[720px] text-left text-sm">
                     <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-500">
                         <tr>
