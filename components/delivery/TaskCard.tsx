@@ -104,7 +104,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </span>
                 )}
                 {epic && (
-                    <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold" style={{ backgroundColor: `${epic.color}18`, color: epic.color }}>
+                    <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold text-slate-700 dark:text-slate-200" style={{ backgroundColor: `${epic.color}18` }}>
                         {epic.name}
                     </span>
                 )}

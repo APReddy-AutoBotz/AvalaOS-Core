@@ -5,6 +5,8 @@ const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts
 const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
 const adminWorkbenchSource = fs.readFileSync(new URL('../../components/admin/AdminWorkbench.tsx', import.meta.url), 'utf8');
+const taskCardSource = fs.readFileSync(new URL('../../components/delivery/TaskCard.tsx', import.meta.url), 'utf8');
+const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
@@ -102,6 +104,8 @@ assert.match(observerSource, /stop:\(\)=>page\.off\('request',inspect\)/u, 'the 
 assert.match(appSource, /<main id="app-main" tabIndex=\{-1\}/u, 'the post-entry skip-link target must accept programmatic focus');
 assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain the first sequential keyboard target[\s\S]*skipLink\.focus\(\)[\s\S]*page\.keyboard\.press\('Enter'\)/u, 'every persona must prove first-tab-stop ordering and real keyboard skip-link activation');
 assert.match(adminWorkbenchSource, /<span className="[^"]*text-slate-600[^"]*">[\s\S]*Sectioned admin structure/u, 'the Platform Admin badge must retain AA-capable foreground contrast');
+assert.match(taskCardSource, /text-slate-700 dark:text-slate-200" style=\{\{ backgroundColor: `\$\{epic\.color\}18` \}\}/u, 'dynamic epic color may tint only the background, never become low-contrast foreground text');
+assert.match(boardsSource, /overflow-auto[^"]*" tabIndex=\{0\} aria-label="Delivery work board"/u, 'the mobile scrollable board region must be named and keyboard focusable');
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,

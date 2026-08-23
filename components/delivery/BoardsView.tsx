@@ -217,7 +217,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                 </div>
             </section>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Delivery work board">
                 <div className="space-y-4 pb-4">
                     {visibleSwimlanes.length === 0 && (
                         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900/70">
