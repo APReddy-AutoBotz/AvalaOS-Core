@@ -6,8 +6,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
+  issues: read
   pull-requests: read
 
 jobs:
@@ -22,17 +22,19 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Reconstruct and verify approved correction
+      - name: Reconstruct, verify, and publish approved correction
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_BASE_SHA: 51232e24f6500664ec4252e8c4a3eb1e9c9247a9
           PATCH_COMMENT_ID: '5383088611'
+          CONTROLLER_BRANCH: controller/acceptance-evidence-closure-20260822
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
           git merge-base --is-ancestor "$EXPECTED_BASE_SHA" HEAD
           test "$(git diff --name-only "$EXPECTED_BASE_SHA"..HEAD)" = ".github/workflows/controller-255-artifact-recovery.yml"
+
           gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${PATCH_COMMENT_ID}" --jq .body > /tmp/controller-comment.md
           python - <<'PY'
           import base64, gzip, hashlib
@@ -59,38 +61,31 @@ jobs:
               raise SystemExit('patch sha256 mismatch')
           Path('/tmp/final.patch').write_bytes(patch)
           PY
+
           git apply --check /tmp/final.patch
           git apply /tmp/final.patch
+          rm .github/workflows/controller-255-artifact-recovery.yml
           git diff --check
+
           test "$(git hash-object App.tsx)" = "2cd519f146eadc8eb40bb3968c741cb7743ab409"
           test "$(git hash-object services/falseSuccess.test.ts)" = "ba6f3475f9c7a839aae0775b105dfa662ef8a55e"
           test "$(git hash-object services/productNavigationController.test.ts)" = "a9500689ef5cea39467a50e39dc377cc52ce5089"
           test "$(git hash-object services/productNavigationController.ts)" = "0f4cccbea15240acd6405174b1bf0ba8cabbf3d5"
-          mkdir -p /tmp/recovered/services
-          cp App.tsx /tmp/recovered/App.tsx
-          cp services/falseSuccess.test.ts /tmp/recovered/services/falseSuccess.test.ts
-          cp services/productNavigationController.test.ts /tmp/recovered/services/productNavigationController.test.ts
-          cp services/productNavigationController.ts /tmp/recovered/services/productNavigationController.ts
-          cat > /tmp/recovered/MANIFEST.txt <<'EOF'
-          base=51232e24f6500664ec4252e8c4a3eb1e9c9247a9
-          App.tsx=2cd519f146eadc8eb40bb3968c741cb7743ab409
-          services/falseSuccess.test.ts=ba6f3475f9c7a839aae0775b105dfa662ef8a55e
-          services/productNavigationController.test.ts=a9500689ef5cea39467a50e39dc377cc52ce5089
-          services/productNavigationController.ts=0f4cccbea15240acd6405174b1bf0ba8cabbf3d5
-          patch_sha256=1e315b725c4866cb543926a1ff324b2ee5f282e5f007c835690a242757665aa4
+
+          git add -A
+          cat > /tmp/expected-paths <<'EOF'
+          .github/workflows/controller-255-artifact-recovery.yml
+          App.tsx
+          services/falseSuccess.test.ts
+          services/productNavigationController.test.ts
+          services/productNavigationController.ts
           EOF
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          sort /tmp/expected-paths > /tmp/expected-paths.sorted
+          diff -u /tmp/expected-paths.sorted /tmp/actual-paths
+          git diff --cached --check
 
-      - name: Upload verified after-state files
-        uses: actions/upload-artifact@v4
-        with:
-          name: controller-pr255-recovery-${{ github.run_id }}
-          path: /tmp/recovered
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Signal controller artifact readiness
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/255/comments" -f body="CONTROLLER_RECOVERY_ARTIFACT_READY run_id=${GITHUB_RUN_ID} transport_head=$(git rev-parse HEAD) base=51232e24f6500664ec4252e8c4a3eb1e9c9247a9 patch_sha256=1e315b725c4866cb543926a1ff324b2ee5f282e5f007c835690a242757665aa4" >/dev/null
+          git config user.name 'AvalaOS Controller'
+          git config user.email 'controller@users.noreply.github.com'
+          git commit -m 'fix: converge navigation durability settlement'
+          git push origin "HEAD:${CONTROLLER_BRANCH}"
