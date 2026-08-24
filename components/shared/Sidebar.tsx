@@ -192,7 +192,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     : [];
 
   return <>
-    {mobileOpen && <button type="button" aria-label="Close primary navigation" onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" />}
+    {mobileOpen && <button type="button" aria-label="Close primary navigation" onClick={onMobileClose} className="fixed inset-y-0 left-64 right-0 z-40 bg-slate-950/45 lg:hidden" />}
     <aside ref={sidebarRef} id="primary-navigation" aria-label="Primary navigation" className={`premium-sidebar fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col transition-transform duration-200 lg:static lg:z-30 lg:h-auto lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}>
       <div className={`flex min-h-[76px] items-center border-b border-[var(--av-color-border)] px-4 ${collapsed ? 'lg:justify-center' : 'justify-between gap-3'}`}>
         {collapsed ? <><AvalaLogo className="hidden h-10 w-10 lg:block" /><div className="brand-lockup min-w-0 lg:hidden"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div></> : <div className="brand-lockup min-w-0"><AvalaLifecycleLockup className="h-10 w-[172px]" /></div>}

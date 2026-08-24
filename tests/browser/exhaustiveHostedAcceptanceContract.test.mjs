@@ -9,6 +9,7 @@ const taskCardSource = fs.readFileSync(new URL('../../components/delivery/TaskCa
 const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
 const processCatalogSource = fs.readFileSync(new URL('../../components/assess/ProcessCatalogView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
+const sidebarSource = fs.readFileSync(new URL('../../components/shared/Sidebar.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
   ['process-name', 'input'],
@@ -136,6 +137,8 @@ assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small 
 assert.doesNotMatch(processCatalogSource, /bg-emerald-50 text-emerald-700/u, 'small emerald catalog badges may not use the marginal emerald-700 foreground');
 assert.match(adminWorkbenchSource, /text-\[var\(--av-color-brand-primary\)\]">Avala Admin</u, 'the small Avala Admin label must use the AA-capable primary foreground');
 assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
+assert.match(sidebarSource, /aria-label="Close primary navigation"[^\n]*fixed inset-y-0 left-64 right-0 z-40/u, 'the mobile navigation backdrop hitbox must begin outside the higher-layer sidebar');
+assert.doesNotMatch(sidebarSource, /aria-label="Close primary navigation"[^\n]*fixed inset-0/u, 'the mobile navigation backdrop may not hide its actionable center beneath the sidebar');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
 assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y' \|\| binding\.scenario === 'serious-critical-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'both seven-persona accessibility scenarios need an explicit bounded budget without skipped assertions');
 assert.match(
