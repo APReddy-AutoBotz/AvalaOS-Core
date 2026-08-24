@@ -114,10 +114,11 @@ assert.match(observerSource, /if\(sequenceBeforeWait!==requestSequence\)continue
 assert.doesNotMatch(hostedSpec, /observer\.stop\(\)/u, 'hosted journeys must never detach the observer without bounded quiescence');
 assert.match(
   hostedSpec,
-  /runObservedPersonaJourney[\s\S]*enterPersona\(page, label\)[\s\S]*assertActivePersona\(page, userName\)[\s\S]*exerciseRepresentativePersonaPath\(page, label\)[\s\S]*signOutToSandbox\(page\)[\s\S]*page\.waitForLoadState\('networkidle'\)[\s\S]*observer\.stopAfterQuiescence/u,
+  /runObservedPersonaJourney[\s\S]*enterPersona\(page, label\)[\s\S]*assertActivePersona\(page, userName\)[\s\S]*exerciseRepresentativePersonaPath\(page, label\)[\s\S]*signOutToSandbox\(page\)[\s\S]*observer\.stopAfterQuiescence/u,
   'the observer must cover persona entry, representative feature settlement, sign-out, and post-sign-out quiescence',
 );
-assert.match(hostedSpec, /page\.waitForLoadState\('networkidle'\)[\s\S]*requestAnimationFrame/u, 'representative lazy-loaded surfaces must settle before sign-out');
+assert.match(hostedSpec, /const settleLazyLoadedSurface = async \(page: Page\) => \{[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame/u, 'representative lazy-loaded surfaces must settle through two rendered frames before sign-out');
+assert.doesNotMatch(hostedSpec, /waitForLoadState\('networkidle'\)/u, 'hosted evidence must use semantic readiness plus bounded observer quiescence instead of an unbounded global network-idle heuristic');
 for (const persona of ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin']) {
   assert.match(hostedSpec, new RegExp(`label === '${persona.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}'`, 'u'), `${persona} must have an explicit representative feature-path branch`);
 }

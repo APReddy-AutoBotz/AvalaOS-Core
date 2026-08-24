@@ -284,7 +284,6 @@ const assertNoOverflow = async (page: Page) => {
 };
 
 const settleLazyLoadedSurface = async (page: Page) => {
-  await page.waitForLoadState('networkidle');
   await page.evaluate(() => new Promise<void>(resolve => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
@@ -326,7 +325,6 @@ const runObservedPersonaJourney = async (
   await exerciseRepresentativePersonaPath(page, label);
   await assertSurface?.();
   await signOutToSandbox(page);
-  await page.waitForLoadState('networkidle');
   await observer.stopAfterQuiescence({
     quietPeriodMs: POST_SIGN_OUT_QUIET_PERIOD_MS,
     timeoutMs: POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS,
