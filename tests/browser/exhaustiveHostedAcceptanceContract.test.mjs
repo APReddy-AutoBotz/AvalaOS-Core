@@ -133,6 +133,8 @@ assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate
 assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
 assert.doesNotMatch(taskCardSource, /text-\[(?:10|11)px\][^"'`]*text-slate-(?:400|500)/u, 'small TaskCard metadata may not use marginal slate foregrounds');
 assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
+assert.doesNotMatch(processCatalogSource, /bg-emerald-50 text-emerald-700/u, 'small emerald catalog badges may not use the marginal emerald-700 foreground');
+assert.match(adminWorkbenchSource, /text-\[var\(--av-color-brand-primary\)\]">Avala Admin</u, 'the small Avala Admin label must use the AA-capable primary foreground');
 assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
 assert.match(hostedSpec, /binding\.scenario === 'keyboard-a11y' \|\| binding\.scenario === 'serious-critical-a11y'\) testInfo\.setTimeout\(180_000\)/u, 'both seven-persona accessibility scenarios need an explicit bounded budget without skipped assertions');

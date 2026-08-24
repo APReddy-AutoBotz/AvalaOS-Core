@@ -22,7 +22,7 @@ const criticalityClass = (criticality: string) => {
 };
 
 const statusClass = (status: string) => {
-    if (status.toLowerCase().includes('complete') || status.toLowerCase().includes('approved') || status.toLowerCase().includes('handed off')) return 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/60';
+    if (status.toLowerCase().includes('complete') || status.toLowerCase().includes('approved') || status.toLowerCase().includes('handed off')) return 'bg-emerald-50 text-emerald-800 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/60';
     if (status.toLowerCase().includes('review')) return 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900/60';
     if (status.toLowerCase().includes('changes')) return 'bg-amber-50 text-amber-800 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60';
     if (status.toLowerCase().includes('reject') || status.toLowerCase().includes('no-go')) return 'bg-red-50 text-red-700 ring-red-100 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-900/60';
