@@ -205,7 +205,7 @@ test('external hosted resource allowlists are derived from exact index declarati
   assert.match(spec, /prefix: source\.endsWith\('\/'\)/u);
   assert.match(spec, /isDeclaredAiStudioScript\(url\)/u);
 });
-test('mobile-safe Admin scenarios prove the Enterprise Intelligence destination directly', async () => {
+test('mobile-safe Admin scenarios prove the fail-closed Enterprise Intelligence sandbox boundary directly', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   const adminNavigationStart = spec.indexOf("case 'admin-navigation':");
   const adminNavigationEnd = spec.indexOf("case 'non-admin-denial':");
@@ -213,10 +213,14 @@ test('mobile-safe Admin scenarios prove the Enterprise Intelligence destination 
   const adminCapabilityEnd = spec.indexOf("case 'reload-reconstruction':");
   assert.ok(adminNavigationStart >= 0 && adminNavigationEnd > adminNavigationStart, 'admin-navigation scenario must remain present');
   assert.ok(adminCapabilityStart >= 0 && adminCapabilityEnd > adminCapabilityStart, 'admin-capability-view scenario must remain present');
+  assert.match(spec, /Enterprise Intelligence unavailable/u);
+  assert.match(spec, /Enterprise Intelligence requires a server-authorized workspace\. The local synthetic sandbox sends no provider or persistence requests\./u);
+  assert.match(spec, /getByTestId\('enterprise-intelligence-workspace'\)\)\.toHaveCount\(0\)/u);
   for (const scenario of [spec.slice(adminNavigationStart, adminNavigationEnd), spec.slice(adminCapabilityStart, adminCapabilityEnd)]) {
     assert.match(scenario, /await admin\.click\(\);/u);
     assert.doesNotMatch(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
-    assert.match(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
+    assert.doesNotMatch(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
+    assert.match(scenario, /await assertEnterpriseIntelligenceSandboxBoundary\(page\);/u);
   }
 });
 test('delivery pack scenarios enter the canonical project scope and open project subnavigation in order', async () => {
