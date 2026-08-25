@@ -25,7 +25,7 @@ const priorityMap: Record<TaskPriority, { icon: React.FC<{ className?: string }>
 const statusBadgeMap: Partial<Record<TaskStatus, string>> = {
     Blocked: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/20',
     'On Hold': 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
-    Done: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/20',
+    Done: 'bg-emerald-50 text-emerald-800 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/20',
 };
 
 const statusKebabCase = (status: TaskStatus) => status.toLowerCase().replace(/ /g, '-');
@@ -145,7 +145,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                     {hasLineage && (
-                        <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" title="Source lineage retained">
+                        <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" title="Source lineage retained">
                             Lineage
                         </span>
                     )}
@@ -173,7 +173,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         </span>
                     )}
                 </div>
-                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-700 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
                     <ClockIcon className="h-3 w-3" />
                     <span>{overdue ? 'Overdue' : 'Due'} {formatDate(task.dueDate)}</span>
                 </div>

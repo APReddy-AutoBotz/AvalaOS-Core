@@ -43,6 +43,15 @@ type NetworkViolation = { method: string; category: NetworkViolationCategory; re
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
 const POST_SIGN_OUT_QUIET_PERIOD_MS = 750;
 const POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS = 5_000;
+const SEVEN_PERSONA_SCENARIOS = new Set([
+  'persona-matrix',
+  'local-authority',
+  'network-safety',
+  'desktop-layout',
+  'mobile-layout',
+  'keyboard-a11y',
+  'serious-critical-a11y',
+]);
 const UNAVAILABLE_NETWORK_ORIGIN_CLASS = 'unavailable-origin';
 const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
 const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
@@ -304,6 +313,13 @@ const settleLazyLoadedSurface = async (page: Page) => {
   }));
 };
 
+const ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY = 'Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.';
+const assertEnterpriseIntelligenceSandboxBoundary = async (page: Page) => {
+  await expect(page.getByRole('heading', { name: 'Enterprise Intelligence unavailable', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY, { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('enterprise-intelligence-workspace')).toHaveCount(0);
+};
+
 const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
   if (label === 'Process Analyst' || label === 'AP Process Owner') {
     await clickProductNav(page, 'Assess');
@@ -321,7 +337,7 @@ const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
     const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
     await expect(admin).toBeVisible({ timeout: 15_000 });
     await admin.click();
-    await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible({ timeout: 15_000 });
+    await assertEnterpriseIntelligenceSandboxBoundary(page);
   } else {
     throw new Error(`No representative feature path is bound to persona ${label}`);
   }
@@ -503,7 +519,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
+        await assertEnterpriseIntelligenceSandboxBoundary(page);
       }
       return;
     case 'non-admin-denial':
@@ -518,7 +534,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
+        await assertEnterpriseIntelligenceSandboxBoundary(page);
       }
       return;
     case 'reload-reconstruction': {
@@ -606,7 +622,7 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
   test(title, async ({ page }, testInfo) => {
     test.skip(!binding.projects.includes(testInfo.project.name), `Not required in ${testInfo.project.name}`);
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');
-    if (binding.scenario === 'keyboard-a11y' || binding.scenario === 'serious-critical-a11y') testInfo.setTimeout(180_000);
+    if (binding.scenario && SEVEN_PERSONA_SCENARIOS.has(binding.scenario)) testInfo.setTimeout(180_000);
     await runScenario(binding.scenario!, page, testInfo);
   });
 }

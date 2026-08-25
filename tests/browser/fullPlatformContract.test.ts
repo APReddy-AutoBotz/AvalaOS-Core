@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   classifyPublicRoute,
@@ -58,5 +59,10 @@ assert.equal(classifyPublicRoute('/sandbox'), 'sandbox');
 assert.equal(classifyPublicRoute('/sandbox/unexpected-deep-link'), 'sandbox');
 assert.equal(classifyPublicRoute('/sign-in'), 'server-sign-in');
 assert.equal(classifyPublicRoute('/admin'), 'outside-sandbox');
+
+const campaignSource = readFileSync('tests/browser/fullPlatformCampaign.spec.ts', 'utf8');
+assert.match(campaignSource, /const closeNavigation = async\(page:Page\) => \{[\s\S]*Close primary navigation[\s\S]*await close\.click\(\)/u);
+assert.match(campaignSource, /const selectScope = async\(page:Page, label:string\) => \{\s*await closeNavigation\(page\);[\s\S]*Switch workspace context/u);
+assert.match(campaignSource, /await button\.click\(\);[\s\S]*toHaveAttribute\('aria-current','page'\);[\s\S]*await closeNavigation\(page\);\s*await assertSurface/u);
 
 console.log('Full-platform browser campaign contract regression passed.');

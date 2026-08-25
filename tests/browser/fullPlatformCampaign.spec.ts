@@ -162,7 +162,13 @@ const openNavigation = async(page:Page) => {
   if(await opener.isVisible().catch(()=>false))await opener.click();
 };
 
+const closeNavigation = async(page:Page) => {
+  const close=page.getByRole('button',{name:'Close primary navigation'});
+  if(await close.isVisible().catch(()=>false))await close.click();
+};
+
 const selectScope = async(page:Page, label:string) => {
+  await closeNavigation(page);
   const switcher=page.getByRole('button',{name:'Switch workspace context'});
   await expect(switcher).toBeVisible();
   await switcher.click();
@@ -197,9 +203,8 @@ const visitIfAuthorized = async(page:Page,label:string,visited:Set<string>) => {
     await openNavigation(page);
     const reopened=page.getByRole('button',{name:label,exact:true});
     await expect(reopened).toHaveAttribute('aria-current','page');
-    const close=page.getByRole('button',{name:'Close primary navigation'});
-    if(await close.isVisible().catch(()=>false))await close.click();
   }
+  await closeNavigation(page);
   await assertSurface(page,started);
   visited.add(label);
   return true;
