@@ -103,7 +103,7 @@ const TaskListView: React.FC<TaskListViewProps> = ({ tasks, projects, onSelectTa
                             <span className={`text-sm font-black ${overdue ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
                                 {formatDate(task.dueDate)}
                             </span>
-                            <button onClick={(e) => handleDelete(e, task.id)} className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
+                            <button type="button" aria-label={`Delete ${task.title}`} onClick={(e) => handleDelete(e, task.id)} className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
                                 <TrashIcon className="w-4 h-4" />
                             </button>
                         </div>

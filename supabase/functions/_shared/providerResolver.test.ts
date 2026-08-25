@@ -8,6 +8,7 @@ import {
   ProviderResolverDeps,
   ProviderResolverFailureClass,
   ProviderResolverInput,
+  WorkspaceMembershipRoleContext,
   EnterpriseProviderRouteResolverDeps,
   resolveProviderForOperation,
   resolveEnterpriseProviderRoute,
@@ -22,6 +23,7 @@ console.log('Starting M3.2l provider resolver decision regression suite...');
 
 const orgId = '11111111-1111-4111-8111-111111111111';
 const actorId = '00000000-0000-4000-8000-000000000008';
+const workspaceId = '66666666-6666-4666-8666-666666666666';
 const configId = '33333333-3333-4333-8333-333333333333';
 const keyRefId = '44444444-4444-4444-8444-444444444444';
 const now = new Date('2026-06-08T00:00:00.000Z');
@@ -31,6 +33,7 @@ const baseInput: ProviderResolverInput = {
   operation: 'generate_document',
   requestedProvider: 'groq',
   orgId,
+  workspaceId,
   actorId,
   correlationId: 'corr-m3-2l-001',
   evidenceRef: 'docs/quality/m3.2l-provider-resolver-decision-logic-evidence.md',
@@ -44,6 +47,15 @@ const membership: MembershipRoleContext = {
   status: 'active',
   roleNames: ['Admin'],
   roleIds: ['22222222-2222-4222-8222-222222222201'],
+};
+
+const workspaceMembership: WorkspaceMembershipRoleContext = {
+  orgId,
+  workspaceId,
+  status: 'active',
+  roleNames: ['Workspace Admin'],
+  roleIds: ['22222222-2222-4222-8222-222222222202'],
+  roleScopeValid: true,
 };
 
 const policy: ProviderPolicyRow = {
@@ -82,6 +94,7 @@ const keyRef: ProviderKeyRefRow = {
 
 const buildDeps = (overrides: {
   membership?: MembershipRoleContext | null;
+  workspaceMembership?: WorkspaceMembershipRoleContext | null;
   policies?: ProviderPolicyRow[];
   config?: ProviderConfigRow | null;
   keyRef?: ProviderKeyRefRow | null;
@@ -89,6 +102,9 @@ const buildDeps = (overrides: {
   now: () => now,
   createCorrelationId: () => 'generated-correlation-id',
   queryMembershipAndRoles: async () => overrides.membership === undefined ? membership : overrides.membership,
+  queryWorkspaceMembershipAndRoles: async () => overrides.workspaceMembership === undefined
+    ? workspaceMembership
+    : overrides.workspaceMembership,
   queryProviderPolicy: async () => overrides.policies || [policy],
   queryProviderConfig: async () => overrides.config === undefined ? config : overrides.config,
   queryProviderKeyRef: async () => overrides.keyRef === undefined ? keyRef : overrides.keyRef,
@@ -151,11 +167,23 @@ const main = async () => {
     assert.equal(allowed.keyRefId, keyRefId);
     assert.equal(allowed.keyRefResolverType, 'server_reference');
     assert.equal(allowed.policyResult, 'allowed');
+    assert.equal(allowed.workspaceId, workspaceId);
     assert.equal(allowed.auditEvent.eventType, 'ai_provider_resolver_decision');
     assert.equal(allowed.auditEvent.status, 'allowed');
     assert.equal(allowed.auditEvent.metadata.keyReference, 'eligible_for_future_lookup');
   }
   assertNoSecretLeak(allowed);
+
+  const refineAllowed = await resolveProviderForOperation(
+    { ...baseInput, operation: 'refine_section' },
+    buildDeps({ policies: [{ ...policy, operation: 'refine_section' }] }),
+  );
+  assert.equal(refineAllowed.status, 'allowed');
+  if (refineAllowed.status === 'allowed') {
+    assert.equal(refineAllowed.operation, 'refine_section');
+    assert.equal(refineAllowed.workspaceId, workspaceId);
+  }
+  assertNoSecretLeak(refineAllowed);
 
   const extractionRouteId = '77777777-7777-4777-8777-777777777777';
   const replacementRouteId = '88888888-8888-4888-8888-888888888888';
@@ -260,6 +288,20 @@ const main = async () => {
   await expectBlocked({ orgId: '' }, {}, 'org_missing');
   await expectBlocked({}, { membership: { ...membership, status: 'suspended' } }, 'membership_denied');
   await expectBlocked({}, { membership: { status: 'active', roleNames: [], roleIds: [] } }, 'role_not_allowed');
+  await expectBlocked({ workspaceId: '' }, {}, 'membership_denied');
+  await expectBlocked({}, { workspaceMembership: null }, 'membership_denied');
+  await expectBlocked({}, { workspaceMembership: { ...workspaceMembership, status: 'suspended' } }, 'membership_denied');
+  await expectBlocked({}, { workspaceMembership: { ...workspaceMembership, orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } }, 'membership_denied');
+  await expectBlocked({}, { workspaceMembership: { ...workspaceMembership, workspaceId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } }, 'membership_denied');
+  await expectBlocked({}, { workspaceMembership: { ...workspaceMembership, roleScopeValid: false } }, 'membership_denied');
+  await expectBlocked(
+    { operation: 'refine_section' },
+    {
+      policies: [{ ...policy, operation: 'refine_section' }],
+      workspaceMembership: { ...workspaceMembership, workspaceId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    },
+    'membership_denied',
+  );
   await expectBlocked({ operation: 'summarize_case' }, {}, 'operation_not_allowed');
   await expectBlocked({ requestedProvider: 'openai' }, {}, 'provider_not_supported');
   await expectBlocked({}, { policies: [] }, 'provider_policy_missing');

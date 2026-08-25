@@ -50,6 +50,24 @@
       "futureAction": "Keep structural assertions about the hosted navigation test harness confined to test-control code; do not treat matched browser-storage text as runtime authority."
     },
     {
+      "pattern": "localStorage",
+      "pathPrefix": "tests/browser/fullPlatformCampaign.spec.ts",
+      "reason": "test/control documentation",
+      "futureAction": "Keep synthetic sign-out persistence setup and inspection confined to the full-platform browser campaign; do not treat browser storage as server authority."
+    },
+    {
+      "pattern": "localStorage",
+      "pathPrefix": "services/storageAuthority.ts",
+      "reason": "non-secret app localStorage state",
+      "futureAction": "Keep this helper limited to removing persisted identity, tenant scope, and view authority; never add provider secrets or product data."
+    },
+    {
+      "pattern": "GROQ_API_KEY",
+      "pathPrefix": "scripts/runFullPlatformProviderDiagnostics.mjs",
+      "reason": "server-side Edge/Supabase environment reference",
+      "futureAction": "Keep the ignored local key file server-side, diagnostic-only, and absent from retained output, browser bundles, and acceptance evidence."
+    },
+    {
       "pathPrefix": "scripts/checkEnterpriseIntelligenceBoundaries.mjs",
       "reason": "test/control documentation",
       "futureAction": "Keep Enterprise Intelligence source-boundary patterns confined to the control script; do not treat them as runtime behavior."
@@ -211,10 +229,8 @@
       "pattern": "localStorage",
       "path": "services/adapters/authAdapter.ts",
       "lines": [
-        34,
-        52,
-        57,
-        63
+        35,
+        57
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep current-user/demo state classified separately from provider-key storage."

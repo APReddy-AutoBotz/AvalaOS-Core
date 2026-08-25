@@ -93,6 +93,12 @@ export type MembershipRoleContext = {
   roleIds?: string[];
 };
 
+export type WorkspaceMembershipRoleContext = MembershipRoleContext & {
+  orgId: string;
+  workspaceId: string;
+  roleScopeValid: boolean;
+};
+
 export type ProviderPolicyRow = {
   id: string;
   org_id: string;
@@ -154,6 +160,11 @@ export type KeyRefLookupInput = {
 export type ProviderResolverDeps = {
   now: () => Date;
   queryMembershipAndRoles: (input: { orgId: string; actorId: string }) => Promise<MembershipRoleContext | null>;
+  queryWorkspaceMembershipAndRoles: (input: {
+    orgId: string;
+    workspaceId: string;
+    actorId: string;
+  }) => Promise<WorkspaceMembershipRoleContext | null>;
   queryProviderPolicy: (input: PolicyLookupInput) => Promise<ProviderPolicyRow[]>;
   queryProviderConfig: (input: ConfigLookupInput) => Promise<ProviderConfigRow | null>;
   queryProviderKeyRef: (input: KeyRefLookupInput) => Promise<ProviderKeyRefRow | null>;
@@ -399,6 +410,20 @@ const roleMatchesPolicy = (membership: MembershipRoleContext, policy: ProviderPo
   return allowedRoles.some(role => roleNames.has(role) || roleIds.has(role));
 };
 
+const legacyWorkspaceOperations = new Set<ProviderResolverOperation>([
+  'generate_document',
+  'refine_section',
+]);
+
+const combineMembershipRoles = (
+  organization: MembershipRoleContext,
+  workspace: WorkspaceMembershipRoleContext,
+): MembershipRoleContext => ({
+  status: organization.status,
+  roleNames: [...new Set([...(organization.roleNames || []), ...(workspace.roleNames || [])])],
+  roleIds: [...new Set([...(organization.roleIds || []), ...(workspace.roleIds || [])])],
+});
+
 const isPolicyActiveForRequest = (
   policy: ProviderPolicyRow,
   orgId: string,
@@ -502,6 +527,24 @@ export const resolveProviderForOperation = async (
   if (!operation) return block('operation_not_allowed');
   if (!provider) return block('provider_not_supported');
 
+  let authorizationRoles = membership;
+  if (legacyWorkspaceOperations.has(operation)) {
+    if (!workspaceId) return block('membership_denied');
+    const workspaceMembership = await deps.queryWorkspaceMembershipAndRoles({
+      orgId,
+      workspaceId,
+      actorId,
+    });
+    if (
+      !workspaceMembership
+      || workspaceMembership.status !== 'active'
+      || workspaceMembership.orgId !== orgId
+      || workspaceMembership.workspaceId !== workspaceId
+      || workspaceMembership.roleScopeValid !== true
+    ) return block('membership_denied');
+    authorizationRoles = combineMembershipRoles(membership, workspaceMembership);
+  }
+
   const policies = await deps.queryProviderPolicy({
     orgId,
     operation,
@@ -515,7 +558,7 @@ export const resolveProviderForOperation = async (
   if (activePolicies.length > 1) return block('provider_policy_ambiguous');
 
   const policy = activePolicies[0];
-  if (!roleMatchesPolicy(membership, policy)) return block('role_not_allowed', {
+  if (!roleMatchesPolicy(authorizationRoles, policy)) return block('role_not_allowed', {
     providerConfigId: policy.provider_config_id,
   });
 

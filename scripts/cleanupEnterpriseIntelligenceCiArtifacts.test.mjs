@@ -10,6 +10,9 @@ const generatedDirectories = [
   '.agent/provider-resolver-integration-tests',
 ];
 const forbiddenFixture = '.ai-boundary-cleanup-regression-forbidden.js';
+const ignoredGeneratedDirectory = 'dist-trust-assurance';
+const ignoredGeneratedFixture = `${ignoredGeneratedDirectory}/.ai-boundary-generated-fixture.js`;
+const ignoredGeneratedDirectoryExisted = existsSync(ignoredGeneratedDirectory);
 const forbiddenReservedName = ['GROQ', 'API', 'KEY'].join('_');
 
 const runNode = script => spawnSync(process.execPath, [script], {
@@ -29,6 +32,8 @@ try {
     assert.equal(existsSync(directory), false, `${directory} must not survive the cleanup boundary`);
   }
 
+  mkdirSync(ignoredGeneratedDirectory, { recursive: true });
+  writeFileSync(ignoredGeneratedFixture, `export const generated = '${forbiddenReservedName}';\n`);
   const cleanScan = runNode('scripts/check-ai-boundary.mjs');
   assert.equal(cleanScan.status, 0, cleanScan.stderr || cleanScan.stdout);
 
@@ -42,6 +47,8 @@ try {
   );
 } finally {
   rmSync(forbiddenFixture, { force: true });
+  rmSync(ignoredGeneratedFixture, { force: true });
+  if (!ignoredGeneratedDirectoryExisted) rmSync(ignoredGeneratedDirectory, { recursive: true, force: true });
   for (const directory of generatedDirectories) rmSync(directory, { recursive: true, force: true });
 }
 

@@ -9,6 +9,7 @@ export const createAuthorityRequestObserver = <TRequest, TSample>({
   page,
   classify,
   sample,
+  webSocket,
   maxSamples,
   now=()=>Date.now(),
   wait=(milliseconds:number)=>new Promise<void>(resolve=>setTimeout(resolve,milliseconds)),
@@ -16,6 +17,11 @@ export const createAuthorityRequestObserver = <TRequest, TSample>({
   page:{on:(event:'request',listener:(request:TRequest)=>void)=>unknown;off:(event:'request',listener:(request:TRequest)=>void)=>unknown};
   classify:(request:TRequest)=>string|null;
   sample:(request:TRequest,category:string)=>TSample;
+  webSocket?:{
+    page:{on:(event:'websocket',listener:(socket:unknown)=>void)=>unknown;off:(event:'websocket',listener:(socket:unknown)=>void)=>unknown};
+    classify:(socket:unknown)=>string|null;
+    sample:(socket:unknown,category:string)=>TSample;
+  };
   maxSamples:number;
   now?:()=>number;
   wait?:(milliseconds:number)=>Promise<void>;
@@ -33,11 +39,21 @@ export const createAuthorityRequestObserver = <TRequest, TSample>({
     totalViolations+=1;
     if(samples.length<maxSamples)samples.push(sample(request,category));
   };
+  const inspectWebSocket=(socket:unknown)=>{
+    requestSequence+=1;
+    lastRequestAt=now();
+    const category=webSocket?.classify(socket)??null;
+    if(!category)return;
+    totalViolations+=1;
+    if(samples.length<maxSamples)samples.push(webSocket!.sample(socket,category));
+  };
   page.on('request',inspect);
+  webSocket?.page.on('websocket',inspectWebSocket);
   const stop=()=>{
     if(stopped)return;
     stopped=true;
     page.off('request',inspect);
+    webSocket?.page.off('websocket',inspectWebSocket);
   };
   const stopAfterQuiescence=async({quietPeriodMs,timeoutMs}:QuiescenceOptions)=>{
     if(!Number.isFinite(quietPeriodMs)||quietPeriodMs<=0)throw new Error('quietPeriodMs must be a positive finite number');

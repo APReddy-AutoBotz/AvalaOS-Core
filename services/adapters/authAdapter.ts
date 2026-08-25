@@ -2,6 +2,7 @@ import { getRuntimeDataAccess, supabase } from '../supabaseClient';
 import { User } from '../../types';
 import { MOCK_LOGIN_PROFILES, MOCK_USERS } from '../../data/mockData';
 import { StorageKeys } from '../storage';
+import { clearPersistedAuthorityState } from '../storageAuthority';
 
 export interface AuthSession {
   user: User | null;
@@ -47,9 +48,8 @@ export const authAdapter = {
     if (getRuntimeDataAccess() === 'server') {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      return;
     }
-    localStorage.removeItem(StorageKeys.CURRENT_USER);
+    clearPersistedAuthorityState();
   },
 
   async getCurrentUser(): Promise<User | null> {
@@ -60,7 +60,7 @@ export const authAdapter = {
         const parsed = JSON.parse(stored) as User;
         return MOCK_USERS.find(user => user.id === parsed.id) || null;
       } catch {
-        localStorage.removeItem(StorageKeys.CURRENT_USER);
+        clearPersistedAuthorityState();
         return null;
       }
     }

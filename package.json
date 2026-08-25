@@ -4,6 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:full-platform:campaign": "node scripts/validateFullPlatformTesting.mjs && node --test scripts/validateFullPlatformTesting.test.mjs",
+    "test:full-platform:provider-mocked": "node scripts/fullPlatformProviderHarness.test.mjs",
+    "test:full-platform:browser-contracts": "node scripts/runPr1fTypeScriptTest.mjs services/storageAuthority.ts services/storageAuthority.test.ts && node scripts/runPr1fTypeScriptTest.mjs tests/browser/fullPlatformContract.ts tests/browser/fullPlatformContract.test.ts && npm run test:acceptance:network-observer",
+    "test:browser:full-platform": "playwright test --config=playwright.full-platform.config.ts",
+    "diagnose:full-platform:providers": "node scripts/runFullPlatformProviderDiagnostics.mjs",
     "test:hosted-evidence-family-attestations": "node scripts/hostedEvidenceFamilyAttestation.test.mjs && node scripts/deriveHostedEvidenceFamilyAssertions.test.mjs",
     "test:acceptance:catalog": "node scripts/exhaustiveAcceptanceValidate.mjs && node tests/acceptance/validators/validate-traceability.mjs && node tests/acceptance/validators/acceptance-metadata.test.mjs && node tests/acceptance/validators/inventory-provenance.test.mjs && node tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs && node scripts/runAssessV1AcceptanceOracle.test.mjs",
     "test:acceptance:hosted": "playwright test --config=playwright.exhaustive-acceptance.config.ts",

@@ -25,7 +25,13 @@ const WidgetWrapper: React.FC<WidgetWrapperProps> = ({
                     <h3 className="font-bold text-md text-text-light dark:text-text-dark">{title}</h3>
                 </div>
                 {isConfigurable && (
-                    <button onClick={onToggleConfigure} className={`p-1.5 rounded-full transition-colors ${isConfiguring ? 'bg-abz-primary/10 text-abz-primary' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}>
+                    <button
+                        type="button"
+                        onClick={onToggleConfigure}
+                        aria-label={`${isConfiguring ? 'Finish configuring' : 'Configure'} ${title}`}
+                        aria-pressed={isConfiguring}
+                        className={`p-1.5 rounded-full transition-colors ${isConfiguring ? 'bg-abz-primary/10 text-abz-primary' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                    >
                         <CogIcon className="w-5 h-5" />
                     </button>
                 )}

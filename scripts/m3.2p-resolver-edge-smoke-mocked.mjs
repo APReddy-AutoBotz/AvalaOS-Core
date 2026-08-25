@@ -16,7 +16,7 @@ const { persistProviderResolverAuditEvent } = require('../.agent/m3.2p-resolver-
 const provider = 'groq';
 const mode = 'pilot';
 const roleName = 'M3.2p Smoke Resolver Role';
-const secretRef = 'AVALA_PROVIDER_SECRET_GROQ_SMOKE';
+const secretRef = 'AVALA_PROVIDER_SECRET_GROQ_100000000000400080000000000032F0_SMOKE';
 const fakeProviderSecret = 'm3_2p_mock_provider_value_not_a_real_key';
 const evidenceRef = 'docs/quality/m3.2p-non-production-resolver-edge-smoke-mocked-evidence.md';
 const actorId = '00000000-0000-4000-8000-0000000032f0';
@@ -29,6 +29,11 @@ const ids = {
   orgDisabledConfig: '10000000-0000-4000-8000-0000000032f2',
   orgManualKeyRef: '10000000-0000-4000-8000-0000000032f3',
   orgWrongPrefix: '10000000-0000-4000-8000-0000000032f4',
+  workspaceAllowed: '50000000-0000-4000-8000-0000000032f0',
+  workspaceMissingPolicy: '50000000-0000-4000-8000-0000000032f1',
+  workspaceDisabledConfig: '50000000-0000-4000-8000-0000000032f2',
+  workspaceManualKeyRef: '50000000-0000-4000-8000-0000000032f3',
+  workspaceWrongPrefix: '50000000-0000-4000-8000-0000000032f4',
   keyAllowed: '20000000-0000-4000-8000-0000000032f0',
   keyMissingPolicy: '20000000-0000-4000-8000-0000000032f1',
   keyDisabledConfig: '20000000-0000-4000-8000-0000000032f2',
@@ -47,11 +52,11 @@ const ids = {
 };
 
 const smokeOrgs = [
-  { id: ids.orgAllowed, slug: 'm3-2p-smoke-allowed', roleId: ids.roleAllowed },
-  { id: ids.orgMissingPolicy, slug: 'm3-2p-smoke-missing-policy', roleId: ids.roleMissingPolicy },
-  { id: ids.orgDisabledConfig, slug: 'm3-2p-smoke-disabled-config', roleId: ids.roleDisabledConfig },
-  { id: ids.orgManualKeyRef, slug: 'm3-2p-smoke-manual-key-ref', roleId: ids.roleManualKeyRef },
-  { id: ids.orgWrongPrefix, slug: 'm3-2p-smoke-wrong-prefix', roleId: ids.roleWrongPrefix },
+  { id: ids.orgAllowed, workspaceId: ids.workspaceAllowed, slug: 'm3-2p-smoke-allowed', roleId: ids.roleAllowed },
+  { id: ids.orgMissingPolicy, workspaceId: ids.workspaceMissingPolicy, slug: 'm3-2p-smoke-missing-policy', roleId: ids.roleMissingPolicy },
+  { id: ids.orgDisabledConfig, workspaceId: ids.workspaceDisabledConfig, slug: 'm3-2p-smoke-disabled-config', roleId: ids.roleDisabledConfig },
+  { id: ids.orgManualKeyRef, workspaceId: ids.workspaceManualKeyRef, slug: 'm3-2p-smoke-manual-key-ref', roleId: ids.roleManualKeyRef },
+  { id: ids.orgWrongPrefix, workspaceId: ids.workspaceWrongPrefix, slug: 'm3-2p-smoke-wrong-prefix', roleId: ids.roleWrongPrefix },
 ];
 
 class SmokeBlocked extends Error {
@@ -237,15 +242,38 @@ const seedSmokeRows = async (client) => {
       await upsertById(client, 'roles', {
         id: org.roleId,
         org_id: org.id,
+        workspace_id: null,
         name: roleName,
+        slug: 'm3-2p-smoke-resolver',
+        scope: 'organization',
         permissions: JSON.stringify(['m3.2p:mocked-smoke']),
+        status: 'active',
+        deleted_at: null,
       });
       seedStep = `membership:${org.slug}`;
       await client.query(
         `INSERT INTO organization_members (org_id, user_id, role_id, status)
          VALUES ($1, $2, $3, 'active')
-         ON CONFLICT (org_id, user_id) DO UPDATE SET role_id = EXCLUDED.role_id, status = 'active'`,
+         ON CONFLICT (org_id, user_id) WHERE deleted_at IS NULL AND status = 'active'
+         DO UPDATE SET role_id = EXCLUDED.role_id, status = 'active', disabled_at = NULL, deleted_at = NULL`,
         [org.id, actorId, org.roleId],
+      );
+      seedStep = `workspace:${org.slug}`;
+      await upsertById(client, 'workspaces', {
+        id: org.workspaceId,
+        org_id: org.id,
+        name: `M3.2p Smoke Workspace ${org.slug}`,
+        slug: `${org.slug}-workspace`,
+        metadata: { source: 'm3.2p_mocked_smoke' },
+        status: 'active',
+      });
+      seedStep = `workspace-membership:${org.slug}`;
+      await client.query(
+        `INSERT INTO workspace_memberships (org_id, workspace_id, user_id, role_id, status, disabled_at, deleted_at)
+         VALUES ($1, $2, $3, NULL, 'active', NULL, NULL)
+         ON CONFLICT (workspace_id, user_id) WHERE deleted_at IS NULL AND status = 'active'
+         DO UPDATE SET role_id = NULL, status = 'active', disabled_at = NULL, deleted_at = NULL`,
+        [org.id, org.workspaceId, actorId],
       );
     }
 
@@ -363,6 +391,8 @@ const assertRequiredTables = async (client) => {
     ['public', 'profiles'],
     ['public', 'roles'],
     ['public', 'organization_members'],
+    ['public', 'workspaces'],
+    ['public', 'workspace_memberships'],
     ['public', 'ai_provider_key_refs'],
     ['public', 'ai_provider_configs'],
     ['public', 'ai_workspace_provider_policies'],
@@ -395,6 +425,38 @@ const buildResolverDeps = (client, order) => ({
       status: row.status,
       roleIds: [row.role_id, row.joined_role_id].filter(Boolean),
       roleNames: [row.joined_role_name].filter(Boolean),
+    };
+  },
+  queryWorkspaceMembershipAndRoles: async ({ orgId, workspaceId, actorId: inputActorId }) => {
+    order.push('resolver:workspaceMembership');
+    const row = await queryOne(
+      client,
+      `SELECT wm.org_id, wm.workspace_id, wm.status, wm.role_id, wm.disabled_at, wm.deleted_at,
+              r.id AS joined_role_id, r.name AS joined_role_name, r.org_id AS role_org_id,
+              r.workspace_id AS role_workspace_id, r.scope AS role_scope, r.status AS role_status,
+              r.deleted_at AS role_deleted_at
+       FROM workspace_memberships wm
+       LEFT JOIN roles r ON r.id = wm.role_id
+       WHERE wm.org_id = $1 AND wm.workspace_id = $2 AND wm.user_id = $3
+       LIMIT 1`,
+      [orgId, workspaceId, inputActorId],
+    );
+    if (!row) return null;
+    const roleScopeValid = !row.role_id || Boolean(
+      row.joined_role_id === row.role_id
+      && row.role_org_id === orgId
+      && row.role_workspace_id === workspaceId
+      && row.role_scope === 'workspace'
+      && row.role_status === 'active'
+      && !row.role_deleted_at
+    );
+    return {
+      orgId: row.org_id,
+      workspaceId: row.workspace_id,
+      status: row.disabled_at || row.deleted_at ? 'inactive' : row.status,
+      roleIds: [row.role_id, row.joined_role_id].filter(Boolean),
+      roleNames: [row.joined_role_name].filter(Boolean),
+      roleScopeValid,
     };
   },
   queryProviderPolicy: async ({ orgId, operation, mode: inputMode, requestedProviderConfigId }) => {
@@ -478,6 +540,7 @@ const runSmokeCase = async (client, {
   const result = await runProviderGovernedOperation({
     operation,
     orgId,
+    workspaceId: smokeOrgs.find(item => item.id === orgId)?.workspaceId,
     actorId,
     requestedProvider: provider,
     evidenceRef,
@@ -514,7 +577,13 @@ const runSmokeCase = async (client, {
   });
 
   assertSafeOutput(result);
-  assert.equal(result.status, expectStatus);
+  if (result.status !== expectStatus) {
+    const failureClass = typeof result.body?.failureClass === 'string'
+      && /^[a-z0-9_]+$/.test(result.body.failureClass)
+      ? result.body.failureClass
+      : 'UNKNOWN';
+    block(`scenario status mismatch: ${name}:${result.status}:${failureClass}`);
+  }
   if (expectStatus === 'blocked') {
     assert.equal(mockedProviderCalls, 0);
     if (expectedFailureClass) assert.equal(result.body.failureClass, expectedFailureClass);
@@ -522,7 +591,7 @@ const runSmokeCase = async (client, {
     assert.equal(mockedProviderCalls, 1);
   }
 
-  return { name, result, order, auditRows, secretReads, mockedProviderCalls };
+  return { name, operation, result, order, auditRows, secretReads, mockedProviderCalls };
 };
 
 const verifyAuditRows = async (client) => {
@@ -638,6 +707,7 @@ const main = async () => {
     stage = 'allowed-scenarios';
     const allowedCases = [];
     for (const operation of operations) {
+      stage = `allowed-scenario:${operation}`;
       allowedCases.push(await runSmokeCase(client, {
         name: `allowed-${operation.replaceAll('_', '-')}`,
         orgId: ids.orgAllowed,
@@ -647,15 +717,20 @@ const main = async () => {
     }
 
     for (const allowedCase of allowedCases) {
-      assert.deepEqual(allowedCase.order, [
+      stage = `allowed-assertion:${allowedCase.operation}`;
+      const expectedOrder = [
         'resolver:membership',
+        ...(['generate_document', 'refine_section'].includes(allowedCase.operation)
+          ? ['resolver:workspaceMembership']
+          : []),
         'resolver:policy',
         'resolver:config',
         'resolver:keyRef',
         'audit:allowed',
         'secret',
         'mockedProvider',
-      ]);
+      ];
+      assert.deepEqual(allowedCase.order, expectedOrder);
       assert.deepEqual(allowedCase.secretReads, [secretRef]);
       assert.equal(allowedCase.mockedProviderCalls, 1);
     }

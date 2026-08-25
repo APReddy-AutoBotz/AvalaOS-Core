@@ -186,7 +186,10 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Status</dt><dd className="font-bold text-slate-900 dark:text-white">{pack.governLite.governanceStatus}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Autonomy</dt><dd className="font-bold text-slate-900 dark:text-white">{pack.governLite.autonomyLevel}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Risk</dt><dd className="font-bold text-slate-900 dark:text-white">{pack.governLite.riskLevel}</dd></div>
-                  <div className="pt-2 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">{pack.governLite.nextGovernanceAction}</div>
+                  <div className="pt-2">
+                    <dt className="sr-only">Next governance action</dt>
+                    <dd className="text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">{pack.governLite.nextGovernanceAction}</dd>
+                  </div>
                 </dl>
               ) : (
                 <p className="mt-3 text-sm font-semibold text-slate-500">No Avala Govern snapshot is linked for this project.</p>
@@ -233,7 +236,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
       </Section>
 
       <Section title="Work Item Lineage" icon={InformationCircleIcon}>
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-800" tabIndex={0} aria-label="Delivery pack work items">
           <div className="min-w-[760px]">
             <div className="grid grid-cols-[1fr_140px_140px_120px] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/60">
               <div>Work Item</div>

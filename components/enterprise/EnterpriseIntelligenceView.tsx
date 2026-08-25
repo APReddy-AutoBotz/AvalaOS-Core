@@ -11,6 +11,7 @@ import {
   type EnterpriseIntelligenceProjection,
 } from '../../services/enterpriseIntelligence';
 import { bytesToBase64, enterpriseIntelligenceClient, getProviderLifecycleAuthorizationVersion } from '../../services/enterpriseIntelligenceClient';
+import { getRuntimeDataAccess } from '../../services/supabaseClient';
 
 type TabId = 'controls' | 'intake' | 'review' | 'modernization' | 'handoff' | 'delivery' | 'monitor' | 'assemble';
 const tabs: Array<{ id: TabId; label: string; eyebrow: string }> = [
@@ -38,7 +39,10 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
 }) {
   const organizationId = organization?.id || '';
   const workspaceId = workspace?.id || '';
-  const workspaceReady = Boolean(organizationId && workspaceId && currentUser?.id);
+  const serverAuthorityReady = (() => {
+    try { return getRuntimeDataAccess() === 'server'; } catch { return false; }
+  })();
+  const scopeReady = Boolean(organizationId && workspaceId && currentUser?.id);
   const [activeTab, setActiveTab] = useState<TabId>('controls');
   const [projection, setProjection] = useState<EnterpriseIntelligenceProjection | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +66,16 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   const [approvalRationale, setApprovalRationale] = useState('');
 
   const reload = useCallback(async () => {
-    if (!workspaceReady) return;
+    if (!serverAuthorityReady) {
+      setProjection(null);
+      setError('');
+      setStatus('Enterprise Intelligence requires a server-authorized workspace. The local sandbox does not execute provider or persistence calls.');
+      return;
+    }
+    if (!scopeReady) {
+      setStatus('Select an authorized organization and workspace to load committed Enterprise Intelligence state.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -80,7 +93,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     } finally {
       setBusy(false);
     }
-  }, [organizationId, workspaceId, workspaceReady, projection?.authorizationVersion]);
+  }, [organizationId, workspaceId, scopeReady, serverAuthorityReady, projection?.authorizationVersion]);
 
   useEffect(() => { void reload(); }, [organizationId, workspaceId]);
 
@@ -149,7 +162,8 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     setSourceFile({ name: file.name, mimeType: support.mimeType, size: file.size, base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())), note: support.message });
   };
 
-  if (!workspaceReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
+  if (!serverAuthorityReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.</p></section></div>;
+  if (!scopeReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
 
   return <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-4 overflow-y-auto p-4 sm:p-6" data-testid="enterprise-intelligence-workspace">
     <header className={panel}>

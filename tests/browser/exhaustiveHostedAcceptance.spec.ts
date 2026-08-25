@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
+import type { WebSocket as PlaywrightWebSocket } from '@playwright/test';
 import fs from 'node:fs';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
@@ -93,6 +94,10 @@ const classifyNetworkRequest = (request: Request): NetworkViolationCategory | nu
   if (['script', 'stylesheet', 'font', 'image', 'media', 'other'].includes(resourceType) && safeStaticPath(url.pathname)) return null;
   return 'unexpected-resource';
 };
+const classifyNetworkWebSocket = (socket: PlaywrightWebSocket): NetworkViolationCategory => {
+  const url = new URL(socket.url());
+  return hostedOrigin && url.origin === hostedOrigin ? 'authority-request' : 'unexpected-origin';
+};
 
 test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
@@ -178,6 +183,16 @@ const observeAuthorityRequests = (page: Page) => {
       resourceType: request.resourceType(),
       originClass: classifyDiagnosticOrigin(request.url()),
     }),
+    webSocket: {
+      page,
+      classify: socket => classifyNetworkWebSocket(socket as PlaywrightWebSocket),
+      sample: (socket, category) => ({
+        method: 'CONNECT',
+        category: category as NetworkViolationCategory,
+        resourceType: 'websocket',
+        originClass: classifyDiagnosticOrigin((socket as PlaywrightWebSocket).url()),
+      }),
+    },
     maxSamples: MAX_NETWORK_VIOLATION_SAMPLES,
   });
   return {

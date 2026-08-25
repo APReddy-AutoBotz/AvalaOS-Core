@@ -26,13 +26,19 @@ const patterns = [
 ];
 
 const excludedDirectories = new Set([
+  '.agent',
   '.git',
   '.turbo',
   '.vite',
+  'acceptance-results',
+  'artifacts',
   'build',
   'coverage',
   'dist',
+  'dist-trust-assurance',
   'node_modules',
+  'output',
+  'test-results',
 ]);
 
 const allowedReasons = new Set([

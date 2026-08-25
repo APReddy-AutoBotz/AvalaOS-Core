@@ -9,6 +9,7 @@ import {
   ProviderPolicyRow,
   ProviderResolverDeps,
   ProviderResolverOperation,
+  WorkspaceMembershipRoleContext,
 } from './providerResolver';
 import { runProviderGovernedOperation } from './providerResolverIntegration';
 import type { ProviderGovernedOperationDeps } from './providerResolverIntegration';
@@ -21,6 +22,7 @@ const tenantSecretSegment = orgId.replaceAll('-', '').toUpperCase();
 const groqSecretRef = `AVALA_PROVIDER_SECRET_GROQ_${tenantSecretSegment}_PRIMARY`;
 const geminiSecretRef = `AVALA_PROVIDER_SECRET_GEMINI_${tenantSecretSegment}_PRIMARY`;
 const actorId = '00000000-0000-4000-8000-000000000008';
+const workspaceId = '66666666-6666-4666-8666-666666666666';
 const configId = '33333333-3333-4333-8333-333333333333';
 const keyRefId = '44444444-4444-4444-8444-444444444444';
 const now = new Date('2026-06-09T00:00:00.000Z');
@@ -29,6 +31,15 @@ const membership: MembershipRoleContext = {
   status: 'active',
   roleNames: ['Admin'],
   roleIds: ['22222222-2222-4222-8222-222222222201'],
+};
+
+const workspaceMembership: WorkspaceMembershipRoleContext = {
+  orgId,
+  workspaceId,
+  status: 'active',
+  roleNames: ['Workspace Admin'],
+  roleIds: ['22222222-2222-4222-8222-222222222202'],
+  roleScopeValid: true,
 };
 
 const policyFor = (operation: ProviderResolverOperation): ProviderPolicyRow => ({
@@ -68,8 +79,9 @@ const keyRef: ProviderKeyRefRow = {
 const buildDeps = (operation: ProviderResolverOperation, options: {
   policies?: ProviderPolicyRow[];
   keyRef?: ProviderKeyRefRow | null;
+  workspaceMembership?: WorkspaceMembershipRoleContext | null;
   order?: string[];
-  throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
+  throwAt?: 'membership' | 'workspaceMembership' | 'policy' | 'config' | 'keyRef';
 } = {}): ProviderResolverDeps => ({
   now: () => now,
   createCorrelationId: () => 'generated-correlation-id',
@@ -79,6 +91,13 @@ const buildDeps = (operation: ProviderResolverOperation, options: {
       throw new Error('Supabase REST request failed: organization_members raw response body');
     }
     return membership;
+  },
+  queryWorkspaceMembershipAndRoles: async () => {
+    options.order?.push('resolver:workspaceMembership');
+    if (options.throwAt === 'workspaceMembership') {
+      throw new Error('Supabase REST request failed: workspace_memberships raw response body');
+    }
+    return options.workspaceMembership === undefined ? workspaceMembership : options.workspaceMembership;
   },
   queryProviderPolicy: async () => {
     options.order?.push('resolver:policy');
@@ -145,7 +164,8 @@ const runScenario = async (
     secretThrows?: boolean;
     useDefaultSecretLookup?: boolean;
     keyRef?: ProviderKeyRefRow | null;
-    throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
+    workspaceMembership?: WorkspaceMembershipRoleContext | null;
+    throwAt?: 'membership' | 'workspaceMembership' | 'policy' | 'config' | 'keyRef';
   } = {},
 ) => {
   const order: string[] = [];
@@ -159,6 +179,7 @@ const runScenario = async (
     resolverDeps: buildDeps(operation, {
       policies: options.policies,
       keyRef: options.keyRef,
+      workspaceMembership: options.workspaceMembership,
       order,
       throwAt: options.throwAt,
     }),
@@ -190,7 +211,9 @@ const runScenario = async (
   const result = await runProviderGovernedOperation({
     operation,
     orgId,
+    workspaceId,
     actorId,
+    correlationId: 'corr-provider-regression',
     requestedProvider: 'groq',
     scannerReference: `supabase/functions/${operation}/index.ts`,
     runAllowed: async ({ apiKey }) => {
@@ -239,7 +262,7 @@ const allowedDecision = (provider: 'groq' | 'gemini' = 'groq'): AllowedProviderR
 });
 
 const DENIED_OPERATIONS = ['generate_document', 'refine_section', 'test_provider_connection'] as const;
-const RESOLVER_THROW_POINTS = ['membership', 'policy', 'config', 'keyRef'] as const;
+const RESOLVER_THROW_POINTS = ['membership', 'workspaceMembership', 'policy', 'config', 'keyRef'] as const;
 
 const exactExecutedCoverage = <T extends string>(registered: readonly T[], executed: ReadonlyMap<T, boolean>) =>
   executed.size === registered.length
@@ -303,10 +326,31 @@ const main = async () => {
     assert.equal(Boolean(blocked.result.body.retryCategory), true);
   }
 
+  const missingWorkspaceMembership = await runScenario('generate_document', { workspaceMembership: null });
+  const wrongOrganizationMembership = await runScenario('generate_document', {
+    workspaceMembership: { ...workspaceMembership, orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+  });
+  const wrongWorkspaceMembership = await runScenario('generate_document', {
+    workspaceMembership: { ...workspaceMembership, workspaceId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+  });
+  for (const denied of [missingWorkspaceMembership, wrongOrganizationMembership, wrongWorkspaceMembership]) {
+    assert.equal(denied.result.status, 'blocked');
+    assert.equal(denied.providerCalls, 0);
+    assert.equal(denied.createJobCalls, 0);
+    assert.equal(denied.secretCalls, 0);
+    if (denied.result.status === 'blocked') {
+      assert.equal(denied.result.body.error, 'AI provider governance controls blocked this request.');
+      assert.equal(denied.result.body.failureClass, 'membership_denied');
+    }
+  }
+  assert.deepEqual(missingWorkspaceMembership.result, wrongOrganizationMembership.result);
+  assert.deepEqual(missingWorkspaceMembership.result, wrongWorkspaceMembership.result);
+
   const allowed = await runScenario('generate_document');
   assert.equal(allowed.result.status, 'allowed');
   assert.deepEqual(allowed.order, [
     'resolver:membership',
+    'resolver:workspaceMembership',
     'resolver:policy',
     'resolver:config',
     'resolver:keyRef',
@@ -318,6 +362,11 @@ const main = async () => {
   assert.equal(allowed.createJobCalls, 1);
   assert.equal(allowed.providerCalls, 1);
   const allowedPathInjectedExecutorOnly=allowed.result.status==='allowed'&&allowed.providerCalls===1&&allowed.createJobCalls===1;
+
+  const refineAllowed = await runScenario('refine_section');
+  assert.equal(refineAllowed.result.status, 'allowed');
+  assert.equal(refineAllowed.providerCalls, 1);
+  assert.equal(refineAllowed.createJobCalls, 1);
 
   const auditFailure = await runScenario('generate_document', { auditFails: true });
   assert.equal(auditFailure.result.status, 'blocked');

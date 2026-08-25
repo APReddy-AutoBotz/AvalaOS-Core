@@ -3,10 +3,11 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
-  // PR 1D, PR 1E, governed Studio artifacts, Enterprise Intelligence, Pilot Operations, and
-  // hosted-pilot acceptance use dedicated fixtures/runtime modes/servers; the retained localhost
-  // suite must not own them. Hosted pilot evidence must execute only against a real HTTPS origin.
-  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts', 'enterpriseIntelligence.spec.ts', 'pilotOperations.spec.ts', 'hostedPilot.spec.ts', 'hostedAccessibilityPerformance.spec.ts', 'exhaustiveHostedAcceptance.spec.ts', 'controllerNavigationHistory.spec.ts'],
+  // PR 1D, PR 1E, governed Studio artifacts, Enterprise Intelligence, Pilot Operations, the
+  // full-platform campaign, and hosted-pilot acceptance use dedicated fixtures/runtime modes/
+  // servers; the retained localhost suite must not own them. Hosted pilot evidence must execute
+  // only against a real HTTPS origin.
+  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts', 'enterpriseIntelligence.spec.ts', 'pilotOperations.spec.ts', 'hostedPilot.spec.ts', 'hostedAccessibilityPerformance.spec.ts', 'exhaustiveHostedAcceptance.spec.ts', 'controllerNavigationHistory.spec.ts', 'fullPlatformCampaign.spec.ts'],
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
