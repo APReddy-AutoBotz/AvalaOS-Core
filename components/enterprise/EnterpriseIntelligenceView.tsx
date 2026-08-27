@@ -12,11 +12,14 @@ import {
 } from '../../services/enterpriseIntelligence';
 import { bytesToBase64, enterpriseIntelligenceClient, getProviderLifecycleAuthorizationVersion } from '../../services/enterpriseIntelligenceClient';
 import { getRuntimeDataAccess } from '../../services/supabaseClient';
+import { TranscriptSourceLibrary } from './TranscriptSourceLibrary';
+import { AssessTranscriptCandidateReview } from './AssessTranscriptCandidateReview';
 
-type TabId = 'controls' | 'intake' | 'review' | 'modernization' | 'handoff' | 'delivery' | 'monitor' | 'assemble';
+type TabId = 'controls' | 'intake' | 'source-library' | 'review' | 'modernization' | 'handoff' | 'delivery' | 'monitor' | 'assemble';
 const tabs: Array<{ id: TabId; label: string; eyebrow: string }> = [
   { id: 'controls', label: 'AI Controls', eyebrow: 'Admin' },
   { id: 'intake', label: 'Evidence Intake', eyebrow: 'Assess' },
+  { id: 'source-library', label: 'Source Library', eyebrow: 'Assess' },
   { id: 'review', label: 'Candidate Review', eyebrow: 'Assess' },
   { id: 'modernization', label: 'Modernization', eyebrow: 'Assess' },
   { id: 'handoff', label: 'Studio Handoff', eyebrow: 'Studio to Delivery' },
@@ -47,6 +50,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   const [projection, setProjection] = useState<EnterpriseIntelligenceProjection | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadRequired, setReloadRequired] = useState(false);
+  const [transcriptReviewActivated, setTranscriptReviewActivated] = useState(false);
   const [status, setStatus] = useState('Loading committed Enterprise Intelligence state.');
   const [error, setError] = useState('');
   const [providerForm, setProviderForm] = useState({ provider: 'openai' as EnterpriseAiProvider, displayName: '', endpoint: '', deployment: '', defaultModel: '' });
@@ -88,6 +92,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
       setReloadRequired(false);
       setStatus(next.availability === 'blocked' ? 'Server access is blocked for this workspace.' : 'Committed server state loaded.');
     } catch (cause) {
+      setReloadRequired(true);
       setError(cause instanceof Error ? cause.message : 'Committed state could not be loaded.');
       setStatus('Projection unavailable. No local fallback or success state is shown.');
     } finally {
@@ -96,9 +101,13 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   }, [organizationId, workspaceId, scopeReady, serverAuthorityReady, projection?.authorizationVersion]);
 
   useEffect(() => { void reload(); }, [organizationId, workspaceId]);
+  useEffect(() => { setTranscriptReviewActivated(false); }, [organizationId, workspaceId]);
+  useEffect(() => {
+    if (projection?.transcriptFlow.features.assessMultisourceApplyEnabled) setTranscriptReviewActivated(true);
+  }, [projection?.transcriptFlow.features.assessMultisourceApplyEnabled]);
 
-  const mutate = async (action: () => Promise<unknown>, success: string) => {
-    if (!projection || reloadRequired) return;
+  const mutate = async (action: () => Promise<unknown>, success: string): Promise<boolean> => {
+    if (!projection || reloadRequired) return false;
     setBusy(true);
     setError('');
     setStatus('Submitting one server-authorized command.');
@@ -112,14 +121,17 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
         });
         setProjection(next);
         setStatus(success);
+        return true;
       } catch (reloadError) {
         setReloadRequired(true);
         setStatus('Command committed, but projection reload failed. Reload committed state before another mutation.');
         setError(reloadError instanceof Error ? reloadError.message : 'Projection reload failed.');
+        return false;
       }
     } catch (cause) {
       setStatus('The command was not confirmed. No success state was recorded.');
       setError(cause instanceof Error ? cause.message : 'The governed command failed.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -185,11 +197,33 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
       })}</div>
     </section>}
 
+    {activeTab === 'source-library' && projection ? <TranscriptSourceLibrary
+      key={`source-library:${organizationId}:${workspaceId}:${projection.authorizationVersion}:${projection.availability}:${reloadRequired}:${projection.transcriptFlow.sourceSets.map(item => `${item.id}:${item.versionSelector}:${item.version}`).join('|')}`}
+      projection={projection.transcriptFlow}
+      locked={locked}
+      onCommitSourceSet={async sourceSet => {
+        const committed = await mutate(() => enterpriseIntelligenceClient.commitTranscriptSourceSet({ organizationId, workspaceId, ...sourceSet }), 'Immutable Assess source-set version committed.');
+        if (!committed) throw new Error('The source-set version was not confirmed. Keep this edit and reload committed state before retrying.');
+      }}
+      onLockInputBundle={bundle => mutate(() => enterpriseIntelligenceClient.lockTranscriptInputBundle({ organizationId, workspaceId, ...bundle }), 'Exact Assess input bundle locked.')}
+      onSetJourneyState={journey => mutate(() => enterpriseIntelligenceClient.setTranscriptJourneyState({ organizationId, workspaceId, ...journey }), journey.status === 'stopped' ? 'Assess journey stopped after committed state.' : 'Assess journey state committed.')}
+    /> : null}
+
     {activeTab === 'intake' && <section className={panel}><p className="av-eyebrow">Evidence capture</p><h2 className="mt-2 text-xl font-black">Upload a bounded private source</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">TXT, Markdown, CSV, VTT/SRT, text PDFs, and DOCX are supported. Scanned PDFs fail truthfully because OCR is not enabled.</p><label className="mt-5 block">{label('Evidence document')}<input className="mt-2 block w-full" type="file" accept=".txt,.md,.markdown,.csv,.vtt,.srt,.pdf,.docx" onChange={event => void onFile(event.target.files?.[0])} /></label>{sourceFile && <p className="mt-3 text-sm font-bold">{sourceFile.name} · {Math.ceil(sourceFile.size / 1024)} KB. {sourceFile.note}</p>}<button type="button" className={`${primary} mt-4`} disabled={locked || !sourceFile} onClick={() => sourceFile && void mutate(() => enterpriseIntelligenceClient.createEvidenceSource({ organizationId, workspaceId, displayName: sourceFile.name, filename: sourceFile.name, mimeType: sourceFile.mimeType, contentBase64: sourceFile.base64 }), 'Private source version committed.')}>Store private source</button>
       <label className="mt-6 block">{label('Committed evidence source')}<select className={input} value={sourceId} onChange={event => setSourceId(event.target.value)}><option value="">Select a source</option>{projection?.evidenceSources.map(item => <option key={item.id} value={item.id}>{item.displayName} — {item.versionLabel} — {item.failureCode ? item.failureCode.replaceAll('_', ' ') : item.extractionState.replaceAll('_', ' ')}</option>)}</select></label><button type="button" className={`${secondary} mt-4`} disabled={locked || !sourceId || projection?.evidenceSources.find(item => item.id === sourceId)?.extractionState === 'failed'} onClick={() => void mutate(() => enterpriseIntelligenceClient.extractEvidence({ organizationId, workspaceId, sourceId }), 'Extraction completed; candidates require human review.')}>Run governed extraction</button>
     </section>}
 
-    {activeTab === 'review' && <section className={panel}>
+    {activeTab === 'review' && projection && (projection.transcriptFlow.features.assessMultisourceApplyEnabled || transcriptReviewActivated) ? <AssessTranscriptCandidateReview
+      key={`candidate-review:${organizationId}:${workspaceId}:${projection.authorizationVersion}:${projection.availability}:${reloadRequired}:${projection.transcriptFlow.inputBundles.map(item => `${item.id}:${item.versionSelector}:${item.version}:${item.status}`).join('|')}:${projection.assessDrafts.map(item => `${item.id}:${item.versionLabel}`).join('|')}`}
+      projection={projection.transcriptFlow}
+      assessDrafts={projection.assessDrafts}
+      locked={locked}
+      onExtract={input => mutate(() => enterpriseIntelligenceClient.extractTranscriptAssessBundle({ organizationId, workspaceId, ...input }), 'Multi-source extraction completed; candidates require human review.')}
+      onReview={input => mutate(() => enterpriseIntelligenceClient.reviewTranscriptAssessCandidate({ organizationId, workspaceId, ...input }), input.status === 'edited' ? 'Candidate edit and rationale committed as immutable history.' : `Candidate ${input.status}.`)}
+      onPreview={input => mutate(() => enterpriseIntelligenceClient.previewTranscriptAssessApply({ organizationId, workspaceId, ...input }), 'Exact Assess draft changes previewed; no draft mutation occurred.')}
+      onResolveConflict={input => mutate(() => enterpriseIntelligenceClient.resolveTranscriptAssessConflict({ organizationId, workspaceId, ...input }), 'Conflict resolution and rationale committed.')}
+      onApply={input => mutate(() => enterpriseIntelligenceClient.applyTranscriptAssessPreview({ organizationId, workspaceId, ...input }), 'Selected batch applied atomically as one new Assess draft version.')}
+    /> : activeTab === 'review' && projection && <section className={panel}>
       <p className="av-eyebrow">Assess draft promotion</p><h2 className="mt-2 text-xl font-black">Review and select anchored candidates</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <label>{label('Evidence source')}<select className={input} value={sourceId} onChange={event => { setSourceId(event.target.value); setSelectedCandidateIds([]); }}><option value="">Select a source</option>{projection?.evidenceSources.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>

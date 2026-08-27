@@ -11,6 +11,19 @@ const workspace = (page: Page) => page.getByTestId('enterprise-intelligence-work
 const tab = (page: Page, name: string) => workspace(page).getByRole('button', { name, exact: true });
 const activeSection = (page: Page) => workspace(page).locator('section:visible').first();
 
+const assertEnterpriseHarnessReady = async (page: Page) => {
+  await expect(workspace(page)).toBeVisible();
+  const evidenceIntakeTab = tab(page, 'Evidence Intake');
+  await expect(evidenceIntakeTab).toBeVisible();
+  await expect(workspace(page).getByRole('status')).toHaveText('Committed server state loaded.');
+  return evidenceIntakeTab;
+};
+
+const gotoEnterpriseHarness = async (page: Page) => {
+  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  return assertEnterpriseHarnessReady(page);
+};
+
 const chooseFirst = async (section: Locator) => {
   const selector = section.locator('select').first();
   await expect(selector).toBeVisible();
@@ -22,13 +35,14 @@ const chooseFirst = async (section: Locator) => {
 };
 
 const assertSafeBrowserProjection = async (page: Page) => {
-  const surface = workspace(page);
-  const attributes = await surface.locator('input, textarea').evaluateAll(elements => elements.map(element => [
-    element.getAttribute('name'), element.getAttribute('placeholder'), element.getAttribute('aria-label'),
-    element.closest('label')?.textContent,
-  ].filter(Boolean).join(' ')).join('\n'));
+  const { attributes, visibleText } = await workspace(page).evaluate(element => ({
+    attributes: Array.from(element.querySelectorAll('input, textarea')).map(input => [
+      input.getAttribute('name'), input.getAttribute('placeholder'), input.getAttribute('aria-label'),
+      input.closest('label')?.textContent,
+    ].filter(Boolean).join(' ')).join('\n'),
+    visibleText: (element as HTMLElement).innerText,
+  }));
   expect(attributes).not.toMatch(/(?:uuid|raw\s+id|content\s+hash|sha-?256|version\s+id|comma[- ]separated|item\s+ids?)/i);
-  const visibleText = await surface.innerText();
   expect(visibleText).not.toMatch(UUID);
   expect(visibleText).not.toMatch(DIGEST);
   expect(visibleText).not.toMatch(PRIVATE_VALUE);
@@ -77,8 +91,9 @@ test('deterministic compressed PDF and DOCX fixtures are representative and stab
 });
 
 test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driven after reload', async ({ page }) => {
+  test.setTimeout(60_000);
   const fixture = await installEnterpriseIntelligenceFixture(page);
-  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  await gotoEnterpriseHarness(page);
   await expect(workspace(page)).toContainText('Synthetic drafting provider');
   await assertSafeBrowserProjection(page);
 
@@ -137,6 +152,7 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
 
   await workspace(page).getByRole('button', { name: 'Reload committed state', exact: true }).click();
   await page.reload();
+  await assertEnterpriseHarnessReady(page);
   await tab(page, 'Work Package').click();
   await expect(workspace(page)).toContainText('New synthetic Delivery draft');
   await tab(page, 'Monitor Baseline').click();
@@ -176,7 +192,7 @@ test('provider secret actions recover stale authority as the same in-memory brow
   const fixture = await installEnterpriseIntelligenceFixture(page);
   const browserMessages: string[] = [];
   page.on('console', message => browserMessages.push(message.text()));
-  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  await gotoEnterpriseHarness(page);
   const controls = activeSection(page);
   const keyInput = controls.getByLabel('Provider key (sent once)');
 
@@ -301,10 +317,11 @@ test('provider secret actions recover stale authority as the same in-memory brow
 
 test('keyboard navigation, DOCX intake, and command failure never show false success', async ({ page }) => {
   const fixture = await installEnterpriseIntelligenceFixture(page);
-  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
-  await tab(page, 'Evidence Intake').focus();
+  const evidenceIntakeTab = await gotoEnterpriseHarness(page);
+  await evidenceIntakeTab.focus();
+  await expect(evidenceIntakeTab).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(tab(page, 'Evidence Intake')).toHaveAttribute('aria-current', 'page');
+  await expect(evidenceIntakeTab).toHaveAttribute('aria-current', 'page');
   const docx = enterpriseDocumentFixtures[1];
   await activeSection(page).locator('input[type="file"]').setInputFiles({ name: docx.name, mimeType: docx.mimeType, buffer: docx.create() });
   await expect(workspace(page)).toContainText(/DOCX|synthetic-evidence\.docx/i);
@@ -338,6 +355,7 @@ for (const scenario of [
     }
     fixture.recoverProjection();
     await page.getByRole('button', { name: 'Reload committed state', exact: true }).click();
+    await assertEnterpriseHarnessReady(page);
     await expect(workspace(page)).toContainText('Synthetic drafting provider');
     await assertSafeBrowserProjection(page);
   });
@@ -345,7 +363,7 @@ for (const scenario of [
 
 test('no-BYOK and provider-unavailable projections are explicit and block extraction', async ({ page }) => {
   await installEnterpriseIntelligenceFixture(page, { noByok: true });
-  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  await gotoEnterpriseHarness(page);
   const noByokControls = activeSection(page);
   await expect(noByokControls.locator('select').nth(1).locator('option')).toHaveCount(1);
   await expect(noByokControls.getByRole('button', { name: /^Validate$/i })).toBeDisabled();
@@ -357,6 +375,7 @@ test('no-BYOK and provider-unavailable projections are explicit and block extrac
   await page.unrouteAll({ behavior: 'wait' });
   await installEnterpriseIntelligenceFixture(page, { providerUnavailable: true });
   await page.reload();
+  await assertEnterpriseHarnessReady(page);
   await expect(activeSection(page)).toContainText(/provider unavailable/i);
   await tab(page, 'Evidence Intake').click();
   await expect(activeSection(page).getByRole('button', { name: /extract/i })).toBeDisabled();

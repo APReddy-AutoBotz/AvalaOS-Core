@@ -126,6 +126,24 @@ await test('reauthorizes provider receipt disclosure with operation-specific aut
   }
 });
 
+await test('first-class Groq lifecycle uses the governed default endpoint and route contract', async () => {
+  let transition: { operation: ProviderLifecycleOperation; payload: Record<string, unknown> } | undefined;
+  const ids = [CONFIG, ROUTE];
+  const result = await executeProviderLifecycleCommand('provider.register', authority, {
+    provider: 'groq', displayName: 'Governed Groq', defaultModel: 'groq-governed',
+    modelAllowlist: ['groq-governed'], capabilities: ['assess.evidence.extract'],
+    budget: { dailyRequests: 5, monthlyTokens: 1_000 },
+  }, {
+    database: { loadConfig: async () => null, transition: async input => { transition = input as typeof transition; return {}; } },
+    secretBackend: { kind: 'environment', writable: false, resolve: async () => undefined },
+    routeResolverDeps: {} as never, validateConnection: async () => ({ validated: true as const }),
+    now: () => now, randomId: () => ids.shift() || crypto.randomUUID(),
+  });
+  assert.equal(result.provider, 'groq'); assert.equal(transition?.operation, 'provider.register');
+  assert.equal(transition?.payload.provider, 'groq'); assert.equal(transition?.payload.endpoint, null);
+  assert.deepEqual(transition?.payload.budget, { dailyRequests: 5, monthlyTokens: 1_000 });
+});
+
 await test('executes the seven-step lifecycle without persisting raw secret material', async () => {
   let config: ProviderLifecycleConfig | null = null;
   let route = { id: ROUTE, enabled: false, capability: 'assess.evidence.extract' as const, allowedRoles: ['admin'] };

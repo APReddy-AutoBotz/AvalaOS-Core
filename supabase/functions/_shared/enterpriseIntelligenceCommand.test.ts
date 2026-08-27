@@ -21,6 +21,7 @@ import {
   resolveEnterpriseCommandResourceId,
   shouldPreserveClaimedEnterpriseReceipt,
   type Authority,
+  type TranscriptCommandRequestBindingDependencies,
 } from './enterpriseIntelligenceCommand';
 import { inspectBinaryArtifact, StorageArtifactError, uploadBinaryArtifact } from './storage';
 import { EVIDENCE_SOURCE_BUCKET } from './storageBoundary';
@@ -67,6 +68,12 @@ test('rejects unknown commands and raw secret fields', () => {
     () => parseEnterpriseCommandEnvelope({ ...base, payload: { ...base.payload, apiKey: 'never' } }),
     (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'INVALID_PAYLOAD',
   );
+  for (const field of ['bundleHash', 'manifestHash', 'provenanceHash', 'contentHash', 'routePolicyVersion']) {
+    assert.throws(
+      () => parseEnterpriseCommandEnvelope({ ...base, payload: { ...base.payload, [field]: 'a'.repeat(64) } }),
+      (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'INVALID_PAYLOAD',
+    );
+  }
 });
 
 test('rejects malformed ids and unsafe idempotency keys', () => {
@@ -92,6 +99,14 @@ test('uses one exhaustive command-to-current-capability mapping for replay autho
     'evidence.extract': 'evidence.write',
     'evidence.candidate.review': 'evidence.review',
     'evidence.assess.promote': 'assessment.edit',
+    'transcript.source-set.create-version': 'transcript.sources.manage',
+    'transcript.input-bundle.lock': 'transcript.sources.manage',
+    'transcript.assess.extract': 'evidence.write',
+    'transcript.assess.candidate.review': 'evidence.review',
+    'transcript.assess.apply.preview': 'transcript.assess.apply',
+    'transcript.assess.apply.commit': 'transcript.assess.apply',
+    'transcript.assess.conflict.resolve': 'transcript.assess.apply',
+    'transcript.journey.set-state': 'transcript.journeys.manage',
     'modernization.evaluate': 'portfolio.manage',
     'approval.review.record': 'approvals.review',
     'approval.record': 'approvals.review',
@@ -115,6 +130,7 @@ const replayAuthority: Authority = {
   permissions: new Set([
     'evidence.write', 'evidence.review', 'assessment.edit', 'portfolio.manage',
     'approvals.review', 'docs.approve', 'monitor.manage', 'assemble.manage',
+    'transcript.sources.manage', 'transcript.assess.apply', 'transcript.journeys.manage',
   ]),
   organizationPermissions: new Set(),
   workspacePermissions: new Set(),
@@ -128,12 +144,926 @@ const replayAuthority: Authority = {
 
 const replayCommands = [
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
-  'evidence.assess.promote', 'modernization.evaluate', 'approval.review.record',
+  'evidence.assess.promote', 'transcript.source-set.create-version', 'transcript.input-bundle.lock',
+  'transcript.assess.extract', 'transcript.assess.candidate.review', 'transcript.assess.apply.preview',
+  'transcript.assess.apply.commit', 'transcript.assess.conflict.resolve', 'transcript.journey.set-state',
+  'modernization.evaluate', 'approval.review.record',
   'approval.record', 'studio.delivery.handoff', 'monitor.baseline.create',
   'assemble.blueprint.create',
 ] as const;
 
 type ReplayCommand = typeof replayCommands[number];
+
+type AssertionRuntimeLineage = {
+  sourceVersionSelectors: string[];
+  sourceSets: Array<{ id: string; versionSelector: string; version: number }>;
+  inputBundles: Array<{ id: string; versionSelector: string; version: number }>;
+  extractionJobIds: string[];
+  extractionBindingIds: string[];
+  candidates: Array<{ id: string; version: number }>;
+  previewBatchIds: string[];
+  assessDrafts: Array<{ id: string; version: number }>;
+};
+
+const emptyAssertionRuntimeLineage = (): AssertionRuntimeLineage => ({
+  sourceVersionSelectors: [], sourceSets: [], inputBundles: [], extractionJobIds: [],
+  extractionBindingIds: [], candidates: [], previewBatchIds: [], assessDrafts: [],
+});
+
+const emitApiAssertion = (
+  testId: 'AUTH-001' | 'AUTH-002' | 'AUTH-003' | 'AUTH-004',
+  assertionId: string,
+  runtimeContext: {
+    persona: { id: string; state: string; capabilities: string[] };
+    organizationId: string;
+    workspaceId: string;
+    fixtureIds: string[];
+    lineage: AssertionRuntimeLineage;
+  },
+) => {
+  if (process.env.PR_A_COMMAND_ID && process.env.PR_A_COMMAND_ID !== 'pr-a-api') return;
+  console.log(`PR_A_ASSERTION ${JSON.stringify({
+    testId, assertionId, fixture: 'api-command-contract', result: 'passed', runtimeContext,
+  })}`);
+};
+
+type ApiExecutionEnvelope = {
+  organizationId: string;
+  workspaceId: string;
+  payload: Record<string, unknown>;
+};
+
+const uniqueSorted = (values: string[]) => [...new Set(values)].sort();
+
+const lineageFromExecutedApiEnvelopes = (envelopes: ApiExecutionEnvelope[]): AssertionRuntimeLineage => {
+  const lineage = emptyAssertionRuntimeLineage();
+  const sourceSets = new Map<string, { id: string; versionSelector: string; version: number }>();
+  const inputBundles = new Map<string, { id: string; versionSelector: string; version: number }>();
+  const candidates = new Map<string, { id: string; version: number }>();
+  const assessDrafts = new Map<string, { id: string; version: number }>();
+  for (const envelope of envelopes) {
+    const payload = envelope.payload;
+    const sourceVersionSelector = payload.sourceVersionSelector;
+    if (typeof sourceVersionSelector === 'string') lineage.sourceVersionSelectors.push(sourceVersionSelector);
+    if (Array.isArray(payload.items)) {
+      for (const item of payload.items) {
+        if (item && typeof item === 'object' && typeof (item as { sourceVersionId?: unknown }).sourceVersionId === 'string') {
+          lineage.sourceVersionSelectors.push((item as { sourceVersionId: string }).sourceVersionId);
+        }
+      }
+    }
+    const sourceSetId = payload.sourceSetId;
+    const sourceSetVersionSelector = payload.sourceSetVersionSelector;
+    const sourceSetVersion = payload.expectedSourceSetVersion;
+    if (typeof sourceSetId === 'string' && typeof sourceSetVersionSelector === 'string' && typeof sourceSetVersion === 'number') {
+      sourceSets.set(sourceSetId, { id: sourceSetId, versionSelector: sourceSetVersionSelector, version: sourceSetVersion });
+    }
+    if (Array.isArray(payload.sourceSetVersions)) {
+      for (const item of payload.sourceSetVersions) {
+        if (!item || typeof item !== 'object') continue;
+        const value = item as { sourceSetId?: unknown; sourceSetVersionSelector?: unknown; expectedVersion?: unknown };
+        if (typeof value.sourceSetId === 'string' && typeof value.sourceSetVersionSelector === 'string' && typeof value.expectedVersion === 'number') {
+          sourceSets.set(value.sourceSetId, { id: value.sourceSetId, versionSelector: value.sourceSetVersionSelector, version: value.expectedVersion });
+        }
+      }
+    }
+    const inputBundleId = payload.inputBundleId;
+    const inputBundleVersionSelector = payload.inputBundleVersionSelector;
+    const inputBundleVersion = payload.expectedInputBundleVersion;
+    if (typeof inputBundleId === 'string' && typeof inputBundleVersionSelector === 'string' && typeof inputBundleVersion === 'number') {
+      inputBundles.set(inputBundleId, { id: inputBundleId, versionSelector: inputBundleVersionSelector, version: inputBundleVersion });
+    }
+    if (typeof payload.candidateId === 'string' && typeof payload.candidateVersion === 'number') {
+      candidates.set(payload.candidateId, { id: payload.candidateId, version: payload.candidateVersion });
+    }
+    if (typeof payload.previewBatchId === 'string') lineage.previewBatchIds.push(payload.previewBatchId);
+    if (typeof payload.assessDraftId === 'string' && typeof payload.expectedDraftVersion === 'number') {
+      assessDrafts.set(payload.assessDraftId, { id: payload.assessDraftId, version: payload.expectedDraftVersion });
+    }
+  }
+  return {
+    ...lineage,
+    sourceVersionSelectors: uniqueSorted(lineage.sourceVersionSelectors),
+    sourceSets: [...sourceSets.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    inputBundles: [...inputBundles.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    candidates: [...candidates.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    previewBatchIds: uniqueSorted(lineage.previewBatchIds),
+    assessDrafts: [...assessDrafts.values()].sort((left, right) => left.id.localeCompare(right.id)),
+  };
+};
+
+const apiRuntimeContextFromExecutedTrace = (trace: {
+  actors: string[];
+  authorities: Authority[];
+  envelopes: ApiExecutionEnvelope[];
+  authorityStates: Array<'active' | 'revoked' | 'restored'>;
+  fixtureIds: string[];
+}) => {
+  assert.ok(trace.actors.length > 0 && trace.authorities.length > 0 && trace.envelopes.length > 0);
+  const actorIds = uniqueSorted(trace.actors);
+  const organizationIds = uniqueSorted(trace.envelopes.map(item => item.organizationId));
+  const workspaceIds = uniqueSorted(trace.envelopes.map(item => item.workspaceId));
+  assert.equal(actorIds.length, 1); assert.equal(organizationIds.length, 1); assert.equal(workspaceIds.length, 1);
+  for (const authority of trace.authorities) {
+    assert.equal(authority.actorId, actorIds[0]);
+    assert.equal(authority.organizationId, organizationIds[0]);
+    assert.equal(authority.workspaceId, workspaceIds[0]);
+  }
+  const observedStates = new Set(trace.authorityStates);
+  const state = observedStates.has('revoked') && observedStates.has('restored') ? 'revoked-then-restored' : 'active';
+  return {
+    persona: {
+      id: actorIds[0], state,
+      capabilities: uniqueSorted(trace.authorities.flatMap(authority => [...authority.permissions])),
+    },
+    organizationId: organizationIds[0], workspaceId: workspaceIds[0],
+    fixtureIds: uniqueSorted(trace.fixtureIds),
+    lineage: lineageFromExecutedApiEnvelopes(trace.envelopes),
+  };
+};
+
+const selectorFixtures = {
+  sourceSetIds: ['65000000-0000-4000-8000-000000000001', '65000000-0000-4000-8000-000000000002'],
+  sourceSetVersionSelectors: ['65000000-0000-4000-8000-000000000011', '65000000-0000-4000-8000-000000000012'],
+  inputBundleIds: ['65000000-0000-4000-8000-000000000021', '65000000-0000-4000-8000-000000000022'],
+  inputBundleVersionSelectors: ['65000000-0000-4000-8000-000000000031', '65000000-0000-4000-8000-000000000032'],
+  sourceVersionSelectors: ['65000000-0000-4000-8000-000000000041', '65000000-0000-4000-8000-000000000042'],
+  journeyIds: ['65000000-0000-4000-8000-000000000051', '65000000-0000-4000-8000-000000000052'],
+  candidateIds: ['65000000-0000-4000-8000-000000000061', '65000000-0000-4000-8000-000000000062'],
+  assessDraftIds: ['65000000-0000-4000-8000-000000000071', '65000000-0000-4000-8000-000000000072'],
+  previewBatchIds: ['65000000-0000-4000-8000-000000000081', '65000000-0000-4000-8000-000000000082'],
+  conflictIds: ['65000000-0000-4000-8000-000000000091', '65000000-0000-4000-8000-000000000092'],
+} as const;
+
+const selectorPayload = (caseName: string, index: number): Record<string, unknown> => {
+  const commonExtraction = {
+    inputBundleId: selectorFixtures.inputBundleIds[index],
+    inputBundleVersionSelector: selectorFixtures.inputBundleVersionSelectors[index],
+    expectedInputBundleVersion: 1,
+    sourceSetId: selectorFixtures.sourceSetIds[index],
+    sourceSetVersionSelector: selectorFixtures.sourceSetVersionSelectors[index],
+    expectedSourceSetVersion: 1,
+    sourceVersionSelector: selectorFixtures.sourceVersionSelectors[index],
+  };
+  switch (caseName) {
+    case 'source-set': return {
+      sourceSetId: selectorFixtures.sourceSetIds[index], expectedVersion: 1,
+      items: [{ sourceVersionId: selectorFixtures.sourceVersionSelectors[index], ordinal: 1 }],
+    };
+    case 'input-bundle': return {
+      inputBundleId: selectorFixtures.inputBundleIds[index], expectedVersion: 1,
+      sourceSets: [{ sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[index], ordinal: 1 }],
+    };
+    case 'extract': return commonExtraction;
+    case 'journey': return {
+      journeyId: selectorFixtures.journeyIds[index], entryModule: 'assess', desiredExitModule: 'studio',
+      status: 'active', expectedVersion: 1,
+    };
+    case 'candidate': return {
+      candidateId: selectorFixtures.candidateIds[index], candidateVersion: 1, status: 'accepted',
+      ...commonExtraction,
+    };
+    case 'apply-preview': return {
+      assessDraftId: selectorFixtures.assessDraftIds[index], expectedDraftVersion: 1,
+      inputBundleId: selectorFixtures.inputBundleIds[index],
+      inputBundleVersionSelector: selectorFixtures.inputBundleVersionSelectors[index],
+      expectedInputBundleVersion: 1,
+      sourceSetVersions: [{
+        sourceSetId: selectorFixtures.sourceSetIds[index],
+        sourceSetVersionSelector: selectorFixtures.sourceSetVersionSelectors[index],
+        expectedVersion: 1, ordinal: 1,
+      }],
+      selections: [],
+    };
+    case 'apply-commit': return {
+      previewBatchId: selectorFixtures.previewBatchIds[index],
+      assessDraftId: selectorFixtures.assessDraftIds[index], expectedDraftVersion: 1,
+      inputBundleId: selectorFixtures.inputBundleIds[index],
+      inputBundleVersionSelector: selectorFixtures.inputBundleVersionSelectors[index],
+      expectedInputBundleVersion: 1,
+      sourceSetVersions: [{
+        sourceSetId: selectorFixtures.sourceSetIds[index],
+        sourceSetVersionSelector: selectorFixtures.sourceSetVersionSelectors[index],
+        expectedVersion: 1, ordinal: 1,
+      }],
+    };
+    case 'conflict': return {
+      conflictId: selectorFixtures.conflictIds[index], resolutionVersion: 1,
+      resolution: 'retain_manual', rationale: 'governed reviewer decision',
+    };
+    default: throw new Error(`unknown selector case ${caseName}`);
+  }
+};
+
+const selectorCases = [
+  ['source-set', 'transcript.source-set.create-version'],
+  ['input-bundle', 'transcript.input-bundle.lock'],
+  ['extract', 'transcript.assess.extract'],
+  ['journey', 'transcript.journey.set-state'],
+  ['candidate', 'transcript.assess.candidate.review'],
+  ['apply-preview', 'transcript.assess.apply.preview'],
+  ['apply-commit', 'transcript.assess.apply.commit'],
+  ['conflict', 'transcript.assess.conflict.resolve'],
+] as const;
+
+type SelectorExecutionTrace = {
+  actors: string[];
+  authorities: Authority[];
+  envelopes: ApiExecutionEnvelope[];
+  authorityStates: Array<'active' | 'revoked' | 'restored'>;
+  fixtureIds: string[];
+  requestedSubcaseKeys: string[];
+  completedSubcaseKeys: string[];
+};
+
+const selectorExecutionTrace: SelectorExecutionTrace = {
+  actors: [], authorities: [], envelopes: [], authorityStates: [], fixtureIds: [],
+  requestedSubcaseKeys: [], completedSubcaseKeys: [],
+};
+
+const collectPayloadFixtureIds = (value: unknown, fixtureIds: string[] = []): string[] => {
+  if (typeof value === 'string') {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) fixtureIds.push(value);
+    return fixtureIds;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPayloadFixtureIds(item, fixtureIds);
+    return fixtureIds;
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) collectPayloadFixtureIds(item, fixtureIds);
+  }
+  return fixtureIds;
+};
+
+const tracedSelectorRequest = (
+  subcaseKey: string,
+  envelope: ApiExecutionEnvelope & { commandType: string; requestId: string; idempotencyKey: string },
+) => {
+  selectorExecutionTrace.requestedSubcaseKeys.push(subcaseKey);
+  selectorExecutionTrace.envelopes.push(structuredClone(envelope));
+  selectorExecutionTrace.fixtureIds.push(...collectPayloadFixtureIds(envelope.payload));
+  return new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+};
+
+const completeSelectorSubcase = (subcaseKey: string) => {
+  selectorExecutionTrace.completedSubcaseKeys.push(subcaseKey);
+};
+
+const tracedSelectorAuthority = () => ({
+  authenticate: async () => {
+    selectorExecutionTrace.actors.push(replayAuthority.actorId);
+    return { id: replayAuthority.actorId };
+  },
+  resolveOrganization: async () => replayAuthority.organizationId,
+  resolveCommandAuthority: async () => {
+    selectorExecutionTrace.authorities.push(replayAuthority);
+    selectorExecutionTrace.authorityStates.push('active' as const);
+    return replayAuthority;
+  },
+  assertCurrentAuthority: async (current: Authority) => current,
+});
+
+const expectedSelectorSubcaseKeys = [
+  ...selectorCases.flatMap(([caseName]) => ['foreign', 'missing'].map(disposition => `selector:${caseName}:${disposition}`)),
+  'extraction-source-version:foreign', 'extraction-source-version:missing',
+  'bundle-lineage:apply-preview:foreign', 'bundle-lineage:apply-preview:missing',
+  'bundle-lineage:apply-commit:foreign', 'bundle-lineage:apply-commit:missing',
+  'conflict-candidate:foreign', 'conflict-candidate:missing', 'conflict-candidate:nonmember',
+  'removed-seam:derive-binding', 'removed-seam:extraction-selection', 'removed-seam:bundle-lineage',
+].sort();
+
+const expectedSelectorCompletionKeys = [
+  ...expectedSelectorSubcaseKeys,
+  ...selectorCases.map(([caseName]) => `nondisclosure:selector:${caseName}`),
+  'nondisclosure:extraction-source-version',
+  'nondisclosure:bundle-lineage:apply-preview', 'nondisclosure:bundle-lineage:apply-commit',
+  'nondisclosure:conflict-candidate',
+].sort();
+
+const selectorRuntimeContextFromExecutedTrace = (trace: SelectorExecutionTrace) => {
+  assert.deepEqual(uniqueSorted(trace.requestedSubcaseKeys), expectedSelectorSubcaseKeys, 'AUTH_RUNTIME_TRACE_REQUESTED_SUBCASES');
+  assert.equal(trace.requestedSubcaseKeys.length, expectedSelectorSubcaseKeys.length, 'AUTH_RUNTIME_TRACE_REQUESTED_CARDINALITY');
+  assert.deepEqual(uniqueSorted(trace.completedSubcaseKeys), expectedSelectorCompletionKeys, 'AUTH_RUNTIME_TRACE_COMPLETED_SUBCASES');
+  assert.equal(trace.completedSubcaseKeys.length, expectedSelectorCompletionKeys.length, 'AUTH_RUNTIME_TRACE_COMPLETED_CARDINALITY');
+  assert.equal(trace.envelopes.length, expectedSelectorSubcaseKeys.length, 'AUTH_RUNTIME_TRACE_ENVELOPE_CARDINALITY');
+  assert.equal(trace.actors.length, expectedSelectorSubcaseKeys.length, 'AUTH_RUNTIME_TRACE_ACTOR_CARDINALITY');
+  assert.equal(trace.authorities.length, expectedSelectorSubcaseKeys.length, 'AUTH_RUNTIME_TRACE_AUTHORITY_CARDINALITY');
+  return apiRuntimeContextFromExecutedTrace(trace);
+};
+
+const foreignSelectorOrganizationId = '66000000-0000-4000-8000-000000000001';
+const foreignSelectorTenants = new Map<string, string>([
+  selectorFixtures.sourceSetIds[0], selectorFixtures.inputBundleIds[0],
+  selectorFixtures.sourceSetVersionSelectors[0], selectorFixtures.inputBundleVersionSelectors[0],
+  selectorFixtures.sourceVersionSelectors[0], selectorFixtures.journeyIds[0],
+  selectorFixtures.candidateIds[0], selectorFixtures.assessDraftIds[0],
+  selectorFixtures.previewBatchIds[0], selectorFixtures.conflictIds[0],
+].map(id => [id, foreignSelectorOrganizationId]));
+
+const selectorPrimaryId = (caseName: string, index: number) => {
+  switch (caseName) {
+    case 'source-set': return selectorFixtures.sourceSetIds[index];
+    case 'input-bundle': case 'extract': return selectorFixtures.inputBundleIds[index];
+    case 'journey': return selectorFixtures.journeyIds[index];
+    case 'candidate': return selectorFixtures.candidateIds[index];
+    case 'apply-preview': return selectorFixtures.assessDraftIds[index];
+    case 'apply-commit': return selectorFixtures.previewBatchIds[index];
+    case 'conflict': return selectorFixtures.conflictIds[index];
+    default: throw new Error(`unknown selector case ${caseName}`);
+  }
+};
+
+const querySelectorId = (query: string) => {
+  const match = query.match(/(?:^|&)id=eq\.([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+for (const [caseName, commandType] of selectorCases) {
+  const responses: string[] = [];
+  for (const [index, disposition] of (['foreign', 'missing'] as const).entries()) {
+    const mutations = {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    };
+    const request = tracedSelectorRequest(`selector:${caseName}:${disposition}`, {
+      commandType,
+      requestId: disposition === 'foreign'
+        ? '61000000-0000-4000-8000-000000000001'
+        : '61000000-0000-4000-8000-000000000002',
+      idempotencyKey: `auth-preclaim-${caseName}-${disposition}`,
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: selectorPayload(caseName, index),
+    });
+    const primarySelector = selectorPrimaryId(caseName, index);
+    assert.equal(
+      foreignSelectorTenants.get(primarySelector),
+      disposition === 'foreign' ? foreignSelectorOrganizationId : undefined,
+      `${caseName} ${disposition} fixture must model a real foreign resource or a genuinely absent selector`,
+    );
+    let foreignLookupObserved = false;
+    const dependencies: Partial<TranscriptCommandRequestBindingDependencies> = {
+      findOne: async <T>(table: string, query: string) => {
+        const id = querySelectorId(query);
+        const resourceOrganizationId = id ? foreignSelectorTenants.get(id) : undefined;
+        if (!resourceOrganizationId) return null;
+        foreignLookupObserved = true;
+        if (query.includes(`org_id=eq.${encodeURIComponent(base.organizationId)}`)
+          && resourceOrganizationId !== base.organizationId) return null;
+        if (table === 'enterprise_source_sets' || table === 'enterprise_module_input_bundles') {
+          return { org_id: resourceOrganizationId, workspace_id: base.workspaceId, current_version: 1 } as T;
+        }
+        if (table === 'enterprise_governed_journeys') {
+          return { org_id: resourceOrganizationId, workspace_id: base.workspaceId, version: 1, route_policy_version: 1 } as T;
+        }
+        if (table === 'enterprise_evidence_candidates') {
+          return { id, version: 1, ai_job_id: '65000000-0000-4000-8000-0000000000a1',
+            source_version_id: selectorFixtures.sourceVersionSelectors[0] } as T;
+        }
+        if (table === 'assess_v2_cases') return { version: 1, head_version_id: '65000000-0000-4000-8000-0000000000a2' } as T;
+        if (table === 'enterprise_assess_apply_preview_batches') {
+          return { assess_case_id: selectorFixtures.assessDraftIds[0] } as T;
+        }
+        if (table === 'enterprise_assess_evidence_conflicts') {
+          return { org_id: resourceOrganizationId, workspace_id: base.workspaceId,
+            current_resolution_version: 1, candidate_ids: [selectorFixtures.candidateIds[0]] } as T;
+        }
+        return null;
+      },
+      findMany: async <T>() => { throw new Error('bundle lineage must not be reached'); },
+    };
+    const response = await handleEnterpriseIntelligenceRequest(request, {
+      ...tracedSelectorAuthority(),
+      transcriptCommandRequestBindingDependencies: dependencies,
+      claimReceipt: async () => { mutations.receiptClaims += 1; throw new Error('must not claim'); },
+      executeCommand: async () => {
+        mutations.audits += 1;
+        mutations.providers += 1;
+        mutations.domainCommands += 1;
+        mutations.domainEffects += 1;
+        return {};
+      },
+      completeReceipt: async () => {
+        mutations.receiptFinalizations += 1;
+        mutations.completions += 1;
+        throw new Error('must not complete');
+      },
+      failReceipt: async () => { mutations.receiptFailures += 1; throw new Error('must not fail'); },
+    });
+    assert.equal(response.status, 404);
+    assert.equal(foreignLookupObserved, disposition === 'foreign');
+    responses.push(await response.text());
+    assert.deepEqual(mutations, {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    },
+      `AUTH-002 ${caseName} rejects ${disposition} authority before receipt, audit, provider, effect, or domain mutation`);
+    completeSelectorSubcase(`selector:${caseName}:${disposition}`);
+  }
+  assert.equal(responses[0], responses[1], `AUTH-001 ${caseName} exposes no foreign-versus-missing resource oracle`);
+  completeSelectorSubcase(`nondisclosure:selector:${caseName}`);
+}
+
+const sameTenantLineageFixtures = {
+  assessDraftId: '68000000-0000-4000-8000-000000000001',
+  previewBatchId: '68000000-0000-4000-8000-000000000002',
+  inputBundleId: '68000000-0000-4000-8000-000000000003',
+  inputBundleVersionId: '68000000-0000-4000-8000-000000000004',
+  sourceSetId: '68000000-0000-4000-8000-000000000005',
+  sourceSetVersionId: '68000000-0000-4000-8000-000000000006',
+  assessHeadVersionId: '68000000-0000-4000-8000-000000000007',
+} as const;
+
+const bundleLineagePayload = (caseName: 'apply-preview' | 'apply-commit', index: number) => ({
+  ...selectorPayload(caseName, index),
+  assessDraftId: sameTenantLineageFixtures.assessDraftId,
+  ...(caseName === 'apply-commit' ? { previewBatchId: sameTenantLineageFixtures.previewBatchId } : {}),
+  inputBundleId: sameTenantLineageFixtures.inputBundleId,
+  inputBundleVersionSelector: sameTenantLineageFixtures.inputBundleVersionId,
+});
+
+{
+  const responses: string[] = [];
+  for (const [index, disposition] of (['foreign', 'missing'] as const).entries()) {
+    const sourceVersionId = selectorFixtures.sourceVersionSelectors[index];
+    assert.equal(foreignSelectorTenants.has(sourceVersionId), disposition === 'foreign');
+    let foreignLookupObserved = false;
+    const lookupTables: string[] = [];
+    const mutations = {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    };
+    const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+      `extraction-source-version:${disposition}`,
+      {
+        commandType: 'transcript.assess.extract',
+        requestId: `68000000-0000-4000-8000-00000000000${index + 8}`,
+        idempotencyKey: `auth-extraction-chain-${disposition}`,
+        organizationId: base.organizationId,
+        workspaceId: base.workspaceId,
+        payload: {
+          inputBundleId: sameTenantLineageFixtures.inputBundleId,
+          inputBundleVersionSelector: sameTenantLineageFixtures.inputBundleVersionId,
+          expectedInputBundleVersion: 1,
+          sourceSetId: sameTenantLineageFixtures.sourceSetId,
+          sourceSetVersionSelector: sameTenantLineageFixtures.sourceSetVersionId,
+          expectedSourceSetVersion: 1,
+          sourceVersionSelector: sourceVersionId,
+        },
+      },
+    ), {
+      ...tracedSelectorAuthority(),
+      transcriptCommandRequestBindingDependencies: {
+        findOne: async <T>(table: string, query: string) => {
+          lookupTables.push(table);
+          assert.equal(query.includes(`org_id=eq.${encodeURIComponent(base.organizationId)}`), true);
+          assert.equal(query.includes(`workspace_id=eq.${encodeURIComponent(base.workspaceId)}`), true);
+          if (table === 'enterprise_module_input_bundle_versions') {
+            return { id: sameTenantLineageFixtures.inputBundleVersionId,
+              input_bundle_id: sameTenantLineageFixtures.inputBundleId,
+              version: 1, bundle_hash: '8'.repeat(64) } as T;
+          }
+          if (table === 'enterprise_source_set_versions') {
+            return { id: sameTenantLineageFixtures.sourceSetVersionId,
+              source_set_id: sameTenantLineageFixtures.sourceSetId, version: 1 } as T;
+          }
+          if (table === 'enterprise_module_input_bundle_items') {
+            return { source_set_version_id: sameTenantLineageFixtures.sourceSetVersionId } as T;
+          }
+          if (table === 'enterprise_source_set_version_items') {
+            const id = query.match(/source_version_id=eq\.([^&]+)/)?.[1];
+            if (id && foreignSelectorTenants.has(decodeURIComponent(id))) foreignLookupObserved = true;
+            return null;
+          }
+          return null;
+        },
+        findMany: async <T>() => [] as T[],
+      },
+      claimReceipt: async () => { mutations.receiptClaims += 1; throw new Error('must not claim'); },
+      executeCommand: async () => {
+        mutations.audits += 1;
+        mutations.providers += 1;
+        mutations.domainCommands += 1;
+        mutations.domainEffects += 1;
+        return {};
+      },
+      completeReceipt: async () => {
+        mutations.receiptFinalizations += 1;
+        mutations.completions += 1;
+        throw new Error('must not complete');
+      },
+      failReceipt: async () => { mutations.receiptFailures += 1; throw new Error('must not fail'); },
+    });
+    assert.equal(response.status, 404);
+    assert.equal(foreignLookupObserved, disposition === 'foreign');
+    assert.deepEqual(lookupTables, [
+      'enterprise_module_input_bundle_versions', 'enterprise_source_set_versions',
+      'enterprise_module_input_bundle_items', 'enterprise_source_set_version_items',
+    ], 'extraction request binding must traverse the real four-stage scoped lookup chain');
+    responses.push(await response.text());
+    assert.deepEqual(mutations, {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    });
+    completeSelectorSubcase(`extraction-source-version:${disposition}`);
+  }
+  assert.equal(responses[0], responses[1],
+    'AUTH-001 extraction source-version denial exposes no foreign-versus-missing resource oracle');
+  completeSelectorSubcase('nondisclosure:extraction-source-version');
+}
+
+for (const [caseName, commandType] of ([
+  ['apply-preview', 'transcript.assess.apply.preview'],
+  ['apply-commit', 'transcript.assess.apply.commit'],
+] as const)) {
+  const responses: string[] = [];
+  for (const [index, disposition] of (['foreign', 'missing'] as const).entries()) {
+    const sourceSetVersionId = selectorFixtures.sourceSetVersionSelectors[index];
+    assert.equal(foreignSelectorTenants.has(sourceSetVersionId), disposition === 'foreign');
+    let foreignLookupObserved = false;
+    let lineageLists = 0;
+    const mutations = {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    };
+    const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+      `bundle-lineage:${caseName}:${disposition}`,
+      {
+        commandType,
+        requestId: `68000000-0000-4000-8000-00000000001${index + 1}`,
+        idempotencyKey: `auth-bundle-lineage-${caseName}-${disposition}`,
+        organizationId: base.organizationId,
+        workspaceId: base.workspaceId,
+        payload: bundleLineagePayload(caseName, index),
+      },
+    ), {
+      ...tracedSelectorAuthority(),
+      transcriptCommandRequestBindingDependencies: {
+        findOne: async <T>(table: string, query: string) => {
+          if (table === 'assess_v2_cases') {
+            selectorExecutionTrace.fixtureIds.push(sameTenantLineageFixtures.assessHeadVersionId);
+            return { version: 1, head_version_id: sameTenantLineageFixtures.assessHeadVersionId } as T;
+          }
+          if (table === 'enterprise_assess_apply_preview_batches') {
+            return { assess_case_id: sameTenantLineageFixtures.assessDraftId, expected_case_version: 1,
+              input_bundle_id: sameTenantLineageFixtures.inputBundleId,
+              input_bundle_version_id: sameTenantLineageFixtures.inputBundleVersionId,
+              input_bundle_version: 1, source_set_version_ids: [sourceSetVersionId] } as T;
+          }
+          if (table === 'enterprise_module_input_bundle_versions') {
+            return { input_bundle_id: sameTenantLineageFixtures.inputBundleId, version: 1, status: 'locked' } as T;
+          }
+          if (table === 'enterprise_source_set_versions') {
+            const id = querySelectorId(query);
+            if (id && foreignSelectorTenants.has(id)) foreignLookupObserved = true;
+            return null;
+          }
+          return null;
+        },
+        findMany: async <T>(table: string, query: string) => {
+          assert.equal(table, 'enterprise_module_input_bundle_items');
+          assert.equal(query.includes(`org_id=eq.${encodeURIComponent(base.organizationId)}`), true);
+          assert.equal(query.includes(`workspace_id=eq.${encodeURIComponent(base.workspaceId)}`), true);
+          lineageLists += 1;
+          return [{ source_set_id: selectorFixtures.sourceSetIds[index],
+            source_set_version_id: sourceSetVersionId, ordinal: 1 }] as T[];
+        },
+      },
+      claimReceipt: async () => { mutations.receiptClaims += 1; throw new Error('must not claim'); },
+      executeCommand: async () => {
+        mutations.audits += 1;
+        mutations.providers += 1;
+        mutations.domainCommands += 1;
+        mutations.domainEffects += 1;
+        return {};
+      },
+      completeReceipt: async () => {
+        mutations.receiptFinalizations += 1;
+        mutations.completions += 1;
+        throw new Error('must not complete');
+      },
+      failReceipt: async () => { mutations.receiptFailures += 1; throw new Error('must not fail'); },
+    });
+    assert.equal(response.status, 404);
+    assert.equal(foreignLookupObserved, disposition === 'foreign');
+    assert.equal(lineageLists, 1, `${caseName} must execute the real bundle-lineage list lookup`);
+    responses.push(await response.text());
+    assert.deepEqual(mutations, {
+      receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
+      audits: 0, providers: 0, domainCommands: 0, domainEffects: 0, completions: 0,
+    });
+    completeSelectorSubcase(`bundle-lineage:${caseName}:${disposition}`);
+  }
+  assert.equal(responses[0], responses[1],
+    `AUTH-001 ${caseName} bundle lineage exposes no foreign-versus-missing resource oracle`);
+  completeSelectorSubcase(`nondisclosure:bundle-lineage:${caseName}`);
+}
+
+{
+  const candidateResponses: string[] = [];
+  for (const [index, disposition] of (['foreign', 'missing'] as const).entries()) {
+    let receiptClaims = 0;
+    let audits = 0;
+    let providers = 0;
+    let domainEffects = 0;
+    const candidateId = selectorFixtures.candidateIds[index];
+    assert.equal(foreignSelectorTenants.has(candidateId), disposition === 'foreign');
+    const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+      `conflict-candidate:${disposition}`,
+      {
+        commandType: 'transcript.assess.conflict.resolve',
+        requestId: `67000000-0000-4000-8000-00000000000${index + 1}`,
+        idempotencyKey: `conflict-candidate-${disposition}`,
+        organizationId: base.organizationId,
+        workspaceId: base.workspaceId,
+        payload: {
+          conflictId: selectorFixtures.conflictIds[1], resolutionVersion: 1,
+          resolution: 'select_candidate', candidateId, rationale: 'governed reviewer decision',
+        },
+      },
+    ), {
+      ...tracedSelectorAuthority(),
+      transcriptCommandRequestBindingDependencies: {
+        findOne: async <T>(table: string) => {
+          if (table === 'enterprise_assess_evidence_conflicts') {
+            return { org_id: base.organizationId, workspace_id: base.workspaceId,
+              current_resolution_version: 1, candidate_ids: [candidateId] } as T;
+          }
+          if (table === 'enterprise_evidence_candidates' && disposition === 'foreign') {
+            // The row exists, but the canonical org/workspace-scoped lookup cannot return it.
+            assert.equal(foreignSelectorTenants.get(candidateId), foreignSelectorOrganizationId);
+          }
+          return null;
+        },
+      },
+      claimReceipt: async () => { receiptClaims += 1; throw new Error('must not claim'); },
+      executeCommand: async () => {
+        audits += 1; providers += 1; domainEffects += 1;
+        return {};
+      },
+    });
+    assert.equal(response.status, 404);
+    candidateResponses.push(await response.text());
+    assert.deepEqual({ receiptClaims, audits, providers, domainEffects }, {
+      receiptClaims: 0, audits: 0, providers: 0, domainEffects: 0,
+    });
+    completeSelectorSubcase(`conflict-candidate:${disposition}`);
+  }
+  assert.equal(candidateResponses[0], candidateResponses[1],
+    'foreign and missing chosen conflict candidates are byte-identical and effect-free');
+  completeSelectorSubcase('nondisclosure:conflict-candidate');
+
+  let nonmemberReceiptClaims = 0;
+  const nonmemberCandidateId = selectorFixtures.candidateIds[0];
+  const nonmember = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+    'conflict-candidate:nonmember',
+    {
+      commandType: 'transcript.assess.conflict.resolve',
+      requestId: '67000000-0000-4000-8000-000000000003',
+      idempotencyKey: 'conflict-candidate-nonmember',
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: {
+        conflictId: selectorFixtures.conflictIds[1], resolutionVersion: 1,
+        resolution: 'select_candidate', candidateId: nonmemberCandidateId,
+        rationale: 'governed reviewer decision',
+      },
+    },
+  ), {
+    ...tracedSelectorAuthority(),
+    transcriptCommandRequestBindingDependencies: {
+      findOne: async <T>(table: string) => (table === 'enterprise_assess_evidence_conflicts'
+        ? { org_id: base.organizationId, workspace_id: base.workspaceId,
+          current_resolution_version: 1, candidate_ids: [selectorFixtures.candidateIds[1]] } as T
+        : { id: nonmemberCandidateId } as T),
+    },
+    claimReceipt: async () => { nonmemberReceiptClaims += 1; throw new Error('must not claim'); },
+  });
+  assert.equal(nonmember.status, 404);
+  assert.equal(nonmemberReceiptClaims, 0);
+  completeSelectorSubcase('conflict-candidate:nonmember');
+}
+
+{
+  let removedSeamCalls = 0;
+  let receiptClaims = 0;
+  const attemptedBypass = {
+    ...tracedSelectorAuthority(),
+    transcriptCommandRequestBindingDependencies: {
+      findOne: async <T>() => ({ org_id: foreignSelectorOrganizationId,
+        workspace_id: base.workspaceId, current_version: 1 } as T),
+    },
+    claimReceipt: async () => { receiptClaims += 1; throw new Error('must not claim'); },
+    deriveTranscriptCommandRequestBinding: async () => {
+      removedSeamCalls += 1;
+      return null;
+    },
+  } as Parameters<typeof handleEnterpriseIntelligenceRequest>[1] & {
+    deriveTranscriptCommandRequestBinding: () => Promise<null>;
+  };
+  const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+    'removed-seam:derive-binding',
+    {
+      commandType: 'transcript.source-set.create-version',
+      requestId: '67000000-0000-4000-8000-000000000004',
+      idempotencyKey: 'removed-derive-seam-cannot-bypass',
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: selectorPayload('source-set', 0),
+    },
+  ), attemptedBypass);
+  assert.equal(response.status, 404);
+  assert.deepEqual({ removedSeamCalls, receiptClaims }, { removedSeamCalls: 0, receiptClaims: 0 });
+  completeSelectorSubcase('removed-seam:derive-binding');
+}
+
+{
+  let removedSelectionSeamCalls = 0;
+  let receiptClaims = 0;
+  const attemptedDependencies = {
+    findOne: async <T>() => null as T | null,
+    findMany: async <T>() => [] as T[],
+    resolveExtractionSelection: async () => {
+      removedSelectionSeamCalls += 1;
+      return {
+        inputBundleId: selectorFixtures.inputBundleIds[1],
+        inputBundleVersionId: selectorFixtures.inputBundleVersionSelectors[1], bundleVersion: 1,
+        bundleHash: '8'.repeat(64), sourceSetId: selectorFixtures.sourceSetIds[1],
+        sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[1], sourceSetVersion: 1,
+        sourceId: '68000000-0000-4000-8000-000000000006',
+        sourceVersionId: selectorFixtures.sourceVersionSelectors[1],
+      };
+    },
+  } as Partial<TranscriptCommandRequestBindingDependencies> & {
+    resolveExtractionSelection: () => Promise<Record<string, unknown>>;
+  };
+  const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+    'removed-seam:extraction-selection',
+    {
+      commandType: 'transcript.assess.extract',
+      requestId: '68000000-0000-4000-8000-000000000020',
+      idempotencyKey: 'removed-selection-seam-cannot-bypass',
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: selectorPayload('extract', 1),
+    },
+  ), {
+    ...tracedSelectorAuthority(),
+    transcriptCommandRequestBindingDependencies: attemptedDependencies,
+    claimReceipt: async () => { receiptClaims += 1; throw new Error('must not claim'); },
+  });
+  assert.equal(response.status, 404);
+  assert.deepEqual({ removedSelectionSeamCalls, receiptClaims }, { removedSelectionSeamCalls: 0, receiptClaims: 0 });
+  completeSelectorSubcase('removed-seam:extraction-selection');
+}
+
+{
+  let removedLineageSeamCalls = 0;
+  let lineageLists = 0;
+  let receiptClaims = 0;
+  const attemptedDependencies = {
+    findOne: async <T>(table: string) => {
+      if (table === 'assess_v2_cases') {
+        return { version: 1, head_version_id: sameTenantLineageFixtures.assessHeadVersionId } as T;
+      }
+      if (table === 'enterprise_module_input_bundle_versions') {
+        return { input_bundle_id: sameTenantLineageFixtures.inputBundleId, version: 1, status: 'locked' } as T;
+      }
+      return null;
+    },
+    findMany: async <T>() => {
+      lineageLists += 1;
+      return [{ source_set_id: selectorFixtures.sourceSetIds[1],
+        source_set_version_id: selectorFixtures.sourceSetVersionSelectors[1], ordinal: 1 }] as T[];
+    },
+    assertBundleLineage: async () => { removedLineageSeamCalls += 1; },
+  } as Partial<TranscriptCommandRequestBindingDependencies> & {
+    assertBundleLineage: () => Promise<void>;
+  };
+  const response = await handleEnterpriseIntelligenceRequest(tracedSelectorRequest(
+    'removed-seam:bundle-lineage',
+    {
+      commandType: 'transcript.assess.apply.preview',
+      requestId: '68000000-0000-4000-8000-000000000021',
+      idempotencyKey: 'removed-lineage-seam-cannot-bypass',
+      organizationId: base.organizationId,
+      workspaceId: base.workspaceId,
+      payload: bundleLineagePayload('apply-preview', 1),
+    },
+  ), {
+    ...tracedSelectorAuthority(),
+    transcriptCommandRequestBindingDependencies: attemptedDependencies,
+    claimReceipt: async () => { receiptClaims += 1; throw new Error('must not claim'); },
+  });
+  assert.equal(response.status, 404);
+  assert.deepEqual({ removedLineageSeamCalls, lineageLists, receiptClaims }, {
+    removedLineageSeamCalls: 0, lineageLists: 1, receiptClaims: 0,
+  });
+  completeSelectorSubcase('removed-seam:bundle-lineage');
+}
+console.log('ok - AUTH-001/002 pre-claim resource denial is non-disclosing and mutation-free');
+const omittedSelectorCompletionTrace = structuredClone(selectorExecutionTrace);
+omittedSelectorCompletionTrace.completedSubcaseKeys = omittedSelectorCompletionTrace.completedSubcaseKeys.slice(1);
+assert.throws(
+  () => selectorRuntimeContextFromExecutedTrace(omittedSelectorCompletionTrace),
+  /AUTH_RUNTIME_TRACE_COMPLETED_SUBCASES/u,
+  'AUTH markers must reject a missing completed assertion even when every request ran and the command remains green',
+);
+const substitutedSelectorRequestTrace = structuredClone(selectorExecutionTrace);
+substitutedSelectorRequestTrace.requestedSubcaseKeys[0] = 'selector:source-set:substituted';
+assert.throws(
+  () => selectorRuntimeContextFromExecutedTrace(substitutedSelectorRequestTrace),
+  /AUTH_RUNTIME_TRACE_REQUESTED_SUBCASES/u,
+  'AUTH markers must reject a substituted requested selector trace',
+);
+const substitutedSelectorCompletionTrace = structuredClone(selectorExecutionTrace);
+substitutedSelectorCompletionTrace.completedSubcaseKeys[0] = 'selector:source-set:substituted';
+assert.throws(
+  () => selectorRuntimeContextFromExecutedTrace(substitutedSelectorCompletionTrace),
+  /AUTH_RUNTIME_TRACE_COMPLETED_SUBCASES/u,
+  'AUTH markers must reject a substituted completed selector trace',
+);
+console.log('ok - AUTH-001/002 runtime trace rejects missing completions and substituted request/completion traces');
+const selectorRuntimeContext = selectorRuntimeContextFromExecutedTrace(selectorExecutionTrace);
+emitApiAssertion('AUTH-001', 'auth-001-real-foreign-missing-nondisclosure', selectorRuntimeContext);
+emitApiAssertion('AUTH-002', 'auth-002-real-preclaim-zero-effects', selectorRuntimeContext);
+
+const replayTranscriptCaseByCommand: Partial<Record<ReplayCommand, typeof selectorCases[number][0]>> = {
+  'transcript.source-set.create-version': 'source-set',
+  'transcript.input-bundle.lock': 'input-bundle',
+  'transcript.assess.extract': 'extract',
+  'transcript.journey.set-state': 'journey',
+  'transcript.assess.candidate.review': 'candidate',
+  'transcript.assess.apply.preview': 'apply-preview',
+  'transcript.assess.apply.commit': 'apply-commit',
+  'transcript.assess.conflict.resolve': 'conflict',
+};
+
+const replayPayloadFor = (commandType: ReplayCommand) => {
+  if (commandType.startsWith('approval.')) return { resourceType: 'delivery_work_package' };
+  const transcriptCase = replayTranscriptCaseByCommand[commandType];
+  return transcriptCase ? selectorPayload(transcriptCase, 0) : {};
+};
+
+const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestBindingDependencies> = {
+  findOne: async <T>(table: string, query: string) => {
+    const id = querySelectorId(query);
+    if (table === 'enterprise_source_sets' || table === 'enterprise_module_input_bundles') {
+      return { id, org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1 } as T;
+    }
+    if (table === 'enterprise_evidence_source_versions') {
+      return { id } as T;
+    }
+    if (table === 'enterprise_module_input_bundle_versions') {
+      return { id, input_bundle_id: selectorFixtures.inputBundleIds[0], version: 1,
+        bundle_hash: '8'.repeat(64), status: 'locked' } as T;
+    }
+    if (table === 'enterprise_source_set_versions') {
+      return { id, source_set_id: selectorFixtures.sourceSetIds[0], version: 1 } as T;
+    }
+    if (table === 'enterprise_module_input_bundle_items') {
+      return { source_set_version_id: selectorFixtures.sourceSetVersionSelectors[0] } as T;
+    }
+    if (table === 'enterprise_source_set_version_items') {
+      return { source_id: '65000000-0000-4000-8000-0000000000a4' } as T;
+    }
+    if (table === 'enterprise_governed_journeys') {
+      return { id, org_id: base.organizationId, workspace_id: base.workspaceId, version: 1, route_policy_version: 1 } as T;
+    }
+    if (table === 'enterprise_evidence_candidates') {
+      return { id, version: 1, ai_job_id: '65000000-0000-4000-8000-0000000000a1',
+        source_version_id: selectorFixtures.sourceVersionSelectors[0] } as T;
+    }
+    if (table === 'enterprise_transcript_extraction_bindings') {
+      return { id: '65000000-0000-4000-8000-0000000000a2',
+        input_bundle_id: selectorFixtures.inputBundleIds[0],
+        input_bundle_version_id: selectorFixtures.inputBundleVersionSelectors[0],
+        source_set_id: selectorFixtures.sourceSetIds[0],
+        source_set_version_id: selectorFixtures.sourceSetVersionSelectors[0],
+        source_version_id: selectorFixtures.sourceVersionSelectors[0] } as T;
+    }
+    if (table === 'assess_v2_cases') {
+      return { id, version: 1, head_version_id: '65000000-0000-4000-8000-0000000000a3' } as T;
+    }
+    if (table === 'enterprise_assess_apply_preview_batches') {
+      return { assess_case_id: selectorFixtures.assessDraftIds[0], expected_case_version: 1,
+        input_bundle_id: selectorFixtures.inputBundleIds[0],
+        input_bundle_version_id: selectorFixtures.inputBundleVersionSelectors[0], input_bundle_version: 1,
+        source_set_version_ids: [selectorFixtures.sourceSetVersionSelectors[0]] } as T;
+    }
+    if (table === 'enterprise_assess_evidence_conflicts') {
+      return { id, org_id: base.organizationId, workspace_id: base.workspaceId,
+        current_resolution_version: 1, candidate_ids: [selectorFixtures.candidateIds[0]] } as T;
+    }
+    return null;
+  },
+  findMany: async <T>(table: string) => {
+    assert.equal(table, 'enterprise_module_input_bundle_items');
+    return [{ source_set_id: selectorFixtures.sourceSetIds[0],
+      source_set_version_id: selectorFixtures.sourceSetVersionSelectors[0], ordinal: 1 }] as T[];
+  },
+};
 
 const enterpriseTerminalStatusMatrix = [
   ['INVALID_PAYLOAD', 400],
@@ -158,8 +1088,16 @@ const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => 
   const lineageKey = commandType === 'evidence.source.create' ? 'sourceId'
     : commandType === 'evidence.extract' ? 'jobId'
       : commandType === 'evidence.candidate.review' ? 'candidateId'
-        : commandType === 'evidence.assess.promote' ? 'assessDraftId'
-          : commandType === 'modernization.evaluate' ? 'decisionId'
+          : commandType === 'evidence.assess.promote' ? 'assessDraftId'
+            : commandType === 'transcript.source-set.create-version' ? 'sourceSetId'
+              : commandType === 'transcript.input-bundle.lock' ? 'inputBundleId'
+                : commandType === 'transcript.assess.extract' ? 'jobId'
+                  : commandType === 'transcript.assess.candidate.review' ? 'candidateId'
+                    : commandType === 'transcript.assess.apply.preview' ? 'previewId'
+                      : commandType === 'transcript.assess.apply.commit' ? 'assessDraftId'
+                        : commandType === 'transcript.assess.conflict.resolve' ? 'conflictId'
+                          : commandType === 'transcript.journey.set-state' ? 'journeyId'
+            : commandType === 'modernization.evaluate' ? 'decisionId'
             : commandType === 'studio.delivery.handoff' ? 'workPackageId'
               : commandType === 'monitor.baseline.create' || commandType === 'assemble.blueprint.create'
                 ? 'id'
@@ -590,7 +1528,7 @@ const provenanceCandidate = (overrides: Record<string, unknown> = {}) => ({
   })}`);
 }
 
-test('generic provider stale authority preserves the plan and recovers once under a newer fence', async () => {
+{
   const envelope = {
     commandType: 'provider.validate' as const,
     requestId: '54000000-0000-4000-8000-000000000001',
@@ -616,20 +1554,41 @@ test('generic provider stale authority preserves the plan and recovers once unde
   let attempt = 0;
   let failures = 0;
   let effects = 0;
-  const request = () => new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) });
+  const auth003Trace: {
+    actors: string[]; authorities: Authority[]; envelopes: ApiExecutionEnvelope[];
+    authorityStates: Array<'active' | 'revoked' | 'restored'>; fixtureIds: string[];
+  } = { actors: [], authorities: [], envelopes: [], authorityStates: [], fixtureIds: [] };
+  const request = () => {
+    const executedEnvelope = structuredClone(envelope);
+    auth003Trace.envelopes.push(executedEnvelope);
+    return new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(executedEnvelope) });
+  };
   const common = {
-    authenticate: async () => ({ id: replayAuthority.actorId }),
+    authenticate: async () => {
+      auth003Trace.actors.push(replayAuthority.actorId);
+      return { id: replayAuthority.actorId };
+    },
     resolveOrganization: async () => replayAuthority.organizationId,
-    resolveCommandAuthority: async () => ({
-      ...replayAuthority,
-      permissions: new Set(['byok.manage']),
-      organizationPermissions: new Set(['byok.manage']),
-    }),
-    assertCurrentAuthority: async (current: Authority) => current,
+    resolveCommandAuthority: async () => {
+      const current = {
+        ...replayAuthority,
+        permissions: new Set(['byok.manage']),
+        organizationPermissions: new Set(['byok.manage']),
+      };
+      auth003Trace.authorities.push(current);
+      return current;
+    },
+    assertCurrentAuthority: async (current: Authority) => {
+      auth003Trace.authorityStates.push('active');
+      return current;
+    },
   };
   const stale = await handleEnterpriseIntelligenceRequest(request(), {
     ...common,
-    claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+    claimReceipt: async () => {
+      auth003Trace.fixtureIds.push(claimed.id);
+      return { receipt: claimed, ownsExecution: true };
+    },
     executeCommand: async () => { attempt += 1; throw new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE'); },
     reloadReceipt: async () => claimed,
     failReceipt: async () => { failures += 1; throw new Error('must not finalize stale authority'); },
@@ -642,7 +1601,10 @@ test('generic provider stale authority preserves the plan and recovers once unde
 
   const recovered = await handleEnterpriseIntelligenceRequest(request(), {
     ...common,
-    claimReceipt: async () => ({ receipt: refreshed, ownsExecution: true }),
+    claimReceipt: async () => {
+      auth003Trace.fixtureIds.push(refreshed.execution_token);
+      return { receipt: refreshed, ownsExecution: true };
+    },
     executeCommand: async (_authority, _envelope, receipt) => {
       attempt += 1;
       assert.equal(receipt.execution_fence, 2);
@@ -653,7 +1615,9 @@ test('generic provider stale authority preserves the plan and recovers once unde
     completeReceipt: async () => committed,
   });
   assert.equal(recovered.status, 200);
-  assert.equal((await recovered.json() as { providerConfigId?: string }).providerConfigId, envelope.payload.providerConfigId);
+  const recoveredResult = await recovered.json() as { providerConfigId?: string };
+  assert.equal(recoveredResult.providerConfigId, envelope.payload.providerConfigId);
+  assert.ok(recoveredResult.providerConfigId); auth003Trace.fixtureIds.push(recoveredResult.providerConfigId);
 
   const replay = await handleEnterpriseIntelligenceRequest(request(), {
     ...common,
@@ -662,7 +1626,25 @@ test('generic provider stale authority preserves the plan and recovers once unde
   });
   assert.equal(replay.status, 200);
   assert.deepEqual({ attempt, effects, failures }, { attempt: 2, effects: 1, failures: 0 });
-});
+  console.log('ok - AUTH-003 stale authority preserves one action identity and permits only bounded authorized refresh');
+  emitApiAssertion('AUTH-003', 'auth-003-same-action-bounded-refresh', apiRuntimeContextFromExecutedTrace(auth003Trace));
+}
+
+const genericReplayPriorFetch = globalThis.fetch;
+const genericReplayPriorDeno = (globalThis as any).Deno;
+(globalThis as any).Deno = { env: { get: (key: string) => ({
+  SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_ANON_KEY: 'anon-test',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+} as Record<string, string>)[key] } };
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  if (url.endsWith('/rest/v1/rpc/enterprise_ai_plan_command')) {
+    const args = JSON.parse(String(init?.body || '{}')) as { p_id?: string; p_plan?: Record<string, unknown> };
+    return Response.json({ id: args.p_id, execution_plan: args.p_plan });
+  }
+  return genericReplayPriorFetch(input, init);
+};
 
 for (const [index, commandType] of replayCommands.entries()) {
   const resourceId = `58000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
@@ -672,7 +1654,7 @@ for (const [index, commandType] of replayCommands.entries()) {
     idempotencyKey: `reconcile-authority-${index + 1}`,
     organizationId: base.organizationId,
     workspaceId: base.workspaceId,
-    payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+    payload: replayPayloadFor(commandType),
   };
   const effectResult = { ...enterpriseResultFor(commandType, resourceId), effectMarker: true };
   const claimed: EnterpriseReceiptRow = {
@@ -695,6 +1677,7 @@ for (const [index, commandType] of replayCommands.entries()) {
       if (checks >= 3) throw new EnterpriseCommandError('PERMISSION_DENIED');
       return current;
     },
+    transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
     claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
     executeCommand: async () => { effects += 1; throw new EnterpriseCommandError('COMMAND_UNAVAILABLE'); },
     reloadReceipt: async () => { reloads += 1; return committed; },
@@ -709,15 +1692,20 @@ for (const [index, commandType] of replayCommands.entries()) {
     resolveOrganization: async () => replayAuthority.organizationId,
     resolveCommandAuthority: async () => replayAuthority,
     assertCurrentAuthority: async current => current,
+    transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
     claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
     executeCommand: async () => { effects += 1; return effectResult; },
   });
   assert.equal(restored.status, 200);
   assert.equal((await restored.json() as { effectMarker?: boolean }).effectMarker, true);
-  assert.deepEqual({ effects, reloads }, { effects: 1, reloads: 0 });
+  assert.deepEqual({ effects, reloads }, { effects: 1, reloads: 0 }, `reconciliation effect path for ${commandType}`);
 }
-console.log('ok - all ten command classes leave effect-backed receipts untouched while revoked and reconcile once after restore');
+console.log('ok - all domain command classes leave effect-backed receipts untouched while revoked and reconcile once after restore');
 
+const auth004Trace: {
+  actors: string[]; authorities: Authority[]; envelopes: ApiExecutionEnvelope[];
+  authorityStates: Array<'active' | 'revoked' | 'restored'>; fixtureIds: string[];
+} = { actors: [], authorities: [], envelopes: [], authorityStates: [], fixtureIds: [] };
 for (const [index, commandType] of replayCommands.entries()) {
   const envelope = {
     commandType,
@@ -725,9 +1713,7 @@ for (const [index, commandType] of replayCommands.entries()) {
     idempotencyKey: `replay-authority-${index + 1}`,
     organizationId: base.organizationId,
     workspaceId: base.workspaceId,
-    payload: commandType.startsWith('approval.')
-      ? { resourceType: 'delivery_work_package' }
-      : {},
+    payload: replayPayloadFor(commandType),
   };
   const receipt: EnterpriseReceiptRow = {
     id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -741,21 +1727,38 @@ for (const [index, commandType] of replayCommands.entries()) {
     resource_id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
     response: { ...enterpriseResultFor(commandType, `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`), historicalMarker: true },
   };
-  const buildOverrides = (denyAt: number | null) => {
+  const tracedRequest = () => {
+    const executedEnvelope = structuredClone(envelope);
+    auth004Trace.envelopes.push(executedEnvelope);
+    return new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(executedEnvelope) });
+  };
+  const buildOverrides = (denyAt: number | null, restoredAuthority = false) => {
     let authorityChecks = 0;
     let claims = 0;
     return {
       overrides: {
-        authenticate: async () => ({ id: replayAuthority.actorId }),
+        authenticate: async () => {
+          auth004Trace.actors.push(replayAuthority.actorId);
+          return { id: replayAuthority.actorId };
+        },
         resolveOrganization: async () => replayAuthority.organizationId,
-        resolveCommandAuthority: async () => replayAuthority,
+        resolveCommandAuthority: async () => {
+          auth004Trace.authorities.push(replayAuthority);
+          return replayAuthority;
+        },
         assertCurrentAuthority: async (authority: Authority) => {
           authorityChecks += 1;
-          if (authorityChecks === denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
+          if (authorityChecks === denyAt) {
+            auth004Trace.authorityStates.push('revoked');
+            throw new EnterpriseCommandError('PERMISSION_DENIED');
+          }
+          auth004Trace.authorityStates.push(restoredAuthority ? 'restored' : 'active');
           return authority;
         },
+        transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
         claimReceipt: async () => {
           claims += 1;
+          assert.ok(receipt.resource_id); auth004Trace.fixtureIds.push(receipt.resource_id);
           return { receipt, ownsExecution: false };
         },
       },
@@ -765,7 +1768,7 @@ for (const [index, commandType] of replayCommands.entries()) {
 
   const preclaimRevoked = buildOverrides(1);
   const preclaimDenied = await handleEnterpriseIntelligenceRequest(
-    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    tracedRequest(),
     preclaimRevoked.overrides,
   );
   assert.equal(preclaimDenied.status, 403);
@@ -773,23 +1776,24 @@ for (const [index, commandType] of replayCommands.entries()) {
 
   const replayRevoked = buildOverrides(2);
   const denied = await handleEnterpriseIntelligenceRequest(
-    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    tracedRequest(),
     replayRevoked.overrides,
   );
   assert.equal(denied.status, 403);
   assert.equal((await denied.text()).includes('historicalMarker'), false);
   assert.deepEqual(replayRevoked.counts(), { authorityChecks: 2, claims: 1 });
 
-  const restored = buildOverrides(null);
+  const restored = buildOverrides(null, true);
   const replayed = await handleEnterpriseIntelligenceRequest(
-    new Request('http://local/enterprise', { method: 'POST', body: JSON.stringify(envelope) }),
+    tracedRequest(),
     restored.overrides,
   );
   assert.equal(replayed.status, 200);
   assert.equal((await replayed.json() as { historicalMarker?: boolean }).historicalMarker, true);
   assert.deepEqual(restored.counts(), { authorityChecks: 2, claims: 1 });
 }
-console.log('ok - all ten command classes deny revoked replay without receipt mutation and disclose after authority restoration');
+console.log('ok - AUTH-004 all domain command classes deny revoked replay without receipt mutation and disclose after authority restoration');
+emitApiAssertion('AUTH-004', 'auth-004-revoked-terminal-nondisclosure', apiRuntimeContextFromExecutedTrace(auth004Trace));
 
 for (const [commandIndex, commandType] of replayCommands.entries()) {
   for (const [statusIndex, [code, expectedStatus]] of enterpriseTerminalStatusMatrix.entries()) {
@@ -799,7 +1803,7 @@ for (const [commandIndex, commandType] of replayCommands.entries()) {
       idempotencyKey: `terminal-http-${commandIndex + 1}-${statusIndex + 1}`,
       organizationId: base.organizationId,
       workspaceId: base.workspaceId,
-      payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+      payload: replayPayloadFor(commandType),
     };
     const persistedBody = enterpriseCommandErrorBody(new EnterpriseCommandError(code));
     const receipt: EnterpriseReceiptRow = {
@@ -817,6 +1821,7 @@ for (const [commandIndex, commandType] of replayCommands.entries()) {
         resolveOrganization: async () => replayAuthority.organizationId,
         resolveCommandAuthority: async () => replayAuthority,
         assertCurrentAuthority: async current => current,
+        transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
         claimReceipt: async () => ({ receipt, ownsExecution: false }),
         executeCommand: async () => { executions += 1; return {}; },
       },
@@ -826,7 +1831,7 @@ for (const [commandIndex, commandType] of replayCommands.entries()) {
     assert.equal(executions, 0);
   }
 }
-console.log('ok - all ten command classes replay persisted 400/403/404/409/503 HTTP contracts exactly');
+console.log('ok - all domain command classes replay persisted 400/403/404/409/503 HTTP contracts exactly');
 
 test('generic provider commands enforce provider-specific organization and workspace authority', () => {
   const providerAuthority = (organization: string[], workspace: string[]): Authority => ({
@@ -877,7 +1882,7 @@ for (const [index, commandType] of replayCommands.entries()) {
     idempotencyKey: `systemic-authority-${index + 1}`,
     organizationId: base.organizationId,
     workspaceId: base.workspaceId,
-    payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+    payload: replayPayloadFor(commandType),
   };
   const claimed: EnterpriseReceiptRow = {
     id: `43000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -901,6 +1906,7 @@ for (const [index, commandType] of replayCommands.entries()) {
         if (authorityChecks >= denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
         return current;
       },
+      transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
       claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
       executeCommand: async () => result,
       completeReceipt: async () => { completions += 1; return committed; },
@@ -923,6 +1929,7 @@ for (const [index, commandType] of replayCommands.entries()) {
         if (authorityChecks >= denyAt) throw new EnterpriseCommandError('PERMISSION_DENIED');
         return current;
       },
+      transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
       claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
       executeCommand: async () => { throw new EnterpriseCommandError('COMMAND_BLOCKED'); },
       reloadReceipt: async () => claimed,
@@ -943,6 +1950,7 @@ for (const [index, commandType] of replayCommands.entries()) {
     resolveOrganization: async () => replayAuthority.organizationId,
     resolveCommandAuthority: async () => replayAuthority,
     assertCurrentAuthority: async current => current,
+    transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
     claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
     executeCommand: async () => { executions += 1; return result; },
     completeReceipt: async () => { completions += 1; throw new EnterpriseReceiptError('RECEIPT_FINALIZATION_FAILED'); },
@@ -952,7 +1960,7 @@ for (const [index, commandType] of replayCommands.entries()) {
   assert.equal((await reconciled.json() as { resourceId?: string }).resourceId, resourceId);
   assert.deepEqual({ executions, completions }, { executions: 1, completions: 1 });
 }
-console.log('ok - all ten command classes reauthorize success/failure finalization and reconcile response loss');
+console.log('ok - all domain command classes reauthorize success/failure finalization and reconcile response loss');
 
 for (const [index, commandType] of replayCommands.entries()) {
   for (const status of ['failed', 'blocked', 'claimed'] as const) {
@@ -962,7 +1970,7 @@ for (const [index, commandType] of replayCommands.entries()) {
       idempotencyKey: `terminal-state-${status}-${index + 1}`,
       organizationId: base.organizationId,
       workspaceId: base.workspaceId,
-      payload: commandType.startsWith('approval.') ? { resourceType: 'delivery_work_package' } : {},
+      payload: replayPayloadFor(commandType),
     };
     const receipt: EnterpriseReceiptRow = {
       id: `46000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -983,6 +1991,7 @@ for (const [index, commandType] of replayCommands.entries()) {
         if (checks >= 2) throw new EnterpriseCommandError('PERMISSION_DENIED');
         return current;
       },
+      transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
       claimReceipt: async () => ({ receipt, ownsExecution: false }),
     });
     assert.equal(denied.status, 403);
@@ -994,6 +2003,7 @@ for (const [index, commandType] of replayCommands.entries()) {
       resolveOrganization: async () => replayAuthority.organizationId,
       resolveCommandAuthority: async () => replayAuthority,
       assertCurrentAuthority: async current => current,
+      transcriptCommandRequestBindingDependencies: sameTenantTranscriptBindingDependencies,
       claimReceipt: async () => ({ receipt, ownsExecution: false }),
     });
     assert.equal(restored.status, 409);
@@ -1003,7 +2013,9 @@ for (const [index, commandType] of replayCommands.entries()) {
     }
   }
 }
-console.log('ok - all ten command classes protect failed, blocked, and in-progress replay without receipt mutation');
+console.log('ok - all domain command classes protect failed, blocked, and in-progress replay without receipt mutation');
+globalThis.fetch = genericReplayPriorFetch;
+(globalThis as any).Deno = genericReplayPriorDeno;
 
 test('structured RPC domain signals map without exposing database text', () => {
   const idempotency = new SupabaseRpcError({ status: 409, databaseMessage: 'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT' });
@@ -1021,6 +2033,18 @@ test('structured RPC domain signals map without exposing database text', () => {
   assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
     status: 409, databaseMessage: 'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
   })).code, 'RESOURCE_STALE');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_TRANSCRIPT_APPLY_BATCH_STALE',
+  })).code, 'RESOURCE_STALE');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 409, databaseMessage: 'ENTERPRISE_TRANSCRIPT_MATERIAL_CONFLICT_UNRESOLVED',
+  })).code, 'CONFLICT_UNRESOLVED');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 403, databaseMessage: 'ENTERPRISE_TRANSCRIPT_FEATURE_DISABLED',
+  })).code, 'COMMAND_BLOCKED');
+  assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({
+    status: 400, databaseMessage: 'ENTERPRISE_TRANSCRIPT_INVALID_SOURCE_SET',
+  })).code, 'INVALID_PAYLOAD');
   const unavailable = mapEnterpriseCommandRpcError(new SupabaseRpcError({
     status: 500, databaseMessage: 'arbitrary database text is discarded',
   }));
@@ -1157,7 +2181,7 @@ test('promotion receipt identity is the explicit Assess draft resource', () => {
   );
 });
 
-test('all ten command classes require one explicit canonical resource identity', () => {
+test('all domain command classes require one explicit canonical resource identity', () => {
   for (const [index, commandType] of replayCommands.entries()) {
     const resourceId = `48000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
     const result = enterpriseResultFor(commandType, resourceId);

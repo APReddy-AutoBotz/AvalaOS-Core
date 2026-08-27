@@ -18,6 +18,8 @@ dist-ssr
 .agent/pr1c-coverage
 .agent/pr1d-coverage
 .agent/pr1e-coverage
+.agent/transcript-flow-coverage
+.agent/transcript-flow-pr-a-playwright
 test-results
 output/
 .agent/provider-resolver-tests

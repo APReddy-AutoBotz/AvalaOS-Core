@@ -8,6 +8,7 @@ import { decodeEnterpriseIntelligenceProjection } from '../../../services/enterp
 import type { TenantAuthorityDatabase, TenantContext } from './tenantAuthority.ts';
 import {
   buildEnterpriseIntelligenceProjection,
+  createEnterpriseIntelligenceQueryDatabase,
   decodeModernizationBlockers,
   handleEnterpriseIntelligenceQuery,
   type EnterpriseIntelligenceQueryDatabase,
@@ -35,6 +36,49 @@ const MODERN_ASSESSMENT = '11000000-0000-4000-8000-000000000011';
 const DECISION = '12000000-0000-4000-8000-000000000012';
 const BLUEPRINT = '13000000-0000-4000-8000-000000000013';
 const ASSESS_DRAFT = '16000000-0000-4000-8000-000000000016';
+const TRANSCRIPT_SOURCE_SET = '17000000-0000-4000-8000-000000000017';
+const TRANSCRIPT_SOURCE_SET_VERSION = '18000000-0000-4000-8000-000000000018';
+const TRANSCRIPT_SOURCE_SET_VERSION_NEXT = '22000000-0000-4000-8000-000000000022';
+const TRANSCRIPT_BUNDLE = '19000000-0000-4000-8000-000000000019';
+const TRANSCRIPT_BUNDLE_VERSION = '1a000000-0000-4000-8000-00000000001a';
+const TRANSCRIPT_BINDING = '1b000000-0000-4000-8000-00000000001b';
+const TRANSCRIPT_JOB = '1c000000-0000-4000-8000-00000000001c';
+const UNRELATED_JOB = '1d000000-0000-4000-8000-00000000001d';
+const TRANSCRIPT_PREVIEW = '1e000000-0000-4000-8000-00000000001e';
+const TRANSCRIPT_PREVIEW_BATCH = '1f000000-0000-4000-8000-00000000001f';
+const TRANSCRIPT_JOURNEY = '23000000-0000-4000-8000-000000000023';
+const TRANSCRIPT_CONFLICT = '24000000-0000-4000-8000-000000000024';
+const HIDDEN_CANARY_IDS = {
+  assessDraft: '31000000-0000-4000-8000-000000000031',
+  journey: '32000000-0000-4000-8000-000000000032',
+  candidate: '33000000-0000-4000-8000-000000000033',
+  preview: '34000000-0000-4000-8000-000000000034',
+  previewBatch: '35000000-0000-4000-8000-000000000035',
+  relationship: '36000000-0000-4000-8000-000000000036',
+  conflict: '37000000-0000-4000-8000-000000000037',
+  binding: '38000000-0000-4000-8000-000000000038',
+  job: '39000000-0000-4000-8000-000000000039',
+  review: '3a000000-0000-4000-8000-00000000003a',
+} as const;
+const HIDDEN_CANARY_VALUES = [
+  'HIDDEN_PROVIDER_CANARY',
+  'HIDDEN_EVIDENCE_SOURCE_CANARY',
+  'HIDDEN_EVIDENCE_CANDIDATE_CANARY',
+  'HIDDEN_APPLICATION_CANARY',
+  'HIDDEN_DELIVERY_CANARY',
+  'HIDDEN_MODERNIZATION_CANARY',
+  'HIDDEN_BLUEPRINT_CANARY',
+  'HIDDEN_COMMAND_CANARY',
+  'HIDDEN_ASSESS_CANDIDATE_CANARY',
+  'HIDDEN_ASSESS_EXCERPT_CANARY',
+  'HIDDEN_ASSESS_LOCATOR_CANARY',
+  'HIDDEN_ASSESS_PREVIEW_TARGET_CANARY',
+  'HIDDEN_ASSESS_PROPOSED_VALUE_CANARY',
+  'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY',
+  'HIDDEN_ASSESS_CONFLICT_TARGET_CANARY',
+  'HIDDEN_ASSESS_RESOLUTION_CANARY',
+  'HIDDEN_ASSESS_RESOLUTION_RATIONALE_CANARY',
+] as const;
 
 const CANONICAL_MISSING_EVIDENCE_BY_DIMENSION = {
   integration_accessibility: [],
@@ -107,6 +151,26 @@ const raw = (): EnterpriseIntelligenceRawProjection => ({
   reviewEvents: [{ id: '15000000-0000-4000-8000-000000000015', resource_type: 'delivery_work_package', resource_id: PACKAGE, reviewer_id: REVIEWER, resource_hash: 'e'.repeat(64), created_at: '2026-08-04T08:00:00.000Z' }],
   approvals: [],
   commandReceipts: [{ command_type: 'studio.delivery.handoff', status: 'committed', idempotency_key: 'must-never-project', completed_at: '2026-08-04T08:00:00.000Z', created_at: '2026-08-04T08:00:00.000Z' }],
+  transcriptFlags: [],
+  transcriptSources: [],
+  transcriptSourceVersions: [],
+  transcriptSourceSets: [],
+  transcriptSourceSetVersions: [],
+  transcriptSourceSetItems: [],
+  transcriptInputBundles: [],
+  transcriptInputBundleVersions: [],
+  transcriptInputBundleItems: [],
+  transcriptJourneys: [],
+  transcriptCandidates: [],
+  transcriptApplyPreviews: [],
+  transcriptApplyPreviewBatches: [],
+  transcriptCandidateApplications: [],
+  transcriptCandidateRelationships: [],
+  transcriptConflicts: [],
+  transcriptConflictResolutions: [],
+  transcriptExtractionBindings: [],
+  transcriptJobs: [],
+  transcriptStalenessEvents: [],
 });
 
 const projection = buildEnterpriseIntelligenceProjection(authority(), raw(), new Date('2026-08-04T09:00:00.000Z'));
@@ -125,7 +189,11 @@ assert.equal(projection.modernizationDecisions[0].assembleEligible, true);
 assert.deepEqual(projection.modernizationDecisions[0].conflicts, []);
 assert.equal(projection.blueprints[0].components.find(item => item.type === 'Agent Tools')?.enabled, false);
 assert.equal(projection.approvalResources.find(item => item.id === PACKAGE)?.separationOfDuties, 'creator_cannot_review');
+assert.equal(projection.commandActivity[0].commandType, 'studio.delivery.handoff',
+  'the exact Studio/Delivery authority remains a positive command-activity countercontrol');
 assert.equal(projection.assessPromotion.state, 'contract_pending');
+assert.equal(projection.assessPromotion.acceptedCandidateCount, 1,
+  'assessment.edit remains the exact positive Assess-promotion countercontrol');
 assert.equal(decodeEnterpriseIntelligenceProjection(projection).workspaceId, WORKSPACE);
 
 const astral = '\u{1f680}';
@@ -149,6 +217,406 @@ const serialized = JSON.stringify(projection);
 for (const prohibited of ['must-never-project', 'contentHash', 'extractedTextHash', 'idempotencyKey', 'resource_hash', 'storage_path', 'secret_ref']) {
   assert.ok(!serialized.includes(prohibited), `projection must omit ${prohibited}`);
 }
+
+const transcriptOnlyRows = raw();
+transcriptOnlyRows.evidenceSources = [];
+transcriptOnlyRows.evidenceVersions = [];
+transcriptOnlyRows.evidenceCandidates = [];
+transcriptOnlyRows.transcriptFlags = [{ transcript_source_sets_enabled: false, assess_multisource_apply_enabled: false }];
+transcriptOnlyRows.transcriptSources = [{
+  id: SOURCE, display_name: 'Governed interview transcript', mime_type: 'text/plain', current_version: 1,
+  status: 'review', created_at: '2026-08-04T08:00:00.000Z',
+}];
+transcriptOnlyRows.transcriptSourceVersions = [{
+  id: SOURCE_VERSION, source_id: SOURCE, version: 1, extraction_status: 'parsed', extracted_character_count: 420,
+  extraction_failure_code: null, created_at: '2026-08-04T08:00:00.000Z',
+}];
+transcriptOnlyRows.transcriptSourceSets = [{
+  id: TRANSCRIPT_SOURCE_SET, owner_module: 'assess', current_version: 1, display_label: 'Interview set',
+  description: 'Selected interview evidence', status: 'locked', updated_at: '2026-08-04T08:01:00.000Z',
+}];
+transcriptOnlyRows.transcriptSourceSetVersions = [{
+  id: TRANSCRIPT_SOURCE_SET_VERSION, source_set_id: TRANSCRIPT_SOURCE_SET, version: 1, status: 'locked',
+  source_count: 1, extracted_character_count: 420,
+}];
+transcriptOnlyRows.transcriptSourceSetItems = [{
+  source_set_version_id: TRANSCRIPT_SOURCE_SET_VERSION, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  ordinal: 1, semantic_role: 'primary', user_note: 'Primary interview', extracted_character_count: 420,
+}];
+transcriptOnlyRows.transcriptInputBundles = [{ id: TRANSCRIPT_BUNDLE, owner_module: 'assess', current_version: 1 }];
+transcriptOnlyRows.transcriptInputBundleVersions = [{
+  id: TRANSCRIPT_BUNDLE_VERSION, input_bundle_id: TRANSCRIPT_BUNDLE, version: 1, status: 'locked',
+  created_at: '2026-08-04T08:02:00.000Z',
+}];
+transcriptOnlyRows.transcriptInputBundleItems = [{
+  input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION, source_set_id: TRANSCRIPT_SOURCE_SET,
+  source_set_version_id: TRANSCRIPT_SOURCE_SET_VERSION, ordinal: 1, declared_purpose: 'Assess interview evidence',
+}];
+transcriptOnlyRows.transcriptExtractionBindings = [{
+  id: TRANSCRIPT_BINDING, job_id: TRANSCRIPT_JOB, input_bundle_id: TRANSCRIPT_BUNDLE,
+  input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION, source_set_id: TRANSCRIPT_SOURCE_SET,
+  source_set_version_id: TRANSCRIPT_SOURCE_SET_VERSION, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  created_at: '2026-08-04T08:03:00.000Z',
+}];
+transcriptOnlyRows.transcriptJobs = [{ id: TRANSCRIPT_JOB, status: 'succeeded', completed_at: '2026-08-04T08:04:00.000Z' }];
+transcriptOnlyRows.transcriptCandidates = [{
+  id: CANDIDATE, ai_job_id: TRANSCRIPT_JOB, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  field_key: 'process_objective', value: 'Review exceptions', safe_excerpt: 'Review exceptions',
+  source_locator: 'paragraph:1', confidence: 0.91, suggestion_status: 'suggested', version: 1,
+  created_by: USER, updated_at: '2026-08-04T08:05:00.000Z',
+}, {
+  id: '21000000-0000-4000-8000-000000000021', ai_job_id: UNRELATED_JOB, source_id: SOURCE,
+  source_version_id: SOURCE_VERSION, field_key: 'process_objective', value: 'Must not join by source version',
+  source_locator: 'paragraph:2', confidence: 0.5, suggestion_status: 'suggested', version: 1,
+  created_by: USER, updated_at: '2026-08-04T08:05:00.000Z',
+}];
+transcriptOnlyRows.transcriptApplyPreviews = [{
+  id: TRANSCRIPT_PREVIEW, candidate_id: CANDIDATE, assess_case_id: ASSESS_DRAFT, expected_case_version: 2,
+  application_intent: 'set_case_field', target_key: 'process_objective',
+  expires_at: '2026-08-05T08:00:00.000Z',
+}];
+transcriptOnlyRows.transcriptApplyPreviewBatches = [{
+  id: TRANSCRIPT_PREVIEW_BATCH, assess_case_id: ASSESS_DRAFT, expected_case_version: 2,
+  input_bundle_id: TRANSCRIPT_BUNDLE, input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION,
+  source_set_version_ids: [TRANSCRIPT_SOURCE_SET_VERSION], preview_ids: [TRANSCRIPT_PREVIEW],
+  created_at: '2026-08-04T08:06:00.000Z',
+}];
+const sourceReadOnlyRows = structuredClone(transcriptOnlyRows);
+sourceReadOnlyRows.providerConfigs[0].display_name = 'HIDDEN_PROVIDER_CANARY';
+sourceReadOnlyRows.evidenceSources = [{
+  id: '3b000000-0000-4000-8000-00000000003b', display_name: 'HIDDEN_EVIDENCE_SOURCE_CANARY',
+  mime_type: 'text/plain', current_version: 1, status: 'review', created_by: USER, created_at: '2026-08-04T08:00:00.000Z',
+}];
+sourceReadOnlyRows.evidenceVersions = [{
+  id: '3c000000-0000-4000-8000-00000000003c', source_id: '3b000000-0000-4000-8000-00000000003b',
+  version: 1, extraction_status: 'parsed', extracted_character_count: 42, created_at: '2026-08-04T08:00:00.000Z',
+}];
+sourceReadOnlyRows.evidenceCandidates = [{
+  id: '3d000000-0000-4000-8000-00000000003d', source_id: '3b000000-0000-4000-8000-00000000003b',
+  source_version_id: '3c000000-0000-4000-8000-00000000003c', field_key: 'process_objective',
+  value: 'HIDDEN_EVIDENCE_CANDIDATE_CANARY', excerpt_hash: 'c'.repeat(64), source_locator: 'paragraph:canary',
+  confidence: 0.99, suggestion_status: 'accepted', created_by: USER, updated_at: '2026-08-04T08:05:00.000Z',
+}];
+sourceReadOnlyRows.assessDrafts[0].id = HIDDEN_CANARY_IDS.assessDraft;
+sourceReadOnlyRows.applications[0].name = 'HIDDEN_APPLICATION_CANARY';
+sourceReadOnlyRows.deliveryItems[0].title = 'HIDDEN_DELIVERY_CANARY';
+sourceReadOnlyRows.modernizationDecisions[0].conflicts = ['HIDDEN_MODERNIZATION_CANARY'];
+sourceReadOnlyRows.blueprints[0].structured_content = {
+  ...(sourceReadOnlyRows.blueprints[0].structured_content as Record<string, unknown>),
+  readableDocument: '# HIDDEN_BLUEPRINT_CANARY\n',
+};
+sourceReadOnlyRows.reviewEvents[0].id = HIDDEN_CANARY_IDS.review;
+sourceReadOnlyRows.commandReceipts = [{
+  command_type: 'HIDDEN_COMMAND_CANARY', status: 'committed', completed_at: '2026-08-04T08:00:00.000Z',
+  created_at: '2026-08-04T08:00:00.000Z',
+}, {
+  command_type: 'evidence.assess.promote', status: 'committed', completed_at: '2026-08-04T08:00:00.000Z',
+  created_at: '2026-08-04T08:00:00.000Z',
+}];
+sourceReadOnlyRows.transcriptFlags = [{ transcript_source_sets_enabled: true, assess_multisource_apply_enabled: false }];
+sourceReadOnlyRows.transcriptJourneys = [{
+  id: HIDDEN_CANARY_IDS.journey, entry_module: 'assess', desired_exit_module: 'studio', current_module: 'assess',
+  lineage_classification: 'assessed', planning_only: true, status: 'active', version: 1,
+  updated_at: '2026-08-04T08:07:00.000Z',
+}];
+sourceReadOnlyRows.transcriptCandidates = [{
+  id: HIDDEN_CANARY_IDS.candidate, ai_job_id: HIDDEN_CANARY_IDS.job, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  field_key: 'process_objective', value: 'HIDDEN_ASSESS_CANDIDATE_CANARY', safe_excerpt: 'HIDDEN_ASSESS_EXCERPT_CANARY',
+  source_locator: 'HIDDEN_ASSESS_LOCATOR_CANARY', confidence: 0.91, suggestion_status: 'suggested', version: 1,
+  created_by: USER, updated_at: '2026-08-04T08:05:00.000Z',
+}];
+sourceReadOnlyRows.transcriptApplyPreviews = [{
+  id: HIDDEN_CANARY_IDS.preview, candidate_id: HIDDEN_CANARY_IDS.candidate, assess_case_id: ASSESS_DRAFT,
+  expected_case_version: 2, application_intent: 'set_case_field', target_key: 'HIDDEN_ASSESS_PREVIEW_TARGET_CANARY',
+  proposed_value: 'HIDDEN_ASSESS_PROPOSED_VALUE_CANARY', expires_at: '2026-08-05T08:00:00.000Z',
+}];
+sourceReadOnlyRows.transcriptApplyPreviewBatches = [{
+  id: HIDDEN_CANARY_IDS.previewBatch, assess_case_id: ASSESS_DRAFT, expected_case_version: 2,
+  input_bundle_id: TRANSCRIPT_BUNDLE, input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION,
+  source_set_version_ids: [TRANSCRIPT_SOURCE_SET_VERSION], preview_ids: [HIDDEN_CANARY_IDS.preview],
+  created_at: '2026-08-04T08:06:00.000Z',
+}];
+sourceReadOnlyRows.transcriptCandidateRelationships = [{
+  id: HIDDEN_CANARY_IDS.relationship, candidate_id: HIDDEN_CANARY_IDS.candidate, candidate_version: 1,
+  relationship: 'supporting', rationale: 'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY', created_by: REVIEWER,
+  created_at: '2026-08-04T08:07:00.000Z',
+}];
+sourceReadOnlyRows.transcriptConflicts = [{
+  id: HIDDEN_CANARY_IDS.conflict, assess_case_id: ASSESS_DRAFT, input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION,
+  application_intent: 'set_case_field', target_key: 'HIDDEN_ASSESS_CONFLICT_TARGET_CANARY', candidate_ids: [HIDDEN_CANARY_IDS.candidate],
+  is_material: true, current_resolution_version: 1, created_at: '2026-08-04T08:07:00.000Z',
+}];
+sourceReadOnlyRows.transcriptConflictResolutions = [{
+  conflict_id: HIDDEN_CANARY_IDS.conflict, version: 1, resolution: 'authored_resolution',
+  authored_value: 'HIDDEN_ASSESS_RESOLUTION_CANARY', rationale: 'HIDDEN_ASSESS_RESOLUTION_RATIONALE_CANARY',
+  created_at: '2026-08-04T08:08:00.000Z',
+}];
+sourceReadOnlyRows.transcriptCandidateApplications = [{
+  preview_id: HIDDEN_CANARY_IDS.preview, preview_batch_id: HIDDEN_CANARY_IDS.previewBatch, assess_case_id: ASSESS_DRAFT,
+  assess_case_version: 3, applied_at: '2026-08-04T08:09:00.000Z',
+}];
+sourceReadOnlyRows.transcriptExtractionBindings = [{
+  id: HIDDEN_CANARY_IDS.binding, job_id: HIDDEN_CANARY_IDS.job, input_bundle_id: TRANSCRIPT_BUNDLE,
+  input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION, source_set_id: TRANSCRIPT_SOURCE_SET,
+  source_set_version_id: TRANSCRIPT_SOURCE_SET_VERSION, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  created_at: '2026-08-04T08:03:00.000Z',
+}];
+sourceReadOnlyRows.transcriptJobs = [{
+  id: HIDDEN_CANARY_IDS.job, status: 'succeeded', completed_at: '2026-08-04T08:04:00.000Z',
+}];
+sourceReadOnlyRows.transcriptStalenessEvents = [{
+  resource_kind: 'input_bundle_version', resource_id: TRANSCRIPT_BUNDLE_VERSION,
+  created_at: '2026-08-04T08:10:00.000Z',
+}];
+const transcriptOnlyProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read'],
+}, sourceReadOnlyRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(transcriptOnlyProjection.availability, 'ready', 'transcript-only authority receives usable availability');
+assert.equal(transcriptOnlyProjection.transcriptFlow.features.sourceSetsEnabled, true,
+  'source-read authority receives its source-set feature state');
+assert.equal(transcriptOnlyProjection.transcriptFlow.features.assessMultisourceApplyEnabled, false,
+  'source-read authority never receives the Assess feature state');
+assert.equal(transcriptOnlyProjection.transcriptFlow.features.disabledReason, undefined,
+  'a hidden disabled Assess feature cannot manufacture a source-read disabled reason');
+assert.equal(transcriptOnlyProjection.transcriptFlow.sourceVersions[0].displayName, 'Governed interview transcript');
+assert.deepEqual({
+  providers: transcriptOnlyProjection.providers,
+  evidenceSources: transcriptOnlyProjection.evidenceSources,
+  evidenceCandidates: transcriptOnlyProjection.evidenceCandidates,
+  assessDrafts: transcriptOnlyProjection.assessDrafts,
+  applications: transcriptOnlyProjection.applications,
+  studioDocuments: transcriptOnlyProjection.studioDocuments,
+  deliveryPackages: transcriptOnlyProjection.deliveryPackages,
+  monitorBaselines: transcriptOnlyProjection.monitorBaselines,
+  modernizationDecisions: transcriptOnlyProjection.modernizationDecisions,
+  blueprints: transcriptOnlyProjection.blueprints,
+  approvalResources: transcriptOnlyProjection.approvalResources,
+  commandActivity: transcriptOnlyProjection.commandActivity,
+}, {
+  providers: [], evidenceSources: [], evidenceCandidates: [], assessDrafts: [], applications: [], studioDocuments: [],
+  deliveryPackages: [], monitorBaselines: [], modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
+}, 'source-read-only projection rejects every unrelated top-level service-role collection');
+assert.deepEqual(transcriptOnlyProjection.assessPromotion, {
+  state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [],
+}, 'source-read-only projection neutralizes Assess promotion even when accepted candidates and a committed receipt are injected');
+assert.deepEqual({
+  journeys: transcriptOnlyProjection.transcriptFlow.journeys,
+  assessCandidates: transcriptOnlyProjection.transcriptFlow.assessCandidates,
+  assessConflicts: transcriptOnlyProjection.transcriptFlow.assessConflicts,
+  assessApplyPreviews: transcriptOnlyProjection.transcriptFlow.assessApplyPreviews,
+  assessRuns: transcriptOnlyProjection.transcriptFlow.assessRuns,
+}, { journeys: [], assessCandidates: [], assessConflicts: [], assessApplyPreviews: [], assessRuns: [] },
+'source-read-only projection fails closed over every Assess-owned collection even when raw service-role rows are present');
+assert.deepEqual(transcriptOnlyProjection.transcriptFlow.inputBundles[0].sourceSetVersions, [{
+  sourceSetId: TRANSCRIPT_SOURCE_SET, sourceSetVersionSelector: TRANSCRIPT_SOURCE_SET_VERSION, sourceSetVersion: 1, ordinal: 1,
+}], 'source-read-only authority retains the explicitly authorized immutable input-bundle projection');
+assert.equal(transcriptOnlyProjection.transcriptFlow.inputBundles[0].status, 'locked',
+  'Assess-owned staleness rows cannot influence a source-read-only projection');
+const sourceOnlyRowsWithoutHiddenCollections = structuredClone(sourceReadOnlyRows);
+for (const collection of [
+  'providerConfigs', 'providerRoutes', 'providerRoleOptions', 'providerRoleCapabilities',
+  'evidenceSources', 'evidenceVersions', 'evidenceCandidates', 'assessDrafts', 'applications', 'applicationAssessments',
+  'studioAggregates', 'studioVersions', 'studioHandoffs', 'deliveryPackages', 'deliveryVersions', 'deliveryItems',
+  'monitorBaselines', 'modernizationAssessments', 'modernizationDecisions', 'blueprints', 'reviewEvents', 'approvals',
+  'commandReceipts', 'transcriptJourneys', 'transcriptCandidates', 'transcriptApplyPreviews',
+  'transcriptApplyPreviewBatches', 'transcriptCandidateApplications', 'transcriptCandidateRelationships',
+  'transcriptConflicts', 'transcriptConflictResolutions', 'transcriptExtractionBindings', 'transcriptJobs',
+  'transcriptStalenessEvents',
+] as const) {
+  sourceOnlyRowsWithoutHiddenCollections[collection] = [];
+}
+const sourceOnlyProjectionWithoutHiddenCollections = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read'],
+}, sourceOnlyRowsWithoutHiddenCollections, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(transcriptOnlyProjection.availability, sourceOnlyProjectionWithoutHiddenCollections.availability,
+  'hidden service-role rows cannot influence source-read availability');
+assert.deepEqual(transcriptOnlyProjection.transcriptFlow, sourceOnlyProjectionWithoutHiddenCollections.transcriptFlow,
+  'hidden Assess rows cannot influence any caller-visible source/source-set/input-bundle field');
+const sourceReadOnlySerialized = JSON.stringify(transcriptOnlyProjection);
+for (const hiddenCanary of [
+  ...HIDDEN_CANARY_VALUES,
+  ...Object.values(HIDDEN_CANARY_IDS),
+  CONFIG, ROUTE, ROUTE_ROLE, APPLICATION, APPLICATION_ASSESSMENT, STUDIO, STUDIO_VERSION, PACKAGE, PACKAGE_VERSION,
+  MONITOR, MODERN_ASSESSMENT, DECISION, BLUEPRINT, ASSESS_DRAFT,
+  '3b000000-0000-4000-8000-00000000003b',
+  '3c000000-0000-4000-8000-00000000003c',
+  '3d000000-0000-4000-8000-00000000003d',
+]) {
+  assert.ok(!sourceReadOnlySerialized.includes(hiddenCanary),
+    `source-read-only projection must omit unauthorized service-role canary: ${hiddenCanary}`);
+}
+
+const assessmentEditOnlyProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assessment.edit'],
+}, sourceReadOnlyRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.deepEqual(assessmentEditOnlyProjection.evidenceCandidates, [],
+  'Assess edit authority alone cannot reveal evidence candidates');
+assert.deepEqual(assessmentEditOnlyProjection.commandActivity, [],
+  'Assess edit authority alone cannot reveal evidence promotion receipts');
+assert.deepEqual(assessmentEditOnlyProjection.assessPromotion, {
+  state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [],
+}, 'Assess promotion requires evidence visibility as well as canonical Assess edit authority');
+
+const assessProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, transcriptOnlyRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(assessProjection.transcriptFlow.assessCandidates.length, 1,
+  'candidate lineage joins exact ai_job_id to its extraction binding, never source-version coincidence');
+assert.equal(assessProjection.transcriptFlow.assessCandidates[0].inputBundleVersionSelector, TRANSCRIPT_BUNDLE_VERSION);
+assert.deepEqual(assessProjection.transcriptFlow.inputBundles[0].sourceSetVersions, [{
+  sourceSetId: TRANSCRIPT_SOURCE_SET, sourceSetVersionSelector: TRANSCRIPT_SOURCE_SET_VERSION, sourceSetVersion: 1, ordinal: 1,
+}], 'input bundle projects its exact immutable source-set version identity');
+assert.deepEqual({
+  sourceSetId: assessProjection.transcriptFlow.assessCandidates[0].sourceSetId,
+  sourceSetVersionSelector: assessProjection.transcriptFlow.assessCandidates[0].sourceSetVersionSelector,
+  sourceSetVersion: assessProjection.transcriptFlow.assessCandidates[0].sourceSetVersion,
+}, { sourceSetId: TRANSCRIPT_SOURCE_SET, sourceSetVersionSelector: TRANSCRIPT_SOURCE_SET_VERSION, sourceSetVersion: 1 },
+'candidate projects exact source-set lineage from its AI-job extraction binding');
+assert.equal(assessProjection.transcriptFlow.assessRuns[0].candidateCount, 1,
+  'run counts include only candidates produced by the exact bound job');
+assert.deepEqual(assessProjection.transcriptFlow.assessRuns[0].extractionBindings, [{
+  extractionBindingId: TRANSCRIPT_BINDING, extractionJobId: TRANSCRIPT_JOB,
+  sourceSetId: TRANSCRIPT_SOURCE_SET, sourceSetVersionSelector: TRANSCRIPT_SOURCE_SET_VERSION,
+  sourceSetVersion: 1, sourceVersionSelector: SOURCE_VERSION,
+}], 'run projects exact binding lineage instead of a current source-set root');
+assert.equal(assessProjection.transcriptFlow.assessApplyPreviews[0].id, TRANSCRIPT_PREVIEW_BATCH,
+  'browser projection commits and returns the real preview-batch identifier');
+assert.equal(assessProjection.transcriptFlow.inputBundles[0].status, 'locked',
+  'disabled feature flags retain immutable transcript lineage as a read-only rollback projection');
+
+const assessOnlyProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, transcriptOnlyRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.deepEqual({
+  sourceVersions: assessOnlyProjection.transcriptFlow.sourceVersions,
+  sourceSets: assessOnlyProjection.transcriptFlow.sourceSets,
+  inputBundles: assessOnlyProjection.transcriptFlow.inputBundles,
+}, { sourceVersions: [], sourceSets: [], inputBundles: [] },
+'Assess read uses source lineage internally without projecting source collections that lack transcript.sources.read');
+assert.equal(assessOnlyProjection.transcriptFlow.assessCandidates.length, 1,
+  'canonical Assess read capability independently authorizes Assess-owned projections');
+
+const mutationOnlyProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.manage', 'transcript.assess.apply', 'transcript.journeys.manage'],
+}, sourceReadOnlyRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.deepEqual({
+  sourceVersions: mutationOnlyProjection.transcriptFlow.sourceVersions,
+  sourceSets: mutationOnlyProjection.transcriptFlow.sourceSets,
+  inputBundles: mutationOnlyProjection.transcriptFlow.inputBundles,
+  journeys: mutationOnlyProjection.transcriptFlow.journeys,
+  assessCandidates: mutationOnlyProjection.transcriptFlow.assessCandidates,
+  assessConflicts: mutationOnlyProjection.transcriptFlow.assessConflicts,
+  assessApplyPreviews: mutationOnlyProjection.transcriptFlow.assessApplyPreviews,
+  assessRuns: mutationOnlyProjection.transcriptFlow.assessRuns,
+}, {
+  sourceVersions: [], sourceSets: [], inputBundles: [], journeys: [], assessCandidates: [], assessConflicts: [],
+  assessApplyPreviews: [], assessRuns: [],
+}, 'mutation capabilities never imply source or Assess collection read authority');
+
+const transcriptTablesRequestedFor = async (capabilities: string[]) => {
+  const requested: string[] = [];
+  const query = async <T>(path: string, _init: RequestInit = {}): Promise<T> => {
+    requested.push(path.split('?')[0]);
+    return [] as T;
+  };
+  await createEnterpriseIntelligenceQueryDatabase(query).loadProjectionRows({
+    ...authority(), capabilities,
+  });
+  return requested;
+};
+const sourceReadOnlyRequests = await transcriptTablesRequestedFor(['transcript.sources.read']);
+const sourceCollectionTables = [
+  'enterprise_transcript_workspace_flags',
+  'enterprise_evidence_sources',
+  'enterprise_evidence_source_versions',
+  'enterprise_source_sets',
+  'enterprise_source_set_versions',
+  'enterprise_source_set_version_items',
+  'enterprise_module_input_bundles',
+  'enterprise_module_input_bundle_versions',
+  'enterprise_module_input_bundle_items',
+];
+const assessCollectionTables = [
+  'enterprise_evidence_candidates',
+  'enterprise_governed_journeys',
+  'enterprise_assess_apply_previews',
+  'enterprise_assess_apply_preview_batches',
+  'enterprise_assess_candidate_applications',
+  'enterprise_evidence_candidate_relationship_reviews',
+  'enterprise_assess_evidence_conflicts',
+  'enterprise_assess_evidence_conflict_resolutions',
+  'enterprise_transcript_extraction_bindings',
+  'enterprise_ai_job_ledger',
+  'enterprise_transcript_staleness_events',
+];
+assert.deepEqual(
+  sourceCollectionTables.filter(table => !sourceReadOnlyRequests.includes(table)),
+  [],
+  'source-read-only service-role path requests every authorized transcript source collection',
+);
+assert.deepEqual(
+  assessCollectionTables.filter(table => sourceReadOnlyRequests.includes(table)),
+  [],
+  'source-read-only service-role path never requests an Assess-owned table',
+);
+
+const assessReadRequests = await transcriptTablesRequestedFor(['assess.v2.read']);
+assert.deepEqual(
+  assessCollectionTables.filter(table => !assessReadRequests.includes(table)),
+  [],
+  'canonical Assess read capability requests every Assess-owned collection as a positive countercontrol',
+);
+assert.deepEqual(
+  sourceCollectionTables.filter(table => !assessReadRequests.includes(table)),
+  [],
+  'Assess collection assembly may request supporting immutable source lineage',
+);
+
+const mutationOnlyRequests = await transcriptTablesRequestedFor([
+  'transcript.sources.manage', 'transcript.assess.apply', 'transcript.journeys.manage',
+]);
+assert.deepEqual(
+  [...sourceCollectionTables, ...assessCollectionTables].filter(table => mutationOnlyRequests.includes(table)),
+  [],
+  'mutation-only service-role path requests no transcript read collection',
+);
+const transcriptOnlySerialized = JSON.stringify(transcriptOnlyProjection);
+for (const prohibited of ['content_hash', 'extracted_text_hash', 'storage_path', 'provider_config_id', 'secret_ref']) {
+  assert.ok(!transcriptOnlySerialized.includes(prohibited), `transcript-only projection must omit ${prohibited}`);
+}
+
+const advancedSourceSetRows = structuredClone(transcriptOnlyRows);
+advancedSourceSetRows.transcriptSourceSets[0].current_version = 2;
+advancedSourceSetRows.transcriptSourceSetVersions.push({
+  id: TRANSCRIPT_SOURCE_SET_VERSION_NEXT, source_set_id: TRANSCRIPT_SOURCE_SET, version: 2, status: 'locked',
+  source_count: 1, extracted_character_count: 420,
+});
+advancedSourceSetRows.transcriptSourceSetItems.push({
+  source_set_version_id: TRANSCRIPT_SOURCE_SET_VERSION_NEXT, source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  ordinal: 1, semantic_role: 'supporting', user_note: 'Advanced current set version', extracted_character_count: 420,
+});
+const advancedSourceSetProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, advancedSourceSetRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(advancedSourceSetProjection.transcriptFlow.sourceSets[0].versionSelector, TRANSCRIPT_SOURCE_SET_VERSION_NEXT,
+  'source library projects the advanced current source-set version');
+assert.equal(advancedSourceSetProjection.transcriptFlow.inputBundles[0].sourceSetVersions[0].sourceSetVersionSelector, TRANSCRIPT_SOURCE_SET_VERSION,
+  'immutable bundle retains its historical source-set version after the current source set advances');
+assert.equal(advancedSourceSetProjection.transcriptFlow.assessCandidates[0].sourceSetVersionSelector, TRANSCRIPT_SOURCE_SET_VERSION,
+  'candidate retains the historical source-set version from its exact binding');
+assert.equal(advancedSourceSetProjection.transcriptFlow.assessRuns[0].extractionBindings[0].sourceSetVersionSelector, TRANSCRIPT_SOURCE_SET_VERSION,
+  'run retains historical binding lineage and never substitutes the current source-set version');
+decodeEnterpriseIntelligenceProjection(advancedSourceSetProjection);
+
+const driftedBindingRows = structuredClone(advancedSourceSetRows);
+driftedBindingRows.transcriptExtractionBindings[0].source_set_version_id = TRANSCRIPT_SOURCE_SET_VERSION_NEXT;
+const driftedBindingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, driftedBindingRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.deepEqual(driftedBindingProjection.transcriptFlow.assessCandidates, [],
+  'candidate projection fails closed when binding lineage drifts from the immutable bundle');
+assert.deepEqual(driftedBindingProjection.transcriptFlow.assessRuns, [],
+  'run projection fails closed when a binding substitutes the current source-set version');
 
 const blockerRows = raw();
 blockerRows.modernizationDecisions[0].blockers = [

@@ -16,6 +16,7 @@ import {
   sanitizeEvidenceExcerpt,
   type ModernizationFactors,
 } from './enterpriseIntelligence';
+import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
 
 const completeFactors: ModernizationFactors = {
   criticality: 'medium',
@@ -235,6 +236,7 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
     providers: [], evidenceSources: [], evidenceCandidates: [], assessDrafts: [], applications: [],
     studioDocuments: [], deliveryPackages: [], monitorBaselines: [],
     modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
+    transcriptFlow: emptyTranscriptFlowProjection(),
     assessPromotion: { state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [] },
   };
   assert.equal(decodeEnterpriseIntelligenceProjection(baseProjection).authorizationVersion, 7);

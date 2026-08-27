@@ -229,6 +229,7 @@ const main = async () => {
       deleted_at: null,
       default_model: 'new-default-model',
       model_allowlist: ['original-extraction-model', 'new-default-model'],
+      budget_policy: { dailyRequests: 1, monthlyTokens: 10 },
       last_validated_at: '2026-06-07T23:00:00.000Z',
     }),
     queryProviderKeyRef: async input => ({
@@ -241,7 +242,7 @@ const main = async () => {
       expires_at: '2026-12-31T00:00:00.000Z',
       deleted_at: null,
     }),
-    queryUsage: async () => ({ dailyRequests: 0, monthlyTokens: 0 }),
+    queryUsage: async () => { throw new Error('read-then-compare budget authority must not run'); },
     isEndpointAllowed: () => true,
   };
   const recoveryInput = {

@@ -2,6 +2,25 @@
 
 Record the exact exit code and material result for every executed command. Unavailable or unauthorized checks are `blocked` or `not run`, never passed.
 
+## Governed Multi-Source Transcript PR A Required Set
+
+| Command | Purpose | Pass signal |
+| --- | --- | --- |
+| `npm run test:transcript-flow:domain` | Immutable source-set, input-bundle, conflict, apply, and idempotency contracts. | Exit 0 with explicit owned Test-ID assertions. |
+| `npm run test:transcript-flow:api` | Strict command/query projection and selector boundaries, including exact `AUTH-001/002` request and assertion-completion ledgers with omitted/substituted producer-trace rejection. | Exit 0. |
+| `npm run test:transcript-flow:providers` | Six mocked adapters, Groq parity, atomic budgets, and cleanup recovery. | Exit 0 with explicit provider/budget assertions. |
+| `npm run test:transcript-flow:coverage` | Governed PR A source coverage, with the difficult orchestration surface disclosed separately. | At least 90% lines, 85% functions, and 80% branches for the governed set; do not hide the command/query orchestration observation. |
+| `npm run test:transcript-flow:postgres` | Full-chain disposable PostgreSQL 16 RLS/ACL/source/apply/budget/rollback scenarios. | Exit 0; explicit assertions pass; temporary database removed. |
+| `npm run test:transcript-flow:browser` | Desktop Chrome and Pixel 7 exact-lineage source/review/apply and adverse-state behavior. | Twelve tests pass, six per profile; owned Test-ID assertions emitted. |
+| `npm run test:transcript-flow:adversarial` | Browser/provider boundary, hostile-source, and secret-hygiene gates. | Exit 0; zero forbidden/stale/secret hits. |
+| `npm run test:transcript-flow:a11y` | Keyboard, focus, accessible relationships, axe, zoom, and overflow on Desktop Chrome and Pixel 7. | Six tests pass, three per profile; zero serious/critical axe findings and no horizontal overflow. |
+| `npm run test:transcript-flow:performance` | The implemented 200-candidate half of the interaction budget. | Two `PERF-002-A` tests pass, one per profile; `PERF-002-B` remains explicit `not_run`. |
+| `npm run test:transcript-flow:evidence-contract` | Independent evidence/provenance mutation rejection. | 19/19 evidence-contract tests pass: one positive registry-contract case plus 18/18 adversarial rejection cases. |
+| `node scripts/runTranscriptFlowEvidence.mjs` | Execute the canonical 33-command matrix and generate Test-ID-native sanitized machine evidence bound to base/head SHA, scoped working-tree digest, workflow identity, source owner/hash, assertion-emitted persona/capabilities/tenant/fixtures, and exact exercised lineage. | Exit 0; 194 exact markers and six truthful `not_run` results are written under `output/process-lifecycle/<base-sha>/<digest>/<attempt>/`; no suite exit synthesizes a Test-ID result. |
+| `npm run test:transcript-flow:evidence` | Independently verify assertion completeness, ownership, uniqueness, exact result cardinality, sanitization, exact commands, sources/hashes, emitted runtime context, Git/workflow identity, digest, and truthful not-run boundaries. | Exit 0 with 200 per-assertion results and 33 exact commands. |
+
+The evidence runner also executes browser and Edge typecheck, deterministic scoring, build, dependency audit, workflow YAML validation, retained Enterprise Intelligence/Assess/Studio source and PostgreSQL suites, retained Enterprise Intelligence/Assess/Studio browser suites, mocked full-platform provider tests, the 108-case campaign, boundary/secret checks, and `git diff --check`. Exact-head CI is a separate required acceptance gate and cannot be claimed by a local working-tree run.
+
 ## PR 1A Required Set
 
 | Command | Purpose | Pass signal |

@@ -2341,17 +2341,22 @@ try {
     const contender = await connect(urlFor(names.authority));
     let transactionOpen = false;
     let pending;
+    let pendingAssertionFailure;
     try {
       await contender.query('BEGIN');
       transactionOpen = true;
       await addAssessment(concurrentSource, 2, 'draft', false, 'Retain and monitor', contender);
       let settled = false;
-      pending = commitSource(concurrentSource, 'concurrent').finally(() => { settled = true; });
+      pending = assert.rejects(
+        commitSource(concurrentSource, 'concurrent'),
+        /ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT/,
+      ).catch(error => { pendingAssertionFailure = error; }).finally(() => { settled = true; });
       await new Promise(resolve => setTimeout(resolve, 75));
       assert.equal(settled, false, 'modernization must wait behind the current-assessment insert lock');
       await contender.query('COMMIT');
       transactionOpen = false;
-      await assert.rejects(pending, /ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT/);
+      await pending;
+      if (pendingAssertionFailure) throw pendingAssertionFailure;
     } finally {
       if (transactionOpen) await contender.query('ROLLBACK');
     }

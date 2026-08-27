@@ -25,6 +25,8 @@ import {
 } from '../../../services/enterpriseIntelligence.ts';
 import {
   EnterpriseAiGatewayError,
+  classifyEnterpriseProviderFailureForBudget,
+  estimateMaximumProviderInputTokens,
   isAllowedProviderEndpoint,
   parseJsonObjectResponse,
   runGovernedProviderRequest,
@@ -71,6 +73,7 @@ import {
   uploadBinaryArtifact,
 } from './storage.ts';
 import { EVIDENCE_SOURCE_BUCKET } from './storageBoundary.ts';
+import { ProviderBudgetError, runBudgetedProviderEffect } from './providerBudget.ts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -84,6 +87,14 @@ export type EnterpriseCommandType =
   | 'evidence.extract'
   | 'evidence.candidate.review'
   | 'evidence.assess.promote'
+  | 'transcript.source-set.create-version'
+  | 'transcript.input-bundle.lock'
+  | 'transcript.assess.extract'
+  | 'transcript.assess.candidate.review'
+  | 'transcript.assess.apply.preview'
+  | 'transcript.assess.apply.commit'
+  | 'transcript.assess.conflict.resolve'
+  | 'transcript.journey.set-state'
   | 'modernization.evaluate'
   | 'approval.review.record'
   | 'approval.record'
@@ -116,6 +127,10 @@ export class EnterpriseCommandError extends Error {
       | 'INVALID_PAYLOAD'
       | 'COMMAND_BLOCKED'
       | 'COMMAND_UNAVAILABLE'
+      | 'SOURCE_SET_LIMIT_EXCEEDED'
+      | 'SOURCE_VERSION_NOT_READY'
+      | 'CONFLICT_UNRESOLVED'
+      | 'BUDGET_EXHAUSTED'
       | 'RECEIPT_FINALIZATION_FAILED',
     public readonly status = codeToStatus(code),
   ) {
@@ -182,6 +197,31 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
     'ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT',
     'ENTERPRISE_MODERNIZATION_RESULT_IDENTITY_MISMATCH',
   )) return new EnterpriseCommandError('RESOURCE_STALE');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_SOURCE_SET_LIMIT_EXCEEDED')) {
+    return new EnterpriseCommandError('SOURCE_SET_LIMIT_EXCEEDED');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_SOURCE_VERSION_NOT_READY')) {
+    return new EnterpriseCommandError('SOURCE_VERSION_NOT_READY');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_MATERIAL_CONFLICT_UNRESOLVED')) {
+    return new EnterpriseCommandError('CONFLICT_UNRESOLVED');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_TRANSCRIPT_SOURCE_SET_STALE', 'ENTERPRISE_TRANSCRIPT_BUNDLE_STALE',
+    'ENTERPRISE_TRANSCRIPT_SOURCE_SET_STALE', 'ENTERPRISE_TRANSCRIPT_JOURNEY_STALE',
+    'ENTERPRISE_TRANSCRIPT_CANDIDATE_REVIEW_STALE', 'ENTERPRISE_TRANSCRIPT_CANDIDATE_STALE',
+    'ENTERPRISE_TRANSCRIPT_ASSESS_STALE', 'ENTERPRISE_TRANSCRIPT_CONFLICT_STALE',
+    'ENTERPRISE_TRANSCRIPT_APPLY_BATCH_STALE', 'ENTERPRISE_TRANSCRIPT_EXTRACTION_BINDING_STALE',
+  )) return new EnterpriseCommandError('RESOURCE_STALE');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_FEATURE_DISABLED')) {
+    return new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_TRANSCRIPT_INVALID_SOURCE_SET', 'ENTERPRISE_TRANSCRIPT_INVALID_BUNDLE',
+    'ENTERPRISE_TRANSCRIPT_INVALID_JOURNEY', 'ENTERPRISE_TRANSCRIPT_CANDIDATE_REVIEW_INVALID',
+    'ENTERPRISE_TRANSCRIPT_APPLY_INVALID', 'ENTERPRISE_TRANSCRIPT_CONFLICT_INVALID',
+    'ENTERPRISE_TRANSCRIPT_APPLY_BATCH_INVALID', 'ENTERPRISE_TRANSCRIPT_APPLY_BATCH_DUPLICATE_TARGET',
+  )) return new EnterpriseCommandError('INVALID_PAYLOAD');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_APPROVAL_AUTHORIZATION_STALE', 'ENTERPRISE_APPROVAL_REVIEWER_AUTHORIZATION_STALE',
     'PR1B_AUTHORIZATION_STALE',
@@ -202,6 +242,8 @@ const codeToStatus = (code: EnterpriseCommandError['code']) => {
   if (code === 'RESOURCE_NOT_FOUND') return 404;
   if (code === 'RESOURCE_STALE') return 409;
   if (code === 'COMMAND_IN_PROGRESS') return 409;
+  if (code === 'CONFLICT_UNRESOLVED') return 409;
+  if (code === 'BUDGET_EXHAUSTED') return 409;
   if (code === 'COMMAND_UNAVAILABLE' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   return 400;
 };
@@ -217,6 +259,14 @@ const commandTypes = new Set<EnterpriseCommandType>([
   'evidence.extract',
   'evidence.candidate.review',
   'evidence.assess.promote',
+  'transcript.source-set.create-version',
+  'transcript.input-bundle.lock',
+  'transcript.assess.extract',
+  'transcript.assess.candidate.review',
+  'transcript.assess.apply.preview',
+  'transcript.assess.apply.commit',
+  'transcript.assess.conflict.resolve',
+  'transcript.journey.set-state',
   'modernization.evaluate',
   'approval.review.record',
   'approval.record',
@@ -249,7 +299,28 @@ const requireUuidArray = (value: unknown, maxItems = 100) => {
   return ids;
 };
 
-const unsafeFieldPattern = /^(api[_-]?key|provider[_-]?key|secret(value|reference)?|pre[_-]?provisioned[_-]?reference|authorization|auth[_-]?header|bearer[_-]?token|raw[_-]?(key|prompt|completion)|prompt[_-]?body|completion[_-]?body|storage[_-]?path|object[_-]?key)$/i;
+const requirePositiveInteger = (value: unknown, allowZero = false) => {
+  if (!Number.isSafeInteger(value) || Number(value) < (allowZero ? 0 : 1)) {
+    throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  return Number(value);
+};
+
+const requireSha256 = (value: unknown) => {
+  const hash = requireString(value, 64).toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return hash;
+};
+
+const requireExactPayload = (payload: JsonObject, required: readonly string[], optional: readonly string[] = []) => {
+  const allowed = new Set([...required, ...optional]);
+  if (required.some(key => !(key in payload)) || Object.keys(payload).some(key => !allowed.has(key))) {
+    throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  return payload;
+};
+
+const unsafeFieldPattern = /^(api[_-]?key|provider[_-]?key|secret(value|reference)?|pre[_-]?provisioned[_-]?reference|authorization|auth[_-]?header|bearer[_-]?token|raw[_-]?(key|prompt|completion)|prompt[_-]?body|completion[_-]?body|storage[_-]?path|object[_-]?key|(bundle|manifest|provenance|content|extracted[_-]?text)[_-]?hash|route[_-]?policy[_-]?version)$/i;
 
 const assertNoUnsafeFields = (value: unknown): void => {
   if (Array.isArray(value)) {
@@ -526,6 +597,22 @@ export const resolveEnterpriseCommandResourceId = (
           ? resultObject.candidateId
           : commandType === 'evidence.assess.promote'
             ? resultObject.assessDraftId
+            : commandType === 'transcript.source-set.create-version'
+              ? resultObject.sourceSetId
+              : commandType === 'transcript.input-bundle.lock'
+                ? resultObject.inputBundleId
+                : commandType === 'transcript.assess.extract'
+                  ? resultObject.jobId
+                  : commandType === 'transcript.assess.candidate.review'
+                    ? resultObject.candidateId
+                    : commandType === 'transcript.assess.apply.preview'
+                      ? resultObject.previewBatchId ?? resultObject.previewId
+                      : commandType === 'transcript.assess.apply.commit'
+                        ? resultObject.assessDraftId
+                        : commandType === 'transcript.assess.conflict.resolve'
+                          ? resultObject.conflictId
+                          : commandType === 'transcript.journey.set-state'
+                            ? resultObject.journeyId
             : commandType === 'modernization.evaluate'
               ? resultObject.decisionId
               : commandType === 'studio.delivery.handoff'
@@ -544,7 +631,8 @@ export const enterpriseCommandStatusForTerminalReceipt = (receipt: EnterpriseRec
     'METHOD_NOT_ALLOWED', 'INVALID_COMMAND', 'AUTHENTICATION_REQUIRED', 'TENANT_ACCESS_DENIED',
     'PERMISSION_DENIED', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT', 'COMMAND_IN_PROGRESS',
     'RESOURCE_NOT_FOUND', 'RESOURCE_STALE', 'INVALID_PAYLOAD', 'COMMAND_BLOCKED',
-    'COMMAND_UNAVAILABLE', 'RECEIPT_FINALIZATION_FAILED',
+    'COMMAND_UNAVAILABLE', 'SOURCE_SET_LIMIT_EXCEEDED', 'SOURCE_VERSION_NOT_READY',
+    'CONFLICT_UNRESOLVED', 'BUDGET_EXHAUSTED', 'RECEIPT_FINALIZATION_FAILED',
   ]);
   return known.has(responseError as EnterpriseCommandError['code'])
     ? codeToStatus(responseError as EnterpriseCommandError['code'])
@@ -566,6 +654,14 @@ const enterpriseCommandCapabilities: Record<EnterpriseDomainCommandType, readonl
   'evidence.extract': ['evidence.write'],
   'evidence.candidate.review': ['evidence.review'],
   'evidence.assess.promote': ['assessment.edit'],
+  'transcript.source-set.create-version': ['transcript.sources.manage'],
+  'transcript.input-bundle.lock': ['transcript.sources.manage'],
+  'transcript.assess.extract': ['evidence.write'],
+  'transcript.assess.candidate.review': ['evidence.review'],
+  'transcript.assess.apply.preview': ['transcript.assess.apply'],
+  'transcript.assess.apply.commit': ['transcript.assess.apply'],
+  'transcript.assess.conflict.resolve': ['transcript.assess.apply'],
+  'transcript.journey.set-state': ['transcript.journeys.manage'],
   'modernization.evaluate': ['portfolio.manage'],
   'approval.review.record': ['approvals.review'],
   'approval.record': ['approvals.review'],
@@ -1203,7 +1299,12 @@ const commitStagedEvidenceExtraction = async (
   }
 };
 
-const commandEvidenceExtract = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+type TranscriptExtractionBinding = TranscriptExtractionSelection;
+
+const commandEvidenceExtract = async (
+  authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow,
+  transcriptBinding?: TranscriptExtractionBinding,
+) => {
   requirePermission(authority, 'evidence.write');
   const sourceId = requireUuid(payload.sourceId);
   const source = await findOne<{ id: string; mime_type: SupportedEvidenceMimeType; status: string; current_version: number }>(
@@ -1213,7 +1314,7 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
   if (!source || !source.mime_type || !Number.isSafeInteger(source.current_version)) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
   const version = await findOne<EvidenceVersionRow>(
     'enterprise_evidence_source_versions',
-    `select=id,source_id,version,original_filename,storage_bucket,storage_path,content_hash,extracted_text_hash&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_id=eq.${encodeURIComponent(sourceId)}&version=eq.${source.current_version}`,
+    `select=id,source_id,version,original_filename,storage_bucket,storage_path,content_hash,extracted_text_hash&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_id=eq.${encodeURIComponent(sourceId)}&${transcriptBinding ? `id=eq.${encodeURIComponent(transcriptBinding.sourceVersionId)}` : `version=eq.${source.current_version}`}`,
   );
   if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
   const sourceVersionId = version.id;
@@ -1252,34 +1353,55 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
       promptKey,
       promptVersion,
     };
-    await ensureExecutionPlan(receipt, authority, routePlan);
+    await ensureExecutionPlan(receipt, authority, {
+      ...routePlan,
+      ...(transcriptBinding ? {
+        transcriptInputBundleId: transcriptBinding.inputBundleId,
+        transcriptInputBundleVersionId: transcriptBinding.inputBundleVersionId,
+        transcriptInputBundleVersion: transcriptBinding.bundleVersion,
+        transcriptBundleHash: transcriptBinding.bundleHash,
+        transcriptSourceSetId: transcriptBinding.sourceSetId,
+        transcriptSourceSetVersionId: transcriptBinding.sourceSetVersionId,
+        transcriptSourceSetVersion: transcriptBinding.sourceSetVersion,
+      } : {}),
+    });
     routePlan = readEvidenceExtractionRoutePlan(receipt.execution_plan || {}, expectedPlanIdentity);
     if (!routePlan) throw new EnterpriseCommandError('RESOURCE_STALE');
   }
+  if (transcriptBinding && (
+    receipt.execution_plan?.transcriptInputBundleId !== transcriptBinding.inputBundleId
+    || receipt.execution_plan?.transcriptInputBundleVersionId !== transcriptBinding.inputBundleVersionId
+    || receipt.execution_plan?.transcriptInputBundleVersion !== transcriptBinding.bundleVersion
+    || receipt.execution_plan?.transcriptBundleHash !== transcriptBinding.bundleHash
+    || receipt.execution_plan?.transcriptSourceSetId !== transcriptBinding.sourceSetId
+    || receipt.execution_plan?.transcriptSourceSetVersionId !== transcriptBinding.sourceSetVersionId
+    || receipt.execution_plan?.transcriptSourceSetVersion !== transcriptBinding.sourceSetVersion
+  )) throw new EnterpriseCommandError('RESOURCE_STALE');
   const claimStarted = Date.now();
   let claim: EvidenceExtractionClaim;
+  const extractionClaimArgs = {
+    p_job_id: jobId,
+    p_receipt: receipt.id,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    p_actor: authority.actorId,
+    p_source_id: sourceId,
+    p_source_version_id: sourceVersionId,
+    p_route_id: routePlan.routeId,
+    p_provider_config_id: routePlan.providerConfigId,
+    p_provider: routePlan.provider,
+    p_capability: 'assess.evidence.extract',
+    p_model: routePlan.model,
+    p_endpoint_identity: routePlan.endpointIdentity,
+    p_deployment_identity: routePlan.deploymentIdentity,
+    p_prompt_key: promptKey,
+    p_prompt_version: promptVersion,
+    p_request_hash: receipt.request_hash,
+    p_execution_token: receipt.execution_token,
+    p_execution_fence: receipt.execution_fence,
+  };
   try {
-    claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', {
-      p_job_id: jobId,
-      p_receipt: receipt.id,
-      p_org: authority.organizationId,
-      p_workspace: authority.workspaceId,
-      p_actor: authority.actorId,
-      p_source_id: sourceId,
-      p_source_version_id: sourceVersionId,
-      p_route_id: routePlan.routeId,
-      p_provider_config_id: routePlan.providerConfigId,
-      p_provider: routePlan.provider,
-      p_capability: 'assess.evidence.extract',
-      p_model: routePlan.model,
-      p_endpoint_identity: routePlan.endpointIdentity,
-      p_deployment_identity: routePlan.deploymentIdentity,
-      p_prompt_key: promptKey,
-      p_prompt_version: promptVersion,
-      p_request_hash: receipt.request_hash,
-      p_execution_token: receipt.execution_token,
-      p_execution_fence: receipt.execution_fence,
-    });
+    claim = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', extractionClaimArgs);
   } catch (error) {
     if (isSupabaseRpcTransportError(error)) throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
     const mapped = isSupabaseRpcError(error)
@@ -1291,6 +1413,20 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
   if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
   if (claim.state === 'failed' || claim.state === 'blocked') throw new EnterpriseCommandError('COMMAND_BLOCKED');
   if (!claim.ownsExecution || claim.jobId !== jobId) throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+  if (transcriptBinding) {
+    await rpc('enterprise_transcript_bind_assess_extraction_v2', {
+      p_job: jobId, p_input_bundle: transcriptBinding.inputBundleId,
+      p_input_bundle_version: transcriptBinding.inputBundleVersionId,
+      p_expected_input_bundle_version: transcriptBinding.bundleVersion,
+      p_source_set: transcriptBinding.sourceSetId, p_source_set_version: transcriptBinding.sourceSetVersionId,
+      p_expected_source_set_version: transcriptBinding.sourceSetVersion,
+      p_source: sourceId, p_source_version: sourceVersionId,
+      p_route: routePlan.routeId, p_provider_config: routePlan.providerConfigId, p_model: routePlan.model,
+      p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId,
+      p_authorization_version: authority.authorizationVersion, p_receipt: receipt.id,
+      p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence,
+    });
+  }
   if (claim.state === 'staged') {
     if (!isRecord(claim.safeResult)) throw new EnterpriseCommandError('RESOURCE_STALE');
     await commitStagedEvidenceExtraction(authority, receipt, jobId);
@@ -1330,139 +1466,124 @@ const commandEvidenceExtract = async (authority: Authority, payload: JsonObject,
     throw terminalError;
   }
   const requestStarted = Date.now();
-  let providerResult: Awaited<ReturnType<typeof runGovernedProviderRequest>>;
+  const taskInstruction = `Extract candidate evidence as JSON with a candidates array. Each item must have fieldKey from ${EVIDENCE_CANDIDATE_FIELDS.join(', ')}, value, confidence between 0 and 1, and safeExcerpt. Do not infer missing facts; use unresolved_questions or assumptions when needed. AvalaOS derives source positions server-side.`;
+  let stagedSafeResult: JsonObject | null = null;
   try {
-    providerResult = await runGovernedProviderRequest({
-      provider: routePlan.provider,
-      endpoint: route.config.endpoint_url || undefined,
-      deployment: route.config.deployment_name || undefined,
-      model: routePlan.model,
+    const budgeted = await runBudgetedProviderEffect({
+      authority: {
+        actorId: authority.actorId, organizationId: authority.organizationId,
+        workspaceId: authority.workspaceId, authorizationVersion: authority.authorizationVersion,
+      },
+      execution: {
+        receiptId: receipt.id, jobId, executionToken: receipt.execution_token!, executionFence: receipt.execution_fence!,
+        routeId: routePlan.routeId, providerConfigId: routePlan.providerConfigId, provider: routePlan.provider,
+        capability: 'assess.evidence.extract', model: routePlan.model,
+      },
+      estimatedInputTokens: estimateMaximumProviderInputTokens({
+        capability: 'assess.evidence.extract', taskInstruction, untrustedSource: text,
+      }),
+      maximumOutputTokens: 4_096,
+    }, () => runGovernedProviderRequest({
+      provider: routePlan.provider, endpoint: route.config.endpoint_url || undefined,
+      deployment: route.config.deployment_name || undefined, model: routePlan.model,
       capability: 'assess.evidence.extract',
-      taskInstruction: `Extract candidate evidence as JSON with a candidates array. Each item must have fieldKey from ${EVIDENCE_CANDIDATE_FIELDS.join(', ')}, value, confidence between 0 and 1, and safeExcerpt. Do not infer missing facts; use unresolved_questions or assumptions when needed. AvalaOS derives source positions server-side.`,
+      taskInstruction,
       untrustedSource: text,
       authorization: {
-        organizationId: authority.organizationId,
-        workspaceId: authority.workspaceId,
-        actorId: authority.actorId,
-        providerConfigId: routePlan.providerConfigId,
-        capability: 'assess.evidence.extract',
-        routeEnabled: true,
+        organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId,
+        providerConfigId: routePlan.providerConfigId, capability: 'assess.evidence.extract', routeEnabled: true,
         resolverDecision: route.decision,
       },
+    }), {
+      classifyFailure: classifyEnterpriseProviderFailureForBudget,
+      beforeSettle: async providerResult => {
+        const decoded = parseJsonObjectResponse<{ candidates?: unknown[] }>(providerResult.output, (value): value is { candidates?: unknown[] } => (
+          isRecord(value) && (value.candidates === undefined || Array.isArray(value.candidates))
+        ));
+        const candidates: ReturnType<typeof buildEvidenceCandidate>[] = [];
+        for (const raw of Array.isArray(decoded.candidates) ? decoded.candidates.slice(0, 200) : []) {
+          if (!isRecord(raw)) continue;
+          const field = raw.fieldKey;
+          if (typeof field !== 'string' || !EVIDENCE_CANDIDATE_FIELDS.includes(field as EvidenceCandidateField)
+            || typeof raw.value !== 'string' || !raw.value.trim()) continue;
+          let persistedValue: string;
+          try { persistedValue = sanitizeEvidenceCandidateValue(raw.value); } catch { continue; }
+          const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0;
+          if (!persistedValue.trim() || confidence < 0 || confidence > 1) continue;
+          const candidate = await buildGroundedEvidenceCandidate({
+            source: {
+              sourceId, sourceVersionId, contentHash: version.content_hash,
+              extractedTextHash: version.extracted_text_hash || await sha256Hex(text), text,
+            },
+            candidate: {
+              id: crypto.randomUUID(), sourceId, sourceVersionId, field: field as EvidenceCandidateField,
+              value: persistedValue, safeExcerpt: typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined,
+              confidence, aiJobId: jobId, promptVersion, status: 'suggested', reviewedBy: undefined, reviewedAt: undefined,
+            },
+          });
+          if (candidate) candidates.push(candidate);
+        }
+        const safeResult = { resourceId: jobId, jobId,
+          sourceId, sourceVersionId,
+          ...(transcriptBinding ? {
+            inputBundleId: transcriptBinding.inputBundleId,
+            inputBundleVersionId: transcriptBinding.inputBundleVersionId,
+            sourceSetId: transcriptBinding.sourceSetId,
+            sourceSetVersionId: transcriptBinding.sourceSetVersionId,
+          } : {}),
+          candidateCount: candidates.length, candidates,
+        };
+        const outputHash = await sha256Hex(providerResult.output);
+        const latencyMs = Math.max(0, Date.now() - requestStarted);
+        const stagedCandidates = candidates.map(candidate => ({
+          id: candidate.id, sourceVersionId: candidate.sourceVersionId, field: candidate.field, value: candidate.value,
+          safeExcerpt: candidate.safeExcerpt || null, excerptHash: candidate.excerptHash, sourceLocator: candidate.sourceLocator,
+          confidence: candidate.confidence, promptVersion: candidate.promptVersion, status: candidate.status, createdBy: authority.actorId,
+        }));
+        const stagedPayloadHash = await sha256Json({
+          jobId, receiptId: receipt.id, requestHash: receipt.request_hash,
+          routeId: routePlan.routeId, providerConfigId: routePlan.providerConfigId,
+          provider: routePlan.provider, model: routePlan.model, sourceId, sourceVersionId,
+          outputHash, tokenInput: providerResult.usage.inputTokens, tokenOutput: providerResult.usage.outputTokens,
+          latencyMs, candidates: stagedCandidates, safeResult, executionFence: receipt.execution_fence,
+        });
+        await rpc('enterprise_stage_evidence_extraction_result', {
+          p_job_id: jobId, p_receipt: receipt.id, p_source_id: sourceId, p_source_version_id: sourceVersionId,
+          p_org: authority.organizationId, p_workspace: authority.workspaceId, p_route_id: routePlan.routeId,
+          p_provider_config_id: routePlan.providerConfigId, p_provider: routePlan.provider, p_model: routePlan.model,
+          p_request_hash: receipt.request_hash, p_output_hash: outputHash, p_latency_ms: latencyMs,
+          p_token_input: providerResult.usage.inputTokens, p_token_output: providerResult.usage.outputTokens,
+          p_candidates: stagedCandidates, p_result: safeResult, p_staged_payload_hash: stagedPayloadHash,
+          p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence,
+        });
+        stagedSafeResult = safeResult;
+      },
     });
+    if (budgeted.kind === 'replay') {
+      const recovered = await rpc<EvidenceExtractionClaim>('enterprise_claim_or_resume_evidence_extraction_job_v2', extractionClaimArgs);
+      if (recovered.state === 'committed' && isRecord(recovered.safeResult)) return recovered.safeResult;
+      if (recovered.state === 'staged' && isRecord(recovered.safeResult)) {
+        await commitStagedEvidenceExtraction(authority, receipt, jobId);
+        return recovered.safeResult;
+      }
+      throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+    }
   } catch (error) {
+    if (error instanceof RecoverableEnterpriseCommandError) throw error;
+    if (error instanceof ProviderBudgetError) {
+      if (error.code === 'BUDGET_EXHAUSTED') throw new EnterpriseCommandError('BUDGET_EXHAUSTED');
+      if (error.code === 'AUTHORIZATION_STALE') throw new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
+      if (error.code === 'PERMISSION_DENIED') throw new EnterpriseCommandError('PERMISSION_DENIED');
+      throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    }
     const terminalError = new EnterpriseCommandError('COMMAND_BLOCKED');
     const failureClass = error instanceof EnterpriseAiGatewayError ? error.code : 'PROVIDER_REQUEST_FAILED';
     await failEvidenceExtractionAttempt(authority, receipt, jobId, requestStarted, terminalError, failureClass);
     throw terminalError;
   }
-  let candidates: ReturnType<typeof buildEvidenceCandidate>[];
-  try {
-    const decoded = parseJsonObjectResponse<{ candidates?: unknown[] }>(providerResult.output, (value): value is { candidates?: unknown[] } => (
-      isRecord(value) && (value.candidates === undefined || Array.isArray(value.candidates))
-    ));
-    const rawCandidates = Array.isArray(decoded.candidates) ? decoded.candidates.slice(0, 200) : [];
-    candidates = [];
-    for (const raw of rawCandidates) {
-      if (!isRecord(raw)) continue;
-      const field = raw.fieldKey;
-      if (typeof field !== 'string' || !EVIDENCE_CANDIDATE_FIELDS.includes(field as any)) continue;
-      if (typeof raw.value !== 'string' || !raw.value.trim()) continue;
-      let persistedValue: string;
-      try {
-        persistedValue = sanitizeEvidenceCandidateValue(raw.value);
-      } catch {
-        continue;
-      }
-      if (!persistedValue.trim()) continue;
-      const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0;
-      if (confidence < 0 || confidence > 1) continue;
-      const candidate = await buildGroundedEvidenceCandidate({
-        source: {
-          sourceId,
-          sourceVersionId,
-          contentHash: version.content_hash,
-          extractedTextHash: version.extracted_text_hash || await sha256Hex(text),
-          text,
-        },
-        candidate: {
-          id: crypto.randomUUID(),
-          sourceId,
-          sourceVersionId,
-          field: field as EvidenceCandidateField,
-          value: persistedValue,
-          safeExcerpt: typeof raw.safeExcerpt === 'string' ? raw.safeExcerpt : undefined,
-          confidence,
-          aiJobId: jobId,
-          promptVersion,
-          status: 'suggested',
-          reviewedBy: undefined,
-          reviewedAt: undefined,
-        },
-      });
-      if (!candidate) continue;
-      candidates.push(candidate);
-    }
-  } catch {
-    const terminalError = new EnterpriseCommandError('COMMAND_BLOCKED');
-    await failEvidenceExtractionAttempt(authority, receipt, jobId, requestStarted, terminalError, 'PROVIDER_RESPONSE_INVALID');
-    throw terminalError;
-  }
-  const safeResult = { resourceId: jobId, jobId, sourceId, sourceVersionId, candidateCount: candidates.length, candidates };
-  const outputHash = await sha256Hex(providerResult.output);
-  const tokenInput = Math.max(1, Math.ceil(text.length / 4));
-  const tokenOutput = Math.max(1, Math.ceil(providerResult.output.length / 4));
-  const latencyMs = Math.max(0, Date.now() - requestStarted);
-  const stagedCandidates = candidates.map(candidate => ({
-    id: candidate.id,
-    sourceVersionId: candidate.sourceVersionId,
-    field: candidate.field,
-    value: candidate.value,
-    safeExcerpt: candidate.safeExcerpt || null,
-    excerptHash: candidate.excerptHash,
-    sourceLocator: candidate.sourceLocator,
-    confidence: candidate.confidence,
-    promptVersion: candidate.promptVersion,
-    status: candidate.status,
-    createdBy: authority.actorId,
-  }));
-  const stagedPayloadHash = await sha256Json({
-    jobId, receiptId: receipt.id, requestHash: receipt.request_hash,
-    routeId: routePlan.routeId, providerConfigId: routePlan.providerConfigId,
-    provider: routePlan.provider, model: routePlan.model, sourceId, sourceVersionId,
-    outputHash, tokenInput, tokenOutput, latencyMs, candidates: stagedCandidates, safeResult,
-    executionFence: receipt.execution_fence,
-  });
-  try {
-    await rpc('enterprise_stage_evidence_extraction_result', {
-      p_job_id: jobId,
-      p_receipt: receipt.id,
-      p_source_id: sourceId,
-      p_source_version_id: sourceVersionId,
-      p_org: authority.organizationId,
-      p_workspace: authority.workspaceId,
-      p_route_id: routePlan.routeId,
-      p_provider_config_id: routePlan.providerConfigId,
-      p_provider: routePlan.provider,
-      p_model: routePlan.model,
-      p_request_hash: receipt.request_hash,
-      p_output_hash: outputHash,
-      p_latency_ms: latencyMs,
-      p_token_input: tokenInput,
-      p_token_output: tokenOutput,
-      p_candidates: stagedCandidates,
-      p_result: safeResult,
-      p_staged_payload_hash: stagedPayloadHash,
-      p_execution_token: receipt.execution_token,
-      p_execution_fence: receipt.execution_fence,
-    });
-  } catch (error) {
-    // Staging may have committed even when its response was lost. Never turn
-    // this uncertainty into a terminal provider failure.
-    throw mapExtractionPersistenceError(error);
-  }
+  if (!stagedSafeResult) throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
   await commitStagedEvidenceExtraction(authority, receipt, jobId);
-  return safeResult;
+  return stagedSafeResult;
 };
 
 const commandEvidenceCandidateReview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
@@ -1609,6 +1730,362 @@ const commandEvidenceAssessPromote = async (authority: Authority, payload: JsonO
     throw new EnterpriseCommandError('RESOURCE_STALE');
   }
   return response;
+};
+
+const transcriptReceiptArgs = (authority: Authority, receipt: EnterpriseReceiptRow) => ({
+  p_actor: authority.actorId,
+  p_org: authority.organizationId,
+  p_workspace: authority.workspaceId,
+  p_authorization_version: authority.authorizationVersion,
+  p_receipt: receipt.id,
+  p_execution_token: receipt.execution_token,
+  p_execution_fence: receipt.execution_fence,
+});
+
+const commandTranscriptSourceSetCreateVersion = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['ownerModule', 'displayLabel', 'purpose', 'lock', 'expectedVersion', 'items'], ['sourceSetId', 'description']);
+  requirePermission(authority, 'transcript.sources.manage');
+  const sourceSetId = payload.sourceSetId === undefined ? plannedUuid(receipt, 'transcriptSourceSetId') : requireUuid(payload.sourceSetId);
+  await ensureExecutionPlan(receipt, authority, { transcriptSourceSetId: sourceSetId });
+  if (payload.ownerModule !== 'assess' && payload.ownerModule !== 'studio') throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  if (typeof payload.lock !== 'boolean' || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 20) {
+    throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  const items = payload.items.map((raw, index) => {
+    const item = requirePayloadObject(raw);
+    requireExactPayload(item, ['sourceVersionId', 'ordinal', 'role'], ['note']);
+    if (!['primary', 'supporting', 'contradictory', 'reference'].includes(String(item.role))
+      || requirePositiveInteger(item.ordinal) !== index + 1) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    return {
+      sourceVersionId: requireUuid(item.sourceVersionId), ordinal: index + 1, role: item.role,
+      ...(item.note === undefined ? {} : { note: requireString(item.note, 1_000) }),
+    };
+  });
+  if (new Set(items.map(item => item.sourceVersionId)).size !== items.length) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const current = await findOne<{ current_version: number }>(
+    'enterprise_source_sets',
+    `select=current_version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSetId)}`,
+  );
+  const plannedCurrentVersion = isRecord(receipt.execution_plan?.transcriptCommandBinding)
+    ? receipt.execution_plan?.transcriptCommandBinding.currentVersion
+    : undefined;
+  if (plannedCurrentVersion !== undefined && plannedCurrentVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const submittedExpectedVersion = requirePositiveInteger(payload.expectedVersion, true);
+  if (submittedExpectedVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const label = requireString(payload.displayLabel, 160);
+  return await rpc('enterprise_transcript_create_source_set_version', {
+    p_source_set: sourceSetId, p_owner_module: payload.ownerModule,
+    p_display_label: label,
+    p_description: payload.description === undefined ? '' : requireString(payload.description, 2_000),
+    p_purpose: requireString(payload.purpose, 1_000), p_items: items, p_lock: payload.lock,
+    p_expected_version: submittedExpectedVersion, ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+const commandTranscriptInputBundleLock = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['ownerModule', 'expectedVersion', 'sourceSets'], ['inputBundleId']);
+  requirePermission(authority, 'transcript.sources.manage');
+  if (payload.ownerModule !== 'assess' || !Array.isArray(payload.sourceSets) || payload.sourceSets.length < 1 || payload.sourceSets.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const sourceSets = payload.sourceSets.map((raw, index) => {
+    const item = requirePayloadObject(raw); requireExactPayload(item, ['sourceSetVersionId', 'ordinal', 'purpose']);
+    if (requirePositiveInteger(item.ordinal) !== index + 1) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    return { sourceSetVersionId: requireUuid(item.sourceSetVersionId), ordinal: index + 1, purpose: requireString(item.purpose, 500) };
+  });
+  if (new Set(sourceSets.map(item => item.sourceSetVersionId)).size !== sourceSets.length) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const inputBundleId = payload.inputBundleId === undefined ? plannedUuid(receipt, 'transcriptInputBundleId') : requireUuid(payload.inputBundleId);
+  await ensureExecutionPlan(receipt, authority, { transcriptInputBundleId: inputBundleId });
+  const current = await findOne<{ current_version: number }>(
+    'enterprise_module_input_bundles',
+    `select=current_version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(inputBundleId)}`,
+  );
+  const plannedCurrentVersion = isRecord(receipt.execution_plan?.transcriptCommandBinding)
+    ? receipt.execution_plan?.transcriptCommandBinding.currentVersion
+    : undefined;
+  if (plannedCurrentVersion !== undefined && plannedCurrentVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const submittedExpectedVersion = requirePositiveInteger(payload.expectedVersion, true);
+  if (submittedExpectedVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  return await rpc('enterprise_transcript_lock_input_bundle', {
+    p_input_bundle: inputBundleId, p_items: sourceSets, p_manual_brief_hash: null,
+    p_expected_version: submittedExpectedVersion, ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+type TranscriptExtractionSelection = {
+  inputBundleId: string;
+  inputBundleVersionId: string;
+  bundleVersion: number;
+  bundleHash: string;
+  sourceSetId: string;
+  sourceSetVersionId: string;
+  sourceSetVersion: number;
+  sourceId: string;
+  sourceVersionId: string;
+};
+
+type TranscriptFindOne = <T>(table: string, query: string) => Promise<T | null>;
+type TranscriptFindMany = <T>(table: string, query: string) => Promise<T[]>;
+
+const findTranscriptRows: TranscriptFindMany = async <T>(table: string, query: string) => await postgrest<T[]>(
+  `${table}?${query}`,
+  { method: 'GET' },
+);
+
+const resolveTranscriptExtractionSelection = async (
+  authority: Authority,
+  inputBundleId: string,
+  inputBundleVersionId: string,
+  expectedInputBundleVersion: number,
+  sourceSetId: string,
+  sourceSetVersionId: string,
+  expectedSourceSetVersion: number,
+  sourceVersionId: string,
+  findSelection: TranscriptFindOne = findOne,
+): Promise<TranscriptExtractionSelection | null> => {
+  const version = await findSelection<{ id: string; input_bundle_id: string; version: number; bundle_hash: string }>(
+    'enterprise_module_input_bundle_versions',
+    `select=id,input_bundle_id,version,bundle_hash&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(inputBundleVersionId)}&input_bundle_id=eq.${encodeURIComponent(inputBundleId)}&version=eq.${expectedInputBundleVersion}&status=eq.locked`,
+  );
+  const setVersion = version ? await findSelection<{ id: string; source_set_id: string; version: number }>(
+    'enterprise_source_set_versions',
+    `select=id,source_set_id,version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSetVersionId)}&source_set_id=eq.${encodeURIComponent(sourceSetId)}&version=eq.${expectedSourceSetVersion}`,
+  ) : null;
+  const bundleItem = version && setVersion ? await findSelection<{ source_set_version_id: string }>(
+    'enterprise_module_input_bundle_items',
+    `select=source_set_version_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&input_bundle_version_id=eq.${encodeURIComponent(version.id)}&source_set_id=eq.${encodeURIComponent(sourceSetId)}&source_set_version_id=eq.${encodeURIComponent(setVersion.id)}`,
+  ) : null;
+  const source = bundleItem ? await findSelection<{ source_id: string }>(
+    'enterprise_source_set_version_items',
+    `select=source_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_version_id=eq.${encodeURIComponent(sourceVersionId)}&source_set_version_id=eq.${encodeURIComponent(sourceSetVersionId)}`,
+  ) : null;
+  return version && setVersion && bundleItem && source ? {
+    inputBundleId: version.input_bundle_id, inputBundleVersionId: version.id, bundleVersion: version.version,
+    bundleHash: version.bundle_hash, sourceSetId: setVersion.source_set_id,
+    sourceSetVersionId: setVersion.id, sourceSetVersion: setVersion.version,
+    sourceId: source.source_id, sourceVersionId,
+  } : null;
+};
+
+const commandTranscriptAssessExtract = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, [
+    'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion',
+    'sourceSetId', 'sourceSetVersionSelector', 'expectedSourceSetVersion', 'sourceVersionSelector',
+  ]);
+  requirePermission(authority, 'evidence.write');
+  const inputBundleId = requireUuid(payload.inputBundleId);
+  const inputBundleVersionId = requireUuid(payload.inputBundleVersionSelector);
+  const expectedInputBundleVersion = requirePositiveInteger(payload.expectedInputBundleVersion);
+  const sourceSetId = requireUuid(payload.sourceSetId);
+  const sourceSetVersionId = requireUuid(payload.sourceSetVersionSelector);
+  const expectedSourceSetVersion = requirePositiveInteger(payload.expectedSourceSetVersion);
+  const sourceVersionId = requireUuid(payload.sourceVersionSelector);
+  const selection = await resolveTranscriptExtractionSelection(
+    authority, inputBundleId, inputBundleVersionId, expectedInputBundleVersion,
+    sourceSetId, sourceSetVersionId, expectedSourceSetVersion, sourceVersionId,
+  );
+  if (!selection) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+  const plannedBinding = receipt.execution_plan?.transcriptCommandBinding;
+  if (plannedBinding !== undefined && JSON.stringify(plannedBinding) !== JSON.stringify(selection)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  return await commandEvidenceExtract(authority, { sourceId: selection.sourceId }, receipt, selection);
+};
+
+const commandTranscriptAssessCandidateReview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(
+    payload,
+    [
+      'candidateId', 'candidateVersion', 'status',
+      'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion',
+      'sourceSetId', 'sourceSetVersionSelector', 'expectedSourceSetVersion', 'sourceVersionSelector',
+    ],
+    ['value', 'reason', 'relationship', 'applicationIntent', 'applyTarget'],
+  );
+  const status = requireString(payload.status, 20);
+  const relationship = payload.relationship === undefined ? 'neutral' : requireString(payload.relationship, 20);
+  if (!['neutral', 'supporting', 'contradictory'].includes(relationship)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const applicationIntent = payload.applicationIntent === undefined ? null : requireString(payload.applicationIntent, 80);
+  const applyTarget = payload.applyTarget === undefined ? null : requireString(payload.applyTarget, 160);
+  if ((applicationIntent === null) !== (applyTarget === null)
+    || (applicationIntent !== null && !transcriptApplicationIntents.has(applicationIntent))) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  if (!['accepted', 'rejected', 'edited'].includes(status)
+    || (status === 'edited' && (payload.value === undefined || payload.reason === undefined))
+    || (status !== 'edited' && payload.value !== undefined)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  let value: string | null = null;
+  if (payload.value !== undefined) {
+    try {
+      value = sanitizeEvidenceCandidateValue(requireString(payload.value, 12_000).trim());
+    } catch {
+      throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    }
+    if (!value.trim()) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  return await rpc('enterprise_transcript_review_assess_candidate_v2', {
+    p_candidate: requireUuid(payload.candidateId),
+    p_expected_candidate_version: requirePositiveInteger(payload.candidateVersion),
+    p_input_bundle: requireUuid(payload.inputBundleId),
+    p_input_bundle_version: requireUuid(payload.inputBundleVersionSelector),
+    p_expected_input_bundle_version: requirePositiveInteger(payload.expectedInputBundleVersion),
+    p_source_set: requireUuid(payload.sourceSetId),
+    p_source_set_version: requireUuid(payload.sourceSetVersionSelector),
+    p_expected_source_set_version: requirePositiveInteger(payload.expectedSourceSetVersion),
+    p_source_version: requireUuid(payload.sourceVersionSelector),
+    p_status: status,
+    p_value: value,
+    p_reason: payload.reason === undefined ? 'review decision recorded' : requireString(payload.reason, 2_000),
+    p_relationship: relationship,
+    p_application_intent: applicationIntent,
+    p_apply_target: applyTarget,
+    ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+const transcriptApplicationIntents = new Set([
+  'set_case_field', 'create_primitive', 'create_application_asset', 'create_interaction',
+  'create_decision_point', 'create_exception_path', 'set_registered_fact', 'link_evidence_only',
+]);
+
+const parseTranscriptSourceSetLineage = (value: unknown) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const lineage = value.map((raw, index) => {
+    const item = requirePayloadObject(raw);
+    requireExactPayload(item, ['sourceSetId', 'sourceSetVersionSelector', 'expectedVersion', 'ordinal']);
+    if (requirePositiveInteger(item.ordinal) !== index + 1) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    return {
+      sourceSetId: requireUuid(item.sourceSetId),
+      sourceSetVersionSelector: requireUuid(item.sourceSetVersionSelector),
+      expectedVersion: requirePositiveInteger(item.expectedVersion),
+      ordinal: index + 1,
+    };
+  });
+  if (new Set(lineage.map(item => item.sourceSetId)).size !== lineage.length
+    || new Set(lineage.map(item => item.sourceSetVersionSelector)).size !== lineage.length) {
+    throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  return lineage;
+};
+
+const assertTranscriptBundleLineagePreclaim = async (
+  authority: Authority,
+  inputBundleId: string,
+  inputBundleVersionId: string,
+  expectedInputBundleVersion: number,
+  sourceSets: ReturnType<typeof parseTranscriptSourceSetLineage>,
+  findLineageOne: TranscriptFindOne = findOne,
+  findLineageMany: TranscriptFindMany = findTranscriptRows,
+) => {
+  const bundle = await findLineageOne<{ input_bundle_id: string; version: number; status: string }>(
+    'enterprise_module_input_bundle_versions',
+    `select=input_bundle_id,version,status&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(inputBundleVersionId)}`,
+  );
+  if (!bundle) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+  if (bundle.input_bundle_id !== inputBundleId || bundle.version !== expectedInputBundleVersion || bundle.status !== 'locked') {
+    throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  const items = await findLineageMany<{ source_set_id: string; source_set_version_id: string; ordinal: number }>(
+    'enterprise_module_input_bundle_items',
+    `select=source_set_id,source_set_version_id,ordinal&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&input_bundle_version_id=eq.${encodeURIComponent(inputBundleVersionId)}&order=ordinal.asc`,
+  );
+  if (items.length !== sourceSets.length) throw new EnterpriseCommandError('RESOURCE_STALE');
+  for (const sourceSet of sourceSets) {
+    const version = await findLineageOne<{ source_set_id: string; version: number }>(
+      'enterprise_source_set_versions',
+      `select=source_set_id,version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSet.sourceSetVersionSelector)}`,
+    );
+    if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    const item = items[sourceSet.ordinal - 1];
+    if (version.source_set_id !== sourceSet.sourceSetId || version.version !== sourceSet.expectedVersion
+      || item?.source_set_id !== sourceSet.sourceSetId
+      || item?.source_set_version_id !== sourceSet.sourceSetVersionSelector
+      || item?.ordinal !== sourceSet.ordinal) throw new EnterpriseCommandError('RESOURCE_STALE');
+  }
+};
+
+const commandTranscriptAssessApplyPreview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, [
+    'assessDraftId', 'expectedDraftVersion', 'inputBundleId', 'inputBundleVersionSelector',
+    'expectedInputBundleVersion', 'sourceSetVersions', 'selections',
+  ]);
+  if (!Array.isArray(payload.selections) || payload.selections.length < 1 || payload.selections.length > 100) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const selections = payload.selections.map(raw => {
+    const selection = requirePayloadObject(raw);
+    requireExactPayload(selection, ['candidateId', 'candidateVersion', 'intent', 'target']);
+    const intent = requireString(selection.intent, 80);
+    if (!transcriptApplicationIntents.has(intent)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    return {
+      candidateId: requireUuid(selection.candidateId),
+      candidateVersion: requirePositiveInteger(selection.candidateVersion),
+      intent,
+      target: requireString(selection.target, 160),
+    };
+  });
+  if (new Set(selections.map(selection => selection.candidateId)).size !== selections.length) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const sourceSetVersions = parseTranscriptSourceSetLineage(payload.sourceSetVersions);
+  const previewBatchId = plannedUuid(receipt, 'transcriptApplyPreviewBatchId');
+  await ensureExecutionPlan(receipt, authority, { transcriptApplyPreviewBatchId: previewBatchId });
+  return await rpc('enterprise_transcript_create_assess_apply_preview_batch_v2', {
+    p_batch: previewBatchId, p_case: requireUuid(payload.assessDraftId),
+    p_expected_case_version: requirePositiveInteger(payload.expectedDraftVersion),
+    p_input_bundle: requireUuid(payload.inputBundleId),
+    p_input_bundle_version: requireUuid(payload.inputBundleVersionSelector),
+    p_expected_input_bundle_version: requirePositiveInteger(payload.expectedInputBundleVersion),
+    p_source_sets: sourceSetVersions,
+    p_selections: selections,
+    ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+const commandTranscriptAssessApplyCommit = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, [
+    'previewBatchId', 'assessDraftId', 'expectedDraftVersion', 'inputBundleId',
+    'inputBundleVersionSelector', 'expectedInputBundleVersion', 'sourceSetVersions',
+  ]);
+  return await rpc('enterprise_transcript_commit_assess_apply_preview_batch_v2', {
+    p_batch: requireUuid(payload.previewBatchId),
+    p_case: requireUuid(payload.assessDraftId),
+    p_expected_case_version: requirePositiveInteger(payload.expectedDraftVersion),
+    p_input_bundle: requireUuid(payload.inputBundleId),
+    p_input_bundle_version: requireUuid(payload.inputBundleVersionSelector),
+    p_expected_input_bundle_version: requirePositiveInteger(payload.expectedInputBundleVersion),
+    p_source_sets: parseTranscriptSourceSetLineage(payload.sourceSetVersions),
+    ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+const commandTranscriptAssessConflictResolve = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['conflictId', 'resolutionVersion', 'resolution', 'rationale'], ['candidateId', 'authoredValue']);
+  const resolution = requireString(payload.resolution, 40);
+  if (!['choose_candidate', 'retain_manual', 'authored_resolution', 'unresolved'].includes(resolution)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return await rpc('enterprise_transcript_resolve_assess_conflict', {
+    p_conflict: requireUuid(payload.conflictId), p_expected_version: requirePositiveInteger(payload.resolutionVersion, true), p_resolution: resolution,
+    p_chosen_candidate: payload.candidateId === undefined ? null : requireUuid(payload.candidateId),
+    p_authored_value: payload.authoredValue === undefined ? null : payload.authoredValue,
+    p_rationale: requireString(payload.rationale, 2_000), ...transcriptReceiptArgs(authority, receipt),
+  });
+};
+
+const commandTranscriptJourneySetState = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['entryModule', 'desiredExitModule', 'status'], ['journeyId', 'expectedVersion', 'reason']);
+  requirePermission(authority, 'transcript.journeys.manage');
+  if (payload.entryModule !== 'assess' || !['active', 'stopped'].includes(String(payload.status))
+    || !['assess', 'studio', 'delivery', 'monitor'].includes(String(payload.desiredExitModule))) {
+    throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  }
+  const journeyId = payload.journeyId === undefined ? plannedUuid(receipt, 'transcriptJourneyId') : requireUuid(payload.journeyId);
+  await ensureExecutionPlan(receipt, authority, { transcriptJourneyId: journeyId, transcriptRoutePolicyVersion: 1 });
+  const current = await findOne<{ version: number }>(
+    'enterprise_governed_journeys',
+    `select=version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(journeyId)}`,
+  );
+  const requestBinding = receipt.execution_plan?.transcriptCommandBinding;
+  if (isRecord(requestBinding) && requestBinding.currentVersion !== (current?.version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const expectedVersion = payload.expectedVersion === undefined ? current?.version || 0 : requirePositiveInteger(payload.expectedVersion, true);
+  const action = !current ? 'create' : payload.status === 'stopped' ? 'stop' : 'resume';
+  if (action === 'create' && payload.status !== 'active') throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return await rpc('enterprise_transcript_set_journey_state', {
+    p_journey: journeyId, p_action: action, p_desired_exit_module: payload.desiredExitModule,
+    p_reason: payload.reason === undefined ? '' : requireString(payload.reason, 2_000),
+    p_expected_version: expectedVersion,
+    p_route_policy_version: isRecord(requestBinding) && Number.isSafeInteger(requestBinding.routePolicyVersion) ? requestBinding.routePolicyVersion : 1,
+    ...transcriptReceiptArgs(authority, receipt),
+  });
 };
 
 const assertApprovedApplicationAssessment = async (authority: Authority, payload: JsonObject) => {
@@ -2140,6 +2617,14 @@ const executeEnterpriseCommand = async (authority: Authority, envelope: Enterpri
     case 'evidence.extract': return commandEvidenceExtract(authority, envelope.payload, receipt);
     case 'evidence.candidate.review': return commandEvidenceCandidateReview(authority, envelope.payload, receipt);
     case 'evidence.assess.promote': return commandEvidenceAssessPromote(authority, envelope.payload, receipt);
+    case 'transcript.source-set.create-version': return commandTranscriptSourceSetCreateVersion(authority, envelope.payload, receipt);
+    case 'transcript.input-bundle.lock': return commandTranscriptInputBundleLock(authority, envelope.payload, receipt);
+    case 'transcript.assess.extract': return commandTranscriptAssessExtract(authority, envelope.payload, receipt);
+    case 'transcript.assess.candidate.review': return commandTranscriptAssessCandidateReview(authority, envelope.payload, receipt);
+    case 'transcript.assess.apply.preview': return commandTranscriptAssessApplyPreview(authority, envelope.payload, receipt);
+    case 'transcript.assess.apply.commit': return commandTranscriptAssessApplyCommit(authority, envelope.payload, receipt);
+    case 'transcript.assess.conflict.resolve': return commandTranscriptAssessConflictResolve(authority, envelope.payload, receipt);
+    case 'transcript.journey.set-state': return commandTranscriptJourneySetState(authority, envelope.payload, receipt);
     case 'modernization.evaluate': return commandModernizationEvaluate(authority, envelope.payload, receipt);
     case 'approval.review.record': return commandApprovalReviewRecord(authority, envelope.payload, receipt);
     case 'approval.record': return commandApprovalRecord(authority, envelope.payload, receipt);
@@ -2164,6 +2649,254 @@ export type EnterpriseIntelligenceHandlerOverrides = {
   completeReceipt?: typeof completeEnterpriseReceipt;
   failReceipt?: typeof failEnterpriseReceipt;
   executeCommand?: typeof executeEnterpriseCommand;
+  transcriptCommandRequestBindingDependencies?: Partial<TranscriptCommandRequestBindingDependencies>;
+};
+
+export type TranscriptCommandRequestBindingDependencies = {
+  findOne: TranscriptFindOne;
+  findMany: TranscriptFindMany;
+};
+
+export const deriveTranscriptCommandRequestBinding = async (
+  authority: Authority,
+  envelope: EnterpriseCommandEnvelope,
+  dependencies: Partial<TranscriptCommandRequestBindingDependencies> = {},
+): Promise<JsonObject | null> => {
+  const findBinding = dependencies.findOne || findOne;
+  const findBindingRows = dependencies.findMany || findTranscriptRows;
+  if (envelope.commandType === 'transcript.assess.extract') {
+    requireExactPayload(envelope.payload, [
+      'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion',
+      'sourceSetId', 'sourceSetVersionSelector', 'expectedSourceSetVersion', 'sourceVersionSelector',
+    ]);
+    const selection = await resolveTranscriptExtractionSelection(
+      authority,
+      requireUuid(envelope.payload.inputBundleId),
+      requireUuid(envelope.payload.inputBundleVersionSelector),
+      requirePositiveInteger(envelope.payload.expectedInputBundleVersion),
+      requireUuid(envelope.payload.sourceSetId),
+      requireUuid(envelope.payload.sourceSetVersionSelector),
+      requirePositiveInteger(envelope.payload.expectedSourceSetVersion),
+      requireUuid(envelope.payload.sourceVersionSelector),
+      findBinding,
+    );
+    if (!selection) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    return selection;
+  }
+  if (envelope.commandType === 'transcript.source-set.create-version') {
+    const sourceSetId = envelope.payload.sourceSetId === undefined ? null : requireUuid(envelope.payload.sourceSetId);
+    let currentVersion = 0;
+    if (sourceSetId) {
+      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number }>(
+        'enterprise_source_sets', `select=org_id,workspace_id,current_version&id=eq.${encodeURIComponent(sourceSetId)}`,
+      );
+      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+        throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      }
+      currentVersion = anywhere.current_version;
+    }
+    const expectedVersion = requirePositiveInteger(envelope.payload.expectedVersion, true);
+    if (expectedVersion !== currentVersion) throw new EnterpriseCommandError('RESOURCE_STALE');
+    if (!Array.isArray(envelope.payload.items) || envelope.payload.items.length < 1 || envelope.payload.items.length > 20) {
+      throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    }
+    const sourceVersionIds: string[] = [];
+    for (const raw of envelope.payload.items) {
+      const item = requirePayloadObject(raw);
+      const sourceVersionId = requireUuid(item.sourceVersionId);
+      const version = await findBinding<{ id: string }>(
+        'enterprise_evidence_source_versions',
+        `select=id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceVersionId)}`,
+      );
+      if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      sourceVersionIds.push(version.id);
+    }
+    return { ...(sourceSetId ? { sourceSetId } : {}), currentVersion, sourceVersionIds };
+  }
+  if (envelope.commandType === 'transcript.input-bundle.lock') {
+    const inputBundleId = envelope.payload.inputBundleId === undefined ? null : requireUuid(envelope.payload.inputBundleId);
+    let currentVersion = 0;
+    if (inputBundleId) {
+      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number }>(
+        'enterprise_module_input_bundles', `select=org_id,workspace_id,current_version&id=eq.${encodeURIComponent(inputBundleId)}`,
+      );
+      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+        throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      }
+      currentVersion = anywhere.current_version;
+    }
+    const expectedVersion = requirePositiveInteger(envelope.payload.expectedVersion, true);
+    if (expectedVersion !== currentVersion) throw new EnterpriseCommandError('RESOURCE_STALE');
+    if (!Array.isArray(envelope.payload.sourceSets) || envelope.payload.sourceSets.length < 1 || envelope.payload.sourceSets.length > 20) {
+      throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    }
+    const sourceSetVersionIds: string[] = [];
+    for (const raw of envelope.payload.sourceSets) {
+      const item = requirePayloadObject(raw);
+      const sourceSetVersionId = requireUuid(item.sourceSetVersionId);
+      const version = await findBinding<{ id: string }>(
+        'enterprise_source_set_versions',
+        `select=id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSetVersionId)}`,
+      );
+      if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      sourceSetVersionIds.push(version.id);
+    }
+    return { ...(inputBundleId ? { inputBundleId } : {}), currentVersion, sourceSetVersionIds };
+  }
+  if (envelope.commandType === 'transcript.journey.set-state' && envelope.payload.journeyId !== undefined) {
+    const journeyId = requireUuid(envelope.payload.journeyId);
+    const anywhere = await findBinding<{ org_id: string; workspace_id: string }>(
+      'enterprise_governed_journeys', `select=org_id,workspace_id&id=eq.${encodeURIComponent(journeyId)}`,
+    );
+    if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+      throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    }
+    const current = await findBinding<{ version: number; route_policy_version: number }>(
+      'enterprise_governed_journeys',
+      `select=version,route_policy_version&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(journeyId)}`,
+    );
+    return { journeyId, currentVersion: current?.version || 0, routePolicyVersion: current?.route_policy_version || 1 };
+  }
+  if (envelope.commandType === 'transcript.assess.candidate.review') {
+    const candidateId = requireUuid(envelope.payload.candidateId);
+    const candidate = await findBinding<{ id: string; version: number; ai_job_id: string; source_version_id: string }>(
+      'enterprise_evidence_candidates',
+      `select=id,version,ai_job_id,source_version_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(candidateId)}`,
+    );
+    if (!candidate) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    const binding = await findBinding<{ id: string; input_bundle_id: string; input_bundle_version_id: string; source_set_id: string; source_set_version_id: string; source_version_id: string }>(
+      'enterprise_transcript_extraction_bindings',
+      `select=id,input_bundle_id,input_bundle_version_id,source_set_id,source_set_version_id,source_version_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&job_id=eq.${encodeURIComponent(candidate.ai_job_id)}`,
+    );
+    if (!binding) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    const submitted = {
+      candidateId, candidateVersion: requirePositiveInteger(envelope.payload.candidateVersion),
+      inputBundleId: requireUuid(envelope.payload.inputBundleId),
+      inputBundleVersionId: requireUuid(envelope.payload.inputBundleVersionSelector),
+      inputBundleVersion: requirePositiveInteger(envelope.payload.expectedInputBundleVersion),
+      sourceSetId: requireUuid(envelope.payload.sourceSetId),
+      sourceSetVersionId: requireUuid(envelope.payload.sourceSetVersionSelector),
+      sourceSetVersion: requirePositiveInteger(envelope.payload.expectedSourceSetVersion),
+      sourceVersionId: requireUuid(envelope.payload.sourceVersionSelector),
+      extractionBindingId: binding.id, extractionJobId: candidate.ai_job_id,
+    };
+    const exact = await resolveTranscriptExtractionSelection(
+      authority, submitted.inputBundleId, submitted.inputBundleVersionId, submitted.inputBundleVersion,
+      submitted.sourceSetId, submitted.sourceSetVersionId, submitted.sourceSetVersion, submitted.sourceVersionId,
+      findBinding,
+    );
+    if (!exact) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    if (candidate.version !== submitted.candidateVersion || candidate.source_version_id !== submitted.sourceVersionId
+      || binding.input_bundle_id !== submitted.inputBundleId || binding.input_bundle_version_id !== submitted.inputBundleVersionId
+      || binding.source_set_id !== submitted.sourceSetId || binding.source_set_version_id !== submitted.sourceSetVersionId
+      || binding.source_version_id !== submitted.sourceVersionId) throw new EnterpriseCommandError('RESOURCE_STALE');
+    return submitted;
+  }
+  if (envelope.commandType === 'transcript.assess.apply.preview') {
+    const caseId = requireUuid(envelope.payload.assessDraftId);
+    const expectedDraftVersion = requirePositiveInteger(envelope.payload.expectedDraftVersion);
+    const current = await findBinding<{ version: number; head_version_id: string }>(
+      'assess_v2_cases',
+      `select=version,head_version_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(caseId)}&status=eq.draft&deleted_at=is.null`,
+    );
+    if (!current) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    if (current.version !== expectedDraftVersion) throw new EnterpriseCommandError('RESOURCE_STALE');
+    const sourceSets = parseTranscriptSourceSetLineage(envelope.payload.sourceSetVersions);
+    const inputBundleId = requireUuid(envelope.payload.inputBundleId);
+    const inputBundleVersionId = requireUuid(envelope.payload.inputBundleVersionSelector);
+    const inputBundleVersion = requirePositiveInteger(envelope.payload.expectedInputBundleVersion);
+    await assertTranscriptBundleLineagePreclaim(
+      authority, inputBundleId, inputBundleVersionId, inputBundleVersion, sourceSets,
+      findBinding, findBindingRows,
+    );
+    if (!Array.isArray(envelope.payload.selections)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    const candidateBindings = [] as JsonObject[];
+    for (const raw of envelope.payload.selections) {
+      const selection = requirePayloadObject(raw);
+      const candidateId = requireUuid(selection.candidateId);
+      const candidate = await findBinding<{ id: string; version: number; ai_job_id: string }>(
+        'enterprise_evidence_candidates',
+        `select=id,version,ai_job_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(candidateId)}`,
+      );
+      if (!candidate) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      const binding = await findBinding<{ id: string; input_bundle_id: string; input_bundle_version_id: string; source_set_id: string; source_set_version_id: string; source_version_id: string }>(
+        'enterprise_transcript_extraction_bindings',
+        `select=id,input_bundle_id,input_bundle_version_id,source_set_id,source_set_version_id,source_version_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&job_id=eq.${encodeURIComponent(candidate.ai_job_id)}`,
+      );
+      if (!binding) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      if (candidate.version !== requirePositiveInteger(selection.candidateVersion)
+        || binding.input_bundle_id !== inputBundleId || binding.input_bundle_version_id !== inputBundleVersionId
+        || !sourceSets.some(item => item.sourceSetId === binding.source_set_id
+          && item.sourceSetVersionSelector === binding.source_set_version_id)) throw new EnterpriseCommandError('RESOURCE_STALE');
+      candidateBindings.push({ candidateId, candidateVersion: candidate.version, extractionBindingId: binding.id,
+        extractionJobId: candidate.ai_job_id, sourceVersionId: binding.source_version_id });
+    }
+    return { assessDraftId: caseId, currentVersion: current.version, headVersionId: current.head_version_id,
+      inputBundleId, inputBundleVersionId, inputBundleVersion, sourceSets, candidateBindings };
+  }
+  if (envelope.commandType === 'transcript.assess.apply.commit') {
+    const previewBatchId = requireUuid(envelope.payload.previewBatchId);
+    const batch = await findBinding<{ assess_case_id: string; expected_case_version: number; input_bundle_id: string; input_bundle_version_id: string; input_bundle_version: number; source_set_version_ids: string[] }>(
+      'enterprise_assess_apply_preview_batches',
+      `select=assess_case_id,expected_case_version,input_bundle_id,input_bundle_version_id,input_bundle_version,source_set_version_ids&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(previewBatchId)}`,
+    );
+    if (!batch) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    const sourceSets = parseTranscriptSourceSetLineage(envelope.payload.sourceSetVersions);
+    const submitted = {
+      previewBatchId, assessDraftId: requireUuid(envelope.payload.assessDraftId),
+      expectedDraftVersion: requirePositiveInteger(envelope.payload.expectedDraftVersion),
+      inputBundleId: requireUuid(envelope.payload.inputBundleId),
+      inputBundleVersionId: requireUuid(envelope.payload.inputBundleVersionSelector),
+      inputBundleVersion: requirePositiveInteger(envelope.payload.expectedInputBundleVersion), sourceSets,
+    };
+    await assertTranscriptBundleLineagePreclaim(
+      authority, submitted.inputBundleId, submitted.inputBundleVersionId, submitted.inputBundleVersion, sourceSets,
+      findBinding, findBindingRows,
+    );
+    if (batch.assess_case_id !== submitted.assessDraftId || batch.expected_case_version !== submitted.expectedDraftVersion
+      || batch.input_bundle_id !== submitted.inputBundleId || batch.input_bundle_version_id !== submitted.inputBundleVersionId
+      || batch.input_bundle_version !== submitted.inputBundleVersion
+      || JSON.stringify(batch.source_set_version_ids) !== JSON.stringify(sourceSets.map(item => item.sourceSetVersionSelector))) {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+    return submitted;
+  }
+  if (envelope.commandType === 'transcript.assess.conflict.resolve') {
+    requireExactPayload(
+      envelope.payload,
+      ['conflictId', 'resolutionVersion', 'resolution', 'rationale'],
+      ['candidateId', 'authoredValue'],
+    );
+    const conflictId = requireUuid(envelope.payload.conflictId);
+    const resolutionVersion = requirePositiveInteger(envelope.payload.resolutionVersion, true);
+    const anywhere = await findBinding<{
+      org_id: string;
+      workspace_id: string;
+      current_resolution_version: number;
+      candidate_ids: string[];
+    }>(
+      'enterprise_assess_evidence_conflicts',
+      `select=org_id,workspace_id,current_resolution_version,candidate_ids&id=eq.${encodeURIComponent(conflictId)}`,
+    );
+    if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+      throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+    }
+    if (anywhere.current_resolution_version !== resolutionVersion) throw new EnterpriseCommandError('RESOURCE_STALE');
+    const candidateId = envelope.payload.candidateId === undefined
+      ? null
+      : requireUuid(envelope.payload.candidateId);
+    if (candidateId) {
+      const candidate = await findBinding<{ id: string }>(
+        'enterprise_evidence_candidates',
+        `select=id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(candidateId)}`,
+      );
+      if (!candidate || !Array.isArray(anywhere.candidate_ids) || !anywhere.candidate_ids.includes(candidateId)) {
+        throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      }
+    }
+    return { conflictId, resolutionVersion, ...(candidateId ? { candidateId } : {}) };
+  }
+  return null;
 };
 
 const assertCommittedEnterpriseReceiptIdentity = (
@@ -2202,8 +2935,16 @@ export const handleEnterpriseIntelligenceRequest = async (
       user.id, organizationId, envelope.workspaceId,
     );
     const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType);
+    const transcriptCommandBinding = await deriveTranscriptCommandRequestBinding(
+      authority,
+      envelope,
+      overrides.transcriptCommandRequestBindingDependencies,
+    );
     const { requestId: _transportRequestId, ...canonicalEnvelope } = envelope;
-    const requestHash = await hashReceiptValue(canonicalEnvelope);
+    const requestHash = await hashReceiptValue({
+      ...canonicalEnvelope,
+      ...(transcriptCommandBinding ? { serverBinding: transcriptCommandBinding } : {}),
+    });
     const resourceType = envelope.commandType === 'approval.review.record' || envelope.commandType === 'approval.record'
       ? requireString(envelope.payload.resourceType, 80)
       : null;
@@ -2229,6 +2970,9 @@ export const handleEnterpriseIntelligenceRequest = async (
     claimedReceipt = receipt;
     claimedAuthority = disclosureAuthority;
     claimedCommandType = envelope.commandType;
+    if (transcriptCommandBinding) {
+      await ensureExecutionPlan(receipt, disclosureAuthority, { transcriptCommandBinding });
+    }
     const result = await executeCommand(disclosureAuthority, envelope, receipt);
     const resultObject: JsonObject = isRecord(result) ? result : { result };
     const resourceId = resolveEnterpriseCommandResourceId(envelope.commandType, resultObject);

@@ -10,6 +10,7 @@ export type EnterpriseProviderResolverProvider =
   | 'azure_openai'
   | 'anthropic'
   | 'gemini'
+  | 'groq'
   | 'openai_compatible';
 export type ProviderResolverProvider = 'gemini' | 'groq';
 export type ProviderResolverSupportedProvider = ProviderResolverProvider | EnterpriseProviderResolverProvider;
@@ -729,6 +730,7 @@ const enterpriseProviders = new Set<EnterpriseProviderResolverProvider>([
   'azure_openai',
   'anthropic',
   'gemini',
+  'groq',
   'openai_compatible',
 ]);
 
@@ -748,15 +750,6 @@ const classifyEnterpriseConfig = (
     return 'provider_validation_stale';
   }
   return null;
-};
-
-const configuredBudget = (config: ProviderConfigRow) => {
-  const policy = config.budget_policy || {};
-  const readLimit = (key: 'dailyRequests' | 'monthlyTokens') => {
-    const value = policy[key];
-    return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : undefined;
-  };
-  return { dailyRequests: readLimit('dailyRequests'), monthlyTokens: readLimit('monthlyTokens') };
 };
 
 /**
@@ -859,14 +852,12 @@ export const resolveEnterpriseProviderRoute = async (
     const keyFailure = classifyKeyRefFailure(keyRef, orgId, provider, deps.now());
     if (keyFailure) return block(keyFailure, { provider, providerConfigId: config.id, keyRefId: keyRef.id });
 
-    const budget = configuredBudget(config);
-    if (budget.dailyRequests !== undefined || budget.monthlyTokens !== undefined) {
-      const usage = await deps.queryUsage({ orgId, workspaceId, providerConfigId: config.id, now: deps.now() });
-      if (
-        (budget.dailyRequests !== undefined && usage.dailyRequests >= budget.dailyRequests)
-        || (budget.monthlyTokens !== undefined && usage.monthlyTokens >= budget.monthlyTokens)
-      ) return block('budget_exhausted', { provider, providerConfigId: config.id, keyRefId: keyRef.id });
-    }
+    // Budget authority deliberately does not live in this read-only route
+    // projection. The provider-budget reservation RPC rechecks this exact
+    // route, fresh actor authority, and the configured limits while holding
+    // the tenant/workspace/provider/capability budget lock. Keeping a
+    // read-then-compare gate here would permit two concurrent callers to both
+    // observe the final slot and call the provider.
 
     const auditEvent = buildProviderResolverAuditEventShell({
       orgId,
