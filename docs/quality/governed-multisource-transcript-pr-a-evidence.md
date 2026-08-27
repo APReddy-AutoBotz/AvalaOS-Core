@@ -26,6 +26,7 @@ No hosted/live infrastructure, real provider, real secret, customer data, deploy
 - The retained ten-operation Enterprise functional journey has a bounded 60-second test deadline because it is not a performance assertion. After one load-sensitive 30-second timeout at its final rendered state, the exact Pixel 7 scenario passed three isolated repetitions in 2.3–2.6 seconds; the separately owned performance thresholds remained unchanged.
 - The retained Enterprise PostgreSQL concurrency test attaches its expected stale-source rejection before releasing the competing transaction. This preserves the lock-wait assertion and prevents the governed rejection from becoming an unhandled microtask-race failure; the exact harness is included in PR A provenance.
 - Exact-head CI on the first pushed candidate exposed a deterministic PostgreSQL catalog-identity mismatch: PostgreSQL may omit a visible `public` qualification from composite routine arguments while migration SQL retains it. The shared canonical inventory now normalizes only that visibility-dependent qualification, preserves non-`public` schema identity, and has positive/adversarial hosted-inventory regressions. The same run exposed the hosted identity marker lagging the PR A migrations; additive migration `20260827173000_governed_transcript_hosted_identity_convergence.sql` advances the fail-closed marker to the actual chain tip. Fresh and accepted-baseline PostgreSQL 16 paths now pass the exact failing gate.
+- The next exact-head run passed the dedicated PR A, Pilot Operations, exhaustive acceptance, Pilot Acceptance, preview QA, Studio, Enterprise, and Netlify gates, then exposed the generic retained Playwright config discovering the transcript specification without building its Enterprise harness. The retained localhost config now excludes that dedicated specification; the PR A config remains its exclusive owner at the controlled `4193` origin, and the source-boundary gate rejects either ownership drift.
 
 Existing deterministic scoring formulas, weights, thresholds, hard stops, recommendation logic, and score version are unchanged.
 
@@ -33,7 +34,7 @@ Existing deterministic scoring formulas, weights, thresholds, hard stops, recomm
 
 | Gate | Exact local result |
 | --- | --- |
-| Evidence registry | 33 exact commands; 194 passed assertion markers; six explicit `not_run` results; 67 source-provenance hashes. |
+| Evidence registry | 33 exact commands; 194 passed assertion markers; six explicit `not_run` results; 68 source-provenance hashes. |
 | Evidence mutation verifier | 19/19 evidence-contract tests passed: one positive registry-contract case plus 18/18 adversarial rejection cases covering assertion-producer runtime substitution, substituted runtime persona/capability/tenant/lineage, default-off browser context, unrelated or missing AUTH assertions, duplicate/count drift, fake/missing source, owner/hash, command, run identity, digest, and arbitrary output mutations. |
 | Browser lifecycle diagnostics | 9/9 passed: exact free loopback bind/release, native free-port non-misclassification, bounded never-ready cleanup, spawn-error classification, capped ANSI-sanitized output, split exact binding recognition, Enterprise and transcript build/preview sequencing, and pre-build foreign HTTP 200 preservation with no Playwright launch. |
 | PR A domain/API/provider/adversarial suites | Exit 0; migration static 12/12; API command 24/24 plus query tests; all owned source, Assess, authorization, idempotency, budget, provider, and injection assertions passed. |
@@ -61,7 +62,7 @@ The six truthful `not_run` boundaries are:
 - `IDEMP-002-B`: downstream handoff response-loss consumption belongs to PR B/PR C; PR A's `IDEMP-002-A` passed.
 - `PROVIDER-009-B`: Studio shared-gateway adoption belongs to PR B; PR A's `PROVIDER-009-A` passed.
 
-The first pushed exact-head candidate ran GitHub Actions and exposed the two linked catalog/marker defects recorded above. Final exact-head GitHub Actions is `not_run` for this local additive follow-up and remains required before repository acceptance. The generated manifest and the controller handoff record the exact local working-tree digest and verifier result because including a digest inside a digest-scoped source document would be self-referential.
+Successive pushed exact-head candidates exposed the catalog/marker and generic browser-suite ownership defects recorded above. Final exact-head GitHub Actions is `not_run` for this local follow-up and remains required before repository acceptance. The generated manifest and the controller handoff record the exact local working-tree digest and verifier result because including a digest inside a digest-scoped source document would be self-referential.
 
 ## Rollback
 

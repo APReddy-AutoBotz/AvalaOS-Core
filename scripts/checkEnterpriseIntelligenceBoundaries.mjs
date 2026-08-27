@@ -570,6 +570,8 @@ const evidenceVerifier = read('scripts/verifyTranscriptFlowEvidence.mjs');
 const evidenceContract = read('scripts/transcriptFlowEvidenceContract.mjs');
 const evidenceScope = read('scripts/transcriptFlowEvidenceScope.mjs');
 const sourceProvenance = read('tests/acceptance/source-provenance.json');
+const retainedPlaywright = read('playwright.config.ts');
+const transcriptPlaywright = read('playwright.transcript-flow-pr-a.config.ts');
 if (evidenceRegistry.commands.length !== 33 || new Set(evidenceRegistry.commands.map(item => item.id)).size !== 33) {
   throw new Error('PR A evidence must retain the exact unique 33-command governed and retained-platform gate registry.');
 }
@@ -588,11 +590,18 @@ for (const required of [
   'ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL:', 'STUDIO_ARTIFACT_MIGRATION_DATABASE_URL:', 'PR1D_MIGRATION_DATABASE_URL:',
   'node scripts/runTranscriptFlowEvidence.mjs', 'npm run test:transcript-flow:evidence',
 ]) if (!evidenceWorkflow.includes(required)) throw new Error(`PR A workflow is missing exact evidence binding ${required}.`);
+if (!/testIgnore:\s*\[[^\]]*'transcriptFlowPrA\.spec\.ts'/u.test(retainedPlaywright)) {
+  throw new Error('The retained localhost browser suite must not discover the dedicated governed transcript specification.');
+}
+if (!/testMatch:\s*'transcriptFlowPrA\.spec\.ts'/u.test(transcriptPlaywright)
+  || !/baseURL:\s*'http:\/\/127\.0\.0\.1:4193'/u.test(transcriptPlaywright)) {
+  throw new Error('The dedicated PR A Playwright config must exclusively own its transcript specification and controlled harness origin.');
+}
 if (!evidenceRunner.includes('validateCommandMarkers') || !evidenceRunner.includes('PR_A_SCOPED_TREE_CHANGED_DURING_RUN')
   || !evidenceVerifier.includes('validateEvidenceDirectory') || !evidenceContract.includes('PR_A_PASS_WITHOUT_REGISTERED_MARKER')) {
   throw new Error('PR A runner and independent verifier must fail closed on marker or scoped-tree substitution.');
 }
-for (const source of ['20260826151538_governed_transcript_authority_forward_fix.sql', 'tests/browser/transcriptFlowPrA.spec.ts', 'services/transcriptFlow']) {
+for (const source of ['20260826151538_governed_transcript_authority_forward_fix.sql', 'playwright.config.ts', 'tests/browser/transcriptFlowPrA.spec.ts', 'services/transcriptFlow']) {
   if (!evidenceScope.includes(source)) throw new Error(`PR A evidence scope omitted ${source}.`);
   if (!sourceProvenance.includes(source)) throw new Error(`PR A source provenance omitted ${source}.`);
 }

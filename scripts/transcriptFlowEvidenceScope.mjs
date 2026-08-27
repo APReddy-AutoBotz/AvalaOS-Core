@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export const PR_A_EVIDENCE_SCOPE = [
-  '.github/workflows/transcript-flow-pr-a.yml', '.gitignore', 'package.json', 'vite.config.ts', 'playwright.enterprise-intelligence.config.ts',
+  '.github/workflows/transcript-flow-pr-a.yml', '.gitignore', 'package.json', 'vite.config.ts', 'playwright.config.ts', 'playwright.enterprise-intelligence.config.ts',
   'playwright.pr1d.config.ts', 'playwright.studio-artifacts.config.ts', 'playwright.transcript-flow-pr-a.config.ts',
   'scripts/checkEnterpriseIntelligenceBoundaries.mjs', 'scripts/runTranscriptFlowBrowser.mjs',
   'scripts/hostedPilotActivation.mjs', 'scripts/hostedPilotActivation.test.mjs',
@@ -69,7 +69,7 @@ export const calculatePrAWorkingTreeDigest = root => {
 
 export const isPrASourcePath = file => {
   const value = slash(file);
-  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:.*TranscriptFlow.*|checkEnterpriseIntelligenceBoundaries|hostedPilotActivation(?:\.test)?|testEnterpriseIntelligencePostgres|testPilotOperationsMigration)\.mjs|testing\/process-lifecycle\/|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
+  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:.*TranscriptFlow.*|checkEnterpriseIntelligenceBoundaries|hostedPilotActivation(?:\.test)?|testEnterpriseIntelligencePostgres|testPilotOperationsMigration)\.mjs|testing\/process-lifecycle\/|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
 };
 
 export const collectChangedPrASources = (root, baseGitSha) => {
