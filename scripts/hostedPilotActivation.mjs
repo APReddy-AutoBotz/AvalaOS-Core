@@ -52,6 +52,11 @@ export function normalizeRoutineIdentityArguments(argumentsSql) {
     if(tokens.length>1 && !/^(?:double|character|timestamp|time|bit|interval)$/i.test(tokens[0]) && !tokens[0].includes('.') && !tokens[0].endsWith('[]')) tokens.shift();
     let type=tokens.join(' ').toLowerCase().replace(/\s+/g,' ').replace(/\s*\[\s*\]/g,'[]');
     type=TYPE_ALIASES.get(type)??type;
+    // pg_get_function_identity_arguments omits an explicitly qualified public
+    // type whenever public is visible on search_path. Canonical migration SQL
+    // may still spell the same type as public.<name>, so collapse only that
+    // visibility-dependent qualification while retaining all other schemas.
+    type=type.replace(/^public\./,'');
     return type;
   }).join(', ');
 }
@@ -330,12 +335,12 @@ export function sanitizeStructuralInventory(raw) {
   });
   const routines = normalized((raw.routines ?? []).map((entry, index) => {
     if (!entry || typeof entry !== 'object') throw new Error(`routines[${index}] must be an object`);
-    const schema=String(entry.schema??'').toLowerCase(), name=String(entry.name??'').toLowerCase();
-    if (!IDENTIFIER.test(schema)||!IDENTIFIER.test(name)||!/^[a-z0-9_ ,\[\]."]*$/.test(String(entry.arguments??'').toLowerCase())) throw new Error(`routines[${index}] contains an unsafe identifier`);
-    return `${schema}.${name}(${String(entry.arguments??'').replace(/\s+/g,' ').trim().toLowerCase()})`;
+    const schema=String(entry.schema??'').toLowerCase(), name=String(entry.name??'').toLowerCase(), argumentsSql=String(entry.arguments??'');
+    if (!IDENTIFIER.test(schema)||!IDENTIFIER.test(name)||!/^[a-z0-9_ ,\[\]."]*$/.test(argumentsSql.toLowerCase())) throw new Error(`routines[${index}] contains an unsafe identifier`);
+    return `${schema}.${name}(${normalizeRoutineIdentityArguments(argumentsSql)})`;
   }));
   const approvedCompatibilityRoutines=normalized((raw.routines??[]).filter(entry=>entry.approved_compatibility===true)
-    .map(entry=>`${String(entry.schema).toLowerCase()}.${String(entry.name).toLowerCase()}(${String(entry.arguments).replace(/\s+/g,' ').trim().toLowerCase()})`));
+    .map(entry=>`${String(entry.schema).toLowerCase()}.${String(entry.name).toLowerCase()}(${normalizeRoutineIdentityArguments(String(entry.arguments))})`));
   if (!Array.isArray(raw.appliedMigrations ?? [])) throw new Error('appliedMigrations must be an array');
   const appliedMigrations = (raw.appliedMigrations ?? []).map((name, index) => {
     if (typeof name !== 'string' || !MIGRATION_NAME.test(name)) throw new Error(`appliedMigrations[${index}] is invalid`);

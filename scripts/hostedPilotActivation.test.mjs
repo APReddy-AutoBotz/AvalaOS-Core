@@ -17,10 +17,41 @@ test('canonical object extraction is comment-safe, final-state aware, and Postgr
   const sql=`-- CREATE TABLE public.phantom(id int);\n/* CREATE FUNCTION public.phantom() RETURNS void */\nCREATE TABLE public.real_table(id int);\nCREATE FUNCTION public.defaulted(p_id uuid, p_note text DEFAULT NULL, p_count int4 = 3) RETURNS void LANGUAGE sql AS 'select';\nCREATE FUNCTION public.removed(p_id uuid) RETURNS void LANGUAGE sql AS 'select';\nDROP FUNCTION public.removed(uuid);`;
   assert.doesNotMatch(stripSqlComments(sql),/phantom/);
   assert.equal(normalizeRoutineIdentityArguments('p_id uuid, p_note text DEFAULT NULL, p_count int4 = 3'),'uuid, text, integer');
+  assert.equal(
+    normalizeRoutineIdentityArguments('p_row public.enterprise_ai_budget_reservations, p_actor uuid'),
+    normalizeRoutineIdentityArguments('enterprise_ai_budget_reservations, uuid'),
+    'public composite type visibility must not change a routine identity',
+  );
+  assert.equal(
+    normalizeRoutineIdentityArguments('p_row tenant_private.enterprise_ai_budget_reservations'),
+    'tenant_private.enterprise_ai_budget_reservations',
+    'non-public type schemas must remain identity-significant',
+  );
   assert.deepEqual(extractObjectOperations(sql).map(op=>`${op.action}:${op.identity}`),[
     'create:public.real_table:table','create:public.defaulted(uuid, text, integer)','create:public.removed(uuid)','drop:public.removed(uuid)']);
   assert.equal(canonical.routines.some(identity=>identity.includes('legacy_untrusted')),false,'deliberately dropped legacy routines must not remain canonical');
   assert.equal(canonical.relations.some(identity=>identity.includes('IF')),false,'commented pseudo-DDL must not create phantom relations');
+});
+
+test('hosted inventory accepts PostgreSQL-unqualified public composite types only',()=>{
+  const migrationName='20260101000000_typed_routine.sql';
+  const typedCanonical={migrations:[{
+    name:migrationName,
+    objectOperations:[{kind:'routine',action:'create',identity:'public.typed_command(typed_payload, uuid)'}],
+  }]};
+  const compatible=classifyHostedTarget({
+    ...base,
+    routines:[{schema:'public',name:'typed_command',arguments:'public.typed_payload, uuid',owner:'postgres',acl:''}],
+    appliedMigrations:[migrationName],
+  },typedCanonical);
+  assert.equal(compatible.mutationAllowed,true);
+  const foreignSchema=classifyHostedTarget({
+    ...base,
+    routines:[{schema:'public',name:'typed_command',arguments:'tenant_private.typed_payload, uuid',owner:'postgres',acl:''}],
+    appliedMigrations:[migrationName],
+  },typedCanonical);
+  assert.equal(foreignSchema.mutationAllowed,false);
+  assert.ok(foreignSchema.reasons.includes('foreign_routine'));
 });
 
 test('canonical replay models routine and relation renames in migration order',()=>{

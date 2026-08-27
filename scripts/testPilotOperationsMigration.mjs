@@ -10,6 +10,7 @@ const lifecycleTruth = await readFile('supabase/migrations/20260810160000_pilot_
 const rollbackProjectionCorrection = await readFile('supabase/migrations/20260810180000_pilot_operations_rollback_projection_correction.sql', 'utf8');
 const promotionSerialization = await readFile('supabase/migrations/20260810200000_pilot_operations_promotion_history_serialization.sql', 'utf8');
 const pendingSerialization = await readFile('supabase/migrations/20260810220000_pilot_operations_pending_candidate_serialization.sql', 'utf8');
+const transcriptHostedIdentityConvergence = await readFile('supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql', 'utf8');
 
 for (const required of [
   'pilot_operations_environments',
@@ -60,5 +61,8 @@ assert.match(pendingSerialization, /FOR UPDATE[\s\S]*next_ordinal[\s\S]*candidat
 assert.match(pendingSerialization, /FORCE ROW LEVEL SECURITY/);
 assert.doesNotMatch(pendingSerialization, /release_candidates[\s\S]{0,300}ORDER BY created_at DESC,id DESC/);
 assert.doesNotMatch(pendingSerialization, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
+assert.match(transcriptHostedIdentityConvergence, /SET\s+migration_tip\s*=\s*'20260827173000'/i);
+assert.match(transcriptHostedIdentityConvergence, /CHECK\s*\(migration_tip\s*=\s*'20260827173000'\)/i);
+assert.doesNotMatch(transcriptHostedIdentityConvergence, /DROP\s+(TABLE|SCHEMA)|TRUNCATE/i);
 assert.match(sql, /LIVE_ACTIVATION_NOT_AUTHORIZED/);
 console.log('Pilot Operations migration contract: additive authority, RLS, service-only RPCs, and non-live stop gate passed.');

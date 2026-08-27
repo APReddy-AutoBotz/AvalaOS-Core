@@ -7,9 +7,10 @@ export const PR_A_EVIDENCE_SCOPE = [
   '.github/workflows/transcript-flow-pr-a.yml', '.gitignore', 'package.json', 'vite.config.ts', 'playwright.enterprise-intelligence.config.ts',
   'playwright.pr1d.config.ts', 'playwright.studio-artifacts.config.ts', 'playwright.transcript-flow-pr-a.config.ts',
   'scripts/checkEnterpriseIntelligenceBoundaries.mjs', 'scripts/runTranscriptFlowBrowser.mjs',
+  'scripts/hostedPilotActivation.mjs', 'scripts/hostedPilotActivation.test.mjs',
   'scripts/runTranscriptFlowBrowser.test.mjs', 'scripts/runTranscriptFlowCoverage.mjs',
   'scripts/runTranscriptFlowEvidence.mjs', 'scripts/testEnterpriseIntelligencePostgres.mjs',
-  'scripts/testTranscriptFlowPostgres.mjs', 'scripts/transcriptFlowEvidenceContract.mjs',
+  'scripts/testPilotOperationsMigration.mjs', 'scripts/testTranscriptFlowPostgres.mjs', 'scripts/transcriptFlowEvidenceContract.mjs',
   'scripts/transcriptFlowEvidenceContract.test.mjs', 'scripts/transcriptFlowEvidenceScope.mjs', 'scripts/verifyTranscriptFlowEvidence.mjs',
   'components/enterprise/AssessTranscriptCandidateReview.tsx', 'components/enterprise/EnterpriseIntelligenceView.tsx',
   'components/enterprise/TranscriptSourceLibrary.tsx', 'services/enterpriseIntelligence.ts', 'services/enterpriseIntelligence.test.ts',
@@ -25,6 +26,7 @@ export const PR_A_EVIDENCE_SCOPE = [
   'supabase/migrations/20260825165350_governed_transcript_source_sets_assess.sql',
   'supabase/migrations/20260825165401_unified_provider_budget_authority.sql',
   'supabase/migrations/20260826151538_governed_transcript_authority_forward_fix.sql',
+  'supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql',
   'testing/process-lifecycle', 'tests/browser/transcriptFlowPrA.spec.ts', 'tests/browser/enterpriseIntelligenceNetworkFixture.ts',
   'tests/browser/enterpriseIntelligence.spec.ts',
   'tests/acceptance/source-provenance.json', 'docs/00_SOURCE_OF_TRUTH.md',
@@ -67,7 +69,7 @@ export const calculatePrAWorkingTreeDigest = root => {
 
 export const isPrASourcePath = file => {
   const value = slash(file);
-  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:.*TranscriptFlow.*|checkEnterpriseIntelligenceBoundaries|testEnterpriseIntelligencePostgres)\.mjs|testing\/process-lifecycle\/|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
+  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:.*TranscriptFlow.*|checkEnterpriseIntelligenceBoundaries|hostedPilotActivation(?:\.test)?|testEnterpriseIntelligencePostgres|testPilotOperationsMigration)\.mjs|testing\/process-lifecycle\/|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
 };
 
 export const collectChangedPrASources = (root, baseGitSha) => {
