@@ -96,10 +96,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ tasks, projects, onSelectTa
                     {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                 </h2>
                 <div className="flex items-center gap-2">
-                    <button onClick={goToPreviousMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
+                    <button type="button" aria-label="Previous month" onClick={goToPreviousMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
                         <ChevronLeftIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={goToNextMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
+                    <button type="button" aria-label="Next month" onClick={goToNextMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
                         <ChevronRightIcon className="w-5 h-5" />
                     </button>
                 </div>

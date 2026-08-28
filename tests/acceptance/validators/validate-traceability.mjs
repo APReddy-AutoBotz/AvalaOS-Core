@@ -6,14 +6,18 @@ import {
   loadCatalog,
   loadExecutionBindings,
   loadInventoryDocument,
+  loadSourceProvenance,
   repoRoot,
+  validateSourceProvenance,
 } from '../../../scripts/exhaustiveAcceptanceModel.mjs';
 
 const fixtures = JSON.parse(fs.readFileSync(path.join(repoRoot, 'tests/acceptance/fixtures/process-discovery-transcripts.json'), 'utf8'));
 const catalog = loadCatalog();
 const bindings = loadExecutionBindings();
-const inventory = deriveInventory(catalog, loadInventoryDocument());
+const provenance = loadSourceProvenance();
+const inventory = deriveInventory(catalog, loadInventoryDocument(), provenance, bindings);
 const errors = [];
+errors.push(...validateSourceProvenance(catalog, bindings, provenance));
 const ids = new Set((catalog.cases ?? []).map(item => item.testId));
 const classification = classifyExecutionBindings(catalog, bindings);
 
@@ -24,7 +28,11 @@ for (const item of catalog.cases ?? []) {
     }
   }
   const kinds = classification.get(item.testId) ?? [];
-  if (kinds.length !== 1) errors.push(`${item.testId}: execution binding count ${kinds.length}`);
+  if (!kinds.length) errors.push(`${item.testId}: execution binding count 0`);
+  if (kinds.length > 1) {
+    const server = (bindings.serverTests ?? []).find(binding => binding.testId === item.testId);
+    if (!server || JSON.stringify([...server.components].sort()) !== JSON.stringify([...kinds].sort())) errors.push(`${item.testId}: invalid composite execution binding`);
+  }
 }
 
 for (const branch of inventory) {
@@ -59,9 +67,11 @@ const summary = {
   declared: declared.length,
   sourceBacked: sourceBacked.length,
   uncovered: uncovered.length,
-  retainedCases: [...classification.values()].filter(kinds => kinds[0] === 'retained').length,
-  oracleCases: [...classification.values()].filter(kinds => kinds[0] === 'oracle').length,
-  hostedCases: [...classification.values()].filter(kinds => kinds[0] === 'hosted').length,
+  retainedCases: [...classification.values()].filter(kinds => kinds.includes('retained')).length,
+  oracleCases: [...classification.values()].filter(kinds => kinds.includes('oracle')).length,
+  hostedCases: [...classification.values()].filter(kinds => kinds.includes('hosted')).length,
+  serverCases: [...classification.values()].filter(kinds => kinds.includes('server')).length,
+  compositeCases: [...classification.values()].filter(kinds => kinds.length > 1).length,
   transcripts: fixtures.fixtures.length,
   errors,
 };

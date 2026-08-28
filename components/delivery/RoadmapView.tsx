@@ -123,7 +123,7 @@ const RoadmapView: React.FC<RoadmapViewProps> = ({ tasks, epics }) => {
                         ))}
                     </div>
                 </div>
-                <div className="flex-1 overflow-x-auto">
+                <div className="flex-1 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Delivery roadmap">
                     {renderTimelineHeader()}
                     <div className="relative">
                         {epicsWithDates.map((epic, index) => (

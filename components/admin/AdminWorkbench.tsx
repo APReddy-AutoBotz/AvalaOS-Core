@@ -68,7 +68,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
       <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--av-color-accent)]">Avala Admin</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--av-color-brand-primary)]">Avala Admin</p>
             <h1 className="mt-2 text-3xl font-black text-[#002C4B] dark:text-white">Admin Workbench</h1>
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
               Focused admin navigation for organization setup, module access, Trust Center review, Buyer Acceptance Pack review, Admin walkthrough rehearsal, evidence policy, users, audit signals, and AI control direction.
@@ -93,7 +93,7 @@ const AdminWorkbench: React.FC<AdminWorkbenchProps> = ({
                 <h2 className="text-xl font-black text-[#002C4B] dark:text-white">{activeSectionDefinition.label}</h2>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{activeSectionDefinition.description}</p>
               </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                 Sectioned admin structure
               </span>
             </div>

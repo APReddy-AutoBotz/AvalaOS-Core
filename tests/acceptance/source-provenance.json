@@ -1,0 +1,2460 @@
+{
+  "schemaVersion": 2,
+  "inventoryId": "avalaos-hosted-acceptance-2026-08",
+  "proofOwnerRegistrySource": "tests/acceptance/proof-owner-registry.json",
+  "sourceDigests": {
+    ".github/workflows/transcript-flow-pr-a.yml": "sha256:347cf0368259449ec32d216b37e29480df934a19b96cffc87023d5590903d2ff",
+    "components/enterprise/AssessTranscriptCandidateReview.tsx": "sha256:e7f592b57e6a71b55b90b4843c65f32ce3a297cd151bb4ea43bca8aac553e9b8",
+    "components/enterprise/EnterpriseIntelligenceView.tsx": "sha256:1a6b5aaaf7b65a0e874f20d037f6a2492f89fa87d0923729e5bddb6cd5fffd89",
+    "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
+    "package.json": "sha256:126ba0d807ab0e8ed42deff5dfd2a2feaa2d3f45614571ce927e89b0cd319840",
+    "vite.config.ts": "sha256:f80d2ef5736d7693a1b779a676ccdb6983fd7118fff9786519a5c069060b9f79",
+    "playwright.config.ts": "sha256:b6bb2e0f9ae6849d8d67ea37064138e9b0e530191776048fc60874088e05e3cc",
+    "playwright.enterprise-intelligence.config.ts": "sha256:cd77023a53e99a39e951eaba1faa93ac8c452056025dfc9f472c316f219d16a4",
+    "playwright.pr1d.config.ts": "sha256:5a4ea342469f424c2a38197a6948528c9f108f06ba4fd21c4aab90acb7fb0696",
+    "playwright.studio-artifacts.config.ts": "sha256:bd09e76652cf489822c47ee742b1b07a66685739265ed15c871c963771b727da",
+    "playwright.transcript-flow-pr-a.config.ts": "sha256:a8efa768b38af673a1fe96a6a2bb3912ad8130c21285a03d0c6218b5f869e694",
+    "scripts/checkEnterpriseIntelligenceBoundaries.mjs": "sha256:03f05adeb3d7f30d98ce051353fdb3f58506c33339403a6403f5a01718eac995",
+    "scripts/hostedPilotActivation.mjs": "sha256:375a869fb088b4581bd26b95ecf523da050cc8b01266bef81375fd2ba4d43449",
+    "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
+    "scripts/runTranscriptFlowBrowser.mjs": "sha256:ce907468f840506b47559511dfe4d65058ee84e01d15d50010ecc103278c7720",
+    "scripts/runTranscriptFlowBrowser.test.mjs": "sha256:5feda76cf02774f9d3d3b1d108090f448c50a9b3cc18d766d74cd2ff8a29b87e",
+    "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
+    "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
+    "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:b53f9d3c65715c6a2b9853226c162c1ad7c1a3a3a9d7eab0d71368a1f213abd5",
+    "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
+    "scripts/testTranscriptFlowPostgres.mjs": "sha256:8e24fe1f5381250ff25af0dcff5c1af540270d8d96bb8ef330bd0f256a0db179",
+    "scripts/transcriptFlowEvidenceContract.mjs": "sha256:410fca06f0b3861802b503b8ce555afeffa5ff315e4742d5cf029e304b745582",
+    "scripts/transcriptFlowEvidenceContract.test.mjs": "sha256:ed87d9e89fa69f5810db944b7ed48654c7bc9aee854d49338a3ea2c27ec5e444",
+    "scripts/transcriptFlowEvidenceScope.mjs": "sha256:71329bae8ba81676016ef79125e6570a67b00b8ef91ad1eacbfc25a692347067",
+    "scripts/verifyTranscriptFlowEvidence.mjs": "sha256:15ab6e9fd011cde0bf8025b82eeb300158936b385cbf0ef98911558e7320436e",
+    "services/enterpriseIntelligence.test.ts": "sha256:08cf6dc2a171d7d181002ba8a3e756050cd1eb76e3a0d4cf0240bf9f25daad43",
+    "services/enterpriseIntelligenceClient.ts": "sha256:fc2767b828044abdab40afbb5552320ab63b57aeca9e92d64b79e84ad6454965",
+    "services/transcriptFlow/assessApply.test.ts": "sha256:4ece1fa70cd933bb08612493305c088d633148e4efd4c3d530c27f02bd045579",
+    "services/transcriptFlow/assessApply.ts": "sha256:6c1e9385310d7b34518a12d6695af3e237025ac2ea5ccebd62c6baf1168faf5e",
+    "services/transcriptFlow/contracts.ts": "sha256:eb509f15a822319624a5d22126d1d8b6b72c72f3d4aceffe4b7237fc132b7542",
+    "services/transcriptFlow/sourceSets.test.ts": "sha256:a6da03e710b6a3226bc701f5fc3bbbb97cbf16a3a1db3facc1ca013d6cec3c98",
+    "services/transcriptFlow/sourceSets.ts": "sha256:177268c0ca1f99936de33df2526cfe0cf3dfcbefabf45466287060e5852b8022",
+    "supabase/functions/_shared/enterpriseIntelligenceAi.test.ts": "sha256:a3e0f002b880c1a37cc1fcef50f69c6d3b9ef397c064f264b92cfaeec049aea1",
+    "supabase/functions/_shared/enterpriseIntelligenceAi.ts": "sha256:b4bfbe5d304732806b350646cbe20cd32fa3edd4d4b811e33a1311ac05d44ed7",
+    "supabase/functions/_shared/enterpriseIntelligenceCommand.test.ts": "sha256:78eddd95cb2199fca9b335fcff21603283509360c1523eb56c643c3f6ce261d8",
+    "supabase/functions/_shared/enterpriseIntelligenceCommand.ts": "sha256:49a271318b6f9275e79683d79461e63dab6560a618be60f6df24a2a51faa0d48",
+    "supabase/functions/_shared/enterpriseIntelligenceQuery.test.ts": "sha256:3f93a5f2762f1fff343b3e01183ef13c4bd44aebc66fd5b91d7c99a28e77c163",
+    "supabase/functions/_shared/enterpriseIntelligenceQuery.ts": "sha256:e0f17c7a68dff6bee8846d2ddeb40f64479030a03adbb25d248777dbcb74b3e5",
+    "supabase/functions/_shared/providerBudget.test.ts": "sha256:a8f2441c6c630c71761669232164d25687e82056a27d8276e816067afa0796ba",
+    "supabase/functions/_shared/providerBudget.ts": "sha256:a9e38870df2312782053249940a0af269001625776a6ca49da902be78449aaee",
+    "supabase/functions/_shared/providerBudgetMigration.test.ts": "sha256:16bcec9876664f59ff95b0ea7da66a07013436ad17d2c8c004315c66792a6193",
+    "supabase/functions/_shared/providerCleanup.test.ts": "sha256:989b4a19b54baad699f08ec1d502a6f837a92d978f8b3d372e8b23a65f61e703",
+    "supabase/functions/_shared/providerCleanup.ts": "sha256:5533c1b2cefa1a4e7618e0679e7fc526e81edd45d9312b8a88d2c4cc6f7ecd36",
+    "supabase/functions/_shared/providerLifecycle.test.ts": "sha256:85a91f32648d3f4c3f18bc22f243da9a96a5c40d0125e1b110821171d5b4f48a",
+    "supabase/functions/_shared/providerResolver.test.ts": "sha256:d0826b6de364f4d137a53f264cd8339749c41c2f219789619ec4e3d9d42f7c9d",
+    "supabase/functions/_shared/providerResolver.ts": "sha256:e7b9df5783ff158ae57fdfbdbc5471a57c206269537a60b38d84da3a42c4e544",
+    "supabase/functions/_shared/supabase.ts": "sha256:c563e57a07187f20192ba60746c36e1d43cbc2267b4f6c68884979efa7fa4820",
+    "supabase/functions/_shared/transcriptSourceSetMigration.test.mjs": "sha256:2489cfcde1109c169a5cdfee9e54586a03891bf8c381bf26b513fd3467f86265",
+    "supabase/migrations/20260825165350_governed_transcript_source_sets_assess.sql": "sha256:c656d515ab8805fe01d42ec3baa7a6c2784527a97d655101a838bfcce2b898a4",
+    "supabase/migrations/20260825165401_unified_provider_budget_authority.sql": "sha256:eee73c54ff3538ce78d2179cc5c5ad269a7c9581ad17b47b317616f00ea7989b",
+    "supabase/migrations/20260826151538_governed_transcript_authority_forward_fix.sql": "sha256:b2cbc07ae7917bf7dc6bd887cea7f0b5ae45207d1f0723f2b339e3d1b1586cf1",
+    "supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql": "sha256:175058deb005500c8e5c66db2be06ead69c0335e18096f5441292bbcd6f4f646",
+    "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
+    "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:bca3680926beb1406f17dd95ee20003c2b65166840a2c8271680d095de7140b4",
+    "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
+    "testing/process-lifecycle/fixtures/identities/pr-a-personas.json": "sha256:720111d5b7875272acfed22321db029845b15ac2f5b2b99531aa6089a6a5d751",
+    "testing/process-lifecycle/fixtures/pr-a-fixture-registry.json": "sha256:c66ecf23cae20f02495380e24e300b767918a545d282acc92126f6b7018f168d",
+    "testing/process-lifecycle/fixtures/providers/pr-a-mock-contracts.json": "sha256:fb0f73e08452cdcc877685e110b2708906ff81b8e5d87f564d9620f71020374b",
+    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CLEAN-01.vtt": "sha256:3015cf97dd451613252e9eb03df560c352a5655667bf1fc3e243bb3056c4d76b",
+    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CONFLICT-04.vtt": "sha256:99da5264f89131446fb96fd6f7a1c1a6543ffe07cea3419ea27a18cc743864e5",
+    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CONTROLS-02.srt": "sha256:4e5ca5ece80e2ed551fbed9029d9c1c1db6569ae3c808252902fccbc72f4acbf",
+    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-INCOMPLETE-03.txt": "sha256:9f058e0b98323ee9c1f7c32b4e0d038a50ac8fb0c13acab575c376edab7f4be9",
+    "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
+    "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
+    "tests/browser/enterpriseIntelligence.spec.ts": "sha256:109eabbe7fa21debaaf602dacbc13c4da7cad6ece5e1db8fb0cbcbf6da148f91",
+    "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:4dba5871b2ac2f469c84f3f5bbf216f7c049f8125ce9fcc6a18d017dab06694b",
+    "tests/browser/transcriptFlowPrA.spec.ts": "sha256:26e43ebf1350aa86942ac034496afc9064105ea6f1406311f347d6e4294bcd5b",
+    "App.tsx": "sha256:27c16b16b9b2ee354a4b46b64ab1d1f519dadc44e7b5462615e6fa8658021f7d",
+    "scripts/testPilotOperationsPostgres.mjs": "sha256:bac650ec023c34ecccbe467bf09ea9c6ab1f1f4958167f5ba4eab634afb38925",
+    "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql": "sha256:ab7c4ac7367d6768b6bb4a15cc16dab3ece087404d1ea9f26204222871bd565c",
+    "services/adminWorkbenchModel.ts": "sha256:65a48174ae1e0ee6bafbb7796f5ad3bb82851ff0a60edbc9b67d4e8b29c89156",
+    "services/aiMode.ts": "sha256:f73136224dd913662ad82698a15010d5eb8886ca2289204fbcf7e8dd3bb116a6",
+    "services/assessV2/applicationPortfolio.ts": "sha256:f2ad28154480e62cce6ad5cc9e74440ac1e3de216fbc4e2ec97d6cd98df7eb6a",
+    "services/assessV2/reviewDomain.ts": "sha256:2ebdfdd9d598c4d29e35ce57953a2c2a48964319182003a3a7dbb4f2914904b6",
+    "services/deliveryWorkflowPolicy.ts": "sha256:1a86a44c5f2b807a93f10944fe4e2fc776dc4ba507ecdb160d8001fdfc6c0e8e",
+    "services/docsToDeliveryLineage.ts": "sha256:316c63c8532a90feb70a6dc3cb76cf45f883abd32b6f27769ead9495c4607aa2",
+    "services/enterpriseIntelligence.ts": "sha256:495226e074964aa86e5f8330f893658cca50a76cd02b1219265465c8ce651ee7",
+    "services/handoffLedgerService.ts": "sha256:f44606025c75519f3befad71a7ea96c2101809f909922291ba8d5592717d515d",
+    "services/hostedSandboxRoute.ts": "sha256:31b5a5e97e0f430bee5ca66846e4a1c91c4cb49d5d0ec17dcc3dbb37ff214fb5",
+    "services/persistenceTransition.ts": "sha256:190843d1c54e84f2bfc2d448a48539b44baa06adc8ea934ba96bb384ed3aeb2c",
+    "services/scoringEngine.ts": "sha256:5361966c91e6492ac69b3f79841365decc6de96472d345ed0472c24f9bd27f04",
+    "services/studioArtifacts/contracts.ts": "sha256:998049662ba843b2812fa3a656f2abf5e98e5a2c27e12eedd8936ff38a1ca594",
+    "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864"
+  },
+  "contracts": [
+    {
+      "branchId": "ADMIN-ADMIN_NAVIGATION",
+      "testId": "ADMIN-001",
+      "sourceReferences": [
+        "services/adminWorkbenchModel.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "admin-navigation"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ADMIN-NON_ADMIN_DENIAL",
+      "testId": "ADMIN-002",
+      "sourceReferences": [
+        "services/adminWorkbenchModel.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ADMIN-002"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-admin-non-admin-denial",
+          "scenarioIds": [
+            "admin-non-admin-authority-denial"
+          ],
+          "assertionIds": [
+            "admin-postgres--non-admin-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ADMIN-PILOT_OPERATIONS_READ_ONLY",
+      "testId": "ADMIN-004",
+      "sourceReferences": [
+        "services/adminWorkbenchModel.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "pilot-operations",
+          "assertionId": "pilot-operations::ADMIN-004",
+          "scenarioId": "ADMIN-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ADMIN-ROLE_CAPABILITY_VIEW",
+      "testId": "ADMIN-003",
+      "sourceReferences": [
+        "services/adminWorkbenchModel.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ADMIN-003"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-admin-capability-matrix",
+          "scenarioIds": [
+            "admin-capability-matrix"
+          ],
+          "assertionIds": [
+            "admin-postgres--capability-matrix"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-NO_BROWSER_SECRET",
+      "testId": "AI-006",
+      "sourceReferences": [
+        "services/aiMode.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-006",
+          "scenarioId": "AI-006::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-NO_BYOK",
+      "testId": "AI-001",
+      "sourceReferences": [
+        "services/aiMode.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-001",
+          "scenarioId": "AI-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-PROVIDER_CAPABILITY_DENIAL",
+      "testId": "AI-003",
+      "sourceReferences": [
+        "services/aiMode.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-003",
+          "scenarioId": "AI-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-PROVIDER_DISABLED",
+      "testId": "AI-002",
+      "sourceReferences": [
+        "services/aiMode.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-002",
+          "scenarioId": "AI-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-PROVIDER_SECRET_BOUNDARY",
+      "testId": "AI-004",
+      "sourceReferences": [
+        "services/aiMode.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-004",
+          "scenarioId": "AI-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "AI-PROVIDER_UNAVAILABLE",
+      "testId": "AI-005",
+      "sourceReferences": [
+        "services/aiMode.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "ai-boundary",
+          "assertionId": "ai-boundary::AI-005",
+          "scenarioId": "AI-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "APPS-APPLICATION_CREATE",
+      "testId": "APPS-001",
+      "sourceReferences": [
+        "services/assessV2/applicationPortfolio.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "application-portfolio",
+          "assertionId": "application-portfolio::APPS-001",
+          "scenarioId": "APPS-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "APPS-ASSESSMENT_SNAPSHOT",
+      "testId": "APPS-002",
+      "sourceReferences": [
+        "services/assessV2/applicationPortfolio.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "application-portfolio",
+          "assertionId": "application-portfolio::APPS-002",
+          "scenarioId": "APPS-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "APPS-CROSS_WORKSPACE_DENIAL",
+      "testId": "APPS-004",
+      "sourceReferences": [
+        "services/assessV2/applicationPortfolio.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "application-portfolio",
+          "assertionId": "application-portfolio::APPS-004",
+          "scenarioId": "APPS-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "APPS-MODERNIZATION_DISPOSITION",
+      "testId": "APPS-003",
+      "sourceReferences": [
+        "services/assessV2/applicationPortfolio.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "application-portfolio",
+          "assertionId": "application-portfolio::APPS-003",
+          "scenarioId": "APPS-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "APPS-REPLAY",
+      "testId": "APPS-005",
+      "sourceReferences": [
+        "services/assessV2/applicationPortfolio.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "application-portfolio",
+          "assertionId": "application-portfolio::APPS-005",
+          "scenarioId": "APPS-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-DISCOVERY_COMPLETE",
+      "testId": "ASSESS-003",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-003"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-DISCOVERY_INCOMPLETE",
+      "testId": "ASSESS-004",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "incomplete-assessment"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-PROCESS_CREATE",
+      "testId": "ASSESS-001",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "process-create"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-PROCESS_EDIT_DENIAL",
+      "testId": "ASSESS-002",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-002"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-assess-process-edit-denial",
+          "scenarioIds": [
+            "assess-process-edit-authority-denial"
+          ],
+          "assertionIds": [
+            "assess-postgres--process-edit-authority-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_DISCOVERY",
+      "testId": "ASSESS-009",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "needs-discovery",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-009::needs-discovery"
+          ],
+          "scenarioIds": [
+            "needs-discovery"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_GOVERNANCE",
+      "testId": "ASSESS-013",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "governance-review",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-013::governance-review"
+          ],
+          "scenarioIds": [
+            "governance-review"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_HUMAN_LED",
+      "testId": "ASSESS-012",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "human-led",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-012::human-led"
+          ],
+          "scenarioIds": [
+            "human-led"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_LOW_VALUE",
+      "testId": "ASSESS-011",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "low-value",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-011::low-value"
+          ],
+          "scenarioIds": [
+            "low-value"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_NO_GO",
+      "testId": "ASSESS-014",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "no-go",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-014::no-go"
+          ],
+          "scenarioIds": [
+            "no-go"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_GATE_REDESIGN",
+      "testId": "ASSESS-010",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "process-redesign",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-010::process-redesign"
+          ],
+          "scenarioIds": [
+            "process-redesign"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_SCORE_MAX",
+      "testId": "ASSESS-008",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "governance-max",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-008::governance-max"
+          ],
+          "scenarioIds": [
+            "governance-max"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_SCORE_MIN",
+      "testId": "ASSESS-007",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "governance-min",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-007::governance-min"
+          ],
+          "scenarioIds": [
+            "governance-min"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_THRESHOLD_ABOVE",
+      "testId": "ASSESS-017",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "completion-above",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-017::completion-above"
+          ],
+          "scenarioIds": [
+            "completion-above"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_THRESHOLD_BELOW",
+      "testId": "ASSESS-015",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "completion-below",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-015::completion-below"
+          ],
+          "scenarioIds": [
+            "completion-below"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_THRESHOLD_EXACT",
+      "testId": "ASSESS-016",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "completion-exact",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-016::completion-exact"
+          ],
+          "scenarioIds": [
+            "completion-exact"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_VALIDATION_INVALID",
+      "testId": "ASSESS-006",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "invalid-input",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-006::invalid-input"
+          ],
+          "scenarioIds": [
+            "invalid-input"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V1_VALIDATION_MISSING",
+      "testId": "ASSESS-005",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "oracle-scenario",
+          "ownerId": "missing-input",
+          "assertionIds": [
+            "assess-v1-oracle::ASSESS-005::missing-input"
+          ],
+          "scenarioIds": [
+            "missing-input"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V2_CREATE",
+      "testId": "ASSESS-018",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "assess-v2-authority",
+          "assertionId": "assess-v2-authority::ASSESS-018",
+          "scenarioId": "ASSESS-018::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V2_FEATURE_DISABLED",
+      "testId": "ASSESS-020",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "assess-v2-authority",
+          "assertionId": "assess-v2-authority::ASSESS-020",
+          "scenarioId": "ASSESS-020::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V2_FINALIZE",
+      "testId": "ASSESS-019",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "assess-v2-authority",
+          "assertionId": "assess-v2-authority::ASSESS-019",
+          "scenarioId": "ASSESS-019::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V2_IDEMPOTENCY_CONFLICT",
+      "testId": "ASSESS-022",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "assess-v2-authority",
+          "assertionId": "assess-v2-authority::ASSESS-022",
+          "scenarioId": "ASSESS-022::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "ASSESS-V2_VERSION_CONFLICT",
+      "testId": "ASSESS-021",
+      "sourceReferences": [
+        "services/scoringEngine.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "assess-v2-authority",
+          "assertionId": "assess-v2-authority::ASSESS-021",
+          "scenarioId": "ASSESS-021::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-DELIVERY_PACK",
+      "testId": "DELIVERY-009",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:DELIVERY-009"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-delivery-lineage-tenant-boundary",
+          "scenarioIds": [
+            "delivery-lineage-tenant-boundary"
+          ],
+          "assertionIds": [
+            "delivery-postgres--exact-pack-ancestry",
+            "delivery-postgres--foreign-tenant-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-DUPLICATE_IMPORT",
+      "testId": "DELIVERY-007",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-007",
+          "scenarioId": "DELIVERY-007::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-HANDOFF_IMPORT",
+      "testId": "DELIVERY-001",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-001",
+          "scenarioId": "DELIVERY-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-INVALID_TRANSITION",
+      "testId": "DELIVERY-006",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-006",
+          "scenarioId": "DELIVERY-006::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-RETAINED_LINEAGE",
+      "testId": "DELIVERY-008",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-008",
+          "scenarioId": "DELIVERY-008::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-STATUS_TRANSITION",
+      "testId": "DELIVERY-005",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-005",
+          "scenarioId": "DELIVERY-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-TASK_CREATE",
+      "testId": "DELIVERY-002",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-002",
+          "scenarioId": "DELIVERY-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-TASK_DELETE_DENIAL",
+      "testId": "DELIVERY-004",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-004",
+          "scenarioId": "DELIVERY-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "DELIVERY-TASK_UPDATE_OWN",
+      "testId": "DELIVERY-003",
+      "sourceReferences": [
+        "services/deliveryWorkflowPolicy.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "delivery-policy",
+          "assertionId": "delivery-policy::DELIVERY-003",
+          "scenarioId": "DELIVERY-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-AUTHORITY_DENIAL",
+      "testId": "E2E-003",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "canonical-pilot-journey",
+          "assertionId": "canonical-pilot-journey::E2E-003",
+          "scenarioId": "E2E-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-CANONICAL_HAPPY",
+      "testId": "E2E-001",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "canonical-pilot-journey",
+          "assertionId": "canonical-pilot-journey::E2E-001",
+          "scenarioId": "E2E-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-HITL_COMPLIANCE",
+      "testId": "E2E-007",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:E2E-007"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-LOW_SUITABILITY",
+      "testId": "E2E-005",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:E2E-005"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-REQUESTED_CHANGES_LOOP",
+      "testId": "E2E-002",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:E2E-002"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-STALE_REPLAY_RECOVERY",
+      "testId": "E2E-004",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "canonical-pilot-journey",
+          "assertionId": "canonical-pilot-journey::E2E-004",
+          "scenarioId": "E2E-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "E2E-STRONG_AUTOMATION",
+      "testId": "E2E-006",
+      "sourceReferences": [
+        "services/handoffLedgerService.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:E2E-006"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
+      "testId": "EI-005",
+      "sourceReferences": [
+        "services/enterpriseIntelligence.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "enterprise-intelligence",
+          "assertionId": "enterprise-intelligence::EI-005",
+          "scenarioId": "EI-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "EI-COMMAND_REPLAY",
+      "testId": "EI-004",
+      "sourceReferences": [
+        "services/enterpriseIntelligence.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "enterprise-intelligence",
+          "assertionId": "enterprise-intelligence::EI-004",
+          "scenarioId": "EI-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "EI-INGESTION_LINEAGE",
+      "testId": "EI-002",
+      "sourceReferences": [
+        "services/enterpriseIntelligence.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "enterprise-intelligence",
+          "assertionId": "enterprise-intelligence::EI-002",
+          "scenarioId": "EI-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "EI-INGESTION_VALIDATION",
+      "testId": "EI-001",
+      "sourceReferences": [
+        "services/enterpriseIntelligence.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "enterprise-intelligence",
+          "assertionId": "enterprise-intelligence::EI-001",
+          "scenarioId": "EI-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "EI-QUERY_TENANT_ISOLATION",
+      "testId": "EI-003",
+      "sourceReferences": [
+        "services/enterpriseIntelligence.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "enterprise-intelligence",
+          "assertionId": "enterprise-intelligence::EI-003",
+          "scenarioId": "EI-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-APPROVAL",
+      "testId": "GOVERN-005",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-005",
+          "scenarioId": "GOVERN-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-CHANGES_REQUESTED",
+      "testId": "GOVERN-003",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-003",
+          "scenarioId": "GOVERN-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-DUPLICATE_DECISION",
+      "testId": "GOVERN-010",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-010",
+          "scenarioId": "GOVERN-010::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-INDEPENDENT_ATTESTATION",
+      "testId": "GOVERN-002",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-002",
+          "scenarioId": "GOVERN-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-REJECTION",
+      "testId": "GOVERN-006",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-006",
+          "scenarioId": "GOVERN-006::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-REVIEW_ASSIGNMENT",
+      "testId": "GOVERN-001",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-001",
+          "scenarioId": "GOVERN-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-REVOKED_AUTHORITY",
+      "testId": "GOVERN-009",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-009",
+          "scenarioId": "GOVERN-009::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-REWORK_RESUBMIT",
+      "testId": "GOVERN-004",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-004",
+          "scenarioId": "GOVERN-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-SEPARATION_OF_DUTY",
+      "testId": "GOVERN-007",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-007",
+          "scenarioId": "GOVERN-007::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "GOVERN-STALE_AUTHORITY",
+      "testId": "GOVERN-008",
+      "sourceReferences": [
+        "services/assessV2/reviewDomain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "govern-authority",
+          "assertionId": "govern-authority::GOVERN-008",
+          "scenarioId": "GOVERN-008::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "MONITOR-BLOCKER_VISIBILITY",
+      "testId": "MONITOR-003",
+      "sourceReferences": [
+        "services/docsToDeliveryLineage.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:MONITOR-003"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-monitor-blocker",
+          "scenarioIds": [
+            "monitor-blocker-tenant-boundary"
+          ],
+          "assertionIds": [
+            "monitor-postgres--blocker-projection",
+            "monitor-postgres--foreign-tenant-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "MONITOR-LINEAGE_VISIBILITY",
+      "testId": "MONITOR-001",
+      "sourceReferences": [
+        "services/docsToDeliveryLineage.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:MONITOR-001"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-monitor-lineage",
+          "scenarioIds": [
+            "monitor-lineage-tenant-boundary"
+          ],
+          "assertionIds": [
+            "monitor-postgres--lineage-projection",
+            "monitor-postgres--foreign-tenant-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "MONITOR-UNAVAILABLE_PROJECTION",
+      "testId": "MONITOR-004",
+      "sourceReferences": [
+        "services/docsToDeliveryLineage.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:MONITOR-004"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-monitor-unavailable",
+          "scenarioIds": [
+            "monitor-unavailable-tenant-boundary"
+          ],
+          "assertionIds": [
+            "monitor-postgres--unavailable-projection",
+            "monitor-postgres--foreign-tenant-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "MONITOR-VALUE_SIGNAL",
+      "testId": "MONITOR-002",
+      "sourceReferences": [
+        "services/docsToDeliveryLineage.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:MONITOR-002"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-monitor-outcome",
+          "scenarioIds": [
+            "monitor-outcome-tenant-boundary"
+          ],
+          "assertionIds": [
+            "monitor-postgres--outcome-projection",
+            "monitor-postgres--foreign-tenant-denied"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "PUBLIC-LANDING",
+      "testId": "PUBLIC-001",
+      "sourceReferences": [
+        "App.tsx"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "public-landing"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "PUBLIC-RELEASE_IDENTITY",
+      "testId": "PUBLIC-004",
+      "sourceReferences": [
+        "App.tsx"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "release-identity"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "PUBLIC-SANDBOX_ROUTE_ISOLATION",
+      "testId": "PUBLIC-003",
+      "sourceReferences": [
+        "App.tsx"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "sandbox-accepted-descendant"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "PUBLIC-SIGN_IN_SEPARATION",
+      "testId": "PUBLIC-002",
+      "sourceReferences": [
+        "App.tsx"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "sign-in-separation"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-HORIZONTAL_OVERFLOW",
+      "testId": "SAFETY-006",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "horizontal-overflow"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-OFFLINE_NO_FALSE_SUCCESS",
+      "testId": "SAFETY-001",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:SAFETY-001"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-offline-false-success",
+          "scenarioIds": [
+            "offline-mutation-no-false-success"
+          ],
+          "assertionIds": [
+            "safety-postgres--offline-mutation-no-false-success"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-RELOAD_RECONSTRUCTION",
+      "testId": "SAFETY-004",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "reload-reconstruction"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-RESPONSE_LOST_AFTER_COMMIT",
+      "testId": "SAFETY-005",
+      "sourceReferences": [
+        "scripts/testPilotOperationsPostgres.mjs",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+      ],
+      "ownership": [
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-disposable-postgresql",
+          "scenarioIds": [
+            "production-command-response-lost-after-durable-commit"
+          ],
+          "assertionIds": [
+            "pilot-operations-postgres--responseLossExactReplayVerified",
+            "pilot-operations-postgres--responseLossExactlyOneEffectVerified",
+            "pilot-operations-postgres--responseLossConflictRejected",
+            "pilot-operations-postgres--responseLossForeignTenantNonDisclosure"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-pilot-operations-response-loss",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
+      }
+    },
+    {
+      "branchId": "SAFETY-SERIOUS_CRITICAL_A11Y",
+      "testId": "SAFETY-007",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "serious-critical-a11y"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS",
+      "testId": "SAFETY-002",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "cross-cutting-false-success",
+          "assertionId": "cross-cutting-false-success::SAFETY-002",
+          "scenarioId": "SAFETY-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SAFETY-TIMEOUT_NO_FALSE_SUCCESS",
+      "testId": "SAFETY-003",
+      "sourceReferences": [
+        "services/persistenceTransition.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:SAFETY-003"
+        },
+        {
+          "kind": "server-assertion",
+          "ownerId": "server-timeout-false-success",
+          "scenarioIds": [
+            "timeout-mutation-no-false-success"
+          ],
+          "assertionIds": [
+            "safety-postgres--timeout-mutation-no-false-success"
+          ]
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-ACCEPTED_DESCENDANT_ROUTE",
+      "testId": "SANDBOX-006",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "sandbox-accepted-descendant"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-ACCESS",
+      "testId": "SANDBOX-001",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "sandbox-access"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-DESKTOP_LAYOUT",
+      "testId": "SANDBOX-007",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "desktop-layout"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-KEYBOARD_ACCESSIBILITY",
+      "testId": "SANDBOX-009",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "keyboard-a11y"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-LOCAL_SYNTHETIC_AUTHORITY",
+      "testId": "SANDBOX-003",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "local-authority"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-MOBILE_LAYOUT",
+      "testId": "SANDBOX-008",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "mobile-layout"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-NO_PROVIDER_CALL",
+      "testId": "SANDBOX-004",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "network-safety"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-PERSONA_SELECTION",
+      "testId": "SANDBOX-002",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "persona-matrix"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "SANDBOX-REFRESH_PERSISTENCE",
+      "testId": "SANDBOX-005",
+      "sourceReferences": [
+        "services/hostedSandboxRoute.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "hosted-scenario",
+          "ownerId": "reload-reconstruction"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-DELETION",
+      "testId": "STUDIO-010",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-010",
+          "scenarioId": "STUDIO-010::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-DELETION_RECONCILIATION",
+      "testId": "STUDIO-011",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-011",
+          "scenarioId": "STUDIO-011::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-DOWNLOAD_DENIAL",
+      "testId": "STUDIO-007",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-007",
+          "scenarioId": "STUDIO-007::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-GENERATION_FAILURE",
+      "testId": "STUDIO-003",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-governed",
+          "assertionId": "studio-governed::STUDIO-003",
+          "scenarioId": "STUDIO-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-GOVERNED_GENERATION",
+      "testId": "STUDIO-002",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-governed",
+          "assertionId": "studio-governed::STUDIO-002",
+          "scenarioId": "STUDIO-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-HANDOFF_LINEAGE",
+      "testId": "STUDIO-001",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-governed",
+          "assertionId": "studio-governed::STUDIO-001",
+          "scenarioId": "STUDIO-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-LEGAL_HOLD",
+      "testId": "STUDIO-009",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-009",
+          "scenarioId": "STUDIO-009::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-PRIVATE_RENDITION",
+      "testId": "STUDIO-006",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-006",
+          "scenarioId": "STUDIO-006::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-RETENTION",
+      "testId": "STUDIO-008",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-private",
+          "assertionId": "studio-private::STUDIO-008",
+          "scenarioId": "STUDIO-008::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-REVISION_IMMUTABILITY",
+      "testId": "STUDIO-004",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-governed",
+          "assertionId": "studio-governed::STUDIO-004",
+          "scenarioId": "STUDIO-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "STUDIO-THREE_PERSON_APPROVAL",
+      "testId": "STUDIO-005",
+      "sourceReferences": [
+        "services/studioArtifacts/contracts.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "studio-governed",
+          "assertionId": "studio-governed::STUDIO-005",
+          "scenarioId": "STUDIO-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "TRUST-AUDIT_TRUTH",
+      "testId": "TRUST-005",
+      "sourceReferences": [
+        "services/trustAssurance/domain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "trust-authority",
+          "assertionId": "trust-authority::TRUST-005",
+          "scenarioId": "TRUST-005::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "TRUST-CLAIM_EVIDENCE_SELECTION",
+      "testId": "TRUST-001",
+      "sourceReferences": [
+        "services/trustAssurance/domain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "trust-authority",
+          "assertionId": "trust-authority::TRUST-001",
+          "scenarioId": "TRUST-001::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "TRUST-CROSS_TENANT_DENIAL",
+      "testId": "TRUST-004",
+      "sourceReferences": [
+        "services/trustAssurance/domain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "trust-authority",
+          "assertionId": "trust-authority::TRUST-004",
+          "scenarioId": "TRUST-004::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "TRUST-IMMUTABLE_EVIDENCE",
+      "testId": "TRUST-003",
+      "sourceReferences": [
+        "services/trustAssurance/domain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "trust-authority",
+          "assertionId": "trust-authority::TRUST-003",
+          "scenarioId": "TRUST-003::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    },
+    {
+      "branchId": "TRUST-PUBLICATION_SOD",
+      "testId": "TRUST-002",
+      "sourceReferences": [
+        "services/trustAssurance/domain.ts"
+      ],
+      "ownership": [
+        {
+          "kind": "retained-assertion",
+          "ownerId": "trust-authority",
+          "assertionId": "trust-authority::TRUST-002",
+          "scenarioId": "TRUST-002::retained-contract"
+        }
+      ],
+      "scope": {
+        "evidenceScope": "planned-fixture",
+        "fixtureId": "synthetic-default",
+        "organizationId": null,
+        "workspaceId": null
+      }
+    }
+  ]
+}

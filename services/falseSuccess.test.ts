@@ -36,17 +36,22 @@ assert.match(
 );
 assert.match(
   appSource,
-  /const hydrationCommitted = Boolean\(pending[\s\S]*currentView === pending\.view[\s\S]*areScopesEqual\(currentScope, pending\.scope\)[\s\S]*selectedProcessId === pending\.selectedProcessId[\s\S]*activeGenerationId === pending\.activeGenerationId\);[\s\S]*if \(!hydrationCommitted\) return;[\s\S]*navigationWriteSuppressed\.current = false;/,
+  /const hydrationCommitted = Boolean\(pending[\s\S]*currentView === pending\.view[\s\S]*areScopesEqual\(currentScope, pending\.scope\)[\s\S]*selectedProcessId === pending\.selectedProcessId[\s\S]*activeGenerationId === pending\.activeGenerationId\);[\s\S]*if \(!hydrationCommitted\) return;[\s\S]*commitSettlement\(transition\)/,
   'pre-hydration effects must not release reconciliation suppression before the full navigation tuple commits',
 );
 assert.match(
   appSource,
-  /if \(explicitNavigationIntent && !navigationHydrated\.current\) return;\s*if \(navigationWriteSuppressed\.current\) return;[\s\S]*resolvePersistedViewScopeState/,
+  /if \(!canApplyDefaultNavigation\(\{[\s\S]*explicitNavigationIntent,[\s\S]*settlement: navigationController\.current\.settlement\(\),[\s\S]*\}\)\) return;/,
+  'authority defaults must not race a classified but not-yet-committed fail-closed navigation settlement',
+);
+assert.match(
+  appSource,
+  /if \(navigationController\.current\.needsClassification\(\)\) return;\s*if \(navigationController\.current\.settlementPending\(\)\) return;[\s\S]*resolvePersistedViewScopeState/,
   'persisted view/scope normalization must not race explicit URL hydration or its commit',
 );
 assert.match(
   appSource,
-  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| navigationHydrated\.current\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?navigationHydrated\.current = true;\s*return;\s*\}\s*[^]*?if \(processesLoading\) return;/,
+  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| !navigationController\.current\.needsClassification\(\)\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?beginSettlement\(false\);[\s\S]*?return;\s*\}\s*[^]*?if \(processesLoading\) return;/,
   'invalid durable navigation must be rejected in the layout phase before product hydration can observe a stale render',
 );
 assert.match(

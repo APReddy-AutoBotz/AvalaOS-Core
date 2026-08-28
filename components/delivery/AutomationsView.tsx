@@ -70,16 +70,20 @@ const AutomationItem: React.FC<{ automation: Automation; onEdit: () => void; onD
                 </div>
             </div>
             <div className="flex items-center gap-2">
-                <div 
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={automation.isEnabled}
+                    aria-label={automation.name}
                     onClick={() => onToggle(!automation.isEnabled)}
                     className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-abz-primary focus:ring-offset-2 ${automation.isEnabled ? 'bg-abz-primary' : 'bg-gray-200 dark:bg-gray-700'}`}
                 >
                     <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${automation.isEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                </div>
-                 <button onClick={onEdit} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-primary">
+                </button>
+                 <button type="button" aria-label={`Edit ${automation.name}`} onClick={onEdit} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-primary">
                     <PencilIcon className="w-4 h-4" />
                 </button>
-                <button onClick={onDelete} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-danger">
+                <button type="button" aria-label={`Delete ${automation.name}`} onClick={onDelete} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-danger">
                     <TrashIcon className="w-4 h-4" />
                 </button>
             </div>

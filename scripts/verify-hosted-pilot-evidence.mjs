@@ -3,16 +3,28 @@ import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadCanonicalMigrationInventory } from './hostedPilotActivation.mjs';
+import {HOSTED_EVIDENCE_FAMILIES,validateAuthoritativeHostedFamilyState,validateHostedEvidenceFamilyAssertion} from './hostedEvidenceFamilyAttestation.mjs';
 
 export const REQUIRED_GATES = Object.freeze([
   'database-preflight', 'migration-chain', 'tenant-adversarial', 'runtime-fail-closed',
   'backup-restore', 'provider-simulation-zero-egress', 'canonical-journey',
-  'browser-desktop', 'browser-pixel', 'accessibility-performance',
+  'recovery-rollback', 'browser-desktop', 'browser-pixel', 'accessibility-performance',
 ]);
 export const ACTIVATION_PRODUCER_WORKFLOW = '.github/workflows/hosted-pilot-activation-evidence-producer.yml';
 export const ACTIVATION_MANIFEST_ARTIFACT = 'hosted-pilot-activation-manifest';
+const readSource = async sourcePath => {
+  const normalized = typeof sourcePath === 'string' ? sourcePath.replaceAll('\\', '/') : '';
+  if (!/^supabase\/migrations\/[A-Za-z0-9._-]+\.sql$/.test(normalized) || path.isAbsolute(normalized)) {
+    throw new Error('hosted family source path must be a repository-relative migration');
+  }
+  const absolute = path.resolve(process.cwd(), ...normalized.split('/'));
+  const relative = path.relative(process.cwd(), absolute);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('hosted family source path escaped the checkout');
+  return readFile(absolute);
+};
 export const canonicalTargetFingerprint = value => {
   if (!/^sha256:[0-9a-f]{64}$/.test(value ?? '')) throw new Error('target fingerprint must use sha256:<digest>');
   return value;
@@ -88,6 +100,17 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
     || manifest.workflowEvent !== activationRun.event
     || manifest.workflowConclusion !== activationRun.conclusion) throw new Error('manifest workflow identity does not match the controller-selected activation run');
   if ('hostedUrl' in manifest || 'siteId' in manifest || 'projectRef' in manifest) throw new Error('raw hosted target identifiers are prohibited in evidence');
+  if(!Array.isArray(manifest.hostedEvidenceFamilyState)||manifest.hostedEvidenceFamilyState.length!==HOSTED_EVIDENCE_FAMILIES.length)
+    throw new Error('exact authoritative hosted family state is required');
+  const familyByName=new Map();
+  for(const familyState of manifest.hostedEvidenceFamilyState){
+    validateHostedEvidenceFamilyAssertion(familyState,{family:familyState.family,releaseSha:expectedHead,
+      producerWorkflowPath:ACTIVATION_PRODUCER_WORKFLOW,producerRunId:activationRun.id,producerRunAttempt:Number(activationRun.attempt),
+      ...expectedScope,targetFingerprint:manifest.targetFingerprint,deploymentFingerprint:expectedDeploymentFingerprint});
+    if(familyState.disposition!=='executed_hosted_evidence'||familyByName.has(familyState.family)) throw new Error('hosted family state set is invalid');
+    familyByName.set(familyState.family,familyState);
+  }
+  if(HOSTED_EVIDENCE_FAMILIES.some(family=>!familyByName.has(family))) throw new Error('hosted family state set is invalid');
   for (const gate of REQUIRED_GATES) {
     const evidence = manifest.evidence?.[gate];
     if (!evidence || evidence.result !== 'passed' || evidence.gitCommit !== expectedHead
@@ -100,6 +123,8 @@ export function verifyManifest(manifest, { expectedHead, actualHead, canonicalMi
       || evidence.organizationId !== manifest.organizationId || evidence.workspaceId !== manifest.workspaceId || evidence.exerciseRunId !== manifest.exerciseRunId
       || evidence.deploymentTargetFingerprint !== expectedDeploymentFingerprint
       || !SAFE_ID.test(evidence.resultId ?? '')) throw new Error(`missing or mismatched executed evidence: ${gate}`);
+    if(HOSTED_EVIDENCE_FAMILIES.includes(gate)&&JSON.stringify(evidence.hostedFamilyAssertion)!==JSON.stringify(familyByName.get(gate)))
+      throw new Error(`manifest did not consume authoritative hosted family state: ${gate}`);
   }
   return true;
 }
@@ -113,9 +138,14 @@ async function main() {
   const canonical = await loadCanonicalMigrationInventory();
   const activationRun = { id: args['activation-run-id'], attempt: args['activation-run-attempt'], workflow: args['activation-workflow'], repository: args['activation-repository'], event: args['activation-event'], head: args['activation-head'], conclusion: args['activation-conclusion'] };
   verifyManifest(manifest, { expectedHead: args['expected-head'], actualHead, canonicalMigrationDigest: canonical.digest, activationRun, expectedDeploymentFingerprint: args['expected-deployment-fingerprint'], expectedScope:{organizationId:args['organization-id'],workspaceId:args['workspace-id'],exerciseRunId:args['exercise-run-id']} });
+  await validateAuthoritativeHostedFamilyState(manifest.hostedEvidenceFamilyState,
+    {releaseSha:actualHead,producerWorkflowPath:activationRun.workflow,producerRunId:activationRun.id,
+      producerRunAttempt:Number(activationRun.attempt),organizationId:args['organization-id'],workspaceId:args['workspace-id'],
+      exerciseRunId:args['exercise-run-id'],targetFingerprint:manifest.targetFingerprint,deploymentFingerprint:args['expected-deployment-fingerprint']},{readSource});
   const output = args.output ?? 'artifacts/hosted-pilot/verified-evidence.json';
-  await mkdir(new URL('.', pathToFileURL(`${process.cwd()}/${output}`)), { recursive: true });
-  await writeFile(output, `${JSON.stringify({ schemaVersion: 1, status: 'hosted_nonproduction_verified', production: 'production_not_authorized', customerData: 'customer_data_not_used', gitCommit: actualHead, activationRunId: activationRun.id, activationRunAttempt: Number(activationRun.attempt), activationWorkflow: activationRun.workflow, activationRepository: activationRun.repository, manifestHash: safeHash(JSON.stringify(manifest)) }, null, 2)}\n`, { mode: 0o600 });
+  const resolvedOutput = path.resolve(output);
+  await mkdir(path.dirname(resolvedOutput), { recursive: true });
+  await writeFile(resolvedOutput, `${JSON.stringify({ schemaVersion: 1, status: 'hosted_nonproduction_verified', production: 'production_not_authorized', customerData: 'customer_data_not_used', gitCommit: actualHead, activationRunId: activationRun.id, activationRunAttempt: Number(activationRun.attempt), activationWorkflow: activationRun.workflow, activationRepository: activationRun.repository, manifestHash: safeHash(JSON.stringify(manifest)) }, null, 2)}\n`, { mode: 0o600 });
   console.log('Hosted non-production evidence verified for exact head; production remains not authorized.');
 }
 

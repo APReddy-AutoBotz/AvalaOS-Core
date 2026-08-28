@@ -10,15 +10,25 @@ import {
   ProviderKeyRefRow,
   ProviderPolicyRow,
   ProviderResolverDeps,
+  WorkspaceMembershipRoleContext,
 } from './providerResolver.ts';
 import { postgrest } from './supabase.ts';
 
 type MembershipRow = {
+  org_id?: string;
+  workspace_id?: string;
   status: string;
   role_id?: string | null;
+  disabled_at?: string | null;
+  deleted_at?: string | null;
   roles?: {
     id?: string | null;
     name?: string | null;
+    org_id?: string | null;
+    workspace_id?: string | null;
+    scope?: string | null;
+    status?: string | null;
+    deleted_at?: string | null;
   } | null;
 };
 
@@ -34,16 +44,60 @@ export const queryMembershipAndRoles = async (input: {
   actorId: string;
 }): Promise<MembershipRoleContext | null> => {
   const rows = await postgrest<MembershipRow[]>(
-    `organization_members?select=status,role_id,roles(id,name)&org_id=eq.${encode(input.orgId)}&user_id=eq.${encode(input.actorId)}&limit=1`,
+    `organization_members?select=org_id,status,role_id,disabled_at,deleted_at,roles(id,name,org_id,workspace_id,scope,status,deleted_at)&org_id=eq.${encode(input.orgId)}&user_id=eq.${encode(input.actorId)}&limit=1`,
     { method: 'GET' },
   );
   const row = rows[0];
   if (!row) return null;
+  const role = row.roles;
+  const activeOrganizationAuthority = Boolean(
+    row.org_id === input.orgId
+    && row.status === 'active'
+    && !row.disabled_at
+    && !row.deleted_at
+    && row.role_id
+    && role?.id === row.role_id
+    && role.org_id === input.orgId
+    && role.workspace_id == null
+    && role.scope === 'organization'
+    && role.status === 'active'
+    && !role.deleted_at
+  );
 
   return {
-    status: row.status,
-    roleIds: [row.role_id, row.roles?.id].filter(Boolean) as string[],
-    roleNames: [row.roles?.name].filter(Boolean) as string[],
+    status: activeOrganizationAuthority ? 'active' : 'inactive',
+    roleIds: activeOrganizationAuthority ? [row.role_id, role?.id].filter(Boolean) as string[] : [],
+    roleNames: activeOrganizationAuthority ? [role?.name].filter(Boolean) as string[] : [],
+  };
+};
+
+export const queryWorkspaceMembershipAndRoles = async (input: {
+  orgId: string;
+  workspaceId: string;
+  actorId: string;
+}): Promise<WorkspaceMembershipRoleContext | null> => {
+  const rows = await postgrest<MembershipRow[]>(
+    `workspace_memberships?select=org_id,workspace_id,status,role_id,disabled_at,deleted_at,roles(id,name,org_id,workspace_id,scope,status,deleted_at)&org_id=eq.${encode(input.orgId)}&workspace_id=eq.${encode(input.workspaceId)}&user_id=eq.${encode(input.actorId)}&limit=1`,
+    { method: 'GET' },
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const role = row.roles;
+  const roleScopeValid = !row.role_id || Boolean(
+    role?.id === row.role_id
+    && role.org_id === input.orgId
+    && role.workspace_id === input.workspaceId
+    && role.scope === 'workspace'
+    && role.status === 'active'
+    && !role.deleted_at
+  );
+  return {
+    orgId: row.org_id || '',
+    workspaceId: row.workspace_id || '',
+    status: row.disabled_at || row.deleted_at ? 'inactive' : row.status,
+    roleIds: [row.role_id, role?.id].filter(Boolean) as string[],
+    roleNames: [role?.name].filter(Boolean) as string[],
+    roleScopeValid,
   };
 };
 
@@ -88,6 +142,7 @@ export const buildProviderResolverDbDeps = (): ProviderResolverDeps => ({
   now: () => new Date(),
   createCorrelationId,
   queryMembershipAndRoles,
+  queryWorkspaceMembershipAndRoles,
   queryProviderPolicy,
   queryProviderConfig,
   queryProviderKeyRef,

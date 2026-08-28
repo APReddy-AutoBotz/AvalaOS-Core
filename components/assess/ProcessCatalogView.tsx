@@ -17,14 +17,14 @@ interface ProcessCatalogViewProps {
 
 const criticalityClass = (criticality: string) => {
     if (criticality === 'Critical') return 'bg-red-50 text-red-700 ring-red-100 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-900/60';
-    if (criticality === 'High') return 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60';
+    if (criticality === 'High') return 'bg-amber-50 text-amber-800 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60';
     return 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700';
 };
 
 const statusClass = (status: string) => {
-    if (status.toLowerCase().includes('complete') || status.toLowerCase().includes('approved') || status.toLowerCase().includes('handed off')) return 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/60';
+    if (status.toLowerCase().includes('complete') || status.toLowerCase().includes('approved') || status.toLowerCase().includes('handed off')) return 'bg-emerald-50 text-emerald-800 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/60';
     if (status.toLowerCase().includes('review')) return 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900/60';
-    if (status.toLowerCase().includes('changes')) return 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60';
+    if (status.toLowerCase().includes('changes')) return 'bg-amber-50 text-amber-800 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60';
     if (status.toLowerCase().includes('reject') || status.toLowerCase().includes('no-go')) return 'bg-red-50 text-red-700 ring-red-100 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-900/60';
     return 'bg-[#002C4B]/10 text-[#002C4B] ring-[#002C4B]/15 dark:bg-[#ffbc03]/10 dark:text-[#ffcf45] dark:ring-[#ffbc03]/20';
 };
@@ -90,7 +90,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
                     </div>
                     <StatusBadge tone="neutral">Enterprise scope</StatusBadge>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Process catalog table">
                 <table className="w-full min-w-[720px] text-left text-sm">
                     <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-500">
                         <tr>

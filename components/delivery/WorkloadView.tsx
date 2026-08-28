@@ -72,7 +72,7 @@ const WorkloadView: React.FC<WorkloadViewProps> = ({ tasks, users }) => {
 
     return (
         <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-soft border border-slate-200 dark:border-gray-700 overflow-hidden" style={{ height: 'calc(100vh - 160px)' }}>
-            <div className="overflow-x-auto h-full">
+            <div className="overflow-x-auto h-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Team capacity schedule">
                 <div className="inline-block min-w-full align-middle">
                     <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
                         <thead className="bg-slate-50 dark:bg-abz-ink sticky top-0 z-10">

@@ -7,6 +7,11 @@
  * effect.
  */
 
+import {
+  decodeTranscriptFlowProjection,
+  type TranscriptFlowProjection,
+} from './transcriptFlow/contracts';
+
 export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';
 export const MODERNIZATION_MODEL_VERSION = 'modernization-disposition-1';
 export const ASSEMBLE_BLUEPRINT_SCHEMA_VERSION = 'assemble-blueprint-1';
@@ -16,6 +21,7 @@ export const ENTERPRISE_AI_PROVIDERS = [
   'azure_openai',
   'anthropic',
   'gemini',
+  'groq',
   'openai_compatible',
 ] as const;
 
@@ -74,7 +80,7 @@ export type EvidenceCandidateField = typeof EVIDENCE_CANDIDATE_FIELDS[number];
 export type EvidenceSuggestionStatus = 'suggested' | 'accepted' | 'rejected' | 'edited';
 export type EvidenceSourceStatus = 'uploaded' | 'extracting' | 'review' | 'deleted' | 'failed';
 
-export const ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION = 'enterprise-intelligence-projection-1' as const;
+export const ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION = 'enterprise-intelligence-projection-2' as const;
 
 export type EnterpriseProjectionAvailability = 'ready' | 'empty' | 'blocked' | 'stale' | 'unavailable';
 
@@ -257,6 +263,7 @@ export interface EnterpriseIntelligenceProjection {
   blueprints: EnterpriseBlueprintProjection[];
   approvalResources: EnterpriseApprovalResourceProjection[];
   commandActivity: EnterpriseCommandActivityProjection[];
+  transcriptFlow: TranscriptFlowProjection;
   assessPromotion: {
     state: 'contract_pending' | 'ready' | 'conflict' | 'promoted';
     acceptedCandidateCount: number;
@@ -585,7 +592,7 @@ const projectionKeys = [
   'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
   'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
   'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
-  'assessPromotion',
+  'transcriptFlow', 'assessPromotion',
 ] as const;
 const prohibitedProjectionKey = /(?:^|_)(?:apiKey|authorization|bearerToken|contentHash|extractedTextHash|idempotencyKey|objectKey|providerKey|rawKey|secret|secretReference|storageBucket|storagePath|versionId)$/i;
 
@@ -615,9 +622,11 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
     || !Array.isArray(row.capabilities) || row.capabilities.some(capability => typeof capability !== 'string')
     || !['ready', 'empty', 'blocked', 'stale', 'unavailable'].includes(String(row.availability))
     || !['providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts', 'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines', 'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity'].every(key => Array.isArray(row[key]))
+    || !row.transcriptFlow || typeof row.transcriptFlow !== 'object' || Array.isArray(row.transcriptFlow)
     || !row.assessPromotion || typeof row.assessPromotion !== 'object' || Array.isArray(row.assessPromotion)
   ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
   rejectSensitiveProjectionFields(row);
+  decodeTranscriptFlowProjection(row.transcriptFlow);
   return structuredClone(row) as unknown as EnterpriseIntelligenceProjection;
 };
 

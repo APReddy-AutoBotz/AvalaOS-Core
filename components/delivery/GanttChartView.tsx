@@ -343,7 +343,7 @@ const GanttChartView: React.FC<GanttChartViewProps> = ({ tasks, projects, onSele
                     </div>
                 </div>
                 {/* Chart */}
-                <div className="flex-1 overflow-auto" ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop}>
+                <div className="flex-1 overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Delivery timeline" ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop}>
                     <div className="relative" style={{ minWidth: `${totalWidth}px`}}>
                         {renderTimelineHeader()}
                         <div className="relative">

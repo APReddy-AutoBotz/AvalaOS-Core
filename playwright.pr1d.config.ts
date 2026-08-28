@@ -11,17 +11,4 @@ export default defineConfig({
     { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'chromium-mobile', use: { ...devices['Pixel 7'] } },
   ],
-  webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4183',
-    url: 'http://127.0.0.1:4183',
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
-    env: {
-      ...process.env,
-      VITE_AVALA_RUNTIME_MODE: 'pilot',
-      VITE_SUPABASE_URL: 'https://127.0.0.1:59999',
-      VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
-      VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
-    },
-  },
 });

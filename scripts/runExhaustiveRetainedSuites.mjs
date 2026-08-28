@@ -2,22 +2,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { validateRetainedProducerResults } from './exhaustiveAcceptanceEvidence.mjs';
-import { loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
+import { loadExecutionBindings, loadSourceProvenance } from './exhaustiveAcceptanceModel.mjs';
 
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
+const environment = process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'pull-request';
+const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || process.env.GITHUB_WORKFLOW_REF?.split('@')[0]?.replace(`${process.env.GITHUB_REPOSITORY}/`, '') || '.github/workflows/exhaustive-acceptance.yml';
 const manifestPath = path.resolve(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
 const bindings = loadExecutionBindings();
+const provenanceByTestId = new Map(loadSourceProvenance().contracts.map(item => [item.testId, item]));
+const identity = { releaseSha, workflowRunId, workflowAttempt, environment, workflowPath };
 
 if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('RETAINED_RELEASE_SHA_REQUIRED');
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  manifestKind: 'retained',
   releaseSha,
   workflowRunId,
   workflowAttempt,
+  environment,
+  workflowPath,
   generatedAt: new Date().toISOString(),
   suites: [],
   results: [],
@@ -31,6 +38,7 @@ const writeAtomic = () => {
 
 for (const suite of bindings.retainedSuites ?? []) {
   const [executable, ...args] = suite.command;
+  const useWindowsCommandShim = process.platform === 'win32' && executable === 'npm';
   const started = Date.now();
   const resultPath = path.join(path.dirname(manifestPath), `.retained-${suite.suiteId}-${process.pid}.json`);
   fs.rmSync(resultPath, { force: true });
@@ -42,11 +50,13 @@ for (const suite of bindings.retainedSuites ?? []) {
       RELEASE_SHA: releaseSha,
       GITHUB_RUN_ID: workflowRunId,
       GITHUB_RUN_ATTEMPT: workflowAttempt,
+      ACCEPTANCE_EVIDENCE_ENVIRONMENT: environment,
+      ACCEPTANCE_WORKFLOW_PATH: workflowPath,
       RETAINED_SUITE_ID: suite.suiteId,
       RETAINED_TEST_ID_RESULTS: resultPath,
     },
     stdio: 'inherit',
-    shell: false,
+    shell: useWindowsCommandShim,
   });
   const status = result.status === 0 ? 'PASS' : 'FAIL';
   manifest.suites.push({
@@ -57,13 +67,16 @@ for (const suite of bindings.retainedSuites ?? []) {
     durationMs: Date.now() - started,
     testIds: suite.testIds ?? [],
     requiredGate: suite.requiredGate === true,
+    command: suite.command.join(' '),
   });
   if (fs.existsSync(resultPath)) {
     const emitted = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-    const producerErrors = validateRetainedProducerResults({ suite, emitted });
+    const producerErrors = validateRetainedProducerResults({ suite, emitted, identity, provenanceByTestId });
     fs.rmSync(resultPath, { force: true });
     if (producerErrors.length) throw new Error(`RETAINED_TEST_ID_PRODUCER_INVALID:${suite.suiteId}:${producerErrors.join(',')}`);
     manifest.results.push(...emitted.results);
+  } else if (status === 'PASS' && (suite.testIds ?? []).length) {
+    console.log(`[acceptance-retained] ${suite.suiteId}: aggregate suite passed but emitted no exact assertion artifact; configured Test IDs remain BLOCKED.`);
   }
   writeAtomic();
 }

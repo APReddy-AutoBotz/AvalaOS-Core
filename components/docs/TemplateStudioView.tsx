@@ -68,10 +68,10 @@ const TemplateStudioView: React.FC<TemplateStudioViewProps> = ({ templates, onCr
                                 <div className="flex items-start justify-between">
                                     <Icon className="w-8 h-8 text-abz-primary mb-3" />
                                     <div className="flex items-center gap-1">
-                                        <button onClick={() => setEditingTemplate(template)} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-primary">
+                                        <button type="button" aria-label={`Edit ${template.title}`} onClick={() => setEditingTemplate(template)} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-primary">
                                             <PencilIcon className="w-4 h-4" />
                                         </button>
-                                         <button onClick={() => handleDelete(template.id)} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-danger">
+                                         <button type="button" aria-label={`Delete ${template.title}`} onClick={() => handleDelete(template.id)} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-abz-ink-900 hover:text-abz-danger">
                                             <TrashIcon className="w-4 h-4" />
                                         </button>
                                     </div>

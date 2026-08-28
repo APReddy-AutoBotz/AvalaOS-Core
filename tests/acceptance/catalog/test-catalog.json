@@ -254,15 +254,15 @@
     },
     {
       "testId": "SANDBOX-006",
-      "title": "Sandbox: unauthorized deep link",
+      "title": "Sandbox: accepted descendant remains synthetic",
       "module": "Sandbox",
-      "feature": "unauthorized",
-      "ruleRequirement": "unauthorized deep link",
+      "feature": "accepted descendant routing",
+      "ruleRequirement": "sandbox descendants remain inside the synthetic sandbox boundary",
       "sourceReference": [
         "services/hostedSandboxRoute.ts"
       ],
       "branchIds": [
-        "SANDBOX-UNAUTHORIZED_DEEP_LINK"
+        "SANDBOX-ACCEPTED_DESCENDANT_ROUTE"
       ],
       "environment": "hosted_sandbox",
       "persona": [
@@ -275,11 +275,11 @@
         "Real providers disabled"
       ],
       "actions": [
-        "Exercise unauthorized deep link through the declared environment"
+        "Open an intentionally accepted sandbox descendant route"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "The descendant resolves to the synthetic sandbox and never to authenticated organization access",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
@@ -3859,7 +3859,8 @@
       "feature": "pilot",
       "ruleRequirement": "pilot operations read only",
       "sourceReference": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "ADMIN-PILOT_OPERATIONS_READ_ONLY"
@@ -4409,7 +4410,8 @@
       "feature": "no",
       "ruleRequirement": "no browser secret",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "AI-NO_BROWSER_SECRET"
@@ -4709,7 +4711,8 @@
       "feature": "canonical",
       "ruleRequirement": "canonical happy",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
       ],
       "branchIds": [
         "E2E-CANONICAL_HAPPY"
@@ -5245,6 +5248,57 @@
       ],
       "browser": "chromium",
       "destructiveOrNonDestructive": "non_destructive",
+      "realProviderAllowed": false,
+      "customerDataAllowed": false,
+      "automation": {
+        "kind": "acceptance",
+        "status": "automated"
+      }
+    },
+    {
+      "testId": "SAFETY-005",
+      "title": "Safety: response lost after durable commit",
+      "module": "Cross-cutting",
+      "feature": "response-loss recovery",
+      "ruleRequirement": "same request identity recovers the exact canonical response with exactly one durable effect",
+      "sourceReference": [
+        "scripts/testPilotOperationsPostgres.mjs",
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+      ],
+      "branchIds": [
+        "SAFETY-RESPONSE_LOST_AFTER_COMMIT"
+      ],
+      "environment": "disposable_postgresql_16",
+      "persona": [
+        "authorized_synthetic_operator",
+        "foreign_tenant_operator"
+      ],
+      "fixture": "synthetic-pilot-operations-response-loss",
+      "transcript": null,
+      "preconditions": [
+        "Synthetic data only",
+        "Real providers disabled"
+      ],
+      "actions": [
+        "Commit production Pilot Operations command and discard its response",
+        "Replay the exact request identity",
+        "Reject conflicting and foreign-tenant replay"
+      ],
+      "expectedResult": "Exact canonical response recovered without duplicate effects or tenant disclosure",
+      "expectedMutation": "one release-candidate registration",
+      "expectedMutationCount": 1,
+      "expectedDenial": true,
+      "expectedErrorCode": "IDEMPOTENCY_CONFLICT|PR1B_NOT_FOUND",
+      "expectedStateBefore": "no SAFETY-005 receipt or candidate history effect",
+      "expectedStateAfter": "one receipt and one candidate history effect",
+      "expectedScore": null,
+      "expectedClassification": null,
+      "expectedLineage": null,
+      "expectedEvidence": "sanitized exact Test-ID and branch assertion artifact",
+      "expectedAudit": "exactly one authoritative audit/effect chain",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {

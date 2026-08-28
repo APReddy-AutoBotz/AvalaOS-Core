@@ -12,6 +12,8 @@ const requiredFiles = [
   'supabase/functions/_shared/enterpriseReceipt.ts',
   'supabase/functions/_shared/providerLifecycle.ts',
   'supabase/functions/_shared/providerLifecycleEndpoint.ts',
+  'supabase/functions/_shared/providerBudget.ts',
+  'supabase/functions/_shared/providerCleanup.ts',
   'supabase/functions/enterprise-intelligence-command/index.ts',
   'supabase/functions/enterprise-intelligence-query/index.ts',
   'supabase/functions/enterprise-provider-lifecycle/index.ts',
@@ -25,6 +27,8 @@ const requiredFiles = [
   'supabase/migrations/20260807120000_enterprise_review_action_replay_authority.sql',
   'supabase/migrations/20260807130000_provider_secret_cleanup_recovery.sql',
   'supabase/migrations/20260807140000_provider_secret_cleanup_deadline.sql',
+  'supabase/migrations/20260825165350_governed_transcript_source_sets_assess.sql',
+  'supabase/migrations/20260825165401_unified_provider_budget_authority.sql',
 ];
 
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -47,12 +51,35 @@ const command = read('supabase/functions/_shared/enterpriseIntelligenceCommand.t
 const client = read('services/enterpriseIntelligenceClient.ts');
 const view = read('components/enterprise/EnterpriseIntelligenceView.tsx');
 const providerResolver = read('supabase/functions/_shared/providerResolver.ts');
+const providerBudget = read('supabase/functions/_shared/providerBudget.ts');
 const supabaseRpc = read('supabase/functions/_shared/supabase.ts');
 for (const required of ['resolveOrgId', 'resolveAuthority', 'enterprise_claim_or_resume_evidence_extraction_job', 'runGovernedProviderRequest', 'RESOURCE_STALE', 'evidence.assess.promote', 'enterprise_promote_evidence_batch_to_assess_v2']) {
   if (!command.includes(required)) throw new Error(`Enterprise command boundary is missing ${required}.`);
 }
-if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(command)) {
+const transcriptExtractStart = command.indexOf('const commandTranscriptAssessExtract');
+const transcriptExtractEnd = command.indexOf('const commandTranscriptAssessCandidateReview', transcriptExtractStart);
+const transcriptExtract = command.slice(transcriptExtractStart, transcriptExtractEnd);
+const transcriptBindingStart = command.indexOf('const deriveTranscriptCommandRequestBinding');
+const transcriptBindingEnd = command.indexOf('const assertCommittedEnterpriseReceiptIdentity', transcriptBindingStart);
+const transcriptBinding = command.slice(transcriptBindingStart, transcriptBindingEnd);
+const commandWithoutTranscriptExactSelector = [
+  command.slice(0, transcriptExtractStart),
+  command.slice(transcriptExtractEnd, transcriptBindingStart),
+  command.slice(transcriptBindingEnd),
+].join('');
+if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(commandWithoutTranscriptExactSelector)) {
   throw new Error('Enterprise commands may not accept browser-supplied authoritative versions, hashes, or item identifiers.');
+}
+if (!transcriptExtract.includes("'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion'")
+  || !transcriptExtract.includes("'sourceSetId', 'sourceSetVersionSelector', 'expectedSourceSetVersion', 'sourceVersionSelector'")
+  || !transcriptBinding.includes("envelope.commandType === 'transcript.assess.extract'")
+  || !transcriptBinding.includes('requireUuid(envelope.payload.inputBundleId)')
+  || !transcriptBinding.includes('requireUuid(envelope.payload.inputBundleVersionSelector)')
+  || !transcriptBinding.includes('requireUuid(envelope.payload.sourceSetId)')
+  || !transcriptBinding.includes('requireUuid(envelope.payload.sourceSetVersionSelector)')
+  || !transcriptBinding.includes('requireUuid(envelope.payload.sourceVersionSelector)')
+  || /(?:payload|envelope\.payload)\.(?:bundleHash|sourceId|provider|providerConfigId|route|routeId|model|contentHash|extractedTextHash)\b/u.test(`${transcriptExtract}\n${transcriptBinding}`)) {
+  throw new Error('Transcript extraction may accept only the exact locked-bundle and source-version selectors; all hashes and provider authority remain server-owned.');
 }
 const approvalCommands = command.slice(
   command.indexOf('const approvalResourceTypes'),
@@ -480,8 +507,16 @@ const stageUncertainty = extractionCommand.slice(
   extractionCommand.indexOf("rpc('enterprise_stage_evidence_extraction_result'"),
   extractionCommand.lastIndexOf('await commitStagedEvidenceExtraction'),
 );
-if (!stageUncertainty.includes('throw mapExtractionPersistenceError(error)')
-  || stageUncertainty.includes('failEvidenceExtractionAttempt')) {
+const legacyStageUncertaintyIsPreserved = stageUncertainty.includes('throw mapExtractionPersistenceError(error)')
+  && !stageUncertainty.includes('failEvidenceExtractionAttempt');
+const budgetedStageUncertaintyIsPreserved = extractionCommand.includes('beforeSettle: async providerResult =>')
+  && extractionCommand.indexOf('if (error instanceof ProviderBudgetError)')
+    < extractionCommand.lastIndexOf('await failEvidenceExtractionAttempt')
+  && extractionCommand.includes("throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE')")
+  && providerBudget.includes('await options.beforeSettle(result, reservation)')
+  && providerBudget.includes("failureClass: 'pre_settlement_persistence_failed'")
+  && providerBudget.includes("throw new ProviderBudgetError('PROVIDER_EFFECT_UNCERTAIN')");
+if (!legacyStageUncertaintyIsPreserved && !budgetedStageUncertaintyIsPreserved) {
   throw new Error('Extraction staging uncertainty must preserve the receipt without failure authority.');
 }
 const promotionCommand = command.slice(
@@ -526,6 +561,49 @@ for (const required of ['FunctionsFetchError', 'FunctionsRelayError', 'isRetryab
 }
 if (/if \(invocation\.error\) invocation = await supabase\.functions\.invoke/u.test(browserClient)) {
   throw new Error('Browser retry must not replay application-level HTTP failures.');
+}
+
+const evidenceRegistry = JSON.parse(read('testing/process-lifecycle/contracts/pr-a-assertion-registry.json'));
+const evidenceWorkflow = read('.github/workflows/transcript-flow-pr-a.yml');
+const evidenceRunner = read('scripts/runTranscriptFlowEvidence.mjs');
+const evidenceVerifier = read('scripts/verifyTranscriptFlowEvidence.mjs');
+const evidenceContract = read('scripts/transcriptFlowEvidenceContract.mjs');
+const evidenceScope = read('scripts/transcriptFlowEvidenceScope.mjs');
+const sourceProvenance = read('tests/acceptance/source-provenance.json');
+const retainedPlaywright = read('playwright.config.ts');
+const transcriptPlaywright = read('playwright.transcript-flow-pr-a.config.ts');
+if (evidenceRegistry.commands.length !== 33 || new Set(evidenceRegistry.commands.map(item => item.id)).size !== 33) {
+  throw new Error('PR A evidence must retain the exact unique 33-command governed and retained-platform gate registry.');
+}
+for (const command of [
+  'npm run test:transcript-flow:postgres', 'npm run test:transcript-flow:browser', 'npm run test:transcript-flow:adversarial',
+  'npm run test:transcript-flow:a11y', 'npm run test:transcript-flow:performance', 'npm run test:transcript-flow:coverage',
+  'npm run test:migrations:enterprise-intelligence:postgres', 'npm run test:browser:enterprise-intelligence',
+  'npm run test:pr1d', 'npm run test:browser:pr1d', 'npm run test:assess-v2-rule-registry', 'npm run test:scoring',
+  'npm run test:studio-artifacts', 'npm run test:migrations:studio-artifacts', 'npm run test:browser:studio-artifacts',
+  'npm run test:full-platform:provider-mocked', 'npm run test:full-platform:campaign', 'npm run typecheck', 'npm run typecheck:edge',
+  'npm run test:workflow-yaml', 'npm run test:ai-boundary-static', 'npm run test:secret-hygiene', 'npm run build',
+  'npm audit --audit-level=moderate', 'git diff --check',
+]) if (!evidenceRegistry.commands.some(item => item.command === command)) throw new Error(`PR A evidence registry omitted ${command}.`);
+for (const required of [
+  'PR_A_BASE_SHA:', 'PR_A_EXACT_HEAD_SHA:', 'github.run_attempt', 'TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL:',
+  'ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL:', 'STUDIO_ARTIFACT_MIGRATION_DATABASE_URL:', 'PR1D_MIGRATION_DATABASE_URL:',
+  'node scripts/runTranscriptFlowEvidence.mjs', 'npm run test:transcript-flow:evidence',
+]) if (!evidenceWorkflow.includes(required)) throw new Error(`PR A workflow is missing exact evidence binding ${required}.`);
+if (!/testIgnore:\s*\[[^\]]*'transcriptFlowPrA\.spec\.ts'/u.test(retainedPlaywright)) {
+  throw new Error('The retained localhost browser suite must not discover the dedicated governed transcript specification.');
+}
+if (!/testMatch:\s*'transcriptFlowPrA\.spec\.ts'/u.test(transcriptPlaywright)
+  || !/baseURL:\s*'http:\/\/127\.0\.0\.1:4193'/u.test(transcriptPlaywright)) {
+  throw new Error('The dedicated PR A Playwright config must exclusively own its transcript specification and controlled harness origin.');
+}
+if (!evidenceRunner.includes('validateCommandMarkers') || !evidenceRunner.includes('PR_A_SCOPED_TREE_CHANGED_DURING_RUN')
+  || !evidenceVerifier.includes('validateEvidenceDirectory') || !evidenceContract.includes('PR_A_PASS_WITHOUT_REGISTERED_MARKER')) {
+  throw new Error('PR A runner and independent verifier must fail closed on marker or scoped-tree substitution.');
+}
+for (const source of ['20260826151538_governed_transcript_authority_forward_fix.sql', 'playwright.config.ts', 'tests/browser/transcriptFlowPrA.spec.ts', 'services/transcriptFlow']) {
+  if (!evidenceScope.includes(source)) throw new Error(`PR A evidence scope omitted ${source}.`);
+  if (!sourceProvenance.includes(source)) throw new Error(`PR A source provenance omitted ${source}.`);
 }
 
 console.log('Enterprise Intelligence source-boundary scan passed.');

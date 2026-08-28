@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
+const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
+const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+const adminWorkbenchSource = fs.readFileSync(new URL('../../components/admin/AdminWorkbench.tsx', import.meta.url), 'utf8');
+const taskCardSource = fs.readFileSync(new URL('../../components/delivery/TaskCard.tsx', import.meta.url), 'utf8');
+const taskListSource = fs.readFileSync(new URL('../../components/delivery/TaskListView.tsx', import.meta.url), 'utf8');
+const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
+const processCatalogSource = fs.readFileSync(new URL('../../components/assess/ProcessCatalogView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
+const sidebarSource = fs.readFileSync(new URL('../../components/shared/Sidebar.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
   ['process-name', 'input'],
@@ -26,6 +34,25 @@ assert.equal(
   false,
   'hosted acceptance must not depend on the removed Enterprise Intelligence test id',
 );
+assert.match(
+  hostedSpec,
+  /const ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY = 'Enterprise Intelligence requires a server-authorized workspace\. The local synthetic sandbox sends no provider or persistence requests\.';/u,
+  'hosted sandbox acceptance must bind to the exact no-provider/no-persistence authority explanation',
+);
+assert.match(
+  hostedSpec,
+  /const assertEnterpriseIntelligenceSandboxBoundary = async \(page: Page\) => \{[\s\S]*Enterprise Intelligence unavailable[\s\S]*getByText\(ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY, \{ exact: true \}\)[\s\S]*getByTestId\('enterprise-intelligence-workspace'\)\)\.toHaveCount\(0\)/u,
+  'hosted sandbox acceptance must prove the unavailable surface, exact boundary copy, and absence of a server-authorized workspace',
+);
+assert.equal(
+  hostedSpec.includes("getByRole('heading', { name: 'Enterprise Intelligence', exact: true })"),
+  false,
+  'hosted sandbox acceptance must not accept an authorized Enterprise Intelligence workspace',
+);
+assert.ok(
+  hostedSpec.match(/await assertEnterpriseIntelligenceSandboxBoundary\(page\);/gu)?.length >= 3,
+  'every hosted Platform Admin path must assert the same fail-closed sandbox boundary',
+);
 assert.ok(
   hostedSpec.match(/getByRole\('heading', \{ name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true \}\)/gu)?.length >= 3,
   'Delivery Pack acceptance must target the actual project-qualified semantic heading',
@@ -47,8 +74,13 @@ assert.match(
 );
 assert.match(
   hostedSpec,
-  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*page\.reload/u,
+  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*reloadWithPersistedScopeAtDocumentStart\(page, invalidScope\)/u,
   'SAFETY-004 must retain stale, missing, and malformed persisted projects through reconstruction',
+);
+assert.match(
+  hostedSpec,
+  /reloadWithPersistedScopeAtDocumentStart[\s\S]*page\.addInitScript[\s\S]*sessionStorage\.getItem\(marker\) !== 'armed'[\s\S]*localStorage\.(?:removeItem|setItem)[\s\S]*page\.reload[\s\S]*the adversarial persisted scope mutation must execute before application startup/u,
+  'SAFETY-004 must inject corrupt persisted scope at document start and prove the mutation ran before application startup',
 );
 assert.ok(
   hostedSpec.match(/\.toEqual\(canonicalDeliveryPackNavigation\)/gu)?.length >= 3,
@@ -57,7 +89,7 @@ assert.ok(
 assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=/u, 'invalid persisted scope must remove URL-only project evidence');
 assert.match(
   hostedSpec,
-  /canonicalBoardsNavigation[\s\S]*stale-different-project[\s\S]*invalidBoardsResponse = await page\.reload[\s\S]*not\.toHaveURL\(\/projectId=/u,
+  /canonicalBoardsNavigation[\s\S]*invalidBoardsResponse = await reloadWithPersistedScopeAtDocumentStart\(page, JSON\.stringify\(\{[\s\S]*stale-different-project[\s\S]*not\.toHaveURL\(\/projectId=/u,
   'SAFETY-004 must enforce exact persisted project agreement on the canonical Boards destination through reload',
 );
 
@@ -85,14 +117,64 @@ assert.match(hostedSpec, /externalOriginClasses\.set\(url\.origin, originClass\)
 assert.doesNotMatch(hostedSpec, /return url\.origin;/u, 'literal origins must never be returned into retained diagnostic evidence');
 assert.doesNotMatch(hostedSpec, /\.(?:search|hash|username|password)\b/u, 'diagnostics must not retain query, fragment, or userinfo fields');
 
-const sampleBody = hostedSpec.match(/samples\.push\(\{([\s\S]*?)\}\);/u);
+const sampleBody = hostedSpec.match(/sample: \(request, category\) => \(\{([\s\S]*?)\}\),/u);
 assert.ok(sampleBody, 'violation sample construction must remain structurally inspectable');
 assert.match(sampleBody[1], /method: request\.method\(\)\.toUpperCase\(\)/u, 'violation evidence may retain only normalized method metadata');
-assert.match(sampleBody[1], /category,/u, 'violation evidence must retain the fail-closed category');
+assert.match(sampleBody[1], /category: category as NetworkViolationCategory,/u, 'violation evidence must retain the fail-closed category');
 assert.match(sampleBody[1], /resourceType: request\.resourceType\(\)/u, 'violation evidence may retain the non-sensitive Playwright resource type');
 assert.match(sampleBody[1], /originClass: classifyDiagnosticOrigin\(request\.url\(\)\)/u, 'violation evidence must retain only the opaque origin class');
 assert.doesNotMatch(sampleBody[1], /\borigin\s*:/u, 'violation evidence must never retain a literal origin field');
 assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'violation evidence must never retain headers or request bodies');
+assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
+assert.match(observerSource, /samples\.length<maxSamples/u, 'retained violation samples must remain bounded');
+assert.match(observerSource, /const stopAfterQuiescence=async\(\{quietPeriodMs,timeoutMs\}:QuiescenceOptions\)=>/u, 'the observer must expose a bounded asynchronous quiescence boundary');
+assert.match(observerSource, /requestSequence\+=1;[\s\S]*lastRequestAt=now\(\);/u, 'every request, including allowed resources, must restart quiescence');
+assert.match(observerSource, /const startedAt=now\(\);[\s\S]*lastRequestAt=Math\.max\(lastRequestAt,startedAt\);/u, 'pre-sign-out quiet time must never shorten the post-sign-out observation window');
+assert.match(observerSource, /if\(sequenceBeforeWait!==requestSequence\)continue;[\s\S]*stop\(\);/u, 'listener removal must follow the final synchronous request-sequence check');
+assert.doesNotMatch(hostedSpec, /observer\.stop\(\)/u, 'hosted journeys must never detach the observer without bounded quiescence');
+assert.match(
+  hostedSpec,
+  /runObservedPersonaJourney[\s\S]*enterPersona\(page, label\)[\s\S]*assertActivePersona\(page, userName\)[\s\S]*exerciseRepresentativePersonaPath\(page, label\)[\s\S]*signOutToSandbox\(page\)[\s\S]*observer\.stopAfterQuiescence/u,
+  'the observer must cover persona entry, representative feature settlement, sign-out, and post-sign-out quiescence',
+);
+assert.match(hostedSpec, /const settleLazyLoadedSurface = async \(page: Page\) => \{[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame/u, 'representative lazy-loaded surfaces must settle through two rendered frames before sign-out');
+assert.doesNotMatch(hostedSpec, /waitForLoadState\('networkidle'\)/u, 'hosted evidence must use semantic readiness plus bounded observer quiescence instead of an unbounded global network-idle heuristic');
+for (const persona of ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin']) {
+  assert.match(hostedSpec, new RegExp(`label === '${persona.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}'`, 'u'), `${persona} must have an explicit representative feature-path branch`);
+}
+assert.match(hostedSpec, /Process Analyst'[\s\S]*AP Process Owner'[\s\S]*clickProductNav\(page, 'Assess'\)[\s\S]*process-catalog-view/u, 'Assess personas must settle the Process Catalog');
+assert.match(hostedSpec, /Delivery Lead'[\s\S]*Control Reviewer'[\s\S]*Automation Contributor'[\s\S]*clickProductNav\(page, 'Delivery'\)[\s\S]*Delivery work board/u, 'Delivery personas must settle the Delivery board');
+assert.match(hostedSpec, /Buyer Viewer'[\s\S]*closeProductNavigation\(page\)[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Monitor'\)[\s\S]*monitor-overview/u, 'Buyer Viewer must close mobile navigation, restore the required My Work scope, and settle Monitor');
+assert.match(hostedSpec, /Platform Admin'[\s\S]*Admin \/ Intelligence[\s\S]*assertEnterpriseIntelligenceSandboxBoundary\(page\)/u, 'Platform Admin must settle the fail-closed Admin / Intelligence sandbox boundary');
+assert.match(appSource, /<main id="app-main" tabIndex=\{0\}/u, 'the post-entry skip-link target and primary scroll region must accept sequential keyboard focus');
+assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain the first sequential keyboard target[\s\S]*skipLink\.focus\(\)[\s\S]*page\.keyboard\.press\('Enter'\)/u, 'every persona must prove first-tab-stop ordering and real keyboard skip-link activation');
+assert.match(adminWorkbenchSource, /<span className="[^"]*text-slate-600[^"]*">[\s\S]*Sectioned admin structure/u, 'the Platform Admin badge must retain AA-capable foreground contrast');
+assert.match(taskCardSource, /text-slate-700 dark:text-slate-200" style=\{\{ backgroundColor: `\$\{epic\.color\}18` \}\}/u, 'dynamic epic color may tint only the background, never become low-contrast foreground text');
+assert.match(boardsSource, /overflow-auto[^"]*" tabIndex=\{0\} aria-label="Delivery work board"/u, 'the mobile scrollable board region must be named and keyboard focusable');
+assert.match(boardsSource, /text-xs font-semibold text-slate-600 dark:text-slate-400">\{label\}/u, 'mobile board summary labels must retain AA-capable contrast');
+assert.match(taskCardSource, /leading-\[1\.15rem\] text-slate-600 dark:text-slate-400/u, 'mobile task descriptions must retain AA-capable contrast');
+assert.doesNotMatch(taskCardSource, /text-\[(?:10|11)px\][^"'`]*text-slate-(?:400|500)/u, 'small TaskCard metadata may not use marginal slate foregrounds');
+assert.doesNotMatch(taskCardSource, /bg-emerald-50 text-emerald-700/u, 'small TaskCard lineage and status badges may not use the marginal emerald-700 foreground');
+assert.match(taskCardSource, /overdue \? 'text-red-700 dark:text-red-400'/u, 'small overdue metadata must retain an AA-capable light-mode red foreground');
+assert.match(taskListSource, /overdue \? 'text-red-700 dark:text-red-400'/u, 'Work List overdue dates must retain an AA-capable light-mode red foreground');
+assert.doesNotMatch(taskListSource, /text-sm font-black \$\{overdue \? 'text-red-500'/u, 'Work List overdue dates may not regress to the sub-AA red-500 foreground');
+assert.doesNotMatch(processCatalogSource, /bg-amber-50 text-amber-700/u, 'small amber catalog badges may not use the marginal amber-700 foreground');
+assert.doesNotMatch(processCatalogSource, /bg-emerald-50 text-emerald-700/u, 'small emerald catalog badges may not use the marginal emerald-700 foreground');
+assert.match(adminWorkbenchSource, /text-\[var\(--av-color-brand-primary\)\]">Avala Admin</u, 'the small Avala Admin label must use the AA-capable primary foreground');
+assert.match(processCatalogSource, /overflow-x-auto[^"]*" tabIndex=\{0\} aria-label="Process catalog table"/u, 'the mobile process catalog scroll region must be named and keyboard focusable');
+assert.match(sidebarSource, /aria-label="Close primary navigation"[^\n]*fixed inset-y-0 left-64 right-0 z-40/u, 'the mobile navigation backdrop hitbox must begin outside the higher-layer sidebar');
+assert.doesNotMatch(sidebarSource, /aria-label="Close primary navigation"[^\n]*fixed inset-0/u, 'the mobile navigation backdrop may not hide its actionable center beneath the sidebar');
+assert.match(hostedSpec, /not\.toHaveURL\(\/projectId=\/u, \{ timeout: 15_000 \}\)/u, 'stale project URL scrubbing must remain fail-closed while allowing bounded hydration under CI load');
+assert.match(
+  hostedSpec,
+  /const SEVEN_PERSONA_SCENARIOS = new Set\(\[[\s\S]*'persona-matrix'[\s\S]*'local-authority'[\s\S]*'network-safety'[\s\S]*'desktop-layout'[\s\S]*'mobile-layout'[\s\S]*'keyboard-a11y'[\s\S]*'serious-critical-a11y'[\s\S]*\]\);/u,
+  'every seven-persona scenario must be explicitly enumerated for the bounded extended timeout',
+);
+assert.match(
+  hostedSpec,
+  /binding\.scenario && SEVEN_PERSONA_SCENARIOS\.has\(binding\.scenario\)\) testInfo\.setTimeout\(180_000\)/u,
+  'every seven-persona scenario needs an explicit bounded budget without skipped assertions or retries',
+);
 assert.match(
   hostedSpec,
   /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,

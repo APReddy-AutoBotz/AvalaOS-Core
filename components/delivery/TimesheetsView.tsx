@@ -86,10 +86,10 @@ const TimesheetsView: React.FC<TimesheetsViewProps> = ({ project, tasks, current
         <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-soft border border-slate-200 dark:border-gray-700 overflow-hidden">
             <div className="p-4 flex items-center justify-between border-b border-slate-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
+                    <button type="button" aria-label="Previous week" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
                         <ChevronLeftIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
+                    <button type="button" aria-label="Next week" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-abz-ink-900">
                         <ChevronRightIcon className="w-5 h-5" />
                     </button>
                     <h3 className="text-md font-semibold">
@@ -111,7 +111,7 @@ const TimesheetsView: React.FC<TimesheetsViewProps> = ({ project, tasks, current
                             {weekDays.map(day => (
                                 <th key={day.toISOString()} scope="col" className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
                                     {day.toLocaleDateString('default', { weekday: 'short' })}
-                                    <span className="block font-normal text-slate-400">{day.getDate()}</span>
+                                    <span className="block font-normal text-slate-600 dark:text-slate-300">{day.getDate()}</span>
                                 </th>
                             ))}
                              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
@@ -127,6 +127,7 @@ const TimesheetsView: React.FC<TimesheetsViewProps> = ({ project, tasks, current
                                         <td key={day.toISOString()} className="px-2 py-1 whitespace-nowrap text-sm">
                                             <input
                                                 type="number"
+                                                aria-label={`Hours for ${task.title} on ${formatDate(day)}`}
                                                 min="0"
                                                 step="0.25"
                                                 value={value}

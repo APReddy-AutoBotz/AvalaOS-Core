@@ -181,7 +181,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                 key={label}
                                 className={`flex min-w-[92px] items-center justify-between gap-3 px-3 py-2.5 ${index > 0 ? 'border-l border-slate-200 dark:border-slate-700' : ''}`}
                             >
-                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{label}</span>
                                 <span className={`text-base font-extrabold tabular-nums ${color}`}>{value}</span>
                             </div>
                         ))}
@@ -217,7 +217,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                 </div>
             </section>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" tabIndex={0} aria-label="Delivery work board">
                 <div className="space-y-4 pb-4">
                     {visibleSwimlanes.length === 0 && (
                         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900/70">

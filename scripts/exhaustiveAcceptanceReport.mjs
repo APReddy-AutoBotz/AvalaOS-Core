@@ -1,14 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  canonicalCommand,
   canonicalHostedTitle,
   deriveInventory,
   loadCatalog,
   loadExecutionBindings,
   loadInventoryDocument,
+  loadSourceProvenance,
   oracleBindingMap,
   retainedBindingMap,
   hostedBindingMap,
+  serverBindingMap,
 } from './exhaustiveAcceptanceModel.mjs';
 import {
   evaluateHostedTest,
@@ -16,6 +19,8 @@ import {
   flattenPlaywright,
   validateOracleManifest,
   validateRetainedManifest,
+  validateServerManifest,
+  evaluateCompositeTest,
 } from './exhaustiveAcceptanceEvidence.mjs';
 
 const root = process.cwd();
@@ -28,7 +33,9 @@ const loadOptional = file => {
 
 const catalog = loadCatalog();
 const bindings = loadExecutionBindings();
-const inventory = deriveInventory(catalog, loadInventoryDocument());
+const provenanceDocument = loadSourceProvenance();
+const inventory = deriveInventory(catalog, loadInventoryDocument(), provenanceDocument, bindings);
+const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
 const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
 const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
@@ -42,14 +49,37 @@ const timestamp = new Date().toISOString();
 const retainedManifest = loadOptional(process.env.RETAINED_RESULTS_MANIFEST || 'acceptance-results/retained-suite-results.json');
 const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
+const serverManifest = loadOptional(process.env.SERVER_RESULTS_MANIFEST || 'acceptance-results/server-results.json');
 const executions = flattenPlaywright(playwright);
 
-const expectedBinding = { releaseSha, workflowRunId, workflowAttempt };
+const expectedBinding = {
+  releaseSha,
+  workflowRunId,
+  workflowAttempt,
+  environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
+  workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml',
+  branchIdsByTestId: new Map((catalog.cases ?? []).map(item => [item.testId, item.branchIds ?? []])),
+  provenanceByTestId,
+  canonicalCommandBySuiteId: new Map([
+    ...(bindings.retainedSuites ?? []).map(item => [item.suiteId, item.command.join(' ')]),
+    ...(bindings.serverTests ?? []).map(item => [item.suiteId, item.command.join(' ')]),
+  ]),
+  oracleEnvironment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
+  oracleWorkflowPath: bindings.oracleExecution?.workflowPath,
+  oracleCommand: canonicalCommand(bindings.oracleExecution?.command ?? []),
+  oracleBindingByTestId: new Map((bindings.oracleTests ?? []).map(item => [item.testId, item])),
+};
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
+const serverMap = serverBindingMap(bindings);
+const serverExpected = { ...expectedBinding, environment: 'disposable-ci' };
+const serverSuiteMap = new Map([...serverMap].map(([testId, binding]) => [testId, [binding.suiteId]]));
+const serverErrors = validateServerManifest(serverManifest, serverExpected, serverSuiteMap);
 const oracleErrors = validateOracleManifest(oracleManifest, expectedBinding);
 const suiteIndex = new Map((retainedManifest?.suites ?? []).map(item => [item.suiteId, item]));
 const retainedResultIndex = new Map((retainedManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
+const serverSuiteIndex = new Map((serverManifest?.suites ?? []).map(item => [item.suiteId, item]));
+const serverResultIndex = new Map((serverManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
 const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
 const oracleMap = oracleBindingMap(bindings);
 const hostedMap = hostedBindingMap(bindings);
@@ -60,7 +90,37 @@ const results = (catalog.cases ?? []).map(testCase => {
   let evidenceReferences = [];
   let executionKind = 'unbound';
 
-  if (retainedMap.has(testCase.testId)) {
+  if (serverMap.has(testCase.testId)) {
+    const binding = serverMap.get(testCase.testId);
+    executionKind = binding.components?.length > 1 ? 'composite' : 'server';
+    const serverEvaluation = evaluateRetainedTest({
+      testId: testCase.testId,
+      requiredSuiteIds: [binding.suiteId],
+      suiteIndex: serverSuiteIndex,
+      resultIndex: serverResultIndex,
+      manifestErrors: serverErrors,
+    });
+    const serverActual = serverResultIndex.get(`${binding.suiteId}:${testCase.testId}`)?.status ?? 'MISSING';
+    if (binding.components?.includes('hosted')) {
+      const hostedBinding = hostedMap.get(testCase.testId);
+      const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
+        ? evaluateHostedTest({ title: canonicalHostedTitle(testCase), executions, requiredProjects: hostedBinding.projects })
+        : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
+      if (hostedEvaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
+        hostedEvaluation.status = 'BLOCKED';
+        hostedEvaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
+      }
+      evaluation = evaluateCompositeTest([{ name: 'server', ...serverEvaluation }, { name: 'hosted', ...hostedEvaluation }]);
+      actualResult = {
+        server: { status: serverActual, reason: serverEvaluation.reason ?? null },
+        hosted: { status: hostedEvaluation.status, reason: hostedEvaluation.reason ?? null },
+      };
+      evidenceReferences = (hostedEvaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
+    } else {
+      evaluation = serverEvaluation;
+      actualResult = { server: { status: serverActual, reason: serverEvaluation.reason ?? null } };
+    }
+  } else if (retainedMap.has(testCase.testId)) {
     executionKind = 'retained';
     const requiredSuiteIds = retainedMap.get(testCase.testId);
     evaluation = evaluateRetainedTest({
@@ -82,7 +142,12 @@ const results = (catalog.cases ?? []).map(testCase => {
     } else {
       const item = oracleIndex.get(testCase.testId);
       if (!item) evaluation = { status: 'BLOCKED', reason: 'Oracle result missing.' };
-      else evaluation = { status: item.status, reason: item.status === 'PASS' ? null : `Oracle scenario failed: ${item.scenario}` };
+      else evaluation = {
+        status: item.status,
+        reason: item.status === 'PASS' ? null
+          : item.status === 'FAIL' ? `Oracle scenario failed: ${item.scenario}`
+            : 'Oracle assertions executed, but no separately validated same-run executed fixture scope was supplied.',
+      };
       actualResult = item?.actual ?? null;
     }
   } else if (hostedMap.has(testCase.testId)) {
@@ -98,6 +163,10 @@ const results = (catalog.cases ?? []).map(testCase => {
         executions,
         requiredProjects: binding.projects,
       });
+      if (evaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
+        evaluation.status = 'BLOCKED';
+        evaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
+      }
     }
     evidenceReferences = (evaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
     actualResult = evaluation.status;

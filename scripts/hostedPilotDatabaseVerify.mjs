@@ -6,6 +6,7 @@ const { Client } = pg;
 
 export const HOSTED_AUTHORITY_TABLES = Object.freeze([
   'hosted_pilot_environment_identity','hosted_pilot_exercise_evidence_families','hosted_pilot_provider_simulations',
+  'hosted_pilot_evidence_observations',
   'hosted_pilot_recovery_operators','hosted_pilot_synthetic_subjects','hosted_pilot_verification_run_results',
   'pilot_operations_audit_events','pilot_operations_candidate_history','pilot_operations_candidate_sequences',
   'pilot_operations_command_receipts','pilot_operations_environments','pilot_operations_evidence_manifests',
@@ -22,6 +23,7 @@ export const SERVICE_ONLY_HOSTED_RPCS = Object.freeze([
   'hosted_pilot_provision_recovery_operator(uuid,uuid,uuid,bigint,uuid)',
   'hosted_pilot_record_verification_result(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint)',
   'hosted_pilot_oidc_preflight(text,bigint,text)',
+  'hosted_pilot_oidc_execute(uuid,uuid,uuid,text,text,text,bigint,text,text,bigint,text)',
   'hosted_pilot_oidc_status(uuid,uuid,uuid,text,text,text,bigint,text,text,bigint,text)',
   'hosted_pilot_oidc_finalize(uuid,uuid,uuid,text,text,text,bigint,text,text,uuid,bigint,bigint,text)',
   'pilot_operations_command(uuid,uuid,uuid,text,uuid,text,text,bigint,bigint,jsonb)',
@@ -60,7 +62,7 @@ export function assertAuthorityTableCatalog(rows, expected = HOSTED_AUTHORITY_TA
 }
 
 export function assertOwnerOnlyEvidenceTableCatalog(rows) {
-  const expected = ['hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'];
+  const expected = ['hosted_pilot_evidence_observations','hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'];
   if (rows.length !== expected.length) throw new Error('HOSTED_PILOT_EVIDENCE_TABLE_ACL_MISMATCH');
   const byName = new Map(rows.map(row => [row.relname,row]));
   for (const relname of expected) {
@@ -112,7 +114,7 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
     WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') AND c.relname=ANY($1::text[]) ORDER BY c.relname`,[HOSTED_AUTHORITY_TABLES])).rows;
   assertAuthorityTableCatalog(authorityTables);
   assertOwnerOnlyEvidenceTableCatalog(authorityTables.filter(row=>
-    row.relname==='hosted_pilot_exercise_evidence_families'||row.relname==='hosted_pilot_verification_run_results'));
+    row.relname==='hosted_pilot_evidence_observations'||row.relname==='hosted_pilot_exercise_evidence_families'||row.relname==='hosted_pilot_verification_run_results'));
 
   const subjectRows=(await client.query(`SELECT test_role,lifecycle,synthetic_only
     FROM public.hosted_pilot_synthetic_subjects WHERE org_id=$1 AND workspace_id=$2 ORDER BY test_role`,[scope.organizationId,scope.workspaceId])).rows;
@@ -158,7 +160,10 @@ export async function verifyHostedPilotDatabase(client, canonical, expectedTarge
         AND family.producer_workflow_path='.github/workflows/hosted-pilot-activation-evidence-producer.yml'
         AND family.producer_run_id=$5 AND family.producer_run_attempt=$6 AND family.target_fingerprint=$7
         AND family.deployment_fingerprint=$8 AND family.hosted_target='hosted_nonproduction_pilot'
-        AND family.disposition='executed_hosted_evidence') AS exact_exercise_family_count`,
+        AND family.disposition='executed_hosted_evidence' AND family.provenance_schema_version='hosted-family-assertion-v2'
+        AND family.observation_schema_version='hosted-family-derived-observation-v1'
+        AND public.hosted_pilot_evidence_family_provenance_valid(family.evidence_family,family.environment,family.test_ids,family.contract_sha256,family.assertion_outcomes,family.source_artifacts)
+        AND public.hosted_pilot_evidence_family_derived_valid(family.org_id,family.workspace_id,family.exercise_run_id,family.evidence_family)) AS exact_exercise_family_count`,
     [expectedReleaseSha,scope.organizationId,scope.workspaceId,scope.exerciseRunId,scope.producerRunId,Number(scope.producerRunAttempt),expectedTargetFingerprint,scope.deploymentFingerprint])).rows[0];
   if (Number(operations?.recovery_evidence_count)<1 || Number(operations?.rollback_event_count)<1)
     throw new Error('HOSTED_PILOT_RECOVERY_EVIDENCE_MISMATCH');

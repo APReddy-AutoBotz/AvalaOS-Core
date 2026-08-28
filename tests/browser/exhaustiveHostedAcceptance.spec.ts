@@ -1,7 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
+import type { WebSocket as PlaywrightWebSocket } from '@playwright/test';
 import fs from 'node:fs';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
+import { createAuthorityRequestObserver } from './authorityRequestObserver';
 
 const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
 const deployId = process.env.NETLIFY_DEPLOY_ID;
@@ -39,6 +41,17 @@ const personas: Array<[string, string]> = [
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
 type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
+const POST_SIGN_OUT_QUIET_PERIOD_MS = 750;
+const POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS = 5_000;
+const SEVEN_PERSONA_SCENARIOS = new Set([
+  'persona-matrix',
+  'local-authority',
+  'network-safety',
+  'desktop-layout',
+  'mobile-layout',
+  'keyboard-a11y',
+  'serious-critical-a11y',
+]);
 const UNAVAILABLE_NETWORK_ORIGIN_CLASS = 'unavailable-origin';
 const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
 const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
@@ -90,6 +103,10 @@ const classifyNetworkRequest = (request: Request): NetworkViolationCategory | nu
   if (['script', 'stylesheet', 'font', 'image', 'media', 'other'].includes(resourceType) && safeStaticPath(url.pathname)) return null;
   return 'unexpected-resource';
 };
+const classifyNetworkWebSocket = (socket: PlaywrightWebSocket): NetworkViolationCategory => {
+  const url = new URL(socket.url());
+  return hostedOrigin && url.origin === hostedOrigin ? 'authority-request' : 'unexpected-origin';
+};
 
 test.beforeAll(() => {
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
@@ -106,6 +123,23 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
   expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
   expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
   expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+};
+
+let startupScopeMutationSequence = 0;
+const reloadWithPersistedScopeAtDocumentStart = async (page: Page, persistedScope: string | null) => {
+  const marker = `avalaos-safety-004-scope-mutation-${++startupScopeMutationSequence}`;
+  await page.addInitScript(({ marker, persistedScope }) => {
+    if (sessionStorage.getItem(marker) !== 'armed') return;
+    if (persistedScope === null) localStorage.removeItem('avalaos-core-v1-scope');
+    else localStorage.setItem('avalaos-core-v1-scope', persistedScope);
+    sessionStorage.setItem(`${marker}:applied`, localStorage.getItem('avalaos-core-v1-scope') ?? '<missing>');
+    sessionStorage.removeItem(marker);
+  }, { marker, persistedScope });
+  await page.evaluate(value => sessionStorage.setItem(value, 'armed'), marker);
+  const response = await page.reload({ waitUntil: 'domcontentloaded' });
+  const appliedScope = await page.evaluate(value => sessionStorage.getItem(`${value}:applied`), marker);
+  expect(appliedScope, 'the adversarial persisted scope mutation must execute before application startup').toBe(persistedScope ?? '<missing>');
+  return response;
 };
 
 const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
@@ -148,33 +182,39 @@ const canonicalBoardsNavigation = {
 };
 
 const observeAuthorityRequests = (page: Page) => {
-  const samples: NetworkViolation[] = [];
   const classifyDiagnosticOrigin = createDiagnosticOriginClassifier();
-  let totalViolations = 0;
-  const inspect = (request: Request) => {
-    const category = classifyNetworkRequest(request);
-    if (category) {
-      totalViolations += 1;
-      if (samples.length < MAX_NETWORK_VIOLATION_SAMPLES) {
-        samples.push({
-          method: request.method().toUpperCase(),
-          category,
-          resourceType: request.resourceType(),
-          originClass: classifyDiagnosticOrigin(request.url()),
-        });
-      }
-    }
-  };
-  page.on('request', inspect);
+  const observer = createAuthorityRequestObserver<Request,NetworkViolation>({
+    page,
+    classify: classifyNetworkRequest,
+    sample: (request, category) => ({
+      method: request.method().toUpperCase(),
+      category: category as NetworkViolationCategory,
+      resourceType: request.resourceType(),
+      originClass: classifyDiagnosticOrigin(request.url()),
+    }),
+    webSocket: {
+      page,
+      classify: socket => classifyNetworkWebSocket(socket as PlaywrightWebSocket),
+      sample: (socket, category) => ({
+        method: 'CONNECT',
+        category: category as NetworkViolationCategory,
+        resourceType: 'websocket',
+        originClass: classifyDiagnosticOrigin((socket as PlaywrightWebSocket).url()),
+      }),
+    },
+    maxSamples: MAX_NETWORK_VIOLATION_SAMPLES,
+  });
   return {
-    assertSafe: () => expect({ totalViolations, samples }, 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
-    stop: () => page.off('request', inspect),
+    assertSafe: () => expect(observer.snapshot(), 'Sandbox network traffic must remain inside the explicit static/navigation allowlist').toEqual({ totalViolations: 0, samples: [] }),
+    stopAfterQuiescence: observer.stopAfterQuiescence,
   };
 };
 
 const openSandbox = async (page: Page) => {
-  const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
-  assertHostedResponseIdentity(response);
+  if (new URL(page.url()).pathname !== '/sandbox') {
+    const response = await page.goto('/sandbox', { waitUntil: 'domcontentloaded' });
+    assertHostedResponseIdentity(response);
+  }
   await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
   await expect(page.getByText('Sandbox data is synthetic and local to this product exploration.')).toBeVisible();
@@ -203,6 +243,10 @@ const openProductNavigation = async (page: Page) => {
   if (await mobileIdentity.isVisible().catch(() => false)) return;
   await opener.click();
   await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
+};
+const closeProductNavigation = async (page: Page) => {
+  const close = page.getByRole('button', { name: 'Close primary navigation' });
+  if (await close.isVisible().catch(() => false)) await close.click();
 };
 const assertActivePersona = async (page: Page, userName: string) => {
   await openProductNavigation(page);
@@ -234,6 +278,17 @@ const selectProjectScope = async (page: Page, projectName: string) => {
   await project.click();
 };
 
+const selectMyWorkScope = async (page: Page) => {
+  const switcher = page.getByRole('button', { name: 'Switch workspace context' });
+  await expect(switcher).toBeVisible();
+  await switcher.click();
+  const myWork = page.getByRole('button').filter({
+    has: page.getByText('Tasks and decisions assigned to you', { exact: true }),
+  });
+  await expect(myWork).toBeVisible();
+  await myWork.click();
+};
+
 const clickProductNav = async (page: Page, label: string) => {
   let target = page.getByRole('button', { name: label, exact: true });
   if (!(await target.isVisible().catch(() => false))) {
@@ -250,6 +305,62 @@ const assertNoOverflow = async (page: Page) => {
     document.body.scrollWidth - document.body.clientWidth,
   ));
   expect(overflow).toBeLessThanOrEqual(1);
+};
+
+const settleLazyLoadedSurface = async (page: Page) => {
+  await page.evaluate(() => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+};
+
+const ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY = 'Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.';
+const assertEnterpriseIntelligenceSandboxBoundary = async (page: Page) => {
+  await expect(page.getByRole('heading', { name: 'Enterprise Intelligence unavailable', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(ENTERPRISE_INTELLIGENCE_SANDBOX_BOUNDARY, { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('enterprise-intelligence-workspace')).toHaveCount(0);
+};
+
+const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
+  if (label === 'Process Analyst' || label === 'AP Process Owner') {
+    await clickProductNav(page, 'Assess');
+    await expect(page.getByTestId('process-catalog-view')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Delivery Lead' || label === 'Control Reviewer' || label === 'Automation Contributor') {
+    await clickProductNav(page, 'Delivery');
+    await expect(page.getByLabel('Delivery work board')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Buyer Viewer') {
+    await closeProductNavigation(page);
+    await selectMyWorkScope(page);
+    await clickProductNav(page, 'Monitor');
+    await expect(page.getByTestId('monitor-overview')).toBeVisible({ timeout: 15_000 });
+  } else if (label === 'Platform Admin') {
+    await openProductNavigation(page);
+    const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
+    await expect(admin).toBeVisible({ timeout: 15_000 });
+    await admin.click();
+    await assertEnterpriseIntelligenceSandboxBoundary(page);
+  } else {
+    throw new Error(`No representative feature path is bound to persona ${label}`);
+  }
+  await settleLazyLoadedSurface(page);
+};
+
+const runObservedPersonaJourney = async (
+  page: Page,
+  label: string,
+  userName: string,
+  assertSurface?: () => Promise<void>,
+) => {
+  const observer = observeAuthorityRequests(page);
+  await enterPersona(page, label);
+  await assertActivePersona(page, userName);
+  await exerciseRepresentativePersonaPath(page, label);
+  await assertSurface?.();
+  await signOutToSandbox(page);
+  await observer.stopAfterQuiescence({
+    quietPeriodMs: POST_SIGN_OUT_QUIET_PERIOD_MS,
+    timeoutMs: POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS,
+  });
+  observer.assertSafe();
 };
 
 const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => {
@@ -270,27 +381,13 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       return;
     case 'local-authority': {
       for (const [label, userName] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        await assertActivePersona(page, userName);
-        if (label === 'Process Analyst') {
-          await clickProductNav(page, 'Assess');
-          await expect(page.getByTestId('process-catalog-view')).toBeVisible();
-        }
-        observer.assertSafe();
-        observer.stop();
-        await signOutToSandbox(page);
+        await runObservedPersonaJourney(page, label, userName);
       }
       return;
     }
     case 'network-safety': {
       for (const [label, userName] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        await assertActivePersona(page, userName);
-        observer.assertSafe();
-        observer.stop();
-        await signOutToSandbox(page);
+        await runObservedPersonaJourney(page, label, userName);
       }
       return;
     }
@@ -304,17 +401,37 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'desktop-layout':
     case 'mobile-layout':
-      await openSandbox(page);
-      await assertNoOverflow(page);
+      for (const [label, userName] of personas) {
+        await enterPersona(page, label);
+        await assertActivePersona(page, userName);
+        await assertNoOverflow(page);
+        await signOutToSandbox(page);
+      }
       return;
     case 'keyboard-a11y': {
-      await openSandbox(page);
-      await page.keyboard.press('Tab');
-      await expect(page.getByRole('link', { name: 'Skip to access' })).toBeFocused();
-      await page.keyboard.press('Enter');
-      await expect(page.locator('#access-main')).toBeFocused();
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+      for (const [label, userName] of personas) {
+        await enterPersona(page, label);
+        await assertActivePersona(page, userName);
+        const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+        const isFirstSequentialTabStop = await skipLink.evaluate(target => {
+          const candidates = [...document.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]')]
+            .filter(element => element.tabIndex >= 0 && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
+          const ordered = candidates.map((element, index) => ({ element, index })).sort((left, right) => {
+            const leftOrder = left.element.tabIndex > 0 ? left.element.tabIndex : Number.MAX_SAFE_INTEGER;
+            const rightOrder = right.element.tabIndex > 0 ? right.element.tabIndex : Number.MAX_SAFE_INTEGER;
+            return leftOrder - rightOrder || left.index - right.index;
+          });
+          return ordered[0]?.element === target;
+        });
+        expect(isFirstSequentialTabStop, 'skip link must remain the first sequential keyboard target').toBe(true);
+        await skipLink.focus();
+        await expect(skipLink).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#app-main')).toBeFocused();
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        await signOutToSandbox(page);
+      }
       return;
     }
     case 'public-landing': {
@@ -324,7 +441,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await expect(page.getByText('Synthetic sandbox for product exploration. No live execution.')).toBeVisible();
       return;
     }
-    case 'sandbox-descendant': {
+    case 'sandbox-accepted-descendant': {
       const response = await page.goto('/sandbox/unexpected-deep-link', { waitUntil: 'domcontentloaded' });
       assertHostedResponseIdentity(response);
       await expect(page.getByRole('heading', { name: 'Explore with synthetic data.' })).toBeVisible();
@@ -402,7 +519,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
+        await assertEnterpriseIntelligenceSandboxBoundary(page);
       }
       return;
     case 'non-admin-denial':
@@ -417,7 +534,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
         await expect(admin).toBeVisible();
         await admin.click();
-        await expect(page.getByRole('heading', { name: 'Enterprise Intelligence', exact: true })).toBeVisible();
+        await assertEnterpriseIntelligenceSandboxBoundary(page);
       }
       return;
     case 'reload-reconstruction': {
@@ -428,14 +545,13 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         () => readDurableProjectNavigation(page),
         { message: 'The project-switch Boards destination must persist the exact URL and project identity.' },
       ).toEqual(canonicalBoardsNavigation);
-      await page.evaluate(() => localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({
+      const invalidBoardsResponse = await reloadWithPersistedScopeAtDocumentStart(page, JSON.stringify({
         type: 'project',
         id: 'stale-different-project',
         name: 'Stale Different Project',
-      })));
-      const invalidBoardsResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+      }));
       assertHostedResponseIdentity(invalidBoardsResponse);
-      await expect(page).not.toHaveURL(/projectId=/u);
+      await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
       await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalBoardsNavigation);
       await clickProductNav(page, 'Delivery');
@@ -455,13 +571,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         '{malformed',
       ];
       for (const invalidScope of invalidPersistedScopes) {
-        await page.evaluate(scope => {
-          if (scope === null) localStorage.removeItem('avalaos-core-v1-scope');
-          else localStorage.setItem('avalaos-core-v1-scope', scope);
-        }, invalidScope);
-        const invalidResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+        const invalidResponse = await reloadWithPersistedScopeAtDocumentStart(page, invalidScope);
         assertHostedResponseIdentity(invalidResponse);
-        await expect(page).not.toHaveURL(/projectId=/u);
+        await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
         await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
 
         await page.evaluate(scope => {
@@ -490,14 +602,11 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertNoOverflow(page);
       return;
     case 'serious-critical-a11y': {
-      for (const [label] of personas) {
-        const observer = observeAuthorityRequests(page);
-        await enterPersona(page, label);
-        const results = await new AxeBuilder({ page }).analyze();
-        expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
-        observer.assertSafe();
-        observer.stop();
-        await signOutToSandbox(page);
+      for (const [label, userName] of personas) {
+        await runObservedPersonaJourney(page, label, userName, async () => {
+          const results = await new AxeBuilder({ page }).analyze();
+          expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+        });
       }
       return;
     }
@@ -513,6 +622,7 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
   test(title, async ({ page }, testInfo) => {
     test.skip(!binding.projects.includes(testInfo.project.name), `Not required in ${testInfo.project.name}`);
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');
+    if (binding.scenario && SEVEN_PERSONA_SCENARIOS.has(binding.scenario)) testInfo.setTimeout(180_000);
     await runScenario(binding.scenario!, page, testInfo);
   });
 }

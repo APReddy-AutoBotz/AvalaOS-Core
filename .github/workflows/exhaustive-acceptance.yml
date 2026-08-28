@@ -28,11 +28,26 @@ env:
   ACCEPTANCE_RESULTS_DIR: acceptance-results
   RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
   ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
+  SERVER_RESULTS_MANIFEST: /tmp/avalaos-server-results.json
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: ${{ inputs.release_sha && 'stable-release' || 'pull-request' }}
 
 jobs:
   acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avalaos_exhaustive
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,6 +76,9 @@ jobs:
           npm run test:acceptance:catalog
           node scripts/runExhaustiveAcceptanceReport.test.mjs
           node scripts/exhaustiveAcceptanceEvidence.test.mjs
+          node scripts/produceExhaustiveServerEvidence.test.mjs
+          npm run test:hosted-evidence-family-attestations
+          npm run test:acceptance:network-observer
           node scripts/exhaustiveAcceptanceDispatchBridge.test.mjs
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
 
@@ -73,6 +91,17 @@ jobs:
         id: oracle
         continue-on-error: true
         run: node scripts/runAssessV1AcceptanceOracle.mjs
+
+      - name: Run same-run disposable PostgreSQL server evidence
+        id: server
+        continue-on-error: true
+        env:
+          PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          CANDIDATE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
+        run: |
+          npm run test:migrations:pilot-operations:postgres
+          node scripts/produceExhaustiveServerEvidence.mjs
 
       - name: Validate deterministic hosted declarations
         env:
@@ -88,6 +117,7 @@ jobs:
           mkdir -p acceptance-results
           test -f "$RETAINED_RESULTS_MANIFEST" && cp "$RETAINED_RESULTS_MANIFEST" acceptance-results/retained-suite-results.json || true
           test -f "$ORACLE_RESULTS_MANIFEST" && cp "$ORACLE_RESULTS_MANIFEST" acceptance-results/oracle-results.json || true
+          test -f "$SERVER_RESULTS_MANIFEST" && cp "$SERVER_RESULTS_MANIFEST" acceptance-results/server-results.json || true
 
       - name: Install official Chromium for exact hosted execution
         if: env.NETLIFY_DEPLOY_ID != 'pull-request-not-deployed'
@@ -130,6 +160,9 @@ jobs:
             tests/acceptance/catalog/
             tests/acceptance/inventory.json
             tests/acceptance/execution-bindings.json
+            tests/acceptance/source-provenance.json
+            tests/acceptance/proof-owner-registry.json
+            tests/acceptance/proof-owner-source-contracts.mjs
             tests/acceptance/fixtures/
             acceptance-results/
             artifacts/exhaustive-acceptance/
@@ -141,6 +174,7 @@ jobs:
           set -euo pipefail
           test "${{ steps.retained.outcome }}" = success
           test "${{ steps.oracle.outcome }}" = success
+          test "${{ steps.server.outcome }}" = success
           test "${{ steps.report.outcome }}" = success
           if [ "$NETLIFY_DEPLOY_ID" != "pull-request-not-deployed" ]; then
             test "${{ steps.deployment.outcome }}" = success

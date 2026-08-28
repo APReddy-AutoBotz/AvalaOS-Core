@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   AllowedProviderResolverDecision,
   MembershipRoleContext,
@@ -7,6 +9,7 @@ import {
   ProviderPolicyRow,
   ProviderResolverDeps,
   ProviderResolverOperation,
+  WorkspaceMembershipRoleContext,
 } from './providerResolver';
 import { runProviderGovernedOperation } from './providerResolverIntegration';
 import type { ProviderGovernedOperationDeps } from './providerResolverIntegration';
@@ -19,6 +22,7 @@ const tenantSecretSegment = orgId.replaceAll('-', '').toUpperCase();
 const groqSecretRef = `AVALA_PROVIDER_SECRET_GROQ_${tenantSecretSegment}_PRIMARY`;
 const geminiSecretRef = `AVALA_PROVIDER_SECRET_GEMINI_${tenantSecretSegment}_PRIMARY`;
 const actorId = '00000000-0000-4000-8000-000000000008';
+const workspaceId = '66666666-6666-4666-8666-666666666666';
 const configId = '33333333-3333-4333-8333-333333333333';
 const keyRefId = '44444444-4444-4444-8444-444444444444';
 const now = new Date('2026-06-09T00:00:00.000Z');
@@ -27,6 +31,15 @@ const membership: MembershipRoleContext = {
   status: 'active',
   roleNames: ['Admin'],
   roleIds: ['22222222-2222-4222-8222-222222222201'],
+};
+
+const workspaceMembership: WorkspaceMembershipRoleContext = {
+  orgId,
+  workspaceId,
+  status: 'active',
+  roleNames: ['Workspace Admin'],
+  roleIds: ['22222222-2222-4222-8222-222222222202'],
+  roleScopeValid: true,
 };
 
 const policyFor = (operation: ProviderResolverOperation): ProviderPolicyRow => ({
@@ -66,8 +79,9 @@ const keyRef: ProviderKeyRefRow = {
 const buildDeps = (operation: ProviderResolverOperation, options: {
   policies?: ProviderPolicyRow[];
   keyRef?: ProviderKeyRefRow | null;
+  workspaceMembership?: WorkspaceMembershipRoleContext | null;
   order?: string[];
-  throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
+  throwAt?: 'membership' | 'workspaceMembership' | 'policy' | 'config' | 'keyRef';
 } = {}): ProviderResolverDeps => ({
   now: () => now,
   createCorrelationId: () => 'generated-correlation-id',
@@ -77,6 +91,13 @@ const buildDeps = (operation: ProviderResolverOperation, options: {
       throw new Error('Supabase REST request failed: organization_members raw response body');
     }
     return membership;
+  },
+  queryWorkspaceMembershipAndRoles: async () => {
+    options.order?.push('resolver:workspaceMembership');
+    if (options.throwAt === 'workspaceMembership') {
+      throw new Error('Supabase REST request failed: workspace_memberships raw response body');
+    }
+    return options.workspaceMembership === undefined ? workspaceMembership : options.workspaceMembership;
   },
   queryProviderPolicy: async () => {
     options.order?.push('resolver:policy');
@@ -143,7 +164,8 @@ const runScenario = async (
     secretThrows?: boolean;
     useDefaultSecretLookup?: boolean;
     keyRef?: ProviderKeyRefRow | null;
-    throwAt?: 'membership' | 'policy' | 'config' | 'keyRef';
+    workspaceMembership?: WorkspaceMembershipRoleContext | null;
+    throwAt?: 'membership' | 'workspaceMembership' | 'policy' | 'config' | 'keyRef';
   } = {},
 ) => {
   const order: string[] = [];
@@ -157,6 +179,7 @@ const runScenario = async (
     resolverDeps: buildDeps(operation, {
       policies: options.policies,
       keyRef: options.keyRef,
+      workspaceMembership: options.workspaceMembership,
       order,
       throwAt: options.throwAt,
     }),
@@ -188,7 +211,9 @@ const runScenario = async (
   const result = await runProviderGovernedOperation({
     operation,
     orgId,
+    workspaceId,
     actorId,
+    correlationId: 'corr-provider-regression',
     requestedProvider: 'groq',
     scannerReference: `supabase/functions/${operation}/index.ts`,
     runAllowed: async ({ apiKey }) => {
@@ -236,12 +261,63 @@ const allowedDecision = (provider: 'groq' | 'gemini' = 'groq'): AllowedProviderR
   },
 });
 
+const DENIED_OPERATIONS = ['generate_document', 'refine_section', 'test_provider_connection'] as const;
+const RESOLVER_THROW_POINTS = ['membership', 'workspaceMembership', 'policy', 'config', 'keyRef'] as const;
+
+const exactExecutedCoverage = <T extends string>(registered: readonly T[], executed: ReadonlyMap<T, boolean>) =>
+  executed.size === registered.length
+  && registered.every(scenario => executed.get(scenario) === true)
+  && [...executed.keys()].every(scenario => registered.includes(scenario));
+
+const deriveProviderAssertionArtifact = ({
+  deniedScenarios,
+  resolverFailureScenarios,
+  auditFailureZeroProviderCalls,
+  secretFailureZeroProviderCalls,
+  allowedPathInjectedExecutorOnly,
+}: {
+  deniedScenarios: ReadonlyMap<(typeof DENIED_OPERATIONS)[number], boolean>;
+  resolverFailureScenarios: ReadonlyMap<(typeof RESOLVER_THROW_POINTS)[number], boolean>;
+  auditFailureZeroProviderCalls: boolean;
+  secretFailureZeroProviderCalls: boolean;
+  allowedPathInjectedExecutorOnly: boolean;
+}) => {
+  const assertionChecks: Array<[string, boolean]> = [
+    ['provider-simulation--denied-path-zero-provider-calls', exactExecutedCoverage(DENIED_OPERATIONS, deniedScenarios)],
+    ['provider-simulation--audit-failure-zero-provider-calls', auditFailureZeroProviderCalls],
+    ['provider-simulation--secret-failure-zero-provider-calls', secretFailureZeroProviderCalls],
+    ['provider-simulation--resolver-failure-zero-provider-calls', exactExecutedCoverage(RESOLVER_THROW_POINTS, resolverFailureScenarios)],
+    ['provider-simulation--allowed-path-injected-executor-only', allowedPathInjectedExecutorOnly],
+  ];
+  const assertionResults = assertionChecks.map(([assertionId, passed]) => ({ assertionId, status: passed ? 'PASS' : 'FAIL' }));
+  return {
+    assertionResults,
+    assertionDisposition: assertionResults.every(item => item.status === 'PASS') ? 'passed' : 'failed',
+  };
+};
+
+// Adversarial coverage guard: a green subset may never satisfy a registered scenario family.
+const missingDeniedScenario = new Map<(typeof DENIED_OPERATIONS)[number], boolean>([
+  ['generate_document', true],
+  ['refine_section', true],
+]);
+const completeResolverScenarios = new Map(RESOLVER_THROW_POINTS.map(point => [point, true] as const));
+assert.equal(deriveProviderAssertionArtifact({
+  deniedScenarios: missingDeniedScenario,
+  resolverFailureScenarios: completeResolverScenarios,
+  auditFailureZeroProviderCalls: true,
+  secretFailureZeroProviderCalls: true,
+  allowedPathInjectedExecutorOnly: true,
+}).assertionDisposition, 'failed');
+
 const main = async () => {
-  for (const operation of ['generate_document', 'refine_section', 'test_provider_connection'] as ProviderResolverOperation[]) {
+  const deniedScenarios = new Map<(typeof DENIED_OPERATIONS)[number], boolean>();
+  for (const operation of DENIED_OPERATIONS) {
     const blocked = await runScenario(operation, { policies: [] });
     assert.equal(blocked.result.status, 'blocked');
     assert.equal(blocked.createJobCalls, 0);
     assert.equal(blocked.providerCalls, 0);
+    deniedScenarios.set(operation, blocked.result.status === 'blocked' && blocked.providerCalls === 0 && blocked.createJobCalls === 0);
     assert.equal(blocked.secretCalls, 0);
     assert.equal(blocked.auditCalls, 1);
     assert.equal(blocked.result.body.error, 'AI provider governance controls blocked this request.');
@@ -250,10 +326,31 @@ const main = async () => {
     assert.equal(Boolean(blocked.result.body.retryCategory), true);
   }
 
+  const missingWorkspaceMembership = await runScenario('generate_document', { workspaceMembership: null });
+  const wrongOrganizationMembership = await runScenario('generate_document', {
+    workspaceMembership: { ...workspaceMembership, orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+  });
+  const wrongWorkspaceMembership = await runScenario('generate_document', {
+    workspaceMembership: { ...workspaceMembership, workspaceId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+  });
+  for (const denied of [missingWorkspaceMembership, wrongOrganizationMembership, wrongWorkspaceMembership]) {
+    assert.equal(denied.result.status, 'blocked');
+    assert.equal(denied.providerCalls, 0);
+    assert.equal(denied.createJobCalls, 0);
+    assert.equal(denied.secretCalls, 0);
+    if (denied.result.status === 'blocked') {
+      assert.equal(denied.result.body.error, 'AI provider governance controls blocked this request.');
+      assert.equal(denied.result.body.failureClass, 'membership_denied');
+    }
+  }
+  assert.deepEqual(missingWorkspaceMembership.result, wrongOrganizationMembership.result);
+  assert.deepEqual(missingWorkspaceMembership.result, wrongWorkspaceMembership.result);
+
   const allowed = await runScenario('generate_document');
   assert.equal(allowed.result.status, 'allowed');
   assert.deepEqual(allowed.order, [
     'resolver:membership',
+    'resolver:workspaceMembership',
     'resolver:policy',
     'resolver:config',
     'resolver:keyRef',
@@ -264,12 +361,19 @@ const main = async () => {
   ]);
   assert.equal(allowed.createJobCalls, 1);
   assert.equal(allowed.providerCalls, 1);
+  const allowedPathInjectedExecutorOnly=allowed.result.status==='allowed'&&allowed.providerCalls===1&&allowed.createJobCalls===1;
+
+  const refineAllowed = await runScenario('refine_section');
+  assert.equal(refineAllowed.result.status, 'allowed');
+  assert.equal(refineAllowed.providerCalls, 1);
+  assert.equal(refineAllowed.createJobCalls, 1);
 
   const auditFailure = await runScenario('generate_document', { auditFails: true });
   assert.equal(auditFailure.result.status, 'blocked');
   assert.equal(auditFailure.secretCalls, 0);
   assert.equal(auditFailure.createJobCalls, 0);
   assert.equal(auditFailure.providerCalls, 0);
+  const auditFailureZeroProviderCalls=auditFailure.result.status==='blocked'&&auditFailure.providerCalls===0&&auditFailure.secretCalls===0;
   assert.equal(auditFailure.result.body.failureClass, 'audit_context_unsafe');
 
   const secretFailure = await runScenario('generate_document', { secretFails: true });
@@ -277,6 +381,7 @@ const main = async () => {
   assert.equal(secretFailure.secretCalls, 1);
   assert.equal(secretFailure.createJobCalls, 0);
   assert.equal(secretFailure.providerCalls, 0);
+  const secretFailureZeroProviderCalls=secretFailure.result.status==='blocked'&&secretFailure.providerCalls===0;
   assert.equal(secretFailure.result.body.failureClass, 'key_reference_ineligible');
 
   const injectedSecretException = await runScenario('generate_document', { secretThrows: true });
@@ -297,7 +402,8 @@ const main = async () => {
   assert.equal(defaultSecretException.result.body.failureClass, 'key_reference_ineligible');
   assertNoSensitiveFields(defaultSecretException.result);
 
-  for (const throwAt of ['membership', 'policy', 'config', 'keyRef'] as const) {
+  const resolverFailureScenarios = new Map<(typeof RESOLVER_THROW_POINTS)[number], boolean>();
+  for (const throwAt of RESOLVER_THROW_POINTS) {
     const resolverFailure = await runScenario('generate_document', { throwAt });
     assert.equal(resolverFailure.result.status, 'blocked');
     assert.equal(resolverFailure.result.body.error, 'AI provider governance controls blocked this request.');
@@ -306,6 +412,7 @@ const main = async () => {
     assert.equal(resolverFailure.secretCalls, 0);
     assert.equal(resolverFailure.createJobCalls, 0);
     assert.equal(resolverFailure.providerCalls, 0);
+    resolverFailureScenarios.set(throwAt, resolverFailure.result.status === 'blocked' && resolverFailure.providerCalls === 0 && resolverFailure.createJobCalls === 0);
     assert.equal(resolverFailure.auditCalls, 0);
     assertNoSensitiveFields(resolverFailure.result);
   }
@@ -438,6 +545,32 @@ const main = async () => {
   });
   assert.equal(resolvedGemini.status, 'resolved');
   if (resolvedGemini.status === 'resolved') assert.equal(resolvedGemini.apiKey, 'mock-provider-key');
+
+  if (process.env.PROVIDER_EVIDENCE_OUTPUT) {
+    const { assertionResults, assertionDisposition } = deriveProviderAssertionArtifact({
+      deniedScenarios,
+      resolverFailureScenarios,
+      auditFailureZeroProviderCalls,
+      secretFailureZeroProviderCalls,
+      allowedPathInjectedExecutorOnly,
+    });
+    assert.equal(assertionDisposition,'passed','provider assertion artifact must derive from the executed injected-provider checks');
+    const outputPath = process.env.PROVIDER_EVIDENCE_OUTPUT;
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, `${JSON.stringify({
+      schemaVersion: 'provider-simulation-execution-v1',
+      head: process.env.CANDIDATE_SHA ?? null,
+      runId: process.env.GITHUB_RUN_ID ?? null,
+      runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT ?? 0),
+      workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH ?? null,
+      environment: 'disposable-ci-simulation',
+      scope: { kind: 'synthetic-organization-policy', organizationId: orgId },
+      assertionDisposition,
+      assertionResults,
+      realNetworkEgressObserved: false,
+      providerExecutionBoundary: 'injected-test-executor',
+    }, null, 2)}\n`, { mode: 0o600 });
+  }
 
   console.log('M3.2n resolver Edge Function integration regression suite passed.');
 };

@@ -100,7 +100,7 @@ const AiInsightsWidget: React.FC<AiInsightsWidgetProps> = ({ currentUser, tasks,
     return (
         <WidgetWrapper icon={SparklesIcon} title="Monitor Insights" isConfigurable={false}>
             <div className="relative">
-                <button onClick={fetchInsights} disabled={isLoading} className="absolute top-[-48px] right-[10px] p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <button type="button" aria-label="Refresh monitor insights" onClick={fetchInsights} disabled={isLoading} className="absolute top-[-48px] right-[10px] p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                     <ArrowPathIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
                 {renderContent()}

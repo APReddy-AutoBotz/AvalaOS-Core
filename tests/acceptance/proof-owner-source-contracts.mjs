@@ -1,0 +1,1946 @@
+// Independent deterministic ownership anchors. Changes require source-contract review.
+export const PROOF_SOURCE_ANCHORS = Object.freeze([
+  {
+    "anchorId": "hosted-sandbox-route",
+    "sourceReference": "services/hostedSandboxRoute.ts",
+    "selector": "export const HOSTED_SANDBOX_ROUTE = '/sandbox';"
+  },
+  {
+    "anchorId": "application-shell",
+    "sourceReference": "App.tsx",
+    "selector": "function App() {"
+  },
+  {
+    "anchorId": "assess-v1-scoring",
+    "sourceReference": "services/scoringEngine.ts",
+    "selector": "export const CURRENT_SCORE_VERSION = 'assess-core-2026-05';"
+  },
+  {
+    "anchorId": "application-portfolio",
+    "sourceReference": "services/assessV2/applicationPortfolio.ts",
+    "selector": "export const APPLICATION_PORTFOLIO_MODEL_VERSION = 'assess-v2-application-portfolio-2026-07';"
+  },
+  {
+    "anchorId": "assess-review-domain",
+    "sourceReference": "services/assessV2/reviewDomain.ts",
+    "selector": "export const ASSESS_V2_REVIEW_VERSION = 'assess-v2-review-2026-07' as const;"
+  },
+  {
+    "anchorId": "studio-artifact-contracts",
+    "sourceReference": "services/studioArtifacts/contracts.ts",
+    "selector": "export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;"
+  },
+  {
+    "anchorId": "delivery-workflow-policy",
+    "sourceReference": "services/deliveryWorkflowPolicy.ts",
+    "selector": "export type DeliveryWorkflowDecisionStatus = 'allowed' | 'blocked' | 'decision_pending';"
+  },
+  {
+    "anchorId": "docs-delivery-lineage",
+    "sourceReference": "services/docsToDeliveryLineage.ts",
+    "selector": "export const buildDocsToDeliveryLineage = ({"
+  },
+  {
+    "anchorId": "admin-workbench",
+    "sourceReference": "services/adminWorkbenchModel.ts",
+    "selector": "export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = ["
+  },
+  {
+    "anchorId": "trust-assurance",
+    "sourceReference": "services/trustAssurance/domain.ts",
+    "selector": "export const deriveEffectiveProofStatus = ("
+  },
+  {
+    "anchorId": "ai-runtime-mode",
+    "sourceReference": "services/aiMode.ts",
+    "selector": "export const getAiExecutionPolicy = ({"
+  },
+  {
+    "anchorId": "enterprise-intelligence",
+    "sourceReference": "services/enterpriseIntelligence.ts",
+    "selector": "export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';"
+  },
+  {
+    "anchorId": "handoff-ledger",
+    "sourceReference": "services/handoffLedgerService.ts",
+    "selector": "export function useHandoffLedger() {"
+  },
+  {
+    "anchorId": "persistence-transition",
+    "sourceReference": "services/persistenceTransition.ts",
+    "selector": "export const persistBeforeCommit = async <T>("
+  },
+  {
+    "anchorId": "pilot-operations-postgres",
+    "sourceReference": "scripts/testPilotOperationsPostgres.mjs",
+    "selector": "['pilot-operations-postgres--responseLossExactReplayVerified',responseLossExactReplayVerified],"
+  },
+  {
+    "anchorId": "hosted-exact-run-scenarios",
+    "sourceReference": "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+    "selector": "CREATE FUNCTION public.hosted_pilot_execute_assertion_scenario("
+  }
+]);
+export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
+  oracle: Object.freeze({
+    command: Object.freeze(['node', 'scripts/runAssessV1AcceptanceOracle.mjs']),
+    environments: Object.freeze(['pull-request', 'stable-release']),
+    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
+    assertionIdFormat: 'assess-v1-oracle::{testId}::{scenario}',
+  }),
+  server: Object.freeze({
+    environment: 'disposable-ci',
+    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
+  }),
+});
+export const PROOF_COMMAND_CONTRACTS = Object.freeze({
+  "retainedCommands": {
+    "assess-v2-authority": [
+      "npm",
+      "run",
+      "test:pr1d"
+    ],
+    "application-portfolio": [
+      "npm",
+      "run",
+      "test:pr1g"
+    ],
+    "govern-authority": [
+      "npm",
+      "run",
+      "test:pr1e"
+    ],
+    "studio-governed": [
+      "npm",
+      "run",
+      "test:studio-artifacts"
+    ],
+    "studio-private": [
+      "npm",
+      "run",
+      "test:studio-private-artifacts"
+    ],
+    "delivery-policy": [
+      "npm",
+      "run",
+      "test:delivery-workflow-policy"
+    ],
+    "trust-authority": [
+      "node",
+      "scripts/runTrustAssuranceTest.mjs"
+    ],
+    "ai-boundary": [
+      "npm",
+      "run",
+      "test:pr1a"
+    ],
+    "enterprise-intelligence": [
+      "npm",
+      "run",
+      "test:enterprise-intelligence"
+    ],
+    "cross-cutting-false-success": [
+      "npm",
+      "run",
+      "test:false-success"
+    ],
+    "canonical-pilot-journey": [
+      "npm",
+      "run",
+      "test:pilot-acceptance"
+    ],
+    "requested-changes-domain-regression": [
+      "node",
+      "scripts/runTypeScriptTest.mjs",
+      "types.ts",
+      "services/assessV2/types.ts",
+      "services/assessV2/canonical.ts",
+      "services/assessV2/reviewDomain.ts",
+      "tests/acceptance/journeys/requestedChangesJourney.test.ts"
+    ],
+    "pilot-operations": [
+      "npm",
+      "run",
+      "test:pilot-operations"
+    ]
+  },
+  "serverCommands": {
+    "server-disposable-postgresql": [
+      "npm",
+      "run",
+      "test:migrations:pilot-operations:postgres"
+    ],
+    "server-assess-process-edit-denial": [
+      "npm",
+      "run",
+      "test:migrations:pr1b"
+    ],
+    "server-delivery-lineage-tenant-boundary": [
+      "npm",
+      "run",
+      "test:migrations:enterprise-intelligence:postgres"
+    ],
+    "server-monitor-lineage": [
+      "npm",
+      "run",
+      "test:migrations:enterprise-intelligence:postgres"
+    ],
+    "server-monitor-outcome": [
+      "npm",
+      "run",
+      "test:migrations:enterprise-intelligence:postgres"
+    ],
+    "server-monitor-blocker": [
+      "npm",
+      "run",
+      "test:migrations:enterprise-intelligence:postgres"
+    ],
+    "server-monitor-unavailable": [
+      "npm",
+      "run",
+      "test:migrations:enterprise-intelligence:postgres"
+    ],
+    "server-admin-non-admin-denial": [
+      "npm",
+      "run",
+      "test:migrations:pilot-operations:postgres"
+    ],
+    "server-admin-capability-matrix": [
+      "npm",
+      "run",
+      "test:migrations:pilot-operations:postgres"
+    ],
+    "server-offline-false-success": [
+      "npm",
+      "run",
+      "test:migrations:pilot-operations:postgres"
+    ],
+    "server-timeout-false-success": [
+      "npm",
+      "run",
+      "test:migrations:pilot-operations:postgres"
+    ]
+  }
+});
+export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
+  {
+    "branchId": "ADMIN-ADMIN_NAVIGATION",
+    "testId": "ADMIN-001",
+    "sourceAnchorIds": [
+      "admin-workbench"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "admin-navigation"
+      }
+    ]
+  },
+  {
+    "branchId": "ADMIN-NON_ADMIN_DENIAL",
+    "testId": "ADMIN-002",
+    "sourceAnchorIds": [
+      "admin-workbench"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:ADMIN-002"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-admin-non-admin-denial",
+        "scenarioIds": [
+          "admin-non-admin-authority-denial"
+        ],
+        "assertionIds": [
+          "admin-postgres--non-admin-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ADMIN-PILOT_OPERATIONS_READ_ONLY",
+    "testId": "ADMIN-004",
+    "sourceAnchorIds": [
+      "admin-workbench",
+      "hosted-exact-run-scenarios"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "pilot-operations",
+        "assertionId": "pilot-operations::ADMIN-004",
+        "scenarioId": "ADMIN-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ADMIN-ROLE_CAPABILITY_VIEW",
+    "testId": "ADMIN-003",
+    "sourceAnchorIds": [
+      "admin-workbench"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:ADMIN-003"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-admin-capability-matrix",
+        "scenarioIds": [
+          "admin-capability-matrix"
+        ],
+        "assertionIds": [
+          "admin-postgres--capability-matrix"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "AI-NO_BROWSER_SECRET",
+    "testId": "AI-006",
+    "sourceAnchorIds": [
+      "ai-runtime-mode",
+      "hosted-exact-run-scenarios"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-006",
+        "scenarioId": "AI-006::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "AI-NO_BYOK",
+    "testId": "AI-001",
+    "sourceAnchorIds": [
+      "ai-runtime-mode"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-001",
+        "scenarioId": "AI-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "AI-PROVIDER_CAPABILITY_DENIAL",
+    "testId": "AI-003",
+    "sourceAnchorIds": [
+      "ai-runtime-mode"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-003",
+        "scenarioId": "AI-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "AI-PROVIDER_DISABLED",
+    "testId": "AI-002",
+    "sourceAnchorIds": [
+      "ai-runtime-mode"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-002",
+        "scenarioId": "AI-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "AI-PROVIDER_SECRET_BOUNDARY",
+    "testId": "AI-004",
+    "sourceAnchorIds": [
+      "ai-runtime-mode"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-004",
+        "scenarioId": "AI-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "AI-PROVIDER_UNAVAILABLE",
+    "testId": "AI-005",
+    "sourceAnchorIds": [
+      "ai-runtime-mode"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "ai-boundary",
+        "assertionId": "ai-boundary::AI-005",
+        "scenarioId": "AI-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "APPS-APPLICATION_CREATE",
+    "testId": "APPS-001",
+    "sourceAnchorIds": [
+      "application-portfolio"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "application-portfolio",
+        "assertionId": "application-portfolio::APPS-001",
+        "scenarioId": "APPS-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "APPS-ASSESSMENT_SNAPSHOT",
+    "testId": "APPS-002",
+    "sourceAnchorIds": [
+      "application-portfolio"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "application-portfolio",
+        "assertionId": "application-portfolio::APPS-002",
+        "scenarioId": "APPS-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "APPS-CROSS_WORKSPACE_DENIAL",
+    "testId": "APPS-004",
+    "sourceAnchorIds": [
+      "application-portfolio"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "application-portfolio",
+        "assertionId": "application-portfolio::APPS-004",
+        "scenarioId": "APPS-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "APPS-MODERNIZATION_DISPOSITION",
+    "testId": "APPS-003",
+    "sourceAnchorIds": [
+      "application-portfolio"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "application-portfolio",
+        "assertionId": "application-portfolio::APPS-003",
+        "scenarioId": "APPS-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "APPS-REPLAY",
+    "testId": "APPS-005",
+    "sourceAnchorIds": [
+      "application-portfolio"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "application-portfolio",
+        "assertionId": "application-portfolio::APPS-005",
+        "scenarioId": "APPS-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-DISCOVERY_COMPLETE",
+    "testId": "ASSESS-003",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:ASSESS-003"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-DISCOVERY_INCOMPLETE",
+    "testId": "ASSESS-004",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "incomplete-assessment"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-PROCESS_CREATE",
+    "testId": "ASSESS-001",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "process-create"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-PROCESS_EDIT_DENIAL",
+    "testId": "ASSESS-002",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:ASSESS-002"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-assess-process-edit-denial",
+        "scenarioIds": [
+          "assess-process-edit-authority-denial"
+        ],
+        "assertionIds": [
+          "assess-postgres--process-edit-authority-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_DISCOVERY",
+    "testId": "ASSESS-009",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "needs-discovery",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-009::needs-discovery"
+        ],
+        "scenarioIds": [
+          "needs-discovery"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_GOVERNANCE",
+    "testId": "ASSESS-013",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "governance-review",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-013::governance-review"
+        ],
+        "scenarioIds": [
+          "governance-review"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_HUMAN_LED",
+    "testId": "ASSESS-012",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "human-led",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-012::human-led"
+        ],
+        "scenarioIds": [
+          "human-led"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_LOW_VALUE",
+    "testId": "ASSESS-011",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "low-value",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-011::low-value"
+        ],
+        "scenarioIds": [
+          "low-value"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_NO_GO",
+    "testId": "ASSESS-014",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "no-go",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-014::no-go"
+        ],
+        "scenarioIds": [
+          "no-go"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_GATE_REDESIGN",
+    "testId": "ASSESS-010",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "process-redesign",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-010::process-redesign"
+        ],
+        "scenarioIds": [
+          "process-redesign"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_SCORE_MAX",
+    "testId": "ASSESS-008",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "governance-max",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-008::governance-max"
+        ],
+        "scenarioIds": [
+          "governance-max"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_SCORE_MIN",
+    "testId": "ASSESS-007",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "governance-min",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-007::governance-min"
+        ],
+        "scenarioIds": [
+          "governance-min"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_THRESHOLD_ABOVE",
+    "testId": "ASSESS-017",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "completion-above",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-017::completion-above"
+        ],
+        "scenarioIds": [
+          "completion-above"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_THRESHOLD_BELOW",
+    "testId": "ASSESS-015",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "completion-below",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-015::completion-below"
+        ],
+        "scenarioIds": [
+          "completion-below"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_THRESHOLD_EXACT",
+    "testId": "ASSESS-016",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "completion-exact",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-016::completion-exact"
+        ],
+        "scenarioIds": [
+          "completion-exact"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_VALIDATION_INVALID",
+    "testId": "ASSESS-006",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "invalid-input",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-006::invalid-input"
+        ],
+        "scenarioIds": [
+          "invalid-input"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V1_VALIDATION_MISSING",
+    "testId": "ASSESS-005",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "oracle-scenario",
+        "ownerId": "missing-input",
+        "assertionIds": [
+          "assess-v1-oracle::ASSESS-005::missing-input"
+        ],
+        "scenarioIds": [
+          "missing-input"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V2_CREATE",
+    "testId": "ASSESS-018",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "assess-v2-authority",
+        "assertionId": "assess-v2-authority::ASSESS-018",
+        "scenarioId": "ASSESS-018::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V2_FEATURE_DISABLED",
+    "testId": "ASSESS-020",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "assess-v2-authority",
+        "assertionId": "assess-v2-authority::ASSESS-020",
+        "scenarioId": "ASSESS-020::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V2_FINALIZE",
+    "testId": "ASSESS-019",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "assess-v2-authority",
+        "assertionId": "assess-v2-authority::ASSESS-019",
+        "scenarioId": "ASSESS-019::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V2_IDEMPOTENCY_CONFLICT",
+    "testId": "ASSESS-022",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "assess-v2-authority",
+        "assertionId": "assess-v2-authority::ASSESS-022",
+        "scenarioId": "ASSESS-022::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "ASSESS-V2_VERSION_CONFLICT",
+    "testId": "ASSESS-021",
+    "sourceAnchorIds": [
+      "assess-v1-scoring"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "assess-v2-authority",
+        "assertionId": "assess-v2-authority::ASSESS-021",
+        "scenarioId": "ASSESS-021::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-DELIVERY_PACK",
+    "testId": "DELIVERY-009",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:DELIVERY-009"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-delivery-lineage-tenant-boundary",
+        "scenarioIds": [
+          "delivery-lineage-tenant-boundary"
+        ],
+        "assertionIds": [
+          "delivery-postgres--exact-pack-ancestry",
+          "delivery-postgres--foreign-tenant-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-DUPLICATE_IMPORT",
+    "testId": "DELIVERY-007",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-007",
+        "scenarioId": "DELIVERY-007::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-HANDOFF_IMPORT",
+    "testId": "DELIVERY-001",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-001",
+        "scenarioId": "DELIVERY-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-INVALID_TRANSITION",
+    "testId": "DELIVERY-006",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-006",
+        "scenarioId": "DELIVERY-006::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-RETAINED_LINEAGE",
+    "testId": "DELIVERY-008",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-008",
+        "scenarioId": "DELIVERY-008::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-STATUS_TRANSITION",
+    "testId": "DELIVERY-005",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-005",
+        "scenarioId": "DELIVERY-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-TASK_CREATE",
+    "testId": "DELIVERY-002",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-002",
+        "scenarioId": "DELIVERY-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-TASK_DELETE_DENIAL",
+    "testId": "DELIVERY-004",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-004",
+        "scenarioId": "DELIVERY-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "DELIVERY-TASK_UPDATE_OWN",
+    "testId": "DELIVERY-003",
+    "sourceAnchorIds": [
+      "delivery-workflow-policy"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "delivery-policy",
+        "assertionId": "delivery-policy::DELIVERY-003",
+        "scenarioId": "DELIVERY-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-AUTHORITY_DENIAL",
+    "testId": "E2E-003",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "canonical-pilot-journey",
+        "assertionId": "canonical-pilot-journey::E2E-003",
+        "scenarioId": "E2E-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-CANONICAL_HAPPY",
+    "testId": "E2E-001",
+    "sourceAnchorIds": [
+      "handoff-ledger",
+      "hosted-exact-run-scenarios"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "canonical-pilot-journey",
+        "assertionId": "canonical-pilot-journey::E2E-001",
+        "scenarioId": "E2E-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-HITL_COMPLIANCE",
+    "testId": "E2E-007",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:E2E-007"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-LOW_SUITABILITY",
+    "testId": "E2E-005",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:E2E-005"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-REQUESTED_CHANGES_LOOP",
+    "testId": "E2E-002",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:E2E-002"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-STALE_REPLAY_RECOVERY",
+    "testId": "E2E-004",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "canonical-pilot-journey",
+        "assertionId": "canonical-pilot-journey::E2E-004",
+        "scenarioId": "E2E-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "E2E-STRONG_AUTOMATION",
+    "testId": "E2E-006",
+    "sourceAnchorIds": [
+      "handoff-ledger"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:E2E-006"
+      }
+    ]
+  },
+  {
+    "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
+    "testId": "EI-005",
+    "sourceAnchorIds": [
+      "enterprise-intelligence"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "enterprise-intelligence",
+        "assertionId": "enterprise-intelligence::EI-005",
+        "scenarioId": "EI-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "EI-COMMAND_REPLAY",
+    "testId": "EI-004",
+    "sourceAnchorIds": [
+      "enterprise-intelligence"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "enterprise-intelligence",
+        "assertionId": "enterprise-intelligence::EI-004",
+        "scenarioId": "EI-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "EI-INGESTION_LINEAGE",
+    "testId": "EI-002",
+    "sourceAnchorIds": [
+      "enterprise-intelligence"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "enterprise-intelligence",
+        "assertionId": "enterprise-intelligence::EI-002",
+        "scenarioId": "EI-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "EI-INGESTION_VALIDATION",
+    "testId": "EI-001",
+    "sourceAnchorIds": [
+      "enterprise-intelligence"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "enterprise-intelligence",
+        "assertionId": "enterprise-intelligence::EI-001",
+        "scenarioId": "EI-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "EI-QUERY_TENANT_ISOLATION",
+    "testId": "EI-003",
+    "sourceAnchorIds": [
+      "enterprise-intelligence"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "enterprise-intelligence",
+        "assertionId": "enterprise-intelligence::EI-003",
+        "scenarioId": "EI-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-APPROVAL",
+    "testId": "GOVERN-005",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-005",
+        "scenarioId": "GOVERN-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-CHANGES_REQUESTED",
+    "testId": "GOVERN-003",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-003",
+        "scenarioId": "GOVERN-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-DUPLICATE_DECISION",
+    "testId": "GOVERN-010",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-010",
+        "scenarioId": "GOVERN-010::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-INDEPENDENT_ATTESTATION",
+    "testId": "GOVERN-002",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-002",
+        "scenarioId": "GOVERN-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-REJECTION",
+    "testId": "GOVERN-006",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-006",
+        "scenarioId": "GOVERN-006::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-REVIEW_ASSIGNMENT",
+    "testId": "GOVERN-001",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-001",
+        "scenarioId": "GOVERN-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-REVOKED_AUTHORITY",
+    "testId": "GOVERN-009",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-009",
+        "scenarioId": "GOVERN-009::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-REWORK_RESUBMIT",
+    "testId": "GOVERN-004",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-004",
+        "scenarioId": "GOVERN-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-SEPARATION_OF_DUTY",
+    "testId": "GOVERN-007",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-007",
+        "scenarioId": "GOVERN-007::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "GOVERN-STALE_AUTHORITY",
+    "testId": "GOVERN-008",
+    "sourceAnchorIds": [
+      "assess-review-domain"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "govern-authority",
+        "assertionId": "govern-authority::GOVERN-008",
+        "scenarioId": "GOVERN-008::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "MONITOR-BLOCKER_VISIBILITY",
+    "testId": "MONITOR-003",
+    "sourceAnchorIds": [
+      "docs-delivery-lineage"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:MONITOR-003"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-monitor-blocker",
+        "scenarioIds": [
+          "monitor-blocker-tenant-boundary"
+        ],
+        "assertionIds": [
+          "monitor-postgres--blocker-projection",
+          "monitor-postgres--foreign-tenant-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "MONITOR-LINEAGE_VISIBILITY",
+    "testId": "MONITOR-001",
+    "sourceAnchorIds": [
+      "docs-delivery-lineage"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:MONITOR-001"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-monitor-lineage",
+        "scenarioIds": [
+          "monitor-lineage-tenant-boundary"
+        ],
+        "assertionIds": [
+          "monitor-postgres--lineage-projection",
+          "monitor-postgres--foreign-tenant-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "MONITOR-UNAVAILABLE_PROJECTION",
+    "testId": "MONITOR-004",
+    "sourceAnchorIds": [
+      "docs-delivery-lineage"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:MONITOR-004"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-monitor-unavailable",
+        "scenarioIds": [
+          "monitor-unavailable-tenant-boundary"
+        ],
+        "assertionIds": [
+          "monitor-postgres--unavailable-projection",
+          "monitor-postgres--foreign-tenant-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "MONITOR-VALUE_SIGNAL",
+    "testId": "MONITOR-002",
+    "sourceAnchorIds": [
+      "docs-delivery-lineage"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:MONITOR-002"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-monitor-outcome",
+        "scenarioIds": [
+          "monitor-outcome-tenant-boundary"
+        ],
+        "assertionIds": [
+          "monitor-postgres--outcome-projection",
+          "monitor-postgres--foreign-tenant-denied"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "PUBLIC-LANDING",
+    "testId": "PUBLIC-001",
+    "sourceAnchorIds": [
+      "application-shell"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "public-landing"
+      }
+    ]
+  },
+  {
+    "branchId": "PUBLIC-RELEASE_IDENTITY",
+    "testId": "PUBLIC-004",
+    "sourceAnchorIds": [
+      "application-shell"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "release-identity"
+      }
+    ]
+  },
+  {
+    "branchId": "PUBLIC-SANDBOX_ROUTE_ISOLATION",
+    "testId": "PUBLIC-003",
+    "sourceAnchorIds": [
+      "application-shell"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "sandbox-accepted-descendant"
+      }
+    ]
+  },
+  {
+    "branchId": "PUBLIC-SIGN_IN_SEPARATION",
+    "testId": "PUBLIC-002",
+    "sourceAnchorIds": [
+      "application-shell"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "sign-in-separation"
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-HORIZONTAL_OVERFLOW",
+    "testId": "SAFETY-006",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "horizontal-overflow"
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-OFFLINE_NO_FALSE_SUCCESS",
+    "testId": "SAFETY-001",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:SAFETY-001"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-offline-false-success",
+        "scenarioIds": [
+          "offline-mutation-no-false-success"
+        ],
+        "assertionIds": [
+          "safety-postgres--offline-mutation-no-false-success"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-RELOAD_RECONSTRUCTION",
+    "testId": "SAFETY-004",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "reload-reconstruction"
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-RESPONSE_LOST_AFTER_COMMIT",
+    "testId": "SAFETY-005",
+    "sourceAnchorIds": [
+      "pilot-operations-postgres",
+      "hosted-exact-run-scenarios"
+    ],
+    "ownership": [
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-disposable-postgresql",
+        "scenarioIds": [
+          "production-command-response-lost-after-durable-commit"
+        ],
+        "assertionIds": [
+          "pilot-operations-postgres--responseLossExactReplayVerified",
+          "pilot-operations-postgres--responseLossExactlyOneEffectVerified",
+          "pilot-operations-postgres--responseLossConflictRejected",
+          "pilot-operations-postgres--responseLossForeignTenantNonDisclosure"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-SERIOUS_CRITICAL_A11Y",
+    "testId": "SAFETY-007",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "serious-critical-a11y"
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS",
+    "testId": "SAFETY-002",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "cross-cutting-false-success",
+        "assertionId": "cross-cutting-false-success::SAFETY-002",
+        "scenarioId": "SAFETY-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "SAFETY-TIMEOUT_NO_FALSE_SUCCESS",
+    "testId": "SAFETY-003",
+    "sourceAnchorIds": [
+      "persistence-transition"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "blocked:SAFETY-003"
+      },
+      {
+        "kind": "server-assertion",
+        "ownerId": "server-timeout-false-success",
+        "scenarioIds": [
+          "timeout-mutation-no-false-success"
+        ],
+        "assertionIds": [
+          "safety-postgres--timeout-mutation-no-false-success"
+        ]
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-ACCEPTED_DESCENDANT_ROUTE",
+    "testId": "SANDBOX-006",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "sandbox-accepted-descendant"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-ACCESS",
+    "testId": "SANDBOX-001",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "sandbox-access"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-DESKTOP_LAYOUT",
+    "testId": "SANDBOX-007",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "desktop-layout"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-KEYBOARD_ACCESSIBILITY",
+    "testId": "SANDBOX-009",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "keyboard-a11y"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-LOCAL_SYNTHETIC_AUTHORITY",
+    "testId": "SANDBOX-003",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "local-authority"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-MOBILE_LAYOUT",
+    "testId": "SANDBOX-008",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "mobile-layout"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-NO_PROVIDER_CALL",
+    "testId": "SANDBOX-004",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "network-safety"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-PERSONA_SELECTION",
+    "testId": "SANDBOX-002",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "persona-matrix"
+      }
+    ]
+  },
+  {
+    "branchId": "SANDBOX-REFRESH_PERSISTENCE",
+    "testId": "SANDBOX-005",
+    "sourceAnchorIds": [
+      "hosted-sandbox-route"
+    ],
+    "ownership": [
+      {
+        "kind": "hosted-scenario",
+        "ownerId": "reload-reconstruction"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-DELETION",
+    "testId": "STUDIO-010",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-010",
+        "scenarioId": "STUDIO-010::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-DELETION_RECONCILIATION",
+    "testId": "STUDIO-011",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-011",
+        "scenarioId": "STUDIO-011::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-DOWNLOAD_DENIAL",
+    "testId": "STUDIO-007",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-007",
+        "scenarioId": "STUDIO-007::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-GENERATION_FAILURE",
+    "testId": "STUDIO-003",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-governed",
+        "assertionId": "studio-governed::STUDIO-003",
+        "scenarioId": "STUDIO-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-GOVERNED_GENERATION",
+    "testId": "STUDIO-002",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-governed",
+        "assertionId": "studio-governed::STUDIO-002",
+        "scenarioId": "STUDIO-002::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-HANDOFF_LINEAGE",
+    "testId": "STUDIO-001",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-governed",
+        "assertionId": "studio-governed::STUDIO-001",
+        "scenarioId": "STUDIO-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-LEGAL_HOLD",
+    "testId": "STUDIO-009",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-009",
+        "scenarioId": "STUDIO-009::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-PRIVATE_RENDITION",
+    "testId": "STUDIO-006",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-006",
+        "scenarioId": "STUDIO-006::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-RETENTION",
+    "testId": "STUDIO-008",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-private",
+        "assertionId": "studio-private::STUDIO-008",
+        "scenarioId": "STUDIO-008::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-REVISION_IMMUTABILITY",
+    "testId": "STUDIO-004",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-governed",
+        "assertionId": "studio-governed::STUDIO-004",
+        "scenarioId": "STUDIO-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "STUDIO-THREE_PERSON_APPROVAL",
+    "testId": "STUDIO-005",
+    "sourceAnchorIds": [
+      "studio-artifact-contracts"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "studio-governed",
+        "assertionId": "studio-governed::STUDIO-005",
+        "scenarioId": "STUDIO-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "TRUST-AUDIT_TRUTH",
+    "testId": "TRUST-005",
+    "sourceAnchorIds": [
+      "trust-assurance"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "trust-authority",
+        "assertionId": "trust-authority::TRUST-005",
+        "scenarioId": "TRUST-005::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "TRUST-CLAIM_EVIDENCE_SELECTION",
+    "testId": "TRUST-001",
+    "sourceAnchorIds": [
+      "trust-assurance"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "trust-authority",
+        "assertionId": "trust-authority::TRUST-001",
+        "scenarioId": "TRUST-001::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "TRUST-CROSS_TENANT_DENIAL",
+    "testId": "TRUST-004",
+    "sourceAnchorIds": [
+      "trust-assurance"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "trust-authority",
+        "assertionId": "trust-authority::TRUST-004",
+        "scenarioId": "TRUST-004::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "TRUST-IMMUTABLE_EVIDENCE",
+    "testId": "TRUST-003",
+    "sourceAnchorIds": [
+      "trust-assurance"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "trust-authority",
+        "assertionId": "trust-authority::TRUST-003",
+        "scenarioId": "TRUST-003::retained-contract"
+      }
+    ]
+  },
+  {
+    "branchId": "TRUST-PUBLICATION_SOD",
+    "testId": "TRUST-002",
+    "sourceAnchorIds": [
+      "trust-assurance"
+    ],
+    "ownership": [
+      {
+        "kind": "retained-assertion",
+        "ownerId": "trust-authority",
+        "assertionId": "trust-authority::TRUST-002",
+        "scenarioId": "TRUST-002::retained-contract"
+      }
+    ]
+  }
+]);

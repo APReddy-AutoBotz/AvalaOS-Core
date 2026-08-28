@@ -8,6 +8,33 @@ import {
   type EnterpriseApprovalResourceType,
   type EnterpriseIntelligenceProjection,
 } from './enterpriseIntelligence';
+import type { TranscriptAssessApplicationIntent } from './transcriptFlow/contracts';
+import { validateTranscriptSourceSetSelection } from './transcriptFlow/sourceSets';
+
+type TranscriptSourceSetLineageSelector = {
+  sourceSetId: string;
+  sourceSetVersionSelector: string;
+  expectedVersion: number;
+};
+
+const encodeTranscriptSourceSetLineage = (items: TranscriptSourceSetLineageSelector[]) => {
+  if (items.length < 1 || items.length > 20
+    || new Set(items.map(item => item.sourceSetId)).size !== items.length
+    || new Set(items.map(item => item.sourceSetVersionSelector)).size !== items.length) {
+    throw new EnterpriseIntelligenceClientError('TRANSCRIPT_INPUT_BUNDLE_INVALID');
+  }
+  return items.map((item, index) => {
+    if (!Number.isSafeInteger(item.expectedVersion) || item.expectedVersion < 1) {
+      throw new EnterpriseIntelligenceClientError('TRANSCRIPT_INPUT_BUNDLE_INVALID');
+    }
+    return {
+      sourceSetId: requireUuidSelector(item.sourceSetId),
+      sourceSetVersionSelector: requireUuidSelector(item.sourceSetVersionSelector),
+      expectedVersion: item.expectedVersion,
+      ordinal: index + 1,
+    };
+  });
+};
 
 const commandEnabled = () => getRuntimeDataAccess() === 'server' && isSupabaseConfigured();
 
@@ -79,6 +106,12 @@ const errorMessages: Record<string, string> = {
   COMMAND_IN_PROGRESS: 'The same operation is still in progress. Reload before retrying.',
   COMMAND_BLOCKED: 'The server blocked this lifecycle transition. No success was recorded.',
   COMMAND_UNAVAILABLE: 'The governed server operation is unavailable. No fallback was used.',
+  BUDGET_EXHAUSTED: 'The configured provider budget is exhausted. No provider call was made.',
+  SOURCE_INCOMPLETE: 'Every selected source must complete extraction before this bundle can run.',
+  TRANSCRIPT_SOURCE_SET_MEMBER_LIMIT: 'A source set must contain between 1 and 20 exact source versions.',
+  TRANSCRIPT_SOURCE_SET_DUPLICATE_VERSION: 'The same exact source version cannot appear twice in one source set.',
+  TRANSCRIPT_ASSESS_MATERIAL_CONFLICT_UNRESOLVED: 'Resolve every material conflict before applying or finalizing this Assess draft.',
+  TRANSCRIPT_ASSESS_TARGET_STALE: 'The Assess draft or preview changed. Reload and preview the exact changes again.',
   ENTERPRISE_PROJECTION_UNAVAILABLE: 'The Enterprise Intelligence projection is unavailable. Existing records were not replaced with local data.',
 };
 
@@ -88,6 +121,13 @@ export class EnterpriseIntelligenceClientError extends Error {
     this.name = 'EnterpriseIntelligenceClientError';
   }
 }
+
+const requireUuidSelector = (value: string) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new EnterpriseIntelligenceClientError('RESOURCE_NOT_FOUND');
+  }
+  return value;
+};
 
 const invokeCommand = async <T>(input: {
   commandType: string;
@@ -361,6 +401,191 @@ export const enterpriseIntelligenceClient = {
       organizationId: input.organizationId,
       workspaceId: input.workspaceId,
       payload: input,
+    });
+  },
+
+  commitTranscriptSourceSet(input: {
+    organizationId: string;
+    workspaceId: string;
+    sourceSetId?: string;
+    expectedVersion?: number;
+    label: string;
+    description?: string;
+    members: Array<{ sourceId: string; versionSelector: string; role: 'primary' | 'supporting' | 'contradictory' | 'reference'; note?: string }>;
+  }) {
+    const label = input.label.trim();
+    const description = input.description?.trim();
+    if (!label || Array.from(label).length > 240 || (description && Array.from(description).length > 1_000)) {
+      throw new EnterpriseIntelligenceClientError('TRANSCRIPT_SOURCE_SET_INPUT_INVALID');
+    }
+    return invokeCommand({
+      commandType: 'transcript.source-set.create-version',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        ...(input.sourceSetId ? { sourceSetId: requireUuidSelector(input.sourceSetId) } : {}),
+        displayLabel: label,
+        ...(description ? { description } : {}),
+        ownerModule: 'assess',
+        purpose: description || label,
+        lock: true,
+        expectedVersion: input.expectedVersion ?? 0,
+        items: validateTranscriptSourceSetSelection(input.members).map(member => ({
+          sourceVersionId: member.versionSelector,
+          ordinal: member.ordinal,
+          role: member.role,
+          ...(member.note ? { note: member.note } : {}),
+        })),
+      },
+    });
+  },
+
+  lockTranscriptInputBundle(input: { organizationId: string; workspaceId: string; inputBundleId?: string; expectedVersion?: number; sourceSetVersionSelectors: string[]; label: string }) {
+    const sourceSetVersionSelectors = input.sourceSetVersionSelectors.map(requireUuidSelector);
+    if (!input.label.trim() || sourceSetVersionSelectors.length < 1 || sourceSetVersionSelectors.length > 20 || new Set(sourceSetVersionSelectors).size !== sourceSetVersionSelectors.length) {
+      throw new EnterpriseIntelligenceClientError('TRANSCRIPT_INPUT_BUNDLE_INVALID');
+    }
+    return invokeCommand({
+      commandType: 'transcript.input-bundle.lock',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        ...(input.inputBundleId ? { inputBundleId: requireUuidSelector(input.inputBundleId) } : {}),
+        ownerModule: 'assess',
+        expectedVersion: input.expectedVersion ?? 0,
+        sourceSets: sourceSetVersionSelectors.map((sourceSetVersionId, index) => ({ sourceSetVersionId, ordinal: index + 1, purpose: input.label.trim() })),
+      },
+    });
+  },
+
+  setTranscriptJourneyState(input: { organizationId: string; workspaceId: string; journeyId?: string; desiredExitModule: 'assess' | 'studio' | 'delivery' | 'monitor'; status: 'active' | 'stopped' }) {
+    return invokeCommand({
+      commandType: 'transcript.journey.set-state',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        ...(input.journeyId ? { journeyId: requireUuidSelector(input.journeyId) } : {}),
+        entryModule: 'assess',
+        desiredExitModule: input.desiredExitModule,
+        status: input.status,
+      },
+    });
+  },
+
+  extractTranscriptAssessBundle(input: {
+    organizationId: string;
+    workspaceId: string;
+    inputBundleId: string;
+    inputBundleVersionSelector: string;
+    expectedInputBundleVersion: number;
+    selections: Array<TranscriptSourceSetLineageSelector & { sourceVersionSelector: string }>;
+  }) {
+    const inputBundleId = requireUuidSelector(input.inputBundleId);
+    const inputBundleVersionSelector = requireUuidSelector(input.inputBundleVersionSelector);
+    if (!Number.isSafeInteger(input.expectedInputBundleVersion) || input.expectedInputBundleVersion < 1
+      || input.selections.length < 1 || input.selections.length > 20
+      || new Set(input.selections.map(item => item.sourceVersionSelector)).size !== input.selections.length) {
+      throw new EnterpriseIntelligenceClientError('TRANSCRIPT_INPUT_BUNDLE_INVALID');
+    }
+    return Promise.all(input.selections.map(selection => invokeCommand({
+      commandType: 'transcript.assess.extract',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        inputBundleId, inputBundleVersionSelector, expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sourceSetId: requireUuidSelector(selection.sourceSetId),
+        sourceSetVersionSelector: requireUuidSelector(selection.sourceSetVersionSelector),
+        expectedSourceSetVersion: selection.expectedVersion,
+        sourceVersionSelector: requireUuidSelector(selection.sourceVersionSelector),
+      },
+    })));
+  },
+
+  reviewTranscriptAssessCandidate(input: {
+    organizationId: string; workspaceId: string; candidateId: string; candidateVersion: number;
+    inputBundleId: string; inputBundleVersionSelector: string; expectedInputBundleVersion: number;
+    sourceSetId: string; sourceSetVersionSelector: string; expectedSourceSetVersion: number; sourceVersionSelector: string;
+    status: 'accepted' | 'rejected' | 'edited'; value?: string; reason?: string;
+    relationship?: 'neutral' | 'supporting' | 'contradictory'; applicationIntent?: TranscriptAssessApplicationIntent; applyTarget?: string;
+  }) {
+    if (!Number.isSafeInteger(input.candidateVersion) || input.candidateVersion < 1
+      || !Number.isSafeInteger(input.expectedInputBundleVersion) || input.expectedInputBundleVersion < 1
+      || !Number.isSafeInteger(input.expectedSourceSetVersion) || input.expectedSourceSetVersion < 1) {
+      throw new EnterpriseIntelligenceClientError('TRANSCRIPT_CANDIDATE_STALE');
+    }
+    return invokeCommand({
+      commandType: 'transcript.assess.candidate.review',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        candidateId: requireUuidSelector(input.candidateId), candidateVersion: input.candidateVersion, status: input.status,
+        inputBundleId: requireUuidSelector(input.inputBundleId),
+        inputBundleVersionSelector: requireUuidSelector(input.inputBundleVersionSelector),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sourceSetId: requireUuidSelector(input.sourceSetId),
+        sourceSetVersionSelector: requireUuidSelector(input.sourceSetVersionSelector),
+        expectedSourceSetVersion: input.expectedSourceSetVersion,
+        sourceVersionSelector: requireUuidSelector(input.sourceVersionSelector),
+        ...(input.value !== undefined ? { value: input.value } : {}), ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.relationship ? { relationship: input.relationship } : {}), ...(input.applicationIntent ? { applicationIntent: input.applicationIntent } : {}),
+        ...(input.applyTarget ? { applyTarget: input.applyTarget } : {}),
+      },
+    });
+  },
+
+  previewTranscriptAssessApply(input: {
+    organizationId: string; workspaceId: string; assessDraftId: string; expectedDraftVersion: number;
+    inputBundleId: string; inputBundleVersionSelector: string; expectedInputBundleVersion: number;
+    sourceSetVersions: TranscriptSourceSetLineageSelector[];
+    selections: Array<{ candidateId: string; candidateVersion: number; intent: TranscriptAssessApplicationIntent; target: string }>;
+  }) {
+    if (input.selections.length < 1 || input.selections.length > 100) throw new EnterpriseIntelligenceClientError('TRANSCRIPT_ASSESS_BATCH_LIMIT');
+    return invokeCommand({
+      commandType: 'transcript.assess.apply.preview',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        assessDraftId: requireUuidSelector(input.assessDraftId),
+        expectedDraftVersion: input.expectedDraftVersion,
+        inputBundleId: requireUuidSelector(input.inputBundleId),
+        inputBundleVersionSelector: requireUuidSelector(input.inputBundleVersionSelector),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sourceSetVersions: encodeTranscriptSourceSetLineage(input.sourceSetVersions),
+        selections: input.selections.map(selection => ({ ...selection, candidateId: requireUuidSelector(selection.candidateId) })),
+      },
+    });
+  },
+
+  resolveTranscriptAssessConflict(input: { organizationId: string; workspaceId: string; conflictId: string; resolutionVersion: number; resolution: 'choose_candidate' | 'retain_manual' | 'authored_resolution'; candidateId?: string; authoredValue?: string; rationale: string }) {
+    if (!Number.isSafeInteger(input.resolutionVersion) || input.resolutionVersion < 0 || input.rationale.trim().length < 4) throw new EnterpriseIntelligenceClientError('TRANSCRIPT_CONFLICT_RESOLUTION_INVALID');
+    return invokeCommand({
+      commandType: 'transcript.assess.conflict.resolve',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        conflictId: requireUuidSelector(input.conflictId), resolutionVersion: input.resolutionVersion, resolution: input.resolution,
+        ...(input.candidateId ? { candidateId: requireUuidSelector(input.candidateId) } : {}),
+        ...(input.authoredValue ? { authoredValue: input.authoredValue } : {}), rationale: input.rationale.trim(),
+      },
+    });
+  },
+
+  applyTranscriptAssessPreview(input: {
+    organizationId: string; workspaceId: string; previewBatchId: string; assessDraftId: string; expectedDraftVersion: number;
+    inputBundleId: string; inputBundleVersionSelector: string; expectedInputBundleVersion: number;
+    sourceSetVersions: TranscriptSourceSetLineageSelector[];
+  }) {
+    return invokeCommand({
+      commandType: 'transcript.assess.apply.commit',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        previewBatchId: requireUuidSelector(input.previewBatchId), assessDraftId: requireUuidSelector(input.assessDraftId),
+        expectedDraftVersion: input.expectedDraftVersion, inputBundleId: requireUuidSelector(input.inputBundleId),
+        inputBundleVersionSelector: requireUuidSelector(input.inputBundleVersionSelector),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sourceSetVersions: encodeTranscriptSourceSetLineage(input.sourceSetVersions),
+      },
     });
   },
 

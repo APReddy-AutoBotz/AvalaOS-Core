@@ -1,0 +1,61 @@
+name: Governed transcript flow PR A
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transcript-flow-pr-a-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-head-governed-evidence:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PR_A_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+      PR_A_EXACT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PR1D_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact checked-out head
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$PR_A_EXACT_HEAD_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify registry, fixtures, personas, provenance, and adversarial rejection contract
+        run: npm run test:transcript-flow:evidence-contract
+      - name: Execute the exact 33-command PR A and retained-platform gate registry
+        run: node scripts/runTranscriptFlowEvidence.mjs
+      - name: Independently verify per-assertion exact-head evidence
+        run: npm run test:transcript-flow:evidence
+      - name: Upload sanitized exact-head PR A evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governed-transcript-pr-a-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: output/process-lifecycle/
+          if-no-files-found: error
+          retention-days: 14

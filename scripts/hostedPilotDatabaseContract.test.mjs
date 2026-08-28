@@ -3,6 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertAuthorityTableCatalog, assertExactMigrationLedger, assertSecurityDefinerCatalog, assertServiceOnlyRoutineCatalog, SERVICE_ONLY_HOSTED_RPCS } from './hostedPilotDatabaseVerify.mjs';
 import { CATALOG_LIMITS, inventoryConnectedHostedTarget } from './hostedPilotDatabaseInventory.mjs';
+import {
+  HOSTED_EVIDENCE_FAMILIES,HOSTED_EVIDENCE_FAMILY_CONTRACTS,HOSTED_SCENARIO_SOURCE_PATH,HOSTED_SCENARIO_SOURCE_SHA256,
+  canonicalHostedSourceSha256,hostedEvidenceFamilyContractSha256,
+} from './hostedEvidenceFamilyAttestation.mjs';
 
 const migration=await readFile(new URL('../supabase/migrations/20260811120000_hosted_nonproduction_pilot_activation.sql',import.meta.url),'utf8');
 const hardeningMigration=await readFile(new URL('../supabase/migrations/20260811130000_hosted_security_advisor_hardening.sql',import.meta.url),'utf8');
@@ -12,6 +16,7 @@ const verificationMigration=await readFile(new URL('../supabase/migrations/20260
 const identityConvergenceMigration=await readFile(new URL('../supabase/migrations/20260811180000_hosted_forward_migration_identity_convergence.sql',import.meta.url),'utf8');
 const executedEvidenceMigration=await readFile(new URL('../supabase/migrations/20260811190000_hosted_executed_evidence_convergence.sql',import.meta.url),'utf8');
 const currentExerciseMigration=await readFile(new URL('../supabase/migrations/20260811200000_hosted_current_exercise_evidence_binding.sql',import.meta.url),'utf8');
+const provenanceMigration=await readFile(new URL('../supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql',import.meta.url),'utf8');
 const recoveryAuthorityMigration=await readFile(new URL('../supabase/migrations/20260811150000_hosted_recovery_operator_authority_convergence.sql',import.meta.url),'utf8');
 const applyScript=await readFile(new URL('./hostedPilotApply.mjs',import.meta.url),'utf8');
 const applySafety=await readFile(new URL('./hostedPilotApplySafety.mjs',import.meta.url),'utf8');
@@ -175,6 +180,57 @@ test('hosted result recording consumes exact current hosted evidence families on
   assert.match(verifyScript,/count\(DISTINCT family\.evidence_family\)[\s\S]+exact_exercise_family_count/);
   assert.match(verifyScript,/exact_exercise_family_count\)!==5/);
   assert.doesNotMatch(currentExerciseMigration,/hosted_pilot_synthetic_subjects|hosted_pilot_provider_simulations|pilot_operations_recovery_evidence_ingestions/);
+});
+
+test('hosted family provenance contract is mechanically cross-validated with the runtime registry',()=>{
+  for(const family of HOSTED_EVIDENCE_FAMILIES){
+    const contract=HOSTED_EVIDENCE_FAMILY_CONTRACTS[family];
+    assert.match(provenanceMigration,new RegExp(`WHEN '${family.replaceAll('-','\\-')}'`));
+    for(const testId of contract.testIds) assert.match(provenanceMigration,new RegExp(testId));
+    for(const owned of contract.assertions){
+      assert.match(provenanceMigration,new RegExp(owned.assertionId.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+      assert.match(provenanceMigration,new RegExp(owned.sourcePath.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+      assert.equal(owned.sourcePath,HOSTED_SCENARIO_SOURCE_PATH,'hosted assertions must name the executable scenario/contract source');
+      assert.equal(owned.sourceSha256,HOSTED_SCENARIO_SOURCE_SHA256,'hosted assertion source hashes must be exact and shared across the executable contract');
+    }
+    assert.match(hostedEvidenceFamilyContractSha256(family),/^sha256:[0-9a-f]{64}$/);
+  }
+  assert.match(provenanceMigration,/HOSTED_EVIDENCE_LEGACY_INGEST_DISABLED/);
+  assert.match(provenanceMigration,/current_user IS DISTINCT FROM \(SELECT pg_get_userbyid\(datdba\)/);
+  assert.match(provenanceMigration,/HOSTED_EVIDENCE_CALLER_ASSERTIONS_DISABLED/);
+  assert.match(provenanceMigration,/HOSTED_OIDC_EXECUTOR_ACL_MISMATCH/);
+  assert.match(provenanceMigration,/HOSTED_EVIDENCE_OBSERVATION_TABLE_ACL_MISMATCH/);
+  assert.match(provenanceMigration,/HOSTED_EVIDENCE_SCENARIO_TABLE_ACL_MISMATCH/);
+  assert.match(provenanceMigration,/HOSTED_RESPONSE_LOSS_PREPARATION_TABLE_ACL_MISMATCH/);
+  assert.match(provenanceMigration,/HOSTED_EXACT_RUN_EXECUTION_TABLE_ACL_MISMATCH/);
+  assert.match(provenanceMigration,/hosted_pilot_evidence_scenario_observations/);
+  assert.match(provenanceMigration,/hosted_pilot_response_loss_preparations/);
+  assert.match(provenanceMigration,/hosted_pilot_exact_run_operational_executions/);
+  assert.match(provenanceMigration,/hosted_pilot_bind_exact_run_operational_execution/);
+  assert.match(provenanceMigration,/hosted_pilot_exact_run_operational_execution_valid/);
+  assert.match(provenanceMigration,/'operationalPreparationReady',operational_preparation_ready/);
+  assert.match(provenanceMigration,/preparation\.preparation_txid=txid_current\(\)/);
+  assert.match(provenanceMigration,/hosted_pilot_execute_assertion_scenario/);
+  assert.match(provenanceMigration,/hosted_pilot_assertion_predicate_valid/);
+  for(const executedFact of ['unauthorizedReadDenied','unauthorizedMutationDenied','readErrorNondisclosing','mutationErrorNondisclosing',
+    'activeForeignScopeActor','sourceScopeProjectionAuthorized','foreignScopeExists','foreignProtectedResourceExists',
+    'foreignOrganizationMembershipAbsent','foreignWorkspaceMembershipAbsent','durableCommitBeforeRetry','exactRunScenarioSetBound','exactRunZeroEgressCount',
+    'receiptSideEffects','auditSideEffects','businessSideEffects','exactReplayResponseMatched','committedReceiptCount',
+    'resourceBusinessEffectCount','canonicalAuditEventCount','changedPayloadConflictRejected','exactResponseLossPreparationBound',
+    'exactRunRecoveryExecutionBound','exactRunRollbackExecutionBound','historicalRecoveryRowsExcluded','historicalRollbackRowsExcluded'])
+    assert.match(provenanceMigration,new RegExp(executedFact));
+  assert.doesNotMatch(provenanceMigration,/foreignScopeNonexistent/);
+  assert.match(provenanceMigration,/recovery\.artifact_sha256 IS DISTINCT FROM expected_artifact/);
+  assert.match(provenanceMigration,/receipt\.idempotency_key IS DISTINCT FROM expected_rollback_key/);
+  for(const binding of ['org_id','workspace_id','exercise_run_id','release_sha','producer_workflow_path','producer_run_id','producer_run_attempt','target_fingerprint','deployment_fingerprint'])
+    assert.match(provenanceMigration,new RegExp(binding));
+  assert.match(provenanceMigration,/hosted_pilot_oidc_preflight_legacy_internal/);
+  assert.match(provenanceMigration,/provenance_schema_version='hosted-family-assertion-v2'/);
+  assert.match(provenanceMigration,/hosted_pilot_evidence_family_derived_valid\(e\.org_id,e\.workspace_id,e\.exercise_run_id,e\.evidence_family\)/);
+  assert.match(provenanceMigration,/jsonb_array_length\(coalesce\(family_digest,'\[\]'::jsonb\)\)<>5/);
+  assert.doesNotMatch(provenanceMigration,/GRANT EXECUTE ON FUNCTION public\.hosted_pilot_ingest_exercise_evidence_family_v2/);
+  assert.equal(canonicalHostedSourceSha256(provenanceMigration),HOSTED_SCENARIO_SOURCE_SHA256,'registered hosted proof hash must equal executable migration bytes');
+  assert.doesNotMatch(provenanceMigration,/sourcePath[^\n]+20260813020000_hosted_oidc_verifier_bridge/,'OIDC/ACL bridge code is not an executable assertion source');
 });
 
 test('operational identity follows the DB-owned migration ledger instead of a stale literal tip',()=>{

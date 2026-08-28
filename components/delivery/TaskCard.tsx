@@ -18,14 +18,14 @@ interface TaskCardProps {
 
 const priorityMap: Record<TaskPriority, { icon: React.FC<{ className?: string }>; color: string; badge: string; label: string }> = {
     High: { icon: ArrowUpIcon, color: 'text-red-500', badge: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/20', label: 'High' },
-    Medium: { icon: MinusIcon, color: 'text-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20', label: 'Medium' },
+    Medium: { icon: MinusIcon, color: 'text-amber-500', badge: 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20', label: 'Medium' },
     Low: { icon: ArrowDownIcon, color: 'text-slate-400', badge: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', label: 'Low' },
 };
 
 const statusBadgeMap: Partial<Record<TaskStatus, string>> = {
     Blocked: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-500/10 dark:text-red-200 dark:border-red-500/20',
-    'On Hold': 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
-    Done: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/20',
+    'On Hold': 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
+    Done: 'bg-emerald-50 text-emerald-800 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/20',
 };
 
 const statusKebabCase = (status: TaskStatus) => status.toLowerCase().replace(/ /g, '-');
@@ -104,7 +104,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </span>
                 )}
                 {epic && (
-                    <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold" style={{ backgroundColor: `${epic.color}18`, color: epic.color }}>
+                    <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold text-slate-700 dark:text-slate-200" style={{ backgroundColor: `${epic.color}18` }}>
                         {epic.name}
                     </span>
                 )}
@@ -120,7 +120,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <div>
                 <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{task.title}</p>
                 {task.description && (
-                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-[1.15rem] text-slate-500 dark:text-slate-400">{task.description}</p>
+                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-[1.15rem] text-slate-600 dark:text-slate-400">{task.description}</p>
                 )}
             </div>
 
@@ -140,23 +140,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
                             </span>
                         </>
                     ) : (
-                        <span className="text-[11px] font-semibold text-slate-400">Unassigned</span>
+                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Unassigned</span>
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                     {hasLineage && (
-                        <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" title="Source lineage retained">
+                        <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" title="Source lineage retained">
                             Lineage
                         </span>
                     )}
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                         {task.type}
                     </span>
                 </div>
             </div>
 
             <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
-                <div className="flex min-w-0 items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                <div className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300">
                     <span title={`${priorityConfig.label} priority`} className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold ${priorityConfig.badge}`}>
                         <priorityConfig.icon className={`h-3 w-3 ${priorityConfig.color}`} />
                         {priorityConfig.label}
@@ -173,7 +173,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         </span>
                     )}
                 </div>
-                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-700 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
                     <ClockIcon className="h-3 w-3" />
                     <span>{overdue ? 'Overdue' : 'Due'} {formatDate(task.dueDate)}</span>
                 </div>

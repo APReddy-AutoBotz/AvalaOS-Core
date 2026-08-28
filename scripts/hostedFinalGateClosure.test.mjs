@@ -8,6 +8,7 @@ const workflow=await readFile(new URL('../.github/workflows/hosted-pilot-activat
 const bridge=await readFile(new URL('../.github/workflows/hosted-pilot-dispatch-bridge.yml',import.meta.url),'utf8');
 const closureMigration=await readFile(new URL('../supabase/migrations/20260812171000_hosted_evidence_execution_gate_closure.sql',import.meta.url),'utf8');
 const oidcMigration=await readFile(new URL('../supabase/migrations/20260813020000_hosted_oidc_verifier_bridge.sql',import.meta.url),'utf8');
+const derivedMigration=await readFile(new URL('../supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql',import.meta.url),'utf8');
 const oidcFunction=await readFile(new URL('../supabase/functions/hosted-pilot-github-verifier/index.ts',import.meta.url),'utf8');
 const supabaseConfig=await readFile(new URL('../supabase/config.toml',import.meta.url),'utf8');
 const netlifyProxy=await readFile(new URL('../netlify/functions/hosted-pilot-github-verifier-proxy.mjs',import.meta.url),'utf8');
@@ -15,7 +16,7 @@ const netlifyProxy=await readFile(new URL('../netlify/functions/hosted-pilot-git
 const forbiddenHostedProjectRef='fcsfvonhvyrevwhyvano';
 
 test('owner-controlled hosted evidence tables reject direct service-role mutation',()=>{
-  const exact=['hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'].map(relname=>({
+  const exact=['hosted_pilot_evidence_observations','hosted_pilot_exercise_evidence_families','hosted_pilot_verification_run_results'].map(relname=>({
     relname,owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false,service_role_mutation:false,
   }));
   assert.doesNotThrow(()=>assertOwnerOnlyEvidenceTableCatalog(exact));
@@ -24,7 +25,7 @@ test('owner-controlled hosted evidence tables reject direct service-role mutatio
 });
 
 test('hosted authority catalog is exact and does not treat all product tables as controller tables',()=>{
-  assert.equal(HOSTED_AUTHORITY_TABLES.length,20);
+  assert.equal(HOSTED_AUTHORITY_TABLES.length,21);
   const exact=HOSTED_AUTHORITY_TABLES.map(relname=>({relname,owner:'postgres',rls_enabled:true,force_rls:true,public_mutation:false,anon_mutation:false,authenticated_mutation:false}));
   assert.doesNotThrow(()=>assertAuthorityTableCatalog(exact));
   assert.throws(()=>assertAuthorityTableCatalog(exact.slice(1)),/AUTHORITY_TABLE_MISMATCH/);
@@ -47,9 +48,18 @@ test('producer uses short-lived GitHub OIDC through the same-site protected prox
   assert.match(workflow,/\.netlify\/functions\/hosted-pilot-github-verifier-proxy/);
   assert.match(workflow,/HOSTED_PILOT_VERIFIER_PROXY_TARGET_INVALID/);
   assert.match(workflow,/call_verifier preflight/);
+  assert.match(workflow,/call_verifier execute/);
+  assert.equal(workflow.match(/call_verifier execute/g)?.length,2,'workflow must commit without exposing the first business response, then retry in a later OIDC call');
+  assert.match(workflow,/response_loss_committed/);
+  assert.match(workflow,/businessResponseExposed==false/);
   assert.match(workflow,/call_verifier status/);
+  assert.match(workflow,/operationalPreparationReady/);
+  assert.match(workflow,/HOSTED_EXACT_RUN_OPERATIONAL_PREPARATION_TIMEOUT/);
   assert.match(workflow,/call_verifier finalize/);
-  assert.ok(workflow.indexOf('call_verifier preflight')<workflow.indexOf('call_verifier status'));
+  assert.ok(workflow.indexOf('call_verifier preflight')<workflow.indexOf('call_verifier execute'));
+  assert.ok(workflow.indexOf('call_verifier execute')<workflow.indexOf('call_verifier status'));
+  assert.ok(workflow.indexOf('call_verifier status')<workflow.lastIndexOf('call_verifier execute'),
+    'the second execute must wait for an independently bound exact operational preparation');
   assert.ok(workflow.indexOf('call_verifier status')<workflow.indexOf('call_verifier finalize'));
   assert.doesNotMatch(workflow,/HOSTED_PILOT_DATABASE_URL/);
   assert.doesNotMatch(workflow,/secrets\.HOSTED_PILOT_DATABASE_URL/);
@@ -88,7 +98,22 @@ test('OIDC verifier binds the signed token to the exact repository, workflow, im
   assert.match(oidcFunction,/crypto\.subtle\.verify/);
   assert.match(oidcFunction,/RSASSA-PKCS1-v1_5/);
   assert.match(oidcFunction,/SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(oidcFunction,/operation==='execute'/);
+  assert.match(oidcFunction,/hosted_pilot_oidc_execute/);
   assert.doesNotMatch(oidcFunction,/console\.log\(token|console\.error\(token/);
+});
+
+test('OIDC execute derives immutable observations and accepts no caller outcomes',()=>{
+  assert.match(derivedMigration,/hosted_pilot_evidence_observations/);
+  assert.match(derivedMigration,/hosted_pilot_evidence_scenario_observations/);
+  assert.match(derivedMigration,/hosted_pilot_execute_evidence_families_internal/);
+  assert.match(derivedMigration,/hosted_pilot_execute_assertion_scenario/);
+  assert.match(derivedMigration,/hosted_pilot_assertion_predicate_valid/);
+  assert.match(derivedMigration,/HOSTED_SCENARIO_OBSERVATION_CONFLICT/);
+  assert.match(derivedMigration,/HOSTED_EVIDENCE_CALLER_ASSERTIONS_DISABLED/);
+  assert.match(derivedMigration,/observation_schema_version='hosted-family-derived-observation-v1'/);
+  assert.match(derivedMigration,/hosted_pilot_evidence_family_derived_valid\(e\.org_id,e\.workspace_id,e\.exercise_run_id,e\.evidence_family\)/);
+  assert.doesNotMatch(oidcFunction,/assertionOutcomes|sourceArtifacts|result:\s*['"]PASS/);
 });
 
 test('OIDC database bridge validates migration truth, table and privileged-RPC ACLs, fail-closed recovery and exact evidence',()=>{

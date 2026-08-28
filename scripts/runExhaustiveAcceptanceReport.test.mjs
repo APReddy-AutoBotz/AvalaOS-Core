@@ -48,3 +48,48 @@ test('declaration parse failure emits sanitized fail-closed report artifacts', (
     rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('green hosted execution cannot promote a planned fixture scope', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-acceptance-planned-scope-'));
+  const resultsDir = path.join(temp, 'results');
+  const playwrightPath = path.join(temp, 'playwright.json');
+  const exactTitle = '[SANDBOX-001] Sandbox: access';
+  const playwright = {
+    suites: [{
+      specs: [{
+        title: exactTitle,
+        tests: ['desktop-chromium', 'pixel-7-chromium'].map(projectName => ({
+          projectName,
+          expectedStatus: 'passed',
+          results: [{ status: 'passed', attachments: [] }],
+        })),
+      }],
+    }],
+  };
+
+  try {
+    writeFileSync(playwrightPath, JSON.stringify(playwright));
+    const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ACCEPTANCE_RESULTS_DIR: resultsDir,
+        PLAYWRIGHT_JSON: playwrightPath,
+        RELEASE_SHA: 'a'.repeat(40),
+        NETLIFY_DEPLOY_ID: 'b'.repeat(24),
+        GITHUB_RUN_ID: '123456',
+        GITHUB_RUN_ATTEMPT: '2',
+        ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'stable-release',
+        ACCEPTANCE_EXECUTION_DISPOSITION: 'EXECUTED',
+      },
+    });
+    assert.notEqual(run.status, 0, 'planned coverage remains intentionally incomplete');
+    const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+    const sandbox = report.results.find(item => item.testId === 'SANDBOX-001');
+    assert.equal(sandbox.status, 'BLOCKED');
+    assert.match(sandbox.failureReason, /no separately validated same-run executed fixture scope/u);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});

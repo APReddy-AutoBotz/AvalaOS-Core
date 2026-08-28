@@ -375,7 +375,7 @@ for (const required of [
 ]) check(providerCleanupDeadlineSql.includes(required), `Provider cleanup deadline migration is missing ${required}.`);
 check(providerCleanupDeadlineSql.includes('FROM PUBLIC,anon,authenticated'), 'Cleanup deadline functions must reject browser roles.');
 check(providerCleanupDeadlineSql.match(/TO service_role/g)?.length === 2, 'Both cleanup deadline functions must remain service-only.');
-check(providerCleanupDeadlineSql.includes('enterprise_ai_claim_provider_secret_cleanup(\n  UUID,UUID,UUID,TEXT,TEXT,UUID,UUID,UUID\n) FROM service_role'), 'The superseded one-second cleanup claim must no longer be executable.');
+check(/enterprise_ai_claim_provider_secret_cleanup\(\r?\n  UUID,UUID,UUID,TEXT,TEXT,UUID,UUID,UUID\r?\n\) FROM service_role/u.test(providerCleanupDeadlineSql), 'The superseded one-second cleanup claim must no longer be executable.');
 check(!/(?:providerKey|rawKey|secretValue)/u.test(providerCleanupDeadlineSql), 'Cleanup deadline functions must not accept raw key material.');
 check(providerLifecycleSource.indexOf("secretOwnership: 'managed_write'") < providerLifecycleSource.indexOf('await deps.secretBackend.write'), 'Managed secret ownership must be persisted before the external write.');
 check(providerLifecycleSource.includes("execution.plan.secretPlanReceiptId === execution.receiptId"), 'Cleanup ownership must be bound to the current receipt plan.');

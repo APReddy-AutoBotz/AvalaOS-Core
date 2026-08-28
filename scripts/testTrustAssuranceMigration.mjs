@@ -3,7 +3,9 @@ const candidates=fs.readdirSync('supabase/migrations').filter(name=>/^\d{14}_tru
 if(candidates.length!==1)throw new Error(`Expected exactly one Trust Assurance migration, found ${candidates.length}`);
 if(candidates[0]!=='20260808190000_trust_assurance_evidence_hub.sql')throw new Error(`Trust migration must follow the accepted 20260808180000 main tip, found ${candidates[0]}`);
 const ordered=fs.readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')).sort();
-if(ordered.at(-1)!==candidates[0]||new Set(ordered.map(name=>name.slice(0,14))).size!==ordered.length)throw new Error('Trust migration chain must have unique ordered versions and the canonical Trust tip');
+const trustIndex=ordered.indexOf(candidates[0]);
+if(new Set(ordered.map(name=>name.slice(0,14))).size!==ordered.length)throw new Error('Trust migration chain must have unique ordered versions');
+if(trustIndex<1||ordered[trustIndex-1]!=='20260808180000_enterprise_promotion_ancestry_dirty_history_preflight.sql')throw new Error('Trust migration must immediately follow the accepted 20260808180000 main tip');
 const file=`supabase/migrations/${candidates[0]}`;const sql=fs.readFileSync(file,'utf8');
 const tables=['trust_claims','trust_claim_versions','trust_evidence','trust_evidence_versions','trust_claim_evidence_links','trust_review_events','trust_snapshots','trust_publication_events','trust_current_publications','trust_command_receipts','trust_audit_events'];
 for(const table of tables){if(!sql.includes(`CREATE TABLE public.${table}`)||!sql.includes(`'${table}'`))throw new Error(`Missing governed table ${table}`)}
