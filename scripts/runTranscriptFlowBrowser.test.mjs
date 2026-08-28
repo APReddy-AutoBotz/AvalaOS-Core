@@ -10,6 +10,7 @@ import {
   createCappedOutputCapture,
   createOwnedListeningState,
   defaultBrowserMode,
+  requestBrowserReadiness,
   runBrowserHarness,
 } from './runTranscriptFlowBrowser.mjs';
 
@@ -84,6 +85,23 @@ test('native port preflight does not misclassify a free loopback port', async ()
   successor.listen(freePort, '127.0.0.1');
   await once(successor, 'listening');
   await new Promise((resolve, reject) => successor.close(error => error ? reject(error) : resolve()));
+});
+
+test('owned readiness client supports the exact Studio private artifact port blocked by fetch', async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200, 'OK', { 'content-type': 'text/plain' });
+    response.end('ready');
+  });
+  server.listen(4190, '127.0.0.1');
+  await once(server, 'listening');
+
+  try {
+    await assert.rejects(fetch('http://127.0.0.1:4190/'), /fetch failed/);
+    const response = await requestBrowserReadiness('http://127.0.0.1:4190/');
+    assert.deepEqual(response, { ok: true, status: 200, statusText: 'OK' });
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
 
 test('live server child that never listens emits bounded diagnostics and is stopped', async () => {
@@ -218,6 +236,265 @@ test('Enterprise mode builds its dedicated harness then previews before propagat
   assert.equal(server.wasKilled, true);
 });
 
+test('full-platform fixture mode owns the exact local preview lifecycle before campaign preflight', async () => {
+  const mode = browserModeByFlag.get('--full-platform');
+  assert.deepEqual(mode, {
+    label: 'Full-platform fixture campaign',
+    port: '4173',
+    config: 'playwright.full-platform.config.ts',
+    readinessPath: '/sandbox',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING: 'authorized',
+      SITE_NAME: 'avalaos-pilot',
+    },
+    playwrightEnvironment: {
+      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4173',
+      FULL_PLATFORM_EXECUTION_MODE: 'fixture',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('build')) {
+      const build = new FakeChild();
+      queueMicrotask(() => {
+        build.exitCode = 0;
+        build.emit('close', 0, null);
+      });
+      return build;
+    }
+    if (arguments_.includes('preview')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4173/\n');
+      });
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].arguments_.includes('build'));
+  assert.equal(calls[0].options.env.AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING, 'authorized');
+  assert.equal(calls[0].options.env.SITE_NAME, 'avalaos-pilot');
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('--strictPort'));
+  assert.ok(calls[1].arguments_.includes('4173'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.full-platform.config.ts'));
+  assert.equal(calls[2].options.env.FULL_PLATFORM_BASE_URL, 'http://127.0.0.1:4173');
+  assert.equal(calls[2].options.env.FULL_PLATFORM_EXECUTION_MODE, 'fixture');
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
+test('Studio private artifacts mode owns its preview lifecycle and disables Playwright webServer ownership', async () => {
+  const mode = browserModeByFlag.get('--studio-private-artifacts');
+  assert.deepEqual(mode, {
+    label: 'Studio private artifacts',
+    port: '4190',
+    config: 'playwright.studio-private-artifacts.config.ts',
+    readinessPath: '/tests/browser/studioPrivateArtifactsHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD: 'true',
+    },
+    playwrightEnvironment: {
+      STUDIO_PRIVATE_ARTIFACT_EXTERNAL_SERVER: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('build')) {
+      const build = new FakeChild();
+      queueMicrotask(() => {
+        build.exitCode = 0;
+        build.emit('close', 0, null);
+      });
+      return build;
+    }
+    if (arguments_.includes('preview')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4190/\n');
+      });
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].arguments_.includes('build'));
+  assert.equal(calls[0].options.env.STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD, 'true');
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('--strictPort'));
+  assert.ok(calls[1].arguments_.includes('4190'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.studio-private-artifacts.config.ts'));
+  assert.equal(calls[2].options.env.STUDIO_PRIVATE_ARTIFACT_EXTERNAL_SERVER, 'true');
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
+test('Pilot Operations mode owns its Vite lifecycle and preserves automated-test runtime mode', async () => {
+  const mode = browserModeByFlag.get('--pilot-operations');
+  assert.deepEqual(mode, {
+    label: 'Pilot Operations',
+    port: '4427',
+    config: 'playwright.pilot-operations.config.ts',
+    readinessPath: '/tests/browser/pilotOperationsHarness.html',
+    serverCommand: 'serve',
+    runtimeMode: 'automated_test',
+    playwrightEnvironment: {
+      PILOT_OPERATIONS_EXTERNAL_SERVER: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('--port')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4427/\n');
+      });
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].arguments_.includes('--strictPort'));
+  assert.ok(calls[0].arguments_.includes('4427'));
+  assert.equal(calls[0].options.env.VITE_AVALA_RUNTIME_MODE, 'automated_test');
+  assert.ok(calls[1].arguments_.includes('--config=playwright.pilot-operations.config.ts'));
+  assert.equal(calls[1].options.env.PILOT_OPERATIONS_EXTERNAL_SERVER, 'true');
+  assert.equal(calls[1].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
+test('retained PR 1E, PR 1F, and PR 1G modes own preview teardown and disable nested Playwright servers', async () => {
+  const retainedModes = [
+    ['--pr1e', 'PR 1E', '4184', 'playwright.pr1e.config.ts', 'PR1E_EXTERNAL_SERVER'],
+    ['--pr1f', 'PR 1F', '4185', 'playwright.pr1f.config.ts', 'PR1F_EXTERNAL_SERVER'],
+    ['--pr1g', 'PR 1G', '4186', 'playwright.pr1g.config.ts', 'PR1G_EXTERNAL_SERVER'],
+  ];
+
+  for (const [flag, label, port, config, externalServerVariable] of retainedModes) {
+    const mode = browserModeByFlag.get(flag);
+    assert.deepEqual(mode, {
+      label,
+      port,
+      config,
+      readinessPath: '/',
+      serverCommand: 'preview',
+      build: true,
+      playwrightEnvironment: {
+        [externalServerVariable]: 'true',
+      },
+    });
+
+    const calls = [];
+    const server = new FakeChild();
+    const spawnImpl = (_command, arguments_, options) => {
+      calls.push({ arguments_, options });
+      if (arguments_.includes('build')) {
+        const build = new FakeChild();
+        queueMicrotask(() => {
+          build.exitCode = 0;
+          build.emit('close', 0, null);
+        });
+        return build;
+      }
+      if (arguments_.includes('preview')) {
+        queueMicrotask(() => {
+          server.stdout.write(`  ➜  Local:   http://127.0.0.1:${port}/\n`);
+        });
+        return server;
+      }
+      const playwright = new FakeChild();
+      queueMicrotask(() => {
+        playwright.exitCode = 0;
+        playwright.emit('close', 0, null);
+      });
+      return playwright;
+    };
+
+    const exitCode = await runBrowserHarness({
+      mode,
+      environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+      spawnImpl,
+      fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+      readinessTimeoutMs: 100,
+      readinessPollIntervalMs: 1,
+      portPreflightImpl: async () => {},
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(calls.length, 3);
+    assert.ok(calls[0].arguments_.includes('build'));
+    assert.ok(calls[1].arguments_.includes('preview'));
+    assert.ok(calls[1].arguments_.includes('--strictPort'));
+    assert.ok(calls[1].arguments_.includes(port));
+    assert.ok(calls[2].arguments_.includes(`--config=${config}`));
+    assert.equal(calls[2].options.env[externalServerVariable], 'true');
+    assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+    assert.equal(server.wasKilled, true);
+  }
+});
+
 test('default transcript mode builds its dedicated harness then previews before Playwright', async () => {
   const calls = [];
   const server = new FakeChild();
@@ -275,7 +552,6 @@ test('foreign HTTP 200 on the Enterprise port is rejected and preserved without 
   await once(foreignServer, 'listening');
 
   try {
-    const startedAt = Date.now();
     const result = await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [
         'scripts/runTranscriptFlowBrowser.mjs', '--enterprise-intelligence',
@@ -307,7 +583,6 @@ test('foreign HTTP 200 on the Enterprise port is rejected and preserved without 
 
     assert.notEqual(result.code, 0, `runner unexpectedly passed:\n${result.stdout}\n${result.stderr}`);
     assert.equal(result.signal, null);
-    assert.ok(Date.now() - startedAt < 5_000, 'occupied-port preflight did not fail before build');
     assert.match(result.stderr, /browser port preflight rejected 127\.0\.0\.1:4191 \(EADDRINUSE\): address already in use/);
     assert.match(result.stderr, /No build or Playwright process was started/);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /building client environment for production/i);

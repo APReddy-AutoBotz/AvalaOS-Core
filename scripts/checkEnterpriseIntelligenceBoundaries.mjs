@@ -228,7 +228,7 @@ if (!(enterpriseSuccessFinalization.indexOf('await assertCurrentAuthority')
   throw new Error('Enterprise success finalization requires current authority both before commit and before disclosure.');
 }
 const enterpriseFailureFinalization = command.slice(
-  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
   command.indexOf('export const handleEnterpriseIntelligenceOptions'),
 );
 if (!(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
@@ -238,8 +238,8 @@ if (!(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')
   throw new Error('Enterprise failure finalization requires current authority both before commit and before disclosure.');
 }
 const enterpriseRecovery = command.slice(
-  command.indexOf('if (claimedReceipt && claimedAuthority && claimedCommandType) {'),
-  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  command.indexOf('if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload) {'),
+  command.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
 );
 if (!(enterpriseRecovery.indexOf('await assertCurrentAuthority') >= 0
   && enterpriseRecovery.indexOf('await assertCurrentAuthority') < enterpriseRecovery.indexOf('reloadEnterpriseReceipt')

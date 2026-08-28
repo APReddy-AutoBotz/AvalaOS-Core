@@ -56,15 +56,18 @@ const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGener
     const studioPresentationContext = marketingStudioCapture && studioContext
         ? createMarketingStudioCaptureContext(studioContext)
         : studioContext;
-    const showGovernedWorkspace = Boolean(studioPresentationContext && (serverAuthorityAvailable || studioTransport));
+    const governedStudioReadAvailable = studioPresentationContext?.capabilities.some(capability => [
+        'studio.artifacts.read', 'studio.sources.read', 'studio.templates.read', 'studio.handoffs.read',
+    ].includes(capability)) === true;
+    const showGovernedWorkspace = Boolean(studioPresentationContext && governedStudioReadAvailable && (serverAuthorityAvailable || studioTransport));
 
     const sortedGenerations = [...generations].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
     const artifactCount = generations.reduce((sum, generation) => sum + Object.keys(generation.artifacts || {}).length, 0);
 
     return (
         <div data-testid="studio-application-route">
-            {showGovernedWorkspace && studioPresentationContext && <StudioArtifactWorkspace key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${marketingStudioCapture ? 'capture' : 'live'}`} context={studioPresentationContext} capabilities={studioPresentationContext.capabilities} captureMode={marketingStudioCapture} transport={studioTransport} />}
-            {studioPresentationContext && !showGovernedWorkspace && <section className="av-surface mt-6 p-5" aria-labelledby="studio-server-boundary-title"><h2 id="studio-server-boundary-title" className="text-lg font-black text-slate-950 dark:text-white">Governed artifact workspace unavailable in the local sandbox</h2><p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Canonical Studio artifacts require a server-authorized tenant workspace. This local synthetic view sends no persistence or provider requests; the unverified archive remains available below for interface review.</p></section>}
+            {showGovernedWorkspace && studioPresentationContext && <StudioArtifactWorkspace key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${studioPresentationContext.userId}:${studioPresentationContext.authorizationVersion}:${marketingStudioCapture ? 'capture' : 'live'}`} context={studioPresentationContext} capabilities={studioPresentationContext.capabilities} captureMode={marketingStudioCapture} transport={studioTransport} />}
+            {studioPresentationContext && !showGovernedWorkspace && <section className="av-surface mt-6 p-5" aria-labelledby="studio-server-boundary-title"><h2 id="studio-server-boundary-title" className="text-lg font-black text-slate-950 dark:text-white">Governed artifact workspace unavailable</h2><p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Canonical Studio artifacts require a current server-authorized read capability for this tenant workspace. No local persistence or provider fallback is offered; the unverified archive remains available below for reference.</p></section>}
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Legacy generated archive · unverified projection</p>

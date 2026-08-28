@@ -440,6 +440,24 @@ export const enterpriseIntelligenceClient = {
     });
   },
 
+  commitStudioTranscriptSourceSet(input: {
+    organizationId: string;
+    workspaceId: string;
+    sourceSetId?: string;
+    expectedVersion?: number;
+    label: string;
+    description?: string;
+    members: Array<{ sourceId: string; versionSelector: string; role: 'primary' | 'supporting' | 'contradictory' | 'reference'; note?: string }>;
+  }) {
+    const label = input.label.trim();
+    const description = input.description?.trim();
+    if (!label || Array.from(label).length > 240 || (description && Array.from(description).length > 1_000)) throw new EnterpriseIntelligenceClientError('TRANSCRIPT_SOURCE_SET_INPUT_INVALID');
+    return invokeCommand({
+      commandType: 'transcript.source-set.create-version', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: { ...(input.sourceSetId ? { sourceSetId: requireUuidSelector(input.sourceSetId) } : {}), displayLabel: label, ...(description ? { description } : {}), ownerModule: 'studio', purpose: description || label, lock: true, expectedVersion: input.expectedVersion ?? 0, items: validateTranscriptSourceSetSelection(input.members).map(member => ({ sourceVersionId: member.versionSelector, ordinal: member.ordinal, role: member.role, ...(member.note ? { note: member.note } : {}) })) },
+    });
+  },
+
   lockTranscriptInputBundle(input: { organizationId: string; workspaceId: string; inputBundleId?: string; expectedVersion?: number; sourceSetVersionSelectors: string[]; label: string }) {
     const sourceSetVersionSelectors = input.sourceSetVersionSelectors.map(requireUuidSelector);
     if (!input.label.trim() || sourceSetVersionSelectors.length < 1 || sourceSetVersionSelectors.length > 20 || new Set(sourceSetVersionSelectors).size !== sourceSetVersionSelectors.length) {
@@ -456,6 +474,12 @@ export const enterpriseIntelligenceClient = {
         sourceSets: sourceSetVersionSelectors.map((sourceSetVersionId, index) => ({ sourceSetVersionId, ordinal: index + 1, purpose: input.label.trim() })),
       },
     });
+  },
+
+  lockStudioTranscriptInputBundle(input: { organizationId: string; workspaceId: string; inputBundleId?: string; expectedVersion?: number; sourceSetVersionSelectors: string[]; label: string }) {
+    const sourceSetVersionSelectors = input.sourceSetVersionSelectors.map(requireUuidSelector);
+    if (!input.label.trim() || sourceSetVersionSelectors.length < 1 || sourceSetVersionSelectors.length > 20 || new Set(sourceSetVersionSelectors).size !== sourceSetVersionSelectors.length) throw new EnterpriseIntelligenceClientError('TRANSCRIPT_INPUT_BUNDLE_INVALID');
+    return invokeCommand({ commandType: 'transcript.input-bundle.lock', organizationId: input.organizationId, workspaceId: input.workspaceId, payload: { ...(input.inputBundleId ? { inputBundleId: requireUuidSelector(input.inputBundleId) } : {}), ownerModule: 'studio', expectedVersion: input.expectedVersion ?? 0, sourceSets: sourceSetVersionSelectors.map((sourceSetVersionId,index) => ({ sourceSetVersionId, ordinal:index+1, purpose:input.label.trim() })) } });
   },
 
   setTranscriptJourneyState(input: { organizationId: string; workspaceId: string; journeyId?: string; desiredExitModule: 'assess' | 'studio' | 'delivery' | 'monitor'; status: 'active' | 'stopped' }) {

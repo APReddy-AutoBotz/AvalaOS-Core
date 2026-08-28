@@ -659,7 +659,7 @@ check(enterpriseSuccessFinalization.indexOf('await assertCurrentAuthority')
     > enterpriseSuccessFinalization.indexOf('await completeReceipt'),
 'Enterprise success finalization must reauthorize before commit and disclosure.');
 const enterpriseFailureFinalization = commandSource.slice(
-  commandSource.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
+  commandSource.indexOf("if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload && commandError.code !== 'RECEIPT_FINALIZATION_FAILED')"),
   commandSource.indexOf('export const handleEnterpriseIntelligenceOptions'),
 );
 check(enterpriseFailureFinalization.indexOf('await assertCurrentAuthority')

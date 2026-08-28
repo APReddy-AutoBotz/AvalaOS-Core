@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Governed multi-source transcript sequence
+
+PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted boundary covers the default-off Source Library, independently versioned Assess source sets and locked bundles, transcript-assisted Assess review/apply, the unified provider registry and atomic budget authority, Desktop/Pixel browser evidence, all 15 applicable workflows, Netlify preview, and fresh independent review. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
+
+Governed multi-source transcript PR B is the active substantial implementation boundary. It owns independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess handoff, governed tenant templates, structured editing and source coverage, Studio adoption of the unified provider gateway, exact lineage/backfill, and feature-owned verification. PR C Delivery/Monitor generalization remains separately gated and is not part of PR B.
+
 ## Studio PR B accepted boundary
 
 Studio PR B is accepted through PR #217 and corrective PR #218 on verified main baseline `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`: approved PR #216 versions only, deterministic rendition bytes, create-only private storage, brokered no-store downloads, retention snapshots, legal holds, governed deletion, reconciliation, and feature-owned CI. The five PR #217 post-merge findings are closed by PR #218 and both PRs have zero unresolved review threads. No live infrastructure access or deployment was performed. Safe rollback disables mutation, rendition, download, and deletion execution while retaining committed metadata and read-only projections for additive repair.
@@ -9,7 +15,7 @@ Studio PR B is accepted through PR #217 and corrective PR #218 on verified main 
 Studio PR A owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The accepted Studio PR B boundary above owns private storage, rendition, brokered download, retention, hold, deletion, and reconciliation source authority. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
 
 
-Status: active plan; PR 1A through PR #206, PR 1B, PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, PR #212 / PR 1F, PR #214/#215 / PR 1G, PR #216, and PR #217 plus corrective PR #218 are accepted; Studio PR B is post-merge verified at `bc6dfcde2806bd0ea2067d64baf6fea91d32c207`
+Status: active plan; the accepted sequence includes PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B is authorized and active; PR C remains separately gated
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 

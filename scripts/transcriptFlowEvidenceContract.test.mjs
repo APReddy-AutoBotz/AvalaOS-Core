@@ -63,6 +63,22 @@ test('independent command source contract rejects a substituted canonical comman
   assert.throws(() => validateEvidenceContract(root, substituted), /PR_A_COMMAND_SOURCE_CONTRACT|PR_A_COMMAND_DUPLICATE_STRING/u);
 });
 
+test('PR-A provenance scope excludes later PR process-lifecycle contracts and fixtures', () => {
+  const scoped = new Set(collectPrAProvenanceFiles(root));
+  assert.equal(scoped.has('testing/process-lifecycle/contracts/pr-a-assertion-registry.json'), true);
+  assert.equal(scoped.has('testing/process-lifecycle/fixtures/pr-a-fixture-registry.json'), true);
+  for (const file of [
+    'testing/process-lifecycle/contracts/pr-b-assertion-registry.json',
+    'testing/process-lifecycle/contracts/pr-b-source-provenance.json',
+    'testing/process-lifecycle/fixtures/studio-pr-b/fixture-registry.json',
+  ]) assert.equal(scoped.has(file), false, `PR_A_PROVENANCE_SCOPE_LEAK:${file}`);
+});
+
+test('checked-in PR-A provenance validates without in-memory digest replacement', () => {
+  const baseGitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  assert.doesNotThrow(() => validateProvenance(root, baseGitSha));
+});
+
 test('provenance rejects omitted and fake-hash PR-A sources, including the forward migration', () => {
   const baseGitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   const provenance = JSON.parse(readFileSync(path.join(root, 'tests/acceptance/source-provenance.json'), 'utf8'));

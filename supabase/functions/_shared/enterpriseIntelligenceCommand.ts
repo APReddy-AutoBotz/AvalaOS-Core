@@ -670,14 +670,31 @@ const enterpriseCommandCapabilities: Record<EnterpriseDomainCommandType, readonl
   'assemble.blueprint.create': ['assemble.manage'],
 };
 
-export const requiredCapabilitiesForEnterpriseCommand = (commandType: EnterpriseCommandType) => (
-  [...(enterpriseCommandCapabilities[commandType as EnterpriseDomainCommandType]
-    || (() => { throw new EnterpriseCommandError('INVALID_COMMAND'); })())]
-);
+type TranscriptSourceOwnerModule = 'assess' | 'studio';
+const transcriptSourceCommands = new Set<EnterpriseCommandType>([
+  'transcript.source-set.create-version', 'transcript.input-bundle.lock',
+]);
+export const transcriptSourceOwnerModule = (value: unknown): TranscriptSourceOwnerModule => {
+  if (value !== 'assess' && value !== 'studio') throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return value;
+};
+
+export const requiredCapabilitiesForEnterpriseCommand = (
+  commandType: EnterpriseCommandType,
+  payload?: JsonObject,
+) => {
+  if (transcriptSourceCommands.has(commandType)) {
+    const ownerModule = payload === undefined ? 'assess' : transcriptSourceOwnerModule(payload.ownerModule);
+    return [ownerModule === 'studio' ? 'studio.sources.manage' : 'transcript.sources.manage'];
+  }
+  return [...(enterpriseCommandCapabilities[commandType as EnterpriseDomainCommandType]
+    || (() => { throw new EnterpriseCommandError('INVALID_COMMAND'); })())];
+};
 
 export const assertEnterpriseCommandOperationAuthority = (
   authority: Authority,
   commandType: EnterpriseCommandType,
+  payload?: JsonObject,
 ) => {
   const providerOperation = enterpriseProviderOperations[commandType];
   if (providerOperation) {
@@ -688,22 +705,28 @@ export const assertEnterpriseCommandOperationAuthority = (
       throw new EnterpriseCommandError('PERMISSION_DENIED');
     }
   }
-  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand(commandType));
+  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand(commandType, payload));
 };
 
 export const assertCurrentEnterpriseCommandAuthority = async (
   authority: Authority,
   commandType: EnterpriseCommandType,
+  payload?: JsonObject,
 ) => {
+  const providerOperation = enterpriseProviderOperations[commandType];
+  // Decode payload-derived capability selectors before the authority catch so
+  // malformed owner modules remain INVALID_PAYLOAD, never permission oracles.
+  const requiredCapabilities = providerOperation
+    ? null
+    : requiredCapabilitiesForEnterpriseCommand(commandType, payload);
   try {
     const current = await resolveAuthority(
       authority.actorId, authority.organizationId, authority.workspaceId,
     );
-    const providerOperation = enterpriseProviderOperations[commandType];
     if (providerOperation) {
       assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current));
     } else {
-      await assertFreshAuthority(current, requiredCapabilitiesForEnterpriseCommand(commandType));
+      await assertFreshAuthority(current, requiredCapabilities!);
     }
     return current;
   } catch {
@@ -1742,12 +1765,37 @@ const transcriptReceiptArgs = (authority: Authority, receipt: EnterpriseReceiptR
   p_execution_fence: receipt.execution_fence,
 });
 
+export const buildTranscriptInputBundleLockRpcInvocation = (
+  inputBundleId: string,
+  ownerModule: TranscriptSourceOwnerModule,
+  sourceSets: readonly { sourceSetVersionId: string; ordinal: number; purpose: string }[],
+  expectedVersion: number,
+  authority: Pick<Authority, 'actorId' | 'organizationId' | 'workspaceId' | 'authorizationVersion'>,
+  receipt: Pick<EnterpriseReceiptRow, 'id' | 'execution_token' | 'execution_fence'>,
+) => ({
+  name: 'enterprise_transcript_lock_input_bundle_v2' as const,
+  args: {
+    p_input_bundle: inputBundleId,
+    p_owner_module: ownerModule,
+    p_items: sourceSets,
+    p_manual_brief_hash: null,
+    p_expected_version: expectedVersion,
+    p_actor: authority.actorId,
+    p_org: authority.organizationId,
+    p_workspace: authority.workspaceId,
+    p_authorization_version: authority.authorizationVersion,
+    p_receipt: receipt.id,
+    p_execution_token: receipt.execution_token,
+    p_execution_fence: receipt.execution_fence,
+  },
+});
+
 const commandTranscriptSourceSetCreateVersion = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requireExactPayload(payload, ['ownerModule', 'displayLabel', 'purpose', 'lock', 'expectedVersion', 'items'], ['sourceSetId', 'description']);
-  requirePermission(authority, 'transcript.sources.manage');
+  const ownerModule = transcriptSourceOwnerModule(payload.ownerModule);
+  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand('transcript.source-set.create-version', payload));
   const sourceSetId = payload.sourceSetId === undefined ? plannedUuid(receipt, 'transcriptSourceSetId') : requireUuid(payload.sourceSetId);
   await ensureExecutionPlan(receipt, authority, { transcriptSourceSetId: sourceSetId });
-  if (payload.ownerModule !== 'assess' && payload.ownerModule !== 'studio') throw new EnterpriseCommandError('INVALID_PAYLOAD');
   if (typeof payload.lock !== 'boolean' || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 20) {
     throw new EnterpriseCommandError('INVALID_PAYLOAD');
   }
@@ -1774,7 +1822,7 @@ const commandTranscriptSourceSetCreateVersion = async (authority: Authority, pay
   if (submittedExpectedVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
   const label = requireString(payload.displayLabel, 160);
   return await rpc('enterprise_transcript_create_source_set_version', {
-    p_source_set: sourceSetId, p_owner_module: payload.ownerModule,
+    p_source_set: sourceSetId, p_owner_module: ownerModule,
     p_display_label: label,
     p_description: payload.description === undefined ? '' : requireString(payload.description, 2_000),
     p_purpose: requireString(payload.purpose, 1_000), p_items: items, p_lock: payload.lock,
@@ -1784,8 +1832,9 @@ const commandTranscriptSourceSetCreateVersion = async (authority: Authority, pay
 
 const commandTranscriptInputBundleLock = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
   requireExactPayload(payload, ['ownerModule', 'expectedVersion', 'sourceSets'], ['inputBundleId']);
-  requirePermission(authority, 'transcript.sources.manage');
-  if (payload.ownerModule !== 'assess' || !Array.isArray(payload.sourceSets) || payload.sourceSets.length < 1 || payload.sourceSets.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const ownerModule = transcriptSourceOwnerModule(payload.ownerModule);
+  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand('transcript.input-bundle.lock', payload));
+  if (!Array.isArray(payload.sourceSets) || payload.sourceSets.length < 1 || payload.sourceSets.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
   const sourceSets = payload.sourceSets.map((raw, index) => {
     const item = requirePayloadObject(raw); requireExactPayload(item, ['sourceSetVersionId', 'ordinal', 'purpose']);
     if (requirePositiveInteger(item.ordinal) !== index + 1) throw new EnterpriseCommandError('INVALID_PAYLOAD');
@@ -1804,10 +1853,10 @@ const commandTranscriptInputBundleLock = async (authority: Authority, payload: J
   if (plannedCurrentVersion !== undefined && plannedCurrentVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
   const submittedExpectedVersion = requirePositiveInteger(payload.expectedVersion, true);
   if (submittedExpectedVersion !== (current?.current_version || 0)) throw new EnterpriseCommandError('RESOURCE_STALE');
-  return await rpc('enterprise_transcript_lock_input_bundle', {
-    p_input_bundle: inputBundleId, p_items: sourceSets, p_manual_brief_hash: null,
-    p_expected_version: submittedExpectedVersion, ...transcriptReceiptArgs(authority, receipt),
-  });
+  const invocation = buildTranscriptInputBundleLockRpcInvocation(
+    inputBundleId, ownerModule, sourceSets, submittedExpectedVersion, authority, receipt,
+  );
+  return await rpc(invocation.name, invocation.args);
 };
 
 type TranscriptExtractionSelection = {
@@ -2372,6 +2421,7 @@ type StudioAggregateRow = {
   artifact_type: 'brd' | 'frd' | 'pdd';
   current_approved_version_id: string | null;
   lifecycle: string;
+  source_mode: 'assess_handoff' | 'direct_transcript_bundle' | 'assess_plus_transcript_bundle' | 'manual_brief';
 };
 type StudioVersionRow = { id: string; version: number; content: JsonObject; content_hash: string; lifecycle: string };
 
@@ -2391,9 +2441,13 @@ const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonO
   const studioDocumentId = requireUuid(payload.studioDocumentId);
   const aggregate = await findOne<StudioAggregateRow>(
     'studio_artifact_aggregates',
-    `select=id,artifact_type,current_approved_version_id,lifecycle&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(studioDocumentId)}`,
+    `select=id,artifact_type,current_approved_version_id,lifecycle,source_mode&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(studioDocumentId)}`,
   );
   if (!aggregate || !aggregate.current_approved_version_id || aggregate.lifecycle !== 'approved') throw new EnterpriseCommandError('RESOURCE_STALE');
+  // PR B deliberately does not implement PR C lineage generalization. Direct,
+  // hybrid and manual Studio sources therefore fail closed before any Delivery
+  // plan, receipt effect, work package or item is created.
+  if (aggregate.source_mode !== 'assess_handoff') throw new EnterpriseCommandError('COMMAND_BLOCKED');
   const version = await findOne<StudioVersionRow>(
     'studio_artifact_versions',
     `select=id,version,content,content_hash,lifecycle&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(aggregate.current_approved_version_id)}&artifact_id=eq.${encodeURIComponent(studioDocumentId)}`,
@@ -2603,9 +2657,9 @@ const commandAssembleBlueprintCreate = async (authority: Authority, payload: Jso
 const executeEnterpriseCommand = async (authority: Authority, envelope: EnterpriseCommandEnvelope, receipt: EnterpriseReceiptRow) => {
   const providerOperation = enterpriseProviderOperations[envelope.commandType];
   if (providerOperation) {
-    assertEnterpriseCommandOperationAuthority(authority, envelope.commandType);
+    assertEnterpriseCommandOperationAuthority(authority, envelope.commandType, envelope.payload);
   } else {
-    await assertFreshAuthority(authority, requiredCapabilitiesForEnterpriseCommand(envelope.commandType));
+    await assertFreshAuthority(authority, requiredCapabilitiesForEnterpriseCommand(envelope.commandType, envelope.payload));
   }
   switch (envelope.commandType) {
     case 'provider.register': return commandProviderLifecycle('provider.register', authority, envelope.payload, receipt);
@@ -2684,13 +2738,18 @@ export const deriveTranscriptCommandRequestBinding = async (
     return selection;
   }
   if (envelope.commandType === 'transcript.source-set.create-version') {
+    requireExactPayload(envelope.payload,
+      ['ownerModule', 'displayLabel', 'purpose', 'lock', 'expectedVersion', 'items'],
+      ['sourceSetId', 'description']);
+    const ownerModule = transcriptSourceOwnerModule(envelope.payload.ownerModule);
     const sourceSetId = envelope.payload.sourceSetId === undefined ? null : requireUuid(envelope.payload.sourceSetId);
     let currentVersion = 0;
     if (sourceSetId) {
-      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number }>(
-        'enterprise_source_sets', `select=org_id,workspace_id,current_version&id=eq.${encodeURIComponent(sourceSetId)}`,
+      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number; owner_module: string }>(
+        'enterprise_source_sets', `select=org_id,workspace_id,current_version,owner_module&id=eq.${encodeURIComponent(sourceSetId)}`,
       );
-      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId
+        || anywhere.owner_module !== ownerModule) {
         throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
       }
       currentVersion = anywhere.current_version;
@@ -2711,16 +2770,19 @@ export const deriveTranscriptCommandRequestBinding = async (
       if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
       sourceVersionIds.push(version.id);
     }
-    return { ...(sourceSetId ? { sourceSetId } : {}), currentVersion, sourceVersionIds };
+    return { ownerModule, ...(sourceSetId ? { sourceSetId } : {}), currentVersion, sourceVersionIds };
   }
   if (envelope.commandType === 'transcript.input-bundle.lock') {
+    requireExactPayload(envelope.payload, ['ownerModule', 'expectedVersion', 'sourceSets'], ['inputBundleId']);
+    const ownerModule = transcriptSourceOwnerModule(envelope.payload.ownerModule);
     const inputBundleId = envelope.payload.inputBundleId === undefined ? null : requireUuid(envelope.payload.inputBundleId);
     let currentVersion = 0;
     if (inputBundleId) {
-      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number }>(
-        'enterprise_module_input_bundles', `select=org_id,workspace_id,current_version&id=eq.${encodeURIComponent(inputBundleId)}`,
+      const anywhere = await findBinding<{ org_id: string; workspace_id: string; current_version: number; owner_module: string }>(
+        'enterprise_module_input_bundles', `select=org_id,workspace_id,current_version,owner_module&id=eq.${encodeURIComponent(inputBundleId)}`,
       );
-      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId) {
+      if (!anywhere || anywhere.org_id !== authority.organizationId || anywhere.workspace_id !== authority.workspaceId
+        || anywhere.owner_module !== ownerModule) {
         throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
       }
       currentVersion = anywhere.current_version;
@@ -2731,17 +2793,24 @@ export const deriveTranscriptCommandRequestBinding = async (
       throw new EnterpriseCommandError('INVALID_PAYLOAD');
     }
     const sourceSetVersionIds: string[] = [];
+    const sourceSetIds: string[] = [];
     for (const raw of envelope.payload.sourceSets) {
       const item = requirePayloadObject(raw);
       const sourceSetVersionId = requireUuid(item.sourceSetVersionId);
-      const version = await findBinding<{ id: string }>(
+      const version = await findBinding<{ id: string; source_set_id: string }>(
         'enterprise_source_set_versions',
-        `select=id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSetVersionId)}`,
+        `select=id,source_set_id&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(sourceSetVersionId)}`,
       );
       if (!version) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+      const sourceSet = await findBinding<{ id: string; owner_module: string }>(
+        'enterprise_source_sets',
+        `select=id,owner_module&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(version.source_set_id)}`,
+      );
+      if (!sourceSet || sourceSet.owner_module !== ownerModule) throw new EnterpriseCommandError('RESOURCE_NOT_FOUND');
       sourceSetVersionIds.push(version.id);
+      sourceSetIds.push(sourceSet.id);
     }
-    return { ...(inputBundleId ? { inputBundleId } : {}), currentVersion, sourceSetVersionIds };
+    return { ownerModule, ...(inputBundleId ? { inputBundleId } : {}), currentVersion, sourceSetVersionIds, sourceSetIds };
   }
   if (envelope.commandType === 'transcript.journey.set-state' && envelope.payload.journeyId !== undefined) {
     const journeyId = requireUuid(envelope.payload.journeyId);
@@ -2925,6 +2994,7 @@ export const handleEnterpriseIntelligenceRequest = async (
   let claimedReceipt: EnterpriseReceiptRow | null = null;
   let claimedAuthority: Authority | null = null;
   let claimedCommandType: EnterpriseCommandType | null = null;
+  let claimedCommandPayload: JsonObject | null = null;
   try {
     const user = await (overrides.authenticate || getAuthUser)(request);
     const body = await request.json();
@@ -2934,7 +3004,7 @@ export const handleEnterpriseIntelligenceRequest = async (
     const resolvedAuthority = await (overrides.resolveCommandAuthority || resolveAuthority)(
       user.id, organizationId, envelope.workspaceId,
     );
-    const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType);
+    const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType, envelope.payload);
     const transcriptCommandBinding = await deriveTranscriptCommandRequestBinding(
       authority,
       envelope,
@@ -2955,7 +3025,7 @@ export const handleEnterpriseIntelligenceRequest = async (
       requestHash,
       resourceType,
     });
-    const disclosureAuthority = await assertCurrentAuthority(authority, envelope.commandType);
+    const disclosureAuthority = await assertCurrentAuthority(authority, envelope.commandType, envelope.payload);
     if (receipt.status === 'committed') {
       assertCommittedEnterpriseReceiptIdentity(receipt, envelope.commandType);
       return jsonResponse({ ok: true, replayed: true, ...(receipt.response || {}) });
@@ -2970,13 +3040,14 @@ export const handleEnterpriseIntelligenceRequest = async (
     claimedReceipt = receipt;
     claimedAuthority = disclosureAuthority;
     claimedCommandType = envelope.commandType;
+    claimedCommandPayload = envelope.payload;
     if (transcriptCommandBinding) {
       await ensureExecutionPlan(receipt, disclosureAuthority, { transcriptCommandBinding });
     }
     const result = await executeCommand(disclosureAuthority, envelope, receipt);
     const resultObject: JsonObject = isRecord(result) ? result : { result };
     const resourceId = resolveEnterpriseCommandResourceId(envelope.commandType, resultObject);
-    const finalAuthority = await assertCurrentAuthority(disclosureAuthority, envelope.commandType);
+    const finalAuthority = await assertCurrentAuthority(disclosureAuthority, envelope.commandType, envelope.payload);
     claimedAuthority = finalAuthority;
     const completed = await completeReceipt(
       receipt,
@@ -2984,13 +3055,13 @@ export const handleEnterpriseIntelligenceRequest = async (
       resultObject,
       resourceId,
       async () => {
-        const reconciliationAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType);
+        const reconciliationAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType, envelope.payload);
         claimedAuthority = reconciliationAuthority;
         return reconciliationAuthority;
       },
     );
     assertCommittedEnterpriseReceiptIdentity(completed, envelope.commandType);
-    claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType);
+    claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType, envelope.payload);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {
     const commandError = error instanceof EnterpriseCommandError
@@ -3000,17 +3071,17 @@ export const handleEnterpriseIntelligenceRequest = async (
         : isSupabaseRpcError(error)
           ? mapEnterpriseCommandRpcError(error)
           : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
-    if (claimedReceipt && claimedAuthority && claimedCommandType) {
+    if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload) {
       try {
-        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
         const recovered = await (overrides.reloadReceipt || reloadEnterpriseReceipt)(claimedReceipt, claimedAuthority);
         if (recovered.status === 'committed') {
-          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
           assertCommittedEnterpriseReceiptIdentity(recovered, claimedCommandType);
           return jsonResponse({ ok: true, replayed: true, ...(recovered.response || {}) });
         }
         if (recovered.status === 'failed' || recovered.status === 'blocked') {
-          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+          claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
           return jsonResponse(
             { ...(recovered.response || enterpriseCommandErrorBody(commandError)), replayed: true },
             enterpriseCommandStatusForTerminalReceipt(recovered),
@@ -3023,7 +3094,7 @@ export const handleEnterpriseIntelligenceRequest = async (
         }
         if (commandError.code === 'RECEIPT_FINALIZATION_FAILED') {
           try {
-            claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+            claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
           } catch {
             const denied = new EnterpriseCommandError('PERMISSION_DENIED');
             return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
@@ -3032,9 +3103,9 @@ export const handleEnterpriseIntelligenceRequest = async (
         }
       }
     }
-    if (claimedReceipt && claimedAuthority && claimedCommandType && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
+    if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload && commandError.code !== 'RECEIPT_FINALIZATION_FAILED') {
       try {
-        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
       } catch {
         const denied = new EnterpriseCommandError('PERMISSION_DENIED');
         return jsonResponse(enterpriseCommandErrorBody(denied), denied.status);
@@ -3049,12 +3120,12 @@ export const handleEnterpriseIntelligenceRequest = async (
           enterpriseCommandErrorBody(commandError),
           commandError.code === 'PERMISSION_DENIED' || commandError.code === 'TENANT_ACCESS_DENIED' || commandError.code === 'COMMAND_BLOCKED',
           async () => {
-            const reconciliationAuthority = await assertCurrentAuthority(claimedAuthority!, claimedCommandType);
+            const reconciliationAuthority = await assertCurrentAuthority(claimedAuthority!, claimedCommandType, claimedCommandPayload!);
             claimedAuthority = reconciliationAuthority;
             return reconciliationAuthority;
           },
         );
-        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType);
+        claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);
       } catch (finalizationError) {
         if (finalizationError instanceof EnterpriseCommandError
           && finalizationError.code === 'PERMISSION_DENIED') {

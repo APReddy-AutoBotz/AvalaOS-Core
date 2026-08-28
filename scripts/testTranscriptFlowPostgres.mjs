@@ -87,7 +87,7 @@ try{
   await database.query(
     `INSERT INTO public.role_capabilities(role_id,capability_key)
      SELECT $1,unnest($2::text[]) ON CONFLICT DO NOTHING`,
-    [fixture.routeRole,['transcript.sources.read','transcript.sources.manage','transcript.assess.apply','transcript.journeys.manage','assess.v2.read']],
+    [fixture.routeRole,['transcript.sources.read','transcript.sources.manage','transcript.assess.apply','transcript.journeys.manage','assess.v2.read','studio.sources.manage']],
   );
   const runtimeIdentityResult=await database.query(
     `SELECT
@@ -138,8 +138,9 @@ try{
     $$`);
   await database.query(
     `INSERT INTO public.enterprise_transcript_workspace_flags(
-       org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,updated_by
-     ) VALUES($1,$2,true,true,true,true,$3)`,
+       org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,
+       studio_multisource_enabled,updated_by
+     ) VALUES($1,$2,true,true,true,true,true,$3)`,
     [fixture.org,fixture.workspace,fixture.requester],
   );
   let authorizationVersion=Number((await database.query(
@@ -272,6 +273,17 @@ try{
     return {...emptyLineage(),sourceVersionSelectors:[fixture.sources[0].sourceVersionId],sourceSets:[{id:firstSetId,versionSelector:firstV2.sourceSetVersionId,version:2}]};
   });
 
+  assert.equal(postgresRuntimeIdentity.capabilities.includes('studio.sources.manage'),true,
+    'Independent Studio reuse requires the exact Studio-owned source mutation capability');
+  await database.query(
+    `SELECT public.pr1b_assert_command_authority($1,$2,$3,'studio.sources.manage',$4)`,
+    [fixture.requester,fixture.org,fixture.workspace,authorizationVersion],
+  );
+  assert.equal((await database.query(
+    `SELECT studio_multisource_enabled FROM public.enterprise_transcript_workspace_flags
+     WHERE org_id=$1 AND workspace_id=$2`,
+    [fixture.org,fixture.workspace],
+  )).rows[0].studio_multisource_enabled,true);
   const sharedStudioSet=await sourceSet({
     id:nextUuid(),owner:'studio',label:'Independent Studio context',receiptLabel:'studio-reuse',
     items:[{sourceVersionId:fixture.sources[0].sourceVersionId,ordinal:1,role:'reference',note:'Explicit independent reuse'}],

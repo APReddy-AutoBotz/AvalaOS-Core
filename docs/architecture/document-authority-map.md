@@ -1,8 +1,8 @@
 # AvalaOS Core Document Authority Map
 
-## Studio PR A authority
+## Studio governed-artifact authority
 
-The canonical PR A Studio governed-artifact data, command, lifecycle, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. PR A remains authoritative for structured artifact generation and approval. Studio PR B private rendition, storage, brokered download, retention, legal-hold, deletion, reconciliation, and rollback authority is routed separately to `docs/architecture/studio-private-artifact-authority.md`.
+The canonical Studio governed-artifact data, command, lifecycle, source-package, template, Assess-to-Studio handoff, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. The accepted private-rendition, storage, brokered-download, retention, legal-hold, deletion, reconciliation, and rollback authority remains routed separately to `docs/architecture/studio-private-artifact-authority.md`. The active governed multi-source transcript implementation boundary and its PR A/PR B/PR C sequence are defined by `docs/planning/governed-multisource-transcript-module-handoff-plan.md`.
 
 
 ## Default Reading Route
@@ -34,6 +34,8 @@ Read only this sequence unless the active task requires more:
 | Enterprise implementation sequence and PR boundaries | `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md` |
 | Current and target trust/data/runtime architecture | `docs/architecture/current-to-target-enterprise-architecture.md` |
 | Enterprise Intelligence BYOK, evidence ingestion, Studio handoff, Delivery/Monitor lineage, Modernization, and Assemble Phase 1 authority | `docs/architecture/enterprise-intelligence-authority.md` |
+| Governed multi-source transcript PR sequence, cross-module handoffs, and acceptance gates | `docs/planning/governed-multisource-transcript-module-handoff-plan.md` |
+| Studio source packages, tenant templates, structured editing, governed generation, and Assess-to-Studio handoff consumption | `docs/architecture/studio-governed-artifact-authority.md` |
 | Active security, reliability, quality, and readiness risks | `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` |
 | Cross-layer execution-plan requirements | `PLANS.md` |
 | Product strategy and boundaries | `docs/01_PRODUCT_STRATEGY.md`, then `docs/02_PRODUCT_REQUIREMENTS.md` |
@@ -46,7 +48,7 @@ Read only this sequence unless the active task requires more:
 | Active task and accepted milestone ledger | `docs/task-ledger.md` |
 | Readiness definitions | `docs/quality/readiness-gates.md` |
 | Verification commands | `docs/quality/verification-command-matrix.md` |
-| Studio PR B private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
+| Accepted Studio private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
 | PR #217 post-merge projection, command-translation, crash-recovery, due-work, and hold/deletion serialization correction | `docs/architecture/pr217-post-merge-runtime-contract-forward-fix.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
 
@@ -66,7 +68,11 @@ PR #205 is the explicitly authorized one-time docs/config-only enterprise rebase
 
 ## PR 1D Current Authority
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retained and its decisions remain immutable. V1 `assess-core-2026-05` scoring remains unchanged. PR 1E review/approval and Studio-handoff authority, PR 1F economics/calibration, and PR 1G Application Portfolio Assessment are accepted. Hosted/live validation and deployment were not run.
+
+## Current governed-transcript authority
+
+Governed multi-source transcript PR A is accepted at source/CI level through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. Governed multi-source transcript PR B is the active substantial Studio boundary. PR C Delivery/Monitor work remains excluded. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
 
 | Avala Assess V2 domain, rule, command, persistence, compatibility, and rollback architecture | `docs/architecture/assess-v2-decision-intelligence-architecture.md` |
 

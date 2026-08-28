@@ -5,6 +5,7 @@ import {
   RecoverableEnterpriseCommandError,
   enterpriseCommandErrorBody,
   enterpriseCommandStatusForTerminalReceipt,
+  buildTranscriptInputBundleLockRpcInvocation,
   buildGroundedEvidenceCandidate,
   hashEvidenceExcerptAnchor,
   ensureEvidenceSourceUploadPlan,
@@ -17,6 +18,7 @@ import {
   parseEnterpriseCommandEnvelope,
   readEvidenceExtractionRoutePlan,
   reconcileEvidenceSourceUpload,
+  deriveTranscriptCommandRequestBinding,
   requiredCapabilitiesForEnterpriseCommand,
   resolveEnterpriseCommandResourceId,
   shouldPreserveClaimedEnterpriseReceipt,
@@ -33,6 +35,7 @@ import {
   type EnterpriseReceiptRow,
 } from './enterpriseReceipt';
 import { SupabaseRpcError, SupabaseRpcTransportError } from './supabase';
+import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence';
 
 const base = {
   commandType: 'evidence.candidate.review',
@@ -122,6 +125,32 @@ test('uses one exhaustive command-to-current-capability mapping for replay autho
   }
 });
 
+test('derives Studio and Assess source authority from the strict owner module', () => {
+  assert.deepEqual(requiredCapabilitiesForEnterpriseCommand(
+    'transcript.source-set.create-version', { ownerModule: 'studio' },
+  ), ['studio.sources.manage']);
+  assert.deepEqual(requiredCapabilitiesForEnterpriseCommand(
+    'transcript.input-bundle.lock', { ownerModule: 'assess' },
+  ), ['transcript.sources.manage']);
+  assert.throws(() => requiredCapabilitiesForEnterpriseCommand(
+    'transcript.input-bundle.lock', { ownerModule: 'delivery' },
+  ), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'INVALID_PAYLOAD');
+  prBAssertion({
+    passed: true, testId: 'STUDIO-TR-003', assertionId: 'authority.studio-source-owner-capability',
+    fixture: 'studio-owned-source-command',
+    runtimeContext: studioPrBRuntime('studio-source-author', ['studio.sources.manage'], {
+      sourcePackage: null, sourceOwnerModule: 'studio', commandType: 'transcript.source-set.create-version',
+    }),
+  });
+  prBAssertion({
+    passed: true, testId: 'STUDIO-TR-003', assertionId: 'authority.assess-source-owner-retained',
+    fixture: 'assess-owned-source-command',
+    runtimeContext: studioPrBRuntime('assess-source-author', ['transcript.sources.manage'], {
+      sourcePackage: null, sourceOwnerModule: 'assess', commandType: 'transcript.input-bundle.lock',
+    }),
+  });
+});
+
 const replayAuthority: Authority = {
   actorId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   organizationId: base.organizationId,
@@ -141,6 +170,225 @@ const replayAuthority: Authority = {
   workspaceRoleIds: new Set(['cccccccc-cccc-4ccc-8ccc-cccccccccccc']),
   authorizationVersion: 7,
 };
+
+test('enforces source-owner capability separation and builds the Studio v2 bundle RPC', () => {
+  const studioAuthority: Authority = {
+    ...replayAuthority,
+    permissions: new Set(['studio.sources.manage']),
+  };
+  const assessAuthority: Authority = {
+    ...replayAuthority,
+    permissions: new Set(['transcript.sources.manage']),
+  };
+  assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(
+    studioAuthority, 'transcript.input-bundle.lock', { ownerModule: 'studio' },
+  ));
+  assert.throws(() => assertEnterpriseCommandOperationAuthority(
+    assessAuthority, 'transcript.input-bundle.lock', { ownerModule: 'studio' },
+  ), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'PERMISSION_DENIED');
+  assert.doesNotThrow(() => assertEnterpriseCommandOperationAuthority(
+    assessAuthority, 'transcript.input-bundle.lock', { ownerModule: 'assess' },
+  ));
+  assert.throws(() => assertEnterpriseCommandOperationAuthority(
+    studioAuthority, 'transcript.input-bundle.lock', { ownerModule: 'assess' },
+  ), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'PERMISSION_DENIED');
+
+  const invocation = buildTranscriptInputBundleLockRpcInvocation(
+    '61000000-0000-4000-8000-000000000010', 'studio', [{
+      sourceSetVersionId: '61000000-0000-4000-8000-000000000011', ordinal: 1, purpose: 'Studio planning',
+    }], 0, studioAuthority, {
+      id: '61000000-0000-4000-8000-000000000012',
+      execution_token: '61000000-0000-4000-8000-000000000013', execution_fence: 2,
+    },
+  );
+  assert.equal(invocation.name, 'enterprise_transcript_lock_input_bundle_v2');
+  assert.equal(invocation.args.p_owner_module, 'studio');
+  assert.equal('provider' in invocation.args, false);
+  prBAssertion({
+    passed: true, testId: 'STUDIO-TR-003', assertionId: 'authority.cross-owner-source-capability-denied',
+    fixture: 'studio-assess-source-owner-separation',
+    runtimeContext: studioPrBRuntime('studio-source-author', ['studio.sources.manage'], {
+      sourcePackage: null, sourceOwnerModule: 'studio', deniedCapability: 'transcript.sources.manage',
+      rpc: invocation.name,
+    }),
+  });
+});
+
+{
+  const previousDeno = (globalThis as typeof globalThis & { Deno?: unknown }).Deno;
+  const previousFetch = globalThis.fetch;
+  const studioAuthority: Authority = { ...replayAuthority, permissions: new Set(['studio.sources.manage']) };
+  const sourceVersionId = '64000000-0000-4000-8000-000000000001';
+  const sourceSetId = '64000000-0000-4000-8000-000000000002';
+  const sourceSetVersionId = '64000000-0000-4000-8000-000000000003';
+  const inputBundleId = '64000000-0000-4000-8000-000000000004';
+  const seenRpc: Array<{ name: string; args: Record<string, unknown> }> = [];
+  let receiptOrdinal = 0;
+  (globalThis as typeof globalThis & { Deno?: unknown }).Deno = { env: { get: (key: string) => ({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_ANON_KEY: 'anon-test',
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+  } as Record<string, string>)[key] } };
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes('/rest/v1/rpc/')) {
+      const name = url.slice(url.lastIndexOf('/') + 1);
+      const args = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      seenRpc.push({ name, args });
+      if (name === 'enterprise_ai_plan_command') {
+        return Response.json({
+          id: args.p_id, request_hash: 'a'.repeat(64), initial_request_id: studioAuthority.actorId,
+          last_request_id: studioAuthority.actorId, execution_token: args.p_execution_token,
+          execution_fence: args.p_execution_fence, lease_expires_at: '2026-08-28T00:00:00.000Z',
+          status: 'claimed', execution_plan: args.p_plan,
+        });
+      }
+      if (name === 'pr1b_assert_command_authority') return Response.json({ ok: true });
+      if (name === 'enterprise_transcript_create_source_set_version') {
+        return Response.json({ resourceId: sourceSetId, sourceSetId, ownerModule: 'studio' });
+      }
+      if (name === 'enterprise_transcript_lock_input_bundle_v2') {
+        return Response.json({ resourceId: inputBundleId, inputBundleId, ownerModule: 'studio' });
+      }
+    }
+    if (url.includes('/rest/v1/authorization_versions?')) return Response.json([{ version: studioAuthority.authorizationVersion }]);
+    if (url.includes('/rest/v1/enterprise_source_sets?') || url.includes('/rest/v1/enterprise_module_input_bundles?')) {
+      return Response.json([]);
+    }
+    throw new Error(`UNEXPECTED_TEST_TRANSPORT:${url}`);
+  };
+  const run = async (commandType: 'transcript.source-set.create-version' | 'transcript.input-bundle.lock', payload: Record<string, unknown>) => {
+    receiptOrdinal += 1;
+    const resourceId = commandType === 'transcript.source-set.create-version' ? sourceSetId : inputBundleId;
+    const claimed: EnterpriseReceiptRow = {
+      id: `64000000-0000-4000-8000-${String(receiptOrdinal + 10).padStart(12, '0')}`,
+      request_hash: 'a'.repeat(64), initial_request_id: studioAuthority.actorId, last_request_id: studioAuthority.actorId,
+      execution_token: `64000000-0000-4000-8000-${String(receiptOrdinal + 20).padStart(12, '0')}`,
+      execution_fence: 1, lease_expires_at: '2026-08-28T00:00:00.000Z', status: 'claimed', execution_plan: {},
+    };
+    const response = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+      method: 'POST', body: JSON.stringify({
+        commandType, requestId: `64000000-0000-4000-8000-${String(receiptOrdinal + 30).padStart(12, '0')}`,
+        idempotencyKey: `studio-owned-command-${receiptOrdinal}`, organizationId: base.organizationId,
+        workspaceId: base.workspaceId, payload,
+      }),
+    }), {
+      authenticate: async () => ({ id: studioAuthority.actorId }),
+      resolveOrganization: async () => studioAuthority.organizationId,
+      resolveCommandAuthority: async () => studioAuthority,
+      assertCurrentAuthority: async (current, selectedCommand, selectedPayload) => {
+        assert.equal(selectedPayload?.ownerModule, 'studio');
+        assertEnterpriseCommandOperationAuthority(current, selectedCommand, selectedPayload);
+        return current;
+      },
+      transcriptCommandRequestBindingDependencies: {
+        findOne: async <T>(table: string) => {
+          if (table === 'enterprise_evidence_source_versions') return { id: sourceVersionId } as T;
+          if (table === 'enterprise_source_set_versions') return { id: sourceSetVersionId, source_set_id: sourceSetId } as T;
+          if (table === 'enterprise_source_sets') return {
+            id: sourceSetId, org_id: base.organizationId, workspace_id: base.workspaceId,
+            current_version: 0, owner_module: 'studio',
+          } as T;
+          if (table === 'enterprise_module_input_bundles') return {
+            id: inputBundleId, org_id: base.organizationId, workspace_id: base.workspaceId,
+            current_version: 0, owner_module: 'studio',
+          } as T;
+          return null;
+        },
+      },
+      claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+      completeReceipt: async (receipt, _authority, result) => ({
+        ...receipt, status: 'committed', resource_id: resourceId, response: result,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json() as { resourceId?: string }).resourceId, resourceId);
+  };
+  try {
+    await run('transcript.source-set.create-version', {
+      ownerModule: 'studio', sourceSetId, displayLabel: 'Studio sources', purpose: 'Direct planning', lock: true,
+      expectedVersion: 0, items: [{ sourceVersionId, ordinal: 1, role: 'primary', note: 'Exact source' }],
+    });
+    await run('transcript.input-bundle.lock', {
+      ownerModule: 'studio', inputBundleId, expectedVersion: 0,
+      sourceSets: [{ sourceSetVersionId, ordinal: 1, purpose: 'Direct planning' }],
+    });
+    const sourceRpc = seenRpc.find(call => call.name === 'enterprise_transcript_create_source_set_version');
+    const bundleRpc = seenRpc.find(call => call.name === 'enterprise_transcript_lock_input_bundle_v2');
+    assert.equal(sourceRpc?.args.p_owner_module, 'studio');
+    assert.equal(bundleRpc?.args.p_owner_module, 'studio');
+    assert.equal(bundleRpc?.args.p_input_bundle, inputBundleId);
+  } finally {
+    globalThis.fetch = previousFetch;
+    (globalThis as typeof globalThis & { Deno?: unknown }).Deno = previousDeno;
+  }
+  console.log('ok - executes Studio-owned source-set and bundle commands with exact owner-bound RPC payloads');
+}
+
+{
+  const previousDeno = (globalThis as typeof globalThis & { Deno?: unknown }).Deno;
+  const previousFetch = globalThis.fetch;
+  const documentId = '64100000-0000-4000-8000-000000000001';
+  const deliveryAuthority: Authority = { ...replayAuthority, permissions: new Set(['docs.approve']) };
+  (globalThis as typeof globalThis & { Deno?: unknown }).Deno = { env: { get: (key: string) => ({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_ANON_KEY: 'anon-test',
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+  } as Record<string, string>)[key] } };
+  try {
+    for (const [index, sourceMode] of ['direct_transcript_bundle', 'assess_plus_transcript_bundle', 'manual_brief'].entries()) {
+      let aggregateReads = 0;
+      let downstreamEffects = 0;
+      let authorityChecks = 0;
+      globalThis.fetch = async input => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/rest/v1/authorization_versions?')) return Response.json([{ version: deliveryAuthority.authorizationVersion }]);
+        if (url.endsWith('/rest/v1/rpc/pr1b_assert_command_authority')) return Response.json({ ok: true });
+        if (url.includes('/rest/v1/studio_artifact_aggregates?')) {
+          aggregateReads += 1;
+          return Response.json([{ id: documentId, artifact_type: 'brd', current_approved_version_id: '64100000-0000-4000-8000-000000000002', lifecycle: 'approved', source_mode: sourceMode }]);
+        }
+        downstreamEffects += 1;
+        throw new Error(`UNEXPECTED_DOWNSTREAM_EFFECT:${url}`);
+      };
+      const requestId = `64100000-0000-4000-8000-${String(index + 10).padStart(12, '0')}`;
+      const claimed: EnterpriseReceiptRow = {
+        id: `64100000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+        request_hash: 'b'.repeat(64), initial_request_id: requestId, last_request_id: requestId,
+        execution_token: `64100000-0000-4000-8000-${String(index + 30).padStart(12, '0')}`,
+        execution_fence: 1, lease_expires_at: '2026-08-28T00:00:00.000Z', status: 'claimed', execution_plan: {},
+      };
+      const response = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+        method: 'POST', body: JSON.stringify({
+          commandType: 'studio.delivery.handoff', requestId, idempotencyKey: `delivery-guard-${sourceMode}`,
+          organizationId: base.organizationId, workspaceId: base.workspaceId, payload: { studioDocumentId: documentId },
+        }),
+      }), {
+        authenticate: async () => ({ id: deliveryAuthority.actorId }),
+        resolveOrganization: async () => deliveryAuthority.organizationId,
+        resolveCommandAuthority: async () => deliveryAuthority,
+        assertCurrentAuthority: async (current, commandType, payload) => {
+          authorityChecks += 1;
+          assert.equal(commandType, 'studio.delivery.handoff');
+          assert.equal(payload?.studioDocumentId, documentId);
+          return current;
+        },
+        claimReceipt: async () => ({ receipt: claimed, ownsExecution: true }),
+        reloadReceipt: async () => claimed,
+        failReceipt: async receipt => ({ ...receipt, status: 'blocked', response: enterpriseCommandErrorBody(new EnterpriseCommandError('COMMAND_BLOCKED')) }),
+      });
+      const responseBody = await response.json() as { error?: { code?: string } };
+      assert.equal(response.status, 400, JSON.stringify(responseBody));
+      assert.equal(responseBody.error?.code, 'COMMAND_BLOCKED');
+      assert.deepEqual({ aggregateReads, downstreamEffects }, { aggregateReads: 1, downstreamEffects: 0 });
+      assert.ok(authorityChecks >= 5);
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+    (globalThis as typeof globalThis & { Deno?: unknown }).Deno = previousDeno;
+  }
+  console.log('ok - blocks every non-Assess Studio source mode before any Delivery effect and retains payload-bound reauthorization');
+}
 
 const replayCommands = [
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
@@ -307,12 +555,13 @@ const selectorPayload = (caseName: string, index: number): Record<string, unknow
   };
   switch (caseName) {
     case 'source-set': return {
-      sourceSetId: selectorFixtures.sourceSetIds[index], expectedVersion: 1,
-      items: [{ sourceVersionId: selectorFixtures.sourceVersionSelectors[index], ordinal: 1 }],
+      ownerModule: 'assess', sourceSetId: selectorFixtures.sourceSetIds[index],
+      displayLabel: 'Assess sources', purpose: 'Assessment evidence', lock: true, expectedVersion: 1,
+      items: [{ sourceVersionId: selectorFixtures.sourceVersionSelectors[index], ordinal: 1, role: 'primary' }],
     };
     case 'input-bundle': return {
-      inputBundleId: selectorFixtures.inputBundleIds[index], expectedVersion: 1,
-      sourceSets: [{ sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[index], ordinal: 1 }],
+      ownerModule: 'assess', inputBundleId: selectorFixtures.inputBundleIds[index], expectedVersion: 1,
+      sourceSets: [{ sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[index], ordinal: 1, purpose: 'Assessment input' }],
     };
     case 'extract': return commonExtraction;
     case 'journey': return {
@@ -354,6 +603,73 @@ const selectorPayload = (caseName: string, index: number): Record<string, unknow
     default: throw new Error(`unknown selector case ${caseName}`);
   }
 };
+
+{
+  const studioAuthority: Authority = { ...replayAuthority, permissions: new Set(['studio.sources.manage']) };
+  const studioSourceSetPayload = {
+    ownerModule: 'studio', sourceSetId: selectorFixtures.sourceSetIds[0], displayLabel: 'Studio sources',
+    purpose: 'Direct planning', lock: true, expectedVersion: 1,
+    items: [{ sourceVersionId: selectorFixtures.sourceVersionSelectors[0], ordinal: 1, role: 'primary' }],
+  };
+  const studioSourceSetEnvelope = parseEnterpriseCommandEnvelope({
+    commandType: 'transcript.source-set.create-version', requestId: '62000000-0000-4000-8000-000000000001',
+    idempotencyKey: 'studio-source-owner-preclaim', organizationId: base.organizationId,
+    workspaceId: base.workspaceId, payload: studioSourceSetPayload,
+  });
+  const sourceSetBinding = await deriveTranscriptCommandRequestBinding(studioAuthority, studioSourceSetEnvelope, {
+    findOne: async <T>(table: string) => {
+      if (table === 'enterprise_source_sets') return {
+        org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1, owner_module: 'studio',
+      } as T;
+      if (table === 'enterprise_evidence_source_versions') return { id: selectorFixtures.sourceVersionSelectors[0] } as T;
+      return null;
+    },
+  });
+  assert.equal(sourceSetBinding?.ownerModule, 'studio');
+  await assert.rejects(() => deriveTranscriptCommandRequestBinding(studioAuthority, studioSourceSetEnvelope, {
+    findOne: async <T>(table: string) => table === 'enterprise_source_sets' ? {
+      org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1, owner_module: 'assess',
+    } as T : { id: selectorFixtures.sourceVersionSelectors[0] } as T,
+  }), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_NOT_FOUND');
+
+  const studioBundleEnvelope = parseEnterpriseCommandEnvelope({
+    commandType: 'transcript.input-bundle.lock', requestId: '62000000-0000-4000-8000-000000000002',
+    idempotencyKey: 'studio-bundle-owner-preclaim', organizationId: base.organizationId,
+    workspaceId: base.workspaceId, payload: {
+      ownerModule: 'studio', inputBundleId: selectorFixtures.inputBundleIds[0], expectedVersion: 1,
+      sourceSets: [{ sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[0], ordinal: 1, purpose: 'Studio planning' }],
+    },
+  });
+  const bundleDependencies = (selectedOwner: 'assess' | 'studio'): Partial<TranscriptCommandRequestBindingDependencies> => ({
+    findOne: async <T>(table: string, query: string) => {
+      if (table === 'enterprise_module_input_bundles') return {
+        org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1, owner_module: 'studio',
+      } as T;
+      if (table === 'enterprise_source_set_versions') return {
+        id: selectorFixtures.sourceSetVersionSelectors[0], source_set_id: selectorFixtures.sourceSetIds[0],
+      } as T;
+      if (table === 'enterprise_source_sets' && query.includes(selectorFixtures.sourceSetIds[0])) return {
+        id: selectorFixtures.sourceSetIds[0], owner_module: selectedOwner,
+      } as T;
+      return null;
+    },
+  });
+  const bundleBinding = await deriveTranscriptCommandRequestBinding(
+    studioAuthority, studioBundleEnvelope, bundleDependencies('studio'),
+  );
+  assert.equal(bundleBinding?.ownerModule, 'studio');
+  await assert.rejects(() => deriveTranscriptCommandRequestBinding(
+    studioAuthority, studioBundleEnvelope, bundleDependencies('assess'),
+  ), (error: unknown) => error instanceof EnterpriseCommandError && error.code === 'RESOURCE_NOT_FOUND');
+  prBAssertion({
+    passed: true, testId: 'STUDIO-TR-003', assertionId: 'authority.preclaim-cross-owner-selector-rejected',
+    fixture: 'studio-bundle-assess-source-set-substitution',
+    runtimeContext: studioPrBRuntime('studio-source-author', ['studio.sources.manage'], {
+      sourcePackage: null, sourceOwnerModule: 'studio', sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[0],
+      rejectedSourceSetOwnerModule: 'assess', inputBundleId: selectorFixtures.inputBundleIds[0],
+    }),
+  });
+}
 
 const selectorCases = [
   ['source-set', 'transcript.source-set.create-version'],
@@ -512,7 +828,8 @@ for (const [caseName, commandType] of selectorCases) {
         if (query.includes(`org_id=eq.${encodeURIComponent(base.organizationId)}`)
           && resourceOrganizationId !== base.organizationId) return null;
         if (table === 'enterprise_source_sets' || table === 'enterprise_module_input_bundles') {
-          return { org_id: resourceOrganizationId, workspace_id: base.workspaceId, current_version: 1 } as T;
+          return { org_id: resourceOrganizationId, workspace_id: base.workspaceId,
+            current_version: 1, owner_module: 'assess' } as T;
         }
         if (table === 'enterprise_governed_journeys') {
           return { org_id: resourceOrganizationId, workspace_id: base.workspaceId, version: 1, route_policy_version: 1 } as T;
@@ -1010,7 +1327,8 @@ const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestB
   findOne: async <T>(table: string, query: string) => {
     const id = querySelectorId(query);
     if (table === 'enterprise_source_sets' || table === 'enterprise_module_input_bundles') {
-      return { id, org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1 } as T;
+      return { id, org_id: base.organizationId, workspace_id: base.workspaceId,
+        current_version: 1, owner_module: 'assess' } as T;
     }
     if (table === 'enterprise_evidence_source_versions') {
       return { id } as T;
@@ -1064,6 +1382,65 @@ const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestB
       source_set_version_id: selectorFixtures.sourceSetVersionSelectors[0], ordinal: 1 }] as T[];
   },
 };
+
+{
+  const studioAuthority: Authority = { ...replayAuthority, permissions: new Set(['studio.sources.manage']) };
+  const inputBundleId = '63000000-0000-4000-8000-000000000001';
+  const sourceSetId = '63000000-0000-4000-8000-000000000002';
+  const sourceSetVersionId = '63000000-0000-4000-8000-000000000003';
+  const envelope = {
+    commandType: 'transcript.input-bundle.lock' as const,
+    requestId: '63000000-0000-4000-8000-000000000004', idempotencyKey: 'studio-bundle-replay',
+    organizationId: base.organizationId, workspaceId: base.workspaceId,
+    payload: { ownerModule: 'studio', inputBundleId, expectedVersion: 1,
+      sourceSets: [{ sourceSetVersionId, ordinal: 1, purpose: 'Studio planning' }] },
+  };
+  const responseValue = { resourceId: inputBundleId, inputBundleId, ownerModule: 'studio' };
+  const committed = {
+    id: '63000000-0000-4000-8000-000000000005', request_hash: 'd'.repeat(64),
+    initial_request_id: envelope.requestId, last_request_id: envelope.requestId,
+    execution_token: '63000000-0000-4000-8000-000000000006', execution_fence: 1,
+    lease_expires_at: '2026-08-28T00:00:00.000Z', status: 'committed', execution_plan: {},
+    resource_id: inputBundleId, response: responseValue,
+  } as EnterpriseReceiptRow;
+  let currentAuthorityChecks = 0;
+  let effects = 0;
+  const replay = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+    method: 'POST', body: JSON.stringify(envelope),
+  }), {
+    authenticate: async () => ({ id: studioAuthority.actorId }),
+    resolveOrganization: async () => studioAuthority.organizationId,
+    resolveCommandAuthority: async () => studioAuthority,
+    assertCurrentAuthority: async (current, commandType, payload) => {
+      currentAuthorityChecks += 1;
+      assertEnterpriseCommandOperationAuthority(current, commandType, payload);
+      return current;
+    },
+    transcriptCommandRequestBindingDependencies: {
+      findOne: async <T>(table: string) => {
+        if (table === 'enterprise_module_input_bundles') return {
+          org_id: base.organizationId, workspace_id: base.workspaceId, current_version: 1, owner_module: 'studio',
+        } as T;
+        if (table === 'enterprise_source_set_versions') return { id: sourceSetVersionId, source_set_id: sourceSetId } as T;
+        if (table === 'enterprise_source_sets') return { id: sourceSetId, owner_module: 'studio' } as T;
+        return null;
+      },
+    },
+    claimReceipt: async () => ({ receipt: committed, ownsExecution: false }),
+    executeCommand: async () => { effects += 1; return responseValue; },
+  });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json() as { replayed?: boolean }).replayed, true);
+  assert.deepEqual({ currentAuthorityChecks, effects }, { currentAuthorityChecks: 2, effects: 0 });
+  prBAssertion({
+    passed: true, testId: 'IDEMP-002-B', assertionId: 'authority.studio-source-replay-current-capability',
+    fixture: 'studio-input-bundle-committed-replay',
+    runtimeContext: studioPrBRuntime('studio-source-author', ['studio.sources.manage'], {
+      sourcePackage: null, sourceOwnerModule: 'studio', inputBundleId, sourceSetVersionId,
+      receiptId: committed.id, providerEffects: effects,
+    }),
+  });
+}
 
 const enterpriseTerminalStatusMatrix = [
   ['INVALID_PAYLOAD', 400],

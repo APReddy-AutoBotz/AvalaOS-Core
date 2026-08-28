@@ -64,7 +64,7 @@ const WorkspaceView = React.lazy(() => import('./components/delivery/WorkspaceVi
 const TaskDetailModal = React.lazy(() => import('./components/delivery/TaskDetailModal'));
 const ProjectSelectorModal = React.lazy(() => import('./components/delivery/ProjectSelectorModal'));
 const DocsForgeView = React.lazy(() => import('./components/docs/DocsForgeView'));
-const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateStudioView'));
+const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateManagerView'));
 const DocsView = React.lazy(() => import('./components/docs/DocsView'));
 const CustomDashboardView = React.lazy(() => import('./components/shared/CustomDashboardView'));
 const PortfolioView = React.lazy(() => import('./components/shared/PortfolioView'));
