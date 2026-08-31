@@ -13,13 +13,18 @@ dist-trust-assurance
 dist-ssr
 .agent/ts-tests
 .agent/edge-ts-tests
+.agent/pr1f-ts-tests
+.agent/studio-private-artifact-esm-tests
 .agent/pr1a-coverage
 .agent/pr1b-coverage
 .agent/pr1c-coverage
 .agent/pr1d-coverage
 .agent/pr1e-coverage
 .agent/transcript-flow-coverage
+.agent/transcript-flow-pr-b-coverage
 .agent/transcript-flow-pr-a-playwright
+.agent/enterprise-intelligence-playwright/
+.agent/pilot-operations-playwright/
 test-results
 output/
 .agent/provider-resolver-tests
@@ -41,3 +46,4 @@ output/
 *.sw?
 artifacts/v1-rc/
 artifacts/pilot-acceptance/
+artifacts/pilot-operations/

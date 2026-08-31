@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApprovedStudioFixture, privateCommand } from './studioPrivateArtifactPostgresFixture.mjs';
@@ -9,13 +9,31 @@ const uuid = ordinal => '61000000-0000-4000-8000-' + String(ordinal).padStart(12
 
 export async function runStudioPrivateArtifactReconciliationEvidence(db, peer, deletionDb, storageDb, { scenario, names }) {
   const directory = await mkdtemp(join(tmpdir(), 'studio-private-reconciliation-'));
+  const compiledDirectory = join(directory, 'edge-ts-tests');
+  const compiledConsumer = join(compiledDirectory, 'supabase', 'functions', '_shared', 'studioPrivateArtifactCrossLayerConsumer.test.js');
+  const compileInputPath = join(directory, 'compile-input.json');
+  const compileOutputPath = join(directory, 'compile-output.json');
+  const compileCrossLayerConsumer = async () => {
+    await writeFile(compileInputPath, `${JSON.stringify({ bucket: 'studio-private-archive', allowlist: 'studio-private-archive' })}\n`, 'utf8');
+    execFileSync(process.execPath, ['scripts/runEdgeTypeScriptTest.mjs', 'types.ts', 'supabase/functions/deno.d.ts', 'supabase/functions/_shared/studioPrivateArtifactCrossLayerConsumer.test.ts'], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        STUDIO_PRIVATE_CROSS_LAYER_MODE: 'bucketAuthority',
+        STUDIO_PRIVATE_CROSS_LAYER_INPUT: compileInputPath,
+        STUDIO_PRIVATE_CROSS_LAYER_OUTPUT: compileOutputPath,
+      },
+    });
+    assert.deepEqual(JSON.parse(await readFile(compileOutputPath, 'utf8')), { rejected: true, providerRequests: 0 });
+    await cp(join(process.cwd(), '.agent', 'edge-ts-tests'), compiledDirectory, { recursive: true });
+  };
   let consumeOrdinal = 0; let requestOrdinal = 0;
   const consume = async (mode, input) => {
     consumeOrdinal += 1;
     const inputPath = join(directory, consumeOrdinal + '-' + mode + '-input.json');
     const outputPath = join(directory, consumeOrdinal + '-' + mode + '-output.json');
     await writeFile(inputPath, JSON.stringify(input) + '\n', 'utf8');
-    execFileSync(process.execPath, ['scripts/runEdgeTypeScriptTest.mjs', 'types.ts', 'supabase/functions/deno.d.ts', 'supabase/functions/_shared/studioPrivateArtifactCrossLayerConsumer.test.ts'], { stdio: 'inherit', env: { ...process.env, STUDIO_PRIVATE_CROSS_LAYER_MODE: mode, STUDIO_PRIVATE_CROSS_LAYER_INPUT: inputPath, STUDIO_PRIVATE_CROSS_LAYER_OUTPUT: outputPath } });
+    execFileSync(process.execPath, [compiledConsumer], { stdio: 'inherit', env: { ...process.env, STUDIO_PRIVATE_CROSS_LAYER_MODE: mode, STUDIO_PRIVATE_CROSS_LAYER_INPUT: inputPath, STUDIO_PRIVATE_CROSS_LAYER_OUTPUT: outputPath } });
     return JSON.parse(await readFile(outputPath, 'utf8'));
   };
   let renditionFixture;
@@ -58,6 +76,7 @@ export async function runStudioPrivateArtifactReconciliationEvidence(db, peer, d
     }
   };
   try {
+    await compileCrossLayerConsumer();
     renditionFixture = await createApprovedStudioFixture(db);
     let renditionProviderUploads = 0;
     await rollbackScenario(async () => {

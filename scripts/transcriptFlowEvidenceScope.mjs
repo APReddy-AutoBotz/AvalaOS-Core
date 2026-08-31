@@ -3,6 +3,17 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+export const PR_A_PROCESS_LIFECYCLE_SCOPE = [
+  'testing/process-lifecycle/README.md',
+  'testing/process-lifecycle/contracts/pr-a-assertion-registry.json',
+  'testing/process-lifecycle/contracts/pr-a-evidence.schema.json',
+  'testing/process-lifecycle/fixtures/identities/pr-a-personas.json',
+  'testing/process-lifecycle/fixtures/pr-a-fixture-registry.json',
+  'testing/process-lifecycle/fixtures/providers/pr-a-mock-contracts.json',
+  'testing/process-lifecycle/fixtures/sources/assess',
+  'testing/process-lifecycle/scenarios/pr-a.json',
+];
+
 export const PR_A_EVIDENCE_SCOPE = [
   '.github/workflows/transcript-flow-pr-a.yml', '.gitignore', 'package.json', 'vite.config.ts', 'playwright.config.ts', 'playwright.enterprise-intelligence.config.ts',
   'playwright.pr1d.config.ts', 'playwright.studio-artifacts.config.ts', 'playwright.transcript-flow-pr-a.config.ts',
@@ -27,7 +38,7 @@ export const PR_A_EVIDENCE_SCOPE = [
   'supabase/migrations/20260825165401_unified_provider_budget_authority.sql',
   'supabase/migrations/20260826151538_governed_transcript_authority_forward_fix.sql',
   'supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql',
-  'testing/process-lifecycle', 'tests/browser/transcriptFlowPrA.spec.ts', 'tests/browser/enterpriseIntelligenceNetworkFixture.ts',
+  ...PR_A_PROCESS_LIFECYCLE_SCOPE, 'tests/browser/transcriptFlowPrA.spec.ts', 'tests/browser/enterpriseIntelligenceNetworkFixture.ts',
   'tests/browser/enterpriseIntelligence.spec.ts',
   'tests/acceptance/source-provenance.json', 'docs/00_SOURCE_OF_TRUTH.md',
   'docs/architecture/current-to-target-enterprise-architecture.md', 'docs/architecture/enterprise-intelligence-authority.md',
@@ -69,7 +80,7 @@ export const calculatePrAWorkingTreeDigest = root => {
 
 export const isPrASourcePath = file => {
   const value = slash(file);
-  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:.*TranscriptFlow.*|checkEnterpriseIntelligenceBoundaries|hostedPilotActivation(?:\.test)?|testEnterpriseIntelligencePostgres|testPilotOperationsMigration)\.mjs|testing\/process-lifecycle\/|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
+  return /^(?:components\/enterprise\/(?:AssessTranscriptCandidateReview|EnterpriseIntelligenceView|TranscriptSourceLibrary)\.tsx|services\/enterpriseIntelligence(?:Client|\.test)?\.ts|services\/transcriptFlow\/|supabase\/functions\/_shared\/(?:enterpriseIntelligence(?:Ai|Command|Query)(?:\.test)?|providerBudget(?:Migration\.test|\.test)?|providerCleanup(?:\.test)?|providerLifecycle\.test|providerResolver(?:\.test)?|supabase)\.(?:ts|mjs)|supabase\/migrations\/\d+_[^/]*(?:transcript|provider_budget)[^/]*\.sql|tests\/browser\/(?:transcriptFlowPrA\.spec|enterpriseIntelligenceNetworkFixture|enterpriseIntelligence\.spec)\.ts|vite\.config\.ts|playwright\.config\.ts|playwright\.(?:enterprise-intelligence|pr1d|studio-artifacts|transcript-flow-pr-a)\.config\.ts|scripts\/(?:checkEnterpriseIntelligenceBoundaries|hostedPilotActivation(?:\.test)?|runTranscriptFlow(?:Browser(?:\.test)?|Coverage|Evidence)|testEnterpriseIntelligencePostgres|testPilotOperationsMigration|testTranscriptFlowPostgres|transcriptFlowEvidenceContract(?:\.test)?|transcriptFlowEvidenceScope|verifyTranscriptFlowEvidence)\.mjs|testing\/process-lifecycle\/(?:README\.md|contracts\/pr-a-(?:assertion-registry\.json|evidence\.schema\.json)|fixtures\/(?:identities\/pr-a-personas\.json|pr-a-fixture-registry\.json|providers\/pr-a-mock-contracts\.json|sources\/assess\/[^/]+)|scenarios\/pr-a\.json)|\.github\/workflows\/transcript-flow-pr-a\.yml|package\.json)$/u.test(value);
 };
 
 export const collectChangedPrASources = (root, baseGitSha) => {

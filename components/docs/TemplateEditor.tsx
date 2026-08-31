@@ -167,10 +167,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave, onCan
                                 <div className="mt-2 p-3 bg-indigo-50 dark:bg-abz-indigo-700/20 rounded-lg animate-highlight-glow ring-1 ring-abz-indigo-500/20">
                                     <label className="flex items-center gap-1.5 text-xs font-semibold text-abz-indigo-600 dark:text-abz-indigo-300 mb-1">
                                         <SparklesIcon className="w-4 h-4" />
-                                        AI PROMPT INJECTION (Your instructions for the AI)
+                                        GENERATION GUIDANCE (untrusted template text)
                                     </label>
                                     <textarea 
-                                        placeholder="e.g., Format this as a bulleted list. Be concise." 
+                                        placeholder="e.g., Present this section as a concise bulleted list."
                                         value={section.promptInjection || ''} 
                                         onChange={(e) => handleSectionChange(index, 'promptInjection', e.target.value)} 
                                         className="input-field-sm w-full"

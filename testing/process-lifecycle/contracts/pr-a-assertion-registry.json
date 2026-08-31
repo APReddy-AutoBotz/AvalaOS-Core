@@ -37,10 +37,10 @@
     { "id": "diff-check", "command": "git diff --check", "environment": "controlled-git" }
   ],
   "owners": {
-    "postgres": { "path": "scripts/testTranscriptFlowPostgres.mjs", "sha256": "8e24fe1f5381250ff25af0dcff5c1af540270d8d96bb8ef330bd0f256a0db179" },
+    "postgres": { "path": "scripts/testTranscriptFlowPostgres.mjs", "sha256": "212ad6b688ad31d44d9fb033dd7fbebb94a2f4611ac2d971d915e967d6493044" },
     "browser": { "path": "tests/browser/transcriptFlowPrA.spec.ts", "sha256": "26e43ebf1350aa86942ac034496afc9064105ea6f1406311f347d6e4294bcd5b" },
     "provider": { "path": "supabase/functions/_shared/enterpriseIntelligenceAi.test.ts", "sha256": "a3e0f002b880c1a37cc1fcef50f69c6d3b9ef397c064f264b92cfaeec049aea1" },
-    "api": { "path": "supabase/functions/_shared/enterpriseIntelligenceCommand.test.ts", "sha256": "78eddd95cb2199fca9b335fcff21603283509360c1523eb56c643c3f6ce261d8" },
+    "api": { "path": "supabase/functions/_shared/enterpriseIntelligenceCommand.test.ts", "sha256": "139aaf493dd0d16aead300cbbaadb8a4e006c5b3f7f031f7f16ee7fa79906923" },
     "migration": { "path": "supabase/functions/_shared/transcriptSourceSetMigration.test.mjs", "sha256": "2489cfcde1109c169a5cdfee9e54586a03891bf8c381bf26b513fd3467f86265" },
     "boundary": { "path": "testing/process-lifecycle/scenarios/pr-a.json", "sha256": "defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a" }
   },

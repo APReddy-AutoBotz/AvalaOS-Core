@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { get as httpGet } from 'node:http';
 import { createServer } from 'node:net';
 import path from 'node:path';
 
@@ -9,6 +10,22 @@ const READINESS_POLL_INTERVAL_MS = 250;
 const OUTPUT_CAPTURE_LIMIT = 4_000;
 
 export const browserModeByFlag = new Map([
+  ['--full-platform', {
+    label: 'Full-platform fixture campaign',
+    port: '4173',
+    config: 'playwright.full-platform.config.ts',
+    readinessPath: '/sandbox',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING: 'authorized',
+      SITE_NAME: 'avalaos-pilot',
+    },
+    playwrightEnvironment: {
+      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4173',
+      FULL_PLATFORM_EXECUTION_MODE: 'fixture',
+    },
+  }],
   ['--enterprise-intelligence', {
     label: 'Enterprise Intelligence',
     port: '4191',
@@ -34,6 +51,64 @@ export const browserModeByFlag = new Map([
     config: 'playwright.studio-artifacts.config.ts',
     readinessPath: '/tests/browser/studioArtifactsHarness.html',
     serverCommand: 'serve',
+  }],
+  ['--studio-private-artifacts', {
+    label: 'Studio private artifacts',
+    port: '4190',
+    config: 'playwright.studio-private-artifacts.config.ts',
+    readinessPath: '/tests/browser/studioPrivateArtifactsHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD: 'true',
+    },
+    playwrightEnvironment: {
+      STUDIO_PRIVATE_ARTIFACT_EXTERNAL_SERVER: 'true',
+    },
+  }],
+  ['--pr1e', {
+    label: 'PR 1E',
+    port: '4184',
+    config: 'playwright.pr1e.config.ts',
+    readinessPath: '/',
+    serverCommand: 'preview',
+    build: true,
+    playwrightEnvironment: {
+      PR1E_EXTERNAL_SERVER: 'true',
+    },
+  }],
+  ['--pr1f', {
+    label: 'PR 1F',
+    port: '4185',
+    config: 'playwright.pr1f.config.ts',
+    readinessPath: '/',
+    serverCommand: 'preview',
+    build: true,
+    playwrightEnvironment: {
+      PR1F_EXTERNAL_SERVER: 'true',
+    },
+  }],
+  ['--pr1g', {
+    label: 'PR 1G',
+    port: '4186',
+    config: 'playwright.pr1g.config.ts',
+    readinessPath: '/',
+    serverCommand: 'preview',
+    build: true,
+    playwrightEnvironment: {
+      PR1G_EXTERNAL_SERVER: 'true',
+    },
+  }],
+  ['--pilot-operations', {
+    label: 'Pilot Operations',
+    port: '4427',
+    config: 'playwright.pilot-operations.config.ts',
+    readinessPath: '/tests/browser/pilotOperationsHarness.html',
+    serverCommand: 'serve',
+    runtimeMode: 'automated_test',
+    playwrightEnvironment: {
+      PILOT_OPERATIONS_EXTERNAL_SERVER: 'true',
+    },
   }],
 ]);
 
@@ -106,6 +181,19 @@ export const classifyReadinessError = error => {
   return `fetch error${message ? `: ${message}` : ''}`;
 };
 
+export const requestBrowserReadiness = (url, { signal } = {}) => new Promise((resolve, reject) => {
+  const request = httpGet(url, { signal }, response => {
+    response.resume();
+    const status = response.statusCode ?? 0;
+    resolve({
+      ok: status >= 200 && status < 300,
+      status,
+      statusText: response.statusMessage ?? '',
+    });
+  });
+  request.once('error', reject);
+});
+
 export const assertBrowserPortAvailable = ({
   host,
   port,
@@ -167,7 +255,7 @@ export const waitForBrowserServer = async ({
   label,
   capture,
   ownedListeningState,
-  fetchImpl = fetch,
+  fetchImpl = requestBrowserReadiness,
   timeoutMs = READINESS_TIMEOUT_MS,
   requestTimeoutMs = READINESS_REQUEST_TIMEOUT_MS,
   pollIntervalMs = READINESS_POLL_INTERVAL_MS,
@@ -249,7 +337,7 @@ export const runBrowserHarness = async ({
   environment = process.env,
   spawnImpl = spawn,
   spawnSyncImpl = spawnSync,
-  fetchImpl = fetch,
+  fetchImpl = requestBrowserReadiness,
   readinessTimeoutMs = READINESS_TIMEOUT_MS,
   readinessRequestTimeoutMs = READINESS_REQUEST_TIMEOUT_MS,
   readinessPollIntervalMs = READINESS_POLL_INTERVAL_MS,
@@ -262,10 +350,14 @@ export const runBrowserHarness = async ({
   const serverEnvironment = {
     ...environment,
     ...mode.environment,
-    VITE_AVALA_RUNTIME_MODE: 'pilot',
+    VITE_AVALA_RUNTIME_MODE: mode.runtimeMode ?? 'pilot',
     VITE_SUPABASE_URL: 'https://127.0.0.1:59999',
     VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
     VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
+  };
+  const playwrightEnvironment = {
+    ...environment,
+    ...mode.playwrightEnvironment,
   };
 
   if (mode.build) {
@@ -325,7 +417,7 @@ export const runBrowserHarness = async ({
         'test', `--config=${mode.config}`, ...playwrightArguments,
       ],
       root,
-      environment,
+      environment: playwrightEnvironment,
       spawnImpl,
     });
   } finally {

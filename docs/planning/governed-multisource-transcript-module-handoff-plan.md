@@ -1,16 +1,16 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
-Status: PR A local implementation and evidence complete; repository acceptance pending; PR B and PR C remain proposed
+Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B implementation is authorized and active; PR C remains proposed and excluded
 
 Plan date: 2026-08-25
 
-Planning baseline: `controller/acceptance-evidence-closure-20260822` at `5518413a947030de2af0144f143c4ee97f72fc08`
+Planning baseline: accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`
 
 Deployment status: unknown; no hosted or live environment was inspected
 
-Implementation authority: PR A was explicitly authorized on 2026-08-26; PR B and PR C require separate execution approval
+Implementation authority: PR A was accepted through PR #255; PR B was explicitly authorized on 2026-08-28; PR C requires separate execution approval
 
-PR A evidence boundary: 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, and Pixel 7 checks executed locally. Executed markers bind assertion-emitted runtime persona, canonical capabilities, tenant scope, fixtures, and exact exercised lineage. Final exact-head GitHub Actions, hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
+PR A evidence boundary: accepted final head `460c44864b9d240321e727945411ced51dd0fe30`, merge `11e670003a73b0ab5a28650b70afac4b267760f4`, 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, all 15 applicable workflows, Netlify preview, and fresh independent review. Executed markers bind assertion-emitted runtime persona, canonical capabilities, tenant scope, fixtures, and exact exercised lineage. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
 
 ## 1. Plan handling and authority
 
@@ -881,11 +881,13 @@ testing/process-lifecycle/
   scenarios/
 ```
 
-Run-specific sanitized evidence belongs only under an ignored path such as:
+Run-specific sanitized evidence belongs only under an ignored path. For PR B the implemented contract is:
 
 ```text
-output/process-lifecycle/<exact-sha>/<run-attempt>/
+output/process-lifecycle-pr-b/<base-sha>/<working-tree-digest>/<run-attempt>/
 ```
+
+The local attempt name is generated with a `local-` prefix and binds the checked-out `headGitSha` plus the scoped working-tree digest. Exact-head CI uses the same path shape, binds the pull-request head as `PR_B_EXACT_HEAD_SHA`, and uses the GitHub workflow run attempt as the final path segment; the manifest also binds the workflow run ID. A local pre-commit run is not exact-head CI evidence.
 
 ### 20.1 Identity fixtures
 
@@ -1139,7 +1141,7 @@ Use three substantial vertical PRs. Do not create plan/evidence/closure micro-PR
 
 ### PR A - Governed source sets, unified BYOK, and transcript-assisted Assess
 
-Implementation disposition (2026-08-27): local implementation and evidence are complete at planning baseline `5518413a947030de2af0144f143c4ee97f72fc08`; repository acceptance, final exact-head CI, review, and merge remain pending. The corrective slice isolates source/source-set/input-bundle reads from Assess-owned collections; makes real selector derivation and conflict-candidate preclaim mandatory; binds exact historical source-set-version, bundle-version, extraction-job, binding, candidate, real preview-batch, and expected Assess-draft selectors; invalidates only unconsumed dependants; preserves consumed history and initial default-off legacy single-source review; and verifies the result through 33 exact commands, 194 passed assertion markers, six explicit `not_run` results, and 68 source-provenance entries. `AUTH-001` through `AUTH-004` are owned only by their exact API assertions, and executed evidence preserves assertion-emitted runtime context rather than attaching registry context. `AUTH-001` and `AUTH-002` additionally require exact request/authority and assertion-completion ledgers, with producer mutations proving that omitted completions or substituted traces cannot retain a green marker. Successive exact-head runs exposed PostgreSQL routine-identity normalization, stale hosted migration marker, and generic-browser-suite ownership defects; the follow-ups normalize only visibility-dependent `public` composite types, preserve other schema qualifications, advance the fail-closed hosted marker through a new forward migration, and bind the transcript specification exclusively to its controlled dedicated harness. `IDEMP-002-A` and `PROVIDER-009-A` are passed PR A assertions; downstream `IDEMP-002-B` and `PROVIDER-009-B` remain `not_run` for PR B/PR C. `PERF-001`, `PERF-002-B`, `PERF-003`, and `PERF-004` remain truthful `not_run` because no owned cached-route metric, 250-work-item execution, approved numeric PostgreSQL duration, or end-to-end memory/provider/token budget exists.
+Acceptance disposition (2026-08-28): PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as accepted-main baseline `11e670003a73b0ab5a28650b70afac4b267760f4`. The accepted slice isolates source/source-set/input-bundle reads from Assess-owned collections; makes real selector derivation and conflict-candidate preclaim mandatory; binds exact historical source-set-version, bundle-version, extraction-job, binding, candidate, real preview-batch, and expected Assess-draft selectors; invalidates only unconsumed dependants; preserves consumed history and initial default-off legacy single-source review; and is bound through 33 exact commands, 194 passed assertion markers, six explicit `not_run` results, and 68 source-provenance entries. `AUTH-001` through `AUTH-004` are owned only by their exact API assertions, and executed evidence preserves assertion-emitted runtime context rather than attaching registry context. `AUTH-001` and `AUTH-002` additionally require exact request/authority and assertion-completion ledgers, with producer mutations proving that omitted completions or substituted traces cannot retain a green marker. Successive exact-head runs exposed PostgreSQL routine-identity normalization, stale hosted migration marker, and generic-browser-suite ownership defects; the accepted follow-ups normalize only visibility-dependent `public` composite types, preserve other schema qualifications, advance the fail-closed hosted marker through a new forward migration, and bind the transcript specification exclusively to its controlled dedicated harness. `IDEMP-002-A` and `PROVIDER-009-A` are accepted PR A assertions; `IDEMP-002-B` and `PROVIDER-009-B` are owned by active PR B. `PERF-001`, `PERF-002-B`, `PERF-003`, and `PERF-004` remained truthful `not_run` in PR A because no owned cached-route metric, 250-work-item execution, approved numeric PostgreSQL duration, or end-to-end memory/provider/token budget existed in that slice. All 15 applicable workflows, the Netlify preview, and a fresh independent review passed; hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
 
 Delivers:
 
