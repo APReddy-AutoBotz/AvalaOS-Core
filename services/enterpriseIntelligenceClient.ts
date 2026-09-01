@@ -10,6 +10,19 @@ import {
 } from './enterpriseIntelligence';
 import type { TranscriptAssessApplicationIntent } from './transcriptFlow/contracts';
 import { validateTranscriptSourceSetSelection } from './transcriptFlow/sourceSets';
+import {
+  buildDeliveryMonitorSelectorPayload,
+  type DeliveryMonitorCommandInput,
+} from './deliveryMonitor/commands';
+import type {
+  DeliveryBaselineEligibilityPageRequest,
+  DeliveryItemPageRequest,
+  DeliveryWorkspaceProjection,
+  MonitorApprovedBaselinesProjection,
+} from './deliveryMonitor/contracts';
+
+type DeliveryCommandInput<Action extends DeliveryMonitorCommandInput['action']> =
+  Omit<Extract<DeliveryMonitorCommandInput, { action: Action }>, 'action'> & { organizationId: string; workspaceId: string };
 
 type TranscriptSourceSetLineageSelector = {
   sourceSetId: string;
@@ -104,6 +117,7 @@ const errorMessages: Record<string, string> = {
   RESOURCE_STALE: 'The selected resource changed on the server. Reload before continuing.',
   IDEMPOTENCY_CONFLICT: 'This request conflicts with a previously claimed operation. Reload before retrying.',
   COMMAND_IN_PROGRESS: 'The same operation is still in progress. Reload before retrying.',
+  COMMAND_OUTCOME_UNKNOWN: 'The server may have committed this command, but the response was lost. Reload committed state before retrying.',
   COMMAND_BLOCKED: 'The server blocked this lifecycle transition. No success was recorded.',
   COMMAND_UNAVAILABLE: 'The governed server operation is unavailable. No fallback was used.',
   BUDGET_EXHAUSTED: 'The configured provider budget is exhausted. No provider call was made.',
@@ -113,6 +127,9 @@ const errorMessages: Record<string, string> = {
   TRANSCRIPT_ASSESS_MATERIAL_CONFLICT_UNRESOLVED: 'Resolve every material conflict before applying or finalizing this Assess draft.',
   TRANSCRIPT_ASSESS_TARGET_STALE: 'The Assess draft or preview changed. Reload and preview the exact changes again.',
   ENTERPRISE_PROJECTION_UNAVAILABLE: 'The Enterprise Intelligence projection is unavailable. Existing records were not replaced with local data.',
+  HANDOFF_NOT_ELIGIBLE: 'The selected Studio version is not eligible for a Delivery handoff.',
+  HANDOFF_STALE: 'The handoff changed or its source is no longer current. Reload before continuing.',
+  MODULE_ROUTE_NOT_ALLOWED: 'The organization route policy does not permit this handoff.',
 };
 
 export class EnterpriseIntelligenceClientError extends Error {
@@ -134,6 +151,7 @@ const invokeCommand = async <T>(input: {
   organizationId: string;
   workspaceId: string;
   payload: Record<string, unknown>;
+  outcomeUnknownCodes?: readonly string[];
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
   const body = {
@@ -147,13 +165,34 @@ const invokeCommand = async <T>(input: {
   let invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
   if (isRetryableTransportError(invocation.error)) {
     invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+    if (isRetryableTransportError(invocation.error)) {
+      throw new EnterpriseIntelligenceClientError('COMMAND_OUTCOME_UNKNOWN');
+    }
   }
   const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string; message?: string }; [key: string]: unknown } | null;
-  if (error) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
-  if (!response?.ok) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_BLOCKED');
+  const errorCode = input.outcomeUnknownCodes?.length
+    ? await responseErrorCode(data, error)
+    : response?.error?.code;
+  if (input.outcomeUnknownCodes?.includes(errorCode || '')) {
+    throw new EnterpriseIntelligenceClientError('COMMAND_OUTCOME_UNKNOWN');
+  }
+  if (error) throw new EnterpriseIntelligenceClientError(errorCode || response?.error?.code || 'COMMAND_UNAVAILABLE');
+  if (!response?.ok) throw new EnterpriseIntelligenceClientError(errorCode || response?.error?.code || 'COMMAND_BLOCKED');
   return response as T;
 };
+
+const invokeDeliveryMonitor = <T>(input: {
+  organizationId: string;
+  workspaceId: string;
+  command: DeliveryMonitorCommandInput;
+}) => invokeCommand<T>({
+  commandType: input.command.action,
+  organizationId: input.organizationId,
+  workspaceId: input.workspaceId,
+  payload: buildDeliveryMonitorSelectorPayload(input.command),
+  outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
+});
 
 const invokeProviderLifecycle = async <T>(input: {
   operation: string;
@@ -287,11 +326,15 @@ const invokeProviderLifecycle = async <T>(input: {
   }
 };
 
-const loadProjection = async (input: {
+export type EnterpriseIntelligenceProjectionRequest = {
   organizationId: string;
   workspaceId: string;
   expectedAuthorizationVersion?: number;
-}): Promise<EnterpriseIntelligenceProjection> => {
+  deliveryItemPage?: DeliveryItemPageRequest;
+  deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
+};
+
+const loadProjection = async (input: EnterpriseIntelligenceProjectionRequest): Promise<EnterpriseIntelligenceProjection> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', { body: input });
   const response = data as { projection?: unknown; code?: string } | null;
@@ -304,6 +347,44 @@ const loadProjection = async (input: {
 
 export const enterpriseIntelligenceClient = {
   loadProjection,
+
+  async loadDeliveryWorkspace(input: Parameters<typeof loadProjection>[0]): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    if (!projection.deliveryWorkspace) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    return projection.deliveryWorkspace;
+  },
+
+  async loadDeliveryItemPage(input: EnterpriseIntelligenceProjectionRequest & { deliveryItemPage: DeliveryItemPageRequest }): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    const workspace = projection.deliveryWorkspace;
+    if (!workspace
+      || workspace.organizationId !== input.organizationId
+      || workspace.workspaceId !== input.workspaceId
+      || workspace.packages.length !== 1
+      || workspace.packages[0].id !== input.deliveryItemPage.packageId
+      || !workspace.packages[0].itemPage.cursorApplied) {
+      throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    }
+    return workspace;
+  },
+
+  async loadDeliveryBaselineEligibilityPage(input: EnterpriseIntelligenceProjectionRequest & { deliveryBaselineEligibilityPage: DeliveryBaselineEligibilityPageRequest }): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    const workspace = projection.deliveryWorkspace;
+    if (!workspace
+      || workspace.organizationId !== input.organizationId
+      || workspace.workspaceId !== input.workspaceId
+      || !workspace.page.baselineEligibilityCursorApplied) {
+      throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    }
+    return workspace;
+  },
+
+  async loadMonitorApprovedBaselines(input: Parameters<typeof loadProjection>[0]): Promise<MonitorApprovedBaselinesProjection> {
+    const projection = await loadProjection(input);
+    if (!projection.monitorApprovedBaselines) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    return projection.monitorApprovedBaselines;
+  },
 
   registerProvider(input: {
     organizationId: string;
@@ -641,21 +722,56 @@ export const enterpriseIntelligenceClient = {
   },
 
   handoffStudioDocument(input: { organizationId: string; workspaceId: string; studioDocumentId: string; studioVersion?: number; studioContentHash?: string }) {
-    return invokeCommand({
-      commandType: 'studio.delivery.handoff',
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      payload: buildEnterpriseSelectorPayloads.studioHandoff(input.studioDocumentId),
-    });
+    void input;
+    throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
   },
 
-  createMonitorBaseline(input: { organizationId: string; workspaceId: string; workPackageId?: string; packageVersionId?: string; approvedItemIds?: string[] }) {
-    if (!input.workPackageId) throw new EnterpriseIntelligenceClientError('RESOURCE_STALE');
-    return invokeCommand({
-      commandType: 'monitor.baseline.create',
+  requestDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.request'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.request', ...input } });
+  },
+
+  resolveDeliveryHandoffReview(input: DeliveryCommandInput<'delivery.handoff.review.resolve'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.review.resolve', ...input } });
+  },
+
+  resolveDeliveryHandoffApproval(input: DeliveryCommandInput<'delivery.handoff.approval.resolve'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.approval.resolve', ...input } });
+  },
+
+  withdrawDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.withdraw'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.withdraw', ...input } });
+  },
+
+  consumeDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.consume'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.consume', ...input } });
+  },
+
+  createManualDeliveryPackage(input: DeliveryCommandInput<'delivery.package.create.manual'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.create.manual', manualBrief: input.manualBrief, items: input.items } });
+  },
+
+  reviewDeliveryItem(input: DeliveryCommandInput<'delivery.item.review'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.item.review', ...input } as DeliveryMonitorCommandInput });
+  },
+
+  commitDeliveryPackageRevision(input: DeliveryCommandInput<'delivery.package.revision.commit'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.revision.commit', ...input } });
+  },
+
+  resolveDeliveryPackageReview(input: DeliveryCommandInput<'delivery.package.review.resolve'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.review.resolve', ...input } });
+  },
+
+  resolveDeliveryPackageApproval(input: DeliveryCommandInput<'delivery.package.approval.resolve'>) {
+    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.approval.resolve', ...input } });
+  },
+
+  createMonitorBaseline(input: DeliveryCommandInput<'monitor.baseline.create'>) {
+    return invokeDeliveryMonitor({
       organizationId: input.organizationId,
       workspaceId: input.workspaceId,
-      payload: buildEnterpriseSelectorPayloads.monitorBaseline(input.workPackageId),
+      command: { action: 'monitor.baseline.create', workPackageId: input.workPackageId, expectedPackageVersion: input.expectedPackageVersion,
+        expectedPackageVersionId: input.expectedPackageVersionId },
     });
   },
 

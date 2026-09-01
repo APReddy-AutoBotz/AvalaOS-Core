@@ -4,7 +4,9 @@
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted boundary covers the default-off Source Library, independently versioned Assess source sets and locked bundles, transcript-assisted Assess review/apply, the unified provider registry and atomic budget authority, Desktop/Pixel browser evidence, all 15 applicable workflows, Netlify preview, and fresh independent review. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
 
-Governed multi-source transcript PR B is the active substantial implementation boundary. It owns independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess handoff, governed tenant templates, structured editing and source coverage, Studio adoption of the unified provider gateway, exact lineage/backfill, and feature-owned verification. PR C Delivery/Monitor generalization remains separately gated and is not part of PR B.
+Governed multi-source transcript PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through post-PR-B `main` `5433cad41721355e3ec5a29bc2f87772540c77b5`. It owns independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess handoff, governed tenant templates, structured editing and source coverage, Studio adoption of the unified provider gateway, exact lineage/backfill, and its immutable feature-owned evidence.
+
+Governed Delivery and Monitor PR C is the active substantial implementation boundary from `5433cad41721355e3ec5a29bc2f87772540c77b5`. It owns the additive Delivery source-package union, explicit target-accepted Studio-to-Delivery handoff, manual `not_assessed` / `planning_only` Delivery, immutable item revisions and terminal human decisions, version-bound Delivery review/approval, exact accepted-item-set Monitor baselines, and one read-only canonical Monitor projection. It must preserve PR A/PR B evidence and legacy lineage, remain default off, and complete its feature-owned migration, security, browser, performance, evidence, rollback, and retained-regression gates inside the same substantial PR.
 
 ## Studio PR B accepted boundary
 
@@ -15,7 +17,7 @@ Studio PR B is accepted through PR #217 and corrective PR #218 on verified main 
 Studio PR A owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The accepted Studio PR B boundary above owns private storage, rendition, brokered download, retention, hold, deletion, and reconciliation source authority. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
 
 
-Status: active plan; the accepted sequence includes PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B is authorized and active; PR C remains separately gated
+Status: active plan; PR #255 is accepted at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; governed Delivery and Monitor PR C is authorized and active with exact-head evidence pending
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 

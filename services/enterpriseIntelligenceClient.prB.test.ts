@@ -88,6 +88,75 @@ await (async () => {
   });
 })();
 
+await (async () => {
+  resetTransport(
+    { data: null, error: { name: 'FunctionsFetchError' } },
+    { data: null, error: { name: 'FunctionsRelayError' } },
+  );
+  await assert.rejects(() => enterpriseIntelligenceClient.createManualDeliveryPackage({
+    organizationId,
+    workspaceId,
+    manualBrief: 'Reconcile the uncertain manual package before retrying',
+    items: [{
+      type: 'task',
+      title: 'Reload committed state',
+      description: 'Prove that a possibly committed manual package is not resubmitted under a fresh key.',
+      acceptanceCriteria: ['Exactly one authoritative package is visible after reload.'],
+      nonFunctionalRequirements: ['No automatic execution authority.'],
+    }],
+  }), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'COMMAND_OUTCOME_UNKNOWN');
+  assert.equal(invocations.length, 2);
+  assert.deepEqual(invocations[0].options.body, invocations[1].options.body);
+})();
+
+for (const code of ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'] as const) {
+  await (async () => {
+    resetTransport({
+      data: null,
+      error: {
+        name: 'FunctionsHttpError',
+        context: new Response(JSON.stringify({ ok: false, error: { code } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }),
+      },
+    });
+    await assert.rejects(() => enterpriseIntelligenceClient.createManualDeliveryPackage({
+      organizationId,
+      workspaceId,
+      manualBrief: 'Reconcile the post-commit server outcome before retrying',
+      items: [{
+        type: 'task',
+        title: 'Reload committed state',
+        description: 'A post-execute response failure must lock any fresh-key retry.',
+        acceptanceCriteria: ['Exactly one authoritative package is visible after reload.'],
+        nonFunctionalRequirements: ['No automatic execution authority.'],
+      }],
+    }), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'COMMAND_OUTCOME_UNKNOWN');
+    assert.equal(invocations.length, 1);
+  })();
+}
+
+await (async () => {
+  resetTransport({
+    data: null,
+    error: {
+      name: 'FunctionsHttpError',
+      context: new Response(JSON.stringify({ ok: false, error: { code: 'RESOURCE_STALE' } }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    },
+  });
+  await assert.rejects(() => enterpriseIntelligenceClient.createAssembleBlueprint({
+    organizationId,
+    workspaceId,
+    modernizationDecisionId: sourceSetId,
+    name: 'Retained generic command failure',
+  }), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'COMMAND_UNAVAILABLE');
+  assert.equal(invocations.length, 1);
+})();
+
 assert.throws(() => enterpriseIntelligenceClient.commitStudioTranscriptSourceSet({
   organizationId, workspaceId, label: ' ', members: [{ sourceId, versionSelector: sourceVersionId, role: 'primary' }],
 }), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'TRANSCRIPT_SOURCE_SET_INPUT_INVALID');

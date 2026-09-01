@@ -1,0 +1,254 @@
+# Governed Delivery and Monitor PR C Evidence
+
+Date: 2026-09-01
+Accepted base: `5433cad41721355e3ec5a29bc2f87772540c77b5`
+Branch: `controller/governed-delivery-monitor-pr-c-20260831`
+Disposition: reviewer-confirmed security, pagination, rollback-evidence, cross-workspace authorization, bounded-selector, same-key concurrency, stale-scope completion, uncertain-outcome retry, package-snapshot binding, current-item actor separation, immediate scope-boundary, primary-Monitor actor invalidation, and post-commit outcome-classification defects remediated in source; `local-precommit-29` passed the complete 72-command, 187-assertion matrix plus the independent verifier for its earlier digest and is retained below only as superseded evidence because final security review found one post-execute authority-recheck classification defect; current-source registry/provenance refresh, a complete precommit rerun, fresh final reviews, the committed-head rerun, and hosted exact-head verification remain pending; no readiness claim
+
+## Boundary
+
+PR C is one additive vertical slice after the accepted governed multi-source Studio PR B source boundary. It owns explicit target-accepted Studio-to-Delivery handoff, manual Delivery without fabricated upstream ancestry, immutable Delivery item aggregates and versions, rationale-bound human decisions, version- and aggregate-generation-bound package review and approval, and one immutable Monitor baseline for the exact server-derived accepted item-version set. Enterprise Intelligence and the primary Monitor consume the same minimized read-only baseline projection.
+
+The change does not alter Assess scoring formulas, weights, thresholds, hard stops, recommendations, or score versions. It does not add browser-side provider authority, live telemetry, completion inference, task execution, deployment, or production behavior.
+
+## Authority and rollback
+
+- `module_handoffs_enabled`, `direct_delivery_planning_enabled`, `delivery_item_review_enabled`, and `monitor_approved_baseline_enabled` remain default off.
+- PR C mutation is service-only and transactionally rechecks actor, tenant, workspace, authorization version, resource aggregate version, package snapshot generation, receipt identity, execution token, and fence.
+- Delivery sources are an immutable exclusive union of exact Studio handoff or manual `not_assessed` / `planning_only` origin.
+- Monitor membership is derived in PostgreSQL from the exact approved current package version and canonical accepted set; the browser cannot supply approval or membership truth.
+- Rollback disables the four controls and leaves committed handoffs, packages, versions, decisions, approvals, receipts, effects, and baselines available only through safe read projections. Schema correction is additive-forward; historical evidence is not rewritten.
+
+## Pre-remediation working-tree evidence binding
+
+The canonical local matrix passed against the implementation working-tree snapshot immediately before the first fresh final reviews. Those reviews then found three confirmed source defects, so this run is retained as historical local diagnostic evidence and is not proof for the remediated candidate. It is also not exact committed-head evidence.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `6420eeede40e6d60ba839d7c1b92de2953c175c4430e760292bf1595db26b2d2` |
+| Attempt | `local-precommit-12` |
+| Canonical registry result | 72 commands; 168 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 26 registered fixtures; 13 personas, of which 12 are required; 8 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 168 assertions, and 8 `not_run` results |
+| Recorded legacy semantic manifest digest (not a byte checksum) | `a1b6402226dc6db882b4817c8242be746500b1a4b8fef9aa4945ea47a1b91ebc` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/6420eeede40e6d60ba839d7c1b92de2953c175c4430e760292bf1595db26b2d2/local-precommit-12/` |
+
+Generated logs and manifests are ignored local evidence. They contain no secrets, customer data, raw logs, signed URLs, object identifiers, or production infrastructure identifiers and are not committed as product source.
+
+## Fresh-review findings and focused remediation evidence
+
+Seven successive read-only final-diff review rounds found defects after otherwise complete local matrices. Each affected matrix is retained below as superseded evidence and is not attributed to the current candidate.
+
+The first review round found that legacy generic `approval.review.record` / `approval.record` paths could approve PR C Delivery resources without the canonical terminal-item, three-person, and accepted-set controls; public projections exposed excessive Delivery state plus server lineage hashes and raw identities; and replay incorrectly treated transport request IDs and historical authorization versions as business identity. The corrected source fails closed at both Edge and SQL legacy-approval boundaries, separates full Delivery-read authority from a minimized baseline selector, removes hashes and nonessential identities from strict browser DTOs, and binds receipt identity to the business request while retaining immutable per-attempt metadata and current-authority disclosure checks.
+
+After `local-precommit-16`, the second review round found that production did not carry the database item cursor end to end, the 250-item performance fixture bypassed strict decoding, rollback evidence omitted manual package creation and a separate global read-only mode, handoff history visibility was coupled to write-state flags, and withdrawal could be advertised after current request authority was lost. The corrected package path carries an exact tenant-bound opaque cursor through query, strict client decoding, production state, and the view; loads 100/100/50 items; rejects scope, version, duplicate, non-advancing-cursor, excessive-page, and stale-response drift; preserves prior state across failed-page retry; searches all 250 loaded items; and renders an honest 25-item window. Rollback now executes all 11 actions with all four feature flags off and again with those flags restored under global `read_only=true`, rejecting before receipt, attempt, effect, or privileged-audit creation while keeping current-authority package, handoff outbox/inbox, and Monitor history readable and action-free. Withdrawal is advertised only while current request authority, the handoff flag, and a writable runtime all remain true.
+
+`local-precommit-18` then passed the complete 72-command matrix and independent verifier. The third review round found three additional blockers:
+
+- baseline eligibility SQL could return more than the strict decoder's 100-entry maximum;
+- a cross-workspace handoff request verified source authority but did not require current request authority in the target workspace before receipt creation; and
+- concurrent first use of one business idempotency key had no database serialization proof and could race on receipt insertion.
+
+The current source clamps baseline-eligibility pages to 100, uses a tenant-bound `(updatedAt, workPackageId)` keyset cursor, returns at most 100 entries plus explicit continuation metadata, and exposes continuation through the strict query/client/view path. A disposable PostgreSQL 16 scenario creates 101 eligible packages inside a rollback transaction and proves 100/1 continuation without public hashes; the strict domain decoder accepts 100 and rejects 101.
+
+Every handoff request now requires current `delivery.handoff.request` authority in both the source and target workspaces before business binding or receipt creation. A negative PostgreSQL persona with source authority but no target membership receives only the non-disclosing unavailable result and creates zero receipt, attempt, effect, or privileged-audit rows. First use of an idempotency key is serialized by a transaction-scoped advisory lock over organization, workspace, actor, action, and key; the waiting request reselects the committed canonical response. Two independent PostgreSQL sessions now prove equivalent replay and exactly one effect for the same business key despite different transport metadata, and the Edge test proves the same public contract with one simulated effect.
+
+`local-precommit-19` then passed the complete 72-command matrix and independent verifier. The next fresh security and quality reviews confirmed the prior remediations but found two additional browser-controller defects plus this document's missing `local-precommit-19` binding:
+
+- a delayed command from workspace A could reload and repaint A's projection after the same Enterprise component switched to workspace or actor scope B; and
+- after a manual-package commit followed by two lost responses, the user could resubmit the preserved form under a fresh idempotency key before authoritative reconciliation.
+
+Every read and mutation completion now carries a captured actor/organization/workspace scope plus a monotonic request epoch. Scope changes synchronously invalidate the old epoch, clear its busy state, and discard every old success, error, projection, reload, and finalizer write. The Enterprise strict decoder now returns its validated normalized Delivery and Monitor DTOs rather than the raw nested server shape. A delayed production-component mutation proves that workspace B remains rendered after A completes on Desktop Chrome and Pixel 7.
+
+Two retryable transport failures for one `enterprise-intelligence-command` envelope now produce the explicit `COMMAND_OUTCOME_UNKNOWN` state. Delivery mutation controls remain locked, authored input remains visible, and only an authoritative projection reload permits a later command. The deterministic browser fixture commits the first request, loses both same-envelope responses, and proves that reconciliation returns exactly one manual planning-only package and one effect on both governed browser profiles.
+
+Focused current-source verification passed application typecheck, the governed coverage gate, the new Enterprise decoder/client assertions, and both new adversarial browser scenarios across Desktop Chrome and Pixel 7. The complete `local-precommit-20` matrix then passed all 72 commands and 187 causal assertions, its independent verifier, and its raw-manifest checksum comparison. This evidence binding is a tracked governed-source change, so that run is retained as superseded pre-document-update evidence and does not substitute for the exact committed-head rerun.
+
+The registry bound to `local-precommit-20` recorded 72 commands, 187 causal assertions, nine assertion owners, eight explicit `not_run` boundaries, 29 registered fixtures, 13 registered personas, and all 12 required personas covered. The four added browser assertions own the stale-scope and uncertain-outcome scenarios on Desktop Chrome and Pixel 7. Registry generation records ownership and source provenance only; after this evidence binding, registry/provenance refresh and fresh final read-only reviews remain required before the single commit.
+
+The fifth security review then found that package-level review and approval selected only the package version while item decisions could change the current item set without changing that version, and that a current item actor with a separate package capability was not excluded from package review or approval. It also found that scope invalidation in a passive effect allowed one first render under a changed actor, organization, or workspace to retain the previous projection. Those findings supersede `local-precommit-20` as candidate evidence.
+
+The current source adds an immutable package aggregate generation to the strict projection and every package review/approval selector. Every item decision advances that generation; stale selectors fail before decision/effect creation; page merges reject generation drift; and package review/approval actions and commands exclude every actor who authored or decided a current item. The Enterprise view now stores each projection with its exact actor/organization/workspace key, so the old projection is unavailable during the first changed-context commit rather than waiting for an effect.
+
+Focused current-source verification passed application and Edge typechecks, the domain/client/API suites, the migration contract, the full disposable PostgreSQL 16 fresh/empty/populated/dirty matrix, the governed component and coverage gates, and the targeted stale-scope mutation scenario on Desktop Chrome and Pixel 7. The browser proof observes the pre-passive-effect commit for actor, organization, and workspace changes, sees no old projection or action, attempts no unauthorized mutation, and confirms that the delayed old completion is discarded. A complete current-source matrix and independent verification remain required before the final read-only reviews.
+
+`local-precommit-24` then completed all 72 commands with 187 causal assertions and eight explicit `not_run` boundaries, followed by the independent verifier and a byte-level manifest checksum match. Fresh final security and quality reviews confirmed the package-generation, current-item-actor, Enterprise first-commit scope, tenant/RLS/ACL, rollback, pagination, and retained-history corrections, but found two additional blockers:
+
+- the primary Portfolio Monitor keyed its loaded canonical projection by organization, workspace, and authorization version but omitted the actor, so a same-workspace actor switch could retain or repaint the prior actor's projection; and
+- the Delivery/Monitor SQL command could commit its package, receipt, audit, and effect before the Edge lost or failed to decode the PostgreSQL response, while the Edge/client exposed an ordinary retryable 503 that did not lock a fresh-key resubmission.
+
+The current correction adds actor identity only to the primary Monitor's presentation invalidation key and request-cancellation lifecycle; the default loader deliberately strips that actor-only dimension before the server query so it cannot become a client authority claim. A delayed same-organization/workspace actor request now proves the previous projection is absent on the first changed-context commit and that its late response cannot repaint over the final actor on Desktop Chrome and Pixel 7.
+
+For Delivery/Monitor commands, a typed Edge-to-PostgreSQL transport failure after execution is attempted, an invalid canonical SQL result, or an equivalent post-execute finalization response now returns `COMMAND_OUTCOME_UNKNOWN`. The browser client also maps legacy `RECEIPT_FINALIZATION_FAILED` post-execute responses to that same locked state. Focused application/Edge typechecks, the Enterprise command fault suite, governed coverage including structured `FunctionsHttpError` client cases, and the two-profile browser reconciliation/actor-switch scenarios pass. The browser proof records one post-commit 503, one transport attempt, one manual package, one effect, preserved authored input, no fresh-key retry before reload, and successful authoritative reconciliation. These focused results do not replace the pending complete current-source matrix or exact committed-head run.
+
+`local-precommit-29` subsequently completed all 72 commands with 187 causal assertions and eight explicit `not_run` boundaries. Its independent verifier passed and its raw manifest checksum matched. Fresh final quality review cleared the snapshot; fresh final security review found that successful Delivery/Monitor SQL execution followed by a failed handler-level current-authority recheck still preserved `PERMISSION_DENIED`. Because the Delivery client locks fresh-key mutation only for an unknown outcome, that false terminal failure could permit a second manual package and effect.
+
+The current correction preserves every authorization denial before Delivery/Monitor execution, but maps any handler-level `EnterpriseCommandError` after execution is attempted to non-disclosing `COMMAND_OUTCOME_UNKNOWN`. The causal Enterprise command regression reaches the second authority check only after a decoder-valid committed SQL result, forces that check to deny, and proves HTTP 503 unknown outcome, no permission/authority disclosure, two authority checks, and exactly one effect. Application and Edge typechecks, the governed coverage gate, and the existing Desktop Chrome/Pixel 7 reconciliation journey pass; the browser remains locked until authoritative reload and records one package and one effect. These focused results do not replace the pending complete current-source matrix, fresh final reviews, or exact committed-head run.
+
+## Superseded `local-precommit-29` pre-final-security-review working-tree evidence binding
+
+`local-precommit-29` is the complete matrix for the snapshot reviewed by the latest security and quality review round. The post-execute authority-recheck correction above changed tracked source and therefore supersedes this run as candidate evidence.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `bd32957e80e0676fa03b9ee94bc871d938f77a6afb3dfb598a03f1a9ba592a89` |
+| Attempt | `local-precommit-29` |
+| Canonical registry result | 72 commands; 187 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 29 registered fixtures; 13 personas, of which 12 are required; 9 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 187 assertions, and 8 `not_run` results |
+| Raw `manifest.json` SHA-256 | `2ddb062b62886a7a4c821a3550fe84d741e5f13175aec0389c9e00b84ceb1fc8`; exactly matched `manifest.sha256` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/bd32957e80e0676fa03b9ee94bc871d938f77a6afb3dfb598a03f1a9ba592a89/local-precommit-29/` |
+
+For that superseded digest, the owned PR C groups passed 15/15 domain, 6/6 client, 14/14 API, 30/30 PostgreSQL, 60/60 browser, 12/12 accessibility, 4/4 performance, 35/35 coverage, and 11/11 evidence-contract assertions. Desktop cached-route median was 304 ms and 250-item search p95 was 30.8 ms; Pixel 7 cached-route median was 188 ms and search p95 was 30.4 ms. Retained PR A and PR B exact-head contracts, the full retained platform matrix, 108/108 acceptance cases, 16/16 full-platform browser cases, repository tests, application and Edge typechecks, build, zero-vulnerability audit, provenance/history/security guards, scoring-drift guard, and `git diff --check` passed. No scoring change was present.
+
+## Superseded `local-precommit-24` pre-final-review working-tree evidence binding
+
+`local-precommit-24` is the complete matrix for the snapshot reviewed by the sixth security and quality review round. The two findings above changed tracked source and therefore supersede this run as candidate evidence.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `82c3478c58489313b9d7e92523c2f5006240921b225a1aa7e75588f828a84bdc` |
+| Attempt | `local-precommit-24` |
+| Canonical registry result | 72 commands; 187 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 29 registered fixtures; 13 personas, of which 12 are required; 9 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 187 assertions, and 8 `not_run` results |
+| Raw `manifest.json` SHA-256 | `b2411f8984acc008698ea3751475306e4181dd9fcb1facd32bafb7030fbd0aa4`; exactly matched `manifest.sha256` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/82c3478c58489313b9d7e92523c2f5006240921b225a1aa7e75588f828a84bdc/local-precommit-24/` |
+
+For that superseded digest, the owned PR C groups passed 15/15 domain, 6/6 client, 14/14 API, 30/30 PostgreSQL, 60/60 browser, 12/12 accessibility, 4/4 performance, 35/35 coverage, and 11/11 evidence-contract assertions. Desktop cached-route median was 449 ms and 250-item search p95 was 24.5 ms; Pixel 7 cached-route median was 574 ms and search p95 was 28.8 ms. Retained PR A and PR B exact-head contracts, the full retained platform matrix, 108/108 acceptance cases, 16/16 full-platform browser cases, repository tests, application and Edge typechecks, build, zero-vulnerability audit, provenance/history/security guards, scoring-drift guard, and `git diff --check` passed. No scoring change was present.
+
+## Superseded `local-precommit-20` pre-document-update working-tree evidence binding
+
+`local-precommit-20` is the complete current-source matrix immediately before this exact evidence binding was written. It passed after the stale-scope, uncertain-outcome, nested-decoder, regression-test, registry, and provenance corrections. Because this tracked document update changes the governed working-tree digest, the run is retained as superseded pre-document-update evidence, not as current-source, exact committed-head, hosted, or readiness evidence. The exact committed-head rerun after the single coherent commit remains the final local authority.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `1a232631ea69a4140caa603954c64d9e58ba5691b8b1a202e677433a91493eee` |
+| Attempt | `local-precommit-20` |
+| Canonical registry result | 72 commands; 187 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 29 registered fixtures; 13 personas, of which 12 are required; 9 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 187 assertions, and 8 `not_run` results |
+| Raw `manifest.json` SHA-256 | `b1340dd30b70eacaa64b7e018c347837f8a2c41b3b79d43ce8799c5f2863d3fa`; exactly matched `manifest.sha256` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/1a232631ea69a4140caa603954c64d9e58ba5691b8b1a202e677433a91493eee/local-precommit-20/` |
+
+For that superseded digest, the owned PR C groups passed 15/15 domain, 6/6 client, 14/14 API, 30/30 PostgreSQL, 60/60 browser, 12/12 accessibility, 4/4 performance, 35/35 coverage, and 11/11 evidence-contract assertions. The 72 command durations totaled 2,466,246 ms. `PERF-001` cached-route medians were 170 ms on Desktop Chrome and 182 ms on Pixel 7; `PERF-002-B` 250-item native-`InputEvent` search p95 was 31.1 ms on Desktop Chrome and 30.8 ms on Pixel 7. Retained PR A and PR B exact-head wrappers, retained platform suites, the 108/108 source-backed acceptance catalog, the 16/16 full-platform browser suite, repository tests, application and Edge typechecks, build, zero-vulnerability audit result, static/security/provenance guards, scoring-drift and history-drift guards, and `git diff --check` all passed for that superseded digest.
+
+## Superseded `local-precommit-19` pre-document-update working-tree evidence binding
+
+`local-precommit-19` is the last complete matrix before the stale-scope, uncertain-outcome, nested-decoder, regression-test, and documentation corrections above. It is retained as final pre-document-update evidence for its exact governed digest, not as current-source, exact committed-head, hosted, or readiness evidence. The exact committed-head rerun after the single coherent commit remains the final local authority.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `02379f3030df735a435a0383c814baed87fad501989fb0c111f3fcb694128a87` |
+| Attempt | `local-precommit-19` |
+| Canonical registry result | 72 commands; 183 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 26 registered fixtures; 13 personas, of which 12 are required; 9 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 183 assertions, and 8 `not_run` results |
+| Raw `manifest.json` SHA-256 | `0f778345252c5058a75ba7d3a79aa25f5153ae2f34625b58a2250a84a525716f`; exactly matched `manifest.sha256` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/02379f3030df735a435a0383c814baed87fad501989fb0c111f3fcb694128a87/local-precommit-19/` |
+
+For that superseded digest, the owned PR C groups passed 15/15 domain, 6/6 client, 14/14 API, 30/30 PostgreSQL, 56/56 browser, 12/12 accessibility, 4/4 performance, 35/35 coverage, and 11/11 evidence-contract assertions. Desktop cached-route median was 173 ms and 250-item search p95 was 30.9 ms; Pixel 7 cached-route median was 175 ms and search p95 was 31.4 ms. Retained PR A and PR B exact-head wrappers, retained platform suites, the full 108/108 mocked-provider campaign, the 16/16 full-platform browser suite, repository tests, typechecks, build, zero-vulnerability audit result, static/security/provenance guards, and `git diff --check` all passed for that superseded digest.
+
+## Earlier superseded pre-document-update working-tree evidence binding
+
+The last complete matrix before the third review remediations and this documentation update was `local-precommit-18`. It is the final pre-document-update working-tree evidence, not current-source, exact committed-head, or hosted evidence. The current remediation and documentation changed the governed source digest, so a new complete matrix is required. The exact committed-head rerun after the single coherent commit remains the final local authority.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `1a4dfcac7d795c8acda8422f2ddbfb3c9a5790fc88851411446f1dcdedfbdc96` |
+| Attempt | `local-precommit-18` |
+| Canonical registry result | 72 commands; 176 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 26 registered fixtures; 13 personas, of which 12 are required; 9 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 176 assertions, and 8 `not_run` results |
+| Raw `manifest.json` SHA-256 | `75b26eede8e77261d654a38af7101246040bbf902788cfa8004b92c831c8da11`; exactly matched `manifest.sha256` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/1a4dfcac7d795c8acda8422f2ddbfb3c9a5790fc88851411446f1dcdedfbdc96/local-precommit-18/` |
+
+For that superseded digest, the owned PR C groups passed 14/14 domain, 6/6 client, 13/13 API, 27/27 PostgreSQL, 56/56 browser, 12/12 accessibility, 4/4 performance, 33/33 coverage, and 11/11 evidence-contract assertions. The full run completed in 2,395,965 ms. `PERF-001` cached-route medians were 166 ms on Desktop and 186 ms on Pixel 7; `PERF-002-B` search p95 was 31.7 ms on Desktop and 31.2 ms on Pixel 7. Retained PR A at `460c44864b9d240321e727945411ced51dd0fe30`, retained PR B at `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea`, retained platform suites, the full 108/108 mocked-provider campaign, the two-profile full-platform browser suite, repository tests, typechecks, build, audit, workflow/static/security/source-provenance guards, scoring-drift guard, history-drift guard, and `git diff --check` all passed for that superseded digest.
+
+## Earlier superseded post-remediation working-tree evidence binding
+
+The complete canonical matrix and independent verifier passed against the remediated implementation working-tree snapshot recorded below. It no longer binds the current source after tracked documentation/registry refreshes and post-review quality corrections. It is retained as superseded local evidence, not current precommit, exact committed-head, or hosted evidence. A fresh full canonical rerun is pending after the source freezes.
+
+| Binding | Recorded value |
+| --- | --- |
+| Checked-out Git head and accepted base | `5433cad41721355e3ec5a29bc2f87772540c77b5` |
+| Governed working-tree digest | `929225c070e69a8e84f5245bb559dcb0137455d7f664ed8b6b171e4d9c24fef6` |
+| Attempt | `local-precommit-15` |
+| Canonical registry result | 72 commands; 168 passed causal assertions; 8 explicit `not_run` assertions |
+| Registry context | 26 registered fixtures; 13 personas, of which 12 are required; 8 assertion owners |
+| Independent verifier | Passed for the same base, working-tree digest, 72 commands, 168 assertions, and 8 `not_run` results |
+| Recorded legacy semantic manifest digest (not a byte checksum) | `2f021ea69fdca4ca3f6dba939f921323944bdd7fb1a282863d27d3dfc54f5031` |
+| Sanitized local evidence | `output/process-lifecycle-pr-c/5433cad41721355e3ec5a29bc2f87772540c77b5/929225c070e69a8e84f5245bb559dcb0137455d7f664ed8b6b171e4d9c24fef6/local-precommit-15/` |
+
+The evidence runner used the exact ignored local PostgreSQL tool adapter for `avalaos-pr-c-pg16-20260831`; the pilot backup-to-clean-restore command passed inside the uninterrupted canonical run. Generated adapters, logs, and manifests remain untracked and are not product source.
+
+The `local-precommit-12` and `local-precommit-15` attempts used the pre-correction checksum implementation, which hashed a compact semantic serialization rather than the exact pretty-printed `manifest.json` bytes. Their recorded values are retained only to identify those historical bundles. `local-precommit-18`, `local-precommit-19`, `local-precommit-20`, and current-source evidence generation hash the exact bytes written so standard SHA-256 checksum verification agrees.
+
+## Superseded complete post-remediation local results
+
+The results below belong only to `local-precommit-15` and the independently verified working-tree digest above. They must not be attributed to the current source snapshot.
+
+| Gate | Current classification | Local result |
+| --- | --- | --- |
+| Delivery/Monitor domain, client, Edge command, and query contracts | Executed evidence | Strict domain and client decoders, selector-only clients, canonical SQL-result handling, non-disclosing failure behavior, capability isolation, API adapters, and Edge command/query contracts passed. |
+| Additive migration | Executed evidence | PostgreSQL 16.15 fresh chain, empty upgrade, populated upgrade, dirty-partial atomic rejection, default-off/read-only behavior, RLS/ACL/authentication negatives, response-loss recovery, idempotency, three-person approval separation, replay, concurrency, later Studio-version rejection, target-bound consumption, and safe projections passed in the exact disposable local container. |
+| Browser behavior | Executed evidence | 18/18 PR C Playwright cases passed across Desktop Chrome and Pixel 7. Governed handoff, manual origin, Delivery review/approval, immutable Monitor baseline, capability denial, error recovery, and false-success prevention were exercised with deterministic local fixtures. |
+| Accessibility | Executed evidence | 4/4 dedicated cases passed across the governed profiles, with zero serious/critical axe findings and zero horizontal overflow at Pixel width and 200% zoom. |
+| `PERF-001` and `PERF-002-B` | Executed evidence | Desktop cached-route median was 476 ms and 250-item native-`InputEvent` search p95 was 30.4 ms. Pixel 7 cached-route median was 473 ms and search p95 was 30.8 ms. These passed the unchanged 2500 ms route and 200 ms search budgets. |
+| PR C coverage | Executed evidence | The governed PR C TypeScript coverage command passed its unchanged 95% lines, 95% functions, and 85% branches thresholds, including changed Enterprise integration observation. |
+| Retained PR A and PR B contracts | Executed evidence | The retained PR A wrapper passed 19/19 at `460c44864b9d240321e727945411ced51dd0fe30`; the retained PR B wrapper passed 23/23 at `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea`. Their domain/API/provider/client, PostgreSQL 16, browser, accessibility, performance where owned, coverage, adversarial, and static gates passed. Historical evidence files were not rewritten. |
+| Retained platform suites | Executed evidence | Studio, private Studio, Enterprise Intelligence, Pilot Operations including clean backup/restore, PR 1D through PR 1G, their PostgreSQL/browser/source gates, and scoring parity passed. The retained browser totals included Studio 14/14, private Studio 52/52, Enterprise 20/20, Pilot 6/6, PR 1D 36/36, PR 1E 2/2, PR 1F 2/2, and PR 1G 4/4. |
+| Full-platform campaign | Executed evidence | The mocked-provider campaign passed 108/108 source-backed acceptance branches with zero uncovered branches and all 21 campaign-validator tests. The full-platform browser suite passed 16/16 across seven synthetic personas plus the route boundary on Desktop Chrome and Pixel 7. |
+| Repository quality gates | Executed evidence | `npm test`, application and Edge typechecks, build, audit with zero reported vulnerabilities, workflow validation, secret hygiene, AI-boundary validation, source-provenance validation, scoring-drift guard, history-drift guard, and `git diff --check` passed. |
+| Assertion-owned PR C evidence | Superseded executed local working-tree evidence | The canonical evidence contract and independent verifier accepted every command, owner hash, source-provenance binding, fixture, persona/capability/tenant/workspace context, causal lineage record, assertion result, and explicit `not_run` boundary for the recorded digest. Subsequent tracked changes mean it does not bind current source. |
+| Fresh security and quality review | Executed findings; final review pending | Successive review rounds found the approval bypass, overbroad projection, replay binding, production pagination, rollback coverage, handoff-history, withdrawal-affordance, unbounded eligibility, cross-workspace authority, same-key concurrency, stale-scope completion, uncertain-outcome retry, package-snapshot binding, current-item actor separation, immediate scope-boundary, and evidence-binding defects recorded above. All are corrected in current source; focused verification passed, while a complete current-source matrix and fresh final read-only reviews remain required before commit. |
+| Exact committed-head local matrix | Planned verification | After the single coherent commit, rerun all 72 commands and the independent verifier with the exact commit bound as `PR_C_EXACT_HEAD_SHA`. |
+| Exact-head GitHub Actions and Netlify preview | `not_run` | Required hosted checks must reach terminal success for the exact pushed head before this evidence can report them as executed. |
+
+Local PostgreSQL used the disposable container `avalaos-pr-c-pg16-20260831` running PostgreSQL 16.15 on loopback port 55439. Local browser/provider evidence used deterministic synthetic fixtures and mocked providers. Neither constitutes hosted, connected, provider-cost, deployment, pilot, or production proof.
+
+## Diagnostic attempts excluded from final-candidate passing evidence
+
+The following diagnostic or superseded attempts are not counted as final-candidate passing evidence:
+
+- `local-precommit-8` stopped because the Windows host lacked `pg_dump`. The local backup/restore adapter was then bound to the exact disposable PostgreSQL 16 container.
+- `local-precommit-9` exposed retained PR 1F harness state leaking through a shared temporary database. The harness now creates and drops one exact isolated database per run; repeat execution passed.
+- `local-precommit-10` stopped when the Windows process sandbox denied Chromium spawn. The complete browser matrix was rerun under the approved process-sandbox execution exception.
+- `local-precommit-11` stopped when the full-platform source-provenance gate correctly detected stale digests for intentional changes. The canonical LF-normalized bindings were refreshed, and the focused 21-test/108-case campaign passed before the full rerun.
+- `local-precommit-12` is the first complete passing canonical local run, but its source snapshot was superseded by reviewer-required remediation and it is not final-candidate evidence.
+- `local-precommit-13` ran the remediated PostgreSQL 16 scenarios successfully, then stopped when the evidence matcher detected that the new immutable command-attempt table was absent from the registered forced-RLS table set. The registry context was corrected; this attempt is diagnostic and is not passing evidence.
+- `local-precommit-14` completed 46 canonical commands with all 168 assertion markers present, including the remediated PR C matrix and retained PR A/PR B/Studio/Enterprise campaigns reached before the stop. The pilot recovery command then failed before backup execution because Node could not resolve the temporary Windows `pg_dump.cmd` adapter through direct `spawnSync`; the runner correctly recorded the attempt as failed. An ignored native launcher was added for the exact disposable PostgreSQL 16 adapter, and this partial attempt remains diagnostic only.
+- `local-precommit-15` completed all 72 commands and its independent verifier passed for working-tree digest `929225c070e69a8e84f5245bb559dcb0137455d7f664ed8b6b171e4d9c24fef6`. Subsequent tracked evidence-contract refreshes changed the governed digest, and post-remediation quality review required additional source corrections. It is therefore superseded and is not current-source proof.
+- `local-precommit-16` completed all 72 commands with 170 causal assertions and eight explicit `not_run` results for working-tree digest `b56b6e581d5fb3bea3233dd2f69775072e97f65c526b9efe5a4359ffa4e92d18`. The independent verifier passed, and raw `manifest.json` SHA-256 `87f232f92850d8765c620c281a9576f1a972f5bbe2e217a6444a390f9382256a` exactly matched `manifest.sha256`. Fresh final reviews subsequently found the production-pagination, full rollback, handoff-history, and withdrawal-affordance defects described above. This run is therefore superseded and is not current-source proof.
+- `local-precommit-17` passed the current PR C domain, API, PostgreSQL, browser, accessibility, performance, coverage, evidence-contract, history-drift, and application/Edge typecheck gates plus the retained PR B domain/API/client gates reached before the stop. The runner then failed closed before retained PR B PostgreSQL execution because its dedicated `TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL` binding was absent. The controller enumerated and bound every registry-required database variable before the next attempt; this incomplete attempt is diagnostic only.
+- `local-precommit-18` completed all 72 commands with 176 causal assertions and eight explicit `not_run` results for working-tree digest `1a4dfcac7d795c8acda8422f2ddbfb3c9a5790fc88851411446f1dcdedfbdc96`. Its independent verifier passed, and raw `manifest.json` SHA-256 `75b26eede8e77261d654a38af7101246040bbf902788cfa8004b92c831c8da11` exactly matched `manifest.sha256`. Fresh final reviews then found the unbounded baseline-eligibility selector, missing target-workspace request authority, and unproven same-key receipt race described above. The remediations and documentation changed the governed source digest, so this run is superseded and is not current-source proof.
+- `local-precommit-19` completed all 72 commands with 183 causal assertions and eight explicit `not_run` results for working-tree digest `02379f3030df735a435a0383c814baed87fad501989fb0c111f3fcb694128a87`. Its independent verifier passed, and raw `manifest.json` SHA-256 `0f778345252c5058a75ba7d3a79aa25f5153ae2f34625b58a2250a84a525716f` exactly matched `manifest.sha256`. Fresh final reviews then found the stale-scope completion and uncertain-outcome fresh-key retry defects described above and required this exact evidence binding. The corrections changed the governed source digest, so this run is superseded and is not current-source proof.
+- `local-precommit-20` completed all 72 commands with 187 causal assertions and eight explicit `not_run` results for working-tree digest `1a232631ea69a4140caa603954c64d9e58ba5691b8b1a202e677433a91493eee`. Its independent verifier passed, and raw `manifest.json` SHA-256 `b1340dd30b70eacaa64b7e018c347837f8a2c41b3b79d43ce8799c5f2863d3fa` exactly matched `manifest.sha256`. The fifth security review subsequently found the package-snapshot, current-item actor-separation, and immediate scope-boundary defects described above. Their corrections changed the governed source digest, so this run is superseded and is not current-source, exact committed-head, or hosted proof.
+- `local-precommit-21` stopped in the first domain group when the evidence matcher correctly rejected the newly emitted `stale-item-snapshot` negative because that runtime-context value was not yet registered. Both domain checks themselves passed. The canonical registry was updated to require that negative in the domain and coverage commands; this incomplete attempt is diagnostic only.
+- `local-precommit-22` passed the domain, client, API, migration-contract, and full disposable PostgreSQL 16 scenarios, then stopped when the evidence matcher correctly rejected the migration-contract copy owned by the PostgreSQL command because its registered package context did not yet require snapshot-generation binding and current-item actor separation. The duplicated static context, the expanded PostgreSQL causal context, and the two browser-profile immediate-commit contexts were reconciled before the next attempt; this incomplete attempt is diagnostic only.
+- `local-precommit-23` again passed the domain, client, API, migration-contract, and full disposable PostgreSQL 16 scenarios. It then stopped when the evidence matcher correctly rejected the deterministic same-key concurrency receipt identifier: the newly inserted negative commands had advanced that fixture-owned command ordinal from `311` to `319`. The exact deterministic binding was advanced rather than weakened to a wildcard; this incomplete attempt is diagnostic only.
+- `local-precommit-24` completed all 72 commands with 187 causal assertions and eight explicit `not_run` results for working-tree digest `82c3478c58489313b9d7e92523c2f5006240921b225a1aa7e75588f828a84bdc`. Its independent verifier passed, and raw `manifest.json` SHA-256 `b2411f8984acc008698ea3751475306e4181dd9fcb1facd32bafb7030fbd0aa4` exactly matched `manifest.sha256`. Fresh final reviews then found the primary-Monitor actor invalidation and post-commit outcome-classification defects described above. Their corrections changed the governed source digest, so this run is superseded and is not current-source, exact committed-head, or hosted proof.
+- `local-precommit-25` passed the domain, client, API, static migration contract, and full disposable PostgreSQL 16 scenarios, then the evidence matcher stopped on the same-key concurrency receipt ID. The two genuinely concurrent callers each supplied a different exact receipt ID, and the second caller won this run while the registry encoded only the first caller as winner. The source assertion and registry now enumerate the two exact eligible caller IDs with a strict `$oneOf` matcher; arbitrary UUIDs remain rejected. This incomplete attempt is diagnostic only.
+- `local-precommit-26` passed 42 commands before the retained Enterprise browser command stopped the run. Its Enterprise suite passed 18/20, but both Desktop Chrome and Pixel 7 showed `RESOURCE_STALE` where the established generic failed-HTTP boundary requires `COMMAND_UNAVAILABLE`; the new structured-error decoder had been applied outside Delivery/Monitor. The decoder is now command-family scoped, governed coverage passes, and the exact retained browser journey passes 2/2. This incomplete attempt is diagnostic only and is not current-source proof.
+- `local-precommit-27` passed 59 commands, including the corrected retained Enterprise 20/20 browser journey and every PR C, PR B, PR A, Studio, Private Studio, Enterprise, Pilot, PR 1D, PR 1E, PR 1F, and PR 1G gate reached before the stop. The full-platform campaign then failed closed because the four public branches sourced from intentionally changed `App.tsx` still carried its prior canonical LF-normalized digest. The exact `App.tsx` provenance binding was refreshed, and the focused 21-test/108-case campaign passed. This incomplete attempt is diagnostic only and is not current-source proof.
+- `local-precommit-29` completed all 72 commands with 187 causal assertions and eight explicit `not_run` results for working-tree digest `bd32957e80e0676fa03b9ee94bc871d938f77a6afb3dfb598a03f1a9ba592a89`. Its independent verifier passed, and raw `manifest.json` SHA-256 `2ddb062b62886a7a4c821a3550fe84d741e5f13175aec0389c9e00b84ceb1fc8` exactly matched `manifest.sha256`. Fresh final security review then found the post-execute authority-recheck classification defect described above. The correction changed the governed source digest, so this run is superseded and is not current-source, exact committed-head, or hosted proof.
+
+## Explicit `not_run` and unproven boundaries
+
+- `PERF-003`: `not_run`; no AP-approved numeric PostgreSQL duration budget exists. Functional PostgreSQL 16 isolation, recovery, concurrency, and replay assertions executed separately.
+- `PERF-004`: `not_run`; no AP-approved memory, provider-call, reservation, or token budget exists.
+- Controlled-human walkthrough: prepared separately, `not_run`.
+- Hosted/live infrastructure inspection, real-provider execution or cost, deployment, pilot, production, security certification, and compliance certification: `not_run` or unproven.
+- Current-source registry/provenance refresh, the complete post-latest-correction precommit matrix, fresh final security review, fresh final quality review, exact committed-head local verification, GitHub Actions, and Netlify preview remain pending and are not represented by the superseded precommit working-tree results.
+
+The recorded P0 Storage disposition remains `NOT DEPLOYED`. It is not PR C deployment, security, pilot, production, hosted, storage, or readiness proof.
+
+## Finalization sequence
+
+After the sixth-review remediation narrative above, refresh the assertion registry and source provenance, rerun the complete current-source matrix plus its independent verifier, freeze tracked writes, and obtain fresh security and quality final-diff reviews. If those gates pass, inspect the complete staged patch, create one coherent commit, rerun and independently verify the full matrix against the exact commit, push the branch, and open one Draft PR. Merge, deployment, and live-environment actions are outside this controller run.

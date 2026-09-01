@@ -2012,6 +2012,37 @@ try {
     assert.deepEqual([editHistory[0].actor_id, editHistory[0].next_value, Number(editHistory[0].resulting_version), editHistory[0].resulting_provenance_hash], [fixture.reviewer, 'Govern the reviewed fixture process', 2, edited.provenanceHash]);
   });
   await scenario('Delivery derives IDs/hashes, enforces three-person approval, and gates Monitor', async () => {
+    const prCCanonicalCommand = (await authority.query(
+      "SELECT to_regprocedure('public.enterprise_delivery_monitor_command(jsonb)') IS NOT NULL AS installed",
+    )).rows[0].installed;
+    if (prCCanonicalCommand) {
+      assert.equal((await authority.query(
+        "SELECT has_function_privilege('service_role','public.enterprise_commit_delivery_handoff(jsonb,jsonb,jsonb,jsonb)','EXECUTE') allowed",
+      )).rows[0].allowed, false);
+      assert.equal((await authority.query(
+        "SELECT has_function_privilege('service_role','public.enterprise_commit_monitor_baseline(jsonb,uuid,uuid,uuid)','EXECUTE') allowed",
+      )).rows[0].allowed, false);
+      assert.equal((await authority.query(
+        "SELECT has_function_privilege('service_role','public.enterprise_delivery_monitor_command(jsonb)','EXECUTE') allowed",
+      )).rows[0].allowed, true);
+      const before = (await authority.query(
+        'SELECT (SELECT count(*) FROM public.enterprise_studio_delivery_handoffs)::int handoffs,(SELECT count(*) FROM public.enterprise_delivery_work_packages)::int packages',
+      )).rows[0];
+      await authority.query('BEGIN');
+      try {
+        await authority.query('SET LOCAL ROLE service_role');
+        await assert.rejects(
+          authority.query("SELECT public.enterprise_commit_delivery_handoff('{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb)"),
+          /permission denied/iu,
+        );
+      } finally {
+        await authority.query('ROLLBACK');
+      }
+      assert.deepEqual((await authority.query(
+        'SELECT (SELECT count(*) FROM public.enterprise_studio_delivery_handoffs)::int handoffs,(SELECT count(*) FROM public.enterprise_delivery_work_packages)::int packages',
+      )).rows[0], before);
+      return;
+    }
     const handoff = fixture.uuid(340); const workPackage = fixture.uuid(341); const version = fixture.uuid(342);
     const rootLogical = fixture.uuid(343); const childLogical = fixture.uuid(344);
     const result = (await authority.query('SELECT public.enterprise_commit_delivery_handoff($1::jsonb,$2::jsonb,$3::jsonb,$4::jsonb) result', [

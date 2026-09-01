@@ -11,6 +11,12 @@ import {
   decodeTranscriptFlowProjection,
   type TranscriptFlowProjection,
 } from './transcriptFlow/contracts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+  type DeliveryWorkspaceProjection,
+  type MonitorApprovedBaselinesProjection,
+} from './deliveryMonitor/contracts';
 
 export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';
 export const MODERNIZATION_MODEL_VERSION = 'modernization-disposition-1';
@@ -259,6 +265,8 @@ export interface EnterpriseIntelligenceProjection {
   studioDocuments: EnterpriseStudioDocumentProjection[];
   deliveryPackages: EnterpriseDeliveryPackageProjection[];
   monitorBaselines: EnterpriseMonitorProjection[];
+  deliveryWorkspace?: DeliveryWorkspaceProjection;
+  monitorApprovedBaselines?: MonitorApprovedBaselinesProjection;
   modernizationDecisions: EnterpriseModernizationProjection[];
   blueprints: EnterpriseBlueprintProjection[];
   approvalResources: EnterpriseApprovalResourceProjection[];
@@ -591,6 +599,7 @@ const projectionKeys = [
   'schemaVersion', 'organizationId', 'workspaceId', 'authorizationVersion', 'generatedAt',
   'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
   'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
+  'deliveryWorkspace', 'monitorApprovedBaselines',
   'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
   'transcriptFlow', 'assessPromotion',
 ] as const;
@@ -627,7 +636,13 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
   rejectSensitiveProjectionFields(row);
   decodeTranscriptFlowProjection(row.transcriptFlow);
-  return structuredClone(row) as unknown as EnterpriseIntelligenceProjection;
+  const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : decodeDeliveryWorkspaceProjection(row.deliveryWorkspace);
+  const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : decodeMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
+  return {
+    ...structuredClone(row),
+    ...(deliveryWorkspace ? { deliveryWorkspace } : {}),
+    ...(monitorApprovedBaselines ? { monitorApprovedBaselines } : {}),
+  } as unknown as EnterpriseIntelligenceProjection;
 };
 
 export const classifyEvidenceFile = (name: string, browserMimeType: string, size: number): EvidenceFileSupport => {

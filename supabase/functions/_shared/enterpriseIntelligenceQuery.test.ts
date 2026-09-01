@@ -5,6 +5,10 @@ import {
   type ApplicationRecord,
 } from '../../../services/assessV2/applicationPortfolio.ts';
 import { decodeEnterpriseIntelligenceProjection } from '../../../services/enterpriseIntelligence.ts';
+import {
+  createDeliveryWorkspaceFixture,
+  createMonitorBaselinesFixture,
+} from '../../../services/deliveryMonitor/fixtures.ts';
 import type { TenantAuthorityDatabase, TenantContext } from './tenantAuthority.ts';
 import {
   buildEnterpriseIntelligenceProjection,
@@ -580,6 +584,49 @@ assert.deepEqual(
   [],
   'mutation-only service-role path requests no transcript read collection',
 );
+
+const deliveryProjectionQueries: Array<Record<string, unknown>> = [];
+const boundedDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async (_organizationId, _workspaceId, query = {}) => {
+      deliveryProjectionQueries.push(query);
+      return createDeliveryWorkspaceFixture();
+    },
+    loadMonitorProjection: async () => createMonitorBaselinesFixture(),
+  },
+);
+await boundedDeliveryDatabase.loadProjectionRows(authority(), {
+  deliveryItemPage: {
+    packageId: PACKAGE,
+    cursor: { version: 3, id: CANDIDATE },
+    limit: 100,
+  },
+});
+assert.deepEqual(deliveryProjectionQueries, [{
+  actorId: USER,
+  authorizationVersion: 9,
+  itemLimit: 100,
+  baselineEligibilityLimit: 100,
+  packageId: PACKAGE,
+  itemCursorVersion: 3,
+  itemCursorId: CANDIDATE,
+}], 'Enterprise query forwards only the bounded package and cursor selectors after tenant authority resolves');
+await boundedDeliveryDatabase.loadProjectionRows(authority(), {
+  deliveryBaselineEligibilityPage: {
+    cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE },
+    limit: 100,
+  },
+});
+assert.deepEqual(deliveryProjectionQueries[1], {
+  actorId: USER,
+  authorizationVersion: 9,
+  itemLimit: 100,
+  baselineEligibilityLimit: 100,
+  baselineEligibilityCursorUpdatedAt: '2026-08-31T06:30:00.000Z',
+  baselineEligibilityCursorPackageId: PACKAGE,
+}, 'Enterprise query forwards the bounded baseline-eligibility continuation only after tenant authority resolves');
 const transcriptOnlySerialized = JSON.stringify(transcriptOnlyProjection);
 for (const prohibited of ['content_hash', 'extracted_text_hash', 'storage_path', 'provider_config_id', 'secret_ref']) {
   assert.ok(!transcriptOnlySerialized.includes(prohibited), `transcript-only projection must omit ${prohibited}`);
@@ -817,6 +864,68 @@ const allowed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, expe
 assert.equal(allowed.response.status, 200);
 assert.equal(allowed.response.headers.get('cache-control'), 'no-store');
 assert.ok(isProjectionBody(allowed.body));
+
+let parsedDeliveryPage: unknown;
+const paged = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  expectedAuthorizationVersion: 9,
+  deliveryItemPage: { packageId: PACKAGE, cursor: { version: 2, id: CANDIDATE }, limit: 100 },
+}, {
+  queryDatabase: {
+    loadProjectionRows: async (_authority, options) => {
+      parsedDeliveryPage = options?.deliveryItemPage;
+      return raw();
+    },
+  },
+});
+assert.equal(paged.response.status, 200);
+assert.deepEqual(parsedDeliveryPage, {
+  packageId: PACKAGE,
+  cursor: { version: 2, id: CANDIDATE },
+  limit: 100,
+}, 'strict HTTP request decoding preserves the opaque package selector and exact bounded cursor');
+
+const malformedDeliveryPage = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  deliveryItemPage: { packageId: PACKAGE, cursor: { version: 2, id: CANDIDATE }, limit: 101 },
+});
+assert.deepEqual(
+  { status: malformedDeliveryPage.response.status, body: malformedDeliveryPage.body },
+  { status: 400, body: { code: 'INVALID_REQUEST' } },
+  'a page over the decoder maximum fails before tenant query execution',
+);
+
+let parsedBaselineEligibilityPage: unknown;
+const pagedBaselineEligibility = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  expectedAuthorizationVersion: 9,
+  deliveryBaselineEligibilityPage: { cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE }, limit: 100 },
+}, {
+  queryDatabase: {
+    loadProjectionRows: async (_authority, options) => {
+      parsedBaselineEligibilityPage = options?.deliveryBaselineEligibilityPage;
+      return raw();
+    },
+  },
+});
+assert.equal(pagedBaselineEligibility.response.status, 200);
+assert.deepEqual(parsedBaselineEligibilityPage, {
+  cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE },
+  limit: 100,
+}, 'strict HTTP request decoding preserves the server-issued baseline-eligibility cursor');
+const malformedBaselineEligibilityPage = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  deliveryBaselineEligibilityPage: { cursor: { updatedAt: 'not-a-timestamp', workPackageId: PACKAGE }, limit: 100 },
+});
+assert.deepEqual(
+  { status: malformedBaselineEligibilityPage.response.status, body: malformedBaselineEligibilityPage.body },
+  { status: 400, body: { code: 'INVALID_REQUEST' } },
+  'an invalid baseline-eligibility cursor fails before tenant query execution',
+);
 
 const malformed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, role: 'owner' });
 assert.deepEqual({ status: malformed.response.status, body: malformed.body }, { status: 400, body: { code: 'INVALID_REQUEST' } });

@@ -1194,6 +1194,12 @@ function App() {
           onViewChange={handleViewChange}
           captureMode={productMarketingCapture}
           outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
+          canonicalMonitorContext={!productMarketingCapture && currentOrganization?.id && currentWorkspace?.id ? {
+            actorId: currentUser.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+            expectedAuthorizationVersion: tenantContext?.authorizationVersion,
+          } : undefined}
         />;
       case View.DOCS_FORGE:
         return <DocsForgeView

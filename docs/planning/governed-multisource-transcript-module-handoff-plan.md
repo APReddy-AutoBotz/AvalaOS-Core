@@ -1,16 +1,18 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
-Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B implementation is authorized and active; PR C remains proposed and excluded
+Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; PR C implementation and exact-head verification are authorized and active
 
 Plan date: 2026-08-25
 
-Planning baseline: accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`
+Planning baseline: post-PR-B `main` at `5433cad41721355e3ec5a29bc2f87772540c77b5`
 
 Deployment status: unknown; no hosted or live environment was inspected
 
-Implementation authority: PR A was accepted through PR #255; PR B was explicitly authorized on 2026-08-28; PR C requires separate execution approval
+Implementation authority: PR A was accepted through PR #255; PR B is merged through PR #263; the AP explicitly authorized PR C implementation and testing control on 2026-08-31
 
 PR A evidence boundary: accepted final head `460c44864b9d240321e727945411ced51dd0fe30`, merge `11e670003a73b0ab5a28650b70afac4b267760f4`, 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, all 15 applicable workflows, Netlify preview, and fresh independent review. Executed markers bind assertion-emitted runtime persona, canonical capabilities, tenant scope, fixtures, and exact exercised lineage. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
+
+PR C execution boundary: one additive implementation PR owns Delivery and Monitor behavior, migrations, tests, assertion-owned evidence, rollback, and controlled-human readiness material. Its source/local/CI evidence may prove only the exact candidate it executes. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, compliance certification, and controlled-human results remain `not_run` unless separately authorized and actually executed. `PERF-003` and `PERF-004` remain `not_run` until the AP approves numeric budgets.
 
 ## 1. Plan handling and authority
 
@@ -1209,6 +1211,8 @@ Acceptance boundary:
 - all `DELIVERY-TR-*`, `MONITOR-TR-*`, remaining `PATH-*`, `HANDOFF-*`, end-to-end, accessibility, and performance gates pass;
 - draft/rejected/stale/unresolved packages cannot affect Monitor;
 - Monitor remains read-only and shows exact lineage;
+- actor, organization, or workspace changes invalidate every in-flight Delivery/Monitor completion before it can repaint the new scope;
+- two lost command responses lock fresh-key mutation until an authoritative reload reconciles the possibly committed effect; and
 - the full retained repository matrix passes.
 
 Rollback:

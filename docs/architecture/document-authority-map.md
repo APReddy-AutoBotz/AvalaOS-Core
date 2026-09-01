@@ -72,7 +72,7 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 ## Current governed-transcript authority
 
-Governed multi-source transcript PR A is accepted at source/CI level through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. Governed multi-source transcript PR B is the active substantial Studio boundary. PR C Delivery/Monitor work remains excluded. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+Governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through post-PR-B `main` `5433cad41721355e3ec5a29bc2f87772540c77b5`. Governed Delivery and Monitor PR C is the active substantial boundary; its exact-head source/local/CI evidence and repository acceptance remain pending. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
 
 | Avala Assess V2 domain, rule, command, persistence, compatibility, and rollback architecture | `docs/architecture/assess-v2-decision-intelligence-architecture.md` |
 
