@@ -37,19 +37,14 @@ for (const required of [
   'pull_request:',
   'workflow_dispatch:',
   'contents: read',
-  'image: postgres:16',
   "node-version: '22'",
-  'PR_B_BASE_SHA: 11e670003a73b0ab5a28650b70afac4b267760f4',
   'ref: ${{ github.event.pull_request.head.sha || github.sha }}',
   'fetch-depth: 0',
   'test "$(git rev-parse HEAD)" = "$PR_B_EXACT_HEAD_SHA"',
-  'npx playwright install --with-deps chromium',
-  'npm run test:transcript-flow:studio-evidence-contract',
-  'node scripts/runTranscriptFlowPrBEvidence.mjs',
-  'npm run test:transcript-flow:studio-evidence',
-  'path: output/process-lifecycle-pr-b/',
-  'if-no-files-found: error',
+  'npm run test:transcript-flow:studio-evidence-contract:retained',
 ]) assert.ok(workflow.includes(required), `PR_B_WORKFLOW_REQUIRED:${required}`);
+assert.doesNotMatch(workflow, /node scripts\/runTranscriptFlowPrBEvidence\.mjs/u, 'PR_B_CURRENT_HEAD_HISTORICAL_REPLAY');
+assert.doesNotMatch(workflow, /^\s*run:\s*npm run test:transcript-flow:studio-evidence\s*$/mu, 'PR_B_CURRENT_HEAD_HISTORICAL_VERIFY');
 assert.doesNotMatch(workflow, /continue-on-error\s*:\s*true/iu, 'PR_B_WORKFLOW_CONTINUE_ON_ERROR');
 assert.doesNotMatch(workflow, /permissions:\s*write-all/iu, 'PR_B_WORKFLOW_WRITE_PERMISSION');
 
@@ -78,4 +73,4 @@ for (const required of [
   'studio_artifact_generation_request_v2',
 ]) assert.ok(migration.includes(required), `PR_B_MIGRATION_CI_CONTRACT:${required}`);
 
-console.log(`Governed multi-source Studio PR B CI contract passed: ${EXPECTED_COMMANDS.length} exact commands, isolated two-profile browser ownership, PostgreSQL 16, and exact-head evidence binding.`);
+console.log(`Governed multi-source Studio PR B CI contract passed: ${EXPECTED_COMMANDS.length} exact commands, isolated two-profile browser ownership, PostgreSQL 16, and retained exact-head evidence binding.`);
