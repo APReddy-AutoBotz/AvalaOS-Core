@@ -39,6 +39,35 @@ const requiredScripts = [
   'test:transcript-flow:delivery-monitor-evidence',
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
+assert.match(
+  scripts['test:transcript-flow:delivery-monitor-evidence-contract'],
+  /node --test scripts\/runRetainedEvidenceContract\.test\.mjs/u,
+  'the current PR C contract must regression-test retained merge-parent lineage before evidence execution',
+);
+
+const retainedEvidenceRunner = read('scripts/runRetainedEvidenceContract.mjs');
+assert.match(retainedEvidenceRunner, /\['cat-file', '-p', commit\]/u, 'retained lineage must read raw commit parent objects');
+assert.match(retainedEvidenceRunner, /GIT_NO_REPLACE_OBJECTS: '1'/u, 'retained lineage must disable replacement refs');
+assert.doesNotMatch(
+  retainedEvidenceRunner,
+  /merge-base/u,
+  'retained lineage must not depend on the hosted merge-base query that returned a false result for the accepted graph',
+);
+for (const [file, expected] of [
+  ['scripts/runRetainedPrAEvidenceContract.mjs', [
+    '5433cad41721355e3ec5a29bc2f87772540c77b5',
+    '11e670003a73b0ab5a28650b70afac4b267760f4',
+    '460c44864b9d240321e727945411ced51dd0fe30',
+  ]],
+  ['scripts/runRetainedPrBEvidenceContract.mjs', [
+    '5433cad41721355e3ec5a29bc2f87772540c77b5',
+    'fe3ebfb900bc163df2e436ec5b11f8751f9b79ea',
+  ]],
+]) {
+  const retainedContract = read(file);
+  assert.match(retainedContract, /acceptedParentChain/u, `${file} must declare its accepted merge-parent chain`);
+  for (const sha of expected) assert.match(retainedContract, new RegExp(sha, 'u'), `${file} must pin ${sha}`);
+}
 
 const defaultPlaywright = read('playwright.config.ts');
 assert.match(
@@ -82,6 +111,7 @@ for (const file of [
   'scripts/transcriptFlowPrCEvidenceScope.mjs',
   'scripts/transcriptFlowPrCEvidenceContract.mjs',
   'scripts/transcriptFlowPrCEvidenceContract.test.mjs',
+  'scripts/runRetainedEvidenceContract.test.mjs',
   'scripts/runTranscriptFlowPrCEvidence.mjs',
   'scripts/verifyTranscriptFlowPrCEvidence.mjs',
 ]) assert.equal(existsSync(file), true, `missing PR C CI artifact ${file}`);

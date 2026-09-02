@@ -25,20 +25,88 @@ const assertSucceeded = (result, code) => {
   if (result.status !== 0) throw new Error(`${code}:${result.status ?? 'unknown'}`);
 };
 
-export const runRetainedEvidenceContract = ({ label, exactHead, npmScript }) => {
+const assertSha = (value, code) => {
+  if (!/^[0-9a-f]{40}$/u.test(value)) throw new Error(code);
+};
+
+const readGitObject = (root, args) => run(root, 'git', args, {
+  env: { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' },
+});
+
+const commitParents = (root, label, commit) => {
+  const result = readGitObject(root, ['cat-file', '-p', commit]);
+  if (result.error || result.status !== 0) {
+    assertSucceeded(result, `PR_C_RETAINED_${label}_PARENT_READ`);
+  }
+  return result.stdout.split(/\r?\n/gu).flatMap(line => {
+    const match = line.match(/^parent ([0-9a-f]{40})$/u);
+    return match ? [match[1]] : [];
+  });
+};
+
+export const assertRetainedCommitChain = ({
+  root = process.cwd(), label, exactHead, acceptedBase, acceptedParentChain,
+}) => {
   if (!/^[A-Z0-9_]+$/u.test(label)) throw new Error('PR_C_RETAINED_LABEL');
-  if (!/^[0-9a-f]{40}$/u.test(exactHead)) throw new Error(`PR_C_RETAINED_${label}_HEAD`);
+  assertSha(exactHead, `PR_C_RETAINED_${label}_HEAD`);
+  assertSha(acceptedBase, `PR_C_RETAINED_${label}_ACCEPTED_BASE`);
+  if (!Array.isArray(acceptedParentChain) || acceptedParentChain.length === 0) {
+    throw new Error(`PR_C_RETAINED_${label}_PARENT_CHAIN`);
+  }
+
+  const referencedCommits = new Set([acceptedBase, exactHead]);
+  for (const [index, edge] of acceptedParentChain.entries()) {
+    if (!edge || JSON.stringify(Object.keys(edge).sort()) !== JSON.stringify(['commit', 'parent'])) {
+      throw new Error(`PR_C_RETAINED_${label}_PARENT_EDGE_FIELDS:${index}`);
+    }
+    assertSha(edge.commit, `PR_C_RETAINED_${label}_PARENT_EDGE_COMMIT:${index}`);
+    assertSha(edge.parent, `PR_C_RETAINED_${label}_PARENT_EDGE_PARENT:${index}`);
+    referencedCommits.add(edge.commit);
+    referencedCommits.add(edge.parent);
+  }
+
+  for (const commit of referencedCommits) {
+    assertSucceeded(
+      readGitObject(root, ['cat-file', '-e', `${commit}^{commit}`]),
+      `PR_C_RETAINED_${label}_COMMIT_MISSING:${commit}`,
+    );
+  }
+
+  let cursor = acceptedBase;
+  const visited = new Set([cursor]);
+  for (const [index, edge] of acceptedParentChain.entries()) {
+    if (edge.commit !== cursor) {
+      throw new Error(`PR_C_RETAINED_${label}_PARENT_CHAIN_DISCONNECTED:${index}`);
+    }
+    if (!commitParents(root, label, edge.commit).includes(edge.parent)) {
+      throw new Error(`PR_C_RETAINED_${label}_PARENT_EDGE_MISMATCH:${edge.commit}:${edge.parent}`);
+    }
+    if (visited.has(edge.parent)) throw new Error(`PR_C_RETAINED_${label}_PARENT_CHAIN_CYCLE:${index}`);
+    visited.add(edge.parent);
+    cursor = edge.parent;
+  }
+  if (cursor !== exactHead) throw new Error(`PR_C_RETAINED_${label}_PARENT_CHAIN_TERMINUS:${cursor}`);
+
+  return {
+    acceptedBase,
+    exactHead,
+    parentEdges: acceptedParentChain.length,
+  };
+};
+
+export const runRetainedEvidenceContract = ({
+  label, exactHead, acceptedBase, acceptedParentChain, npmScript,
+}) => {
   if (!/^[a-z0-9:-]+$/u.test(npmScript)) throw new Error(`PR_C_RETAINED_${label}_SCRIPT`);
 
   const root = process.cwd();
-  assertSucceeded(
-    run(root, 'git', ['cat-file', '-e', `${exactHead}^{commit}`]),
-    `PR_C_RETAINED_${label}_HEAD_MISSING`,
-  );
-  assertSucceeded(
-    run(root, 'git', ['merge-base', '--is-ancestor', exactHead, 'HEAD']),
-    `PR_C_RETAINED_${label}_HEAD_NOT_ANCESTOR`,
-  );
+  const retainedLineage = assertRetainedCommitChain({
+    root,
+    label,
+    exactHead,
+    acceptedBase,
+    acceptedParentChain,
+  });
 
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), `avalaos-pr-c-retained-${label.toLowerCase()}-`));
   const checkout = path.join(temporaryRoot, 'repository');
@@ -87,6 +155,7 @@ export const runRetainedEvidenceContract = ({ label, exactHead, npmScript }) => 
     process.stdout.write(`PR_C_RETAINED_EVIDENCE_CONTRACT ${JSON.stringify({
       label,
       exactHead,
+      retainedLineage,
       command: `npm run ${npmScript}`,
       result: 'passed',
     })}\n`);
