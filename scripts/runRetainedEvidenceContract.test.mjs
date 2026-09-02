@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { assertRetainedCommitChain } from './runRetainedEvidenceContract.mjs';
+import { assertRetainedCommitChain, createRetainedCheckout } from './runRetainedEvidenceContract.mjs';
 
 const acceptedBase = '5433cad41721355e3ec5a29bc2f87772540c77b5';
 const acceptedFirstParent = '11e670003a73b0ab5a28650b70afac4b267760f4';
@@ -14,6 +18,58 @@ const prAParentChain = [
 const prBParentChain = [
   { commit: acceptedBase, parent: retainedPrBHead },
 ];
+
+const git = (root, args) => {
+  const result = spawnSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  assert.equal(
+    result.status,
+    0,
+    `git ${args.join(' ')} failed: ${result.error?.message || result.stderr}`,
+  );
+  return result.stdout.trim();
+};
+
+test('creates a self-contained historical checkout without shared object alternates', () => {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'avalaos-retained-checkout-test-'));
+  const source = path.join(temporaryRoot, 'source');
+  const checkout = path.join(temporaryRoot, 'checkout');
+
+  try {
+    mkdirSync(source);
+    git(source, ['init', '--quiet']);
+    git(source, ['config', 'user.name', 'AvalaOS Test']);
+    git(source, ['config', 'user.email', 'test@avalaos.invalid']);
+    writeFileSync(path.join(source, 'retained.txt'), 'retained\n');
+    git(source, ['add', 'retained.txt']);
+    git(source, ['commit', '--quiet', '-m', 'retained']);
+    const retainedHead = git(source, ['rev-parse', 'HEAD']);
+    writeFileSync(path.join(source, 'current.txt'), 'current\n');
+    git(source, ['add', 'current.txt']);
+    git(source, ['commit', '--quiet', '-m', 'current']);
+
+    createRetainedCheckout({
+      root: source,
+      checkout,
+      label: 'TEST',
+      exactHead: retainedHead,
+    });
+
+    assert.equal(git(checkout, ['rev-parse', 'HEAD']), retainedHead);
+    assert.equal(existsSync(path.join(checkout, '.git', 'objects', 'info', 'alternates')), false);
+    rmSync(source, { recursive: true, force: true });
+    assert.equal(git(checkout, ['cat-file', '-t', `${retainedHead}^{tree}`]), 'tree');
+    assert.equal(
+      readFileSync(path.join(checkout, 'retained.txt'), 'utf8').replace(/\r\n/gu, '\n'),
+      'retained\n',
+    );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
 
 test('accepts the exact retained PR A merge-parent chain', () => {
   assert.deepEqual(assertRetainedCommitChain({

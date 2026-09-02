@@ -48,6 +48,21 @@ assert.match(
 const retainedEvidenceRunner = read('scripts/runRetainedEvidenceContract.mjs');
 assert.match(retainedEvidenceRunner, /\['cat-file', '-p', commit\]/u, 'retained lineage must read raw commit parent objects');
 assert.match(retainedEvidenceRunner, /GIT_NO_REPLACE_OBJECTS: '1'/u, 'retained lineage must disable replacement refs');
+assert.match(
+  retainedEvidenceRunner,
+  /\['clone', '--no-local', '--no-checkout', '--no-tags', root, checkout\]/u,
+  'retained execution must use a self-contained historical checkout',
+);
+assert.doesNotMatch(
+  retainedEvidenceRunner,
+  /'--shared'/u,
+  'retained execution must not depend on the hosted checkout object store',
+);
+assert.match(
+  retainedEvidenceRunner,
+  /CHECKOUT_SHARED_OBJECTS/u,
+  'retained execution must fail closed if Git creates a shared-object alternate',
+);
 assert.doesNotMatch(
   retainedEvidenceRunner,
   /merge-base/u,

@@ -33,6 +33,13 @@ const readGitObject = (root, args) => run(root, 'git', args, {
   env: { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' },
 });
 
+const selfContainedGitEnvironment = () => {
+  const environment = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' };
+  delete environment.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  delete environment.GIT_OBJECT_DIRECTORY;
+  return environment;
+};
+
 const commitParents = (root, label, commit) => {
   const result = readGitObject(root, ['cat-file', '-p', commit]);
   if (result.error || result.status !== 0) {
@@ -94,6 +101,36 @@ export const assertRetainedCommitChain = ({
   };
 };
 
+export const createRetainedCheckout = ({ root, checkout, label, exactHead }) => {
+  if (!/^[A-Z0-9_]+$/u.test(label)) throw new Error('PR_C_RETAINED_LABEL');
+  assertSha(exactHead, `PR_C_RETAINED_${label}_HEAD`);
+  const gitEnvironment = selfContainedGitEnvironment();
+
+  assertSucceeded(
+    run(root, 'git', ['clone', '--no-local', '--no-checkout', '--no-tags', root, checkout], {
+      env: gitEnvironment,
+    }),
+    `PR_C_RETAINED_${label}_CLONE_FAILED`,
+  );
+  assertSucceeded(
+    run(root, 'git', ['-C', checkout, 'checkout', '--detach', exactHead], {
+      env: gitEnvironment,
+    }),
+    `PR_C_RETAINED_${label}_CHECKOUT_FAILED`,
+  );
+
+  if (existsSync(path.join(checkout, '.git', 'objects', 'info', 'alternates'))) {
+    throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_SHARED_OBJECTS`);
+  }
+  const checkedOutHead = run(root, 'git', ['-C', checkout, 'rev-parse', 'HEAD'], {
+    env: gitEnvironment,
+  });
+  assertSucceeded(checkedOutHead, `PR_C_RETAINED_${label}_CHECKOUT_HEAD_READ`);
+  if (checkedOutHead.stdout.trim() !== exactHead) {
+    throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_HEAD_MISMATCH`);
+  }
+};
+
 export const runRetainedEvidenceContract = ({
   label, exactHead, acceptedBase, acceptedParentChain, npmScript,
 }) => {
@@ -113,14 +150,7 @@ export const runRetainedEvidenceContract = ({
   const temporaryReal = realpathSync(temporaryRoot);
 
   try {
-    assertSucceeded(
-      run(root, 'git', ['clone', '--shared', '--no-checkout', '--no-tags', root, checkout]),
-      `PR_C_RETAINED_${label}_CLONE_FAILED`,
-    );
-    assertSucceeded(
-      run(root, 'git', ['-C', checkout, 'checkout', '--detach', exactHead]),
-      `PR_C_RETAINED_${label}_CHECKOUT_FAILED`,
-    );
+    createRetainedCheckout({ root, checkout, label, exactHead });
 
     const dependencyRoot = path.join(checkout, 'node_modules');
     for (const packageName of ['typescript', '@types/node', 'undici-types']) {
