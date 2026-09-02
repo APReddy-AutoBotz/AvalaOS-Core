@@ -1,9 +1,10 @@
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { createServer } from 'vite';
 
 const server = await createServer({
-  cacheDir: path.join(process.env.TEMP ?? process.cwd(), 'avalaos-delivery-monitor-pr-c-vite-cache'),
+  cacheDir: path.join(tmpdir(), 'avalaos-delivery-monitor-pr-c-vite-cache'),
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(process.cwd(), '.') } },
   server: { host: '127.0.0.1', port: 4198, strictPort: true },

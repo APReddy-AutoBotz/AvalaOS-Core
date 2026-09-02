@@ -236,11 +236,11 @@ test('Enterprise mode builds its dedicated harness then previews before propagat
   assert.equal(server.wasKilled, true);
 });
 
-test('full-platform fixture mode owns the exact local preview lifecycle before campaign preflight', async () => {
+test('full-platform fixture mode owns an isolated local preview lifecycle before campaign preflight', async () => {
   const mode = browserModeByFlag.get('--full-platform');
   assert.deepEqual(mode, {
     label: 'Full-platform fixture campaign',
-    port: '4173',
+    port: '4192',
     config: 'playwright.full-platform.config.ts',
     readinessPath: '/sandbox',
     serverCommand: 'preview',
@@ -250,7 +250,7 @@ test('full-platform fixture mode owns the exact local preview lifecycle before c
       SITE_NAME: 'avalaos-pilot',
     },
     playwrightEnvironment: {
-      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4173',
+      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4192',
       FULL_PLATFORM_EXECUTION_MODE: 'fixture',
     },
   });
@@ -269,7 +269,7 @@ test('full-platform fixture mode owns the exact local preview lifecycle before c
     }
     if (arguments_.includes('preview')) {
       queueMicrotask(() => {
-        server.stdout.write('  ➜  Local:   http://127.0.0.1:4173/\n');
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4192/\n');
       });
       return server;
     }
@@ -298,9 +298,9 @@ test('full-platform fixture mode owns the exact local preview lifecycle before c
   assert.equal(calls[0].options.env.SITE_NAME, 'avalaos-pilot');
   assert.ok(calls[1].arguments_.includes('preview'));
   assert.ok(calls[1].arguments_.includes('--strictPort'));
-  assert.ok(calls[1].arguments_.includes('4173'));
+  assert.ok(calls[1].arguments_.includes('4192'));
   assert.ok(calls[2].arguments_.includes('--config=playwright.full-platform.config.ts'));
-  assert.equal(calls[2].options.env.FULL_PLATFORM_BASE_URL, 'http://127.0.0.1:4173');
+  assert.equal(calls[2].options.env.FULL_PLATFORM_BASE_URL, 'http://127.0.0.1:4192');
   assert.equal(calls[2].options.env.FULL_PLATFORM_EXECUTION_MODE, 'fixture');
   assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
   assert.equal(server.wasKilled, true);

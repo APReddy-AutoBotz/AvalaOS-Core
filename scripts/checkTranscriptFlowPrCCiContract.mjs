@@ -40,6 +40,38 @@ const requiredScripts = [
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
 
+const defaultPlaywright = read('playwright.config.ts');
+assert.match(
+  defaultPlaywright,
+  /baseURL:\s*'http:\/\/127\.0\.0\.1:4173'/u,
+  'the retained default browser suite must keep its canonical preview port',
+);
+assert.match(
+  defaultPlaywright,
+  /testIgnore:\s*\[[^\]]*'deliveryMonitorPrC\/deliveryMonitorPrC\.spec\.ts'/u,
+  'the retained browser suite must exclude the PR C spec that owns a dedicated harness',
+);
+
+const browserServer = read('tests/browser/deliveryMonitorPrC/server.mjs');
+assert.match(browserServer, /import \{ tmpdir \} from 'node:os';/u, 'the PR C browser server must use the operating-system temp directory');
+assert.match(
+  browserServer,
+  /cacheDir:\s*path\.join\(tmpdir\(\), 'avalaos-delivery-monitor-pr-c-vite-cache'\)/u,
+  'the PR C Vite cache must be outside the repository on every hosted operating system',
+);
+assert.doesNotMatch(
+  browserServer,
+  /cacheDir:[^\r\n]*(?:process\.env\.TEMP|process\.cwd\(\))/u,
+  'the PR C Vite cache must not depend on platform-specific TEMP availability or the repository root',
+);
+
+const governedBrowserRunner = read('scripts/runTranscriptFlowBrowser.mjs');
+assert.match(
+  governedBrowserRunner,
+  /\['--full-platform', \{[\s\S]*?port: '4192'[\s\S]*?FULL_PLATFORM_BASE_URL: 'http:\/\/127\.0\.0\.1:4192'[\s\S]*?\}\],/u,
+  'the full-platform campaign must own a dedicated preview port instead of sharing the retained default suite port',
+);
+
 for (const file of [
   'testing/process-lifecycle/contracts/pr-c-assertion-registry.json',
   'testing/process-lifecycle/contracts/pr-c-assertion-registry.schema.json',

@@ -12,7 +12,9 @@ const OUTPUT_CAPTURE_LIMIT = 4_000;
 export const browserModeByFlag = new Map([
   ['--full-platform', {
     label: 'Full-platform fixture campaign',
-    port: '4173',
+    // Keep the governed campaign isolated from the retained default suite,
+    // whose Playwright-owned preview uses 4173.
+    port: '4192',
     config: 'playwright.full-platform.config.ts',
     readinessPath: '/sandbox',
     serverCommand: 'preview',
@@ -22,7 +24,7 @@ export const browserModeByFlag = new Map([
       SITE_NAME: 'avalaos-pilot',
     },
     playwrightEnvironment: {
-      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4173',
+      FULL_PLATFORM_BASE_URL: 'http://127.0.0.1:4192',
       FULL_PLATFORM_EXECUTION_MODE: 'fixture',
     },
   }],
