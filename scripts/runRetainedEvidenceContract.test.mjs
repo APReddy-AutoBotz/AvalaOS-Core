@@ -33,23 +33,30 @@ const git = (root, args) => {
   return result.stdout.trim();
 };
 
-test('creates a self-contained historical checkout without shared object alternates', () => {
+test('creates a self-contained checkout for an unadvertised historical head without shared object alternates', () => {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'avalaos-retained-checkout-test-'));
   const source = path.join(temporaryRoot, 'source');
   const checkout = path.join(temporaryRoot, 'checkout');
 
   try {
     mkdirSync(source);
-    git(source, ['init', '--quiet']);
+    git(source, ['init', '--quiet', '--initial-branch=current']);
     git(source, ['config', 'user.name', 'AvalaOS Test']);
     git(source, ['config', 'user.email', 'test@avalaos.invalid']);
+    writeFileSync(path.join(source, 'base.txt'), 'base\n');
+    git(source, ['add', 'base.txt']);
+    git(source, ['commit', '--quiet', '-m', 'base']);
+    git(source, ['checkout', '--quiet', '-b', 'retained']);
     writeFileSync(path.join(source, 'retained.txt'), 'retained\n');
     git(source, ['add', 'retained.txt']);
     git(source, ['commit', '--quiet', '-m', 'retained']);
     const retainedHead = git(source, ['rev-parse', 'HEAD']);
+    git(source, ['checkout', '--quiet', 'current']);
     writeFileSync(path.join(source, 'current.txt'), 'current\n');
     git(source, ['add', 'current.txt']);
     git(source, ['commit', '--quiet', '-m', 'current']);
+    git(source, ['branch', '-D', 'retained']);
+    assert.equal(git(source, ['branch', '--contains', retainedHead]), '');
 
     createRetainedCheckout({
       root: source,
@@ -60,12 +67,42 @@ test('creates a self-contained historical checkout without shared object alterna
 
     assert.equal(git(checkout, ['rev-parse', 'HEAD']), retainedHead);
     assert.equal(existsSync(path.join(checkout, '.git', 'objects', 'info', 'alternates')), false);
+    assert.equal(git(source, ['for-each-ref', '--format=%(refname)', 'refs/heads/pr-c-retained']), '');
     rmSync(source, { recursive: true, force: true });
     assert.equal(git(checkout, ['cat-file', '-t', `${retainedHead}^{tree}`]), 'tree');
     assert.equal(
       readFileSync(path.join(checkout, 'retained.txt'), 'utf8').replace(/\r\n/gu, '\n'),
       'retained\n',
     );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('removes the temporary retained source ref when checkout creation fails', () => {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'avalaos-retained-checkout-failure-test-'));
+  const source = path.join(temporaryRoot, 'source');
+  const checkout = path.join(temporaryRoot, 'occupied-checkout');
+
+  try {
+    mkdirSync(source);
+    git(source, ['init', '--quiet', '--initial-branch=current']);
+    git(source, ['config', 'user.name', 'AvalaOS Test']);
+    git(source, ['config', 'user.email', 'test@avalaos.invalid']);
+    writeFileSync(path.join(source, 'retained.txt'), 'retained\n');
+    git(source, ['add', 'retained.txt']);
+    git(source, ['commit', '--quiet', '-m', 'retained']);
+    const retainedHead = git(source, ['rev-parse', 'HEAD']);
+    mkdirSync(checkout);
+    writeFileSync(path.join(checkout, 'occupied.txt'), 'occupied\n');
+
+    assert.throws(() => createRetainedCheckout({
+      root: source,
+      checkout,
+      label: 'FAILURE',
+      exactHead: retainedHead,
+    }), /PR_C_RETAINED_FAILURE_CLONE_FAILED/u);
+    assert.equal(git(source, ['for-each-ref', '--format=%(refname)', 'refs/heads/pr-c-retained']), '');
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }

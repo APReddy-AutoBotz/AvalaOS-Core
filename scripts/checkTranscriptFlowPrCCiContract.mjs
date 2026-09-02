@@ -50,8 +50,18 @@ assert.match(retainedEvidenceRunner, /\['cat-file', '-p', commit\]/u, 'retained 
 assert.match(retainedEvidenceRunner, /GIT_NO_REPLACE_OBJECTS: '1'/u, 'retained lineage must disable replacement refs');
 assert.match(
   retainedEvidenceRunner,
-  /\['clone', '--no-local', '--no-checkout', '--no-tags', root, checkout\]/u,
-  'retained execution must use a self-contained historical checkout',
+  /\['update-ref', retainedRef, exactHead\]/u,
+  'retained execution must advertise the exact historical head through a temporary source ref',
+);
+assert.match(
+  retainedEvidenceRunner,
+  /'clone', '--no-local', '--no-checkout', '--no-tags',[\s\S]*?'--single-branch', '--branch', retainedBranch, root, checkout/u,
+  'retained execution must clone only the temporary exact-head branch into a self-contained checkout',
+);
+assert.match(
+  retainedEvidenceRunner,
+  /\['update-ref', '-d', retainedRef\]/u,
+  'retained execution must remove its temporary source ref even when checkout creation fails',
 );
 assert.doesNotMatch(
   retainedEvidenceRunner,

@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -105,29 +106,50 @@ export const createRetainedCheckout = ({ root, checkout, label, exactHead }) => 
   if (!/^[A-Z0-9_]+$/u.test(label)) throw new Error('PR_C_RETAINED_LABEL');
   assertSha(exactHead, `PR_C_RETAINED_${label}_HEAD`);
   const gitEnvironment = selfContainedGitEnvironment();
+  const retainedBranch = `pr-c-retained/${label.toLowerCase()}-${process.pid}-${randomUUID()}`;
+  const retainedRef = `refs/heads/${retainedBranch}`;
 
   assertSucceeded(
-    run(root, 'git', ['clone', '--no-local', '--no-checkout', '--no-tags', root, checkout], {
+    run(root, 'git', ['update-ref', retainedRef, exactHead], {
       env: gitEnvironment,
     }),
-    `PR_C_RETAINED_${label}_CLONE_FAILED`,
-  );
-  assertSucceeded(
-    run(root, 'git', ['-C', checkout, 'checkout', '--detach', exactHead], {
-      env: gitEnvironment,
-    }),
-    `PR_C_RETAINED_${label}_CHECKOUT_FAILED`,
+    `PR_C_RETAINED_${label}_SOURCE_REF_CREATE_FAILED`,
   );
 
-  if (existsSync(path.join(checkout, '.git', 'objects', 'info', 'alternates'))) {
-    throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_SHARED_OBJECTS`);
-  }
-  const checkedOutHead = run(root, 'git', ['-C', checkout, 'rev-parse', 'HEAD'], {
-    env: gitEnvironment,
-  });
-  assertSucceeded(checkedOutHead, `PR_C_RETAINED_${label}_CHECKOUT_HEAD_READ`);
-  if (checkedOutHead.stdout.trim() !== exactHead) {
-    throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_HEAD_MISMATCH`);
+  try {
+    assertSucceeded(
+      run(root, 'git', [
+        'clone', '--no-local', '--no-checkout', '--no-tags',
+        '--single-branch', '--branch', retainedBranch, root, checkout,
+      ], {
+        env: gitEnvironment,
+      }),
+      `PR_C_RETAINED_${label}_CLONE_FAILED`,
+    );
+    if (existsSync(path.join(checkout, '.git', 'objects', 'info', 'alternates'))) {
+      throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_SHARED_OBJECTS`);
+    }
+    assertSucceeded(
+      run(root, 'git', ['-C', checkout, 'checkout', '--detach', exactHead], {
+        env: gitEnvironment,
+      }),
+      `PR_C_RETAINED_${label}_CHECKOUT_FAILED`,
+    );
+
+    const checkedOutHead = run(root, 'git', ['-C', checkout, 'rev-parse', 'HEAD'], {
+      env: gitEnvironment,
+    });
+    assertSucceeded(checkedOutHead, `PR_C_RETAINED_${label}_CHECKOUT_HEAD_READ`);
+    if (checkedOutHead.stdout.trim() !== exactHead) {
+      throw new Error(`PR_C_RETAINED_${label}_CHECKOUT_HEAD_MISMATCH`);
+    }
+  } finally {
+    assertSucceeded(
+      run(root, 'git', ['update-ref', '-d', retainedRef], {
+        env: gitEnvironment,
+      }),
+      `PR_C_RETAINED_${label}_SOURCE_REF_DELETE_FAILED`,
+    );
   }
 };
 
