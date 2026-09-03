@@ -1,4 +1,4 @@
-export type PrCAssertionOwner = 'domain' | 'pagination-domain' | 'api-command' | 'api-query' | 'client';
+export type PrCAssertionOwner = 'domain' | 'pagination-domain' | 'api-command' | 'api-query' | 'client' | 'client-transport';
 
 export interface PrCAssertionMarker {
   testId: string;

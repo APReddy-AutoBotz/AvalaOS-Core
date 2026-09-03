@@ -1,12 +1,23 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalFileSha256, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH, validatePrCProvenance } from './transcriptFlowPrCEvidenceScope.mjs';
+import {
+  PR_C_EXECUTION_CLASSIFICATIONS,
+  PR_C_GITHUB_CLASSIFICATION,
+  PR_C_LOCAL_CLASSIFICATION,
+} from './transcriptFlowPrCExecutionIdentity.mjs';
 
 export const PR_C_REGISTRY_PATH = 'testing/process-lifecycle/contracts/pr-c-assertion-registry.json';
 export const PR_C_PROVENANCE_PATH = 'testing/process-lifecycle/contracts/pr-c-source-provenance.json';
 export const PR_C_FIXTURE_PATH = 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/fixture-registry.json';
 export const PR_C_PERSONA_PATH = 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json';
+export const PR_C_REGISTRY_VERSION = 'governed-delivery-monitor-pr-c-registry-2';
+export const PR_C_EVIDENCE_VERSION = 'governed-delivery-monitor-pr-c-assertion-evidence-2';
+export const PR_C_COMMAND_RESULTS_VERSION = 'governed-delivery-monitor-pr-c-command-results-2';
+export const PR_C_MANIFEST_VERSION = 'governed-delivery-monitor-pr-c-evidence-2';
+export const PR_C_SOURCE_RECORD_VERSION = 'governed-delivery-monitor-pr-c-source-record-1';
 
 const REQUIRED_TEST_IDS = [
   ...Array.from({ length: 6 }, (_, index) => `DELIVERY-TR-00${index + 1}`),
@@ -22,7 +33,8 @@ const EXACT_NOT_RUN = new Set([
   'PERF-003',
   'PERF-004',
   'CONTROLLED-HUMAN',
-  'HOSTED-VERIFICATION',
+  'EXACT-HEAD-GITHUB-CI',
+  'NETLIFY-HOSTED-PREVIEW',
   'REAL-PROVIDER-VERIFICATION',
   'DEPLOYMENT-VERIFICATION',
   'SECURITY-CERTIFICATION',
@@ -63,6 +75,88 @@ export const expectedPrCCommandRegistry = root => {
 const assert = (condition, code) => {
   if (!condition) throw new Error(code);
 };
+
+export const canonicalPrCJson = value => JSON.stringify(value);
+export const prCSha256 = value => createHash('sha256').update(value).digest('hex');
+export const prCCanonicalDigest = value => prCSha256(canonicalPrCJson(value));
+export const prCCommandRecordDigest = record => {
+  const { commandRecordDigest, ...canonicalRecord } = record;
+  return prCCanonicalDigest(canonicalRecord);
+};
+
+const notApplicable = Object.freeze({ applicability: 'not_applicable', value: null });
+
+export const applicablePrCNotRun = (registry, executionClassification) => registry.notRun.filter(boundary => (
+  boundary.applicableExecutionClassifications.includes(executionClassification)
+));
+
+export const loadPrCEvidenceBindingCatalog = (root, registry) => {
+  const fixturePath = path.join(root, registry.fixtureRegistryPath);
+  const personaPath = path.join(root, registry.personasRegistryPath);
+  const fixtureRegistry = JSON.parse(readFileSync(fixturePath, 'utf8'));
+  return {
+    fixtureRegistrySha256: canonicalFileSha256(fixturePath),
+    personaRegistrySha256: canonicalFileSha256(personaPath),
+    fixtures: new Map(fixtureRegistry.fixtures.map(fixture => [fixture.id, fixture])),
+  };
+};
+
+const canonicalCommand = command => ({
+  id: command.id,
+  command: command.command,
+  environment: command.environment,
+  requiredEnvironment: command.requiredEnvironment || [],
+});
+
+export const buildPrCAssertionSourceRecord = ({ registry, bindingCatalog, assertion, observedRuntimeContext, commandRecordDigest }) => {
+  const command = registry.commands.find(item => item.id === assertion.commandId);
+  const fixture = bindingCatalog.fixtures.get(assertion.fixture);
+  assert(command, `PR_C_SOURCE_COMMAND:${assertion.assertionId}`);
+  assert(fixture, `PR_C_SOURCE_FIXTURE:${assertion.assertionId}`);
+  return {
+    contractVersion: PR_C_SOURCE_RECORD_VERSION,
+    command: canonicalCommand(command),
+    commandRecordDigest,
+    source: { owner: assertion.owner, ...registry.owners[assertion.owner] },
+    fixture: {
+      id: assertion.fixture,
+      registryPath: registry.fixtureRegistryPath,
+      registrySha256: bindingCatalog.fixtureRegistrySha256,
+      recordSha256: prCCanonicalDigest(fixture),
+    },
+    persona: {
+      registryPath: registry.personasRegistryPath,
+      registrySha256: bindingCatalog.personaRegistrySha256,
+      primaryId: observedRuntimeContext.persona.id,
+      participantIds: (observedRuntimeContext.participants || []).map(persona => persona.id),
+    },
+    test: {
+      owner: assertion.owner,
+      testId: assertion.testId,
+      assertionId: assertion.assertionId,
+      testName: assertion.testName,
+    },
+    expectedRuntimeContext: assertion.expectedRuntimeContext,
+    observedRuntimeContext,
+  };
+};
+
+export const buildPrCNotRunSourceRecord = ({ registry, boundary }) => ({
+  contractVersion: PR_C_SOURCE_RECORD_VERSION,
+  command: notApplicable,
+  commandRecordDigest: notApplicable,
+  source: { owner: boundary.owner, ...registry.owners[boundary.owner] },
+  fixture: notApplicable,
+  persona: notApplicable,
+  runtimeContext: notApplicable,
+  test: {
+    owner: boundary.owner,
+    testId: boundary.testId,
+    assertionId: notApplicable,
+    testName: boundary.testName,
+  },
+  boundary,
+});
 
 const unique = (values, code) => {
   assert(new Set(values).size === values.length, code);
@@ -235,14 +329,14 @@ export const runtimeContextMatches = (actual, expected, label = 'runtimeContext'
   assert(actual === expected, `PR_C_RUNTIME_VALUE:${label}`);
 };
 
-const validateSanitized = value => {
+export const validatePrCSanitized = value => {
   const serialized = JSON.stringify(value);
   assert(!/(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|signed[_-]?url|service[_-]?role|raw[_-]?log|customer[_-]?data)\s*["']?\s*:/iu.test(serialized), 'PR_C_EVIDENCE_SENSITIVE_KEY');
   assert(!/(postgres(?:ql)?:\/\/[^:@/]+:[^@/]+@|sk-(?=[a-z0-9_-]{12,})(?=[a-z0-9_-]*\d)[a-z0-9_-]{12,}|eyJ[a-z0-9_-]{20,}\.)/iu.test(serialized), 'PR_C_EVIDENCE_SECRET_VALUE');
 };
 
 export const validatePrCRegistryStructure = (root, registry, provenance, { verifyDigests = true } = {}) => {
-  assert(registry.contractVersion === 'governed-delivery-monitor-pr-c-registry-1', 'PR_C_REGISTRY_VERSION');
+  assert(registry.contractVersion === PR_C_REGISTRY_VERSION, 'PR_C_REGISTRY_VERSION');
   assert(registry.workflowPath === PR_C_WORKFLOW_PATH, 'PR_C_REGISTRY_WORKFLOW');
   assert(registry.provenancePath === PR_C_PROVENANCE_PATH, 'PR_C_REGISTRY_PROVENANCE');
   assert(registry.fixtureRegistryPath === PR_C_FIXTURE_PATH, 'PR_C_REGISTRY_FIXTURES');
@@ -351,12 +445,19 @@ export const validatePrCRegistryStructure = (root, registry, provenance, { verif
     assert(Object.hasOwn(registry.owners, boundary.owner), `PR_C_NOT_RUN_OWNER:${boundary.testId}`);
     assert(typeof boundary.testName === 'string' && boundary.testName.length > 0, `PR_C_NOT_RUN_TEST_NAME:${boundary.testId}`);
     assert(typeof boundary.reason === 'string' && boundary.reason.length > 20, `PR_C_NOT_RUN_REASON:${boundary.testId}`);
+    sortedUnique(boundary.applicableExecutionClassifications, `PR_C_NOT_RUN_CLASSIFICATIONS:${boundary.testId}`);
+    assert(boundary.applicableExecutionClassifications.length > 0
+      && boundary.applicableExecutionClassifications.every(value => PR_C_EXECUTION_CLASSIFICATIONS.includes(value)), `PR_C_NOT_RUN_CLASSIFICATION:${boundary.testId}`);
     assert(!covered.has(boundary.testId), `PR_C_NOT_RUN_EXECUTED:${boundary.testId}`);
   }
+  const exactHeadBoundary = registry.notRun.find(boundary => boundary.testId === 'EXACT-HEAD-GITHUB-CI');
+  assert(JSON.stringify(exactHeadBoundary?.applicableExecutionClassifications) === JSON.stringify([PR_C_LOCAL_CLASSIFICATION]), 'PR_C_EXACT_HEAD_NOT_RUN_SCOPE');
+  const previewBoundary = registry.notRun.find(boundary => boundary.testId === 'NETLIFY-HOSTED-PREVIEW');
+  assert(JSON.stringify(previewBoundary?.applicableExecutionClassifications) === JSON.stringify([PR_C_GITHUB_CLASSIFICATION, PR_C_LOCAL_CLASSIFICATION]), 'PR_C_PREVIEW_NOT_RUN_SCOPE');
 
   assert(provenance.acceptedMainBaseline === PR_C_BASE_SHA, 'PR_C_PROVENANCE_BASE');
-  validateSanitized(registry);
-  validateSanitized(provenance);
+  validatePrCSanitized(registry);
+  validatePrCSanitized(provenance);
   if (verifyDigests) validatePrCProvenance(root, registry, provenance);
   return {
     commandCount: registry.commands.length,

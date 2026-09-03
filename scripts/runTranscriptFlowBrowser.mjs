@@ -52,7 +52,23 @@ export const browserModeByFlag = new Map([
     port: '4187',
     config: 'playwright.studio-artifacts.config.ts',
     readinessPath: '/tests/browser/studioArtifactsHarness.html',
-    serverCommand: 'serve',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      STUDIO_ARTIFACT_BROWSER_TEST_BUILD: 'true',
+    },
+  }],
+  ['--studio-pr-b', {
+    label: 'Governed multi-source Studio PR B',
+    port: '4197',
+    config: 'playwright.studio-pr-b.config.ts',
+    readinessPath: '/tests/browser/studioPrB/harness.html',
+    serverCommand: 'preview',
+    build: true,
+    viteConfig: 'vite.studio-pr-b.config.ts',
+    playwrightEnvironment: {
+      STUDIO_PR_B_EXTERNAL_SERVER: 'true',
+    },
   }],
   ['--studio-private-artifacts', {
     label: 'Studio private artifacts',
@@ -101,13 +117,28 @@ export const browserModeByFlag = new Map([
       PR1G_EXTERNAL_SERVER: 'true',
     },
   }],
+  ['--delivery-monitor-pr-c', {
+    label: 'Governed Delivery/Monitor PR C',
+    port: '4198',
+    config: 'playwright.delivery-monitor-pr-c.config.ts',
+    readinessPath: '/tests/browser/deliveryMonitorPrC/harness.html',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD: 'true',
+    },
+  }],
   ['--pilot-operations', {
     label: 'Pilot Operations',
     port: '4427',
     config: 'playwright.pilot-operations.config.ts',
     readinessPath: '/tests/browser/pilotOperationsHarness.html',
-    serverCommand: 'serve',
+    serverCommand: 'preview',
+    build: true,
     runtimeMode: 'automated_test',
+    environment: {
+      PILOT_OPERATIONS_BROWSER_TEST_BUILD: 'true',
+    },
     playwrightEnvironment: {
       PILOT_OPERATIONS_EXTERNAL_SERVER: 'true',
     },
@@ -364,7 +395,11 @@ export const runBrowserHarness = async ({
 
   if (mode.build) {
     const buildExitCode = await runOwnedCommand({
-      arguments_: [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'],
+      arguments_: [
+        path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
+        'build',
+        ...(mode.viteConfig ? ['--config', mode.viteConfig] : []),
+      ],
       root,
       environment: serverEnvironment,
       spawnImpl,
@@ -378,6 +413,7 @@ export const runBrowserHarness = async ({
   const server = spawnImpl(process.execPath, [
     path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
     ...(mode.serverCommand === 'preview' ? ['preview'] : []),
+    ...(mode.viteConfig ? ['--config', mode.viteConfig] : []),
     '--host', '127.0.0.1', '--port', mode.port, '--strictPort', '--clearScreen', 'false',
   ], {
     cwd: root,

@@ -127,6 +127,16 @@ export type EnterpriseIntelligenceQueryDependencies = {
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const sameUuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+const assertEmbeddedProjectionScope = (
+  authority: TenantContext,
+  projection: DeliveryWorkspaceProjection | MonitorApprovedBaselinesProjection,
+) => {
+  if (!sameUuid(projection.organizationId, authority.organizationId)
+    || !sameUuid(projection.workspaceId, authority.workspaceId)) {
+    throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
+  }
+};
 const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion', 'deliveryItemPage', 'deliveryBaselineEligibilityPage'];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
@@ -366,12 +376,20 @@ export const createEnterpriseIntelligenceQueryDatabase = (
           baselineEligibilityCursorPackageId: baselineEligibilityPage.cursor.workPackageId,
         } : {}),
       },
-    ).then(value => { rows.deliveryWorkspace = decodeDeliveryWorkspaceProjection(value); }));
+    ).then(value => {
+      const projection = decodeDeliveryWorkspaceProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.deliveryWorkspace = projection;
+    }));
     if (monitorVisible) tasks.push(deliveryMonitorDatabase.loadMonitorProjection(
       authority.organizationId,
       authority.workspaceId,
       { actorId: authority.userId, authorizationVersion: authority.authorizationVersion, limit: 100 },
-    ).then(value => { rows.monitorApprovedBaselines = decodeMonitorApprovedBaselinesProjection(value); }));
+    ).then(value => {
+      const projection = decodeMonitorApprovedBaselinesProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.monitorApprovedBaselines = projection;
+    }));
     if (modernizationVisible) {
       load('modernizationAssessments', `enterprise_modernization_assessments?select=id,application_ref,status,created_at&${scope}&order=created_at.desc&limit=200`);
       load('modernizationDecisions', `enterprise_modernization_decisions?select=id,modernization_assessment_id,primary_disposition,alternative_disposition,eligible_dispositions,blockers,conflicts,status,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
@@ -1065,6 +1083,8 @@ export const buildEnterpriseIntelligenceProjection = (
   raw: EnterpriseIntelligenceRawProjection,
   generatedAt = new Date(),
 ): EnterpriseIntelligenceProjection => {
+  if (raw.deliveryWorkspace) assertEmbeddedProjectionScope(authority, raw.deliveryWorkspace);
+  if (raw.monitorApprovedBaselines) assertEmbeddedProjectionScope(authority, raw.monitorApprovedBaselines);
   const visibility = projectionVisibility(authority);
   const providers = visibility.providerVisible ? projectProviders(raw, authority.capabilities.includes('org.admin')) : [];
   const evidence = visibility.evidenceVisible

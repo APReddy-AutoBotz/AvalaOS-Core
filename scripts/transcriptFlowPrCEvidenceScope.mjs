@@ -10,16 +10,25 @@ const normalizePath = value => value.replaceAll('\\', '/');
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const lines = value => value.split(/\r?\n/gu).map(item => item.trim()).filter(Boolean).map(normalizePath);
 const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const governedPath = relative => !relative.startsWith('output/') && !relative.startsWith('.agent/');
 
 export const canonicalFileSha256 = file => sha256(readFileSync(file, 'utf8').replace(/\r\n?/gu, '\n'));
 
 export const collectChangedPrCFiles = (root, baseGitSha = PR_C_BASE_SHA) => {
-  const committed = lines(git(root, ['diff', '--name-only', '--diff-filter=ACMR', `${baseGitSha}...HEAD`]));
-  const tracked = lines(git(root, ['diff', '--name-only', '--diff-filter=ACMR']));
-  const staged = lines(git(root, ['diff', '--cached', '--name-only', '--diff-filter=ACMR']));
+  const deleted = [...new Set([
+    ...lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=D', `${baseGitSha}...HEAD`])),
+    ...lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=D'])),
+    ...lines(git(root, ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=D'])),
+  ])].filter(governedPath).sort();
+  if (deleted.length > 0) {
+    throw new Error(`PR_C_SCOPED_DELETION_UNSUPPORTED:${JSON.stringify(deleted)}`);
+  }
+  const committed = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=ACMR', `${baseGitSha}...HEAD`]));
+  const tracked = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=ACMR']));
+  const staged = lines(git(root, ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=ACMR']));
   const untracked = lines(git(root, ['ls-files', '--others', '--exclude-standard']));
   return [...new Set([...committed, ...tracked, ...staged, ...untracked])]
-    .filter(relative => !relative.startsWith('output/') && !relative.startsWith('.agent/'))
+    .filter(governedPath)
     .sort();
 };
 

@@ -12,7 +12,11 @@ for (const pattern of [
   /node-version: '22'/u,
   /fetch-depth: 0/u,
   /PR_C_BASE_SHA: 5433cad41721355e3ec5a29bc2f87772540c77b5/u,
+  /PR_C_EXECUTION_CLASSIFICATION: github_candidate/u,
   /PR_C_EXACT_HEAD_SHA/u,
+  /PR_C_WORKFLOW_PATH: \.github\/workflows\/transcript-flow-pr-c\.yml/u,
+  /PR_C_WORKFLOW_RUN_ID: \$\{\{ github\.run_id \}\}/u,
+  /PR_C_RUN_ATTEMPT: \$\{\{ github\.run_attempt \}\}/u,
   /git rev-parse HEAD/u,
   /git merge-base/u,
   /npm ci/u,
@@ -21,6 +25,7 @@ for (const pattern of [
   /runTranscriptFlowPrCEvidence\.mjs/u,
   /test:transcript-flow:delivery-monitor-evidence/u,
   /upload-artifact@v4/u,
+  /governed-delivery-monitor-pr-c-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u,
   /output\/process-lifecycle-pr-c\//u,
 ]) assert.match(workflow, pattern);
 assert.doesNotMatch(workflow, /continue-on-error/u);
@@ -43,6 +48,15 @@ assert.match(
   scripts['test:transcript-flow:delivery-monitor-evidence-contract'],
   /node --test scripts\/runRetainedEvidenceContract\.test\.mjs/u,
   'the current PR C contract must regression-test retained merge-parent lineage before evidence execution',
+);
+for (const requiredTest of [
+  'scripts/transcriptFlowPrCExecutionIdentity.test.mjs',
+  'scripts/transcriptFlowPrCEvidenceContract.test.mjs',
+  'scripts/transcriptFlowPrCEvidenceVerifier.test.mjs',
+]) assert.match(
+  scripts['test:transcript-flow:delivery-monitor-evidence-contract'],
+  new RegExp(requiredTest.replaceAll('.', '\\.'), 'u'),
+  `the PR C evidence contract must execute ${requiredTest}`,
 );
 
 const retainedEvidenceRunner = read('scripts/runRetainedEvidenceContract.mjs');
@@ -105,6 +119,23 @@ assert.match(
   /testIgnore:\s*\[[^\]]*'deliveryMonitorPrC\/deliveryMonitorPrC\.spec\.ts'/u,
   'the retained browser suite must exclude the PR C spec that owns a dedicated harness',
 );
+assert.match(
+  defaultPlaywright,
+  /testIgnore:\s*\[[^\]]*'enterpriseIntelligencePrCScope\.spec\.ts'/u,
+  'the retained browser suite must exclude the PR C scope-isolation spec owned by the dedicated harness',
+);
+
+const deliveryMonitorPlaywright = read('playwright.delivery-monitor-pr-c.config.ts');
+assert.match(
+  deliveryMonitorPlaywright,
+  /'deliveryMonitorPrC\/deliveryMonitorPrC\.spec\.ts'/u,
+  'the dedicated PR C browser suite must retain the governed Delivery/Monitor journey',
+);
+assert.match(
+  deliveryMonitorPlaywright,
+  /'enterpriseIntelligencePrCScope\.spec\.ts'/u,
+  'the dedicated PR C browser suite must execute scope-isolation tests on both configured profiles',
+);
 
 const retainedTranscriptPlaywright = read('playwright.transcript-flow-pr-a.config.ts');
 assert.match(
@@ -147,6 +178,60 @@ assert.match(
   /\['--full-platform', \{[\s\S]*?port: '4192'[\s\S]*?FULL_PLATFORM_BASE_URL: 'http:\/\/127\.0\.0\.1:4192'[\s\S]*?\}\],/u,
   'the full-platform campaign must own a dedicated preview port instead of sharing the retained default suite port',
 );
+assert.match(
+  governedBrowserRunner,
+  /\['--delivery-monitor-pr-c', \{[\s\S]*?port: '4198'[\s\S]*?serverCommand: 'preview'[\s\S]*?build: true[\s\S]*?DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD: 'true'[\s\S]*?\}\],/u,
+  'the PR C browser matrix must prebuild its governed harnesses and use the owned preview lifecycle',
+);
+assert.match(
+  governedBrowserRunner,
+  /\['--studio-pr-b', \{[\s\S]*?port: '4197'[\s\S]*?serverCommand: 'preview'[\s\S]*?build: true[\s\S]*?viteConfig: 'vite\.studio-pr-b\.config\.ts'[\s\S]*?STUDIO_PR_B_EXTERNAL_SERVER: 'true'[\s\S]*?\}\],/u,
+  'the retained PR B browser matrix must prebuild its governed harness and use the owned preview lifecycle',
+);
+assert.match(
+  governedBrowserRunner,
+  /\['--studio-artifacts', \{[\s\S]*?port: '4187'[\s\S]*?serverCommand: 'preview'[\s\S]*?build: true[\s\S]*?STUDIO_ARTIFACT_BROWSER_TEST_BUILD: 'true'[\s\S]*?\}\],/u,
+  'the retained Studio browser matrix must prebuild its governed harness and use the owned preview lifecycle',
+);
+assert.equal(
+  scripts['test:transcript-flow:studio-browser'],
+  'node scripts/runTranscriptFlowBrowser.mjs --studio-pr-b',
+  'the retained PR B browser command must select the governed shared lifecycle',
+);
+assert.equal(
+  scripts['test:browser:studio-artifacts'],
+  'node scripts/runTranscriptFlowBrowser.mjs --studio-artifacts',
+  'the retained Studio browser command must select the governed shared lifecycle',
+);
+const retainedStudioPlaywright = read('playwright.studio-pr-b.config.ts');
+assert.match(retainedStudioPlaywright, /STUDIO_PR_B_EXTERNAL_SERVER/u, 'the retained PR B config must disable nested server ownership');
+assert.match(retainedStudioPlaywright, /webServer:\s*externalServer\s*\?\s*undefined/u, 'the retained PR B config must yield server ownership to the shared controller');
+const retainedStudioVite = read('vite.studio-pr-b.config.ts');
+assert.match(retainedStudioVite, /tests\/browser\/studioPrB\/harness\.html/u, 'the retained PR B production build must include its harness');
+
+const prCBrowserRunner = read('scripts/runTranscriptFlowPrCBrowser.mjs');
+assert.match(
+  prCBrowserRunner,
+  /browserModeByFlag\.get\('--delivery-monitor-pr-c'\)/u,
+  'the PR C browser command must select the governed shared lifecycle',
+);
+assert.match(prCBrowserRunner, /runBrowserHarness/u, 'the PR C browser command must use the tested owned browser harness');
+assert.doesNotMatch(
+  prCBrowserRunner,
+  /deliveryMonitorPrC\/server\.mjs|createServer\(|__delivery_monitor_pr_c_shutdown/u,
+  'the PR C browser command must not launch the cold on-demand development server',
+);
+
+const viteConfig = read('vite.config.ts');
+for (const required of [
+  'DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD',
+  'tests/browser/deliveryMonitorPrC/harness.html',
+  'tests/browser/enterpriseIntelligenceHarness.html',
+  'STUDIO_ARTIFACT_BROWSER_TEST_BUILD',
+  'tests/browser/studioArtifactsHarness.html',
+]) {
+  assert.ok(viteConfig.includes(required), `the PR C production build input is missing ${required}`);
+}
 
 for (const file of [
   'testing/process-lifecycle/contracts/pr-c-assertion-registry.json',
@@ -156,8 +241,11 @@ for (const file of [
   'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json',
   'scripts/buildTranscriptFlowPrCRegistry.mjs',
   'scripts/transcriptFlowPrCEvidenceScope.mjs',
+  'scripts/transcriptFlowPrCExecutionIdentity.mjs',
+  'scripts/transcriptFlowPrCExecutionIdentity.test.mjs',
   'scripts/transcriptFlowPrCEvidenceContract.mjs',
   'scripts/transcriptFlowPrCEvidenceContract.test.mjs',
+  'scripts/transcriptFlowPrCEvidenceVerifier.test.mjs',
   'scripts/runRetainedEvidenceContract.test.mjs',
   'scripts/runTranscriptFlowPrCEvidence.mjs',
   'scripts/verifyTranscriptFlowPrCEvidence.mjs',

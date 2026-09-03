@@ -93,7 +93,9 @@ const parsed = [
   parseDeliveryMonitorPayload('delivery.package.create.manual', { manualBrief: 'Manual planning.', items: [{ clientKey: 'item-0001', itemType: 'Task', title: 'Exact target', description: 'Bounded proposal.', acceptanceCriteria: ['Done'], nonFunctionalRequirements: ['Safe'] }] }),
   parseDeliveryMonitorPayload('delivery.item.review', { itemAggregateId: ids.packageId, expectedAggregateVersion: 2, expectedItemVersionId: ids.packageVersionId, outcome: 'edited', rationale: 'Edit.', item: { itemType: 'Task', title: 'Edited', description: 'Edited.', acceptanceCriteria: [], nonFunctionalRequirements: [] } }),
   parseDeliveryMonitorPayload('delivery.item.review', { itemAggregateId: ids.packageId, expectedAggregateVersion: 2, expectedItemVersionId: ids.packageVersionId, outcome: 'accepted', rationale: 'Accept.' }),
-  parseDeliveryMonitorPayload('delivery.package.revision.commit', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, itemRevisions: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId, rationale: 'Revise.', item: { itemType: 'Story', title: 'Story', description: 'Story.', acceptanceCriteria: [], nonFunctionalRequirements: [] } }] }),
+  parseDeliveryMonitorPayload('delivery.package.revision.commit', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3,
+    expectedItems: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId }],
+    itemRevisions: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId, rationale: 'Revise.', item: { itemType: 'Story', title: 'Story', description: 'Story.', acceptanceCriteria: [], nonFunctionalRequirements: [] } }] }),
   parseDeliveryMonitorPayload('delivery.package.review.resolve', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3, outcome: 'approved', rationale: 'Review.' }),
   parseDeliveryMonitorPayload('delivery.package.approval.resolve', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3, outcome: 'rejected', rationale: 'Reject.' }),
   parseDeliveryMonitorPayload('monitor.baseline.create', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId }),
@@ -104,16 +106,86 @@ for (const invalid of [
   ['delivery.package.create.manual', { manualBrief: 'Manual', items: [item, item] }],
   ['delivery.item.review', { itemAggregateId: ids.packageId, expectedAggregateVersion: 1, expectedItemVersionId: ids.packageVersionId, outcome: 'accepted', rationale: 'Accept.', item: { itemType: 'Task', title: 'Bad', description: 'Bad.', acceptanceCriteria: [], nonFunctionalRequirements: [] } }],
   ['delivery.item.review', { itemAggregateId: ids.packageId, expectedAggregateVersion: 1, expectedItemVersionId: ids.packageVersionId, outcome: 'edited', rationale: 'Edit.' }],
-  ['delivery.package.revision.commit', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, itemRevisions: [] }],
+  ['delivery.package.revision.commit', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3, expectedItems: [], itemRevisions: [] }],
   ['delivery.package.review.resolve', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, outcome: 'approved', rationale: 'Missing generation.' }],
   ['monitor.baseline.create', { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, milestones: ['browser-authored'] }],
 ] as const) assert.throws(() => parseDeliveryMonitorPayload(invalid[0], invalid[1]), DeliveryMonitorCommandError);
+assert.throws(() => parseDeliveryMonitorPayload('delivery.package.revision.commit', {
+  workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3,
+  expectedItems: [
+    { itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId },
+    { itemAggregateId: ids.artifactId.toUpperCase(), expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId },
+  ],
+  itemRevisions: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId, rationale: 'Case variants cannot disguise a duplicate identity.', item: { itemType: 'Story', title: 'Changed', description: 'Changed.', acceptanceCriteria: [], nonFunctionalRequirements: [] } }],
+}), DeliveryMonitorCommandError);
 
 decodeDeliveryMonitorCanonicalResult({ ok: true, outcome: 'committed', receiptId: ids.receiptId, action: 'delivery.handoff.request', resourceId: ids.handoffId, resourceVersion: 1,
   sourceWorkspaceId: ids.workspaceId, targetWorkspaceId: ids.targetWorkspaceId, studioArtifactId: ids.artifactId, studioArtifactType: 'brd', studioArtifactVersionId: ids.artifactVersionId,
   studioArtifactHash: 'a'.repeat(64), lineageClassification: 'not_assessed', planningOnly: true, routePolicyVersion: 1, routePolicyHash: 'b'.repeat(64), expiresAt: '2026-09-01T00:00:00.000Z', targetPackageHash: 'c'.repeat(64), proposedItemCount: 1 }, 'delivery.handoff.request');
 decodeDeliveryMonitorCanonicalResult({ ok: true, outcome: 'replayed', receiptId: ids.receiptId, action: 'delivery.package.revision.commit', resourceId: ids.packageId, resourceVersion: 2,
-  packageVersionId: ids.packageVersionId, packageHash: 'a'.repeat(64), items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.artifactVersionId, version: 2, itemHash: 'b'.repeat(64) }] }, 'delivery.package.revision.commit');
+  packageVersionId: ids.artifactId, packageHash: 'a'.repeat(64), items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.baselineId, version: 2, itemHash: 'b'.repeat(64), status: 'edited' }] }, 'delivery.package.revision.commit', {
+    receiptId: ids.receiptId, payload: { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3,
+      expectedItems: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId }], itemRevisions: [{ itemAggregateId: ids.artifactId }] },
+  });
+for (const substituted of [
+  { receiptId: ids.artifactVersionId },
+  { resourceId: ids.handoffId },
+  { resourceVersion: 3 },
+  { items: [{ itemAggregateId: ids.targetWorkspaceId, itemVersionId: ids.baselineId, version: 2, itemHash: 'b'.repeat(64), status: 'edited' }] },
+  { items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.baselineId, version: 3, itemHash: 'b'.repeat(64), status: 'edited' }] },
+  { items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.artifactVersionId, version: 2, itemHash: 'b'.repeat(64), status: 'edited' }] },
+  { items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.baselineId, version: 2, itemHash: 'b'.repeat(64), status: 'proposed' }] },
+]) assert.throws(() => decodeDeliveryMonitorCanonicalResult({ ok: true, outcome: 'committed', receiptId: ids.receiptId, action: 'delivery.package.revision.commit', resourceId: ids.packageId, resourceVersion: 2,
+  packageVersionId: ids.artifactId, packageHash: 'a'.repeat(64), items: [{ itemAggregateId: ids.artifactId, itemVersionId: ids.baselineId, version: 2, itemHash: 'b'.repeat(64), status: 'edited' }], ...substituted }, 'delivery.package.revision.commit', {
+    receiptId: ids.receiptId, payload: { workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 3,
+      expectedItems: [{ itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId }], itemRevisions: [{ itemAggregateId: ids.artifactId }] },
+  }), DeliveryMonitorCommandError);
+
+const secondAggregateId = '22000000-0000-4000-8000-000000000001';
+const secondPredecessorVersionId = '22000000-0000-4000-8000-000000000002';
+const firstNewVersionId = '22000000-0000-4000-8000-000000000003';
+const secondNewVersionId = '22000000-0000-4000-8000-000000000004';
+const multiItemRevisionBinding = {
+  receiptId: ids.receiptId,
+  payload: {
+    workPackageId: ids.packageId,
+    expectedPackageVersion: 1,
+    expectedPackageVersionId: ids.packageVersionId,
+    expectedPackageAggregateVersion: 3,
+    expectedItems: [
+      { itemAggregateId: ids.artifactId, expectedAggregateVersion: 1, expectedItemVersionId: ids.artifactVersionId },
+      { itemAggregateId: secondAggregateId, expectedAggregateVersion: 4, expectedItemVersionId: secondPredecessorVersionId },
+    ],
+    itemRevisions: [{ itemAggregateId: ids.artifactId }],
+  },
+};
+const multiItemRevisionResult = {
+  ok: true,
+  outcome: 'committed',
+  receiptId: ids.receiptId,
+  action: 'delivery.package.revision.commit',
+  resourceId: ids.packageId,
+  resourceVersion: 2,
+  packageVersionId: ids.artifactId,
+  packageHash: 'a'.repeat(64),
+  items: [
+    { itemAggregateId: ids.artifactId, itemVersionId: firstNewVersionId, version: 2, itemHash: 'b'.repeat(64), status: 'edited' },
+    { itemAggregateId: secondAggregateId, itemVersionId: secondNewVersionId, version: 5, itemHash: 'c'.repeat(64), status: 'proposed' },
+  ],
+} as const;
+decodeDeliveryMonitorCanonicalResult(multiItemRevisionResult, 'delivery.package.revision.commit', multiItemRevisionBinding);
+assert.throws(() => decodeDeliveryMonitorCanonicalResult({
+  ...multiItemRevisionResult,
+  items: multiItemRevisionResult.items.map(item => ({ ...item, itemVersionId: firstNewVersionId })),
+}, 'delivery.package.revision.commit', multiItemRevisionBinding), DeliveryMonitorCommandError);
+assert.throws(() => decodeDeliveryMonitorCanonicalResult({
+  ...multiItemRevisionResult,
+  items: [
+    { ...multiItemRevisionResult.items[0], itemVersionId: secondPredecessorVersionId },
+    { ...multiItemRevisionResult.items[1], itemVersionId: ids.artifactVersionId },
+  ],
+}, 'delivery.package.revision.commit', multiItemRevisionBinding), DeliveryMonitorCommandError);
+marker('DELIVERY-TR-003', 'api-recovery-result-binds-receipt-package-version-and-complete-descendants');
 decodeDeliveryMonitorCanonicalResult({ ok: true, outcome: 'committed', receiptId: ids.receiptId, action: 'delivery.package.create.manual', resourceId: ids.packageId, resourceVersion: 1,
   packageVersionId: ids.packageVersionId, packageHash: 'a'.repeat(64), sourcePackageId: ids.artifactId, sourcePackageHash: 'b'.repeat(64), lineageClassification: 'not_assessed', planningOnly: true,
   items: [{ clientKey: 'item-0001', aggregateId: ids.artifactId, versionId: ids.artifactVersionId, version: 1, hash: 'c'.repeat(64) }] }, 'delivery.package.create.manual');

@@ -9,7 +9,7 @@ export type DeliveryMonitorCommandInput =
   | { action: 'delivery.package.create.manual'; manualBrief: string; items: ManualDeliveryItemInput[] }
   | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'edited'; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType } }
   | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'accepted' | 'rejected'; rationale: string }
-  | { action: 'delivery.package.revision.commit'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; itemRevisions: Array<{ itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType } }> }
+  | { action: 'delivery.package.revision.commit'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; expectedItems: DeliveryItemIdentityInput[]; itemRevisions: Array<{ itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType } }> }
   | { action: 'delivery.package.review.resolve'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; outcome: 'approved' | 'changes_requested' | 'rejected'; rationale: string }
   | { action: 'delivery.package.approval.resolve'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; outcome: 'approved' | 'rejected'; rationale: string }
   | { action: 'monitor.baseline.create'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string };
@@ -19,6 +19,12 @@ export interface DeliveryItemAuthoredFields {
   description: string;
   acceptanceCriteria: string[];
   nonFunctionalRequirements: string[];
+}
+
+export interface DeliveryItemIdentityInput {
+  itemAggregateId: string;
+  expectedAggregateVersion: number;
+  expectedItemVersionId: string;
 }
 
 export interface ManualDeliveryItemInput extends DeliveryItemAuthoredFields {
@@ -36,7 +42,7 @@ export class DeliveryMonitorCommandInputError extends Error {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id = (value: string) => {
   if (!uuid.test(value)) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
-  return value;
+  return value.toLowerCase();
 };
 const integer = (value: number, allowZero = false) => {
   if (!Number.isSafeInteger(value) || value < (allowZero ? 0 : 1)) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
@@ -61,6 +67,15 @@ const authored = (value: DeliveryItemAuthoredFields): DeliveryItemAuthoredFields
 const sqlItemType = (value: DeliveryItemType) => `${value[0].toUpperCase()}${value.slice(1)}`;
 const exactInputKeys = (value: object, allowed: readonly string[]) => {
   if (Object.keys(value).some(key => !allowed.includes(key))) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
+};
+const itemIdentities = (values: DeliveryItemIdentityInput[]) => {
+  if (!Array.isArray(values) || values.length < 1 || values.length > 250) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
+  const decoded = values.map(value => {
+    exactInputKeys(value, ['itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId']);
+    return { itemAggregateId: id(value.itemAggregateId), expectedAggregateVersion: integer(value.expectedAggregateVersion), expectedItemVersionId: id(value.expectedItemVersionId) };
+  }).sort((left, right) => left.itemAggregateId.localeCompare(right.itemAggregateId));
+  if (new Set(decoded.map(value => value.itemAggregateId)).size !== decoded.length) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
+  return decoded;
 };
 const items = (values: ManualDeliveryItemInput[]) => {
   if (!Array.isArray(values) || values.length < 1 || values.length > 250) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
@@ -111,14 +126,21 @@ export const buildDeliveryMonitorSelectorPayload = (input: DeliveryMonitorComman
         outcome: input.outcome, rationale: text(input.rationale, 1, 4_000), ...(input.outcome === 'edited' ? { item: { itemType: sqlItemType(input.authored.type), ...authored(input.authored) } } : {}),
       };
     case 'delivery.package.revision.commit':
-      exactInputKeys(input, ['action', 'workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'itemRevisions']);
-      if (input.itemRevisions.length < 1 || input.itemRevisions.length > 250
-        || new Set(input.itemRevisions.map(item => item.itemAggregateId)).size !== input.itemRevisions.length) {
+      exactInputKeys(input, ['action', 'workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'expectedPackageAggregateVersion', 'expectedItems', 'itemRevisions']);
+      if (input.itemRevisions.length < 1 || input.itemRevisions.length > 250) {
         throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
       }
-      return { workPackageId: id(input.workPackageId), expectedPackageVersion: integer(input.expectedPackageVersion), expectedPackageVersionId: id(input.expectedPackageVersionId), itemRevisions: input.itemRevisions.map(item => ({
+      const expectedItems = itemIdentities(input.expectedItems);
+      const expectedById = new Map(expectedItems.map(value => [value.itemAggregateId, value]));
+      const itemRevisions = input.itemRevisions.map(item => ({
         itemAggregateId: id(item.itemAggregateId), expectedAggregateVersion: integer(item.expectedAggregateVersion), expectedItemVersionId: id(item.expectedItemVersionId), rationale: text(item.rationale, 1, 4_000), item: { itemType: sqlItemType(item.authored.type), ...authored(item.authored) },
-      })) };
+      })).sort((left, right) => left.itemAggregateId.localeCompare(right.itemAggregateId));
+      if (new Set(itemRevisions.map(item => item.itemAggregateId)).size !== itemRevisions.length
+        || itemRevisions.some(value => {
+          const identity = expectedById.get(value.itemAggregateId);
+          return !identity || identity.expectedAggregateVersion !== value.expectedAggregateVersion || identity.expectedItemVersionId !== value.expectedItemVersionId;
+        })) throw new DeliveryMonitorCommandInputError('INVALID_PAYLOAD');
+      return { workPackageId: id(input.workPackageId), expectedPackageVersion: integer(input.expectedPackageVersion), expectedPackageVersionId: id(input.expectedPackageVersionId), expectedPackageAggregateVersion: integer(input.expectedPackageAggregateVersion), expectedItems, itemRevisions };
     case 'delivery.package.review.resolve':
     case 'delivery.package.approval.resolve':
       exactInputKeys(input, ['action', 'workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'expectedPackageAggregateVersion', 'outcome', 'rationale']);

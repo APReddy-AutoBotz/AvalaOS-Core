@@ -306,6 +306,68 @@ test('full-platform fixture mode owns an isolated local preview lifecycle before
   assert.equal(server.wasKilled, true);
 });
 
+test('Studio artifacts mode prebuilds its harness and owns the preview lifecycle', async () => {
+  const mode = browserModeByFlag.get('--studio-artifacts');
+  assert.deepEqual(mode, {
+    label: 'Studio artifacts',
+    port: '4187',
+    config: 'playwright.studio-artifacts.config.ts',
+    readinessPath: '/tests/browser/studioArtifactsHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      STUDIO_ARTIFACT_BROWSER_TEST_BUILD: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('build')) {
+      const build = new FakeChild();
+      queueMicrotask(() => {
+        build.exitCode = 0;
+        build.emit('close', 0, null);
+      });
+      return build;
+    }
+    if (arguments_.includes('preview')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4187/\n');
+      });
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].arguments_.includes('build'));
+  assert.equal(calls[0].options.env.STUDIO_ARTIFACT_BROWSER_TEST_BUILD, 'true');
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('--strictPort'));
+  assert.ok(calls[1].arguments_.includes('4187'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.studio-artifacts.config.ts'));
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
 test('Studio private artifacts mode owns its preview lifecycle and disables Playwright webServer ownership', async () => {
   const mode = browserModeByFlag.get('--studio-private-artifacts');
   assert.deepEqual(mode, {
@@ -379,8 +441,12 @@ test('Pilot Operations mode owns its Vite lifecycle and preserves automated-test
     port: '4427',
     config: 'playwright.pilot-operations.config.ts',
     readinessPath: '/tests/browser/pilotOperationsHarness.html',
-    serverCommand: 'serve',
+    serverCommand: 'preview',
+    build: true,
     runtimeMode: 'automated_test',
+    environment: {
+      PILOT_OPERATIONS_BROWSER_TEST_BUILD: 'true',
+    },
     playwrightEnvironment: {
       PILOT_OPERATIONS_EXTERNAL_SERVER: 'true',
     },
@@ -415,13 +481,135 @@ test('Pilot Operations mode owns its Vite lifecycle and preserves automated-test
   });
 
   assert.equal(exitCode, 0);
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0].arguments_.includes('--strictPort'));
-  assert.ok(calls[0].arguments_.includes('4427'));
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].arguments_.includes('build'));
+  assert.equal(calls[0].options.env.PILOT_OPERATIONS_BROWSER_TEST_BUILD, 'true');
   assert.equal(calls[0].options.env.VITE_AVALA_RUNTIME_MODE, 'automated_test');
-  assert.ok(calls[1].arguments_.includes('--config=playwright.pilot-operations.config.ts'));
-  assert.equal(calls[1].options.env.PILOT_OPERATIONS_EXTERNAL_SERVER, 'true');
-  assert.equal(calls[1].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('--strictPort'));
+  assert.ok(calls[1].arguments_.includes('4427'));
+  assert.equal(calls[1].options.env.VITE_AVALA_RUNTIME_MODE, 'automated_test');
+  assert.ok(calls[2].arguments_.includes('--config=playwright.pilot-operations.config.ts'));
+  assert.equal(calls[2].options.env.PILOT_OPERATIONS_EXTERNAL_SERVER, 'true');
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
+test('Studio PR B mode builds its dedicated harness with the retained Vite config before preview', async () => {
+  const mode = browserModeByFlag.get('--studio-pr-b');
+  assert.deepEqual(mode, {
+    label: 'Governed multi-source Studio PR B',
+    port: '4197',
+    config: 'playwright.studio-pr-b.config.ts',
+    readinessPath: '/tests/browser/studioPrB/harness.html',
+    serverCommand: 'preview',
+    build: true,
+    viteConfig: 'vite.studio-pr-b.config.ts',
+    playwrightEnvironment: {
+      STUDIO_PR_B_EXTERNAL_SERVER: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('build')) {
+      const build = new FakeChild();
+      queueMicrotask(() => {
+        build.exitCode = 0;
+        build.emit('close', 0, null);
+      });
+      return build;
+    }
+    if (arguments_.includes('preview')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4197/\n');
+      });
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0].arguments_.slice(-3), ['build', '--config', 'vite.studio-pr-b.config.ts']);
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('--strictPort'));
+  assert.ok(calls[1].arguments_.includes('4197'));
+  assert.ok(calls[1].arguments_.includes('vite.studio-pr-b.config.ts'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.studio-pr-b.config.ts'));
+  assert.equal(calls[2].options.env.STUDIO_PR_B_EXTERNAL_SERVER, 'true');
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
+test('Delivery/Monitor PR C mode prebuilds both governed browser harnesses before Playwright', async () => {
+  const mode = browserModeByFlag.get('--delivery-monitor-pr-c');
+  assert.deepEqual(mode, {
+    label: 'Governed Delivery/Monitor PR C',
+    port: '4198',
+    config: 'playwright.delivery-monitor-pr-c.config.ts',
+    readinessPath: '/tests/browser/deliveryMonitorPrC/harness.html',
+    serverCommand: 'preview',
+    build: true,
+    environment: {
+      DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('--port')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4198/\n');
+      });
+      return server;
+    }
+    const child = new FakeChild();
+    queueMicrotask(() => {
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    });
+    return child;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].arguments_.includes('build'));
+  assert.equal(calls[0].options.env.DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD, 'true');
+  assert.equal(calls[0].options.env.VITE_AVALA_RUNTIME_MODE, 'pilot');
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('4198'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.delivery-monitor-pr-c.config.ts'));
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
   assert.equal(server.wasKilled, true);
 });
 

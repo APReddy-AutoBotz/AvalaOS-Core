@@ -28,6 +28,7 @@ const commands: DeliveryMonitorCommandInput[] = [
   { action: 'delivery.item.review', itemAggregateId: ids.itemAggregateId, expectedAggregateVersion: 2, expectedItemVersionId: ids.itemVersionId, outcome: 'edited', rationale: 'Edited.', authored },
   { action: 'delivery.item.review', itemAggregateId: ids.itemAggregateId, expectedAggregateVersion: 2, expectedItemVersionId: ids.itemVersionId, outcome: 'accepted', rationale: 'Accepted.' },
   { action: 'delivery.package.revision.commit', workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId,
+    expectedPackageAggregateVersion: 2, expectedItems: [{ itemAggregateId: ids.itemAggregateId, expectedAggregateVersion: 2, expectedItemVersionId: ids.itemVersionId }],
     itemRevisions: [{ itemAggregateId: ids.itemAggregateId, expectedAggregateVersion: 2, expectedItemVersionId: ids.itemVersionId, rationale: 'Revised.', authored }] },
   { action: 'delivery.package.review.resolve', workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 2, outcome: 'changes_requested', rationale: 'Changes.' },
   { action: 'delivery.package.approval.resolve', workPackageId: ids.packageId, expectedPackageVersion: 1, expectedPackageVersionId: ids.packageVersionId, expectedPackageAggregateVersion: 2, outcome: 'rejected', rationale: 'Rejected.' },

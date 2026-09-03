@@ -1,6 +1,6 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
-Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; PR C implementation and exact-head verification are authorized and active
+Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized PR C corrective continuation and remains merge NO-GO pending full exact-head verification
 
 Plan date: 2026-08-25
 
@@ -1209,10 +1209,14 @@ Delivers:
 Acceptance boundary:
 
 - all `DELIVERY-TR-*`, `MONITOR-TR-*`, remaining `PATH-*`, `HANDOFF-*`, end-to-end, accessibility, and performance gates pass;
+- a reviewer-blocked package exposes recovery only for its exact current package/version/aggregate identity; the production workspace loads the complete bounded descendant set, binds every current descendant selector, authors only explicitly selected materially changed descendants, and rejects unchanged, partial-knowledge, stale, foreign, replayed, or substituted input atomically;
+- a committed recovery creates a new immutable package version and fresh descendant decision state; its canonical result contains exactly one unique new item-version identity per expected aggregate and reuses no predecessor item-version identity from the complete set, so package review and approval must be repeated before any new Monitor baseline becomes eligible;
 - draft/rejected/stale/unresolved packages cannot affect Monitor;
 - Monitor remains read-only and shows exact lineage;
-- actor, organization, or workspace changes invalidate every in-flight Delivery/Monitor completion before it can repaint the new scope;
+- actor, organization, or workspace changes synchronously clear every secret, private-file byte, provider/source/route selector, candidate/draft selection, preview, pending action, status, and error before the new scope renders, and invalidate every in-flight file/mutation/Delivery/Monitor completion before it can repaint or mutate that scope; requested, outer, and nested Delivery/Monitor UUID scopes must match semantically;
 - two lost command responses lock fresh-key mutation until an authoritative reload reconciles the possibly committed effect; and
+- currently authorized exact committed receipt replay succeeds after mutable feature disablement or global read-only activation, while revoked authority still denies disclosure and new keys create no receipt or effect;
+- the manifest, command results, every passed assertion, and every `not_run` record bind the independently derived canonical workflow path, run ID, attempt, accepted base, exact head, execution classification, canonical evidence path, command/source/fixture/persona/runtime identity, and relevant record digest; base-tracked deletion or rename fails scope collection closed, and local evidence cannot satisfy a hosted gate; and
 - the full retained repository matrix passes.
 
 Rollback:

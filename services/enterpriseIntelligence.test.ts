@@ -252,6 +252,34 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
   assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].label, 'Delivery package v1');
   assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].items[0].aggregateId, deliveryWorkspace.packages[0].items[0].itemAggregateId);
   assert.equal(decodedDelivery.monitorApprovedBaselines?.baselines.length, 1);
+  const uppercaseEquivalent = decodeEnterpriseIntelligenceProjection({
+    ...baseProjection,
+    deliveryWorkspace: {
+      ...deliveryWorkspace,
+      organizationId: baseProjection.organizationId.toUpperCase(),
+      workspaceId: baseProjection.workspaceId.toUpperCase(),
+    },
+    monitorApprovedBaselines: {
+      ...monitorApprovedBaselines,
+      organizationId: baseProjection.organizationId.toUpperCase(),
+      workspaceId: baseProjection.workspaceId.toUpperCase(),
+    },
+  });
+  assert.equal(uppercaseEquivalent.deliveryWorkspace?.organizationId, baseProjection.organizationId.toUpperCase());
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({
+      ...baseProjection,
+      deliveryWorkspace: { ...deliveryWorkspace, organizationId: '30000000-0000-4000-8000-000000000003', workspaceId: baseProjection.workspaceId },
+    }),
+    /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  );
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({
+      ...baseProjection,
+      monitorApprovedBaselines: { ...monitorApprovedBaselines, organizationId: baseProjection.organizationId, workspaceId: '40000000-0000-4000-8000-000000000004' },
+    }),
+    /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  );
   assert.throws(
     () => decodeEnterpriseIntelligenceProjection({ ...baseProjection, providers: [{ secretReference: 'server-only' }] }),
     /ENTERPRISE_PROJECTION_SENSITIVE_FIELD/,

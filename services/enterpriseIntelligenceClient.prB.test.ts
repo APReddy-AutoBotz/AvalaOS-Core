@@ -3,6 +3,8 @@ import {
   EnterpriseIntelligenceClientError,
   enterpriseIntelligenceClient,
 } from './enterpriseIntelligenceClient';
+import { ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION } from './enterpriseIntelligence';
+import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
 
 type Invocation = {
   name: string;
@@ -32,6 +34,53 @@ const sourceVersionId = '10000000-0000-4000-8000-000000000005';
 const supportingSourceId = '10000000-0000-4000-8000-000000000006';
 const supportingVersionId = '10000000-0000-4000-8000-000000000007';
 const bundleId = '10000000-0000-4000-8000-000000000008';
+const emptyProjection = {
+  schemaVersion: ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
+  organizationId,
+  workspaceId,
+  authorizationVersion: 9,
+  generatedAt: '2026-09-03T00:00:00.000Z',
+  capabilities: [],
+  availability: 'empty',
+  providers: [],
+  evidenceSources: [],
+  evidenceCandidates: [],
+  assessDrafts: [],
+  applications: [],
+  studioDocuments: [],
+  deliveryPackages: [],
+  monitorBaselines: [],
+  modernizationDecisions: [],
+  blueprints: [],
+  approvalResources: [],
+  commandActivity: [],
+  transcriptFlow: emptyTranscriptFlowProjection(),
+  assessPromotion: {
+    state: 'contract_pending',
+    acceptedCandidateCount: 0,
+    provenanceComplete: false,
+    idempotencyState: 'not_started',
+    conflicts: [],
+  },
+};
+
+await (async () => {
+  resetTransport({
+    data: { projection: { ...emptyProjection, organizationId: '20000000-0000-4000-8000-000000000002' } },
+    error: null,
+  });
+  await assert.rejects(
+    () => enterpriseIntelligenceClient.loadProjection({ organizationId, workspaceId }),
+    (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'ENTERPRISE_PROJECTION_UNAVAILABLE',
+  );
+
+  resetTransport({
+    data: { projection: { ...emptyProjection, organizationId: organizationId.toUpperCase(), workspaceId: workspaceId.toUpperCase() } },
+    error: null,
+  });
+  const uppercaseEquivalent = await enterpriseIntelligenceClient.loadProjection({ organizationId, workspaceId });
+  assert.equal(uppercaseEquivalent.workspaceId, workspaceId.toUpperCase());
+})();
 
 await (async () => {
   resetTransport({ data: { ok: true, resourceId: sourceSetId }, error: null });

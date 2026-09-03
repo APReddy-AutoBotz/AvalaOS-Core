@@ -1,5 +1,5 @@
 {
-  "contractVersion": "governed-delivery-monitor-pr-c-registry-1",
+  "contractVersion": "governed-delivery-monitor-pr-c-registry-2",
   "workflowPath": ".github/workflows/transcript-flow-pr-c.yml",
   "provenancePath": "testing/process-lifecycle/contracts/pr-c-source-provenance.json",
   "fixtureRegistryPath": "testing/process-lifecycle/fixtures/delivery-monitor-pr-c/fixture-registry.json",
@@ -406,11 +406,11 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "1676a4b413a836cf2fb61cc1dea9296190754ca4946e031305e94442b8e7219f"
+      "sha256": "b02a95bdb40ef10f471cd54e793c8bd59d3508c0d84a1d689e3957c6d6113c4f"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
-      "sha256": "4dbaaf29b260a6402b09905fa545479a6a33ac6bc5b12d82247206654b4a096a"
+      "sha256": "60cc66e05555dd731374e185ebd1a7d8b51a1fe3435a8a74b14f93303c619200"
     },
     "domain": {
       "path": "services/deliveryMonitor/contracts.test.ts",
@@ -422,11 +422,15 @@
     },
     "client": {
       "path": "services/deliveryMonitor/commands.test.ts",
-      "sha256": "bebed26a6a4d148d7dbae4cf276dcaeffe451557ca4085d70d08399725239d4a"
+      "sha256": "8dada94f24f625cda101407ea04744ba856a6d3432695599d653b963330275d4"
+    },
+    "client-transport": {
+      "path": "services/enterpriseIntelligenceClient.prC.test.ts",
+      "sha256": "d5b5279e859b6583c30c9c28c91450f3ce7e0cfce89ce3120cc074115d27191c"
     },
     "api-command": {
       "path": "supabase/functions/_shared/deliveryMonitorCommand.test.ts",
-      "sha256": "d85d472bbc7c44bde34555a55acda7e864b96bd473ff9a1242650c12428286ba"
+      "sha256": "00ebcfb69afcc05a8d6ae16883769d4d91d24db5884342606c2f957a57273847"
     },
     "api-query": {
       "path": "supabase/functions/_shared/deliveryMonitorQuery.test.ts",
@@ -434,11 +438,15 @@
     },
     "browser": {
       "path": "tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts",
-      "sha256": "c91ee0417aa22b32b1fcdd5723a5f47cbfdaee294a8321c81ef7a1dc04ca6098"
+      "sha256": "57a957a31f942a7865de556d341deeed9e3f9584f9649b1ccaf8b108032e8859"
+    },
+    "browser-scope": {
+      "path": "tests/browser/enterpriseIntelligencePrCScope.spec.ts",
+      "sha256": "4bede3af3a71aaf9617d27565d5aabbfe46363e98e2fd9fe19646e4e2982f939"
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "1098de5892810ba4bb4a526ad86a7db9d8694812aa9a8ebdaef15f45ef09125c"
+      "sha256": "c8ae8f34b12facdfebdc442fc2cb051a2368fd8679e8dce284a2fc2f0a1ce6e1"
     }
   },
   "assertions": [
@@ -1025,6 +1033,31 @@
     {
       "commandId": "pr-c-client",
       "owner": "client",
+      "testId": "DELIVERY-TR-005",
+      "assertionId": "client-recovery-binds-package-generation-and-complete-descendant-identities",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "DELIVERY-TR-005 — client recovery binds package generation and complete descendant identities",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "handoffId": "10000000-0000-4000-8000-000000000007",
+        "packageId": "10000000-0000-4000-8000-000000000009",
+        "itemAggregateId": "10000000-0000-4000-8000-00000000000b",
+        "classification": "not_assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-client",
+      "owner": "client",
       "testId": "PATH-004",
       "assertionId": "client-manual-payload-has-no-fabricated-ancestry",
       "fixture": "delivery-command-selector-v1",
@@ -1045,6 +1078,164 @@
         "packageId": "10000000-0000-4000-8000-000000000009",
         "itemAggregateId": "10000000-0000-4000-8000-00000000000b",
         "classification": "not_assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-client",
+      "owner": "client-transport",
+      "testId": "HANDOFF-001",
+      "assertionId": "production-client-handoff-adapters-isolate-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "HANDOFF-001 — production client handoff adapters isolate tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "participants": [
+          {
+            "id": "30000004-0000-4000-8000-000000000004",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.review",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000008-0000-4000-8000-000000000008",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.approve",
+              "delivery.package.approve",
+              "monitor.baseline.create",
+              "monitor.read",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000005-0000-4000-8000-000000000005",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.consume",
+              "project.read"
+            ]
+          }
+        ],
+        "edge": "studio_to_delivery"
+      }
+    },
+    {
+      "commandId": "pr-c-client",
+      "owner": "client-transport",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "production-client-delivery-adapters-isolate-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "DELIVERY-TR-003 — production client delivery adapters isolate tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "participants": [
+          {
+            "id": "30000007-0000-4000-8000-000000000007",
+            "state": "active",
+            "capabilities": [
+              "delivery.package.review",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000008-0000-4000-8000-000000000008",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.approve",
+              "delivery.package.approve",
+              "monitor.baseline.create",
+              "monitor.read",
+              "project.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commandId": "pr-c-client",
+      "owner": "client-transport",
+      "testId": "MONITOR-TR-001",
+      "assertionId": "production-client-monitor-adapter-isolates-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "MONITOR-TR-001 — production client monitor adapter isolates tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000008-0000-4000-8000-000000000008",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.approve",
+            "delivery.package.approve",
+            "monitor.baseline.create",
+            "monitor.read",
+            "project.read"
+          ]
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-client",
+      "owner": "client-transport",
+      "testId": "HANDOFF-002",
+      "assertionId": "production-client-rejects-unrecognized-command-claim-before-transport",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "HANDOFF-002 — production client rejects unrecognized command claim before transport",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "edge": "studio_to_delivery"
       }
     },
     {
@@ -1268,6 +1459,33 @@
             "delivery.package.approve",
             "monitor.baseline.create",
             "monitor.read",
+            "project.read"
+          ]
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-api",
+      "owner": "api-command",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "api-recovery-result-binds-receipt-package-version-and-complete-descendants",
+      "fixture": "delivery-edge-command-v1",
+      "testName": "DELIVERY-TR-003 — api recovery result binds receipt package version and complete descendants",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "handoffId": "20000000-0000-4000-8000-000000000007",
+        "packageId": "20000000-0000-4000-8000-000000000008",
+        "packageVersionId": "20000000-0000-4000-8000-000000000009",
+        "baselineId": "20000000-0000-4000-8000-00000000000a",
+        "classification": "not_assessed",
+        "authorizationVersion": 9,
+        "executionFence": 2,
+        "persona": {
+          "id": "30000005-0000-4000-8000-000000000005",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.consume",
             "project.read"
           ]
         }
@@ -1605,7 +1823,9 @@
         "receipt": {
           "serverHash": true,
           "exactTokenFence": true,
-          "changedBindingConflict": true
+          "changedBindingConflict": true,
+          "authorityBeforeReplay": true,
+          "committedReplayBeforeMutableRuntimeGates": true
         },
         "sourcePackage": null,
         "package": null,
@@ -1619,9 +1839,9 @@
       "commandId": "pr-c-postgres",
       "owner": "migration-static",
       "testId": "DELIVERY-TR-005",
-      "assertionId": "BLOCKERS-AND-THREE-PERSON-APPROVAL-CONTRACT",
+      "assertionId": "BLOCKERS-RECOVERY-AND-THREE-PERSON-APPROVAL-CONTRACT",
       "fixture": "pr-c-migration-sql-contract",
-      "testName": "DELIVERY-TR-005 — BLOCKERS AND THREE PERSON APPROVAL CONTRACT",
+      "testName": "DELIVERY-TR-005 — BLOCKERS RECOVERY AND THREE PERSON APPROVAL CONTRACT",
       "expectedRuntimeContext": {
         "persona": {
           "id": "30000013-0000-4000-8000-000000000013",
@@ -1639,14 +1859,21 @@
           "threePersonSeparation": true,
           "currentItemActorSeparation": true,
           "snapshotGenerationBound": true,
-          "blockersAuthoritative": true
+          "blockersAuthoritative": true,
+          "recoveryBlockedOnly": true,
+          "completeExpectedDescendants": true
         },
-        "item": null,
+        "item": {
+          "selectedChangesOnly": true,
+          "materialChangeRequired": true,
+          "freshDecisionsRequired": true
+        },
         "acceptedSet": {
           "digestBound": true
         },
         "baseline": {
-          "draftRejectedStaleBlockedDenied": true
+          "draftRejectedStaleBlockedDenied": true,
+          "unchangedUntilFreshApproval": true
         },
         "classification": "assessed"
       }
@@ -2324,9 +2551,9 @@
       "commandId": "pr-c-postgres",
       "owner": "postgres",
       "testId": "DELIVERY-TR-003",
-      "assertionId": "PG16-PARTIAL-REVISION-FULL-SNAPSHOT-BLOCKER-RESOLUTION-AND-PACKAGE-FIRST-NO-DEADLOCK",
-      "fixture": "revision-concurrency-pg16",
-      "testName": "DELIVERY-TR-003 — PG16 PARTIAL REVISION FULL SNAPSHOT BLOCKER RESOLUTION AND PACKAGE FIRST NO DEADLOCK",
+      "assertionId": "PG16-BLOCKED-RECOVERY-COMPLETE-EXPECTED-SET-SELECTED-CHANGES-AND-REPLAY-BINDING",
+      "fixture": "revision-recovery-pg16",
+      "testName": "DELIVERY-TR-003 — PG16 BLOCKED RECOVERY COMPLETE EXPECTED SET SELECTED CHANGES AND REPLAY BINDING",
       "expectedRuntimeContext": {
         "persona": {
           "id": "30000013-0000-4000-8000-000000000013",
@@ -2350,7 +2577,7 @@
           "versionId": {
             "$uuid": true
           },
-          "version": 3,
+          "version": 2,
           "hash": {
             "$sha256": true
           },
@@ -2362,13 +2589,25 @@
           },
           "authorSelfReviewDenied": true,
           "postReviewMutationDenied": true,
-          "openBlockerCount": 0
+          "openBlockerCount": 0,
+          "blockedOnly": true,
+          "aggregateVersionBound": true
         },
         "item": {
+          "expectedIdentityCount": 2,
+          "selectedChangedCount": 1,
           "snapshotCount": 2,
           "allBoundToVersion": true,
           "carriedStatus": "proposed",
-          "revisedStatus": "edited"
+          "revisedStatus": "edited",
+          "emptyDenied": true,
+          "partialKnowledgeDenied": true,
+          "unchangedDenied": true,
+          "staleDenied": true,
+          "foreignDenied": true,
+          "caseVariantDuplicateDenied": true,
+          "exactReplayOneEffect": true,
+          "payloadSubstitutionDenied": true
         },
         "acceptedSet": {
           "hash": {
@@ -2383,13 +2622,65 @@
           "hash": {
             "$sha256": true
           },
-          "blockedBeforeResolution": true
+          "blockedBeforeResolution": true,
+          "unchangedUntilFreshApproval": true
         },
-        "classification": "not_assessed",
-        "concurrency": {
-          "deadlocks": 0,
-          "winners": 1
-        }
+        "classification": "not_assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-postgres",
+      "owner": "postgres",
+      "testId": "DELIVERY-TR-005",
+      "assertionId": "PG16-BLOCKED-RECOVERY-250-DESCENDANTS-PAGED-100-100-50",
+      "fixture": "revision-recovery-250-pg16",
+      "testName": "DELIVERY-TR-005 — PG16 BLOCKED RECOVERY 250 DESCENDANTS PAGED 100 100 50",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000013-0000-4000-8000-000000000013",
+          "state": "active",
+          "capabilities": []
+        },
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "96000000-0000-4000-8000-000000000200",
+        "sourcePackage": {
+          "id": {
+            "$uuid": true
+          },
+          "hash": {
+            "$sha256": true
+          }
+        },
+        "package": {
+          "id": {
+            "$uuid": true
+          },
+          "versionId": {
+            "$uuid": true
+          },
+          "version": 2,
+          "hash": {
+            "$sha256": true
+          },
+          "blockedRecovery": true
+        },
+        "item": {
+          "expectedIdentityCount": 250,
+          "selectedChangedCount": 1,
+          "carriedCount": 249,
+          "pageSizes": [
+            100,
+            100,
+            50
+          ],
+          "uniqueCount": 250
+        },
+        "acceptedSet": null,
+        "baseline": {
+          "created": false,
+          "freshReviewRequired": true
+        },
+        "classification": "not_assessed"
       }
     },
     {
@@ -2727,10 +3018,14 @@
             "delivery.package.approval.resolve",
             "monitor.baseline.create"
           ],
-          "newReceipts": 0,
-          "newAttempts": 0,
-          "newEffects": 0,
-          "newAuditEvents": 0
+          "blockedNewReceipts": 0,
+          "blockedNewAttempts": 0,
+          "blockedNewEffects": 0,
+          "blockedNewAuditEvents": 0,
+          "committedReplayAcrossFeatureDisable": true,
+          "committedReplayAcrossGlobalReadOnly": true,
+          "committedReplayAdditionalAttempts": 2,
+          "committedReplayEffects": 1
         }
       }
     },
@@ -3319,6 +3614,42 @@
     {
       "commandId": "pr-c-browser",
       "owner": "browser",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "blocked-recovery-loads-100-100-50-and-authors-selected-descendant-only--desktop-chrome",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "DELIVERY-TR-003 — blocked recovery loads 100 100 50 and authors selected descendant only  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "packageVersion": 2,
+        "priorPackageVersionId": "00000007-0000-4000-8000-000000000007",
+        "expectedDescendantCount": 250,
+        "pageSizes": [
+          100,
+          100,
+          50
+        ],
+        "selectedChangedDescendantCount": 1,
+        "carriedDescendantCount": 249,
+        "packageAggregateBound": true,
+        "monitorUnchanged": true,
+        "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
       "testId": "DELIVERY-TR-005",
       "assertionId": "changes-requested-package-cannot-create-baseline--desktop-chrome",
       "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
@@ -3345,6 +3676,60 @@
         "baselineCount": 0,
         "monitorEffectCount": 0,
         "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
+      "testId": "DELIVERY-TR-005",
+      "assertionId": "recovered-package-requires-fresh-item-review-package-review-and-approval-before-monitor--desktop-chrome",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "DELIVERY-TR-005 — recovered package requires fresh item review package review and approval before monitor  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000009-0000-4000-8000-000000000009",
+          "state": "active",
+          "capabilities": [
+            "monitor.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "packageVersion": 2,
+        "freshItemReview": true,
+        "independentPackageReview": true,
+        "independentPackageApproval": true,
+        "baselineCreatedAfterApprovalOnly": true,
+        "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
+      "testId": "A11Y-002",
+      "assertionId": "blocked-recovery-failure-preserves-selected-authored-descendant--desktop-chrome",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "A11Y-002 — blocked recovery failure preserves selected authored descendant  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "selectedDescendantCount": 1,
+        "preservedTitle": true,
+        "preservedRationale": true,
+        "falseSuccess": false
       }
     },
     {
@@ -3877,6 +4262,187 @@
     },
     {
       "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-workspace-first-commit-isolates-authored-state--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench workspace first commit isolates authored state  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "workspace",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-organization-first-commit-isolates-authored-state--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench organization first commit isolates authored state  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-actor-first-commit-isolates-authored-state--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench actor first commit isolates authored state  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "actor",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-file-read-is-scope-fenced--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed file read is scope fenced  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "workspace",
+        "delayedFileReadCount": 1,
+        "firstCommitProjectionReady": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitStoreActionable": false,
+        "delayedCompletionPopulatedTargetScope": false,
+        "switchBackResurrectedBrowserState": false,
+        "sourceSubmissionCount": 0
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-provider-secret-bind-finalizer-is-scope-fenced--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed provider secret bind finalizer is scope fenced  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "delayedOperation": "provider-secret-bind",
+        "delayedCompletionClearedTargetInput": false,
+        "requestCount": 2,
+        "sourceScopeRequestCount": 1,
+        "targetScopeRequestCount": 1,
+        "crossScopeContentSubmitted": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-provider-secret-rotate-finalizer-is-scope-fenced--desktop-chrome",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed provider secret rotate finalizer is scope fenced  desktop chrome",
+      "expectedRuntimeContext": {
+        "profile": "Desktop Chrome",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "delayedOperation": "provider-secret-rotate",
+        "delayedCompletionClearedTargetInput": false,
+        "requestCount": 2,
+        "sourceScopeRequestCount": 1,
+        "targetScopeRequestCount": 1,
+        "crossScopeContentSubmitted": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
       "owner": "browser",
       "testId": "DELIVERY-TR-001",
       "assertionId": "deterministic-proposal-list-contains-250-items--pixel-7",
@@ -4366,6 +4932,42 @@
     {
       "commandId": "pr-c-browser",
       "owner": "browser",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "blocked-recovery-loads-100-100-50-and-authors-selected-descendant-only--pixel-7",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "DELIVERY-TR-003 — blocked recovery loads 100 100 50 and authors selected descendant only  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "packageVersion": 2,
+        "priorPackageVersionId": "00000007-0000-4000-8000-000000000007",
+        "expectedDescendantCount": 250,
+        "pageSizes": [
+          100,
+          100,
+          50
+        ],
+        "selectedChangedDescendantCount": 1,
+        "carriedDescendantCount": 249,
+        "packageAggregateBound": true,
+        "monitorUnchanged": true,
+        "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
       "testId": "DELIVERY-TR-005",
       "assertionId": "changes-requested-package-cannot-create-baseline--pixel-7",
       "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
@@ -4392,6 +4994,60 @@
         "baselineCount": 0,
         "monitorEffectCount": 0,
         "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
+      "testId": "DELIVERY-TR-005",
+      "assertionId": "recovered-package-requires-fresh-item-review-package-review-and-approval-before-monitor--pixel-7",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "DELIVERY-TR-005 — recovered package requires fresh item review package review and approval before monitor  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000009-0000-4000-8000-000000000009",
+          "state": "active",
+          "capabilities": [
+            "monitor.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "packageVersion": 2,
+        "freshItemReview": true,
+        "independentPackageReview": true,
+        "independentPackageApproval": true,
+        "baselineCreatedAfterApprovalOnly": true,
+        "publicHashesObserved": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser",
+      "testId": "A11Y-002",
+      "assertionId": "blocked-recovery-failure-preserves-selected-authored-descendant--pixel-7",
+      "fixture": "DELIVERY-REVIEW-BLOCKERS-01",
+      "testName": "A11Y-002 — blocked recovery failure preserves selected authored descendant  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "packageId": "00000006-0000-4000-8000-000000000006",
+        "selectedDescendantCount": 1,
+        "preservedTitle": true,
+        "preservedRationale": true,
+        "falseSuccess": false
       }
     },
     {
@@ -4920,6 +5576,187 @@
           "paintBarrier": "double-requestAnimationFrame",
           "inputEvent": "native"
         }
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-workspace-first-commit-isolates-authored-state--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench workspace first commit isolates authored state  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "workspace",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-organization-first-commit-isolates-authored-state--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench organization first commit isolates authored state  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-actor-first-commit-isolates-authored-state--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench actor first commit isolates authored state  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "actor",
+        "firstCommitProjectionReady": false,
+        "firstCommitOldValueVisible": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitOldStatusVisible": false,
+        "firstCommitOldSensitiveActionable": false,
+        "targetScopeSubmissionCount": 1,
+        "crossScopeContentSubmitted": false,
+        "switchBackResurrectedBrowserState": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-file-read-is-scope-fenced--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed file read is scope fenced  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "workspace",
+        "delayedFileReadCount": 1,
+        "firstCommitProjectionReady": false,
+        "firstCommitOldFileVisible": false,
+        "firstCommitStoreActionable": false,
+        "delayedCompletionPopulatedTargetScope": false,
+        "switchBackResurrectedBrowserState": false,
+        "sourceSubmissionCount": 0
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-provider-secret-bind-finalizer-is-scope-fenced--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed provider secret bind finalizer is scope fenced  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "delayedOperation": "provider-secret-bind",
+        "delayedCompletionClearedTargetInput": false,
+        "requestCount": 2,
+        "sourceScopeRequestCount": 1,
+        "targetScopeRequestCount": 1,
+        "crossScopeContentSubmitted": false
+      }
+    },
+    {
+      "commandId": "pr-c-browser",
+      "owner": "browser-scope",
+      "testId": "AUTH-002",
+      "assertionId": "enterprise-workbench-delayed-provider-secret-rotate-finalizer-is-scope-fenced--pixel-7",
+      "fixture": "DELIVERY-STUDIO-HANDOFF-01",
+      "testName": "AUTH-002 — enterprise workbench delayed provider secret rotate finalizer is scope fenced  pixel 7",
+      "expectedRuntimeContext": {
+        "profile": "Pixel 7",
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "scopeChange": "organization",
+        "delayedOperation": "provider-secret-rotate",
+        "delayedCompletionClearedTargetInput": false,
+        "requestCount": 2,
+        "sourceScopeRequestCount": 1,
+        "targetScopeRequestCount": 1,
+        "crossScopeContentSubmitted": false
       }
     },
     {
@@ -5798,6 +6635,31 @@
     {
       "commandId": "pr-c-coverage",
       "owner": "client",
+      "testId": "DELIVERY-TR-005",
+      "assertionId": "client-recovery-binds-package-generation-and-complete-descendant-identities",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "DELIVERY-TR-005 — client recovery binds package generation and complete descendant identities",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "handoffId": "10000000-0000-4000-8000-000000000007",
+        "packageId": "10000000-0000-4000-8000-000000000009",
+        "itemAggregateId": "10000000-0000-4000-8000-00000000000b",
+        "classification": "not_assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
+      "owner": "client",
       "testId": "PATH-004",
       "assertionId": "client-manual-payload-has-no-fabricated-ancestry",
       "fixture": "delivery-command-selector-v1",
@@ -6501,6 +7363,191 @@
     },
     {
       "commandId": "pr-c-coverage",
+      "owner": "api-command",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "api-recovery-result-binds-receipt-package-version-and-complete-descendants",
+      "fixture": "delivery-edge-command-v1",
+      "testName": "DELIVERY-TR-003 — api recovery result binds receipt package version and complete descendants",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "handoffId": "20000000-0000-4000-8000-000000000007",
+        "packageId": "20000000-0000-4000-8000-000000000008",
+        "packageVersionId": "20000000-0000-4000-8000-000000000009",
+        "baselineId": "20000000-0000-4000-8000-00000000000a",
+        "classification": "not_assessed",
+        "authorizationVersion": 9,
+        "executionFence": 2,
+        "persona": {
+          "id": "30000005-0000-4000-8000-000000000005",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.consume",
+            "project.read"
+          ]
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
+      "owner": "client-transport",
+      "testId": "HANDOFF-001",
+      "assertionId": "production-client-handoff-adapters-isolate-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "HANDOFF-001 — production client handoff adapters isolate tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "participants": [
+          {
+            "id": "30000004-0000-4000-8000-000000000004",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.review",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000008-0000-4000-8000-000000000008",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.approve",
+              "delivery.package.approve",
+              "monitor.baseline.create",
+              "monitor.read",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000005-0000-4000-8000-000000000005",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.consume",
+              "project.read"
+            ]
+          }
+        ],
+        "edge": "studio_to_delivery"
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
+      "owner": "client-transport",
+      "testId": "DELIVERY-TR-003",
+      "assertionId": "production-client-delivery-adapters-isolate-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "DELIVERY-TR-003 — production client delivery adapters isolate tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "participants": [
+          {
+            "id": "30000007-0000-4000-8000-000000000007",
+            "state": "active",
+            "capabilities": [
+              "delivery.package.review",
+              "project.read"
+            ]
+          },
+          {
+            "id": "30000008-0000-4000-8000-000000000008",
+            "state": "active",
+            "capabilities": [
+              "delivery.handoff.approve",
+              "delivery.package.approve",
+              "monitor.baseline.create",
+              "monitor.read",
+              "project.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
+      "owner": "client-transport",
+      "testId": "MONITOR-TR-001",
+      "assertionId": "production-client-monitor-adapter-isolates-tenant-envelope",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "MONITOR-TR-001 — production client monitor adapter isolates tenant envelope",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000008-0000-4000-8000-000000000008",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.approve",
+            "delivery.package.approve",
+            "monitor.baseline.create",
+            "monitor.read",
+            "project.read"
+          ]
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
+      "owner": "client-transport",
+      "testId": "HANDOFF-002",
+      "assertionId": "production-client-rejects-unrecognized-command-claim-before-transport",
+      "fixture": "delivery-command-selector-v1",
+      "testName": "HANDOFF-002 — production client rejects unrecognized command claim before transport",
+      "expectedRuntimeContext": {
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "productionClientMethodCount": 11,
+        "commandVariantCount": 12,
+        "transportInvocationCount": 12,
+        "unknownCommandKeyRejectedBeforeTransport": true,
+        "tenantEnvelopeExcludedFromSelector": true,
+        "persona": {
+          "id": "30000006-0000-4000-8000-000000000006",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.request",
+            "delivery.package.manage",
+            "project.read"
+          ]
+        },
+        "edge": "studio_to_delivery"
+      }
+    },
+    {
+      "commandId": "pr-c-coverage",
       "owner": "api-query",
       "testId": "MONITOR-TR-003",
       "assertionId": "api-query-monitor-cannot-load-general-delivery",
@@ -6831,7 +7878,9 @@
         "receipt": {
           "serverHash": true,
           "exactTokenFence": true,
-          "changedBindingConflict": true
+          "changedBindingConflict": true,
+          "authorityBeforeReplay": true,
+          "committedReplayBeforeMutableRuntimeGates": true
         },
         "sourcePackage": null,
         "package": null,
@@ -6845,9 +7894,9 @@
       "commandId": "pr-c-evidence-contract",
       "owner": "migration-static",
       "testId": "DELIVERY-TR-005",
-      "assertionId": "BLOCKERS-AND-THREE-PERSON-APPROVAL-CONTRACT",
+      "assertionId": "BLOCKERS-RECOVERY-AND-THREE-PERSON-APPROVAL-CONTRACT",
       "fixture": "pr-c-migration-sql-contract",
-      "testName": "DELIVERY-TR-005 — BLOCKERS AND THREE PERSON APPROVAL CONTRACT",
+      "testName": "DELIVERY-TR-005 — BLOCKERS RECOVERY AND THREE PERSON APPROVAL CONTRACT",
       "expectedRuntimeContext": {
         "persona": {
           "id": "30000013-0000-4000-8000-000000000013",
@@ -6865,14 +7914,21 @@
           "threePersonSeparation": true,
           "currentItemActorSeparation": true,
           "snapshotGenerationBound": true,
-          "blockersAuthoritative": true
+          "blockersAuthoritative": true,
+          "recoveryBlockedOnly": true,
+          "completeExpectedDescendants": true
         },
-        "item": null,
+        "item": {
+          "selectedChangesOnly": true,
+          "materialChangeRequired": true,
+          "freshDecisionsRequired": true
+        },
         "acceptedSet": {
           "digestBound": true
         },
         "baseline": {
-          "draftRejectedStaleBlockedDenied": true
+          "draftRejectedStaleBlockedDenied": true,
+          "unchangedUntilFreshApproval": true
         },
         "classification": "assessed"
       }
@@ -7009,56 +8065,98 @@
       "owner": "boundary",
       "testName": "PostgreSQL duration budget",
       "command": null,
-      "reason": "No AP-approved numeric PostgreSQL duration budget exists; the PostgreSQL 16 functional, isolation, concurrency, and recovery assertions are executed under their owned Test IDs."
+      "reason": "No AP-approved numeric PostgreSQL duration budget exists; the PostgreSQL 16 functional, isolation, concurrency, and recovery assertions are executed under their owned Test IDs.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "PERF-004",
       "owner": "boundary",
       "testName": "End-to-end resource budget",
       "command": null,
-      "reason": "No AP-approved memory, provider-call, reservation, or token budget exists; bounded 250-item behavior and provider-mock safety are tested without inventing a numeric gate."
+      "reason": "No AP-approved memory, provider-call, reservation, or token budget exists; bounded 250-item behavior and provider-mock safety are tested without inventing a numeric gate.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "CONTROLLED-HUMAN",
       "owner": "boundary",
       "testName": "Controlled human walkthrough",
       "command": null,
-      "reason": "Sanitized seed identities and the walkthrough are prepared, but an authenticated controlled-human session has not been scheduled or executed and therefore remains not_run."
+      "reason": "Sanitized seed identities and the walkthrough are prepared, but an authenticated controlled-human session has not been scheduled or executed and therefore remains not_run.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
-      "testId": "HOSTED-VERIFICATION",
+      "testId": "EXACT-HEAD-GITHUB-CI",
       "owner": "boundary",
-      "testName": "Exact-head hosted CI and preview",
+      "testName": "Exact-head GitHub Actions candidate execution",
       "command": null,
-      "reason": "Hosted CI, Netlify preview, workflow run identity, and run attempt cannot execute before the branch is pushed and the Draft PR exists; they remain not_run in the local bundle."
+      "reason": "A local candidate bundle cannot establish exact-head GitHub Actions execution; only a canonical github_candidate identity derived from GitHub Actions may report this boundary as executed.",
+      "applicableExecutionClassifications": [
+        "local_candidate"
+      ]
+    },
+    {
+      "testId": "NETLIFY-HOSTED-PREVIEW",
+      "owner": "boundary",
+      "testName": "Netlify hosted preview",
+      "command": null,
+      "reason": "The PR C evidence workflow does not execute or inspect a Netlify preview, so hosted-preview behavior remains not_run for both local and GitHub candidate bundles.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "REAL-PROVIDER-VERIFICATION",
       "owner": "boundary",
       "testName": "Real AI provider verification",
       "command": null,
-      "reason": "Real provider execution was not separately authorized or safely budgeted; deterministic provider mocks retain the boundary without exposing credentials."
+      "reason": "Real provider execution was not separately authorized or safely budgeted; deterministic provider mocks retain the boundary without exposing credentials.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "DEPLOYMENT-VERIFICATION",
       "owner": "boundary",
       "testName": "Deployment verification",
       "command": null,
-      "reason": "No deployment or live-infrastructure inspection is authorized for PR C, so deployment state and behavior remain unverified."
+      "reason": "No deployment or live-infrastructure inspection is authorized for PR C, so deployment state and behavior remain unverified.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "SECURITY-CERTIFICATION",
       "owner": "boundary",
       "testName": "External security certification",
       "command": null,
-      "reason": "Source review and adversarial automated tests do not constitute an external security certification; certification remains outside this PR boundary."
+      "reason": "Source review and adversarial automated tests do not constitute an external security certification; certification remains outside this PR boundary.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     },
     {
       "testId": "COMPLIANCE-CERTIFICATION",
       "owner": "boundary",
       "testName": "Compliance certification",
       "command": null,
-      "reason": "PR C adds no unsupported compliance claim, and no independent compliance audit or certification has been performed."
+      "reason": "PR C adds no unsupported compliance claim, and no independent compliance audit or certification has been performed.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
     }
   ]
 }

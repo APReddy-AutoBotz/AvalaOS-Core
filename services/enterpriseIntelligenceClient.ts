@@ -21,8 +21,13 @@ import type {
   MonitorApprovedBaselinesProjection,
 } from './deliveryMonitor/contracts';
 
+type DeliveryCommandFields<Action extends DeliveryMonitorCommandInput['action']> =
+  Extract<DeliveryMonitorCommandInput, { action: Action }> extends infer Command
+    ? Command extends DeliveryMonitorCommandInput ? Omit<Command, 'action'> : never
+    : never;
+
 type DeliveryCommandInput<Action extends DeliveryMonitorCommandInput['action']> =
-  Omit<Extract<DeliveryMonitorCommandInput, { action: Action }>, 'action'> & { organizationId: string; workspaceId: string };
+  DeliveryCommandFields<Action> & { organizationId: string; workspaceId: string };
 
 type TranscriptSourceSetLineageSelector = {
   sourceSetId: string;
@@ -146,6 +151,8 @@ const requireUuidSelector = (value: string) => {
   return value;
 };
 
+const sameUuidSelector = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+
 const invokeCommand = async <T>(input: {
   commandType: string;
   organizationId: string;
@@ -193,6 +200,22 @@ const invokeDeliveryMonitor = <T>(input: {
   payload: buildDeliveryMonitorSelectorPayload(input.command),
   outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
 });
+
+const invokeDeliveryMonitorAction = <Action extends DeliveryMonitorCommandInput['action']>(
+  action: Action,
+  input: DeliveryCommandInput<Action>,
+) => {
+  const { organizationId, workspaceId, ...commandInput } = input as unknown as {
+    organizationId: string;
+    workspaceId: string;
+    [key: string]: unknown;
+  };
+  return invokeDeliveryMonitor({
+    organizationId,
+    workspaceId,
+    command: { ...commandInput, action } as unknown as DeliveryMonitorCommandInput,
+  });
+};
 
 const invokeProviderLifecycle = async <T>(input: {
   operation: string;
@@ -336,13 +359,22 @@ export type EnterpriseIntelligenceProjectionRequest = {
 
 const loadProjection = async (input: EnterpriseIntelligenceProjectionRequest): Promise<EnterpriseIntelligenceProjection> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
-  const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', { body: input });
+  const requestedOrganizationId = requireUuidSelector(input.organizationId);
+  const requestedWorkspaceId = requireUuidSelector(input.workspaceId);
+  const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', {
+    body: { ...input, organizationId: requestedOrganizationId, workspaceId: requestedWorkspaceId },
+  });
   const response = data as { projection?: unknown; code?: string } | null;
   if (error) {
     throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   }
   if (!response?.projection) throw new EnterpriseIntelligenceClientError(response?.code || 'ENTERPRISE_PROJECTION_UNAVAILABLE');
-  return decodeEnterpriseIntelligenceProjection(response.projection);
+  const projection = decodeEnterpriseIntelligenceProjection(response.projection);
+  if (!sameUuidSelector(projection.organizationId, requestedOrganizationId)
+    || !sameUuidSelector(projection.workspaceId, requestedWorkspaceId)) {
+    throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+  }
+  return projection;
 };
 
 export const enterpriseIntelligenceClient = {
@@ -358,10 +390,10 @@ export const enterpriseIntelligenceClient = {
     const projection = await loadProjection(input);
     const workspace = projection.deliveryWorkspace;
     if (!workspace
-      || workspace.organizationId !== input.organizationId
-      || workspace.workspaceId !== input.workspaceId
+      || !sameUuidSelector(workspace.organizationId, input.organizationId)
+      || !sameUuidSelector(workspace.workspaceId, input.workspaceId)
       || workspace.packages.length !== 1
-      || workspace.packages[0].id !== input.deliveryItemPage.packageId
+      || !sameUuidSelector(workspace.packages[0].id, input.deliveryItemPage.packageId)
       || !workspace.packages[0].itemPage.cursorApplied) {
       throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
     }
@@ -372,8 +404,8 @@ export const enterpriseIntelligenceClient = {
     const projection = await loadProjection(input);
     const workspace = projection.deliveryWorkspace;
     if (!workspace
-      || workspace.organizationId !== input.organizationId
-      || workspace.workspaceId !== input.workspaceId
+      || !sameUuidSelector(workspace.organizationId, input.organizationId)
+      || !sameUuidSelector(workspace.workspaceId, input.workspaceId)
       || !workspace.page.baselineEligibilityCursorApplied) {
       throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
     }
@@ -727,52 +759,47 @@ export const enterpriseIntelligenceClient = {
   },
 
   requestDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.request'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.request', ...input } });
+    return invokeDeliveryMonitorAction('delivery.handoff.request', input);
   },
 
   resolveDeliveryHandoffReview(input: DeliveryCommandInput<'delivery.handoff.review.resolve'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.review.resolve', ...input } });
+    return invokeDeliveryMonitorAction('delivery.handoff.review.resolve', input);
   },
 
   resolveDeliveryHandoffApproval(input: DeliveryCommandInput<'delivery.handoff.approval.resolve'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.approval.resolve', ...input } });
+    return invokeDeliveryMonitorAction('delivery.handoff.approval.resolve', input);
   },
 
   withdrawDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.withdraw'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.withdraw', ...input } });
+    return invokeDeliveryMonitorAction('delivery.handoff.withdraw', input);
   },
 
   consumeDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.consume'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.handoff.consume', ...input } });
+    return invokeDeliveryMonitorAction('delivery.handoff.consume', input);
   },
 
   createManualDeliveryPackage(input: DeliveryCommandInput<'delivery.package.create.manual'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.create.manual', manualBrief: input.manualBrief, items: input.items } });
+    return invokeDeliveryMonitorAction('delivery.package.create.manual', input);
   },
 
   reviewDeliveryItem(input: DeliveryCommandInput<'delivery.item.review'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.item.review', ...input } as DeliveryMonitorCommandInput });
+    return invokeDeliveryMonitorAction('delivery.item.review', input);
   },
 
   commitDeliveryPackageRevision(input: DeliveryCommandInput<'delivery.package.revision.commit'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.revision.commit', ...input } });
+    return invokeDeliveryMonitorAction('delivery.package.revision.commit', input);
   },
 
   resolveDeliveryPackageReview(input: DeliveryCommandInput<'delivery.package.review.resolve'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.review.resolve', ...input } });
+    return invokeDeliveryMonitorAction('delivery.package.review.resolve', input);
   },
 
   resolveDeliveryPackageApproval(input: DeliveryCommandInput<'delivery.package.approval.resolve'>) {
-    return invokeDeliveryMonitor({ organizationId: input.organizationId, workspaceId: input.workspaceId, command: { action: 'delivery.package.approval.resolve', ...input } });
+    return invokeDeliveryMonitorAction('delivery.package.approval.resolve', input);
   },
 
   createMonitorBaseline(input: DeliveryCommandInput<'monitor.baseline.create'>) {
-    return invokeDeliveryMonitor({
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      command: { action: 'monitor.baseline.create', workPackageId: input.workPackageId, expectedPackageVersion: input.expectedPackageVersion,
-        expectedPackageVersionId: input.expectedPackageVersionId },
-    });
+    return invokeDeliveryMonitorAction('monitor.baseline.create', input);
   },
 
   createAssembleBlueprint(input: { organizationId: string; workspaceId: string; modernizationDecisionId: string; name: string }) {

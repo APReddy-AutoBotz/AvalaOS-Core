@@ -3,13 +3,23 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => {
-    const browserTestInput = process.env.ENTERPRISE_INTELLIGENCE_BROWSER_TEST_BUILD === 'true'
-      ? { input: { main: path.resolve(__dirname, 'index.html'), enterpriseIntelligenceHarness: path.resolve(__dirname, 'tests/browser/enterpriseIntelligenceHarness.html') } }
-      : process.env.PR1A_BROWSER_TEST_BUILD === 'true'
-        ? { input: { main: path.resolve(__dirname, 'index.html'), browserHarness: path.resolve(__dirname, 'browser-harness.html') } }
-        : process.env.STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD === 'true'
-          ? { input: { main: path.resolve(__dirname, 'index.html'), studioPrivateArtifactsHarness: path.resolve(__dirname, 'tests/browser/studioPrivateArtifactsHarness.html') } }
-          : {};
+    const browserTestInput = process.env.DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD === 'true'
+      ? { input: {
+          main: path.resolve(__dirname, 'index.html'),
+          deliveryMonitorPrCHarness: path.resolve(__dirname, 'tests/browser/deliveryMonitorPrC/harness.html'),
+          enterpriseIntelligenceHarness: path.resolve(__dirname, 'tests/browser/enterpriseIntelligenceHarness.html'),
+        } }
+      : process.env.ENTERPRISE_INTELLIGENCE_BROWSER_TEST_BUILD === 'true'
+        ? { input: { main: path.resolve(__dirname, 'index.html'), enterpriseIntelligenceHarness: path.resolve(__dirname, 'tests/browser/enterpriseIntelligenceHarness.html') } }
+        : process.env.STUDIO_ARTIFACT_BROWSER_TEST_BUILD === 'true'
+          ? { input: { main: path.resolve(__dirname, 'index.html'), studioArtifactsHarness: path.resolve(__dirname, 'tests/browser/studioArtifactsHarness.html') } }
+          : process.env.PILOT_OPERATIONS_BROWSER_TEST_BUILD === 'true'
+            ? { input: { main: path.resolve(__dirname, 'index.html'), pilotOperationsHarness: path.resolve(__dirname, 'tests/browser/pilotOperationsHarness.html') } }
+            : process.env.PR1A_BROWSER_TEST_BUILD === 'true'
+              ? { input: { main: path.resolve(__dirname, 'index.html'), browserHarness: path.resolve(__dirname, 'browser-harness.html') } }
+              : process.env.STUDIO_PRIVATE_ARTIFACT_BROWSER_TEST_BUILD === 'true'
+                ? { input: { main: path.resolve(__dirname, 'index.html'), studioPrivateArtifactsHarness: path.resolve(__dirname, 'tests/browser/studioPrivateArtifactsHarness.html') } }
+                : {};
     const hostedSandboxEnabled =
       process.env.AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING === 'authorized' &&
       process.env.SITE_NAME === 'avalaos-pilot';

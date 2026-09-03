@@ -15,6 +15,12 @@ import {
   PR_C_BASE_SHA,
   PR_C_WORKFLOW_PATH,
 } from './transcriptFlowPrCEvidenceScope.mjs';
+import {
+  PR_C_GITHUB_CLASSIFICATION,
+  PR_C_LOCAL_CLASSIFICATION,
+} from './transcriptFlowPrCExecutionIdentity.mjs';
+
+const ALL_EXECUTION_CLASSIFICATIONS = [PR_C_GITHUB_CLASSIFICATION, PR_C_LOCAL_CLASSIFICATION];
 
 const root = process.cwd();
 const refreshBindingsOnly = process.argv.includes('--refresh-bindings');
@@ -36,9 +42,11 @@ const ownerPaths = {
   domain: 'services/deliveryMonitor/contracts.test.ts',
   'pagination-domain': 'services/deliveryMonitor/pagination.test.ts',
   client: 'services/deliveryMonitor/commands.test.ts',
+  'client-transport': 'services/enterpriseIntelligenceClient.prC.test.ts',
   'api-command': 'supabase/functions/_shared/deliveryMonitorCommand.test.ts',
   'api-query': 'supabase/functions/_shared/deliveryMonitorQuery.test.ts',
   browser: 'tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts',
+  'browser-scope': 'tests/browser/enterpriseIntelligencePrCScope.spec.ts',
   boundary: 'docs/quality/governed-delivery-monitor-pr-c-evidence.md',
 };
 
@@ -46,34 +54,47 @@ const notRun = [
   {
     testId: 'PERF-003', owner: 'boundary', testName: 'PostgreSQL duration budget', command: null,
     reason: 'No AP-approved numeric PostgreSQL duration budget exists; the PostgreSQL 16 functional, isolation, concurrency, and recovery assertions are executed under their owned Test IDs.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'PERF-004', owner: 'boundary', testName: 'End-to-end resource budget', command: null,
     reason: 'No AP-approved memory, provider-call, reservation, or token budget exists; bounded 250-item behavior and provider-mock safety are tested without inventing a numeric gate.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'CONTROLLED-HUMAN', owner: 'boundary', testName: 'Controlled human walkthrough', command: null,
     reason: 'Sanitized seed identities and the walkthrough are prepared, but an authenticated controlled-human session has not been scheduled or executed and therefore remains not_run.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
-    testId: 'HOSTED-VERIFICATION', owner: 'boundary', testName: 'Exact-head hosted CI and preview', command: null,
-    reason: 'Hosted CI, Netlify preview, workflow run identity, and run attempt cannot execute before the branch is pushed and the Draft PR exists; they remain not_run in the local bundle.',
+    testId: 'EXACT-HEAD-GITHUB-CI', owner: 'boundary', testName: 'Exact-head GitHub Actions candidate execution', command: null,
+    reason: 'A local candidate bundle cannot establish exact-head GitHub Actions execution; only a canonical github_candidate identity derived from GitHub Actions may report this boundary as executed.',
+    applicableExecutionClassifications: [PR_C_LOCAL_CLASSIFICATION],
+  },
+  {
+    testId: 'NETLIFY-HOSTED-PREVIEW', owner: 'boundary', testName: 'Netlify hosted preview', command: null,
+    reason: 'The PR C evidence workflow does not execute or inspect a Netlify preview, so hosted-preview behavior remains not_run for both local and GitHub candidate bundles.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'REAL-PROVIDER-VERIFICATION', owner: 'boundary', testName: 'Real AI provider verification', command: null,
     reason: 'Real provider execution was not separately authorized or safely budgeted; deterministic provider mocks retain the boundary without exposing credentials.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'DEPLOYMENT-VERIFICATION', owner: 'boundary', testName: 'Deployment verification', command: null,
     reason: 'No deployment or live-infrastructure inspection is authorized for PR C, so deployment state and behavior remain unverified.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'SECURITY-CERTIFICATION', owner: 'boundary', testName: 'External security certification', command: null,
     reason: 'Source review and adversarial automated tests do not constitute an external security certification; certification remains outside this PR boundary.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
     testId: 'COMPLIANCE-CERTIFICATION', owner: 'boundary', testName: 'Compliance certification', command: null,
     reason: 'PR C adds no unsupported compliance claim, and no independent compliance audit or certification has been performed.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
 ];
 
@@ -121,12 +142,21 @@ const postgresFixtureIdPrefixes = ['300000', '960000', '970000'];
 const normalizePostgresGeneratedValues = value => {
   if (Array.isArray(value)) return value.map(normalizePostgresGeneratedValues);
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
+    const normalized = Object.fromEntries(Object.entries(value).map(([key, nested]) => [
       key,
       key === 'concurrentRequestOutcome'
         ? { $oneOf: ['fulfilled', 'rejected'] }
         : normalizePostgresGeneratedValues(nested),
     ]));
+    if (Array.isArray(value.eligibleReceiptIds)) {
+      const eligibleReceiptIds = [...value.eligibleReceiptIds].sort();
+      assert(eligibleReceiptIds.length > 0, 'PR_C_BUILD_ELIGIBLE_RECEIPT_IDS_EMPTY');
+      assert(eligibleReceiptIds.every(receiptId => typeof receiptId === 'string' && uuidPattern.test(receiptId)), 'PR_C_BUILD_ELIGIBLE_RECEIPT_ID_INVALID');
+      assert(new Set(eligibleReceiptIds).size === eligibleReceiptIds.length, 'PR_C_BUILD_ELIGIBLE_RECEIPT_ID_DUPLICATE');
+      assert(eligibleReceiptIds.includes(value.id), 'PR_C_BUILD_RECEIPT_WINNER_NOT_ELIGIBLE');
+      normalized.id = { $oneOf: eligibleReceiptIds };
+    }
+    return normalized;
   }
   if (typeof value === 'string' && uuidPattern.test(value) && !postgresFixtureIdPrefixes.some(prefix => value.startsWith(prefix))) {
     return { $uuid: true };
@@ -204,7 +234,7 @@ const owners = Object.fromEntries(Object.entries(ownerPaths).map(([owner, relati
 }));
 
 const registry = {
-  contractVersion: 'governed-delivery-monitor-pr-c-registry-1',
+  contractVersion: 'governed-delivery-monitor-pr-c-registry-2',
   workflowPath: PR_C_WORKFLOW_PATH,
   provenancePath: PR_C_PROVENANCE_PATH,
   fixtureRegistryPath: PR_C_FIXTURE_PATH,

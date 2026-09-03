@@ -66,7 +66,7 @@ const string = (value: unknown, min: number, max: number) => {
 const id = (value: unknown) => {
   const result = string(value, 1, 128);
   if (!uuid.test(result)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
-  return result;
+  return result.toLowerCase();
 };
 const integer = (value: unknown, allowZero = false) => {
   if (!Number.isSafeInteger(value) || Number(value) < (allowZero ? 0 : 1)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
@@ -102,6 +102,15 @@ const itemList = (value: unknown) => {
     if (entry.parentClientKey !== undefined && !priorKeys.has(entry.parentClientKey)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
     priorKeys.add(entry.clientKey);
   }
+  return decoded;
+};
+const expectedItemIdentities = (value: unknown) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 250) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  const decoded = value.map(entry => {
+    const identity = exact(record(entry), ['itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId']);
+    return { itemAggregateId: id(identity.itemAggregateId), expectedAggregateVersion: integer(identity.expectedAggregateVersion), expectedItemVersionId: id(identity.expectedItemVersionId) };
+  }).sort((left, right) => left.itemAggregateId.localeCompare(right.itemAggregateId));
+  if (new Set(decoded.map(entry => entry.itemAggregateId)).size !== decoded.length) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
   return decoded;
 };
 export const parseDeliveryMonitorPayload = (
@@ -144,11 +153,17 @@ export const parseDeliveryMonitorPayload = (
         rationale: string(row.rationale, 1, 4_000), ...(edited ? { item: { itemType: literal(edited.itemType, ['Epic', 'Story', 'Task', 'Milestone', 'Dependency', 'Risk'] as const), ...authored(edited) } } : {}) };
     }
     case 'delivery.package.revision.commit': {
-      const row = exact(payload, ['workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'itemRevisions']);
+      const row = exact(payload, ['workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'expectedPackageAggregateVersion', 'expectedItems', 'itemRevisions']);
       if (!Array.isArray(row.itemRevisions) || row.itemRevisions.length < 1 || row.itemRevisions.length > 250) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
-      const itemRevisions = row.itemRevisions.map(entry => { const revision = exact(record(entry), ['itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'rationale', 'item']); const revisionItem = exact(record(revision.item), ['itemType', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements']); return { itemAggregateId: id(revision.itemAggregateId), expectedAggregateVersion: integer(revision.expectedAggregateVersion), expectedItemVersionId: id(revision.expectedItemVersionId), rationale: string(revision.rationale, 1, 4_000), item: { itemType: literal(revisionItem.itemType, ['Epic', 'Story', 'Task', 'Milestone', 'Dependency', 'Risk'] as const), ...authored(revisionItem) } }; });
+      const expectedItems = expectedItemIdentities(row.expectedItems);
+      const expectedById = new Map(expectedItems.map(entry => [entry.itemAggregateId, entry]));
+      const itemRevisions = row.itemRevisions.map(entry => { const revision = exact(record(entry), ['itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'rationale', 'item']); const revisionItem = exact(record(revision.item), ['itemType', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements']); return { itemAggregateId: id(revision.itemAggregateId), expectedAggregateVersion: integer(revision.expectedAggregateVersion), expectedItemVersionId: id(revision.expectedItemVersionId), rationale: string(revision.rationale, 1, 4_000), item: { itemType: literal(revisionItem.itemType, ['Epic', 'Story', 'Task', 'Milestone', 'Dependency', 'Risk'] as const), ...authored(revisionItem) } }; }).sort((left, right) => left.itemAggregateId.localeCompare(right.itemAggregateId));
       if (new Set(itemRevisions.map(item => item.itemAggregateId)).size !== itemRevisions.length) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
-      return { workPackageId: id(row.workPackageId), expectedPackageVersion: integer(row.expectedPackageVersion), expectedPackageVersionId: id(row.expectedPackageVersionId), itemRevisions };
+      if (itemRevisions.some(item => {
+        const identity = expectedById.get(item.itemAggregateId);
+        return !identity || identity.expectedAggregateVersion !== item.expectedAggregateVersion || identity.expectedItemVersionId !== item.expectedItemVersionId;
+      })) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+      return { workPackageId: id(row.workPackageId), expectedPackageVersion: integer(row.expectedPackageVersion), expectedPackageVersionId: id(row.expectedPackageVersionId), expectedPackageAggregateVersion: integer(row.expectedPackageAggregateVersion), expectedItems, itemRevisions };
     }
     case 'delivery.package.review.resolve': {
       const row = exact(payload, ['workPackageId', 'expectedPackageVersion', 'expectedPackageVersionId', 'expectedPackageAggregateVersion', 'outcome', 'rationale']);
@@ -226,26 +241,79 @@ const canonicalHash = (value: unknown) => {
 const canonicalItems = (value: unknown, kind: 'initial' | 'revision') => {
   if (!Array.isArray(value) || value.length < 1 || value.length > 250) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
   const aggregateIds = new Set<string>();
+  const versionIds = new Set<string>();
   for (const itemValue of value) {
     const entry = record(itemValue);
     if (kind === 'initial') {
       const initial = exact(entry, ['clientKey', 'aggregateId', 'versionId', 'version', 'hash']);
       string(initial.clientKey, 1, 120);
       const aggregateId = id(initial.aggregateId);
-      id(initial.versionId);
+      const versionId = id(initial.versionId);
       integer(initial.version);
       canonicalHash(initial.hash);
-      if (aggregateIds.has(aggregateId)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+      if (aggregateIds.has(aggregateId) || versionIds.has(versionId)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
       aggregateIds.add(aggregateId);
+      versionIds.add(versionId);
     } else {
-      const revised = exact(entry, ['itemAggregateId', 'itemVersionId', 'version', 'itemHash']);
+      const revised = exact(entry, ['itemAggregateId', 'itemVersionId', 'version', 'itemHash', 'status']);
       const aggregateId = id(revised.itemAggregateId);
-      id(revised.itemVersionId);
+      const versionId = id(revised.itemVersionId);
       integer(revised.version);
       canonicalHash(revised.itemHash);
-      if (aggregateIds.has(aggregateId)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+      literal(revised.status, ['edited', 'proposed'] as const);
+      if (aggregateIds.has(aggregateId) || versionIds.has(versionId)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
       aggregateIds.add(aggregateId);
+      versionIds.add(versionId);
     }
+  }
+};
+
+interface DeliveryMonitorResultBinding {
+  receiptId?: string;
+  payload: JsonRecord;
+}
+
+const bindCanonicalResult = (
+  result: DeliveryMonitorCanonicalResult,
+  expectedAction: DeliveryMonitorCommandType,
+  binding?: DeliveryMonitorResultBinding,
+) => {
+  if (!binding) return;
+  if (binding.receiptId !== undefined && result.receiptId !== binding.receiptId) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  const payload = binding.payload;
+  if (expectedAction === 'delivery.package.revision.commit') {
+    if (result.resourceId !== payload.workPackageId
+      || result.resourceVersion !== Number(payload.expectedPackageVersion) + 1
+      || result.packageVersionId === payload.expectedPackageVersionId) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+    const expected = expectedItemIdentities(payload.expectedItems);
+    const expectedById = new Map(expected.map(item => [item.itemAggregateId, item]));
+    const predecessorVersionIds = new Set(expected.map(item => item.expectedItemVersionId));
+    const selectedIds = new Set((payload.itemRevisions as JsonRecord[]).map(item => id(item.itemAggregateId)));
+    const descendants = (result.items as JsonRecord[]).map(item => ({
+      itemAggregateId: id(item.itemAggregateId),
+      itemVersionId: id(item.itemVersionId),
+      version: integer(item.version),
+      status: literal(item.status, ['edited', 'proposed'] as const),
+    })).sort((left, right) => left.itemAggregateId.localeCompare(right.itemAggregateId));
+    if (expected.length !== descendants.length) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+    descendants.forEach((descendant, index) => {
+      const identity = expected[index];
+      if (descendant.itemAggregateId !== identity.itemAggregateId
+        || descendant.version !== identity.expectedAggregateVersion + 1
+        || predecessorVersionIds.has(descendant.itemVersionId)
+        || descendant.status !== (selectedIds.has(descendant.itemAggregateId) ? 'edited' : 'proposed')
+        || !expectedById.has(descendant.itemAggregateId)) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+    });
+  } else if (expectedAction === 'delivery.item.review') {
+    if (result.resourceId !== payload.itemAggregateId) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  } else if (expectedAction === 'delivery.package.review.resolve' || expectedAction === 'delivery.package.approval.resolve') {
+    if (result.workPackageId !== payload.workPackageId || result.packageVersionId !== payload.expectedPackageVersionId || result.resourceVersion !== payload.expectedPackageVersion) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  } else if (expectedAction === 'monitor.baseline.create') {
+    if (result.workPackageId !== payload.workPackageId || result.packageVersionId !== payload.expectedPackageVersionId) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  } else if (expectedAction === 'delivery.handoff.review.resolve' || expectedAction === 'delivery.handoff.approval.resolve' || expectedAction === 'delivery.handoff.withdraw') {
+    if (result.resourceId !== payload.handoffId || result.resourceVersion !== Number(payload.expectedHandoffVersion) + 1) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
+  } else if (expectedAction === 'delivery.handoff.request') {
+    if (result.targetWorkspaceId !== payload.targetWorkspaceId || result.studioArtifactId !== payload.studioArtifactId || result.studioArtifactVersionId !== payload.studioArtifactVersionId) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
   }
 };
 
@@ -315,9 +383,12 @@ const validateCanonicalResult = (value: unknown, expectedAction: DeliveryMonitor
 export const decodeDeliveryMonitorCanonicalResult = (
   value: unknown,
   expectedAction: DeliveryMonitorCommandType,
+  binding?: DeliveryMonitorResultBinding,
 ): DeliveryMonitorCanonicalResult => {
   try {
-    return validateCanonicalResult(value, expectedAction);
+    const result = validateCanonicalResult(value, expectedAction);
+    bindCanonicalResult(result, expectedAction, binding);
+    return result;
   } catch {
     throw new DeliveryMonitorCommandError('RECEIPT_FINALIZATION_FAILED');
   }
@@ -326,8 +397,9 @@ export const decodeDeliveryMonitorCanonicalResult = (
 export const projectDeliveryMonitorPublicResult = (
   value: unknown,
   expectedAction: DeliveryMonitorCommandType,
+  binding?: DeliveryMonitorResultBinding,
 ): DeliveryMonitorPublicResult => {
-  const canonical = decodeDeliveryMonitorCanonicalResult(value, expectedAction);
+  const canonical = decodeDeliveryMonitorCanonicalResult(value, expectedAction, binding);
   const projected: DeliveryMonitorPublicResult = {
     ok: true,
     outcome: canonical.outcome,
@@ -363,5 +435,8 @@ export const executeDeliveryMonitorCommand = async (input: {
     executionFence: integer(input.receipt.executionFence),
     ...payload,
   });
-  return projectDeliveryMonitorPublicResult(result, input.action);
+  // The database may return the first canonical receipt for an equivalent
+  // concurrent attempt. Bind the business selectors here; SQL binds that
+  // canonical receipt to the exact actor/action/idempotency/payload hash.
+  return projectDeliveryMonitorPublicResult(result, input.action, { payload });
 };

@@ -722,28 +722,10 @@ BEGIN
   IF SQLERRM='PR1B_NOT_FOUND' THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_PERMISSION_DENIED'; END IF;
   RAISE;
  END;
- BEGIN
-  PERFORM public.enterprise_assert_writable('delivery');
- EXCEPTION WHEN raise_exception THEN
-  IF SQLERRM='ENTERPRISE_INTELLIGENCE_READ_ONLY' THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_READ_ONLY'; END IF;
-  RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED';
- END;
- SELECT * INTO flags FROM public.enterprise_transcript_workspace_flags WHERE org_id=org AND workspace_id=workspace FOR SHARE;
- IF flags.org_id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
- IF action LIKE 'delivery.handoff.%' AND NOT flags.module_handoffs_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
- IF action='delivery.package.create.manual' AND NOT flags.direct_delivery_planning_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
- IF action IN('delivery.item.review','delivery.package.revision.commit','delivery.package.review.resolve','delivery.package.approval.resolve') AND NOT flags.delivery_item_review_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
- IF action='monitor.baseline.create' AND NOT flags.monitor_approved_baseline_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
  IF action='delivery.handoff.consume' AND p_command ? 'items' THEN RAISE EXCEPTION 'INVALID_COMMAND'; END IF;
  IF action='delivery.handoff.request' THEN
   IF p_command ? 'expiresAt' OR p_command ? 'proposedItems' THEN RAISE EXCEPTION 'INVALID_COMMAND'; END IF;
   target_workspace:=(p_command->>'targetWorkspaceId')::uuid;
-  SELECT * INTO target_record FROM public.workspaces WHERE id=target_workspace AND org_id=org FOR SHARE;
-  SELECT * INTO target_flags FROM public.enterprise_transcript_workspace_flags WHERE org_id=org AND workspace_id=target_workspace FOR SHARE;
-  IF target_record.id IS NULL OR target_record.status<>'active' OR target_record.deleted_at IS NOT NULL
-    OR target_flags.org_id IS NULL OR NOT target_flags.module_handoffs_enabled THEN
-   RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE';
-  END IF;
   BEGIN
    PERFORM public.pr1b_assert_command_authority(actor,org,target_workspace,'delivery.handoff.request',authorization_version);
   EXCEPTION WHEN raise_exception THEN
@@ -772,6 +754,31 @@ BEGIN
   ON CONFLICT ON CONSTRAINT enterprise_pr_c_command_attempt_business_key DO NOTHING;
   IF receipt.status='committed' THEN RETURN receipt.response; END IF;
   RAISE EXCEPTION 'ENTERPRISE_DELIVERY_COMMAND_IN_PROGRESS';
+ END IF;
+
+ -- Mutable runtime and feature controls govern only a new durable effect. An
+ -- authorized exact retry must remain able to recover its committed response
+ -- after those controls change, or a lost response can lead to a duplicate
+ -- business action under a fresh key.
+ BEGIN
+  PERFORM public.enterprise_assert_writable('delivery');
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='ENTERPRISE_INTELLIGENCE_READ_ONLY' THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_READ_ONLY'; END IF;
+  RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED';
+ END;
+ SELECT * INTO flags FROM public.enterprise_transcript_workspace_flags WHERE org_id=org AND workspace_id=workspace FOR SHARE;
+ IF flags.org_id IS NULL THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
+ IF action LIKE 'delivery.handoff.%' AND NOT flags.module_handoffs_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
+ IF action='delivery.package.create.manual' AND NOT flags.direct_delivery_planning_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
+ IF action IN('delivery.item.review','delivery.package.revision.commit','delivery.package.review.resolve','delivery.package.approval.resolve') AND NOT flags.delivery_item_review_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
+ IF action='monitor.baseline.create' AND NOT flags.monitor_approved_baseline_enabled THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_FEATURE_DISABLED'; END IF;
+ IF action='delivery.handoff.request' THEN
+  SELECT * INTO target_record FROM public.workspaces WHERE id=target_workspace AND org_id=org FOR SHARE;
+  SELECT * INTO target_flags FROM public.enterprise_transcript_workspace_flags WHERE org_id=org AND workspace_id=target_workspace FOR SHARE;
+  IF target_record.id IS NULL OR target_record.status<>'active' OR target_record.deleted_at IS NOT NULL
+    OR target_flags.org_id IS NULL OR NOT target_flags.module_handoffs_enabled THEN
+   RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE';
+  END IF;
  END IF;
  INSERT INTO public.enterprise_delivery_monitor_command_receipts(id,org_id,workspace_id,actor_id,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,status)
  VALUES(receipt_id,org,workspace,actor,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,'claimed') RETURNING * INTO receipt;
@@ -990,15 +997,31 @@ BEGIN
   SELECT * INTO package FROM public.enterprise_delivery_work_packages WHERE id=(p_command->>'workPackageId')::uuid AND org_id=org AND workspace_id=workspace FOR UPDATE;
   SELECT * INTO package_version FROM public.enterprise_delivery_work_package_versions WHERE id=package.current_version_id AND work_package_id=package.id FOR SHARE;
   items:=COALESCE(p_command->'itemRevisions','[]'::jsonb);
-  IF package.id IS NULL OR package.current_version<>(p_command->>'expectedPackageVersion')::bigint OR package.current_version_id IS DISTINCT FROM (p_command->>'expectedPackageVersionId')::uuid
-    OR package.status NOT IN('draft','blocked') OR jsonb_typeof(items)<>'array' OR jsonb_array_length(items)=0 OR jsonb_array_length(items)>250
+  manifest:=COALESCE(p_command->'expectedItems','[]'::jsonb);
+  IF NULLIF(p_command->>'expectedPackageAggregateVersion','') IS NULL
+    OR package.id IS NULL OR package.current_version<>(p_command->>'expectedPackageVersion')::bigint OR package.current_version_id IS DISTINCT FROM (p_command->>'expectedPackageVersionId')::uuid
+    OR package.aggregate_version<>(p_command->>'expectedPackageAggregateVersion')::bigint OR package.status<>'blocked'
+    OR jsonb_typeof(items)<>'array' OR jsonb_array_length(items)=0 OR jsonb_array_length(items)>250
+    OR jsonb_typeof(manifest)<>'array' OR jsonb_array_length(manifest)=0 OR jsonb_array_length(manifest)>250
     OR NOT public.enterprise_pr_c_delivery_source_current(package.source_package_id,org,workspace,true) THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE'; END IF;
-  SELECT count(*),count(DISTINCT value->>'itemAggregateId') INTO selector_count,new_version FROM jsonb_array_elements(items);
+  SELECT count(*),count(DISTINCT (value->>'itemAggregateId')::uuid) INTO selector_count,new_version FROM jsonb_array_elements(items);
   IF selector_count<>new_version OR EXISTS(SELECT 1 FROM jsonb_array_elements(items) WHERE NULLIF(value->>'itemAggregateId','') IS NULL) THEN RAISE EXCEPTION 'INVALID_COMMAND'; END IF;
+  SELECT count(*),count(DISTINCT (value->>'itemAggregateId')::uuid) INTO selector_count,new_version FROM jsonb_array_elements(manifest);
+  IF selector_count<>new_version OR EXISTS(SELECT 1 FROM jsonb_array_elements(manifest) WHERE NULLIF(value->>'itemAggregateId','') IS NULL
+    OR NULLIF(value->>'expectedAggregateVersion','') IS NULL OR NULLIF(value->>'expectedItemVersionId','') IS NULL) THEN RAISE EXCEPTION 'INVALID_COMMAND'; END IF;
   PERFORM 1 FROM public.enterprise_delivery_work_item_aggregates aggregate
    WHERE aggregate.work_package_id=package.id AND aggregate.org_id=org AND aggregate.workspace_id=workspace ORDER BY aggregate.id FOR UPDATE;
-  IF (SELECT count(*) FROM public.enterprise_delivery_work_item_aggregates aggregate JOIN jsonb_array_elements(items) selected ON (selected.value->>'itemAggregateId')::uuid=aggregate.id
-      WHERE aggregate.work_package_id=package.id AND aggregate.org_id=org AND aggregate.workspace_id=workspace)<>selector_count THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE'; END IF;
+  IF (SELECT count(*) FROM public.enterprise_delivery_work_item_aggregates aggregate WHERE aggregate.work_package_id=package.id AND aggregate.org_id=org AND aggregate.workspace_id=workspace)<>selector_count
+    OR (SELECT count(*) FROM public.enterprise_delivery_work_item_aggregates aggregate JOIN jsonb_array_elements(manifest) selected
+      ON (selected.value->>'itemAggregateId')::uuid=aggregate.id
+      AND (selected.value->>'expectedAggregateVersion')::bigint=aggregate.aggregate_version
+      AND (selected.value->>'expectedItemVersionId')::uuid=aggregate.current_version_id
+      WHERE aggregate.work_package_id=package.id AND aggregate.org_id=org AND aggregate.workspace_id=workspace)<>selector_count
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(items) revision_entry WHERE NOT EXISTS(
+      SELECT 1 FROM jsonb_array_elements(manifest) expected_entry WHERE (expected_entry->>'itemAggregateId')::uuid=(revision_entry->>'itemAggregateId')::uuid
+        AND (expected_entry->>'expectedAggregateVersion')::bigint=(revision_entry->>'expectedAggregateVersion')::bigint
+        AND (expected_entry->>'expectedItemVersionId')::uuid=(revision_entry->>'expectedItemVersionId')::uuid))
+  THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_STALE'; END IF;
   new_version:=package.current_version+1;package_version_id:=gen_random_uuid();content_hash:=public.enterprise_sha256_jsonb(jsonb_build_object('contract','delivery-package-content-2',
    'parentVersionId',package.current_version_id,'packageContent',COALESCE(p_command->'packageContent',package_version.content),'itemRevisions',items));
   INSERT INTO public.enterprise_delivery_work_package_versions(id,work_package_id,org_id,workspace_id,version,studio_workspace_id,studio_document_id,artifact_type,studio_version_id,studio_version,studio_content_hash,
@@ -1010,13 +1033,17 @@ BEGIN
   FOR item_aggregate IN SELECT aggregate.* FROM public.enterprise_delivery_work_item_aggregates aggregate
     WHERE aggregate.work_package_id=package.id AND aggregate.org_id=org AND aggregate.workspace_id=workspace ORDER BY aggregate.id LOOP
    SELECT selected.value INTO revision FROM jsonb_array_elements(p_command->'itemRevisions') selected(value)
-    WHERE selected.value->>'itemAggregateId'=item_aggregate.id::text;
+    WHERE (selected.value->>'itemAggregateId')::uuid=item_aggregate.id;
    SELECT * INTO item_version FROM public.enterprise_delivery_work_item_versions WHERE id=item_aggregate.current_version_id AND item_aggregate_id=item_aggregate.id;
    IF revision IS NOT NULL THEN
     IF item_aggregate.aggregate_version<>(revision->>'expectedAggregateVersion')::bigint OR item_aggregate.current_version_id IS DISTINCT FROM (revision->>'expectedItemVersionId')::uuid
        OR NOT public.enterprise_pr_c_item_json_safe(COALESCE(revision->'item','{}'::jsonb)) OR length(btrim(COALESCE(revision->>'rationale',''))) NOT BETWEEN 1 AND 4000
     THEN RAISE EXCEPTION 'ENTERPRISE_DELIVERY_RESOURCE_STALE'; END IF;
     item_payload:=revision->'item';carried_status:='edited';carried_rationale:=revision->>'rationale';
+    IF item_payload->>'itemType'=item_version.item_type AND item_payload->>'title'=item_version.title AND item_payload->>'description'=item_version.description
+      AND COALESCE(item_payload->'acceptanceCriteria','[]'::jsonb)=item_version.acceptance_criteria
+      AND COALESCE(item_payload->'nonFunctionalRequirements','[]'::jsonb)=item_version.non_functional_requirements
+    THEN RAISE EXCEPTION 'INVALID_COMMAND'; END IF;
    ELSE
     item_payload:=jsonb_build_object('itemType',item_version.item_type,'title',item_version.title,'description',item_version.description,
       'acceptanceCriteria',item_version.acceptance_criteria,'nonFunctionalRequirements',item_version.non_functional_requirements);
@@ -1285,7 +1312,7 @@ BEGIN
    'reviewHistory',page.review_history,'approvalHistory',page.approval_history,
    'acceptedItemCount',page.current_accepted_item_count,
    'historyPage',jsonb_build_object('limit',50,'reviewHasMore',page.review_count>50,'approvalHasMore',page.approval_count>50),
-  'actions',(CASE WHEN page.source_current AND can_manage AND page.status='draft' THEN jsonb_build_array('delivery.item.review','delivery.package.revision.commit') ELSE '[]'::jsonb END)
+  'actions',(CASE WHEN page.source_current AND can_manage AND page.status='draft' THEN jsonb_build_array('delivery.item.review') ELSE '[]'::jsonb END)
     ||(CASE WHEN page.source_current AND can_manage AND page.status='blocked' THEN jsonb_build_array('delivery.package.revision.commit') ELSE '[]'::jsonb END)
     ||(CASE WHEN page.source_current AND can_review AND page.status='draft' AND page.current_version_created_by<>actor AND NOT page.current_item_actor_conflict THEN jsonb_build_array('delivery.package.review.resolve') ELSE '[]'::jsonb END)
     ||(CASE WHEN page.source_current AND can_approve AND page.status='review' AND page.current_version_created_by<>actor AND page.current_reviewer_id IS DISTINCT FROM actor AND NOT page.current_item_actor_conflict THEN jsonb_build_array('delivery.package.approval.resolve') ELSE '[]'::jsonb END)

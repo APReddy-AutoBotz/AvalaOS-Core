@@ -26,8 +26,10 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       PR_C_BASE_SHA: 5433cad41721355e3ec5a29bc2f87772540c77b5
+      PR_C_EXECUTION_CLASSIFICATION: github_candidate
       PR_C_EXACT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PR_C_RUN_ATTEMPT: ${{ github.run_attempt }}
+      PR_C_WORKFLOW_PATH: .github/workflows/transcript-flow-pr-c.yml
       PR_C_WORKFLOW_RUN_ID: ${{ github.run_id }}
       TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
@@ -65,7 +67,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: governed-delivery-monitor-pr-c-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          name: governed-delivery-monitor-pr-c-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/process-lifecycle-pr-c/
           if-no-files-found: error
           retention-days: 14

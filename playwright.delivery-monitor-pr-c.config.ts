@@ -3,8 +3,11 @@ import { tmpdir } from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/browser/deliveryMonitorPrC',
-  testMatch: 'deliveryMonitorPrC.spec.ts',
+  testDir: './tests/browser',
+  testMatch: [
+    'deliveryMonitorPrC/deliveryMonitorPrC.spec.ts',
+    'enterpriseIntelligencePrCScope.spec.ts',
+  ],
   outputDir: path.join(tmpdir(), 'avalaos-delivery-monitor-pr-c-playwright', String(process.pid)),
   workers: 1,
   fullyParallel: false,

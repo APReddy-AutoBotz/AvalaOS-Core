@@ -43,4 +43,12 @@ assert.match(pagedHtml, /1 canonical items are loaded from 1 bounded server page
 assert.match(pagedHtml, /Load next bounded page/);
 assert.match(pagedHtml, /Approve package review<\/button>/);
 assert.match(pagedHtml, /disabled=""[^>]*>Approve package review|Approve package review<\/button>/);
+const blockedComplete: DeliveryWorkspaceProjection = { ...delivery, packages: [{ ...delivery.packages[0], status: 'blocked', reviewState: 'changes_requested', actions: ['delivery.package.revision.commit'] }] };
+const blockedCompleteHtml = renderToStaticMarkup(<GovernedDeliveryWorkspace projection={blockedComplete} monitorProjection={monitor} onAction={() => undefined}/>);
+assert.match(blockedCompleteHtml, /Blocked package recovery/);
+assert.match(blockedCompleteHtml, /Prepare blocked package recovery/);
+assert.doesNotMatch(blockedCompleteHtml, /Load every canonical descendant page before recovery can begin/);
+const blockedPagedHtml = renderToStaticMarkup(<GovernedDeliveryWorkspace projection={{ ...paged, packages: [{ ...paged.packages[0], status: 'blocked', reviewState: 'changes_requested', actions: ['delivery.package.revision.commit'] }] }} monitorProjection={monitor} onAction={() => undefined} onLoadNextPage={() => undefined}/>);
+assert.match(blockedPagedHtml, /Load every canonical descendant page before recovery can begin/);
+assert.match(blockedPagedHtml, /disabled=""[^>]*>Prepare blocked package recovery/);
 console.log('Governed Delivery presentation: canonical items, planning-only truth, history, and read-only Monitor assertions passed.');

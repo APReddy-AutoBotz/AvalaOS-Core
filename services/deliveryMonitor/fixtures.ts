@@ -148,7 +148,7 @@ export const createDeliveryItemPageFixture = ({
     blockerCount: total,
     reviewHistory: [],
     approvalHistory: [],
-    actions: ['delivery.item.review', 'delivery.package.revision.commit'],
+    actions: ['delivery.item.review'],
   };
   return { ...workspace, packages: [deliveryPackage], baselineEligibility: [] };
 };

@@ -31,6 +31,29 @@ const classification = (lineage: string, planningOnly: boolean) => planningOnly 
   ? 'Not assessed · Planning only'
   : lineage === 'mixed' ? 'Mixed assessed lineage' : 'Assessed lineage';
 
+interface RecoveryDraft {
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  nonFunctionalRequirements: string;
+  rationale: string;
+}
+
+const recoveryDraft = (item: DeliveryItemProjection): RecoveryDraft => ({
+  title: item.title,
+  description: item.description,
+  acceptanceCriteria: item.acceptanceCriteria.join('\n'),
+  nonFunctionalRequirements: item.nonFunctionalRequirements.join('\n'),
+  rationale: '',
+});
+const recoveryLines = (value: string) => value.split('\n').map(entry => entry.trim()).filter(Boolean);
+const recoveryChanged = (item: DeliveryItemProjection, draft: RecoveryDraft) => (
+  draft.title.trim() !== item.title
+  || draft.description.trim() !== item.description
+  || JSON.stringify(recoveryLines(draft.acceptanceCriteria)) !== JSON.stringify(item.acceptanceCriteria)
+  || JSON.stringify(recoveryLines(draft.nonFunctionalRequirements)) !== JSON.stringify(item.nonFunctionalRequirements)
+);
+
 type Pending =
   | { kind: 'handoff'; handoff: DeliveryHandoffProjection; action: 'delivery.handoff.review.resolve' | 'delivery.handoff.approval.resolve' | 'delivery.handoff.withdraw' | 'delivery.handoff.consume'; outcome?: 'approved' | 'changes_requested' | 'rejected' }
   | { kind: 'item'; deliveryPackage: DeliveryPackageProjection; item: DeliveryItemProjection; outcome: 'edited' | 'accepted' | 'rejected' }
@@ -166,6 +189,7 @@ export default function GovernedDeliveryWorkspace({ projection, monitorProjectio
     <section aria-labelledby="delivery-packages-title" className="av-surface p-5"><h3 id="delivery-packages-title" className="text-xl font-black">Canonical package list</h3><div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]"><ul aria-label="Delivery packages" className="min-w-0 space-y-2">{projection.packages.map(item => <li key={item.id}><button type="button" aria-pressed={selectedPackage?.id === item.id} className={`${button} w-full flex-col items-start text-left`} onClick={() => setSelectedPackageId(item.id)}><span>{item.label} · v{item.currentVersion}</span><span className="mt-1 text-xs">{human(item.status)} · {classification(item.sourcePackage.lineageClassification, item.sourcePackage.planningOnly)}</span></button></li>)}</ul>
       {selectedPackage ? <article data-testid={`delivery-package-${selectedPackage.id}`} data-package-id={selectedPackage.id} data-package-version={selectedPackage.currentVersion} className={`${panel} min-w-0`}><div className="flex flex-wrap gap-2"><StatusPill>{human(selectedPackage.status)}</StatusPill><StatusPill>{selectedPackage.sourcePackage.sourceMode === 'manual' ? 'Manual Delivery entry' : 'Studio handoff'}</StatusPill><StatusPill>{classification(selectedPackage.sourcePackage.lineageClassification, selectedPackage.sourcePackage.planningOnly)}</StatusPill><StatusPill>Review {human(selectedPackage.reviewState)}</StatusPill><StatusPill>Approval {human(selectedPackage.approvalState)}</StatusPill></div><p className="mt-3 text-sm font-bold">Source package v{selectedPackage.sourcePackage.version}; integrity remains server-side.</p>{selectedPackage.acceptedItemCount !== undefined && <p className="mt-2 text-sm font-bold">Approved identity: {selectedPackage.acceptedItemCount} server-counted items.</p>}{selectedPackage.blockerCount > 0 && <div className="mt-3" role="status"><p className="font-black">Package blockers · {selectedPackage.blockerCount} server-counted</p><ul className="list-disc pl-5 text-sm">{selectedPackage.blockers.map(value => <li key={value}>{value}</li>)}</ul>{selectedPackage.blockerCount > selectedPackage.blockers.length && <p className="mt-1 text-sm font-bold">Only the bounded blocker preview is shown.</p>}</div>}<details className="mt-3 rounded-xl bg-[var(--av-color-bg-subtle)] p-3"><summary className="cursor-pointer font-black">Package review and approval history</summary><p className="mt-2 text-sm">Review events: {selectedPackage.reviewHistory.length}. Approval events: {selectedPackage.approvalHistory.length}.</p>{(selectedPackage.historyPage.reviewHasMore || selectedPackage.historyPage.approvalHasMore) && <p className="mt-1 text-sm font-bold">History is a bounded server page; additional decisions are not shown.</p>}{selectedPackage.reviewHistory.map(entry => <p key={`review:${entry.packageVersion}:${entry.createdAt}`} className="mt-1 text-sm">Review v{entry.packageVersion}: {entry.outcome} · {entry.acceptedItemCount} accepted · {entry.rationale}</p>)}{selectedPackage.approvalHistory.map(entry => <p key={`approval:${entry.packageVersion}:${entry.createdAt}`} className="mt-1 text-sm">Approval v{entry.packageVersion}: {entry.outcome} · {entry.acceptedItemCount} accepted · {entry.rationale}</p>)}</details>
         <DeliveryItemFilter key={`${scopeKey}:${selectedPackage.id}`} deliveryPackage={selectedPackage} locked={locked || !projection.featureFlags.deliveryItemReviewEnabled} onBegin={begin}/>{!selectedPackage.itemPage.isComplete ? <div className="mt-4 rounded-xl border border-[var(--av-color-border)] p-3" data-testid="delivery-item-pagination"><p className="text-sm font-bold">{selectedPackage.items.length} canonical items are loaded from {loadedPageCount} bounded server {loadedPageCount === 1 ? 'page' : 'pages'}; package completeness is not inferred.</p>{selectedPackage.itemPage.hasMore && onLoadNextPage ? <button type="button" className={`${button} mt-2`} disabled={busy} onClick={() => void onLoadNextPage(selectedPackage)}>{busy ? 'Loading next bounded page…' : 'Load next bounded page'}</button> : <p className="mt-2 text-sm">{selectedPackage.itemPage.hasMore ? 'Additional canonical pages are unavailable in this projection. Reload through a server-authorized page loader.' : 'A cursor-selected page is shown; return to the first server page before judging completeness.'}</p>}</div> : <p className="mt-4 rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-sm font-bold" data-testid="delivery-item-pagination-complete">All {selectedPackage.items.length} canonical items are loaded from {loadedPageCount} bounded server {loadedPageCount === 1 ? 'page' : 'pages'}.</p>}
+        {selectedPackage.status === 'blocked' && selectedPackage.actions.includes('delivery.package.revision.commit') && <BlockedPackageRecovery key={`${selectedPackage.id}:${selectedPackage.currentVersionId}:${selectedPackage.aggregateVersion}`} deliveryPackage={selectedPackage} locked={locked || !projection.featureFlags.deliveryItemReviewEnabled} onAction={onAction}/>}
         <div className="mt-5 flex flex-wrap gap-2">{selectedPackage.actions.includes('delivery.package.review.resolve') && <><button type="button" className={button} disabled={locked || !selectedPackage.itemPage.isComplete} onClick={event => begin(event, { kind: 'package', deliveryPackage: selectedPackage, action: 'delivery.package.review.resolve', outcome: 'approved' })}>Approve package review</button><button type="button" className={button} disabled={locked || !selectedPackage.itemPage.isComplete} onClick={event => begin(event, { kind: 'package', deliveryPackage: selectedPackage, action: 'delivery.package.review.resolve', outcome: 'changes_requested' })}>Request package changes</button><button type="button" className={button} disabled={locked || !selectedPackage.itemPage.isComplete} onClick={event => begin(event, { kind: 'package', deliveryPackage: selectedPackage, action: 'delivery.package.review.resolve', outcome: 'rejected' })}>Reject package review</button></>}{selectedPackage.actions.includes('delivery.package.approval.resolve') && <><button type="button" className={primary} disabled={locked || !selectedPackage.itemPage.isComplete} onClick={event => begin(event, { kind: 'package', deliveryPackage: selectedPackage, action: 'delivery.package.approval.resolve', outcome: 'approved' })}>Final package approval</button><button type="button" className={button} disabled={locked || !selectedPackage.itemPage.isComplete} onClick={event => begin(event, { kind: 'package', deliveryPackage: selectedPackage, action: 'delivery.package.approval.resolve', outcome: 'rejected' })}>Final package rejection</button></>}</div>
       </article> : <p className="rounded-xl bg-[var(--av-color-bg-subtle)] p-5 font-bold">No canonical package is present in this server-authorized projection. Delivery does not infer broader workspace state or invent work from legacy task state.</p>}</div>{projection.page.packageHasMore && <p className="mt-3 text-sm font-bold">Additional packages exist beyond this bounded server page.</p>}</section>
     {monitorProjection ? <MonitorApprovedBaselinePanel projection={monitorProjection}/> : <section className="av-surface p-5" aria-label="Monitor unavailable"><p className="font-black">Canonical Monitor projection unavailable</p><p className="mt-1 text-sm">Delivery remains usable under project authority. No empty, complete, or legacy Monitor state is inferred.</p></section>}
@@ -198,4 +222,70 @@ const DeliveryItemFilter = ({ deliveryPackage, locked, onBegin }: {
 function DeliveryItemCard({ item, deliveryPackage, locked, onBegin }: { item: DeliveryItemProjection; deliveryPackage: DeliveryPackageProjection; locked: boolean; onBegin: (event: React.MouseEvent<HTMLButtonElement>, value: Pending) => void }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   return <article data-testid={`delivery-item-${item.aggregateId}`} data-item-title={item.title} data-item-status={item.status} data-item-citation={item.sourceCitation?.sectionLocator ?? 'manual'} className={panel}><div className="flex flex-wrap gap-2"><StatusPill>{item.type}</StatusPill><StatusPill>{human(item.status)}</StatusPill><StatusPill>Version {item.version}</StatusPill></div><h4 className="mt-3 text-lg font-black">{item.title}</h4><p className="mt-2 text-sm">{item.description}</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><BaselineList label="Acceptance criteria" values={item.acceptanceCriteria}/><BaselineList label="Non-functional requirements" values={item.nonFunctionalRequirements}/></div>{item.sourceCitation ? <p className="mt-3 break-all rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-xs font-bold" aria-label="Exact source citation">Source citation: {item.sourceCitation.artifactType.toUpperCase()} artifact v{item.sourceCitation.artifactVersion} · {item.sourceCitation.sectionLocator}</p> : <p className="mt-3 rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-xs font-bold">Manual item · no fabricated Studio or Assess citation</p>}{item.decision && <p className="mt-3 text-sm font-bold">Decision: {item.decision.outcome} · {item.decision.rationale}</p>}<div className="mt-3 flex flex-wrap gap-2">{item.actions.includes('delivery.item.review') && <><button type="button" className={button} disabled={locked} onClick={event => onBegin(event, { kind: 'item', deliveryPackage, item, outcome: 'edited' })}>Edit immutable descendant</button><button type="button" className={button} disabled={locked} onClick={event => onBegin(event, { kind: 'item', deliveryPackage, item, outcome: 'accepted' })}>Accept proposal</button><button type="button" className={button} disabled={locked} onClick={event => onBegin(event, { kind: 'item', deliveryPackage, item, outcome: 'rejected' })}>Reject proposal</button></>}<button type="button" className={button} aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)}>Version diff and history</button></div>{historyOpen && <div className="mt-3 rounded-xl bg-[var(--av-color-bg-subtle)] p-3"><p className="font-black">Immutable history</p>{item.history.length ? <ol className="mt-2 list-decimal pl-5 text-sm">{item.history.map(version => <li key={`${version.version}:${version.createdAt}`}>v{version.version} · {human(version.status)} · {version.title}</li>)}</ol> : <p className="mt-2 text-sm">No prior descendant version.</p>}<p className="mt-2 text-sm font-bold">Changed fields: {item.diffs.flatMap(diff => diff.changedFields).join(', ') || 'none'}</p></div>}</article>;
+}
+
+function BlockedPackageRecovery({ deliveryPackage, locked, onAction }: {
+  key?: React.Key;
+  deliveryPackage: DeliveryPackageProjection;
+  locked: boolean;
+  onAction: Props['onAction'];
+}) {
+  const [active, setActive] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, RecoveryDraft>>({});
+  const [error, setError] = useState('');
+  const selected = deliveryPackage.items.filter(item => drafts[item.aggregateId]);
+  const valid = deliveryPackage.status === 'blocked'
+    && deliveryPackage.itemPage.isComplete
+    && selected.length > 0
+    && selected.every(item => recoveryChanged(item, drafts[item.aggregateId]) && drafts[item.aggregateId].rationale.trim().length >= 4);
+  const toggle = (item: DeliveryItemProjection, checked: boolean) => setDrafts(current => {
+    if (checked) return { ...current, [item.aggregateId]: recoveryDraft(item) };
+    const next = { ...current }; delete next[item.aggregateId]; return next;
+  });
+  const update = (itemId: string, field: keyof RecoveryDraft, value: string) => setDrafts(current => ({ ...current, [itemId]: { ...current[itemId], [field]: value } }));
+  const submitRecovery = async () => {
+    if (!valid) { setError('Select at least one descendant, make a material change, and provide rationale. The complete canonical set remains bound.'); return; }
+    setError('');
+    const expectedItems = deliveryPackage.items.map(item => ({ itemAggregateId: item.aggregateId, expectedAggregateVersion: item.aggregateVersion, expectedItemVersionId: item.currentVersionId }));
+    const itemRevisions = selected.map(item => {
+      const draft = drafts[item.aggregateId];
+      return { itemAggregateId: item.aggregateId, expectedAggregateVersion: item.aggregateVersion, expectedItemVersionId: item.currentVersionId,
+        rationale: draft.rationale, authored: { type: item.type, title: draft.title, description: draft.description,
+          acceptanceCriteria: recoveryLines(draft.acceptanceCriteria), nonFunctionalRequirements: recoveryLines(draft.nonFunctionalRequirements) } };
+    });
+    try {
+      const committed = await onAction({ action: 'delivery.package.revision.commit', workPackageId: deliveryPackage.id,
+        expectedPackageVersion: deliveryPackage.currentVersion, expectedPackageVersionId: deliveryPackage.currentVersionId,
+        expectedPackageAggregateVersion: deliveryPackage.aggregateVersion, expectedItems, itemRevisions });
+      if (committed === false) { setError('Recovery was not confirmed. Selected descendants and authored input are preserved; reload authoritative state before retrying.'); return; }
+      setActive(false); setDrafts({});
+    } catch {
+      setError('Recovery failed before confirmation. Selected descendants and authored input are preserved; no success state is shown.');
+    }
+  };
+  return <section className="mt-4 rounded-xl border border-[var(--av-color-border-strong)] p-4" aria-labelledby="blocked-package-recovery-title" data-testid="blocked-package-recovery">
+    <h4 id="blocked-package-recovery-title" className="font-black">Blocked package recovery</h4>
+    <p className="mt-1 text-sm">Only explicitly selected, materially changed descendants are authored. Submission also binds every current descendant identity and fails closed if any page, item, package generation, or version is stale.</p>
+    {!deliveryPackage.itemPage.isComplete && <p role="status" className="mt-2 text-sm font-bold">Load every canonical descendant page before recovery can begin.</p>}
+    {!active ? <button type="button" className={`${primary} mt-3`} disabled={locked || !deliveryPackage.itemPage.isComplete} onClick={() => setActive(true)}>Prepare blocked package recovery</button> : <>
+      <p className="mt-3 text-sm font-bold" data-testid="recovery-complete-set">Complete canonical descendant set loaded: {deliveryPackage.items.length}. Selected changes: {selected.length}.</p>
+      {error && <p role="alert" className="mt-3 rounded-xl border border-red-500 p-3 font-bold">{error}</p>}
+      <div className="mt-3 max-h-[32rem] space-y-3 overflow-y-auto" aria-label="Canonical descendants available for recovery">{deliveryPackage.items.map((item, index) => {
+        const draft = drafts[item.aggregateId];
+        const label = `Select ${item.title} for recovery`;
+        return <div key={item.aggregateId} className="rounded-xl bg-[var(--av-color-bg-subtle)] p-3">
+          <label className="flex min-h-10 items-center gap-2 font-bold"><input type="checkbox" aria-label={label} checked={Boolean(draft)} onChange={event => toggle(item, event.target.checked)}/><span>{index + 1}. {item.title} · v{item.version}</span></label>
+          {draft && <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label className="text-sm font-black">Recovery title for {item.title}<input className={input} value={draft.title} onChange={event => update(item.aggregateId, 'title', event.target.value)}/></label>
+            <label className="text-sm font-black">Recovery rationale for {item.title}<textarea className={input} rows={2} value={draft.rationale} onChange={event => update(item.aggregateId, 'rationale', event.target.value)}/></label>
+            <label className="text-sm font-black sm:col-span-2">Recovery description for {item.title}<textarea className={input} rows={3} value={draft.description} onChange={event => update(item.aggregateId, 'description', event.target.value)}/></label>
+            <label className="text-sm font-black">Recovery acceptance criteria for {item.title}<textarea className={input} rows={3} value={draft.acceptanceCriteria} onChange={event => update(item.aggregateId, 'acceptanceCriteria', event.target.value)}/></label>
+            <label className="text-sm font-black">Recovery non-functional requirements for {item.title}<textarea className={input} rows={3} value={draft.nonFunctionalRequirements} onChange={event => update(item.aggregateId, 'nonFunctionalRequirements', event.target.value)}/></label>
+            {!recoveryChanged(item, draft) && <p className="text-sm font-bold sm:col-span-2">Make a material change to this selected descendant.</p>}
+          </div>}
+        </div>;
+      })}</div>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={button} disabled={locked} onClick={() => { setActive(false); setDrafts({}); setError(''); }}>Cancel recovery</button><button type="button" className={primary} disabled={locked || !valid} onClick={() => void submitRecovery()}>Submit resolved package</button></div>
+    </>}
+  </section>;
 }

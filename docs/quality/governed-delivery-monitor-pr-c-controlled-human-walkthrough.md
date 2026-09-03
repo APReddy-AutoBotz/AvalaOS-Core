@@ -6,18 +6,31 @@ This is a repeatable synthetic-data walkthrough seed for controlled human testin
 
 ## Preconditions
 
-- Use the exact Draft PR head and record its Git SHA.
+- Use the exact Draft PR head and record its Git SHA, terminal GitHub run ID/attempt/artifact digest, and terminal Netlify Deploy Preview URL from PR #264's external evidence block. The preview's immutable deployment commit must equal that Git SHA.
 - Use only `testing/process-lifecycle/fixtures/delivery-monitor-pr-c/` identities and synthetic content.
 - Reset the synthetic workspace before and after the walkthrough.
 - Keep requester, reviewer, and approver distinct.
 - Confirm every automated Test ID has its own assertion-owned result before starting.
 - Stop if the environment is hosted/live, contains a real provider secret, contains customer data, or requires deployment/infrastructure access.
 
+## Execution-time handoff record
+
+Do not write final values into this tracked document because doing so would change the source digest it is meant to identify. Immediately before a human session, copy the immutable values from PR #264 into the sanitized session record:
+
+- exact commit SHA;
+- GitHub workflow path, run ID, run attempt, job conclusion, artifact name, and artifact digest;
+- exact terminal-success Netlify Deploy Preview URL and its immutable deployment commit;
+- explicitly authorized non-live environment label;
+- exact seed command and exact reset command; and
+- scheduled distinct human mappings for requester, reviewer, and approver.
+
+Any absent value is a stop condition. A branch name, latest-preview alias, local evidence bundle, prior workflow attempt, or commit-mismatched deployment is not a substitute.
+
 ## Seed and reset contract
 
 The seed must create one approved assessed Studio artifact, one approved direct Studio planning artifact, one eligible Studio-to-Delivery handoff, one manual Delivery draft, deterministic proposed work items, and one exact approved-baseline fixture. Reset may delete only disposable synthetic fixture state in the explicitly selected non-live workspace. Canonical source migrations and historical evidence are never rolled back or rewritten.
 
-The implementation PR does not claim that seed/reset was run until a controller records the exact command, build SHA, non-live environment label, start/end time, and sanitized result. Until then, the status above remains `not_run`.
+The repository currently defines the synthetic fixture and reset safety contract but does not claim an authorized interactive non-live tenant or an executed seed/reset command. Do not adapt the disposable PostgreSQL or browser-test harness into hosted state. The AP must identify the authorized non-live workspace and approve its repository-owned seed/reset entry point before the walkthrough starts. The implementation PR does not claim seed/reset was run until a controller records the exact commands, build SHA, non-live environment label, start/end time, and sanitized result. Until then, the status above remains `not_run`, and if no authorized commands are present the walkthrough is `not ready` rather than passed.
 
 ## Personas
 

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { runtimeContextMatches, validatePrCRegistryStructure } from './transcriptFlowPrCEvidenceContract.mjs';
-import { PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
+import { collectChangedPrCFiles, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const requiredIds = [
   ...Array.from({ length: 6 }, (_, index) => `DELIVERY-TR-00${index + 1}`),
@@ -12,12 +15,13 @@ const requiredIds = [
   'PERF-001', 'PERF-002-B',
 ];
 const notRunIds = [
-  'PERF-003', 'PERF-004', 'CONTROLLED-HUMAN', 'HOSTED-VERIFICATION',
+  'PERF-003', 'PERF-004', 'CONTROLLED-HUMAN', 'EXACT-HEAD-GITHUB-CI', 'NETLIFY-HOSTED-PREVIEW',
   'REAL-PROVIDER-VERIFICATION', 'DEPLOYMENT-VERIFICATION',
   'SECURITY-CERTIFICATION', 'COMPLIANCE-CERTIFICATION',
 ];
 
 const personaCatalog = JSON.parse(readFileSync('testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json', 'utf8'));
+const canonicalRegistry = JSON.parse(readFileSync('testing/process-lifecycle/contracts/pr-c-assertion-registry.json', 'utf8'));
 const requiredPersonas = personaCatalog.personas.filter(persona => persona.evidenceRequired);
 const governedWorkspace = personaCatalog.workspaces.find(workspace => workspace.key === 'governed-delivery');
 
@@ -35,7 +39,7 @@ const runtime = (testId, index) => ({
 
 const makeContract = () => ({
   registry: {
-    contractVersion: 'governed-delivery-monitor-pr-c-registry-1',
+    contractVersion: 'governed-delivery-monitor-pr-c-registry-2',
     workflowPath: PR_C_WORKFLOW_PATH,
     provenancePath: 'testing/process-lifecycle/contracts/pr-c-source-provenance.json',
     fixtureRegistryPath: 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/fixture-registry.json',
@@ -54,6 +58,9 @@ const makeContract = () => ({
     notRun: notRunIds.map(testId => ({
       testId, owner: 'boundary', testName: `${testId} explicit boundary`, command: null,
       reason: `${testId} remains outside the executed PR C evidence boundary.`,
+      applicableExecutionClassifications: testId === 'EXACT-HEAD-GITHUB-CI'
+        ? ['local_candidate']
+        : ['github_candidate', 'local_candidate'],
     })),
   },
   provenance: {
@@ -111,6 +118,15 @@ test('rejects a command attached to a not-run result', () => {
   const contract = makeContract();
   contract.registry.notRun[0].command = 'npm test';
   assert.throws(() => validates(contract), /PR_C_NOT_RUN_COMMAND/u);
+});
+
+test('rejects GitHub exact-head or hosted-preview not-run scope substitution', () => {
+  const contract = makeContract();
+  contract.registry.notRun.find(item => item.testId === 'EXACT-HEAD-GITHUB-CI').applicableExecutionClassifications = ['github_candidate', 'local_candidate'];
+  assert.throws(() => validates(contract), /PR_C_EXACT_HEAD_NOT_RUN_SCOPE/u);
+  const preview = makeContract();
+  preview.registry.notRun.find(item => item.testId === 'NETLIFY-HOSTED-PREVIEW').applicableExecutionClassifications = ['local_candidate'];
+  assert.throws(() => validates(preview), /PR_C_PREVIEW_NOT_RUN_SCOPE/u);
 });
 
 test('rejects a live or deployment mutation command', () => {
@@ -241,4 +257,50 @@ test('matches generated PostgreSQL identifiers and digests by type without accep
   assert.throws(() => runtimeContextMatches('0'.repeat(63), { $sha256: true }), /PR_C_RUNTIME_SHA256/u);
   assert.throws(() => runtimeContextMatches('pending', { $oneOf: ['fulfilled', 'rejected'] }), /PR_C_RUNTIME_ONE_OF/u);
   assert.throws(() => runtimeContextMatches('fulfilled', { $oneOf: ['fulfilled', 'fulfilled'] }), /PR_C_RUNTIME_ONE_OF_DUPLICATE/u);
+});
+
+test('accepts either exact eligible PostgreSQL receipt winner and rejects substitutions', () => {
+  const assertion = canonicalRegistry.assertions.find(candidate => (
+    candidate.commandId === 'pr-c-postgres'
+    && candidate.testId === 'IDEMP-003'
+    && candidate.assertionId === 'PG16-CONCURRENT-SAME-KEY-ONE-EFFECT-EQUIVALENT-REPLAY'
+  ));
+  assert.ok(assertion);
+  const eligibleReceiptIds = assertion.expectedRuntimeContext.receipt.eligibleReceiptIds;
+  assert.deepEqual(assertion.expectedRuntimeContext.receipt.id, { $oneOf: eligibleReceiptIds });
+  for (const receiptId of eligibleReceiptIds) runtimeContextMatches(receiptId, assertion.expectedRuntimeContext.receipt.id);
+  assert.throws(
+    () => runtimeContextMatches('96000000-0000-4000-8000-000000009999', assertion.expectedRuntimeContext.receipt.id),
+    /PR_C_RUNTIME_ONE_OF/u,
+  );
+});
+
+test('fails closed when governed base-tracked source is deleted or renamed', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'avalaos-pr-c-scope-'));
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  try {
+    git(['init', '--quiet']);
+    git(['config', 'user.email', 'pr-c-evidence@example.invalid']);
+    git(['config', 'user.name', 'PR C evidence test']);
+    writeFileSync(path.join(root, 'delete-me.txt'), 'base deletion fixture\n', 'utf8');
+    writeFileSync(path.join(root, 'rename-me.txt'), 'base rename fixture\n', 'utf8');
+    git(['add', 'delete-me.txt', 'rename-me.txt']);
+    git(['commit', '--quiet', '-m', 'base fixtures']);
+    const baseGitSha = git(['rev-parse', 'HEAD']);
+
+    rmSync(path.join(root, 'delete-me.txt'));
+    assert.throws(
+      () => collectChangedPrCFiles(root, baseGitSha),
+      /PR_C_SCOPED_DELETION_UNSUPPORTED:.*delete-me\.txt/u,
+    );
+
+    writeFileSync(path.join(root, 'delete-me.txt'), 'base deletion fixture\n', 'utf8');
+    renameSync(path.join(root, 'rename-me.txt'), path.join(root, 'renamed.txt'));
+    assert.throws(
+      () => collectChangedPrCFiles(root, baseGitSha),
+      /PR_C_SCOPED_DELETION_UNSUPPORTED:.*rename-me\.txt/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

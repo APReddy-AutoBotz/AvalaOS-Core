@@ -29,6 +29,7 @@ const MODIFIED_INTEGRATION_SOURCE_SET = [
 const MODIFIED_INTEGRATION_TEST_SET = [
   'services/enterpriseIntelligence.test.ts',
   'services/enterpriseIntelligenceClient.prB.test.ts',
+  'services/enterpriseIntelligenceClient.prC.test.ts',
   'supabase/functions/_shared/supabaseRpc.test.ts',
   'supabase/functions/_shared/enterpriseIntelligenceCommand.test.ts',
   'supabase/functions/_shared/enterpriseIntelligenceQuery.test.ts',

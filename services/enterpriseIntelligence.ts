@@ -595,6 +595,7 @@ export const sanitizeEvidenceCandidateValue = (value: string, maxLength = 12_000
 );
 
 const projectionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const sameProjectionUuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
 const projectionKeys = [
   'schemaVersion', 'organizationId', 'workspaceId', 'authorizationVersion', 'generatedAt',
   'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
@@ -638,6 +639,15 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   decodeTranscriptFlowProjection(row.transcriptFlow);
   const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : decodeDeliveryWorkspaceProjection(row.deliveryWorkspace);
   const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : decodeMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
+  const organizationId = row.organizationId as string;
+  const workspaceId = row.workspaceId as string;
+  if ((deliveryWorkspace && (
+    !sameProjectionUuid(deliveryWorkspace.organizationId, organizationId)
+    || !sameProjectionUuid(deliveryWorkspace.workspaceId, workspaceId)
+  )) || (monitorApprovedBaselines && (
+    !sameProjectionUuid(monitorApprovedBaselines.organizationId, organizationId)
+    || !sameProjectionUuid(monitorApprovedBaselines.workspaceId, workspaceId)
+  ))) throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
   return {
     ...structuredClone(row),
     ...(deliveryWorkspace ? { deliveryWorkspace } : {}),

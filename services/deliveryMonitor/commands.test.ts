@@ -28,11 +28,28 @@ const consumed = buildDeliveryMonitorSelectorPayload({ action: 'delivery.handoff
 assert.equal(consumed.expectedHandoffVersion, 3);
 capabilityMarker('HANDOFF-004', 'client-consume-expected-version', '30000005-0000-4000-8000-000000000005', ['delivery.handoff.consume', 'project.read']);
 
-assert.throws(() => buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.revision.commit', workPackageId: DELIVERY_MONITOR_FIXTURE_IDS.packageId, expectedPackageVersion: 1, expectedPackageVersionId: DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId, itemRevisions: [
+const expectedItems = [{ itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId }];
+assert.throws(() => buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.revision.commit', workPackageId: DELIVERY_MONITOR_FIXTURE_IDS.packageId, expectedPackageVersion: 1, expectedPackageVersionId: DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId, expectedPackageAggregateVersion: 3, expectedItems, itemRevisions: [
   { itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId, rationale: 'Clarify this governed item.', authored: { type: 'task', title: 'One', description: 'One description', acceptanceCriteria: [], nonFunctionalRequirements: [] } },
   { itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId, rationale: 'Duplicate aggregate should fail.', authored: { type: 'task', title: 'Two', description: 'Two description', acceptanceCriteria: [], nonFunctionalRequirements: [] } },
 ] }), DeliveryMonitorCommandInputError);
 marker('DELIVERY-TR-003', 'client-duplicate-revision-selector-rejected');
+
+const revision = buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.revision.commit', workPackageId: DELIVERY_MONITOR_FIXTURE_IDS.packageId,
+  expectedPackageVersion: 1, expectedPackageVersionId: DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId, expectedPackageAggregateVersion: 3, expectedItems,
+  itemRevisions: [{ itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId,
+    rationale: 'Resolve the independent review blocker.', authored: { type: 'task', title: 'Materially revised', description: 'Changed description', acceptanceCriteria: [], nonFunctionalRequirements: [] } }] });
+assert.deepEqual(Object.keys(revision).sort(), ['expectedItems', 'expectedPackageAggregateVersion', 'expectedPackageVersion', 'expectedPackageVersionId', 'itemRevisions', 'workPackageId']);
+assert.throws(() => buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.revision.commit', workPackageId: DELIVERY_MONITOR_FIXTURE_IDS.packageId,
+  expectedPackageVersion: 1, expectedPackageVersionId: DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId, expectedPackageAggregateVersion: 3, expectedItems: [],
+  itemRevisions: [{ itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId,
+    rationale: 'Cannot submit partial knowledge.', authored: { type: 'task', title: 'Changed', description: 'Changed', acceptanceCriteria: [], nonFunctionalRequirements: [] } }] }), DeliveryMonitorCommandInputError);
+assert.throws(() => buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.revision.commit', workPackageId: DELIVERY_MONITOR_FIXTURE_IDS.packageId,
+  expectedPackageVersion: 1, expectedPackageVersionId: DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId, expectedPackageAggregateVersion: 3,
+  expectedItems: [expectedItems[0], { ...expectedItems[0], itemAggregateId: expectedItems[0].itemAggregateId.toUpperCase() }],
+  itemRevisions: [{ itemAggregateId: DELIVERY_MONITOR_FIXTURE_IDS.itemAggregateId, expectedAggregateVersion: 1, expectedItemVersionId: DELIVERY_MONITOR_FIXTURE_IDS.itemVersionId,
+    rationale: 'Case variants cannot disguise a duplicate identity.', authored: { type: 'task', title: 'Changed', description: 'Changed', acceptanceCriteria: [], nonFunctionalRequirements: [] } }] }), DeliveryMonitorCommandInputError);
+marker('DELIVERY-TR-005', 'client-recovery-binds-package-generation-and-complete-descendant-identities');
 
 const manual = buildDeliveryMonitorSelectorPayload({ action: 'delivery.package.create.manual', manualBrief: 'Manual planning package', items: [{ type: 'task', title: 'Manual task', description: 'Manually authored planning work.', acceptanceCriteria: [], nonFunctionalRequirements: [] }] });
 assert.equal('studioArtifactId' in manual, false);

@@ -41,20 +41,45 @@ const secondary = 'inline-flex min-h-10 items-center justify-center rounded-xl b
 const label = (value: string) => <span className="text-xs font-black uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">{value}</span>;
 const Badge = ({ children }: { children: React.ReactNode }) => <span className="rounded-full border border-[var(--av-color-border-strong)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]">{children}</span>;
 
-export default function EnterpriseIntelligenceView({ organization, workspace, currentUser }: {
+type EnterpriseIntelligenceViewProps = {
   organization: Organization | null;
   workspace: EnterpriseWorkspace | null;
   currentUser: User | null;
-}) {
+};
+
+export default function EnterpriseIntelligenceView({ organization, workspace, currentUser }: EnterpriseIntelligenceViewProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('controls');
   const organizationId = organization?.id || '';
   const workspaceId = workspace?.id || '';
   const actorId = currentUser?.id || '';
-  const scopeKey = `${organizationId}:${workspaceId}:${actorId}`;
   const serverAuthorityReady = (() => {
     try { return getRuntimeDataAccess() === 'server'; } catch { return false; }
   })();
   const scopeReady = Boolean(organizationId && workspaceId && actorId);
-  const [activeTab, setActiveTab] = useState<TabId>('controls');
+
+  if (!serverAuthorityReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.</p></section></div>;
+  if (!scopeReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
+
+  const scopeKey = `${organizationId}:${workspaceId}:${actorId}`;
+  return <EnterpriseIntelligenceWorkbench
+    key={scopeKey}
+    organizationId={organizationId}
+    workspaceId={workspaceId}
+    actorId={actorId}
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+  />;
+}
+
+function EnterpriseIntelligenceWorkbench({ organizationId, workspaceId, actorId, activeTab, setActiveTab }: {
+  key?: React.Key;
+  organizationId: string;
+  workspaceId: string;
+  actorId: string;
+  activeTab: TabId;
+  setActiveTab: React.Dispatch<React.SetStateAction<TabId>>;
+}) {
+  const scopeKey = `${organizationId}:${workspaceId}:${actorId}`;
   const [projectionState, setProjectionState] = useState<{ scopeKey: string; value: EnterpriseIntelligenceProjection } | null>(null);
   const projection = projectionState?.scopeKey === scopeKey ? projectionState.value : null;
   const [busy, setBusy] = useState(false);
@@ -74,6 +99,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   const [decisionId, setDecisionId] = useState('');
   const [blueprintName, setBlueprintName] = useState('');
   const projectionRequestEpoch = useRef(0);
+  const fileReadEpoch = useRef(0);
   const activeScopeKey = useRef(scopeKey);
   activeScopeKey.current = scopeKey;
 
@@ -81,22 +107,6 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     const requestEpoch = ++projectionRequestEpoch.current;
     const requestScopeKey = scopeKey;
     const isCurrent = () => requestEpoch === projectionRequestEpoch.current && requestScopeKey === activeScopeKey.current;
-    if (!serverAuthorityReady) {
-      if (isCurrent()) {
-        setBusy(false);
-        setProjectionState(null);
-        setError('');
-        setStatus('Enterprise Intelligence requires a server-authorized workspace. The local sandbox does not execute provider or persistence calls.');
-      }
-      return;
-    }
-    if (!scopeReady) {
-      if (isCurrent()) {
-        setBusy(false);
-        setStatus('Select an authorized organization and workspace to load committed Enterprise Intelligence state.');
-      }
-      return;
-    }
     setBusy(true);
     setError('');
     try {
@@ -117,23 +127,27 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     } finally {
       if (isCurrent()) setBusy(false);
     }
-  }, [organizationId, workspaceId, scopeKey, scopeReady, serverAuthorityReady, projection?.authorizationVersion]);
+  }, [organizationId, workspaceId, scopeKey, projection?.authorizationVersion]);
 
   useEffect(() => {
     projectionRequestEpoch.current += 1;
+    fileReadEpoch.current += 1;
     setBusy(false);
     setProjectionState(null);
     setReloadRequired(false);
     setError('');
     void reload();
-    return () => { projectionRequestEpoch.current += 1; };
+    return () => {
+      projectionRequestEpoch.current += 1;
+      fileReadEpoch.current += 1;
+    };
   }, [scopeKey]);
   useEffect(() => { setTranscriptReviewActivated(false); }, [scopeKey]);
   useEffect(() => {
     if (projection?.transcriptFlow.features.assessMultisourceApplyEnabled) setTranscriptReviewActivated(true);
   }, [projection?.transcriptFlow.features.assessMultisourceApplyEnabled]);
 
-  const mutate = async (action: () => Promise<unknown>, success: string): Promise<boolean> => {
+  const mutate = async (action: (isCurrent: () => boolean) => Promise<unknown>, success: string): Promise<boolean> => {
     if (!projection || reloadRequired) return false;
     const requestEpoch = ++projectionRequestEpoch.current;
     const requestScopeKey = scopeKey;
@@ -145,7 +159,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     setError('');
     setStatus('Submitting one server-authorized command.');
     try {
-      const result = await action();
+      const result = await action(isCurrent);
       if (!isCurrent()) return false;
       try {
         const next = await enterpriseIntelligenceClient.loadProjection({
@@ -296,16 +310,28 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   const scope = projection ? { organizationId, workspaceId, expectedAuthorizationVersion: projection.authorizationVersion } : null;
   const onFile = async (file?: File) => {
     if (!file) return;
+    const requestEpoch = ++fileReadEpoch.current;
+    const requestScopeKey = scopeKey;
+    const isCurrent = () => requestEpoch === fileReadEpoch.current && requestScopeKey === activeScopeKey.current;
     const support = classifyEvidenceFile(file.name, file.type, file.size);
     if (!support.supported || !support.mimeType) {
-      setSourceFile(null); setError(support.message); return;
+      if (isCurrent()) {
+        setSourceFile(null);
+        setError(support.message);
+      }
+      return;
     }
-    setError('');
-    setSourceFile({ name: file.name, mimeType: support.mimeType, size: file.size, base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())), note: support.message });
+    if (isCurrent()) setError('');
+    try {
+      const bytes = await file.arrayBuffer();
+      if (!isCurrent()) return;
+      setSourceFile({ name: file.name, mimeType: support.mimeType, size: file.size, base64: bytesToBase64(new Uint8Array(bytes)), note: support.message });
+    } catch (cause) {
+      if (!isCurrent()) return;
+      setSourceFile(null);
+      setError(cause instanceof Error ? cause.message : 'The selected evidence file could not be read.');
+    }
   };
-
-  if (!serverAuthorityReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.</p></section></div>;
-  if (!scopeReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
 
   return <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-4 overflow-y-auto p-4 sm:p-6" data-testid="enterprise-intelligence-workspace" data-projection-scope-ready={projection ? 'true' : 'false'}>
     <header className={panel}>
@@ -320,7 +346,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
       <button type="button" className={`${primary} mt-4`} disabled={locked || !scope || !providerForm.displayName.trim() || !providerForm.defaultModel.trim()} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.registerProvider({ ...scope, ...providerForm, modelAllowlist: [providerForm.defaultModel], capabilities: [...ENTERPRISE_AI_CAPABILITIES] }), 'Provider registered as pending review. Routes remain disabled.')}>Register provider metadata</button>
       <div className="mt-6 grid gap-4 md:grid-cols-2"><label>{label('Configured provider')}<select className={input} value={providerId} onChange={event => setProviderId(event.target.value)}><option value="">Select a provider</option>{projection?.providers.map(item => <option key={item.id} value={item.id}>{item.displayName} — {item.status}</option>)}</select></label><label>{label('Provider key (sent once)')}<input className={input} type="password" autoComplete="new-password" value={providerKey} onChange={event => setProviderKey(event.target.value)} /></label></div>
       {selectedProvider && <div className="mt-4 rounded-2xl bg-[var(--av-color-bg-subtle)] p-4 text-sm font-bold">Credential: {selectedProvider.credentialState.replaceAll('_', ' ')} · Validation: {selectedProvider.validationState.replaceAll('_', ' ')} · Budget: {selectedProvider.budgetState.replaceAll('_', ' ')}</div>}
-      <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={primary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async () => { try { await enterpriseIntelligenceClient.bindProviderSecret({ ...scope, providerConfigId: providerId, providerKey }); } finally { setProviderKey(''); } }, 'Secret bound through the approved backend; raw key discarded from form state.')}>Bind key securely</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.validateProvider({ ...scope, providerConfigId: providerId }), 'Provider validation recorded.')}>Validate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.activateProvider({ ...scope, providerConfigId: providerId }), 'Validated provider activated.')}>Activate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async () => { try { await enterpriseIntelligenceClient.rotateProviderSecret({ ...scope, providerConfigId: providerId, providerKey }); } finally { setProviderKey(''); } }, 'Provider key rotated and revalidated.')}>Rotate key</button><button type="button" className="min-h-10 rounded-xl border border-rose-300 px-4 text-sm font-black text-rose-700 disabled:opacity-50" disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.revokeProvider({ ...scope, providerConfigId: providerId }), 'Provider revoked and all routes disabled.')}>Revoke</button></div>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={primary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async isCurrent => { const submittedProviderKey = providerKey; try { await enterpriseIntelligenceClient.bindProviderSecret({ ...scope, providerConfigId: providerId, providerKey: submittedProviderKey }); } finally { if (isCurrent()) setProviderKey(''); } }, 'Secret bound through the approved backend; raw key discarded from form state.')}>Bind key securely</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.validateProvider({ ...scope, providerConfigId: providerId }), 'Provider validation recorded.')}>Validate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.activateProvider({ ...scope, providerConfigId: providerId }), 'Validated provider activated.')}>Activate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async isCurrent => { const submittedProviderKey = providerKey; try { await enterpriseIntelligenceClient.rotateProviderSecret({ ...scope, providerConfigId: providerId, providerKey: submittedProviderKey }); } finally { if (isCurrent()) setProviderKey(''); } }, 'Provider key rotated and revalidated.')}>Rotate key</button><button type="button" className="min-h-10 rounded-xl border border-rose-300 px-4 text-sm font-black text-rose-700 disabled:opacity-50" disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.revokeProvider({ ...scope, providerConfigId: providerId }), 'Provider revoked and all routes disabled.')}>Revoke</button></div>
       <div className="mt-5 grid gap-3">{selectedProvider?.routes.map(route => {
         const selectedRoles = routeRoleSelections[route.id] || route.allowedRoleIds;
         return <article key={route.id} className="rounded-2xl border border-[var(--av-color-border)] p-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black">{route.capability}</p><p className="text-xs font-semibold text-[var(--av-color-text-muted)]">{route.modelLabel} · {route.availability.replaceAll('_', ' ')}</p></div><button type="button" className={secondary} disabled={locked || !scope || (!route.enabled && selectedRoles.length === 0)} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.toggleProviderRoute({ ...scope, providerConfigId: selectedProvider.id, routeId: route.id, capability: route.capability, enabled: !route.enabled, ...(!route.enabled ? { allowedRoles: selectedRoles } : {}) }), `Route ${route.enabled ? 'disabled' : 'enabled'}.`)}>{route.enabled ? 'Disable route' : 'Enable route'}</button></div><fieldset className="mt-3"><legend className="text-xs font-black uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">Authorized roles</legend><div className="mt-2 flex flex-wrap gap-3">{selectedProvider.eligibleRouteRoles.map(option => <label key={option.id} className="flex min-h-10 items-center gap-2 text-sm font-bold"><input type="checkbox" checked={selectedRoles.includes(option.id)} disabled={locked || route.enabled} onChange={() => setRouteRoleSelections(current => ({ ...current, [route.id]: selectedRoles.includes(option.id) ? selectedRoles.filter(id => id !== option.id) : [...selectedRoles, option.id] }))} />{option.label} <span className="text-xs text-[var(--av-color-text-muted)]">({option.scope === 'workspace' ? 'workspace' : 'organization admin'})</span></label>)}</div>{selectedProvider.eligibleRouteRoles.length === 0 && <p className="mt-2 text-xs font-semibold text-rose-700">No active role is eligible for this workspace route.</p>}</fieldset></article>;

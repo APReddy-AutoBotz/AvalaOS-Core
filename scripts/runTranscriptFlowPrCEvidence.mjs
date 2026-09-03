@@ -1,14 +1,33 @@
-import { spawnSync, execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { loadPrCContract, runtimeContextMatches, validatePrCRegistryStructure } from './transcriptFlowPrCEvidenceContract.mjs';
-import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
+
+import {
+  applicablePrCNotRun,
+  buildPrCAssertionSourceRecord,
+  buildPrCNotRunSourceRecord,
+  loadPrCContract,
+  loadPrCEvidenceBindingCatalog,
+  PR_C_COMMAND_RESULTS_VERSION,
+  PR_C_EVIDENCE_VERSION,
+  PR_C_MANIFEST_VERSION,
+  prCCanonicalDigest,
+  prCCommandRecordDigest,
+  prCSha256,
+  runtimeContextMatches,
+  validatePrCRegistryStructure,
+  validatePrCSanitized,
+} from './transcriptFlowPrCEvidenceContract.mjs';
+import {
+  assertPrCCanonicalEvidenceDirectory,
+  derivePrCExecutionIdentity,
+  prCExecutionProof,
+  resolvePrCCanonicalEvidenceDirectory,
+} from './transcriptFlowPrCExecutionIdentity.mjs';
+import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const root = process.cwd();
-const sha256 = value => createHash('sha256').update(value).digest('hex');
 const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
-
 const markerKey = marker => [marker.commandId, marker.owner, marker.testId, marker.assertionId, marker.fixture].join('|');
 const expectedKey = assertion => [assertion.commandId, assertion.owner, assertion.testId, assertion.assertionId, assertion.fixture].join('|');
 
@@ -44,18 +63,18 @@ const execute = (command, commandId) => {
 const { registry, provenance } = loadPrCContract(root);
 const contract = validatePrCRegistryStructure(root, registry, provenance);
 const exactHead = git(['rev-parse', 'HEAD']);
-const expectedHead = process.env.PR_C_EXACT_HEAD_SHA;
-if (expectedHead && expectedHead !== exactHead) throw new Error(`PR_C_EXACT_HEAD:${exactHead}`);
 const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', PR_C_BASE_SHA, exactHead], { cwd: root });
 if (ancestor.status !== 0) throw new Error('PR_C_BASE_NOT_ANCESTOR');
 
 const changedFiles = collectChangedPrCFiles(root);
 const workingTreeDigest = calculatePrCWorkingTreeDigest(root, changedFiles);
-const attempt = String(process.env.PR_C_RUN_ATTEMPT || 'local-1').replace(/[^a-z0-9._-]/giu, '-');
-const evidenceDir = path.join(root, 'output', 'process-lifecycle-pr-c', PR_C_BASE_SHA, workingTreeDigest, attempt);
-rmSync(evidenceDir, { recursive: true, force: true });
+const identity = derivePrCExecutionIdentity({ exactHead, workingTreeDigest });
+const evidenceDir = resolvePrCCanonicalEvidenceDirectory(root, identity);
+assertPrCCanonicalEvidenceDirectory(root, identity, evidenceDir);
+if (existsSync(evidenceDir)) throw new Error('PR_C_EVIDENCE_PATH_ALREADY_EXISTS');
 mkdirSync(evidenceDir, { recursive: true });
 
+const bindingCatalog = loadPrCEvidenceBindingCatalog(root, registry);
 const expectedByKey = new Map(registry.assertions.map(assertion => [expectedKey(assertion), assertion]));
 const seen = new Map();
 const commandRecords = [];
@@ -81,23 +100,34 @@ for (const command of registry.commands) {
   }
   const expectedCount = registry.assertions.filter(assertion => assertion.commandId === command.id).length;
   const status = result.status ?? 1;
-  commandRecords.push({
+  const record = {
+    identity,
     id: command.id,
     command: command.command,
     environment: command.environment,
+    requiredEnvironment: command.requiredEnvironment || [],
     startedAt,
     durationMs: Math.round(performance.now() - started),
     exitCode: status,
-    stdoutSha256: sha256(stdout.replace(/\r\n?/gu, '\n')),
-    stderrSha256: sha256(stderr.replace(/\r\n?/gu, '\n')),
+    stdoutSha256: prCSha256(stdout.replace(/\r\n?/gu, '\n')),
+    stderrSha256: prCSha256(stderr.replace(/\r\n?/gu, '\n')),
     assertionCount: markers.length,
     expectedAssertionCount: expectedCount,
     assertions: markers,
-  });
+  };
+  record.commandRecordDigest = prCCommandRecordDigest(record);
+  validatePrCSanitized(record);
+  commandRecords.push(record);
   if (status !== 0 || markers.length !== expectedCount) {
     failed = true;
     break;
   }
+}
+
+const finalChangedFiles = collectChangedPrCFiles(root);
+const finalWorkingTreeDigest = calculatePrCWorkingTreeDigest(root, finalChangedFiles);
+if (JSON.stringify(finalChangedFiles) !== JSON.stringify(changedFiles) || finalWorkingTreeDigest !== workingTreeDigest) {
+  throw new Error('PR_C_SCOPED_TREE_CHANGED_DURING_RUN');
 }
 
 const missing = [...expectedByKey.keys()].filter(key => !seen.has(key));
@@ -109,19 +139,23 @@ for (const [index, [key, marker]] of [...seen.entries()].entries()) {
   const command = registry.commands.find(item => item.id === marker.commandId);
   const commandRecord = commandRecords.find(item => item.id === marker.commandId);
   if (!expected || !command || !commandRecord) throw new Error(`PR_C_ASSERTION_BINDING:${key}`);
+  const sourceRecord = buildPrCAssertionSourceRecord({
+    registry,
+    bindingCatalog,
+    assertion: expected,
+    observedRuntimeContext: marker.runtimeContext,
+    commandRecordDigest: commandRecord.commandRecordDigest,
+  });
   const document = {
-    contractVersion: 'governed-delivery-monitor-pr-c-assertion-evidence-1',
+    contractVersion: PR_C_EVIDENCE_VERSION,
     result: 'passed',
-    acceptedMainBaseline: PR_C_BASE_SHA,
-    exactHead,
-    workingTreeDigest,
-    workflowPath: PR_C_WORKFLOW_PATH,
+    identity,
     command: {
       id: command.id,
       command: command.command,
       environment: command.environment,
-      stdoutSha256: commandRecord.stdoutSha256,
-      stderrSha256: commandRecord.stderrSha256,
+      requiredEnvironment: command.requiredEnvironment || [],
+      commandRecordDigest: commandRecord.commandRecordDigest,
     },
     assertion: {
       owner: expected.owner,
@@ -132,54 +166,59 @@ for (const [index, [key, marker]] of [...seen.entries()].entries()) {
       testName: expected.testName,
       runtimeContext: marker.runtimeContext,
     },
+    sourceRecord,
+    sourceRecordDigest: prCCanonicalDigest(sourceRecord),
   };
+  validatePrCSanitized(document);
   const name = `${String(index + 1).padStart(3, '0')}-${command.id}-${expected.testId}`
     .replace(/[^a-z0-9._-]/giu, '-')
     .toLowerCase() + '.evidence.json';
   writeFileSync(path.join(evidenceDir, name), `${JSON.stringify(document, null, 2)}\n`, 'utf8');
   evidenceFiles.push(name);
 }
-for (const boundary of registry.notRun) {
+
+const effectiveNotRun = applicablePrCNotRun(registry, identity.executionClassification);
+for (const boundary of effectiveNotRun) {
+  const sourceRecord = buildPrCNotRunSourceRecord({ registry, boundary });
   const document = {
-    contractVersion: 'governed-delivery-monitor-pr-c-assertion-evidence-1',
+    contractVersion: PR_C_EVIDENCE_VERSION,
     result: 'not_run',
-    acceptedMainBaseline: PR_C_BASE_SHA,
-    exactHead,
-    workingTreeDigest,
-    workflowPath: PR_C_WORKFLOW_PATH,
-    command: null,
+    identity,
+    command: { applicability: 'not_applicable', value: null },
     assertion: {
       owner: boundary.owner,
       ownerBinding: registry.owners[boundary.owner],
       testId: boundary.testId,
+      assertionId: { applicability: 'not_applicable', value: null },
+      fixture: { applicability: 'not_applicable', value: null },
+      persona: { applicability: 'not_applicable', value: null },
+      runtimeContext: { applicability: 'not_applicable', value: null },
       testName: boundary.testName,
       reason: boundary.reason,
     },
+    sourceRecord,
+    sourceRecordDigest: prCCanonicalDigest(sourceRecord),
   };
+  validatePrCSanitized(document);
   const name = `not-run-${boundary.testId.toLowerCase()}.evidence.json`;
   writeFileSync(path.join(evidenceDir, name), `${JSON.stringify(document, null, 2)}\n`, 'utf8');
   evidenceFiles.push(name);
 }
 
 const commandResults = {
-  contractVersion: 'governed-delivery-monitor-pr-c-command-results-1',
-  acceptedMainBaseline: PR_C_BASE_SHA,
-  exactHead,
-  workingTreeDigest,
+  contractVersion: PR_C_COMMAND_RESULTS_VERSION,
+  identity,
   commands: commandRecords,
 };
+validatePrCSanitized(commandResults);
 const commandResultsText = `${JSON.stringify(commandResults, null, 2)}\n`;
 writeFileSync(path.join(evidenceDir, 'command-results.json'), commandResultsText, 'utf8');
 
 const manifest = {
-  contractVersion: 'governed-delivery-monitor-pr-c-evidence-1',
+  contractVersion: PR_C_MANIFEST_VERSION,
   result: failed ? 'failed' : 'passed',
-  acceptedMainBaseline: PR_C_BASE_SHA,
-  exactHead,
-  workflowPath: PR_C_WORKFLOW_PATH,
-  workflowRunId: process.env.PR_C_WORKFLOW_RUN_ID || null,
-  runAttempt: attempt,
-  workingTreeDigest,
+  identity,
+  verification: prCExecutionProof(identity),
   changedFileCount: changedFiles.length,
   changedFiles,
   registryContract: contract,
@@ -189,17 +228,17 @@ const manifest = {
   notRunFileCount: evidenceFiles.filter(name => name.startsWith('not-run-')).length,
   evidenceFiles,
   commandResultsFile: 'command-results.json',
-  commandResultsSha256: sha256(commandResultsText.replace(/\r\n?/gu, '\n')),
+  commandResultsSha256: prCSha256(commandResultsText),
   commands: commandRecords,
-  notRun: registry.notRun,
+  notRun: effectiveNotRun,
   missingAssertions: missing,
   completedAt: new Date().toISOString(),
 };
-
+validatePrCSanitized(manifest);
 const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 writeFileSync(path.join(evidenceDir, 'manifest.json'), manifestBytes);
-writeFileSync(path.join(evidenceDir, 'manifest.sha256'), `${sha256(manifestBytes)}  manifest.json\n`, 'utf8');
+writeFileSync(path.join(evidenceDir, 'manifest.sha256'), `${prCSha256(manifestBytes)}  manifest.json\n`, 'utf8');
 process.stdout.write(`\nPR C evidence directory: ${evidenceDir}\n`);
-process.stdout.write(`PR C evidence summary: ${JSON.stringify({ result: manifest.result, commands: manifest.commandCount, assertions: manifest.assertionCount, notRun: manifest.notRun.length })}\n`);
+process.stdout.write(`PR C evidence summary: ${JSON.stringify({ result: manifest.result, commands: manifest.commandCount, assertions: manifest.assertionCount, notRun: manifest.notRun.length, identity })}\n`);
 
 if (failed) throw new Error(`PR_C_EVIDENCE_FAILED:${JSON.stringify({ missing, lastCommand: commandRecords.at(-1)?.id })}`);

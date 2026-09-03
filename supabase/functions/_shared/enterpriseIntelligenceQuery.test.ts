@@ -9,6 +9,10 @@ import {
   createDeliveryWorkspaceFixture,
   createMonitorBaselinesFixture,
 } from '../../../services/deliveryMonitor/fixtures.ts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+} from '../../../services/deliveryMonitor/contracts.ts';
 import type { TenantAuthorityDatabase, TenantContext } from './tenantAuthority.ts';
 import {
   buildEnterpriseIntelligenceProjection,
@@ -83,6 +87,13 @@ const HIDDEN_CANARY_VALUES = [
   'HIDDEN_ASSESS_RESOLUTION_CANARY',
   'HIDDEN_ASSESS_RESOLUTION_RATIONALE_CANARY',
 ] as const;
+
+const deliveryProjectionFixture = (organizationId = ORG, workspaceId = WORKSPACE) => decodeDeliveryWorkspaceProjection({
+  ...createDeliveryWorkspaceFixture(), organizationId, workspaceId,
+});
+const monitorProjectionFixture = (organizationId = ORG, workspaceId = WORKSPACE) => decodeMonitorApprovedBaselinesProjection({
+  ...createMonitorBaselinesFixture(), organizationId, workspaceId,
+});
 
 const CANONICAL_MISSING_EVIDENCE_BY_DIMENSION = {
   integration_accessibility: [],
@@ -592,9 +603,9 @@ const boundedDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
     execute: async () => ({}),
     loadDeliveryProjection: async (_organizationId, _workspaceId, query = {}) => {
       deliveryProjectionQueries.push(query);
-      return createDeliveryWorkspaceFixture();
+      return { ...createDeliveryWorkspaceFixture(), organizationId: ORG, workspaceId: WORKSPACE };
     },
-    loadMonitorProjection: async () => createMonitorBaselinesFixture(),
+    loadMonitorProjection: async () => ({ ...createMonitorBaselinesFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
   },
 );
 await boundedDeliveryDatabase.loadProjectionRows(authority(), {
@@ -627,6 +638,40 @@ assert.deepEqual(deliveryProjectionQueries[1], {
   baselineEligibilityCursorUpdatedAt: '2026-08-31T06:30:00.000Z',
   baselineEligibilityCursorPackageId: PACKAGE,
 }, 'Enterprise query forwards the bounded baseline-eligibility continuation only after tenant authority resolves');
+const foreignDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async () => ({
+      ...createDeliveryWorkspaceFixture(),
+      organizationId: '21000000-0000-4000-8000-000000000021',
+      workspaceId: WORKSPACE,
+    }),
+    loadMonitorProjection: async () => ({ ...createMonitorBaselinesFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
+  },
+);
+await assert.rejects(
+  () => foreignDeliveryDatabase.loadProjectionRows(authority()),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'the service-role Delivery projection adapter rejects a valid foreign nested scope',
+);
+const foreignMonitorDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async () => ({ ...createDeliveryWorkspaceFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
+    loadMonitorProjection: async () => ({
+      ...createMonitorBaselinesFixture(),
+      organizationId: ORG,
+      workspaceId: '22000000-0000-4000-8000-000000000022',
+    }),
+  },
+);
+await assert.rejects(
+  () => foreignMonitorDatabase.loadProjectionRows(authority()),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'the service-role Monitor projection adapter rejects a valid foreign nested scope',
+);
 const transcriptOnlySerialized = JSON.stringify(transcriptOnlyProjection);
 for (const prohibited of ['content_hash', 'extracted_text_hash', 'storage_path', 'provider_config_id', 'secret_ref']) {
   assert.ok(!transcriptOnlySerialized.includes(prohibited), `transcript-only projection must omit ${prohibited}`);
@@ -864,6 +909,36 @@ const allowed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, expe
 assert.equal(allowed.response.status, 200);
 assert.equal(allowed.response.headers.get('cache-control'), 'no-store');
 assert.ok(isProjectionBody(allowed.body));
+
+const foreignNestedRows = raw();
+foreignNestedRows.deliveryWorkspace = {
+  ...deliveryProjectionFixture('21000000-0000-4000-8000-000000000021'),
+};
+assert.throws(
+  () => buildEnterpriseIntelligenceProjection(authority(), foreignNestedRows),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'a substituted nested Delivery projection must fail before it can be labeled with outer authority',
+);
+const foreignNested = await invoke(
+  { organizationId: ORG, workspaceId: WORKSPACE, expectedAuthorizationVersion: 9 },
+  { queryDatabase: queryDatabase(foreignNestedRows) },
+);
+assert.deepEqual(
+  { status: foreignNested.response.status, body: foreignNested.body },
+  { status: 503, body: { code: 'ENTERPRISE_PROJECTION_UNAVAILABLE' } },
+  'the HTTP projection boundary fails closed on an outer/nested scope mismatch',
+);
+
+const uppercaseNestedRows = raw();
+uppercaseNestedRows.deliveryWorkspace = {
+  ...deliveryProjectionFixture(ORG.toUpperCase(), WORKSPACE.toUpperCase()),
+};
+uppercaseNestedRows.monitorApprovedBaselines = {
+  ...monitorProjectionFixture(ORG.toUpperCase(), WORKSPACE.toUpperCase()),
+};
+const uppercaseNestedProjection = buildEnterpriseIntelligenceProjection(authority(), uppercaseNestedRows);
+assert.equal(uppercaseNestedProjection.deliveryWorkspace?.organizationId, ORG.toUpperCase());
+assert.equal(uppercaseNestedProjection.monitorApprovedBaselines?.workspaceId, WORKSPACE.toUpperCase());
 
 let parsedDeliveryPage: unknown;
 const paged = await invoke({
