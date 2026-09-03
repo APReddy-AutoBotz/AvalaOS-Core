@@ -35,6 +35,7 @@ const workspace = (page: Page) => page.getByTestId('enterprise-intelligence-work
 const waitForProjection = async (page: Page) => {
   await expect(workspace(page)).toHaveAttribute('data-projection-scope-ready', 'true');
   await expect(workspace(page).locator('header').getByRole('status')).toHaveText('Committed server state loaded.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 };
 
 const selectControls = async (page: Page) => {

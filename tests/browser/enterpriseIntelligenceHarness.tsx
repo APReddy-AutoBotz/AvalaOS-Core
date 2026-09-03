@@ -73,7 +73,7 @@ const Harness = () => {
   const currentUser = deliveryMonitor ? (alternateActor ? alternateDeliveryUser : deliveryUser) : defaultUser;
 
   return <main className="min-h-screen bg-[var(--av-color-bg)]">
-    {scopeSwitch && <div className="flex items-center gap-3 p-4">
+    {scopeSwitch && <div className="flex flex-wrap items-center gap-3 p-4">
       <button type="button" disabled={alternateOrganization} onClick={() => setWorkspaceIndex(index => index === 0 ? 1 : 0)}>Switch Enterprise workspace context</button>
       <button type="button" onClick={() => setAlternateOrganization(value => !value)}>Switch Enterprise organization context</button>
       <button type="button" onClick={() => setAlternateActor(value => !value)}>Switch Enterprise actor context</button>
