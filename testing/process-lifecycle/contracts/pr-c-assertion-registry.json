@@ -442,7 +442,7 @@
     },
     "browser-scope": {
       "path": "tests/browser/enterpriseIntelligencePrCScope.spec.ts",
-      "sha256": "4bede3af3a71aaf9617d27565d5aabbfe46363e98e2fd9fe19646e4e2982f939"
+      "sha256": "2684648c1f834b72dfa716650abb27286eef0765814151b2e7f02f22e39fd11f"
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
