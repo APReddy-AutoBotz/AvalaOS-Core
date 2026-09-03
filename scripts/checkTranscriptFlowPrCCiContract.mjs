@@ -106,6 +106,28 @@ assert.match(
   'the retained browser suite must exclude the PR C spec that owns a dedicated harness',
 );
 
+const retainedTranscriptPlaywright = read('playwright.transcript-flow-pr-a.config.ts');
+assert.match(
+  retainedTranscriptPlaywright,
+  /import path from 'node:path';/u,
+  'the retained PR A Playwright config must use platform-safe path construction',
+);
+assert.match(
+  retainedTranscriptPlaywright,
+  /import \{ tmpdir \} from 'node:os';/u,
+  'the retained PR A Playwright config must use the operating-system temp directory',
+);
+assert.match(
+  retainedTranscriptPlaywright,
+  /outputDir:\s*path\.join\(tmpdir\(\), 'avalaos-transcript-flow-pr-a-playwright', String\(process\.pid\)\)/u,
+  'the retained PR A Playwright output must be outside the repository and isolated per process',
+);
+assert.doesNotMatch(
+  retainedTranscriptPlaywright,
+  /outputDir:[^\r\n]*(?:process\.env\.(?:TEMP|TMP)|['"]\.['"])/u,
+  'the retained PR A Playwright output must not depend on platform-specific TEMP availability or the repository root',
+);
+
 const browserServer = read('tests/browser/deliveryMonitorPrC/server.mjs');
 assert.match(browserServer, /import \{ tmpdir \} from 'node:os';/u, 'the PR C browser server must use the operating-system temp directory');
 assert.match(
