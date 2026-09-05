@@ -1,16 +1,18 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
-Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B implementation is authorized and active; PR C remains proposed and excluded
+Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized PR C corrective continuation and remains merge NO-GO pending full exact-head verification
 
 Plan date: 2026-08-25
 
-Planning baseline: accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`
+Planning baseline: post-PR-B `main` at `5433cad41721355e3ec5a29bc2f87772540c77b5`
 
 Deployment status: unknown; no hosted or live environment was inspected
 
-Implementation authority: PR A was accepted through PR #255; PR B was explicitly authorized on 2026-08-28; PR C requires separate execution approval
+Implementation authority: PR A was accepted through PR #255; PR B is merged through PR #263; the AP explicitly authorized PR C implementation and testing control on 2026-08-31
 
 PR A evidence boundary: accepted final head `460c44864b9d240321e727945411ced51dd0fe30`, merge `11e670003a73b0ab5a28650b70afac4b267760f4`, 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, all 15 applicable workflows, Netlify preview, and fresh independent review. Executed markers bind assertion-emitted runtime persona, canonical capabilities, tenant scope, fixtures, and exact exercised lineage. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
+
+PR C execution boundary: one additive implementation PR owns Delivery and Monitor behavior, migrations, tests, assertion-owned evidence, rollback, and controlled-human readiness material. Its source/local/CI evidence may prove only the exact candidate it executes. On 2026-09-04 the AP separately authorized controlled-human preparation and execution only on a dedicated synthetic `hosted_nonproduction_pilot` backend and the PR #264 Netlify Deploy Preview; that authorization does not itself execute or pass the gate. `CONTROLLED-HUMAN` remains `not_run` until a signed three-distinct-human session binds every canonical step to the exact head, CI run/attempt/artifact, Deploy Preview, backend, seed, Edge deployment manifest, and verified deprovision. Production, AvalaOS.com/custom domains, customer/external data, real providers, pilot/production promotion, security certification, compliance certification, and readiness claims remain prohibited or `not_run`. `PERF-003` and `PERF-004` remain `not_run` until the AP approves numeric budgets.
 
 ## 1. Plan handling and authority
 
@@ -1207,8 +1209,14 @@ Delivers:
 Acceptance boundary:
 
 - all `DELIVERY-TR-*`, `MONITOR-TR-*`, remaining `PATH-*`, `HANDOFF-*`, end-to-end, accessibility, and performance gates pass;
+- a reviewer-blocked package exposes recovery only for its exact current package/version/aggregate identity; the production workspace loads the complete bounded descendant set, binds every current descendant selector, authors only explicitly selected materially changed descendants, and rejects unchanged, partial-knowledge, stale, foreign, replayed, or substituted input atomically;
+- a committed recovery creates a new immutable package version and fresh descendant decision state; its canonical result contains exactly one unique new item-version identity per expected aggregate and reuses no predecessor item-version identity from the complete set, so package review and approval must be repeated before any new Monitor baseline becomes eligible;
 - draft/rejected/stale/unresolved packages cannot affect Monitor;
 - Monitor remains read-only and shows exact lineage;
+- actor, organization, or workspace changes synchronously clear every secret, private-file byte, provider/source/route selector, candidate/draft selection, preview, pending action, status, and error before the new scope renders, and invalidate every in-flight file/mutation/Delivery/Monitor completion before it can repaint or mutate that scope; requested, outer, and nested Delivery/Monitor UUID scopes must match semantically;
+- two lost command responses lock fresh-key mutation until an authoritative reload reconciles the possibly committed effect; and
+- currently authorized exact committed receipt replay succeeds after mutable feature disablement or global read-only activation, while revoked authority still denies disclosure and new keys create no receipt or effect;
+- the manifest, command results, every passed assertion, and every `not_run` record bind the independently derived canonical workflow path, run ID, attempt, accepted base, exact head, execution classification, canonical evidence path, command/source/fixture/persona/runtime identity, and relevant record digest; base-tracked deletion or rename fails scope collection closed, and local evidence cannot satisfy a hosted gate; and
 - the full retained repository matrix passes.
 
 Rollback:
@@ -1295,6 +1303,12 @@ Use only synthetic identities and sources. Record:
 
 Do not capture keys, raw transcript content, storage identities, signed URLs, raw logs, or provider payloads.
 
+The executable evidence boundary is the four fail-closed JSON contracts under `testing/process-lifecycle/contracts/pr-c-controlled-human-*.schema.json` plus `scripts/prCControlledHumanEvidenceContract.mjs`. It defines eight canonical journeys and `CH-01` through `CH-14`; every checkpoint contains its exact ordered steps, persona, Test IDs, timestamps, evidence digest, zero-egress counts, and zero unexpected side-effect counts. A workflow, suite, or checkpoint aggregate cannot synthesize a missing step result.
+
+Five protected, `hosted-nonproduction-pilot` environment-gated workflows own exact allowlisted Edge deployment, preparation, server-authoritative quiesce, checkpoint capture, and final verification. The Edge producer accepts only PR #264's exact branch/head, terminal successful PR C CI run/attempt/artifact digest, canonical `deploy-preview-264--avalaos-pilot.netlify.app`, and a server-attested dedicated backend with production/customer/provider authority false. It derives the raw-byte digest of the exact additive controlled-human migration from the checked-out source, accepts only the expected prior tip or exact replay, binds migration preflight/apply/verify phase digests, suppresses raw deployment CLI output, signs exact source digests, and uploads only a sanitized manifest. A partial run produces no trusted manifest and activates no exercise/feature flag. Preparation downloads that exact run/attempt/artifact and verifies its GitHub identity, artifact digest, HMAC, migration/source equality, and semantic seed counts; caller-authored JSON cannot substitute it. After all active human steps, the dedicated quiesce phase emits the exact server transition timestamp. Checkpoint capture HMAC-pseudonymizes human identity and rejects active steps at or after quiesce or read-only observation before it. Final verification requires three distinct GitHub actors mapped to requester, reviewer, and approver evidence roles, validates every human record before resuming and deprovisioning the exact exercise, and fails closed on any failed/blocked/skipped step, stale attempt, mismatched binding, unsafe evidence, provider egress, unexpected side effect, ordering violation, or partial reset.
+
+A material defect invalidates the entire session and head. After a source fix, all exact-head gates, a new exercise, and all `CH-01` through `CH-14` must be repeated. A final artifact may record only sanitized defect/session digests and full-retest binding; automation cannot promote `CONTROLLED-HUMAN` without the signed human artifacts.
+
 ### 27.3 Ready-to-start gate
 
 Controlled human testing may begin only when:
@@ -1309,6 +1323,8 @@ Controlled human testing may begin only when:
 - seed/reset tooling is repeatable;
 - creator, reviewer, and approver accounts are distinct; and
 - known limitations clearly state text-only ingestion, planning-only direct paths, no execution, no live telemetry, and no readiness claim.
+
+The dedicated synthetic target and Deploy Preview are the only authorized hosted surfaces for this gate. Stable Netlify production context, AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, and broad project/database reset are stop conditions.
 
 The PR remains Draft until controlled users complete the approved script and material defects are fixed and retested.
 
@@ -1334,8 +1350,8 @@ This workstream is complete only when:
 ## 29. Known unknowns and separate approvals
 
 - Exact provider/model choices and pricing are runtime configuration and require current verification before any real-provider smoke test.
-- Hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remain not run in this plan.
-- Real provider calls, live secrets, deployment, hosted tenant isolation, and customer data require separate explicit approval.
+- Dedicated synthetic Supabase and PR #264 Deploy Preview preparation/execution are authorized only for the controlled-human gate and remain `not_run` until exact evidence is produced. All other hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remains outside this plan.
+- Real provider calls/keys, production or customer credentials, stable/custom-domain deployment, production, and customer/external-user data require separate explicit approval.
 - Audio/video transcription, remote meeting integration, external issue-tracker sync, live telemetry, and task execution require new scope approval and their own threat model.
 - Any future execution path must require approved Assess ancestry even when planning-only direct Studio/Delivery paths exist.
 

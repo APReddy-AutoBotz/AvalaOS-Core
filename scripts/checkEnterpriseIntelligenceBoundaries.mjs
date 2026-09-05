@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { assertEnterpriseClientIdempotencyBoundary } from './enterpriseIntelligenceIdempotencyBoundary.mjs';
 
 const root = process.cwd();
 const requiredFiles = [
@@ -95,9 +96,7 @@ for (const required of [
 ]) {
   if (!approvalCommands.includes(required)) throw new Error(`Canonical approval command flow is missing ${required}.`);
 }
-if (client.includes('stableFingerprint(material)') || client.includes("subtle.digest('SHA-256'")) {
-  throw new Error('Browser action idempotency keys must not be deterministic payload hashes.');
-}
+assertEnterpriseClientIdempotencyBoundary(client);
 for (const pattern of [/localStorage/u, /sessionStorage/u, /indexedDB/u, /console\.(?:log|info|debug|warn|error)/u]) {
   if (pattern.test(`${client}\n${view}`)) {
     throw new Error(`Provider browser action code may not persist or log raw key material: ${pattern}.`);
@@ -586,10 +585,14 @@ for (const command of [
   'npm audit --audit-level=moderate', 'git diff --check',
 ]) if (!evidenceRegistry.commands.some(item => item.command === command)) throw new Error(`PR A evidence registry omitted ${command}.`);
 for (const required of [
-  'PR_A_BASE_SHA:', 'PR_A_EXACT_HEAD_SHA:', 'github.run_attempt', 'TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL:',
-  'ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL:', 'STUDIO_ARTIFACT_MIGRATION_DATABASE_URL:', 'PR1D_MIGRATION_DATABASE_URL:',
-  'node scripts/runTranscriptFlowEvidence.mjs', 'npm run test:transcript-flow:evidence',
-]) if (!evidenceWorkflow.includes(required)) throw new Error(`PR A workflow is missing exact evidence binding ${required}.`);
+  'PR_A_EXACT_HEAD_SHA:', 'ref: ${{ github.event.pull_request.head.sha || github.sha }}', 'fetch-depth: 0',
+  'test "$(git rev-parse HEAD)" = "$PR_A_EXACT_HEAD_SHA"',
+  'npm run test:transcript-flow:evidence-contract:retained',
+]) if (!evidenceWorkflow.includes(required)) throw new Error(`PR A workflow is missing retained exact-head evidence binding ${required}.`);
+if (evidenceWorkflow.includes('node scripts/runTranscriptFlowEvidence.mjs')
+  || /^\s*run:\s*npm run test:transcript-flow:evidence\s*$/mu.test(evidenceWorkflow)) {
+  throw new Error('PR A historical evidence must not be replayed against a later pull-request head.');
+}
 if (!/testIgnore:\s*\[[^\]]*'transcriptFlowPrA\.spec\.ts'/u.test(retainedPlaywright)) {
   throw new Error('The retained localhost browser suite must not discover the dedicated governed transcript specification.');
 }

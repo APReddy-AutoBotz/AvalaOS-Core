@@ -1,25 +1,15 @@
 [build]
-  command = "npm run build"
+  # The permanent build router preserves ordinary branch/preview behavior,
+  # admits controlled-human mode only for the exact PR #264 Deploy Preview,
+  # and fails closed for production context unless the pre-existing exact
+  # avalaos-pilot stable non-production authorization tuple is present.
+  # Neither path authorizes AvalaOS.com, custom domains, customer data, real
+  # provider keys/calls, or production use.
+  command = "node scripts/writeHostedPilotNetlifyHeaders.mjs --build"
   publish = "dist"
 
 [functions]
   directory = "netlify/functions"
-
-# Netlify's production deploy context is permitted only for the dedicated
-# avalaos-pilot stable URL. scripts/writeHostedPilotNetlifyHeaders.mjs fails
-# closed unless Netlify proves SITE_NAME=avalaos-pilot, BRANCH=main,
-# URL=https://avalaos-pilot.netlify.app, and the controller-managed build-only
-# non-production testing authorization flag is present.
-# This does not authorize AvalaOS production cutover, custom-domain/DNS use,
-# customer data, external users, or real provider/BYOK egress.
-[context.production]
-  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
-
-[context.deploy-preview]
-  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
-
-[context.branch-deploy]
-  command = "npm ci && npm run build && node scripts/writeHostedPilotNetlifyHeaders.mjs"
 
 [[redirects]]
   from = "/*"

@@ -11,6 +11,12 @@ import {
   decodeTranscriptFlowProjection,
   type TranscriptFlowProjection,
 } from './transcriptFlow/contracts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+  type DeliveryWorkspaceProjection,
+  type MonitorApprovedBaselinesProjection,
+} from './deliveryMonitor/contracts';
 
 export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';
 export const MODERNIZATION_MODEL_VERSION = 'modernization-disposition-1';
@@ -259,6 +265,8 @@ export interface EnterpriseIntelligenceProjection {
   studioDocuments: EnterpriseStudioDocumentProjection[];
   deliveryPackages: EnterpriseDeliveryPackageProjection[];
   monitorBaselines: EnterpriseMonitorProjection[];
+  deliveryWorkspace?: DeliveryWorkspaceProjection;
+  monitorApprovedBaselines?: MonitorApprovedBaselinesProjection;
   modernizationDecisions: EnterpriseModernizationProjection[];
   blueprints: EnterpriseBlueprintProjection[];
   approvalResources: EnterpriseApprovalResourceProjection[];
@@ -587,10 +595,12 @@ export const sanitizeEvidenceCandidateValue = (value: string, maxLength = 12_000
 );
 
 const projectionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const sameProjectionUuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
 const projectionKeys = [
   'schemaVersion', 'organizationId', 'workspaceId', 'authorizationVersion', 'generatedAt',
   'capabilities', 'availability', 'providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts',
   'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
+  'deliveryWorkspace', 'monitorApprovedBaselines',
   'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
   'transcriptFlow', 'assessPromotion',
 ] as const;
@@ -627,7 +637,22 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
   rejectSensitiveProjectionFields(row);
   decodeTranscriptFlowProjection(row.transcriptFlow);
-  return structuredClone(row) as unknown as EnterpriseIntelligenceProjection;
+  const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : decodeDeliveryWorkspaceProjection(row.deliveryWorkspace);
+  const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : decodeMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
+  const organizationId = row.organizationId as string;
+  const workspaceId = row.workspaceId as string;
+  if ((deliveryWorkspace && (
+    !sameProjectionUuid(deliveryWorkspace.organizationId, organizationId)
+    || !sameProjectionUuid(deliveryWorkspace.workspaceId, workspaceId)
+  )) || (monitorApprovedBaselines && (
+    !sameProjectionUuid(monitorApprovedBaselines.organizationId, organizationId)
+    || !sameProjectionUuid(monitorApprovedBaselines.workspaceId, workspaceId)
+  ))) throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
+  return {
+    ...structuredClone(row),
+    ...(deliveryWorkspace ? { deliveryWorkspace } : {}),
+    ...(monitorApprovedBaselines ? { monitorApprovedBaselines } : {}),
+  } as unknown as EnterpriseIntelligenceProjection;
 };
 
 export const classifyEvidenceFile = (name: string, browserMimeType: string, size: number): EvidenceFileSupport => {

@@ -21,6 +21,8 @@ assert.ok(featureIndex>0,`${migrationName} missing or not ordered`);
 const baseline=migrations.slice(0,featureIndex);
 const feature=[migrationName];
 const all=migrations;
+const currentMigrationTip=migrations.at(-1)?.match(/^(\d{14})_/u)?.[1];
+assert.ok(currentMigrationTip,'current migration tip missing or malformed');
 const suffix=`${process.pid}_${Date.now()}`;
 const names=Object.fromEntries(['fresh','upgrade','populated','dirty_hash','dirty_missing','dirty_partial'].map(label=>[label,`studio_pr_b_${label}_${suffix}`]));
 const clients=[];const databases=[];const roles=[];
@@ -108,8 +110,8 @@ try{
 
   const fresh=await createDatabase(admin,names.fresh);await apply(fresh,all);
   const freshTip=(await fresh.query(`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).rows[0]?.migration_tip;
-  assert.equal(freshTip,'20260828120000');
-  emit('MIGRATION-001','FRESH-PG16-CANONICAL-CHAIN','fresh-pg16',migrationContext('fresh',{migrationTip:freshTip,migrationFile:migrationName}));
+  assert.equal(freshTip,currentMigrationTip);
+  emit('MIGRATION-001','FRESH-PG16-CANONICAL-CHAIN','fresh-pg16',migrationContext('fresh',{migrationTip:freshTip,prBMigrationTip:'20260828120000',migrationFile:migrationName}));
 
   const governedTables=['studio_artifact_source_packages','studio_artifact_manual_brief_materials','studio_tenant_template_aggregates','studio_tenant_template_versions','enterprise_module_handoffs','enterprise_module_handoff_consumptions','studio_generation_staged_responses','studio_generation_recovery_events'];
   const rlsRows=(await fresh.query(`SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=ANY($1::text[]) ORDER BY relname`,[governedTables])).rows;
@@ -322,9 +324,13 @@ try{
   assert.deepEqual(Object.keys(summaryPage.items[0]).sort(),['id','artifactType','aggregateVersion','lifecycle','currentVersionId','currentApprovedVersionId','sourceMode','lineageClassification','planningOnly','displayLabel','updatedAt','actions'].sort());
   assert.equal((await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_summary_projection_v2($1,$2,0,20) projection`,[runtime.org,'ffffffff-ffff-4fff-8fff-ffffffffffff'])).rows[0].projection,null);
   const deliveryCountBefore=Number((await fresh.query(`SELECT count(*) n FROM public.enterprise_studio_delivery_handoffs`)).rows[0].n);
-  await assert.rejects(fresh.query(`INSERT INTO public.enterprise_studio_delivery_handoffs(id,org_id,workspace_id,studio_document_id,artifact_type,studio_version_id,studio_version,studio_content_hash,source_status,source_snapshot,status,created_by) VALUES($1,$2,$3,$4,'frd',$5,1,public.enterprise_sha256_jsonb($6::jsonb),'approved',$6::jsonb,'draft',$7)`,[runtime.uuid(7081),runtime.org,runtime.workspace,directArtifactId,directVersionId,JSON.stringify(directContent),runtime.requester]),/STUDIO_PR_B_DELIVERY_PATH_DISABLED/);
+  const prBOnlyDeliveryGuard=Number((await upgrade.query(`SELECT count(*) n FROM pg_trigger WHERE tgrelid='public.enterprise_studio_delivery_handoffs'::regclass AND tgname='studio_pr_b_delivery_assess_handoff_only' AND NOT tgisinternal`)).rows[0].n);
+  const currentChainDeliveryGuard=Number((await fresh.query(`SELECT count(*) n FROM pg_trigger WHERE tgrelid='public.enterprise_studio_delivery_handoffs'::regclass AND tgname='studio_pr_b_delivery_assess_handoff_only' AND NOT tgisinternal`)).rows[0].n);
+  assert.equal(prBOnlyDeliveryGuard,1);
+  assert.equal(currentChainDeliveryGuard,0);
+  assert.notEqual((await fresh.query(`SELECT to_regclass('public.enterprise_delivery_source_packages') relation`)).rows[0].relation,null);
   assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.enterprise_studio_delivery_handoffs`)).rows[0].n),deliveryCountBefore);
-  emit('DELIVERY-PRB-GUARD','NON-ASSESS-FAIL-CLOSED','direct-package-delivery-rejection',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:directPackageId,hash:directPackage.sourcePackageHash,mode:'direct_transcript_bundle'},template:{kind:'system',versionId:directSystemTemplate.id,version:directSystemTemplate.template_version,hash:directSystemTemplate.template_hash},handoff:null,artifact:{id:directArtifactId,versionId:directVersionId,deliveryCountBefore,deliveryCountAfter:deliveryCountBefore}}));
+  emit('DELIVERY-PRB-GUARD','PR-B-GUARD-RETAINED-UNTIL-PR-C-REPLACEMENT','direct-package-delivery-rejection',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:directPackageId,hash:directPackage.sourcePackageHash,mode:'direct_transcript_bundle'},template:{kind:'system',versionId:directSystemTemplate.id,version:directSystemTemplate.template_version,hash:directSystemTemplate.template_hash},handoff:null,artifact:{id:directArtifactId,versionId:directVersionId,deliveryCountBefore,deliveryCountAfter:deliveryCountBefore},compatibility:{prBOnlyGuardPresent:true,prCGeneralizedAuthorityPresent:true,legacyMutationAttempted:false}}));
 
   let commandOrdinal=0;
   const tenantTemplateId=runtime.uuid(7500);

@@ -41,8 +41,18 @@ import {
   type TranscriptFlowProjection,
   type TranscriptSourceRole,
 } from '../../../services/transcriptFlow/contracts.ts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+  DELIVERY_ITEM_PAGE_MAX,
+  type DeliveryBaselineEligibilityPageRequest,
+  type DeliveryItemPageRequest,
+  type DeliveryWorkspaceProjection,
+  type MonitorApprovedBaselinesProjection,
+} from '../../../services/deliveryMonitor/contracts.ts';
 import { corsHeaders } from './http.ts';
 import { postgrest } from './supabase.ts';
+import { createDeliveryMonitorDatabase } from './deliveryMonitorDb.ts';
 import {
   TenantAuthorityError,
   type TenantAuthorityDatabase,
@@ -70,6 +80,8 @@ export interface EnterpriseIntelligenceRawProjection {
   deliveryVersions: Row[];
   deliveryItems: Row[];
   monitorBaselines: Row[];
+  deliveryWorkspace?: DeliveryWorkspaceProjection | null;
+  monitorApprovedBaselines?: MonitorApprovedBaselinesProjection | null;
   modernizationAssessments: Row[];
   modernizationDecisions: Row[];
   blueprints: Row[];
@@ -99,7 +111,12 @@ export interface EnterpriseIntelligenceRawProjection {
 }
 
 export type EnterpriseIntelligenceQueryDatabase = {
-  loadProjectionRows(authority: TenantContext): Promise<EnterpriseIntelligenceRawProjection>;
+  loadProjectionRows(authority: TenantContext, options?: EnterpriseIntelligenceQueryOptions): Promise<EnterpriseIntelligenceRawProjection>;
+};
+
+export type EnterpriseIntelligenceQueryOptions = {
+  deliveryItemPage?: DeliveryItemPageRequest;
+  deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
 };
 
 export type EnterpriseIntelligenceQueryDependencies = {
@@ -110,7 +127,17 @@ export type EnterpriseIntelligenceQueryDependencies = {
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion'];
+const sameUuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+const assertEmbeddedProjectionScope = (
+  authority: TenantContext,
+  projection: DeliveryWorkspaceProjection | MonitorApprovedBaselinesProjection,
+) => {
+  if (!sameUuid(projection.organizationId, authority.organizationId)
+    || !sameUuid(projection.workspaceId, authority.workspaceId)) {
+    throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
+  }
+};
+const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion', 'deliveryItemPage', 'deliveryBaselineEligibilityPage'];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
@@ -236,7 +263,12 @@ const projectionVisibility = (authority: TenantContext) => {
   const assessDraftsVisible = evidenceVisible && hasAny(authority, 'assessment.edit', 'assess.v2.read', 'assess.v2.draft.write');
   const applicationsVisible = hasAny(authority, 'assess.applications.read', 'assess.applications.portfolio.read', 'portfolio.manage');
   const studioVisible = hasAny(authority, 'studio.artifacts.read', 'docs.approve');
-  const deliveryVisible = hasAny(authority, 'project.read', 'project.manage', 'docs.approve');
+  const deliveryVisible = hasAny(
+    authority,
+    'project.read', 'project.manage',
+    'delivery.handoff.request', 'delivery.handoff.review', 'delivery.handoff.approve', 'delivery.handoff.consume',
+    'delivery.package.manage', 'delivery.package.review', 'delivery.package.approve', 'monitor.baseline.create',
+  );
   const monitorVisible = hasAny(authority, 'monitor.read', 'monitor.manage');
   const modernizationVisible = applicationsVisible || hasAny(authority, 'assemble.manage');
   const approvalVisible = hasAny(authority, 'approvals.review');
@@ -262,6 +294,7 @@ const emptyRawProjection = (): EnterpriseIntelligenceRawProjection => ({
   providerConfigs: [], providerRoutes: [], providerRoleOptions: [], providerRoleCapabilities: [], evidenceSources: [], evidenceVersions: [], evidenceCandidates: [], assessDrafts: [],
   applications: [], applicationAssessments: [], studioAggregates: [], studioVersions: [], studioHandoffs: [],
   deliveryPackages: [], deliveryVersions: [], deliveryItems: [], monitorBaselines: [],
+  deliveryWorkspace: null, monitorApprovedBaselines: null,
   modernizationAssessments: [], modernizationDecisions: [], blueprints: [], reviewEvents: [], approvals: [], commandReceipts: [],
   transcriptFlags: [], transcriptSources: [], transcriptSourceVersions: [], transcriptCandidates: [],
   transcriptSourceSets: [], transcriptSourceSetVersions: [], transcriptSourceSetItems: [],
@@ -274,8 +307,9 @@ const scoped = (authority: TenantContext) => `org_id=eq.${encodeURIComponent(aut
 
 export const createEnterpriseIntelligenceQueryDatabase = (
   query: typeof postgrest = postgrest,
+  deliveryMonitorDatabase = createDeliveryMonitorDatabase(),
 ): EnterpriseIntelligenceQueryDatabase => ({
-  async loadProjectionRows(authority) {
+  async loadProjectionRows(authority, options = {}) {
     const rows = emptyRawProjection();
     const scope = scoped(authority);
     const {
@@ -294,7 +328,9 @@ export const createEnterpriseIntelligenceQueryDatabase = (
 
     const tasks: Array<Promise<void>> = [];
     const load = (target: keyof EnterpriseIntelligenceRawProjection, path: string) => {
-      tasks.push(query<Row[]>(path, { method: 'GET', headers: { 'Cache-Control': 'no-store' } }).then(result => { rows[target] = result; }));
+      tasks.push(query<Row[]>(path, { method: 'GET', headers: { 'Cache-Control': 'no-store' } }).then(result => {
+        (rows as unknown as Record<string, Row[]>)[target] = result;
+      }));
     };
 
     if (providerVisible) {
@@ -320,12 +356,40 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('studioVersions', `studio_artifact_versions?select=id,artifact_id,version,lifecycle,created_at&${scope}&lifecycle=eq.approved&order=created_at.desc&limit=200`);
       load('studioHandoffs', `enterprise_studio_delivery_handoffs?select=id,studio_document_id,status,created_at&${scope}&order=created_at.desc&limit=200`);
     }
-    if (deliveryVisible || monitorVisible) {
-      load('deliveryPackages', `enterprise_delivery_work_packages?select=id,current_version,status,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
-      load('deliveryVersions', `enterprise_delivery_work_package_versions?select=id,work_package_id,version,artifact_type,studio_version,status,created_at&${scope}&order=created_at.desc&limit=200`);
-      load('deliveryItems', `enterprise_delivery_work_items?select=id,package_version_id,item_type,title,acceptance_criteria,source_section_locator&${scope}&order=created_at.asc&limit=1000`);
-    }
-    if (monitorVisible) load('monitorBaselines', `enterprise_monitor_baselines?select=id,work_package_id,status,readiness,approved_item_ids,live_telemetry_connected,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
+    const deliveryPage = options.deliveryItemPage;
+    const baselineEligibilityPage = options.deliveryBaselineEligibilityPage;
+    if (deliveryVisible) tasks.push(deliveryMonitorDatabase.loadDeliveryProjection(
+      authority.organizationId,
+      authority.workspaceId,
+      {
+        actorId: authority.userId,
+        authorizationVersion: authority.authorizationVersion,
+        itemLimit: deliveryPage?.limit ?? DELIVERY_ITEM_PAGE_MAX,
+        baselineEligibilityLimit: baselineEligibilityPage?.limit ?? 100,
+        ...(deliveryPage ? {
+          packageId: deliveryPage.packageId,
+          itemCursorVersion: deliveryPage.cursor.version,
+          itemCursorId: deliveryPage.cursor.id,
+        } : {}),
+        ...(baselineEligibilityPage ? {
+          baselineEligibilityCursorUpdatedAt: baselineEligibilityPage.cursor.updatedAt,
+          baselineEligibilityCursorPackageId: baselineEligibilityPage.cursor.workPackageId,
+        } : {}),
+      },
+    ).then(value => {
+      const projection = decodeDeliveryWorkspaceProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.deliveryWorkspace = projection;
+    }));
+    if (monitorVisible) tasks.push(deliveryMonitorDatabase.loadMonitorProjection(
+      authority.organizationId,
+      authority.workspaceId,
+      { actorId: authority.userId, authorizationVersion: authority.authorizationVersion, limit: 100 },
+    ).then(value => {
+      const projection = decodeMonitorApprovedBaselinesProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.monitorApprovedBaselines = projection;
+    }));
     if (modernizationVisible) {
       load('modernizationAssessments', `enterprise_modernization_assessments?select=id,application_ref,status,created_at&${scope}&order=created_at.desc&limit=200`);
       load('modernizationDecisions', `enterprise_modernization_decisions?select=id,modernization_assessment_id,primary_disposition,alternative_disposition,eligible_dispositions,blockers,conflicts,status,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
@@ -513,6 +577,31 @@ const projectStudio = (raw: EnterpriseIntelligenceRawProjection): EnterpriseStud
 };
 
 const projectDelivery = (raw: EnterpriseIntelligenceRawProjection, actorId: string): EnterpriseDeliveryPackageProjection[] => {
+  if (raw.deliveryWorkspace) {
+    const legacyItemType = {
+      epic: 'Epic', story: 'Story', task: 'Task', milestone: 'Milestone', dependency: 'Dependency', risk: 'Risk',
+    } as const;
+    return raw.deliveryWorkspace.packages.map(item => ({
+      id: item.id,
+      label: item.label,
+      status: item.status === 'approved' ? 'approved'
+        : item.status === 'stale' ? 'stale'
+          : item.status === 'blocked' || item.status === 'rejected' ? 'blocked'
+            : item.status === 'draft' ? 'draft' : 'review',
+      currentVersionLabel: `Version ${item.currentVersion}`,
+      sourceLabel: item.sourcePackage.planningOnly
+        ? `${item.sourcePackage.lineageClassification.replace('_', ' ')} / planning only`
+        : item.sourcePackage.lineageClassification.replace('_', ' '),
+      lineageState: item.status === 'stale' ? 'stale' : item.status === 'blocked' ? 'blocked' : 'complete',
+      items: item.items.map(workItem => ({
+        itemType: legacyItemType[workItem.type],
+        title: workItem.title,
+        acceptanceCriteriaCount: workItem.acceptanceCriteria.length,
+        sourceLocator: workItem.sourceCitation?.sectionLocator || 'manual',
+      })),
+      createdByCurrentActor: false,
+    }));
+  }
   const versionByPackage = latestBy(raw.deliveryVersions, 'work_package_id');
   return raw.deliveryPackages.flatMap(item => {
     if (!includes(['draft', 'review', 'approved', 'stale', 'blocked'] as const, item.status)) return [];
@@ -546,6 +635,20 @@ const projectMonitor = (raw: EnterpriseIntelligenceRawProjection, actorId: strin
     liveTelemetryConnected: false, createdByCurrentActor: text(row.created_by) === actorId,
   }];
 });
+
+const projectCanonicalMonitor = (raw: EnterpriseIntelligenceRawProjection): EnterpriseMonitorProjection[] => (
+  raw.monitorApprovedBaselines?.baselines.map(row => ({
+    id: row.id,
+    label: `Approved Delivery baseline v${row.version}`,
+    workPackageId: row.workPackageId,
+    status: 'approved',
+    readiness: row.readiness,
+    approvedItemCount: row.acceptedItemCount,
+    lineageComplete: true,
+    liveTelemetryConnected: false,
+    createdByCurrentActor: false,
+  })) || []
+);
 
 const projectModernization = (raw: EnterpriseIntelligenceRawProjection, actorId: string, applications: Array<{ id: string; name: string }>): EnterpriseModernizationProjection[] => {
   const assessmentById = new Map(raw.modernizationAssessments.map(row => [text(row.id), row]));
@@ -980,6 +1083,8 @@ export const buildEnterpriseIntelligenceProjection = (
   raw: EnterpriseIntelligenceRawProjection,
   generatedAt = new Date(),
 ): EnterpriseIntelligenceProjection => {
+  if (raw.deliveryWorkspace) assertEmbeddedProjectionScope(authority, raw.deliveryWorkspace);
+  if (raw.monitorApprovedBaselines) assertEmbeddedProjectionScope(authority, raw.monitorApprovedBaselines);
   const visibility = projectionVisibility(authority);
   const providers = visibility.providerVisible ? projectProviders(raw, authority.capabilities.includes('org.admin')) : [];
   const evidence = visibility.evidenceVisible
@@ -988,8 +1093,10 @@ export const buildEnterpriseIntelligenceProjection = (
   const assessDrafts = visibility.assessDraftsVisible ? projectAssessDrafts(raw) : [];
   const applications = visibility.applicationsVisible ? projectApplications(raw) : [];
   const studioDocuments = visibility.studioVisible ? projectStudio(raw) : [];
-  const deliveryPackages = visibility.deliveryVisible || visibility.monitorVisible ? projectDelivery(raw, authority.userId) : [];
-  const monitorBaselines = visibility.monitorVisible ? projectMonitor(raw, authority.userId) : [];
+  const deliveryPackages = visibility.deliveryVisible ? projectDelivery(raw, authority.userId) : [];
+  const monitorBaselines = visibility.monitorVisible
+    ? (raw.monitorApprovedBaselines ? projectCanonicalMonitor(raw) : projectMonitor(raw, authority.userId))
+    : [];
   const modernizationDecisions = visibility.modernizationVisible ? projectModernization(raw, authority.userId, applications) : [];
   const blueprints = visibility.modernizationVisible ? projectBlueprints(raw, authority.userId) : [];
   const commandActivity = projectCommandActivity(raw, authority);
@@ -1005,7 +1112,7 @@ export const buildEnterpriseIntelligenceProjection = (
   const projectionCollections = [providers, evidence.sources, evidence.candidates, assessDrafts, applications, studioDocuments, deliveryPackages, monitorBaselines, modernizationDecisions, blueprints,
     approvalResources, commandActivity, transcriptFlow.sourceVersions, transcriptFlow.sourceSets, transcriptFlow.inputBundles, transcriptFlow.journeys,
     transcriptFlow.assessCandidates, transcriptFlow.assessConflicts, transcriptFlow.assessApplyPreviews, transcriptFlow.assessRuns];
-  const relevantCapabilities = authority.capabilities.filter(capability => /^(?:org|byok|security|evidence|assessment|assess|transcript|docs|studio|project|monitor|assemble|approvals|portfolio)\./.test(capability));
+  const relevantCapabilities = authority.capabilities.filter(capability => /^(?:org|byok|security|evidence|assessment|assess|transcript|docs|studio|project|delivery|monitor|assemble|approvals|portfolio)\./.test(capability));
   return {
     schemaVersion: ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
     organizationId: authority.organizationId,
@@ -1022,6 +1129,8 @@ export const buildEnterpriseIntelligenceProjection = (
     studioDocuments,
     deliveryPackages,
     monitorBaselines,
+    ...(visibility.deliveryVisible && raw.deliveryWorkspace ? { deliveryWorkspace: raw.deliveryWorkspace } : {}),
+    ...(visibility.monitorVisible && raw.monitorApprovedBaselines ? { monitorApprovedBaselines: raw.monitorApprovedBaselines } : {}),
     modernizationDecisions,
     blueprints,
     approvalResources,
@@ -1047,10 +1156,54 @@ const parseRequest = (value: unknown) => {
   if (!isRow(value) || Object.keys(value).some(key => !requestKeys.includes(key))) return null;
   if (typeof value.organizationId !== 'string' || !uuid.test(value.organizationId) || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)) return null;
   if (value.expectedAuthorizationVersion !== undefined && (!Number.isSafeInteger(value.expectedAuthorizationVersion) || number(value.expectedAuthorizationVersion) < 1)) return null;
+  let deliveryItemPage: DeliveryItemPageRequest | undefined;
+  if (value.deliveryItemPage !== undefined) {
+    if (!isRow(value.deliveryItemPage)
+      || Object.keys(value.deliveryItemPage).some(key => !['packageId', 'cursor', 'limit'].includes(key))
+      || typeof value.deliveryItemPage.packageId !== 'string'
+      || !uuid.test(value.deliveryItemPage.packageId)
+      || !isRow(value.deliveryItemPage.cursor)
+      || Object.keys(value.deliveryItemPage.cursor).some(key => !['version', 'id'].includes(key))
+      || !Number.isSafeInteger(value.deliveryItemPage.cursor.version)
+      || number(value.deliveryItemPage.cursor.version) < 1
+      || typeof value.deliveryItemPage.cursor.id !== 'string'
+      || !uuid.test(value.deliveryItemPage.cursor.id)
+      || !Number.isSafeInteger(value.deliveryItemPage.limit)
+      || number(value.deliveryItemPage.limit) < 1
+      || number(value.deliveryItemPage.limit) > DELIVERY_ITEM_PAGE_MAX) return null;
+    deliveryItemPage = {
+      packageId: value.deliveryItemPage.packageId,
+      cursor: { version: number(value.deliveryItemPage.cursor.version), id: value.deliveryItemPage.cursor.id },
+      limit: number(value.deliveryItemPage.limit),
+    };
+  }
+  let deliveryBaselineEligibilityPage: DeliveryBaselineEligibilityPageRequest | undefined;
+  if (value.deliveryBaselineEligibilityPage !== undefined) {
+    if (!isRow(value.deliveryBaselineEligibilityPage)
+      || Object.keys(value.deliveryBaselineEligibilityPage).some(key => !['cursor', 'limit'].includes(key))
+      || !isRow(value.deliveryBaselineEligibilityPage.cursor)
+      || Object.keys(value.deliveryBaselineEligibilityPage.cursor).some(key => !['updatedAt', 'workPackageId'].includes(key))
+      || typeof value.deliveryBaselineEligibilityPage.cursor.updatedAt !== 'string'
+      || !Number.isFinite(Date.parse(value.deliveryBaselineEligibilityPage.cursor.updatedAt))
+      || typeof value.deliveryBaselineEligibilityPage.cursor.workPackageId !== 'string'
+      || !uuid.test(value.deliveryBaselineEligibilityPage.cursor.workPackageId)
+      || !Number.isSafeInteger(value.deliveryBaselineEligibilityPage.limit)
+      || number(value.deliveryBaselineEligibilityPage.limit) < 1
+      || number(value.deliveryBaselineEligibilityPage.limit) > 100) return null;
+    deliveryBaselineEligibilityPage = {
+      cursor: {
+        updatedAt: value.deliveryBaselineEligibilityPage.cursor.updatedAt,
+        workPackageId: value.deliveryBaselineEligibilityPage.cursor.workPackageId,
+      },
+      limit: number(value.deliveryBaselineEligibilityPage.limit),
+    };
+  }
   return {
     organizationId: value.organizationId,
     workspaceId: value.workspaceId,
     expectedAuthorizationVersion: value.expectedAuthorizationVersion as number | undefined,
+    ...(deliveryItemPage ? { deliveryItemPage } : {}),
+    ...(deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage } : {}),
   };
 };
 
@@ -1072,7 +1225,10 @@ export const handleEnterpriseIntelligenceQuery = async (request: Request, depend
   if (!parsed) return json(400, { code: 'INVALID_REQUEST' });
   try {
     const authority = await resolveTenantAuthority(user.id, parsed, dependencies.authorityDatabase);
-    const raw = await dependencies.queryDatabase.loadProjectionRows(authority);
+    const raw = await dependencies.queryDatabase.loadProjectionRows(authority, {
+      ...(parsed.deliveryItemPage ? { deliveryItemPage: parsed.deliveryItemPage } : {}),
+      ...(parsed.deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage: parsed.deliveryBaselineEligibilityPage } : {}),
+    });
     return json(200, { projection: buildEnterpriseIntelligenceProjection(authority, raw, dependencies.now?.() || new Date()) });
   } catch (error) {
     if (error instanceof TenantAuthorityError) return json(error.code === 'AUTHORIZATION_STALE' ? 409 : 403, { code: error.code });

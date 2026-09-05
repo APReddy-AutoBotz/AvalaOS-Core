@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
+import {
+  collectReferencedRepositoryMjs,
+  copyReferencedRepositoryMjs,
+} from './typescriptRuntimeMjsGraph.mjs';
 
 const roots = [
   'types.ts',
@@ -36,6 +40,8 @@ const program = ts.createProgram({
   },
 });
 
+const mjsCopies = collectReferencedRepositoryMjs({ program });
+
 const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length) {
   console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
@@ -46,6 +52,7 @@ if (diagnostics.length) {
   process.exit(1);
 }
 if (program.emit().emitSkipped) process.exit(1);
+copyReferencedRepositoryMjs({ copies: mjsCopies, outputDir });
 
 const testFiles = roots
   .filter(file => file.endsWith('.test.ts'))

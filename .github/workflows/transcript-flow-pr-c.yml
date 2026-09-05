@@ -1,0 +1,436 @@
+name: Governed Delivery and Monitor PR C
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: transcript-flow-pr-c-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && 'controlled-human' || 'ci' }}
+  cancel-in-progress: false
+
+jobs:
+  exact-head-governed-evidence:
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PR_C_BASE_SHA: 5433cad41721355e3ec5a29bc2f87772540c77b5
+      PR_C_EXECUTION_CLASSIFICATION: github_candidate
+      PR_C_EXACT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_C_RUN_ATTEMPT: ${{ github.run_attempt }}
+      PR_C_WORKFLOW_PATH: .github/workflows/transcript-flow-pr-c.yml
+      PR_C_WORKFLOW_RUN_ID: ${{ github.run_id }}
+      TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PR1D_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PR1E_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact checked-out head and accepted base
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$PR_C_EXACT_HEAD_SHA"
+          test "$(git merge-base "$PR_C_BASE_SHA" HEAD)" = "$PR_C_BASE_SHA"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify PR C registry, fixtures, owners, lineage, and adversarial evidence contract
+        run: npm run test:transcript-flow:delivery-monitor-evidence-contract
+      - name: Execute the exact governed Delivery/Monitor PR C and retained-platform command registry
+        run: node scripts/runTranscriptFlowPrCEvidence.mjs
+      - name: Independently verify per-assertion exact-head PR C evidence
+        run: npm run test:transcript-flow:delivery-monitor-evidence
+      - name: Upload sanitized exact-head governed Delivery/Monitor PR C evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: governed-delivery-monitor-pr-c-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/process-lifecycle-pr-c/
+          if-no-files-found: error
+          retention-days: 14
+
+  controlled_human_authority:
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.action == 'labeled' &&
+        (github.event.label.name == 'pr264-controlled-human-edge' ||
+         github.event.label.name == 'pr264-controlled-human-prepare' ||
+         github.event.label.name == 'pr264-controlled-human-quiesce' ||
+         github.event.label.name == 'pr264-controlled-human-checkpoints' ||
+         github.event.label.name == 'pr264-controlled-human-final' ||
+         github.event.label.name == 'pr264-controlled-human-abort' ||
+         github.event.label.name == 'pr264-controlled-human-expiry')
+      }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      phase: ${{ steps.authority.outputs.phase }}
+      exact-head-sha: ${{ steps.authority.outputs.exact-head-sha }}
+      exercise-digest: ${{ steps.authority.outputs.exercise-digest }}
+      target-fingerprint: ${{ steps.authority.outputs.target-fingerprint }}
+      public-target-digest: ${{ steps.authority.outputs.public-target-digest }}
+      netlify-deploy-id: ${{ steps.authority.outputs.netlify-deploy-id }}
+      ci-run-id: ${{ steps.authority.outputs.ci-run-id }}
+      ci-run-attempt: ${{ steps.authority.outputs.ci-run-attempt }}
+      ci-artifact-name: ${{ steps.authority.outputs.ci-artifact-name }}
+      ci-artifact-digest: ${{ steps.authority.outputs.ci-artifact-digest }}
+      edge-run-id: ${{ steps.authority.outputs.edge-run-id }}
+      edge-run-attempt: ${{ steps.authority.outputs.edge-run-attempt }}
+      edge-artifact-digest: ${{ steps.authority.outputs.edge-artifact-digest }}
+      preparation-run-id: ${{ steps.authority.outputs.preparation-run-id }}
+      preparation-run-attempt: ${{ steps.authority.outputs.preparation-run-attempt }}
+      quiesce-run-id: ${{ steps.authority.outputs.quiesce-run-id }}
+      quiesce-run-attempt: ${{ steps.authority.outputs.quiesce-run-attempt }}
+      requester-comment-id: ${{ steps.authority.outputs.requester-comment-id }}
+      reviewer-comment-id: ${{ steps.authority.outputs.reviewer-comment-id }}
+      approver-comment-id: ${{ steps.authority.outputs.approver-comment-id }}
+      requester-run-id: ${{ steps.authority.outputs.requester-run-id }}
+      requester-run-attempt: ${{ steps.authority.outputs.requester-run-attempt }}
+      reviewer-run-id: ${{ steps.authority.outputs.reviewer-run-id }}
+      reviewer-run-attempt: ${{ steps.authority.outputs.reviewer-run-attempt }}
+      approver-run-id: ${{ steps.authority.outputs.approver-run-id }}
+      approver-run-attempt: ${{ steps.authority.outputs.approver-run-attempt }}
+      defect-history-json: ${{ steps.authority.outputs.defect-history-json }}
+    steps:
+      - name: Discover only prior terminal exact-head evidence and the exact PR preview
+        id: authority
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_EXERCISE_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST }}
+          EXPECTED_TARGET_FINGERPRINT: ${{ vars.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT }}
+          EXPECTED_PUBLIC_TARGET_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_PUBLIC_TARGET_DIGEST }}
+          DEFECT_HISTORY_JSON: ${{ vars.PR_C_CONTROLLED_HUMAN_DEFECT_HISTORY_JSON }}
+          RECOVERY_HEAD_SHA: ${{ vars.PR_C_CONTROLLED_HUMAN_RECOVERY_HEAD_SHA }}
+          RECOVERY_DEPLOY_ID: ${{ vars.PR_C_CONTROLLED_HUMAN_RECOVERY_DEPLOY_ID }}
+          RECOVERY_EXERCISE_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_RECOVERY_EXERCISE_DIGEST }}
+          RECOVERY_TARGET_FINGERPRINT: ${{ vars.PR_C_CONTROLLED_HUMAN_RECOVERY_TARGET_FINGERPRINT }}
+          RECOVERY_PUBLIC_TARGET_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_RECOVERY_PUBLIC_TARGET_DIGEST }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        with:
+          script: |
+            const reject = message => { throw new Error(`PR264_CONTROLLED_HUMAN_AUTHORITY_REJECTED:${message}`); };
+            const expectedBranch = 'controller/governed-delivery-monitor-pr-c-20260831';
+            const expectedWorkflow = '.github/workflows/transcript-flow-pr-c.yml';
+            const expectedOrigin = 'https://deploy-preview-264--avalaos-pilot.netlify.app';
+            const phases = new Map([
+              ['pr264-controlled-human-edge', 'edge'],
+              ['pr264-controlled-human-prepare', 'prepare'],
+              ['pr264-controlled-human-quiesce', 'quiesce'],
+              ['pr264-controlled-human-checkpoints', 'checkpoints'],
+              ['pr264-controlled-human-final', 'final'],
+              ['pr264-controlled-human-abort', 'abort'],
+              ['pr264-controlled-human-expiry', 'expiry'],
+            ]);
+            const phase = phases.get(context.payload.label?.name);
+            const trusted = value => String(value || '').toLowerCase() === 'apreddy-autobotz';
+            if (!phase || context.payload.action !== 'labeled' || context.payload.pull_request?.number !== 264) reject('event');
+            if (!trusted(context.actor) || !trusted(process.env.TRIGGERING_ACTOR) || !trusted(context.payload.sender?.login)) reject('actor');
+            const exactHead = context.payload.pull_request?.head?.sha;
+            if (!/^[0-9a-f]{40}$/.test(exactHead || '') || context.payload.pull_request?.head?.ref !== expectedBranch) reject('event-head');
+            if (context.payload.pull_request?.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` || context.payload.pull_request?.base?.ref !== 'main') reject('repository');
+            const { data: pull } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: 264 });
+            if (pull.state !== 'open' || pull.head.sha !== exactHead || pull.head.ref !== expectedBranch || pull.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` || pull.base.ref !== 'main') reject('live-pr');
+
+            if (phase === 'abort' || phase === 'expiry') {
+              const recoveryHead = process.env.RECOVERY_HEAD_SHA || '';
+              const recoveryDeploy = process.env.RECOVERY_DEPLOY_ID || '';
+              const recoveryExercise = process.env.RECOVERY_EXERCISE_DIGEST || '';
+              const recoveryTarget = process.env.RECOVERY_TARGET_FINGERPRINT || '';
+              const recoveryPublicTarget = process.env.RECOVERY_PUBLIC_TARGET_DIGEST || '';
+              if (!/^[0-9a-f]{40}$/.test(recoveryHead)) reject('recovery-head');
+              if (!/^[0-9a-f]{24}$/.test(recoveryDeploy)) reject('recovery-deploy');
+              if (!/^sha256:[0-9a-f]{64}$/.test(recoveryExercise) || !/^sha256:[0-9a-f]{64}$/.test(recoveryTarget) || !/^sha256:[0-9a-f]{64}$/.test(recoveryPublicTarget)) reject('recovery-binding');
+              const commits = await github.paginate(github.rest.pulls.listCommits, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: 264,
+                per_page: 100,
+              });
+              if (!commits.some(commit => commit.sha === recoveryHead)) reject('recovery-head-history');
+              core.setOutput('phase', phase);
+              core.setOutput('exact-head-sha', recoveryHead);
+              core.setOutput('exercise-digest', recoveryExercise);
+              core.setOutput('target-fingerprint', recoveryTarget);
+              core.setOutput('public-target-digest', recoveryPublicTarget);
+              core.setOutput('netlify-deploy-id', recoveryDeploy);
+              return;
+            }
+
+            if (!/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_EXERCISE_DIGEST || '') || !/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_TARGET_FINGERPRINT || '') || !/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_PUBLIC_TARGET_DIGEST || '')) reject('protected-binding');
+
+            let preview;
+            try {
+              preview = await fetch(expectedOrigin, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+            } catch {
+              reject('preview-unreachable');
+            }
+            const deployId = preview.headers.get('x-avalaos-netlify-deploy-id');
+            const release = preview.headers.get('x-avalaos-release');
+            const environment = preview.headers.get('x-avalaos-environment');
+            await preview.body?.cancel();
+            if (preview.status !== 200 || !/^[0-9a-f]{24}$/.test(deployId || '') || release !== exactHead || environment !== 'hosted_nonproduction_pilot') reject('preview-identity');
+
+            const runs = (await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'transcript-flow-pr-c.yml',
+              event: 'pull_request',
+              branch: expectedBranch,
+              status: 'completed',
+              per_page: 100,
+            })).filter(run => run.id !== context.runId
+              && String(run.path || '').split('@', 1)[0] === expectedWorkflow
+              && run.head_sha === exactHead
+              && run.head_branch === expectedBranch
+              && run.event === 'pull_request'
+              && run.status === 'completed'
+              && run.conclusion === 'success')
+              .sort((left, right) => Number(right.id) - Number(left.id));
+            if (runs.length === 0) reject('no-prior-successful-run');
+
+            const artifactsFor = async run => github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: run.id,
+              per_page: 100,
+            });
+            const findArtifact = async (kind, buildName) => {
+              for (const run of runs) {
+                const name = buildName(run);
+                const matches = (await artifactsFor(run)).filter(artifact => artifact.name === name && !artifact.expired);
+                if (matches.length > 1) reject(`${kind}-artifact-ambiguous`);
+                if (matches.length === 1) {
+                  const artifact = matches[0];
+                  if (!/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')) reject(`${kind}-artifact-digest`);
+                  return { run, artifact };
+                }
+              }
+              reject(`${kind}-artifact-missing`);
+            };
+            const setRun = (prefix, found) => {
+              core.setOutput(`${prefix}-run-id`, String(found.run.id));
+              core.setOutput(`${prefix}-run-attempt`, String(found.run.run_attempt));
+            };
+
+            core.setOutput('phase', phase);
+            core.setOutput('exact-head-sha', exactHead);
+            core.setOutput('exercise-digest', process.env.EXPECTED_EXERCISE_DIGEST);
+            core.setOutput('target-fingerprint', process.env.EXPECTED_TARGET_FINGERPRINT);
+            core.setOutput('public-target-digest', process.env.EXPECTED_PUBLIC_TARGET_DIGEST);
+            core.setOutput('netlify-deploy-id', deployId);
+
+            if (phase === 'edge' || phase === 'prepare') {
+              const ci = await findArtifact('ci', run => `governed-delivery-monitor-pr-c-${run.id}-${run.run_attempt}`);
+              setRun('ci', ci);
+              core.setOutput('ci-artifact-name', ci.artifact.name);
+              core.setOutput('ci-artifact-digest', ci.artifact.digest);
+            }
+            if (phase === 'prepare') {
+              const edge = await findArtifact('edge', run => `pr264-controlled-human-edge-deployment-${exactHead}-${run.id}-${run.run_attempt}`);
+              setRun('edge', edge);
+              core.setOutput('edge-artifact-digest', edge.artifact.digest);
+            }
+            if (phase === 'quiesce' || phase === 'checkpoints' || phase === 'final') {
+              const preparation = await findArtifact('preparation', run => `pr264-controlled-human-preparation-${exactHead}-${run.id}-${run.run_attempt}`);
+              setRun('preparation', preparation);
+            }
+            if (phase === 'checkpoints' || phase === 'final') {
+              const quiesce = await findArtifact('quiesce', run => `pr264-controlled-human-quiesce-${exactHead}-${run.id}-${run.run_attempt}`);
+              setRun('quiesce', quiesce);
+            }
+            if (phase === 'checkpoints') {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: 264,
+                per_page: 100,
+              });
+              const selected = new Map();
+              for (const role of ['requester', 'reviewer', 'approver']) {
+                const matches = comments.filter(comment => {
+                  if (comment.user?.type !== 'User' || !comment.user.login || comment.created_at !== comment.updated_at) return false;
+                  let body;
+                  try { body = JSON.parse(comment.body); } catch { return false; }
+                  return body.kind === 'pr264-controlled-human-observation'
+                    && body.humanRole === role
+                    && body.exactHead === exactHead
+                    && body.exerciseDigest === process.env.EXPECTED_EXERCISE_DIGEST;
+                });
+                if (matches.length !== 1) reject(`${role}-comment-count`);
+                selected.set(role, matches[0]);
+                core.setOutput(`${role}-comment-id`, String(matches[0].id));
+              }
+              if (new Set([...selected.values()].map(comment => comment.user.login.toLowerCase())).size !== 3) reject('distinct-human-comments');
+            }
+            if (phase === 'final') {
+              for (const role of ['requester', 'reviewer', 'approver']) {
+                const found = await findArtifact(role, run => `pr264-controlled-human-${role}-${run.id}-${run.run_attempt}`);
+                setRun(role, found);
+              }
+              let defectHistory;
+              try { defectHistory = JSON.parse(process.env.DEFECT_HISTORY_JSON || '[]'); } catch { reject('defect-history-json'); }
+              if (!Array.isArray(defectHistory) || defectHistory.length > 20) reject('defect-history-shape');
+              core.setOutput('defect-history-json', JSON.stringify(defectHistory));
+            }
+
+  controlled_human_edge:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'edge' }}
+    uses: ./.github/workflows/pr264-controlled-human-edge-deploy.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      ci_run_id: ${{ needs.controlled_human_authority.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.controlled_human_authority.outputs.ci-run-attempt }}
+      ci_artifact_name: ${{ needs.controlled_human_authority.outputs.ci-artifact-name }}
+      ci_artifact_digest: ${{ needs.controlled_human_authority.outputs.ci-artifact-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+
+  controlled_human_prepare:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'prepare' }}
+    uses: ./.github/workflows/pr264-controlled-human-prepare.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      ci_run_id: ${{ needs.controlled_human_authority.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.controlled_human_authority.outputs.ci-run-attempt }}
+      ci_artifact_name: ${{ needs.controlled_human_authority.outputs.ci-artifact-name }}
+      ci_artifact_digest: ${{ needs.controlled_human_authority.outputs.ci-artifact-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      edge_deployment_run_id: ${{ needs.controlled_human_authority.outputs.edge-run-id }}
+      edge_deployment_run_attempt: ${{ needs.controlled_human_authority.outputs.edge-run-attempt }}
+      edge_deployment_artifact_digest: ${{ needs.controlled_human_authority.outputs.edge-artifact-digest }}
+
+  controlled_human_quiesce:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'quiesce' }}
+    uses: ./.github/workflows/pr264-controlled-human-quiesce.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
+      preparation_run_attempt: ${{ needs.controlled_human_authority.outputs.preparation-run-attempt }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+
+  controlled_human_requester:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' }}
+    uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
+      preparation_run_attempt: ${{ needs.controlled_human_authority.outputs.preparation-run-attempt }}
+      quiesce_run_id: ${{ needs.controlled_human_authority.outputs.quiesce-run-id }}
+      quiesce_run_attempt: ${{ needs.controlled_human_authority.outputs.quiesce-run-attempt }}
+      human_role: requester
+      comment_id: ${{ needs.controlled_human_authority.outputs.requester-comment-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+
+  controlled_human_approver:
+    needs: [controlled_human_authority, controlled_human_requester]
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_requester.result == 'success' }}
+    uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
+      preparation_run_attempt: ${{ needs.controlled_human_authority.outputs.preparation-run-attempt }}
+      quiesce_run_id: ${{ needs.controlled_human_authority.outputs.quiesce-run-id }}
+      quiesce_run_attempt: ${{ needs.controlled_human_authority.outputs.quiesce-run-attempt }}
+      human_role: approver
+      comment_id: ${{ needs.controlled_human_authority.outputs.approver-comment-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+
+  controlled_human_reviewer:
+    needs: [controlled_human_authority, controlled_human_approver]
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_approver.result == 'success' }}
+    uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
+      preparation_run_attempt: ${{ needs.controlled_human_authority.outputs.preparation-run-attempt }}
+      quiesce_run_id: ${{ needs.controlled_human_authority.outputs.quiesce-run-id }}
+      quiesce_run_attempt: ${{ needs.controlled_human_authority.outputs.quiesce-run-attempt }}
+      human_role: reviewer
+      comment_id: ${{ needs.controlled_human_authority.outputs.reviewer-comment-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+
+  controlled_human_final:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'final' }}
+    uses: ./.github/workflows/pr264-controlled-human-verify.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
+      preparation_run_attempt: ${{ needs.controlled_human_authority.outputs.preparation-run-attempt }}
+      quiesce_run_id: ${{ needs.controlled_human_authority.outputs.quiesce-run-id }}
+      quiesce_run_attempt: ${{ needs.controlled_human_authority.outputs.quiesce-run-attempt }}
+      requester_run_id: ${{ needs.controlled_human_authority.outputs.requester-run-id }}
+      requester_run_attempt: ${{ needs.controlled_human_authority.outputs.requester-run-attempt }}
+      reviewer_run_id: ${{ needs.controlled_human_authority.outputs.reviewer-run-id }}
+      reviewer_run_attempt: ${{ needs.controlled_human_authority.outputs.reviewer-run-attempt }}
+      approver_run_id: ${{ needs.controlled_human_authority.outputs.approver-run-id }}
+      approver_run_attempt: ${{ needs.controlled_human_authority.outputs.approver-run-attempt }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+      defect_history_json: ${{ needs.controlled_human_authority.outputs.defect-history-json }}
+
+  controlled_human_recovery:
+    needs: controlled_human_authority
+    if: ${{ needs.controlled_human_authority.outputs.phase == 'abort' || needs.controlled_human_authority.outputs.phase == 'expiry' }}
+    uses: ./.github/workflows/pr264-controlled-human-recover.yml
+    with:
+      exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
+      exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
+      public_target_digest: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      reason: ${{ needs.controlled_human_authority.outputs.phase }}

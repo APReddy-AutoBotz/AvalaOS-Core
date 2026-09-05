@@ -1,0 +1,268 @@
+name: PR 264 Controlled Human Preparation
+
+on:
+  workflow_call:
+    inputs:
+      exact_head_sha:
+        description: Exact 40-character PR 264 head already proved by terminal PR C CI
+        required: true
+        type: string
+      ci_run_id:
+        description: Terminal successful transcript-flow-pr-c workflow run ID
+        required: true
+        type: string
+      ci_run_attempt:
+        description: Exact positive workflow run attempt
+        required: true
+        type: string
+      ci_artifact_name:
+        description: Exact sanitized PR C evidence artifact name
+        required: true
+        type: string
+      ci_artifact_digest:
+        description: Exact sha256 artifact digest reported by GitHub
+        required: true
+        type: string
+      netlify_deploy_id:
+        description: Exact 24-character PR 264 Deploy Preview ID
+        required: true
+        type: string
+      exercise_digest:
+        description: Safe sha256 digest of the exact exercise UUID and scope binding
+        required: true
+        type: string
+      target_fingerprint:
+        description: Safe sha256 fingerprint of the dedicated synthetic backend
+        required: true
+        type: string
+      public_target_digest:
+        description: Protected digest of the exact public Supabase origin
+        required: true
+        type: string
+      edge_deployment_run_id:
+        description: Successful PR 264 controlled-human Edge deployment workflow run ID
+        required: true
+        type: string
+      edge_deployment_run_attempt:
+        description: Exact successful Edge deployment workflow run attempt
+        required: true
+        type: string
+      edge_deployment_artifact_digest:
+        description: Exact sha256 digest of the signed Edge deployment manifest artifact
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr264-controlled-human-${{ inputs.exercise_digest }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 264 && github.event.pull_request.head.sha == inputs.exact_head_sha }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS: hosted_nonproduction_pilot
+      PR_C_CONTROLLED_HUMAN_PR_NUMBER: 264
+      PR_C_CONTROLLED_HUMAN_RELEASE_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
+      PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ inputs.public_target_digest }}
+      PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
+    steps:
+      - name: Checkout exact authorized PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.exact_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify PR 264 head and terminal exact-head CI artifact
+        id: authority
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          EXPECTED_RUN_ID: ${{ inputs.ci_run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
+          EXPECTED_ARTIFACT_NAME: ${{ inputs.ci_artifact_name }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.ci_artifact_digest }}
+        with:
+          script: |
+            const fail = message => core.setFailed(`PR 264 controlled-human authority rejected: ${message}`);
+            if (!/^[0-9a-f]{40}$/.test(process.env.EXPECTED_HEAD)) return fail('invalid head');
+            if (!/^[1-9][0-9]{0,19}$/.test(process.env.EXPECTED_RUN_ID)) return fail('invalid run ID');
+            if (!/^[1-9][0-9]*$/.test(process.env.EXPECTED_RUN_ATTEMPT)) return fail('invalid run attempt');
+            if (!/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_ARTIFACT_DIGEST)) return fail('invalid artifact digest');
+            const { data: pull } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: 264 });
+            if (pull.head.sha !== process.env.EXPECTED_HEAD || pull.head.ref !== 'controller/governed-delivery-monitor-pr-c-20260831') return fail('PR head or branch mismatch');
+            const runId = Number(process.env.EXPECTED_RUN_ID);
+            if (!Number.isSafeInteger(runId)) return fail('unsafe run ID');
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId });
+            const workflowPath = String(run.path || '').split('@', 1)[0];
+            if (workflowPath !== '.github/workflows/transcript-flow-pr-c.yml' || run.head_sha !== process.env.EXPECTED_HEAD || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion !== 'success' || String(run.run_attempt) !== process.env.EXPECTED_RUN_ATTEMPT) return fail('CI run identity mismatch');
+            const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 });
+            const artifact = artifacts.artifacts.find(item => item.name === process.env.EXPECTED_ARTIFACT_NAME);
+            if (!artifact || artifact.expired || artifact.digest !== process.env.EXPECTED_ARTIFACT_DIGEST) return fail('CI artifact identity mismatch');
+            core.setOutput('workflow', workflowPath);
+            core.setOutput('run-id', String(run.id));
+            core.setOutput('run-attempt', String(run.run_attempt));
+            core.setOutput('artifact-name', artifact.name);
+            core.setOutput('artifact-digest', artifact.digest);
+
+      - name: Verify trusted exact-head Edge deployment run and artifact
+        id: edge-authority
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          EDGE_RUN_ID: ${{ inputs.edge_deployment_run_id }}
+          EDGE_RUN_ATTEMPT: ${{ inputs.edge_deployment_run_attempt }}
+          EDGE_ARTIFACT_DIGEST: ${{ inputs.edge_deployment_artifact_digest }}
+        with:
+          script: |
+            const fail = message => core.setFailed(`PR 264 Edge evidence rejected: ${message}`);
+            if (!/^[1-9][0-9]{0,19}$/.test(process.env.EDGE_RUN_ID) || !/^[1-9][0-9]*$/.test(process.env.EDGE_RUN_ATTEMPT) || !/^sha256:[0-9a-f]{64}$/.test(process.env.EDGE_ARTIFACT_DIGEST)) return fail('invalid run binding');
+            const runId = Number(process.env.EDGE_RUN_ID);
+            if (!Number.isSafeInteger(runId)) return fail('unsafe run ID');
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId });
+            const workflowPath = String(run.path || '').split('@', 1)[0];
+            if (workflowPath !== '.github/workflows/transcript-flow-pr-c.yml' || run.head_sha !== process.env.EXPECTED_HEAD || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion !== 'success' || String(run.run_attempt) !== process.env.EDGE_RUN_ATTEMPT) return fail('Edge run identity mismatch');
+            const artifactName = `pr264-controlled-human-edge-deployment-${process.env.EXPECTED_HEAD}-${run.id}-${run.run_attempt}`;
+            const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 });
+            const artifact = artifacts.artifacts.find(item => item.name === artifactName);
+            if (!artifact || artifact.expired || artifact.digest !== process.env.EDGE_ARTIFACT_DIGEST) return fail('Edge artifact identity mismatch');
+            core.setOutput('workflow', '.github/workflows/pr264-controlled-human-edge-deploy.yml');
+            core.setOutput('run-id', String(run.id));
+            core.setOutput('run-attempt', String(run.run_attempt));
+            core.setOutput('artifact-name', artifact.name);
+            core.setOutput('artifact-digest', artifact.digest);
+
+      - name: Fail closed unless checkout is exact
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PR_C_CONTROLLED_HUMAN_RELEASE_SHA"
+          test "$(git merge-base 5433cad41721355e3ec5a29bc2f87772540c77b5 HEAD)" = 5433cad41721355e3ec5a29bc2f87772540c77b5
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Verify controlled-human evidence and workflow contracts
+        run: node --test scripts/prCControlledHumanEvidenceContract.test.mjs scripts/prCControlledHumanWorkflowContract.test.mjs
+
+      - name: Verify exact PR-only Deploy Preview before backend access
+        run: node scripts/verifyPr264ControlledHumanPreview.mjs
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ steps.edge-authority.outputs.artifact-name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.edge_deployment_run_id }}
+          path: output/controlled-human/edge-input
+
+      - name: Verify signed exact deployed Edge source manifest before backend access
+        env:
+          PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW: ${{ steps.edge-authority.outputs.workflow }}
+          PR_C_CONTROLLED_HUMAN_EDGE_RUN_ID: ${{ steps.edge-authority.outputs.run-id }}
+          PR_C_CONTROLLED_HUMAN_EDGE_RUN_ATTEMPT: ${{ steps.edge-authority.outputs.run-attempt }}
+          PR_C_CONTROLLED_HUMAN_EDGE_ARTIFACT_NAME: ${{ steps.edge-authority.outputs.artifact-name }}
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+        run: node scripts/verifyPrCControlledHumanEdgeDeployment.mjs --input output/controlled-human/edge-input/edge-deployment.json --output output/controlled-human/edge-deployment.json
+
+      - name: Bind Supabase Admin API and database to the exact deployed project
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
+
+      - name: Authenticate service-role authority against the exact Supabase API without retaining response data
+        env:
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node --input-type=module -e "try { const base=new URL(process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL); if(base.pathname!=='/'||base.search||base.hash||!base.hostname.endsWith('.supabase.co')) throw new Error(); const response=await fetch(new URL('/auth/v1/admin/users?page=1&per_page=1',base),{redirect:'error',headers:{apikey:process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY,Authorization:'Bearer '+process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY},signal:AbortSignal.timeout(15000)}); await response.body?.cancel(); if(!response.ok) throw new Error(); } catch { throw new Error('PR_C_CONTROLLED_HUMAN_SUPABASE_ADMIN_AUTHORITY_REJECTED'); }"
+
+      - name: Preflight dedicated synthetic target
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: npm run pr-c-controlled-human:preflight -- --output output/controlled-human/preflight.json
+
+      - name: Produce bounded seed plan
+        env:
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: npm run pr-c-controlled-human:plan -- --output output/controlled-human/plan.json
+
+      - name: Apply bounded synthetic seed
+        id: apply
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+          PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON: ${{ secrets.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON }}
+        run: npm run pr-c-controlled-human:apply -- --output output/controlled-human/apply.json
+
+      - name: Verify exact seed and zero-egress boundary
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: npm run pr-c-controlled-human:verify -- --output output/controlled-human/verify.json
+
+      - name: Record preparation timestamp
+        id: timestamp
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build immutable preparation binding
+        env:
+          PR_C_CONTROLLED_HUMAN_CI_WORKFLOW: ${{ steps.authority.outputs.workflow }}
+          PR_C_CONTROLLED_HUMAN_CI_RUN_ID: ${{ steps.authority.outputs.run-id }}
+          PR_C_CONTROLLED_HUMAN_CI_RUN_ATTEMPT: ${{ steps.authority.outputs.run-attempt }}
+          PR_C_CONTROLLED_HUMAN_CI_CONCLUSION: success
+          PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_NAME: ${{ steps.authority.outputs.artifact-name }}
+          PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_DIGEST: ${{ steps.authority.outputs.artifact-digest }}
+          PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW: ${{ steps.edge-authority.outputs.workflow }}
+          PR_C_CONTROLLED_HUMAN_EDGE_RUN_ID: ${{ steps.edge-authority.outputs.run-id }}
+          PR_C_CONTROLLED_HUMAN_EDGE_RUN_ATTEMPT: ${{ steps.edge-authority.outputs.run-attempt }}
+          PR_C_CONTROLLED_HUMAN_EDGE_ARTIFACT_NAME: ${{ steps.edge-authority.outputs.artifact-name }}
+          PR_C_CONTROLLED_HUMAN_EDGE_ARTIFACT_DIGEST: ${{ steps.edge-authority.outputs.artifact-digest }}
+          PR_C_CONTROLLED_HUMAN_CREATED_AT: ${{ steps.timestamp.outputs.value }}
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+        run: node scripts/buildPrCControlledHumanPreparation.mjs --preflight output/controlled-human/preflight.json --plan output/controlled-human/plan.json --apply output/controlled-human/apply.json --verify output/controlled-human/verify.json --edge-deployment output/controlled-human/edge-deployment.json --output output/controlled-human/preparation.json
+
+      - name: Write role-owned human observation templates
+        run: node scripts/writePrCControlledHumanObservationTemplates.mjs --output-directory output/controlled-human/templates
+
+      - name: Protected exact-bound abort recovery after failed seed or evidence assembly
+        if: ${{ failure() && steps.apply.outcome != 'skipped' }}
+        continue-on-error: true
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/prCControlledHumanEnvironment.mjs recover-reset --reason abort --output output/controlled-human/emergency-deprovision.json
+
+      - name: Upload sanitized preparation and observation templates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-controlled-human-preparation-${{ inputs.exact_head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/controlled-human/preparation.json
+            output/controlled-human/edge-deployment.json
+            output/controlled-human/verify.json
+            output/controlled-human/templates/
+          if-no-files-found: error
+          retention-days: 14

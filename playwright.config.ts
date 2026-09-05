@@ -4,10 +4,10 @@ export default defineConfig({
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
   // PR 1D, PR 1E, governed Studio artifacts, Enterprise Intelligence, governed transcript PR A/Studio PR B,
-  // Pilot Operations, the full-platform campaign, and hosted-pilot acceptance use dedicated
+  // governed Delivery/Monitor PR C, Pilot Operations, the full-platform campaign, and hosted-pilot acceptance use dedicated
   // fixtures/runtime modes/servers; the retained localhost suite must not own them. Hosted pilot
   // evidence must execute only against a real HTTPS origin.
-  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts', 'enterpriseIntelligence.spec.ts', 'transcriptFlowPrA.spec.ts', 'studioPrB/studioPrB.spec.ts', 'pilotOperations.spec.ts', 'hostedPilot.spec.ts', 'hostedAccessibilityPerformance.spec.ts', 'exhaustiveHostedAcceptance.spec.ts', 'controllerNavigationHistory.spec.ts', 'fullPlatformCampaign.spec.ts'],
+  testIgnore: ['pr1d.spec.ts', 'pr1e.spec.ts', 'studioArtifacts.spec.ts', 'studioPrivateArtifacts.spec.ts', 'enterpriseIntelligence.spec.ts', 'enterpriseIntelligencePrCScope.spec.ts', 'transcriptFlowPrA.spec.ts', 'studioPrB/studioPrB.spec.ts', 'deliveryMonitorPrC/deliveryMonitorPrC.spec.ts', 'pilotOperations.spec.ts', 'hostedPilot.spec.ts', 'hostedAccessibilityPerformance.spec.ts', 'exhaustiveHostedAcceptance.spec.ts', 'controllerNavigationHistory.spec.ts', 'fullPlatformCampaign.spec.ts'],
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
@@ -22,7 +22,9 @@ export default defineConfig({
     { name: 'chromium-mobile', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
+    // This retained localhost suite requires the repository-owned loopback
+    // adapter. Ordinary/Netlify builds continue to use fail-closed vite.config.ts.
+    command: 'npm run build -- --config vite.synthetic-browser-test.config.ts && npm run preview -- --config vite.synthetic-browser-test.config.ts --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
@@ -30,7 +32,7 @@ export default defineConfig({
       ...process.env,
       VITE_AVALA_RUNTIME_MODE: 'local_demo',
       VITE_SUPABASE_URL: 'https://127.0.0.1:59999',
-      VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_synthetic_public_key_264',
       VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
       PR1A_BROWSER_TEST_BUILD: 'true',
     },

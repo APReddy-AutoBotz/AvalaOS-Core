@@ -1,0 +1,113 @@
+name: PR 264 Controlled Human Read-Only Transition
+
+on:
+  workflow_call:
+    inputs:
+      exact_head_sha: { required: true, type: string }
+      preparation_run_id: { required: true, type: string }
+      preparation_run_attempt: { required: true, type: string }
+      exercise_digest: { required: true, type: string }
+      target_fingerprint: { required: true, type: string }
+      public_target_digest: { required: true, type: string }
+      netlify_deploy_id: { required: true, type: string }
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr264-controlled-human-${{ inputs.exercise_digest }}
+  cancel-in-progress: false
+
+jobs:
+  quiesce:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 264 && github.event.pull_request.head.sha == inputs.exact_head_sha }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS: hosted_nonproduction_pilot
+      PR_C_CONTROLLED_HUMAN_PR_NUMBER: 264
+      PR_C_CONTROLLED_HUMAN_RELEASE_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
+      PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+      PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ inputs.public_target_digest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.exact_head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require exact checkout
+        run: test "$(git rev-parse HEAD)" = "$PR_C_CONTROLLED_HUMAN_RELEASE_SHA"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies before protected values
+        run: npm ci
+
+      - name: Verify completed exact-head preparation run and immutable artifact
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          PREPARATION_RUN_ID: ${{ inputs.preparation_run_id }}
+          PREPARATION_RUN_ATTEMPT: ${{ inputs.preparation_run_attempt }}
+        with:
+          script: |
+            const id = process.env.PREPARATION_RUN_ID;
+            const attempt = process.env.PREPARATION_RUN_ATTEMPT;
+            if (!/^[1-9][0-9]{0,19}$/.test(id) || !/^[1-9][0-9]*$/.test(attempt)) return core.setFailed('invalid preparation run binding');
+            const runId = Number(id);
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId });
+            if (!Number.isSafeInteger(runId) || String(run.path || '').split('@',1)[0] !== '.github/workflows/transcript-flow-pr-c.yml' || run.head_sha !== process.env.EXPECTED_HEAD || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion !== 'success' || String(run.run_attempt) !== attempt) return core.setFailed('preparation run identity mismatch');
+            const name = `pr264-controlled-human-preparation-${process.env.EXPECTED_HEAD}-${id}-${attempt}`;
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 });
+            const matches = data.artifacts.filter(item => item.name === name && !item.expired);
+            if (matches.length !== 1 || !/^sha256:[0-9a-f]{64}$/.test(matches[0].digest || '')) return core.setFailed('immutable preparation artifact missing or ambiguous');
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-preparation-${{ inputs.exact_head_sha }}-${{ inputs.preparation_run_id }}-${{ inputs.preparation_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.preparation_run_id }}
+          path: output/controlled-human/input
+
+      - name: Validate exact preparation and active exercise binding
+        env:
+          PR_C_CONTROLLED_HUMAN_EXPECTED_VERSION: 1
+        run: node scripts/validatePrCControlledHumanPreparation.mjs --preparation output/controlled-human/input/preparation.json
+
+      - name: Bind Supabase project, API and database before lifecycle mutation
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
+
+      - name: Reverify exact preview and active synthetic state
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: |
+          node scripts/verifyPr264ControlledHumanPreview.mjs
+          node scripts/prCControlledHumanEnvironment.mjs verify --output output/controlled-human/current-verify.json
+
+      - name: Enter exact server-enforced read-only state before any read-only human observation
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/prCControlledHumanEnvironment.mjs quiesce --authority output/controlled-human/current-verify.json --output output/controlled-human/quiesce.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-controlled-human-quiesce-${{ inputs.exact_head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/controlled-human/quiesce.json
+          if-no-files-found: error
+          retention-days: 14

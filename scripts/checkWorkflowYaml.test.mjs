@@ -1,9 +1,38 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { isSafePublicSupabaseCredential } from '../services/supabasePublicCredential.mjs';
 import { checkWorkflowYaml, parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 
 const files = await checkWorkflowYaml();
 assert.ok(files.includes('v1-release-candidate.yml'));
+
+for (const retained of [
+  {
+    path: '.github/workflows/transcript-flow-pr-a.yml',
+    exactHeadEnvironment: 'PR_A_EXACT_HEAD_SHA',
+    retainedCommand: 'npm run test:transcript-flow:evidence-contract:retained',
+    forbiddenRunner: 'node scripts/runTranscriptFlowEvidence.mjs',
+    forbiddenVerifier: 'npm run test:transcript-flow:evidence',
+  },
+  {
+    path: '.github/workflows/transcript-flow-pr-b.yml',
+    exactHeadEnvironment: 'PR_B_EXACT_HEAD_SHA',
+    retainedCommand: 'npm run test:transcript-flow:studio-evidence-contract:retained',
+    forbiddenRunner: 'node scripts/runTranscriptFlowPrBEvidence.mjs',
+    forbiddenVerifier: 'npm run test:transcript-flow:studio-evidence',
+  },
+]) {
+  const workflow = parseWorkflowYaml(await readFile(retained.path, 'utf8'), retained.path);
+  const job = workflow.jobs['exact-head-governed-evidence'];
+  const steps = job.steps;
+  const checkout = steps.find(step => step.uses === 'actions/checkout@v4');
+  assert.equal(checkout?.with?.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.equal(checkout?.with?.['fetch-depth'], 0);
+  assert.equal(job.env?.[retained.exactHeadEnvironment], '${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.ok(steps.some(step => step.run === retained.retainedCommand), `${retained.path} must verify its immutable retained head`);
+  assert.ok(!steps.some(step => step.run === retained.forbiddenRunner), `${retained.path} must not replay historical evidence at a later head`);
+  assert.ok(!steps.some(step => step.run === retained.forbiddenVerifier), `${retained.path} must not verify historical evidence at a later head`);
+}
 
 const exhaustiveWorkflow = parseWorkflowYaml(
   await readFile('.github/workflows/exhaustive-acceptance.yml', 'utf8'),
@@ -253,6 +282,50 @@ assert.match(
   trustViteConfig,
   /'import\.meta\.env\.VITE_AVALA_RUNTIME_MODE': JSON\.stringify\('pilot'\)/u,
   'the immutable Trust production build must embed pilot mode at build time',
+);
+assert.match(
+  trustViteConfig,
+  /'__AVALA_SYNTHETIC_BROWSER_TEST_BUILD__': JSON\.stringify\(true\)/u,
+  'the isolated Trust build must explicitly enable the internal synthetic browser adapter',
+);
+const trustSyntheticUrl = 'https://127.0.0.1:59999';
+const trustSyntheticPublicKey = 'sb_publishable_synthetic_public_key_264';
+assert.match(
+  trustViteConfig,
+  /'import\.meta\.env\.VITE_SUPABASE_URL': JSON\.stringify\('https:\/\/127[.]0[.]0[.]1:59999'\)/u,
+  'the isolated Trust build must bind the exact internal loopback provider tuple',
+);
+assert.match(
+  trustViteConfig,
+  /'import\.meta\.env\.VITE_SUPABASE_ANON_KEY': JSON\.stringify\('sb_publishable_synthetic_public_key_264'\)/u,
+  'the isolated Trust build must bind the exact safe public synthetic credential',
+);
+assert.equal(
+  isSafePublicSupabaseCredential(trustSyntheticPublicKey),
+  true,
+  'the Trust synthetic credential must pass the shared public-client credential classifier',
+);
+assert.equal(
+  trustViteConfig.includes(trustSyntheticUrl) && trustViteConfig.includes(trustSyntheticPublicKey),
+  true,
+  'the Trust synthetic capability and exact tuple must remain co-located in its dedicated build config',
+);
+assert.doesNotMatch(
+  trustViteConfig,
+  /trust-test[.]invalid|test-anon-key/u,
+  'the Trust build must not retain unclassified placeholder configuration',
+);
+const ordinaryViteConfig = await readFile('vite.config.ts', 'utf8');
+const syntheticBrowserViteConfig = await readFile('vite.synthetic-browser-test.config.ts', 'utf8');
+assert.match(
+  ordinaryViteConfig,
+  /export default createAvalaViteConfig\(\);/u,
+  'ordinary and Netlify builds must continue to use the synthetic-capability-disabled default',
+);
+assert.match(
+  syntheticBrowserViteConfig,
+  /export default createAvalaViteConfig\(\{ syntheticBrowserTestBuild: true \}\);/u,
+  'only an intentional internal build entrypoint may enable the shared synthetic adapter capability',
 );
 const trustPlaywrightConfig = await readFile('playwright.trust-assurance.config.ts', 'utf8');
 assert.match(

@@ -1,6 +1,6 @@
 # Studio Governed Artifact Authority
 
-Status: the foundational Studio aggregate boundary is accepted through PR #216; governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B is the active additive implementation boundary. PR 1G remains accepted. This document is source architecture, not deployment or hosted-readiness evidence.
+Status: the foundational Studio aggregate boundary is accepted through PR #216; governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; governed Delivery and Monitor PR C is the active additive downstream boundary. PR 1G remains accepted. This document is source architecture, not deployment or hosted-readiness evidence.
 
 ## Scope and trust boundary
 
@@ -30,6 +30,12 @@ System BRD/FRD/PDD versions remain supported. Tenant templates add immutable dra
 
 Every cited transcript anchor must be a member of the exact accepted extraction/candidate manifest bound to the package. Every cited Assess anchor must be a member of an immutable server-hashed Assess anchor manifest for the selected case version. A well-formed UUID, locator, or hash is not provenance authority. Hybrid coverage de-duplicates one immutable source version that is deliberately shared by Assess and Studio before cardinality and completeness checks. Soft deletion prevents new selection but never removes a source already retained by an immutable package projection.
 
+## PR C outbound Studio-to-Delivery authority
+
+An approved Studio artifact is only eligible to request an outbound handoff. Eligibility, preview, or request creates no Delivery package. The exact current approved artifact version, Studio source package/version/hash, template version/hash, inherited assessment/planning classification, requester, route policy, and target workspace are frozen in a versioned Studio-to-Delivery handoff. Independent target review and approval, current authorization, source-package currentness under the accepted PR B predicate, and one-time Delivery consumption are required before a target Delivery source package can exist.
+
+Rejected, withdrawn, expired, changes-requested, stale, superseded, foreign-scope, revoked, or changed-lineage handoffs create no target effect. A later Studio artifact, source-package, or template version never relabels an already consumed Delivery package. Direct, hybrid, and manual Studio classifications survive the handoff unchanged; direct/manual ancestry remains `not_assessed` and `planning_only`. Rollback disables new outbound requests/consumption and retains accepted Studio artifacts plus committed handoff history as read-only evidence.
+
 ## Lifecycle, recovery, and people
 
 The public PR B generation-state vocabulary is `requested`, `claimed`, `generating`, `staged`, `reconciling`, `completed`, `failed`, `stale`, and `uncertain`. The durable database attempt states are the more exact `requested`, `generating`, `response_staged`, `reconciling`, `completed`, `stale_completed`, `failed`, `cancel_requested`, `cancelled`, and `timed_out`; the retained `claimed` value is compatibility-only in the database constraint, while actual v2 execution moves an authorized lease claim directly to `generating` or `reconciling`. Command receipts independently use `claimed`, `committed`, and `failed`. A request commits the immutable source-package, template, aggregate-head, approved-head, provider-plan, effect-key, authorization-version, and timeout bindings before an external effect. A claim reauthorizes the requester, obtains one expiring lease with an exact execution token and monotonically increasing fence, and permits a provider call only when no staged response already exists. An unexpired competing claim is `COMMAND_IN_PROGRESS`; takeover after lease expiry receives a new fence.
@@ -58,7 +64,7 @@ Mutation RPCs are service-role-only and independently validate active profile, o
 
 Existing `document_generations` records remain durable **legacy/unverified** rows. They are not accepted PR 1E descendants and cannot be reviewed, approved, exported, delivered, or treated as canonical. Enterprise Studio paths cannot write them. Clearly labelled local-demo behavior remains isolated from enterprise authority.
 
-The earlier private-artifact PR B boundary is separately accepted through PR #217 and corrective PR #218. Governed multi-source transcript PR B preserves its aggregate/version IDs, approved pointers, rendition ancestry, Storage authority, retention, holds, deletion, and reconciliation behavior. It does not edit accepted private-artifact migrations. Generalized Studio-to-Delivery lineage remains PR C; PR B blocks direct, hybrid, and manual packages from the existing Delivery command path.
+The earlier private-artifact PR B boundary is separately accepted through PR #217 and corrective PR #218. Governed multi-source transcript PR B preserves its aggregate/version IDs, approved pointers, rendition ancestry, Storage authority, retention, holds, deletion, and reconciliation behavior. It does not edit accepted private-artifact migrations. The additive PR C outbound handoff is the only generalized Studio-to-Delivery authority; the retained direct-insert Delivery path remains fail closed outside an accepted exact handoff.
 
 ## Rollback and non-claims
 

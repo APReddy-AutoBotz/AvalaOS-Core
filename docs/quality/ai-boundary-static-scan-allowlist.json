@@ -89,7 +89,7 @@
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "vite-env.d.ts",
       "lines": [
-        4
+        5
       ],
       "reason": "deferred M3.1c cleanup",
       "futureAction": "Remove or replace after approved demo/dev fallback replacement; do not use for pilot or production."
@@ -229,8 +229,8 @@
       "pattern": "localStorage",
       "path": "services/adapters/authAdapter.ts",
       "lines": [
-        35,
-        57
+        40,
+        64
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep current-user/demo state classified separately from provider-key storage."
@@ -252,11 +252,56 @@
       "pattern": "localStorage",
       "path": "components/public/PublicWebsite.tsx",
       "lines": [
-        399,
-        409
+        400,
+        410
       ],
       "reason": "non-secret app localStorage state",
       "futureAction": "Keep public theme preference separate from credentials, provider configuration, and runtime authority."
+    },
+    {
+      "pattern": "GROQ_API_KEY",
+      "path": "scripts/writeHostedPilotNetlifyHeaders.mjs",
+      "lines": [
+        38
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this literal confined to the controlled-human build denylist; never read or forward its value."
+    },
+    {
+      "pattern": "GEMINI_API_KEY",
+      "path": "scripts/writeHostedPilotNetlifyHeaders.mjs",
+      "lines": [
+        40
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this literal confined to the controlled-human build denylist; never read or forward its value."
+    },
+    {
+      "pattern": "GROQ_API_KEY",
+      "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
+      "lines": [
+        59
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep the provider-key name confined to build-boundary negative tests; never use a real provider value."
+    },
+    {
+      "pattern": "GEMINI_API_KEY",
+      "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
+      "lines": [
+        61
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep the provider-key name confined to build-boundary negative tests; never use a real provider value."
+    },
+    {
+      "pattern": "VITE_GEMINI_API_KEY",
+      "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
+      "lines": [
+        230
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep the synthetic browser-provider variable confined to a rejection test; never use a real provider value."
     },
     {
       "pattern": "localStorage",
@@ -380,6 +425,24 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep bounded inspection of non-secret persisted navigation evidence confined to controller browser QA; do not treat browser storage as runtime authority."
+    },
+    {
+      "pattern": "GROQ_API_KEY",
+      "path": "components/docs/PrCControlledHumanSyntheticGeneration.test.mjs",
+      "lines": [
+        36
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this provider-key name only in the provider-free synthetic-generation source rejection test; never read or supply a key."
+    },
+    {
+      "pattern": "GEMINI_API_KEY",
+      "path": "components/docs/PrCControlledHumanSyntheticGeneration.test.mjs",
+      "lines": [
+        38
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this provider-key name only in the provider-free synthetic-generation source rejection test; never read or supply a key."
     }
   ]
 }
