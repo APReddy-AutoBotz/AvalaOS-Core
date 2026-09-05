@@ -144,6 +144,18 @@ export const browserModeByFlag = new Map([
       PILOT_OPERATIONS_EXTERNAL_SERVER: 'true',
     },
   }],
+  ['--trust-assurance', {
+    label: 'Trust assurance',
+    port: '4417',
+    config: 'playwright.trust-assurance.config.ts',
+    readinessPath: '/tests/trust-assurance/browser/trustAssuranceHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    viteConfig: 'vite.trust-assurance.config.ts',
+    playwrightEnvironment: {
+      TRUST_ASSURANCE_EXTERNAL_SERVER: 'true',
+    },
+  }],
 ]);
 
 export const defaultBrowserMode = {

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   ATTESTATION_VERSION, EXPECTED_MIGRATION_TIP, apply, assertTargetInventory, canonicalJson,
-  checkpointObserve, controlledHumanStepEvidenceSpec, deprovision, deriveContext, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
+  checkpointObserve, controlledHumanStepEvidenceSpec, deprovision, deriveBoundNegativeEffectCounts, deriveContext, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
   validatePrivilegedPostgresConnectionString,
 } from './prCControlledHumanEnvironment.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
@@ -35,6 +35,25 @@ test('canonical digests and deterministic identifiers are stable and scoped',()=
   assert.match(sha256({b:1,a:2}),/^sha256:[0-9a-f]{64}$/u);
   assert.equal(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-requester'));
   assert.notEqual(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-reviewer'));
+});
+
+test('negative observer effects are request-causal and require an explicit none effect family',()=>{
+  const requestId='40000000-0000-4000-8000-000000000401';
+  const binding={observation_kind:'negative_attempt',request_id:requestId};
+  const unrelatedRequestId='40000000-0000-4000-8000-000000000402';
+  const sameMillisecond='2026-09-04T13:00:00.123Z';
+  const unrelated={
+    receipts:[{id:'unrelated-receipt',request_id:unrelatedRequestId,actor_id:'same-actor',action:'same.action',status:'committed',event_at:sameMillisecond}],
+    audits:[{id:'unrelated-audit',request_id:unrelatedRequestId,actor_id:'same-actor',action:'same.action',outcome:'succeeded',created_at:sameMillisecond}],
+    deliveryEffects:[{id:'unrelated-effect',receipt_id:'unrelated-receipt',audit_id:'unrelated-audit',created_at:sameMillisecond}],
+    aiEffects:[],
+  };
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',...unrelated}),{receipt:0,audit:0,effect:0});
+  const exactFailedReceipt={id:'exact-failed-receipt',request_id:requestId,actor_id:'same-actor',action:'same.action',status:'failed',event_at:sameMillisecond};
+  const exactDeniedAudit={id:'exact-denied-audit',request_id:requestId,actor_id:'same-actor',action:'same.action',outcome:'denied',created_at:sameMillisecond};
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[exactFailedReceipt],audits:[exactDeniedAudit],deliveryEffects:[{id:'exact-effect',receipt_id:exactFailedReceipt.id,audit_id:exactDeniedAudit.id,created_at:sameMillisecond}],aiEffects:[]}),{receipt:0,audit:0,effect:1});
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[{...exactFailedReceipt,status:'committed'}],audits:[{...exactDeniedAudit,outcome:'succeeded'}],deliveryEffects:[],aiEffects:[]}),{receipt:1,audit:1,effect:0});
+  assert.throws(()=>deriveBoundNegativeEffectCounts({binding,effectFamily:'delivery_work_package',...unrelated}),/OBSERVER_CATALOG_REJECTED/u);
 });
 
 test('one-use exercise identity is deploy-independent while every context retains its exact deployment binding',()=>{

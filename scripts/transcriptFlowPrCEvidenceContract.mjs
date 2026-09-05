@@ -53,6 +53,7 @@ const PR_C_FOCUSED_COMMANDS = [
   { id: 'pr-c-adversarial', command: 'npm run test:transcript-flow:delivery-monitor-adversarial', environment: 'controlled-node-22' },
   { id: 'pr-c-evidence-contract', command: 'npm run test:transcript-flow:delivery-monitor-evidence-contract', environment: 'controlled-node-22' },
   { id: 'pr-c-controlled-human-source', command: 'npm run test:pr-c-controlled-human-source', environment: 'controlled-postgresql-16', requiredEnvironment: ['PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL'] },
+  { id: 'pilot-trust-browser', command: 'npm run test:browser:trust-assurance', environment: 'controlled-browser-two-profile' },
   { id: 'historical-evidence-drift', command: `git diff --exit-code ${PR_C_BASE_SHA} -- testing/process-lifecycle/contracts/pr-a-assertion-registry.json testing/process-lifecycle/contracts/pr-b-assertion-registry.json docs/quality/governed-multisource-transcript-pr-a-evidence.md docs/quality/governed-multisource-studio-pr-b-evidence.md`, environment: 'controlled-git' },
 ];
 

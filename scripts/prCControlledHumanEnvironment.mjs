@@ -77,6 +77,21 @@ export function validateControlledHumanObserverEnvelopeBridge(pairs) {
     fail('PR_C_CONTROLLED_HUMAN_OBSERVER_ENVELOPE_SET_REJECTED');
   return Object.freeze({total:pairs.length,positive:actualPositive.length,negative:actualNegative.length});
 }
+export function deriveBoundNegativeEffectCounts({binding,effectFamily,receipts,audits,deliveryEffects,aiEffects}) {
+  if(!binding||binding.observation_kind!=='negative_attempt'||typeof binding.request_id!=='string'||effectFamily!=='none'
+    ||![receipts,audits,deliveryEffects,aiEffects].every(Array.isArray))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_CATALOG_REJECTED');
+  const requestReceipts=receipts.filter(value=>value.request_id===binding.request_id);
+  const requestAudits=audits.filter(value=>value.request_id===binding.request_id);
+  const requestReceiptIds=new Set(requestReceipts.map(value=>value.id));
+  const requestAuditIds=new Set(requestAudits.map(value=>value.id));
+  const causalDeliveryEffects=deliveryEffects.filter(value=>requestReceiptIds.has(value.receipt_id)||requestAuditIds.has(value.audit_id));
+  const causalAiEffects=aiEffects.filter(value=>requestReceiptIds.has(value.receipt_id)&&value.terminal_status==='committed');
+  return Object.freeze({
+    receipt:requestReceipts.filter(value=>['succeeded','committed'].includes(value.status)).length,
+    audit:requestAudits.filter(value=>value.outcome==='succeeded').length,
+    effect:causalDeliveryEffects.length+causalAiEffects.length,
+  });
+}
 function stepResourceKind(stepId) {
   const action=STEP_ACTIONS[stepId]?.[0]??'';
   if(action.startsWith('delivery.handoff.'))return 'delivery_handoff';
@@ -699,7 +714,7 @@ export class PostgresEnvironmentAdapter {
       const audits=(await db.query(`select id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at from public.privileged_audit_events where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
       const deliveryAttempts=(await db.query(`select id,receipt_id,actor_id,action,request_id,created_at from public.enterprise_delivery_monitor_command_attempts where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
       const deliveryEffects=(await db.query(`select id,receipt_id,actor_id,action,resource_id,audit_id,created_at from public.enterprise_delivery_monitor_effects where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
-      const aiEffects=(await db.query(`select id,receipt_id,operation_type action,resource_id,committed_at created_at from public.enterprise_ai_effect_journal where org_id=$1 and workspace_id=$2 order by committed_at,id`,[state.org_id,state.workspace_id])).rows;
+      const aiEffects=(await db.query(`select id,receipt_id,operation_type action,resource_id,terminal_status,committed_at created_at from public.enterprise_ai_effect_journal where org_id=$1 and workspace_id=$2 order by committed_at,id`,[state.org_id,state.workspace_id])).rows;
       const actionAnchors=(await db.query(`select id,checkpoint_id,step_id,persona_key,actor_id,observation_kind,action,target_family,target_id,expected_version,transition_kind,created_family,request_id,actor_authorization_version,selector_bindings,selector_digest,intent_digest,challenge_token,safe_anchor,created_at
         from public.pr_c_controlled_human_action_anchors where exercise_id=$1 order by created_at,checkpoint_id,step_id`,[state.id])).rows;
       const actionBindings=(await db.query(`select anchor_id,checkpoint_id,step_id,persona_key,actor_id,observation_kind,action,result,denial_proof_kind,resource_family,resource_id,expected_version,observed_version,request_id,receipt_source,receipt_id,audit_id,intent_digest,denial_code_digest,binding_token,safe_record,created_at
@@ -719,6 +734,7 @@ export class PostgresEnvironmentAdapter {
           ||contract.observation_kind!==step.observationKind||contract.expected_result!==step.expectedResult)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_CONTRACT_REJECTED');
         const requiresBinding=contract.observation_kind==='server_event'||contract.observation_kind==='negative_attempt';
         if(requiresBinding&&(!contract.target_family||!contract.effect_family||!contract.transition_kind||!contract.effect_resolver
+          ||(contract.observation_kind==='negative_attempt'&&contract.effect_family!=='none')
           ||contract.catalog_action!==(Array.isArray(contract.expected_actions)?contract.expected_actions[0]:null)))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_CATALOG_REJECTED');
         const actualCapabilityDigest=sha256(contract.capabilities);
         if(actualCapabilityDigest!==contract.capability_digest)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_AUTHORITY_REJECTED');
@@ -730,7 +746,7 @@ export class PostgresEnvironmentAdapter {
         const expectedActions=Array.isArray(contract.expected_actions)?contract.expected_actions:[];
         const successfulReceipts=windowReceipts.filter(value=>['succeeded','committed'].includes(value.status)&&expectedActions.includes(value.action));
         const successfulAudits=windowAudits.filter(value=>value.outcome==='succeeded'&&expectedActions.includes(value.action));
-        const families=requiresBinding?[contract.observation_kind==='negative_attempt'?contract.target_family:contract.effect_family]:resourceFamilies(contract.resource_kind);
+        const families=requiresBinding?[contract.effect_family]:resourceFamilies(contract.resource_kind);
         const currentResources=ownership.filter(value=>families.includes(value.resource_family));
         const windowResources=currentResources.filter(value=>timestampMs(value.created_at)>=start&&timestampMs(value.created_at)<=completed);
         let exactAnchor=null;let exactBinding=null;let exactReceipt=null;let exactAudit=null;let exactEffect=null;let exactAttempt=null;
@@ -825,11 +841,16 @@ export class PostgresEnvironmentAdapter {
             } else if(exactBinding.audit_id!==null)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_DENIAL_PROOF_REJECTED');
           }
         }
-        const observedDeltas={receipt:successfulReceipts.length,audit:successfulAudits.length,
-          target:windowResources.filter(value=>['assess_process','assess_case','assess_studio_handoff','module_handoff','studio_artifact','studio_source_package','delivery_handoff','delivery_source_package','delivery_work_package'].includes(value.resource_family)).length,
-          itemVersion:windowResources.filter(value=>value.resource_family==='delivery_item_version').length,
-          approval:windowResources.filter(value=>['tenant_template_approval','delivery_package_approval'].includes(value.resource_family)).length,
-          baseline:windowResources.filter(value=>value.resource_family==='monitor_baseline').length};
+        const negativeEffectCounts=contract.observation_kind==='negative_attempt'
+          ?deriveBoundNegativeEffectCounts({binding:exactBinding,effectFamily:contract.effect_family,receipts,audits,deliveryEffects,aiEffects})
+          :null;
+        const observedDeltas=negativeEffectCounts
+          ?{receipt:negativeEffectCounts.receipt,audit:negativeEffectCounts.audit,target:negativeEffectCounts.effect,itemVersion:0,approval:0,baseline:0}
+          :{receipt:successfulReceipts.length,audit:successfulAudits.length,
+            target:windowResources.filter(value=>['assess_process','assess_case','assess_studio_handoff','module_handoff','studio_artifact','studio_source_package','delivery_handoff','delivery_source_package','delivery_work_package'].includes(value.resource_family)).length,
+            itemVersion:windowResources.filter(value=>value.resource_family==='delivery_item_version').length,
+            approval:windowResources.filter(value=>['tenant_template_approval','delivery_package_approval'].includes(value.resource_family)).length,
+            baseline:windowResources.filter(value=>value.resource_family==='monitor_baseline').length};
         const hasSideEffect=Object.values(observedDeltas).some(value=>value!==0);
         if(contract.expected_result!=='succeeded'&&hasSideEffect)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED');
         const isVerifyHistory=step.checkpointId==='CH-13'&&step.stepId==='verify-history-readable-and-actions-absent';

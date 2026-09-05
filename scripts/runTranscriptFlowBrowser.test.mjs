@@ -499,6 +499,61 @@ test('Pilot Operations mode owns its Vite lifecycle and preserves automated-test
   assert.equal(server.wasKilled, true);
 });
 
+test('Trust assurance mode owns its exact production build and preview lifecycle', async () => {
+  const mode = browserModeByFlag.get('--trust-assurance');
+  assert.deepEqual(mode, {
+    label: 'Trust assurance',
+    port: '4417',
+    config: 'playwright.trust-assurance.config.ts',
+    readinessPath: '/tests/trust-assurance/browser/trustAssuranceHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    viteConfig: 'vite.trust-assurance.config.ts',
+    playwrightEnvironment: {
+      TRUST_ASSURANCE_EXTERNAL_SERVER: 'true',
+    },
+  });
+
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    calls.push({ arguments_, options });
+    if (arguments_.includes('--port')) {
+      queueMicrotask(() => {
+        server.stdout.write('  ➜  Local:   http://127.0.0.1:4417/\n');
+      });
+      return server;
+    }
+    const child = new FakeChild();
+    queueMicrotask(() => {
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    });
+    return child;
+  };
+
+  const exitCode = await runBrowserHarness({
+    mode,
+    environment: { ...process.env, HARNESS_SENTINEL: 'preserved' },
+    spawnImpl,
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0].arguments_.slice(-3), ['build', '--config', 'vite.trust-assurance.config.ts']);
+  assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('vite.trust-assurance.config.ts'));
+  assert.ok(calls[1].arguments_.includes('4417'));
+  assert.ok(calls[2].arguments_.includes('--config=playwright.trust-assurance.config.ts'));
+  assert.equal(calls[2].options.env.TRUST_ASSURANCE_EXTERNAL_SERVER, 'true');
+  assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
+  assert.equal(server.wasKilled, true);
+});
+
 test('Studio PR B mode builds its dedicated harness with the retained Vite config before preview', async () => {
   const mode = browserModeByFlag.get('--studio-pr-b');
   assert.deepEqual(mode, {

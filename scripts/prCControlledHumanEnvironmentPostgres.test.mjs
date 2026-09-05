@@ -912,6 +912,46 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
         cursor=completed;return{checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,startedAt:new Date(started).toISOString(),completedAt:new Date(completed).toISOString(),attemptDigest:sha256({humanRole,checkpointId:step.checkpointId,stepId:step.stepId,started}),bindingToken:timing?.bindingToken??null};
       });
     };
+    const unrelatedProbe=(await database.client.query(`select exercise.org_id,exercise.workspace_id,binding.actor_id,binding.action,binding.resource_id,binding.created_at event_at,authority.version authorization_version
+      from public.pr_c_controlled_human_action_bindings binding
+      join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id
+      join public.authorization_versions authority on authority.org_id=exercise.org_id and authority.user_id=binding.actor_id
+      where exercise.exercise_digest=$1 and binding.step_id='revoked-actor-mutation-denied'`,[context.exerciseDigest])).rows[0];
+    const unrelatedReceiptId=deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-receipt');
+    const unrelatedAuditId=deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-audit');
+    const unrelatedEffectId=deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-effect');
+    await database.client.query(`insert into public.enterprise_delivery_monitor_command_receipts(id,org_id,workspace_id,actor_id,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,status,resource_id,response,created_at,completed_at)
+      values($1,$2,$3,$4,$5,'observer-unrelated-same-ms',$6,$7,$8,$9,$10,8801,'committed',$11,'{"ok":true,"synthetic":true}'::jsonb,$12,$12)`,[unrelatedReceiptId,unrelatedProbe.org_id,unrelatedProbe.workspace_id,unrelatedProbe.actor_id,unrelatedProbe.action,deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-request'),'a'.repeat(64),'b'.repeat(64),Number(unrelatedProbe.authorization_version),deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-token'),unrelatedProbe.resource_id,unrelatedProbe.event_at]);
+    await database.client.query(`insert into public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at)
+      values($1,$2,$3,$4,$5,$6,'workspace',$7,'succeeded',1,'{"synthetic":true}'::jsonb,$8)`,[unrelatedAuditId,unrelatedProbe.org_id,unrelatedProbe.workspace_id,unrelatedProbe.actor_id,deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-request'),unrelatedProbe.action,unrelatedProbe.resource_id,unrelatedProbe.event_at]);
+    await database.client.query(`insert into public.enterprise_delivery_monitor_effects(id,receipt_id,org_id,workspace_id,actor_id,action,binding_hash,execution_token,execution_fence,resource_id,audit_id,result,created_at)
+      values($1,$2,$3,$4,$5,$6,$7,$8,8801,$9,$10,'{"ok":true,"synthetic":true}'::jsonb,$11)`,[unrelatedEffectId,unrelatedReceiptId,unrelatedProbe.org_id,unrelatedProbe.workspace_id,unrelatedProbe.actor_id,unrelatedProbe.action,'b'.repeat(64),deterministicUuid(context.exerciseId,'observer-unrelated-same-ms-token'),unrelatedProbe.resource_id,unrelatedAuditId,unrelatedProbe.event_at]);
+    const exactEffectProbe=(await database.client.query(`select exercise.org_id,exercise.workspace_id,binding.actor_id,binding.action,binding.resource_id,binding.request_id,binding.observed_version,binding.created_at event_at,authority.version authorization_version
+      from public.pr_c_controlled_human_action_bindings binding
+      join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id
+      join public.authorization_versions authority on authority.org_id=exercise.org_id and authority.user_id=binding.actor_id
+      where exercise.exercise_digest=$1 and binding.step_id='reject-stale-authorization'`,[context.exerciseDigest])).rows[0];
+    const exactEffectReceiptId=deterministicUuid(context.exerciseId,'observer-exact-request-effect-receipt');
+    const exactEffectAuditId=deterministicUuid(context.exerciseId,'observer-exact-request-effect-audit');
+    await database.client.query('begin');
+    try{
+      await database.client.query(`insert into public.enterprise_delivery_monitor_command_receipts(id,org_id,workspace_id,actor_id,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,status,failure_code,created_at,completed_at)
+        values($1,$2,$3,$4,$5,'observer-exact-request-effect',$6,$7,$8,$9,$10,8802,'failed','SYNTHETIC_DENIED',$11,$11)`,[exactEffectReceiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,exactEffectProbe.request_id,'c'.repeat(64),'d'.repeat(64),Number(exactEffectProbe.authorization_version),deterministicUuid(context.exerciseId,'observer-exact-request-effect-token'),exactEffectProbe.event_at]);
+      await database.client.query(`insert into public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at)
+        values($1,$2,$3,$4,$5,$6,'delivery_work_package',$7,'denied',$8,'{"synthetic":true}'::jsonb,$9)`,[exactEffectAuditId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.request_id,exactEffectProbe.action,exactEffectProbe.resource_id,Number(exactEffectProbe.observed_version),exactEffectProbe.event_at]);
+      await database.client.query(`insert into public.enterprise_delivery_monitor_effects(id,receipt_id,org_id,workspace_id,actor_id,action,binding_hash,execution_token,execution_fence,resource_id,audit_id,result,created_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,8802,$9,$10,'{"ok":true,"synthetic":true}'::jsonb,$11)`,[deterministicUuid(context.exerciseId,'observer-exact-request-effect'),exactEffectReceiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,'d'.repeat(64),deterministicUuid(context.exerciseId,'observer-exact-request-effect-token'),exactEffectProbe.resource_id,exactEffectAuditId,exactEffectProbe.event_at]);
+      const probeDatabase=Object.create(database);probeDatabase.client={query:async(text,parameters)=>{
+        const command=typeof text==='string'?text.trim().toLowerCase():'';
+        if(command==='begin')return database.client.query('savepoint observer_exact_request_effect');
+        if(command==='commit')return database.client.query('release savepoint observer_exact_request_effect');
+        if(command==='rollback')return database.client.query('rollback to savepoint observer_exact_request_effect');
+        return database.client.query(text,parameters);
+      }};
+      const requesterProbeSteps=buildObservedDutyRequest('requester');
+      await assert.rejects(probeDatabase.observeDuty(context,'requester',requesterProbeSteps,sha256({humanRole:'requester',steps:requesterProbeSteps})),/PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED/u,'an effect causally tied to the denied request must reject the observation');
+    }finally{await database.client.query('rollback')}
+    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_monitor_effects where id=$1`,[deterministicUuid(context.exerciseId,'observer-exact-request-effect')])).rows[0].count),0);
     const observedDuties=[];
     for(const humanRole of ['requester','reviewer','approver']){
       const steps=buildObservedDutyRequest(humanRole);const observed=await database.observeDuty(context,humanRole,steps,sha256({humanRole,steps}));

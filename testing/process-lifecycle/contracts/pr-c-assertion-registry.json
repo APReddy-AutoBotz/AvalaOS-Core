@@ -67,6 +67,11 @@
       ]
     },
     {
+      "id": "pilot-trust-browser",
+      "command": "npm run test:browser:trust-assurance",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
       "id": "historical-evidence-drift",
       "command": "git diff --exit-code 5433cad41721355e3ec5a29bc2f87772540c77b5 -- testing/process-lifecycle/contracts/pr-a-assertion-registry.json testing/process-lifecycle/contracts/pr-b-assertion-registry.json docs/quality/governed-multisource-transcript-pr-a-evidence.md docs/quality/governed-multisource-studio-pr-b-evidence.md",
       "environment": "controlled-git"
@@ -454,7 +459,7 @@
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "a8f2cfa5809ca0319664ddc2b49955dca16b28da6c6587af611336158009bef8"
+      "sha256": "e717676bd289313566b739761df42a6d69387c6247c5c09a4200fe5ab2663104"
     }
   },
   "assertions": [

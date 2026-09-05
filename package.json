@@ -235,6 +235,7 @@
     "hosted-pilot:verify-database": "node scripts/hostedPilotDatabaseVerify.mjs",
     "verify:hosted-pilot-evidence": "node scripts/verify-hosted-pilot-evidence.mjs",
     "test:browser:hosted-pilot": "playwright test --config=playwright.hosted-pilot.config.ts",
+    "test:browser:trust-assurance": "node scripts/runTranscriptFlowBrowser.mjs --trust-assurance",
     "test:hosted-pilot": "node --test scripts/hostedPilotActivation.test.mjs scripts/hostedPilotApplyEntrypoint.test.mjs scripts/hostedPilotApplySafety.test.mjs scripts/hostedPilotDatabaseContract.test.mjs scripts/verify-hosted-pilot-evidence.test.mjs scripts/writeHostedPilotNetlifyHeaders.test.mjs && node scripts/checkWorkflowYaml.test.mjs",
     "pr-c-controlled-human:preflight": "node scripts/prCControlledHumanEnvironment.mjs preflight",
     "pr-c-controlled-human:migration-preflight": "node scripts/prCControlledHumanEnvironmentMigration.mjs preflight",
