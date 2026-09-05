@@ -476,7 +476,9 @@ const validateControllerRecord = (record, expectedPhase, common) => {
       && record.activeOrganizationCount === 0 && record.activeWorkspaceCount === 0 && record.activePilotEnvironmentCount === 0
       && record.activePilotTenantCount === 0 && record.activeSessionCount === 0 && record.boundPersonaCount === 12
       && record.immutableHistoryRetained === true && record.domainRowsDeleted === 0, 'PR_C_CH_CONTROLLER_DEPROVISION_COUNTS');
-    for (const field of ['postInspectionDigest', 'immutableHistoryDigest', 'quiescedHistoryDigest', 'operationEventDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_DEPROVISION_${field}`);
+    for (const field of ['postInspectionDigest', 'inspectionAttemptDigest', 'immutableHistoryDigest', 'quiescedHistoryDigest', 'operationEventDigest', 'authorityDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_DEPROVISION_${field}`);
+    assertTimestamp(record.inspectionObservedAt, 'PR_C_CH_CONTROLLER_DEPROVISION_INSPECTION_TIME');
+    assert(Number.isSafeInteger(record.operationEventSequence) && record.operationEventSequence > 0, 'PR_C_CH_CONTROLLER_DEPROVISION_EVENT_SEQUENCE');
     validateSafetyObservation(record.safety, 'PR_C_CH_CONTROLLER_DEPROVISION_SAFETY');
   } else if (expectedPhase === 'post-deprovision-verify') {
     assert(record.lifecycle === 'deprovisioned' && record.replayed === true && record.featureFlagCountEnabled === 0
@@ -485,12 +487,15 @@ const validateControllerRecord = (record, expectedPhase, common) => {
       && record.activeWorkspaceCount === 0 && record.activePilotEnvironmentCount === 0 && record.activePilotTenantCount === 0
       && record.activeSessionCount === 0 && record.boundPersonaCount === 12 && record.immutableHistoryRetained === true
       && record.domainRowsDeleted === 0, 'PR_C_CH_CONTROLLER_POST_DEPROVISION_COUNTS');
-    for (const field of ['postInspectionDigest', 'immutableHistoryDigest', 'operationEventDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_POST_DEPROVISION_${field}`);
+    for (const field of ['postInspectionDigest', 'inspectionAttemptDigest', 'immutableHistoryDigest', 'operationEventDigest', 'authorityDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_POST_DEPROVISION_${field}`);
+    assertTimestamp(record.inspectionObservedAt, 'PR_C_CH_CONTROLLER_POST_DEPROVISION_INSPECTION_TIME');
+    assert(Number.isSafeInteger(record.operationEventSequence) && record.operationEventSequence > 0, 'PR_C_CH_CONTROLLER_POST_DEPROVISION_EVENT_SEQUENCE');
     validateSafetyObservation(record.safety, 'PR_C_CH_CONTROLLER_POST_DEPROVISION_SAFETY');
   } else if (expectedPhase === 'quiesce') {
     assert(record.lifecycle === 'read_only' && record.featureFlagCountEnabled === 0 && record.runtimeControlReadOnlyCount === 2
-      && record.runtimeControlProviderEnabledCount === 0, 'PR_C_CH_CONTROLLER_QUIESCE');
-    for (const field of ['operationEventDigest', 'immutableHistoryDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_QUIESCE_${field}`);
+      && record.runtimeControlProviderEnabledCount === 0 && Number.isSafeInteger(record.concurrencyVersion) && record.concurrencyVersion > 0
+      && Number.isSafeInteger(record.operationEventSequence) && record.operationEventSequence > 0, 'PR_C_CH_CONTROLLER_QUIESCE');
+    for (const field of ['operationEventDigest', 'immutableHistoryDigest', 'authorityDigest']) assertDigest(record[field], `PR_C_CH_CONTROLLER_QUIESCE_${field}`);
     assertTimestamp(record.transitionedAt, 'PR_C_CH_CONTROLLER_QUIESCE_TRANSITION');
   }
   recursivelyRejectUnsafeEvidence(record);
@@ -631,7 +636,7 @@ const serverExpectation = expected => {
   if(actionContract)return {observationKind:actionContract.observationKind,result:actionContract.observationKind==='negative_attempt'?'denied':'succeeded',denialIntent:actionContract.observationKind==='negative_attempt',zeroEffect:actionContract.observationKind==='negative_attempt',actionContract};
   if (expected.negative && /^(?:verify-|decline-|stop-with-no-)/u.test(expected.stepId)) return { observationKind: 'no_effect', result: 'no_effect_observed', zeroEffect: true };
   if (SERVER_EVENT_STEPS.has(expected.stepId)) return { observationKind: 'server_event', result: 'succeeded', zeroEffect: false };
-  return { observationKind: 'human_attestation', result: 'attested', zeroEffect: false };
+  return { observationKind: 'human_attestation', result: 'attested', zeroEffect: true };
 };
 
 export const buildServerObserverRequest = (humanRole, observations) => ({
@@ -834,6 +839,9 @@ const validateServerStep = (record, expected, browserBinding, code) => {
   if (expectation.observationKind === 'server_event') assert((record.version > 0 || expectation.actionContract?.transitionKind === 'create_zero')
     && (record.version !== 0 || expectation.actionContract?.transitionKind === 'create_zero')
     && record.causalEventDigest !== canonicalDigest('not-applicable'), `${code}_CAUSAL_EVENT`);
+  if (expectation.observationKind === 'no_effect' || expectation.observationKind === 'human_attestation') {
+    assert(record.causalEventDigest !== canonicalDigest('not-applicable'), `${code}_ABSENCE_WITNESS`);
+  }
   if (expectation.observationKind === 'server_event' || expectation.denialIntent) {
     assert(browserBinding && record.bindingToken === browserBinding.bindingToken && record.action === browserBinding.action
       && record.resourceFamily === browserBinding.resourceFamily && record.resourceDigest === browserBinding.resourceDigest
@@ -867,7 +875,7 @@ export const validateControlledHumanObservedDuty = ({ humanRole, requestedSteps,
   return Object.freeze({humanRole,stepCount:serverSteps.length,machineStepKeys:Object.freeze(observedMachineKeys)});
 };
 
-const validateServerObserver = ({ preparation, humanRole, observations, serverObserver }) => {
+const validateServerObserver = ({ preparation, quiesceRecord, humanRole, observations, serverObserver }) => {
   assertExactKeys(serverObserver, ['contractVersion', 'phase', 'status', 'environmentClass', 'releaseSha', 'reviewHeadSha', 'prNumber', 'deployId', 'deployOrigin', 'exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest', 'migrationTip', 'productionAuthorized', 'customerDataAuthorized', 'realProviderCallsAuthorized', 'humanRole', 'requestDigest', 'observedAt', 'lifecycle', 'concurrencyVersion', 'operationEventSequence', 'operationEventDigest', 'immutableHistoryDigest', 'inspectionDigest', 'steps'], [], 'PR_C_CH_SERVER_OBSERVER');
   assert(serverObserver.contractVersion === CONTROLLER_SCHEMA_VERSION && serverObserver.phase === 'checkpoint-observe' && serverObserver.status === 'passed', 'PR_C_CH_SERVER_OBSERVER_STATUS');
   assert(serverObserver.environmentClass === ENVIRONMENT && serverObserver.migrationTip === CONTROLLED_HUMAN_MIGRATION_TIP, 'PR_C_CH_SERVER_OBSERVER_ENVIRONMENT');
@@ -878,16 +886,22 @@ const validateServerObserver = ({ preparation, humanRole, observations, serverOb
   assert(serverObserver.productionAuthorized === false && serverObserver.customerDataAuthorized === false && serverObserver.realProviderCallsAuthorized === false, 'PR_C_CH_SERVER_OBSERVER_STOP_STATES');
   assert(serverObserver.humanRole === humanRole && serverObserver.requestDigest === canonicalDigest(buildServerObserverRequest(humanRole, observations)), 'PR_C_CH_SERVER_OBSERVER_REQUEST');
   assertTimestamp(serverObserver.observedAt, 'PR_C_CH_SERVER_OBSERVER_TIME');
-  assert(['active', 'read_only'].includes(serverObserver.lifecycle) && Number.isSafeInteger(serverObserver.concurrencyVersion) && serverObserver.concurrencyVersion > 0, 'PR_C_CH_SERVER_OBSERVER_LIFECYCLE');
+  assert(serverObserver.lifecycle === 'read_only' && Number.isSafeInteger(serverObserver.concurrencyVersion) && serverObserver.concurrencyVersion > 0, 'PR_C_CH_SERVER_OBSERVER_LIFECYCLE');
   assert(Number.isSafeInteger(serverObserver.operationEventSequence) && serverObserver.operationEventSequence > 0, 'PR_C_CH_SERVER_OBSERVER_EVENTS');
   assertDigest(serverObserver.operationEventDigest, 'PR_C_CH_SERVER_OBSERVER_EVENT_DIGEST');
   assertDigest(serverObserver.immutableHistoryDigest, 'PR_C_CH_SERVER_OBSERVER_HISTORY_DIGEST');
+  assert(serverObserver.lifecycle===quiesceRecord.lifecycle
+    &&serverObserver.concurrencyVersion===quiesceRecord.concurrencyVersion
+    &&serverObserver.operationEventSequence===quiesceRecord.operationEventSequence
+    &&serverObserver.operationEventDigest===quiesceRecord.operationEventDigest
+    &&serverObserver.immutableHistoryDigest===quiesceRecord.immutableHistoryDigest,
+  'PR_C_CH_SERVER_OBSERVER_QUIESCE_BINDING');
   assertDigest(serverObserver.inspectionDigest, 'PR_C_CH_SERVER_OBSERVER_INSPECTION_DIGEST');
   const expected = expectedDutySteps(humanRole);
   assert(Array.isArray(serverObserver.steps) && serverObserver.steps.length === expected.length, 'PR_C_CH_SERVER_OBSERVER_STEP_SET');
   const humanSteps = observations.flatMap(record => record.steps);
   serverObserver.steps.forEach((record, index) => validateServerStep(record, expected[index], humanSteps[index].browserArtifact.serverBinding, `PR_C_CH_SERVER_STEP:${index}`));
-  const causalEvents=serverObserver.steps.filter((record,index)=>serverExpectation(expected[index]).observationKind==='server_event').map(record=>record.causalEventDigest);
+  const causalEvents=serverObserver.steps.filter(record=>record.causalEventDigest!==canonicalDigest('not-applicable')).map(record=>record.causalEventDigest);
   assert(new Set(causalEvents).size===causalEvents.length,'PR_C_CH_SERVER_OBSERVER_CAUSAL_EVENT_REUSE');
   const bindingTokens=humanSteps.map(record=>record.browserArtifact.serverBinding?.bindingToken).filter(Boolean);
   assert(new Set(bindingTokens).size===bindingTokens.length,'PR_C_CH_SERVER_OBSERVER_BINDING_REUSE');
@@ -948,7 +962,7 @@ export const createHumanCheckpoint = ({ preparation, quiesceRecord, humanRole, a
     });
     return { ...record, steps };
   });
-  validateServerObserver({ preparation, humanRole, observations, serverObserver });
+  validateServerObserver({ preparation, quiesceRecord, humanRole, observations, serverObserver });
   assert(new Set(normalizedBrowserArtifacts.map(record => record.digest)).size === normalizedBrowserArtifacts.length, 'PR_C_CH_BROWSER_DIGEST_REUSE');
   assertExactKeys(comment, ['commentId', 'createdAt', 'updatedAt'], [], 'PR_C_CH_COMMENT');
   assert(RUN_ID.test(String(comment.commentId)) && comment.createdAt === comment.updatedAt, 'PR_C_CH_COMMENT_IDENTITY');
@@ -1029,7 +1043,7 @@ export const validateHumanCheckpoint = ({ preparation, quiesceRecord, checkpoint
   }
   assert(new Set(browserDigests).size === browserDigests.length, 'PR_C_CH_CHECKPOINT_BROWSER_DIGEST_REUSE');
   const rawForRequestDigest = checkpoint.checkpoints.map(record => ({ ...record, steps: record.steps.map(stepRecord => ({ ...stepRecord, browserArtifact: stepRecord.browserArtifact.content })) }));
-  validateServerObserver({ preparation, humanRole: checkpoint.humanRole, observations: rawForRequestDigest, serverObserver: checkpoint.serverObserver.record });
+  validateServerObserver({ preparation, quiesceRecord, humanRole: checkpoint.humanRole, observations: rawForRequestDigest, serverObserver: checkpoint.serverObserver.record });
   const quiesceTime = Date.parse(quiesceRecord.transitionedAt);
   const retainedSteps = checkpoint.checkpoints.flatMap(record => record.steps);
   const readOnlySteps = retainedSteps.filter(record => record.stepId === 'verify-history-readable-and-actions-absent');
@@ -1085,8 +1099,15 @@ export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRec
   validateControllerRecord(postDeprovisionRecord, 'post-deprovision-verify', common);
   assert(deprovisionRecord.status === 'passed', 'PR_C_CH_DEPROVISION_STATUS');
   assert(deprovisionRecord.lifecycle === 'deprovisioned', 'PR_C_CH_DEPROVISION_LIFECYCLE');
-  assert(postDeprovisionRecord.postInspectionDigest !== deprovisionRecord.postInspectionDigest, 'PR_C_CH_POST_DEPROVISION_INDEPENDENCE');
+  assert(quiesceRecord.authorityDigest === preparation.backend.controllerPhaseDigests.verify, 'PR_C_CH_QUIESCE_AUTHORITY_CHAIN');
+  assert(deprovisionRecord.authorityDigest === canonicalDigest(quiesceRecord), 'PR_C_CH_DEPROVISION_AUTHORITY_CHAIN');
+  assert(postDeprovisionRecord.authorityDigest === canonicalDigest(deprovisionRecord), 'PR_C_CH_POST_DEPROVISION_AUTHORITY_CHAIN');
+  assert(postDeprovisionRecord.postInspectionDigest === deprovisionRecord.postInspectionDigest, 'PR_C_CH_POST_DEPROVISION_STABLE_STATE');
+  assert(postDeprovisionRecord.inspectionAttemptDigest !== deprovisionRecord.inspectionAttemptDigest
+    && Date.parse(postDeprovisionRecord.inspectionObservedAt) >= Date.parse(deprovisionRecord.inspectionObservedAt), 'PR_C_CH_POST_DEPROVISION_INDEPENDENCE');
   assert(postDeprovisionRecord.immutableHistoryDigest === deprovisionRecord.immutableHistoryDigest, 'PR_C_CH_POST_DEPROVISION_HISTORY');
+  assert(postDeprovisionRecord.operationEventSequence === deprovisionRecord.operationEventSequence
+    && postDeprovisionRecord.operationEventDigest === deprovisionRecord.operationEventDigest, 'PR_C_CH_POST_DEPROVISION_EVENT_HISTORY');
   assert(deprovisionRecord.concurrencyVersion > quiesceRecord.concurrencyVersion
     && deprovisionRecord.operationEventSequence > quiesceRecord.operationEventSequence, 'PR_C_CH_LIFECYCLE_VERSION_ORDER');
   assert(deprovisionRecord.quiescedHistoryDigest === quiesceRecord.immutableHistoryDigest, 'PR_C_CH_FROZEN_HISTORY_BINDING');
@@ -1107,7 +1128,7 @@ export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRec
   });
   const serverSteps = checkpoints.flatMap(checkpoint => checkpoint.serverObserver.record.steps);
   validateControlledHumanProofPairs(authenticProofPairs,serverSteps);
-  const causalEvents=serverSteps.filter(record=>record.observationKind==='server_event').map(record=>record.causalEventDigest);
+  const causalEvents=serverSteps.filter(record=>record.causalEventDigest!==canonicalDigest('not-applicable')).map(record=>record.causalEventDigest);
   const inspectReadOnly = serverSteps.find(record => record.stepId === 'verify-history-readable-and-actions-absent');
   assert(inspectReadOnly?.resourceDigest === quiesceRecord.immutableHistoryDigest && inspectReadOnly.version === quiesceRecord.concurrencyVersion, 'PR_C_CH_READ_ONLY_STEP_BINDING');
   assert(new Set(browserDigests).size === browserDigests.length && new Set(serverSteps.map(record => record.inspectionDigest)).size === serverSteps.length

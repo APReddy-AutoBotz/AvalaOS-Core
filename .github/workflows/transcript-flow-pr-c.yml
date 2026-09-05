@@ -97,6 +97,7 @@ jobs:
     outputs:
       phase: ${{ steps.authority.outputs.phase }}
       exact-head-sha: ${{ steps.authority.outputs.exact-head-sha }}
+      trusted-execution-sha: ${{ steps.authority.outputs.trusted-execution-sha }}
       exercise-digest: ${{ steps.authority.outputs.exercise-digest }}
       target-fingerprint: ${{ steps.authority.outputs.target-fingerprint }}
       public-target-digest: ${{ steps.authority.outputs.public-target-digest }}
@@ -180,6 +181,7 @@ jobs:
               if (!commits.some(commit => commit.sha === recoveryHead)) reject('recovery-head-history');
               core.setOutput('phase', phase);
               core.setOutput('exact-head-sha', recoveryHead);
+              core.setOutput('trusted-execution-sha', exactHead);
               core.setOutput('exercise-digest', recoveryExercise);
               core.setOutput('target-fingerprint', recoveryTarget);
               core.setOutput('public-target-digest', recoveryPublicTarget);
@@ -429,6 +431,7 @@ jobs:
     uses: ./.github/workflows/pr264-controlled-human-recover.yml
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
+      trusted_execution_sha: ${{ needs.controlled_human_authority.outputs.trusted-execution-sha }}
       netlify_deploy_id: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       exercise_digest: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       target_fingerprint: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}

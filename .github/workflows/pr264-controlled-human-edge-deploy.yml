@@ -99,6 +99,9 @@ jobs:
       - name: Derive exact controlled-human migration digest
         run: node --input-type=module -e "import {appendFileSync,readFileSync} from 'node:fs'; import {createHash} from 'node:crypto'; appendFileSync(process.env.GITHUB_ENV,'PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST=sha256:'+createHash('sha256').update(readFileSync('supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql')).digest('hex')+'\n')"
 
+      - name: Verify pinned Supabase CA for controlled migration
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+
       - name: Apply and verify exact additive migration on the dedicated database
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}

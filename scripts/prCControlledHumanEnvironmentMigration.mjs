@@ -1,7 +1,8 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import process from 'node:process';
 import pg from 'pg';
-import {deriveContext,loadFixture,safeResult,sha256,validatePrivilegedPostgresConnectionString} from './prCControlledHumanEnvironment.mjs';
+import {deriveContext,loadFixture,safeResult,sha256} from './prCControlledHumanEnvironment.mjs';
+import {createControlledHumanPostgresClientConfig} from './prCControlledHumanPostgresTls.mjs';
 
 const {Client}=pg;
 export const MIGRATION_FILE='supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql';
@@ -75,7 +76,7 @@ export function assertMigrationInventory(inventory,context){
 }
 
 export class PostgresEnvironmentMigrationAdapter{
-  constructor(connectionString,migrationSql){if(!connectionString)fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REQUIRED');validatePrivilegedPostgresConnectionString(connectionString);this.preTipProviderCountSql=buildPreTipProviderCountSql(migrationSql);const local=['localhost','127.0.0.1','::1'].includes(new URL(connectionString).hostname);this.client=new Client({connectionString,application_name:'avalaos_pr_c_controlled_human_migration'});if(!local&&(this.client.connectionParameters?.ssl===false||this.client.connectionParameters?.ssl?.rejectUnauthorized===false))fail('PR_C_CONTROLLED_HUMAN_DATABASE_TLS_REJECTED')}
+  constructor(connectionString,migrationSql){if(!connectionString)fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REQUIRED');this.preTipProviderCountSql=buildPreTipProviderCountSql(migrationSql);this.client=new Client(createControlledHumanPostgresClientConfig(connectionString,{applicationName:'avalaos_pr_c_controlled_human_migration'}))}
   async connect(){await this.client.connect()}
   async close(){await this.client.end().catch(()=>undefined)}
   async inspect(){

@@ -8,6 +8,7 @@ import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalSupabasePublicOrigin } from '../services/supabasePublicCredential.mjs';
 import { CONTROLLED_HUMAN_CATALOG, CONTROLLED_HUMAN_EXECUTION_ORDER, CONTROLLED_HUMAN_SERVER_ACTIONS, HUMAN_DUTY_BY_PERSONA, validateControlledHumanProofPairs } from './prCControlledHumanEvidenceContract.mjs';
+import { createControlledHumanPostgresClientConfig, validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
 
 const { Client } = pg;
 export const CONTROLLER_VERSION = 'pr-c-controlled-human-controller-1';
@@ -78,18 +79,46 @@ export function validateControlledHumanObserverEnvelopeBridge(pairs) {
   return Object.freeze({total:pairs.length,positive:actualPositive.length,negative:actualNegative.length});
 }
 export function deriveBoundNegativeEffectCounts({binding,effectFamily,receipts,audits,deliveryEffects,aiEffects}) {
-  if(!binding||binding.observation_kind!=='negative_attempt'||typeof binding.request_id!=='string'||effectFamily!=='none'
+  if(!binding||binding.observation_kind!=='negative_attempt'||typeof binding.request_id!=='string'
+    ||typeof binding.actor_id!=='string'||typeof binding.action!=='string'||!binding.action.startsWith('delivery.')||effectFamily!=='none'
     ||![receipts,audits,deliveryEffects,aiEffects].every(Array.isArray))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_CATALOG_REJECTED');
-  const requestReceipts=receipts.filter(value=>value.request_id===binding.request_id);
-  const requestAudits=audits.filter(value=>value.request_id===binding.request_id);
+  const requestReceipts=receipts.filter(value=>value.source==='delivery'&&value.request_id===binding.request_id
+    &&value.actor_id===binding.actor_id&&value.action===binding.action);
+  const requestAudits=audits.filter(value=>value.request_id===binding.request_id
+    &&value.actor_id===binding.actor_id&&value.action===binding.action);
   const requestReceiptIds=new Set(requestReceipts.map(value=>value.id));
   const requestAuditIds=new Set(requestAudits.map(value=>value.id));
   const causalDeliveryEffects=deliveryEffects.filter(value=>requestReceiptIds.has(value.receipt_id)||requestAuditIds.has(value.audit_id));
-  const causalAiEffects=aiEffects.filter(value=>requestReceiptIds.has(value.receipt_id)&&value.terminal_status==='committed');
+  if(causalDeliveryEffects.some(value=>value.actor_id!==binding.actor_id||value.action!==binding.action))
+    fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EFFECT_METADATA_REJECTED');
   return Object.freeze({
     receipt:requestReceipts.filter(value=>['succeeded','committed'].includes(value.status)).length,
     audit:requestAudits.filter(value=>value.outcome==='succeeded').length,
-    effect:causalDeliveryEffects.length+causalAiEffects.length,
+    effect:causalDeliveryEffects.length,
+  });
+}
+
+export function deriveUnboundAbsenceEffectCounts({actorId,start,completed,receipts,audits,deliveryEffects,aiEffects,ownership}) {
+  if(typeof actorId!=='string'||!Number.isFinite(start)||!Number.isFinite(completed)||completed<=start
+    ||![receipts,audits,deliveryEffects,aiEffects,ownership].every(Array.isArray))
+    fail('PR_C_CONTROLLED_HUMAN_OBSERVER_ABSENCE_WITNESS_REJECTED');
+  const inWindow=value=>{const observed=timestampMs(value);return Number.isFinite(observed)&&observed>=start&&observed<=completed};
+  const successfulReceipts=receipts.filter(value=>value.actor_id===actorId&&inWindow(value.event_at)&&['succeeded','committed'].includes(value.status));
+  const successfulAudits=audits.filter(value=>value.actor_id===actorId&&inWindow(value.created_at)&&value.outcome==='succeeded');
+  const committedDeliveryEffects=deliveryEffects.filter(value=>value.actor_id===actorId&&inWindow(value.created_at));
+  const committedAiEffects=aiEffects.filter(value=>value.actor_id===actorId&&inWindow(value.created_at)&&value.terminal_status==='committed');
+  const windowResources=ownership.filter(value=>inWindow(value.created_at));
+  const itemVersion=windowResources.filter(value=>value.resource_family==='delivery_item_version').length;
+  const approval=windowResources.filter(value=>['tenant_template_approval','delivery_package_approval'].includes(value.resource_family)).length;
+  const baseline=windowResources.filter(value=>value.resource_family==='monitor_baseline').length;
+  return Object.freeze({
+    receipt:successfulReceipts.length,
+    audit:successfulAudits.length,
+    target:committedDeliveryEffects.length+committedAiEffects.length
+      +windowResources.length-itemVersion-approval-baseline,
+    itemVersion,
+    approval,
+    baseline,
   });
 }
 function stepResourceKind(stepId) {
@@ -154,6 +183,24 @@ export function canonicalJson(value) {
   return JSON.stringify(value);
 }
 export function sha256(value) { return `sha256:${createHash('sha256').update(typeof value === 'string' ? value : canonicalJson(value)).digest('hex')}`; }
+export function deriveOperationEventSequence(events) {
+  if(!Array.isArray(events)||events.length<1)fail('PR_C_CONTROLLED_HUMAN_OPERATION_SEQUENCE_REJECTED');
+  const sequences=events.map(event=>Number(event?.sequence));
+  if(sequences.some((sequence,index)=>!Number.isSafeInteger(sequence)||sequence!==index+1))
+    fail('PR_C_CONTROLLED_HUMAN_OPERATION_SEQUENCE_REJECTED');
+  return sequences.at(-1);
+}
+export function controlledHumanObserverLifecycleWitness(lifecycle) {
+  if(!lifecycle||lifecycle.lifecycle!=='read_only'||!Number.isSafeInteger(lifecycle.concurrencyVersion)||lifecycle.concurrencyVersion<1
+    ||!Number.isSafeInteger(lifecycle.operationEventCount)||lifecycle.operationEventCount<1
+    ||!Number.isSafeInteger(lifecycle.operationEventSequence)||lifecycle.operationEventSequence<1
+    ||lifecycle.operationEventCount!==lifecycle.operationEventSequence
+    ||!DIGEST.test(lifecycle.operationEventDigest??'')||!DIGEST.test(lifecycle.immutableHistoryDigest??''))
+    fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EVENT_HISTORY_REJECTED');
+  return Object.freeze({lifecycle:lifecycle.lifecycle,concurrencyVersion:lifecycle.concurrencyVersion,
+    operationEventSequence:lifecycle.operationEventSequence,operationEventDigest:lifecycle.operationEventDigest,
+    immutableHistoryDigest:lifecycle.immutableHistoryDigest});
+}
 export function deterministicUuid(exerciseId, label) {
   const hex = createHash('sha256').update(`${exerciseId}\0${label}`).digest('hex');
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
@@ -195,24 +242,7 @@ export function validateSupabaseTargetTuple(projectRef, apiUrl, databaseUrl, exp
   return true;
 }
 
-export function validatePrivilegedPostgresConnectionString(connectionString, { allowLoopback = true } = {}) {
-  let parsed;
-  try { parsed = new URL(connectionString); } catch { fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REJECTED'); }
-  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REJECTED');
-  const local = ['localhost','127.0.0.1','::1'].includes(parsed.hostname);
-  const entries = [...parsed.searchParams.entries()].map(([key,value])=>[key.toLowerCase(),value.toLowerCase()]);
-  const forbidden = new Set(['uselibpqcompat','ssl','rejectunauthorized','sslcert','sslkey','sslrootcert']);
-  if (entries.some(([key])=>forbidden.has(key))) fail('PR_C_CONTROLLED_HUMAN_DATABASE_TLS_REJECTED');
-  const modes=entries.filter(([key])=>key==='sslmode').map(([,value])=>value);
-  if (local) {
-    if (!allowLoopback || modes.length !== 0 || entries.length !== 0) fail('PR_C_CONTROLLED_HUMAN_DATABASE_TLS_REJECTED');
-    return true;
-  }
-  if (modes.length !== 1 || modes[0] !== 'verify-full' || entries.some(([key])=>key!=='sslmode')) fail('PR_C_CONTROLLED_HUMAN_DATABASE_TLS_REQUIRED');
-  const probe = new Client({ connectionString });
-  if (probe.connectionParameters?.ssl === false || probe.connectionParameters?.ssl?.rejectUnauthorized === false) fail('PR_C_CONTROLLED_HUMAN_DATABASE_TLS_REJECTED');
-  return true;
-}
+export { validatePrivilegedPostgresConnectionString };
 export async function loadCanonicalCapabilityInventory(root = process.cwd()) {
   const capabilities = new Set();
   for (const name of (await readdir(join(root,'supabase/migrations'))).filter(item=>item.endsWith('.sql')).sort()) {
@@ -273,7 +303,7 @@ export function checkoutIdentity(cwd = process.cwd()) {
   return { head, dirty };
 }
 
-export function deriveContext(env, fixtureState, checkout = checkoutIdentity()) {
+export function deriveContext(env, fixtureState, checkout = checkoutIdentity(), { allowTrustedRecoveryCheckout = false } = {}) {
   const values = {
     environmentClass: env.PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS,
     prNumber: Number(env.PR_C_CONTROLLED_HUMAN_PR_NUMBER),
@@ -287,9 +317,13 @@ export function deriveContext(env, fixtureState, checkout = checkoutIdentity()) 
     siteName: env.PR_C_CONTROLLED_HUMAN_SITE_NAME,
     netlifyContext: env.PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT,
   };
+  const trustedRecoverySha=env.PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA;
+  const expectedCheckoutSha=trustedRecoverySha??values.releaseSha;
+  if(trustedRecoverySha!==undefined&&(!allowTrustedRecoveryCheckout||env.PR_C_CONTROLLED_HUMAN_RECOVERY_MODE!=='trusted-current-pr-head'||!SHA.test(trustedRecoverySha)))
+    fail('PR_C_CONTROLLED_HUMAN_RECOVERY_CHECKOUT_REJECTED');
   if (values.environmentClass !== 'hosted_nonproduction_pilot') fail('PR_C_CONTROLLED_HUMAN_ENVIRONMENT_REJECTED');
   if (values.prNumber !== 264) fail('PR_C_CONTROLLED_HUMAN_PR_REJECTED');
-  if (!SHA.test(values.releaseSha ?? '') || values.reviewHeadSha !== values.releaseSha || checkout.head !== values.releaseSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
+  if (!SHA.test(values.releaseSha ?? '') || values.reviewHeadSha !== values.releaseSha || checkout.head !== expectedCheckoutSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
   if (checkout.dirty) fail('PR_C_CONTROLLED_HUMAN_DIRTY_CHECKOUT');
   if (!DEPLOY_ID.test(values.deployId ?? '')) fail('PR_C_CONTROLLED_HUMAN_DEPLOY_REJECTED');
   if (values.deployOrigin !== PREVIEW_ORIGIN || values.siteName !== 'avalaos-pilot' || values.netlifyContext !== 'deploy-preview') fail('PR_C_CONTROLLED_HUMAN_PREVIEW_REJECTED');
@@ -312,7 +346,7 @@ export function deriveContext(env, fixtureState, checkout = checkoutIdentity()) 
   });
   if (env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== undefined
     && env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== exerciseDigest) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
-  return Object.freeze({ ...values, exerciseDigest, personaManifestDigest: fixtureState.personaManifestDigest,
+  return Object.freeze({ ...values, exerciseDigest, trustedRecoverySha:trustedRecoverySha??null, personaManifestDigest: fixtureState.personaManifestDigest,
     fixtureManifestDigest: fixtureState.fixtureManifestDigest, migrationTip: EXPECTED_MIGRATION_TIP });
 }
 
@@ -382,8 +416,7 @@ export function assertTargetInventory(inventory, context, { allowSeeded = true, 
 export class PostgresEnvironmentAdapter {
   constructor(connectionString) {
     if (!connectionString) fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REQUIRED');
-    validatePrivilegedPostgresConnectionString(connectionString);
-    this.client = new Client({ connectionString, application_name: 'avalaos_pr_c_controlled_human' });
+    this.client = new Client(createControlledHumanPostgresClientConfig(connectionString, { applicationName: 'avalaos_pr_c_controlled_human' }));
   }
   async connect() { await this.client.connect(); }
   async close() { await this.client.end().catch(() => undefined); }
@@ -653,11 +686,19 @@ export class PostgresEnvironmentAdapter {
       const table=RESOURCE_TABLES[row.resource_family];if(!table)fail('PR_C_CONTROLLED_HUMAN_RESOURCE_INVENTORY_REJECTED');
       missing+=Number((await this.client.query(`select count(*)::int count from unnest($1::uuid[]) owned_id(value) where not exists(select 1 from public.${table} resource where resource.id=owned_id.value)`,[row.resource_ids])).rows[0].count);
     }
+    const operationEventSequence=deriveOperationEventSequence(events);
     const operationEventDigest=sha256(events.map(event=>({sequence:Number(event.sequence),operation:event.operation,safeResultDigest:event.safe_result_digest})));
     const immutableHistoryDigest=sha256({events:operationEventDigest,ownership:ownership.map(row=>({family:row.resource_family,resourceIds:row.resource_ids}))});
     const safety={providerEgress:Number(providerState.providerEgress),realProviderCalls:Number(providerState.unsafeRows)+Number(providerState.providerCalls),customerDataRecords:Number(state.customer_data_record_count),externalUsers:Number(state.external_user_count)};
-    const safeState={lifecycle:state.lifecycle,concurrencyVersion:Number(state.concurrency_version),featureFlagCountEnabled:Number(state.feature_flag_count),runtimeControlReadOnlyCount:Number(state.runtime_read_only_count),runtimeControlProviderEnabledCount:Number(state.runtime_provider_enabled_count),activeMembershipCount:Number(state.active_membership_count),activeProfileCount:Number(state.active_profile_count),activeOrganizationCount:Number(state.active_organization_count),activeWorkspaceCount:Number(state.active_workspace_count),activePilotEnvironmentCount:Number(state.active_pilot_environment_count),activePilotTenantCount:Number(state.active_pilot_tenant_count),activeSessionCount:Number(state.active_session_count),boundPersonaCount:Number(state.bound_persona_count),immutableHistoryRetained:missing===0,domainRowsDeleted:missing,operationEventCount:events.length,operationEventDigest,immutableHistoryDigest,quiescedHistoryDigest:state.quiesced_history_digest??null,safety};
-    return {...safeState,postInspectionDigest:sha256(safeState)};
+    const safeState={lifecycle:state.lifecycle,concurrencyVersion:Number(state.concurrency_version),featureFlagCountEnabled:Number(state.feature_flag_count),runtimeControlReadOnlyCount:Number(state.runtime_read_only_count),runtimeControlProviderEnabledCount:Number(state.runtime_provider_enabled_count),activeMembershipCount:Number(state.active_membership_count),activeProfileCount:Number(state.active_profile_count),activeOrganizationCount:Number(state.active_organization_count),activeWorkspaceCount:Number(state.active_workspace_count),activePilotEnvironmentCount:Number(state.active_pilot_environment_count),activePilotTenantCount:Number(state.active_pilot_tenant_count),activeSessionCount:Number(state.active_session_count),boundPersonaCount:Number(state.bound_persona_count),immutableHistoryRetained:missing===0,domainRowsDeleted:missing,operationEventCount:events.length,operationEventSequence,operationEventDigest,immutableHistoryDigest,quiescedHistoryDigest:state.quiesced_history_digest??null,safety};
+    const postInspectionDigest=sha256(safeState);
+    const witness=(await this.client.query(`with observation as (select clock_timestamp() observed_at,gen_random_uuid() nonce)
+      select to_char(observed_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') inspection_observed_at,
+      'sha256:'||encode(public.digest(convert_to(jsonb_build_object('exerciseDigest',$1::text,'postInspectionDigest',$2::text,'observedAt',observed_at,'nonce',nonce)::text,'UTF8'),'sha256'),'hex') inspection_attempt_digest
+      from observation`,[context.exerciseDigest,postInspectionDigest])).rows[0];
+    if(!witness||!DIGEST.test(witness.inspection_attempt_digest??'')||!Number.isFinite(Date.parse(witness.inspection_observed_at)))
+      fail('PR_C_CONTROLLED_HUMAN_INSPECTION_WITNESS_REJECTED');
+    return {...safeState,postInspectionDigest,inspectionObservedAt:witness.inspection_observed_at,inspectionAttemptDigest:witness.inspection_attempt_digest};
   }
   async observeDuty(context,humanRole,requestedSteps,requestDigest) {
     const request=exactObserverRequest(humanRole,requestedSteps);
@@ -681,8 +722,8 @@ export class PostgresEnvironmentAdapter {
         const records=request.map(step=>indexed.get(`${step.checkpointId}\0${step.stepId}`));
         if(records.some(value=>!value))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REPLAY_REJECTED');
         const lifecycle=await this.lifecycleInspection(context);await db.query('commit');
-        return {humanRole,observedAt:new Date(Math.max(...records.map(row=>timestampMs(row.observed_at)))).toISOString(),lifecycle:lifecycle.lifecycle,concurrencyVersion:lifecycle.concurrencyVersion,
-          operationEventSequence:lifecycle.operationEventCount,operationEventDigest:lifecycle.operationEventDigest,immutableHistoryDigest:lifecycle.immutableHistoryDigest,steps:records.map(row=>row.safe_record)};
+        return {humanRole,observedAt:new Date(Math.max(...records.map(row=>timestampMs(row.observed_at)))).toISOString(),
+          ...controlledHumanObserverLifecycleWitness(lifecycle),steps:records.map(row=>row.safe_record)};
       }
       const contracts=(await db.query(`select contract.checkpoint_id,contract.step_id,contract.persona_key,contract.negative,contract.action contract_action,contract.resource_kind,contract.observation_kind,contract.expected_result,contract.expected_actions,contract.capability_digest,
         intent.action catalog_action,intent.target_family,intent.target_version_dimension,intent.effect_family,intent.transition_kind,intent.selector_schema,intent.effect_resolver,intent.expected_outcome,intent.expected_denial_code,intent.replay_of_step_id,
@@ -714,7 +755,9 @@ export class PostgresEnvironmentAdapter {
       const audits=(await db.query(`select id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at from public.privileged_audit_events where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
       const deliveryAttempts=(await db.query(`select id,receipt_id,actor_id,action,request_id,created_at from public.enterprise_delivery_monitor_command_attempts where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
       const deliveryEffects=(await db.query(`select id,receipt_id,actor_id,action,resource_id,audit_id,created_at from public.enterprise_delivery_monitor_effects where org_id=$1 and workspace_id=$2 order by created_at,id`,[state.org_id,state.workspace_id])).rows;
-      const aiEffects=(await db.query(`select id,receipt_id,operation_type action,resource_id,terminal_status,committed_at created_at from public.enterprise_ai_effect_journal where org_id=$1 and workspace_id=$2 order by committed_at,id`,[state.org_id,state.workspace_id])).rows;
+      const aiEffects=(await db.query(`select effect.id,effect.receipt_id,receipt.actor_id,effect.operation_type action,effect.resource_id,effect.terminal_status,effect.committed_at created_at
+        from public.enterprise_ai_effect_journal effect join public.enterprise_ai_command_receipts receipt on receipt.id=effect.receipt_id
+        where effect.org_id=$1 and effect.workspace_id=$2 order by effect.committed_at,effect.id`,[state.org_id,state.workspace_id])).rows;
       const actionAnchors=(await db.query(`select id,checkpoint_id,step_id,persona_key,actor_id,observation_kind,action,target_family,target_id,expected_version,transition_kind,created_family,request_id,actor_authorization_version,selector_bindings,selector_digest,intent_digest,challenge_token,safe_anchor,created_at
         from public.pr_c_controlled_human_action_anchors where exercise_id=$1 order by created_at,checkpoint_id,step_id`,[state.id])).rows;
       const actionBindings=(await db.query(`select anchor_id,checkpoint_id,step_id,persona_key,actor_id,observation_kind,action,result,denial_proof_kind,resource_family,resource_id,expected_version,observed_version,request_id,receipt_source,receipt_id,audit_id,intent_digest,denial_code_digest,binding_token,safe_record,created_at
@@ -844,15 +887,19 @@ export class PostgresEnvironmentAdapter {
         const negativeEffectCounts=contract.observation_kind==='negative_attempt'
           ?deriveBoundNegativeEffectCounts({binding:exactBinding,effectFamily:contract.effect_family,receipts,audits,deliveryEffects,aiEffects})
           :null;
+        const absenceEffectCounts=!requiresBinding?deriveUnboundAbsenceEffectCounts({actorId:contract.auth_user_id,start,completed,
+          receipts,audits,deliveryEffects,aiEffects,ownership}):null;
         const observedDeltas=negativeEffectCounts
           ?{receipt:negativeEffectCounts.receipt,audit:negativeEffectCounts.audit,target:negativeEffectCounts.effect,itemVersion:0,approval:0,baseline:0}
+          :absenceEffectCounts
+            ?absenceEffectCounts
           :{receipt:successfulReceipts.length,audit:successfulAudits.length,
             target:windowResources.filter(value=>['assess_process','assess_case','assess_studio_handoff','module_handoff','studio_artifact','studio_source_package','delivery_handoff','delivery_source_package','delivery_work_package'].includes(value.resource_family)).length,
             itemVersion:windowResources.filter(value=>value.resource_family==='delivery_item_version').length,
             approval:windowResources.filter(value=>['tenant_template_approval','delivery_package_approval'].includes(value.resource_family)).length,
             baseline:windowResources.filter(value=>value.resource_family==='monitor_baseline').length};
         const hasSideEffect=Object.values(observedDeltas).some(value=>value!==0);
-        if(contract.expected_result!=='succeeded'&&hasSideEffect)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED');
+        if(contract.expected_result!=='succeeded'&&hasSideEffect)fail(`PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED:${step.checkpointId}:${step.stepId}:${observedDeltas.receipt}:${observedDeltas.audit}:${observedDeltas.target}:${observedDeltas.itemVersion}:${observedDeltas.approval}:${observedDeltas.baseline}`);
         const isVerifyHistory=step.checkpointId==='CH-13'&&step.stepId==='verify-history-readable-and-actions-absent';
         if(isVerifyHistory&&(state.lifecycle!=='read_only'||lifecycle.runtimeControlReadOnlyCount!==2))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_STATE_REJECTED');
         const denialIntent=contract.observation_kind==='negative_attempt';
@@ -874,21 +921,27 @@ export class PostgresEnvironmentAdapter {
               :exactReceipt
                 ?{kind:'command_receipt',id:exactReceipt.id,requestId:exactReceipt.request_id,action:exactReceipt.action,resourceId:exactReceipt.resource_id,eventAt:new Date(exactReceipt.event_at).toISOString()}
                 :null;
-        const causalEventDigest=causalEvent?sha256(causalEvent):sha256('not-applicable');
-        if(causalEvent&&usedCausalEvents.has(causalEventDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EVENT_REUSE_REJECTED');if(causalEvent)usedCausalEvents.add(causalEventDigest);
+        const authenticatedPersonaDigest=sha256({exerciseDigest:context.exerciseDigest,personaKey:contract.persona_key,authUserId:contract.auth_user_id,roleId:contract.role_id,expectedState:contract.expected_state,profileStatus:contract.profile_status,membershipStatus:contract.membership_status,authorizationVersion:Number(contract.authorization_version)});
+        const scopeDigest=sha256({exerciseDigest:context.exerciseDigest,orgId:contract.org_id,workspaceId:contract.workspace_id});
+        const serverObservedAt=new Date(state.observed_at).toISOString();
+        const absenceWitness=!requiresBinding?{contractVersion:'pr-c-controlled-human-absence-witness-1',checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,
+          authenticatedPersonaDigest,capabilityDigest:actualCapabilityDigest,scopeDigest,humanAttemptDigest:step.attemptDigest,
+          startedAt:step.startedAt,completedAt:step.completedAt,observedDeltas,safety,serverObservedAt}:null;
+        const causalEventDigest=causalEvent?sha256(causalEvent):absenceWitness?sha256(absenceWitness):sha256('not-applicable');
+        if(causalEventDigest!==sha256('not-applicable')&&usedCausalEvents.has(causalEventDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EVENT_REUSE_REJECTED');
+        if(causalEventDigest!==sha256('not-applicable'))usedCausalEvents.add(causalEventDigest);
         const base={checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,
-          authenticatedPersonaDigest:sha256({exerciseDigest:context.exerciseDigest,personaKey:contract.persona_key,authUserId:contract.auth_user_id,roleId:contract.role_id,expectedState:contract.expected_state,profileStatus:contract.profile_status,membershipStatus:contract.membership_status,authorizationVersion:Number(contract.authorization_version)}),
-          capabilityDigest:actualCapabilityDigest,scopeDigest:sha256({exerciseDigest:context.exerciseDigest,orgId:contract.org_id,workspaceId:contract.workspace_id}),
+          authenticatedPersonaDigest,capabilityDigest:actualCapabilityDigest,scopeDigest,
           action:exactBinding?.action??contract.contract_action,resourceKind:contract.resource_kind,resourceFamily,observationKind:observedKind,humanAttemptDigest:step.attemptDigest,bindingToken,safeBindingDigest:exactBinding?sha256(exactBinding.safe_record):sha256({safeBinding:'not_applicable'}),causalEventDigest,resourceDigest,expectedVersion:exactBinding?Number(exactBinding.expected_version):version,version,
           requestIdentityDigest:exactBinding?.safe_record.requestDigest??sha256('not-applicable'),receiptDigest:exactBinding?.safe_record.receiptDigest??sha256('not-applicable'),
           auditDigest:exactBinding?.safe_record.auditDigest??sha256('not-applicable'),result:observedResult,denialProofKind:denialProofKind??'not_applicable',
-          denialCodeDigest:exactBinding?.safe_record.denialCodeDigest??sha256('absence'),observedDeltas,safety,serverObservedAt:new Date(state.observed_at).toISOString()};
+          denialCodeDigest:exactBinding?.safe_record.denialCodeDigest??sha256('absence'),observedDeltas,safety,serverObservedAt};
         const record={...base,inspectionDigest:sha256(base)};records.push(record);
         await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
           values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,[state.id,step.checkpointId,step.stepId,step.personaKey,humanRole,requestDigest,step.startedAt,step.completedAt,record.inspectionDigest,JSON.stringify(record),state.observed_at]);
       }
       await db.query('commit');
-      return {humanRole,observedAt:new Date(state.observed_at).toISOString(),lifecycle:state.lifecycle,concurrencyVersion:Number(state.concurrency_version),operationEventSequence:lifecycle.operationEventCount,operationEventDigest:lifecycle.operationEventDigest,immutableHistoryDigest:lifecycle.immutableHistoryDigest,steps:records};
+      return {humanRole,observedAt:new Date(state.observed_at).toISOString(),...controlledHumanObserverLifecycleWitness(lifecycle),steps:records};
     } catch(error) {await db.query('rollback');throw error}
   }
 }
@@ -1189,6 +1242,7 @@ export async function deprovision(context, database, expectedVersion, admin, opt
   const result=await database.finalizeDeprovision(context,version,sessionCount,credentialCount);await failureBoundary(options,'deprovision-database-committed');
   const inspection=assertDeprovisionedInspection(await database.lifecycleInspection(context));
   if(inspection.lifecycle!==result.lifecycle||inspection.concurrencyVersion!==Number(result.concurrencyVersion))fail('PR_C_CONTROLLED_HUMAN_PARTIAL_RESET_REJECTED');
+  if(inspection.operationEventSequence!==Number(result.operationEventSequence))fail('PR_C_CONTROLLED_HUMAN_OPERATION_SEQUENCE_REJECTED');
   if(result.quiescedHistoryDigest!==frozen.quiescedHistoryDigest)fail('PR_C_CONTROLLED_HUMAN_FROZEN_HISTORY_REJECTED');
   await database.completeRecovery(context,'deprovision');await failureBoundary(options,'deprovision-recovery-completed');
   return safeResult('deprovision','passed',context,{...inspection,quiescedHistoryDigest:frozen.quiescedHistoryDigest,replayed:false,sessionsRevoked:sessionCount+Number(result.lateSessionsRevoked??0),credentialsDisabled:credentialCount});
@@ -1206,11 +1260,11 @@ export async function recoverReset(context,fixtureState,database,admin,reason,op
     const recoveredInventory=await database.inspect(context);assertTargetInventory(recoveredInventory,context);
     if(recoveredInventory.exercise)fail('PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED');
     await database.completeRecovery(context,reason);
-    return safeResult('recover-reset','passed',context,{reason,recoveredPartialAuthUserCount:ids.length,lifecycle:'absent',immutableHistoryRetained:true,domainRowsDeleted:0});
+    return safeResult('recover-reset','passed',context,{reason,recoveryImplementationSha:context.trustedRecoverySha??context.releaseSha,recoveredPartialAuthUserCount:ids.length,lifecycle:'absent',immutableHistoryRetained:true,domainRowsDeleted:0});
   }
   const result=await deprovision(context,database,Number(inventory.exercise.concurrency_version),admin,options);
   await database.completeRecovery(context,reason);
-  return safeResult('recover-reset','passed',context,{reason,recoveredPartialAuthUserCount:0,lifecycle:result.lifecycle,immutableHistoryRetained:true,domainRowsDeleted:0,deprovisionDigest:sha256(result)});
+  return safeResult('recover-reset','passed',context,{reason,recoveryImplementationSha:context.trustedRecoverySha??context.releaseSha,recoveredPartialAuthUserCount:0,lifecycle:result.lifecycle,immutableHistoryRetained:true,domainRowsDeleted:0,deprovisionDigest:sha256(result)});
 }
 
 async function emit(result, outputPath) {
@@ -1232,7 +1286,7 @@ async function main() {
   const [phase,...args]=process.argv.slice(2); if (!['preflight','plan','apply','verify','quiesce','checkpoint-observe','deprovision','recover-reset','post-deprovision-verify'].includes(phase)) fail('usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]');
   const outputIndex=args.indexOf('--output'); const outputPath=outputIndex>=0?args[outputIndex+1]:undefined;
   if (outputIndex>=0&&!outputPath) fail('PR_C_CONTROLLED_HUMAN_OUTPUT_REQUIRED');
-  const fixtureState=await loadFixture(); const context=deriveContext(process.env,fixtureState);
+  const fixtureState=await loadFixture(); const context=deriveContext(process.env,fixtureState,checkoutIdentity(),{allowTrustedRecoveryCheckout:phase==='recover-reset'});
   if (phase==='plan') return emit(plan(context,fixtureState),outputPath);
   const database=new PostgresEnvironmentAdapter(process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL); await database.connect();
   try {

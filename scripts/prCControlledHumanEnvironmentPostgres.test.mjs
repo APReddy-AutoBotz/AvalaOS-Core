@@ -838,7 +838,10 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     }
     // CH-14 is entirely browser/human-attested. Preserve a bounded interval for
     // those ordered observations before the CH-13 response-loss operation.
+    const ch14WindowStartedAt=new Date((await database.client.query('select clock_timestamp() observed_at')).rows[0].observed_at).getTime();
     await database.client.query('select pg_sleep(0.12)');
+    const ch14WindowCompletedAt=new Date((await database.client.query('select clock_timestamp() observed_at')).rows[0].observed_at).getTime();
+    assert.ok(ch14WindowCompletedAt-ch14WindowStartedAt>=100,'CH-14 must retain a bounded quiet database-clock window');
     await runResponseLossSuccess();
     const deliveryAuthor=(await database.client.query(`select binding.auth_user_id actor_id,authority.version authorization_version from public.pr_c_controlled_human_persona_bindings binding join public.authorization_versions authority on authority.org_id=binding.org_id and authority.user_id=binding.auth_user_id where binding.exercise_id=$1 and binding.persona_key='delivery_author'`,[context.exerciseId])).rows[0];
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[deliveryAuthor.actor_id]);
@@ -904,10 +907,15 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const timingByStep=new Map(persistedPairs.map(row=>[`${row.checkpoint_id}\0${row.step_id}`,{anchorAt:new Date(row.anchor_at).getTime(),bindingAt:new Date(row.binding_at).getTime(),bindingToken:row.safe_record.bindingToken}]));
     const dutySteps=humanRole=>CONTROLLED_HUMAN_EXECUTION_ORDER.flatMap(checkpointId=>catalog.get(checkpointId).steps.filter(step=>HUMAN_DUTY_BY_PERSONA[step.personaKey]===humanRole).map(step=>({checkpointId,...step})));
     const buildObservedDutyRequest=humanRole=>{
-      const expected=dutySteps(humanRole);let cursor=seededTime;return expected.map((step,index)=>{
+      const expected=dutySteps(humanRole);const ch14Ordinal=new Map(expected.filter(step=>step.checkpointId==='CH-14').map((step,index)=>[step.stepId,index]));let cursor=seededTime;return expected.map((step,index)=>{
         const timing=timingByStep.get(`${step.checkpointId}\0${step.stepId}`);let started;let completed;
         if(timing){started=timing.anchorAt;completed=Math.max(timing.bindingAt,started+1);assert.ok(started>cursor,`${humanRole}:${step.stepId} real action order drifted`);}
         else if(step.stepId==='verify-history-readable-and-actions-absent'){started=Math.max(cursor+1,finalQuiesceTime+1);completed=started+1;}
+        else if(step.checkpointId==='CH-14'){
+          const ordinal=ch14Ordinal.get(step.stepId);assert.ok(Number.isSafeInteger(ordinal));started=ch14WindowStartedAt+1+(ordinal*2);completed=started+1;
+          assert.ok(started>cursor&&completed<ch14WindowCompletedAt,`${humanRole}:${step.stepId} escaped the reserved CH-14 observation window`);
+          const next=expected.slice(index+1).map(item=>timingByStep.get(`${item.checkpointId}\0${item.stepId}`)).find(Boolean);if(next)assert.ok(completed<next.anchorAt,`${humanRole}:${step.stepId} crossed its next authentic action`);
+        }
         else {started=cursor+1;completed=started+1;const next=expected.slice(index+1).map(item=>timingByStep.get(`${item.checkpointId}\0${item.stepId}`)).find(Boolean);if(next)assert.ok(completed<next.anchorAt,`${humanRole}:${step.stepId} lacks an authentic observation interval`);else assert.ok(completed<finalQuiesceTime,`${humanRole}:${step.stepId} crossed quiesce`);}
         cursor=completed;return{checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,startedAt:new Date(started).toISOString(),completedAt:new Date(completed).toISOString(),attemptDigest:sha256({humanRole,checkpointId:step.checkpointId,stepId:step.stepId,started}),bindingToken:timing?.bindingToken??null};
       });
@@ -931,27 +939,57 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id
       join public.authorization_versions authority on authority.org_id=exercise.org_id and authority.user_id=binding.actor_id
       where exercise.exercise_digest=$1 and binding.step_id='reject-stale-authorization'`,[context.exerciseDigest])).rows[0];
-    const exactEffectReceiptId=deterministicUuid(context.exerciseId,'observer-exact-request-effect-receipt');
-    const exactEffectAuditId=deterministicUuid(context.exerciseId,'observer-exact-request-effect-audit');
-    await database.client.query('begin');
-    try{
-      await database.client.query(`insert into public.enterprise_delivery_monitor_command_receipts(id,org_id,workspace_id,actor_id,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,status,failure_code,created_at,completed_at)
-        values($1,$2,$3,$4,$5,'observer-exact-request-effect',$6,$7,$8,$9,$10,8802,'failed','SYNTHETIC_DENIED',$11,$11)`,[exactEffectReceiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,exactEffectProbe.request_id,'c'.repeat(64),'d'.repeat(64),Number(exactEffectProbe.authorization_version),deterministicUuid(context.exerciseId,'observer-exact-request-effect-token'),exactEffectProbe.event_at]);
-      await database.client.query(`insert into public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at)
-        values($1,$2,$3,$4,$5,$6,'delivery_work_package',$7,'denied',$8,'{"synthetic":true}'::jsonb,$9)`,[exactEffectAuditId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.request_id,exactEffectProbe.action,exactEffectProbe.resource_id,Number(exactEffectProbe.observed_version),exactEffectProbe.event_at]);
-      await database.client.query(`insert into public.enterprise_delivery_monitor_effects(id,receipt_id,org_id,workspace_id,actor_id,action,binding_hash,execution_token,execution_fence,resource_id,audit_id,result,created_at)
-        values($1,$2,$3,$4,$5,$6,$7,$8,8802,$9,$10,'{"ok":true,"synthetic":true}'::jsonb,$11)`,[deterministicUuid(context.exerciseId,'observer-exact-request-effect'),exactEffectReceiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,'d'.repeat(64),deterministicUuid(context.exerciseId,'observer-exact-request-effect-token'),exactEffectProbe.resource_id,exactEffectAuditId,exactEffectProbe.event_at]);
-      const probeDatabase=Object.create(database);probeDatabase.client={query:async(text,parameters)=>{
-        const command=typeof text==='string'?text.trim().toLowerCase():'';
-        if(command==='begin')return database.client.query('savepoint observer_exact_request_effect');
-        if(command==='commit')return database.client.query('release savepoint observer_exact_request_effect');
-        if(command==='rollback')return database.client.query('rollback to savepoint observer_exact_request_effect');
-        return database.client.query(text,parameters);
-      }};
-      const requesterProbeSteps=buildObservedDutyRequest('requester');
-      await assert.rejects(probeDatabase.observeDuty(context,'requester',requesterProbeSteps,sha256({humanRole:'requester',steps:requesterProbeSteps})),/PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED/u,'an effect causally tied to the denied request must reject the observation');
-    }finally{await database.client.query('rollback')}
-    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_monitor_effects where id=$1`,[deterministicUuid(context.exerciseId,'observer-exact-request-effect')])).rows[0].count),0);
+    const exactRequestCausalSnapshot=async client=>(await client.query(`select
+      coalesce((select jsonb_agg(to_jsonb(receipt) order by receipt.id) from public.enterprise_delivery_monitor_command_receipts receipt
+        where receipt.org_id=$1 and receipt.workspace_id=$2 and receipt.actor_id=$3 and receipt.action=$4 and receipt.request_id=$5),'[]'::jsonb) receipts,
+      coalesce((select jsonb_agg(to_jsonb(audit) order by audit.id) from public.privileged_audit_events audit
+        where audit.org_id=$1 and audit.workspace_id=$2 and audit.actor_id=$3 and audit.action=$4 and audit.request_id=$5),'[]'::jsonb) audits,
+      coalesce((select jsonb_agg(to_jsonb(effect) order by effect.id) from public.enterprise_delivery_monitor_effects effect
+        join public.enterprise_delivery_monitor_command_receipts receipt on receipt.id=effect.receipt_id
+        where receipt.org_id=$1 and receipt.workspace_id=$2 and receipt.actor_id=$3 and receipt.action=$4 and receipt.request_id=$5),'[]'::jsonb) effects,
+      current_setting('transaction_isolation') transaction_isolation,
+      current_setting('transaction_read_only') transaction_read_only,
+      current_setting('transaction_deferrable') transaction_deferrable,
+      txid_current_if_assigned()::text transaction_id`,[exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,exactEffectProbe.request_id])).rows[0];
+    const insertExactRequestPoison=async(client,suffix,effectOverrides={})=>{
+      const receiptId=deterministicUuid(context.exerciseId,`observer-exact-request-effect-receipt-${suffix}`);
+      const auditId=deterministicUuid(context.exerciseId,`observer-exact-request-effect-audit-${suffix}`);
+      const effectId=deterministicUuid(context.exerciseId,`observer-exact-request-effect-${suffix}`);
+      const token=deterministicUuid(context.exerciseId,`observer-exact-request-effect-token-${suffix}`);
+      await client.query(`insert into public.enterprise_delivery_monitor_command_receipts(id,org_id,workspace_id,actor_id,action,idempotency_key,request_id,request_hash,binding_hash,authorization_version,execution_token,execution_fence,status,failure_code,created_at,completed_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,8802,'failed','SYNTHETIC_DENIED',$12,$12)`,[receiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.action,`observer-exact-request-effect-${suffix}`,exactEffectProbe.request_id,'c'.repeat(64),'d'.repeat(64),Number(exactEffectProbe.authorization_version),token,exactEffectProbe.event_at]);
+      await client.query(`insert into public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata,created_at)
+        values($1,$2,$3,$4,$5,$6,'delivery_work_package',$7,'denied',$8,'{"synthetic":true}'::jsonb,$9)`,[auditId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,exactEffectProbe.actor_id,exactEffectProbe.request_id,exactEffectProbe.action,exactEffectProbe.resource_id,Number(exactEffectProbe.observed_version),exactEffectProbe.event_at]);
+      await client.query(`insert into public.enterprise_delivery_monitor_effects(id,receipt_id,org_id,workspace_id,actor_id,action,binding_hash,execution_token,execution_fence,resource_id,audit_id,result,created_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,8802,$9,$10,'{"ok":true,"synthetic":true}'::jsonb,$11)`,[effectId,receiptId,exactEffectProbe.org_id,exactEffectProbe.workspace_id,effectOverrides.actorId??exactEffectProbe.actor_id,effectOverrides.action??exactEffectProbe.action,'d'.repeat(64),token,exactEffectProbe.resource_id,auditId,exactEffectProbe.event_at]);
+      return{receiptId,auditId,effectId};
+    };
+    const requesterProbeSteps=buildObservedDutyRequest('requester');
+    const requesterProbeDigest=sha256({humanRole:'requester',steps:requesterProbeSteps});
+    const exactRequestBaseline=await exactRequestCausalSnapshot(database.client);
+    assert.deepEqual(exactRequestBaseline,{receipts:[],audits:[],effects:[],transaction_isolation:'read committed',transaction_read_only:'off',transaction_deferrable:'off',transaction_id:null});
+    const wrongEffectActor=users.find(user=>user.id!==exactEffectProbe.actor_id)?.id;assert.ok(wrongEffectActor);
+    const effectPoisons=[{suffix:'linked-effect'},{suffix:'wrong-actor',overrides:{actorId:wrongEffectActor},error:/PR_C_CONTROLLED_HUMAN_OBSERVER_EFFECT_METADATA_REJECTED/u},{suffix:'wrong-action',overrides:{action:'delivery.package.approve'},error:/PR_C_CONTROLLED_HUMAN_OBSERVER_EFFECT_METADATA_REJECTED/u}];
+    for(const [iteration,poison] of effectPoisons.entries()){
+      const isolatedDatabase=new PostgresEnvironmentAdapter(databaseUrl.toString());await isolatedDatabase.connect();let outerTransaction=false;
+      try{
+        await isolatedDatabase.client.query('begin');outerTransaction=true;
+        await insertExactRequestPoison(isolatedDatabase.client,`rollback-${poison.suffix}`,poison.overrides);
+        const savepoint=`observer_exact_request_effect_${iteration}`;
+        const probeDatabase=Object.create(isolatedDatabase);probeDatabase.client={query:async(text,parameters)=>{
+          const command=typeof text==='string'?text.trim().toLowerCase():'';
+          if(command==='begin')return isolatedDatabase.client.query(`savepoint ${savepoint}`);
+          if(command==='commit')return isolatedDatabase.client.query(`release savepoint ${savepoint}`);
+          if(command==='rollback')return isolatedDatabase.client.query(`rollback to savepoint ${savepoint}`);
+          return isolatedDatabase.client.query(text,parameters);
+        }};
+        await assert.rejects(probeDatabase.observeDuty(context,'requester',requesterProbeSteps,requesterProbeDigest),poison.error??/PR_C_CONTROLLED_HUMAN_OBSERVER_NEGATIVE_EFFECT_REJECTED/u,'an exact-request effect must reject without escaping its isolated rollback');
+      }finally{
+        if(outerTransaction)await isolatedDatabase.client.query('rollback').catch(()=>undefined);
+        await isolatedDatabase.close();
+      }
+      assert.deepEqual(await exactRequestCausalSnapshot(database.client),exactRequestBaseline,`rollback-isolated observer poison iteration ${iteration} must not alter exact-request causality or primary transaction state`);
+    }
     const observedDuties=[];
     for(const humanRole of ['requester','reviewer','approver']){
       const steps=buildObservedDutyRequest(humanRole);const observed=await database.observeDuty(context,humanRole,steps,sha256({humanRole,steps}));
@@ -985,12 +1023,12 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const sessionCount=await database.revokeSessions(context);assert.equal(sessionCount,3);
     assert.deepEqual(await database.boundUserIds(context),[...users].sort((left,right)=>left.key.localeCompare(right.key)).map(user=>user.id));
     assert.equal(Number((await database.client.query(`select count(*) count from auth.sessions where user_id=any($1::uuid[])`,[users.map(user=>user.id)])).rows[0].count),0);
-    await database.prepareRecovery(context,'deprovision',2);const deprovisioned=await database.finalizeDeprovision(context,2,sessionCount,12);assert.equal(deprovisioned.lifecycle,'deprovisioned');assert.equal(deprovisioned.concurrencyVersion,3);await database.completeRecovery(context,'deprovision');const postState=await database.lifecycleInspection(context);assert.equal(postState.immutableHistoryRetained,true);assert.equal(postState.domainRowsDeleted,0);assert.equal(postState.activeSessionCount,0);assert.deepEqual(postState.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});
+    await database.prepareRecovery(context,'deprovision',2);const deprovisioned=await database.finalizeDeprovision(context,2,sessionCount,12);assert.equal(deprovisioned.lifecycle,'deprovisioned');assert.equal(deprovisioned.concurrencyVersion,3);assert.equal(deprovisioned.operationEventSequence,5);await database.completeRecovery(context,'deprovision');const postState=await database.lifecycleInspection(context);assert.equal(postState.immutableHistoryRetained,true);assert.equal(postState.domainRowsDeleted,0);assert.equal(postState.activeSessionCount,0);assert.equal(postState.operationEventSequence,5);assert.match(postState.inspectionAttemptDigest,/^sha256:[0-9a-f]{64}$/u);assert.match(postState.inspectionObservedAt,/Z$/u);assert.deepEqual(postState.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});
     await database.client.query('begin');try{
       await database.client.query(`insert into public.ai_provider_audit_events(id,event_type,org_id,workspace_id,provider,operation,status,actor_id,metadata) values($1,'post_observer_probe',$2,$3,'openai','synthetic-test','recorded',$4,'{"synthetic":true}'::jsonb)`,[deterministicUuid(context.exerciseId,'post-observer-provider-traffic'),generationBinding.org_id,generationBinding.workspace_id,generationBinding.actor_id]);
       assert.equal((await database.lifecycleInspection(context)).safety.providerEgress,1);await assert.rejects(postDeprovisionVerify(context,database),/PROVIDER_STATE_REJECTED|PARTIAL_RESET_REJECTED/u);
     }finally{await database.client.query('rollback')}
-    const postVerified=await postDeprovisionVerify(context,database);assert.deepEqual(postVerified.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});
+    const postVerified=await postDeprovisionVerify(context,database);assert.deepEqual(postVerified.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});assert.equal(postVerified.postInspectionDigest,postState.postInspectionDigest);assert.notEqual(postVerified.inspectionAttemptDigest,postState.inspectionAttemptDigest);assert.ok(Date.parse(postVerified.inspectionObservedAt)>=Date.parse(postState.inspectionObservedAt));assert.equal(postVerified.operationEventSequence,postState.operationEventSequence);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),7);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_monitor_baselines`)).rows[0].count),3);
     const auditCountAfterFirst=Number((await database.client.query(`select count(*) count from public.privileged_audit_events`)).rows[0].count);assert.ok(auditCountAfterFirst>=2);

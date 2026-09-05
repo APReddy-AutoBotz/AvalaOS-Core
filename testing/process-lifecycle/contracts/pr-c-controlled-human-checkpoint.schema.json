@@ -135,7 +135,7 @@
         "fixtureManifestDigest": { "$ref": "#/$defs/digest" }, "migrationTip": { "const": "20260904120000" },
         "productionAuthorized": { "const": false }, "customerDataAuthorized": { "const": false }, "realProviderCallsAuthorized": { "const": false },
         "humanRole": { "enum": ["requester", "reviewer", "approver"] }, "requestDigest": { "$ref": "#/$defs/digest" }, "observedAt": { "type": "string", "format": "date-time" },
-        "lifecycle": { "enum": ["active", "read_only"] }, "concurrencyVersion": { "type": "integer", "minimum": 1 }, "operationEventSequence": { "type": "integer", "minimum": 1 },
+        "lifecycle": { "const": "read_only" }, "concurrencyVersion": { "type": "integer", "minimum": 1 }, "operationEventSequence": { "type": "integer", "minimum": 1 },
         "operationEventDigest": { "$ref": "#/$defs/digest" }, "immutableHistoryDigest": { "$ref": "#/$defs/digest" }, "inspectionDigest": { "$ref": "#/$defs/digest" },
         "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/serverStep" } }
       }

@@ -91,6 +91,9 @@ jobs:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
         run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
 
+      - name: Verify pinned Supabase CA for active-state verification
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+
       - name: Reverify exact preview and active synthetic state
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
@@ -98,6 +101,9 @@ jobs:
         run: |
           node scripts/verifyPr264ControlledHumanPreview.mjs
           node scripts/prCControlledHumanEnvironment.mjs verify --output output/controlled-human/current-verify.json
+
+      - name: Verify pinned Supabase CA for read-only transition
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
 
       - name: Enter exact server-enforced read-only state before any read-only human observation
         env:

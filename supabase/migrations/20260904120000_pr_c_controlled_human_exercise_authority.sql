@@ -2020,7 +2020,8 @@ BEGIN
   VALUES(exercise.id,next_sequence+2,'deprovisioned',p_result_digest);
   PERFORM public.pr_c_controlled_human_assert_provider_state();
   RETURN jsonb_build_object('lifecycle','deprovisioned','concurrencyVersion',exercise.concurrency_version+1,
-    'lateSessionsRevoked',late_sessions,'workspaceMembershipsDisabled',affected,'quiescedHistoryDigest',exercise.quiesced_history_digest);
+    'operationEventSequence',next_sequence+2,'lateSessionsRevoked',late_sessions,
+    'workspaceMembershipsDisabled',affected,'quiescedHistoryDigest',exercise.quiesced_history_digest);
 END
 $$;
 

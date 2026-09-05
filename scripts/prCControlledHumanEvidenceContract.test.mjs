@@ -17,6 +17,7 @@ import {
   validateControlledHumanProofPairs, validateEdgeDeploymentManifest, validateHumanCheckpoint, validatePreparationEvidence, validateVerifiedHumanSession,
 } from './prCControlledHumanEvidenceContract.mjs';
 import { verifyPr264DeployPreview } from './buildPrCControlledHumanPreparation.mjs';
+import { deprovision, postDeprovisionVerify, quiesce } from './prCControlledHumanEnvironment.mjs';
 import { captureProviderDeployment } from './producePrCControlledHumanEdgeDeploymentManifest.mjs';
 
 const root = path.resolve('.');
@@ -39,14 +40,16 @@ const controllerRecord = phase => ({
   ...(phase === 'plan' ? { personaCount: 12, featureFlagCount: 11, seedStudioArtifactCount: 2, eligibleStudioArtifactCount: 2, seedPackageCount: 2, seedBaselineCount: 1, operations: ['bounded-seed'], deprovisionOperations: ['bounded-deprovision'] } : {}),
   ...(phase === 'apply' ? { personaCount: 12, studioArtifactCount: 2, eligibleStudioArtifactCount: 2, packageCount: 2, baselineCount: 1, lifecycle: 'active', concurrencyVersion: 1, replayed: false, authUsersCreated: 12, providerRowCount: 0, zeroEgress: true } : {}),
   ...(phase === 'verify' ? { personaCount: 12, activeMembershipCount: 11, studioArtifactCount: 2, eligibleStudioArtifactCount: 2, packageCount: 2, baselineCount: 1, providerRowCount: 0, lifecycle: 'active', concurrencyVersion: 1, featureFlagCount: 11, attestation: { status: 'matched' }, zeroEgress: true, unexpectedDataCount: 0 } : {}),
-  ...(phase === 'quiesce' ? { lifecycle: 'read_only', concurrencyVersion: 2, featureFlagCountEnabled: 0, runtimeControlReadOnlyCount: 2, runtimeControlProviderEnabledCount: 0, operationEventSequence: 2, operationEventDigest: d('quiesce-event'), immutableHistoryDigest: d('quiesced-history'), transitionedAt: '2026-09-04T10:02:40.500Z' } : {}),
+  ...(phase === 'quiesce' ? { lifecycle: 'read_only', concurrencyVersion: 2, featureFlagCountEnabled: 0, runtimeControlReadOnlyCount: 2, runtimeControlProviderEnabledCount: 0, operationEventSequence: 2, operationEventDigest: d('quiesce-event'), immutableHistoryDigest: d('quiesced-history'), transitionedAt: '2026-09-04T10:02:40.500Z', authorityDigest: canonicalDigest(controllerRecord('verify')) } : {}),
   ...(['deprovision','post-deprovision-verify'].includes(phase) ? {
     lifecycle: 'deprovisioned', concurrencyVersion: 3, replayed: phase === 'post-deprovision-verify', sessionsRevoked: 12, credentialsDisabled: 12,
     featureFlagCountEnabled: 0, runtimeControlReadOnlyCount: 2, runtimeControlProviderEnabledCount: 0, activeMembershipCount: 0,
     activeProfileCount: 0, activeOrganizationCount: 0, activeWorkspaceCount: 0, activePilotEnvironmentCount: 0, activePilotTenantCount: 0,
     activeSessionCount: 0, boundPersonaCount: 12, immutableHistoryRetained: true, domainRowsDeleted: 0,
     safety: { providerEgress: 0, realProviderCalls: 0, customerDataRecords: 0, externalUsers: 0 },
-    postInspectionDigest: d(`${phase}-inspection`), immutableHistoryDigest: d('final-history'), quiescedHistoryDigest: d('quiesced-history'), operationEventCount: 5, operationEventSequence: 5, operationEventDigest: d('deprovision-event'),
+    postInspectionDigest: d('stable-deprovisioned-inspection'), inspectionObservedAt: phase === 'deprovision' ? '2026-09-04T10:06:30.000Z' : '2026-09-04T10:06:40.000Z',
+    inspectionAttemptDigest: d(`${phase}-inspection-attempt`), immutableHistoryDigest: d('final-history'), quiescedHistoryDigest: d('quiesced-history'), operationEventCount: 5, operationEventSequence: 5, operationEventDigest: d('deprovision-event'),
+    authorityDigest: phase === 'deprovision' ? canonicalDigest(controllerRecord('quiesce')) : canonicalDigest(controllerRecord('deprovision')),
   } : {}),
 });
 
@@ -145,7 +148,7 @@ const serverObserver = (role, roleObservations=observations(role)) => {
     return ({
     checkpointId: item.checkpointId, stepId: item.stepId, personaKey: item.personaKey,
     authenticatedPersonaDigest: d(`persona-${item.personaKey}`), capabilityDigest: d(`capability-${item.stepId}`), scopeDigest: d(`scope-${item.stepId}`),
-    action: binding?.action??item.stepId, resourceKind: 'controlled-human-step', resourceFamily: binding?.resourceFamily??'controlled-human-step', humanAttemptDigest:attempts.get(`${item.checkpointId}\0${item.stepId}`), bindingToken:binding?.bindingToken??canonicalDigest('not-applicable'), safeBindingDigest:binding?canonicalDigest(binding):canonicalDigest({safeBinding:'not_applicable'}), causalEventDigest:serverEvents.has(item.stepId)?d(`causal-${item.stepId}`):canonicalDigest('not-applicable'),
+    action: binding?.action??item.stepId, resourceKind: 'controlled-human-step', resourceFamily: binding?.resourceFamily??'controlled-human-step', humanAttemptDigest:attempts.get(`${item.checkpointId}\0${item.stepId}`), bindingToken:binding?.bindingToken??canonicalDigest('not-applicable'), safeBindingDigest:binding?canonicalDigest(binding):canonicalDigest({safeBinding:'not_applicable'}), causalEventDigest:serverEvents.has(item.stepId)||!binding?d(`causal-or-absence-${item.stepId}`):canonicalDigest('not-applicable'),
     resourceDigest: binding?.resourceDigest??(item.stepId === 'verify-history-readable-and-actions-absent' ? d('quiesced-history') : d(`resource-${item.stepId}`)),
     expectedVersion: binding?.expectedVersion??(item.stepId === 'verify-history-readable-and-actions-absent' ? 2 : 1), version: binding?.observedVersion??(item.stepId === 'verify-history-readable-and-actions-absent' ? 2 : 1), requestIdentityDigest:binding?.requestDigest??canonicalDigest('not-applicable'),
     receiptDigest: binding?.receiptDigest??d(`receipt-${item.stepId}`), auditDigest: binding?.auditDigest??d(`audit-${item.stepId}`),
@@ -157,11 +160,11 @@ const serverObserver = (role, roleObservations=observations(role)) => {
     safety: { providerEgress: 0, realProviderCalls: 0, customerDataRecords: 0, externalUsers: 0 },
     serverObservedAt: isoFor(200 + index), inspectionDigest: d(`inspection-${role}-${item.stepId}`),
   });});
-  return { contractVersion: 'pr-c-controlled-human-controller-1', phase: 'checkpoint-observe', status: 'passed', ...common, humanRole: role, requestDigest: canonicalDigest(buildServerObserverRequest(role, roleObservations)), observedAt: '2026-09-04T10:04:30Z', lifecycle: 'read_only', concurrencyVersion: 2, operationEventSequence: 2, operationEventDigest: d(`observer-events-${role}`), immutableHistoryDigest: d('quiesced-history'), inspectionDigest: d(`observer-${role}`), steps };
+  return { contractVersion: 'pr-c-controlled-human-controller-1', phase: 'checkpoint-observe', status: 'passed', ...common, humanRole: role, requestDigest: canonicalDigest(buildServerObserverRequest(role, roleObservations)), observedAt: '2026-09-04T10:04:30Z', lifecycle: 'read_only', concurrencyVersion: 2, operationEventSequence: 2, operationEventDigest: d('quiesce-event'), immutableHistoryDigest: d('quiesced-history'), inspectionDigest: d(`observer-${role}`), steps };
 };
 
-const checkpoint = (role, actor, runId, commentId) => createHumanCheckpoint({ preparation: preparation(), quiesceRecord: controllerRecord('quiesce'), humanRole: role, actor, comment: { commentId, createdAt: '2026-09-04T10:05:00Z', updatedAt: '2026-09-04T10:05:00Z' }, workflowRunId: runId, workflowRunAttempt: 1, observations: observations(role), serverObserver: serverObserver(role), signingKey, capturedAt: '2026-09-04T10:06:00Z' });
-const checkpoints = () => [checkpoint('requester','human-one','1001','2001'),checkpoint('reviewer','human-two','1002','2002'),checkpoint('approver','human-three','1003','2003')];
+const checkpoint = (role, actor, runId, commentId, prepared=preparation(), quiesceRecord=controllerRecord('quiesce')) => createHumanCheckpoint({ preparation: prepared, quiesceRecord, humanRole: role, actor, comment: { commentId, createdAt: '2026-09-04T10:05:00Z', updatedAt: '2026-09-04T10:05:00Z' }, workflowRunId: runId, workflowRunAttempt: 1, observations: observations(role), serverObserver: serverObserver(role), signingKey, capturedAt: '2026-09-04T10:06:00Z' });
+const checkpoints = (quiesceRecord=controllerRecord('quiesce'),prepared=preparation()) => [checkpoint('requester','human-one','1001','2001',prepared,quiesceRecord),checkpoint('reviewer','human-two','1002','2002',prepared,quiesceRecord),checkpoint('approver','human-three','1003','2003',prepared,quiesceRecord)];
 const session = () => buildVerifiedHumanSession({ preparation: preparation(), checkpoints: checkpoints(), quiesceRecord: controllerRecord('quiesce'), deprovisionRecord: controllerRecord('deprovision'), postDeprovisionRecord: controllerRecord('post-deprovision-verify'), signingKey, completedAt: '2026-09-04T10:07:00Z' });
 const clone = structuredClone;
 const resignCheckpoint = signed => {
@@ -359,10 +362,52 @@ test('rejects stale provider inventory and missing runtime deployment', async ()
 });
 
 test('requires real pre-comment CH-13 quiesce binding and independent post-deprovision inspection', () => {
+  const invokeObserver=observer=>createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:observations('requester'),serverObserver:observer,signingKey,capturedAt:'2026-09-04T10:06:00Z'});
+  for(const [field,value] of [['lifecycle','active'],['concurrencyVersion',3],['operationEventSequence',3],['operationEventDigest',d('substituted-event-history')],['immutableHistoryDigest',d('substituted-immutable-history')]]){
+    const observer=serverObserver('requester');observer[field]=value;
+    assert.throws(()=>invokeObserver(observer),/SERVER_OBSERVER_(?:LIFECYCLE|QUIESCE_BINDING)/u,`create:${field}`);
+    const retained=checkpoint('requester','human-one','1001','2001');retained.serverObserver.record[field]=value;
+    retained.serverObserver.artifactDigest=canonicalDigest(retained.serverObserver.record);resignCheckpoint(retained);
+    assert.throws(()=>validateHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),checkpoint:retained,signingKey}),/SERVER_OBSERVER_(?:LIFECYCLE|QUIESCE_BINDING)/u,`retained:${field}`);
+  }
   const wrong=controllerRecord('quiesce'); wrong.operationEventDigest=d('wrong');
   assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:wrong,deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /CHECKPOINT_QUIESCE/u);
-  const copied=controllerRecord('post-deprovision-verify'); copied.postInspectionDigest=controllerRecord('deprovision').postInspectionDigest;
+  const copied=controllerRecord('post-deprovision-verify'); copied.inspectionAttemptDigest=controllerRecord('deprovision').inspectionAttemptDigest;
   assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:copied,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_INDEPENDENCE/u);
+  const changedState=controllerRecord('post-deprovision-verify'); changedState.postInspectionDigest=d('unstable-deprovisioned-inspection');
+  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:changedState,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_STABLE_STATE/u);
+  const missingSequence=controllerRecord('deprovision'); delete missingSequence.operationEventSequence;
+  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:missingSequence,postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /EVENT_SEQUENCE/u);
+  const staleSequence=controllerRecord('post-deprovision-verify'); staleSequence.operationEventSequence=4;
+  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:staleSequence,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_EVENT_HISTORY/u);
+});
+
+test('real quiesce and deprovision producer shapes assemble one stable independently reinspected session', async () => {
+  const prepared=preparation();let lifecycle='active';let version=1;let quiescedHistoryDigest=null;let inspectionOrdinal=0;
+  const zeroDomains={assess_processes:0,assess_v2_cases:0,assess_v2_studio_handoffs:0,enterprise_module_handoffs:0,studio_artifacts:0,studio_source_packages:0,delivery_handoffs:0,delivery_packages:0,monitor_baselines:0,pilot_environments:0,pilot_tenants:0};
+  const exercise=()=>({exercise_digest:common.exerciseDigest,release_sha:common.releaseSha,review_head_sha:common.reviewHeadSha,deploy_id:common.deployId,deploy_origin:common.deployOrigin,target_fingerprint:common.targetFingerprint,public_target_digest:common.publicTargetDigest,persona_manifest_digest:common.personaManifestDigest,fixture_manifest_digest:common.fixtureManifestDigest,migration_tip:common.migrationTip,lifecycle,concurrency_version:String(version)});
+  const inventory=()=>({actualTargetFingerprint:common.targetFingerprint,marker:{product_key:'avalaos-core',environment_class:ENVIRONMENT,migration_tip:common.migrationTip,production_authorized:false,customer_data_authorized:false,real_provider_calls_authorized:false},counts:{auth_users:12,profiles:12,organizations:2,workspaces:3,exercises:1},recoverableAuthUsers:0,domainCounts:zeroDomains,ownedResourceCounts:{},unownedResourceRows:0,providerRows:0,unsafeDeprovisionedRows:0,exercise:exercise(),priorExercises:[]});
+  const lifecycleInspection=async()=>{
+    inspectionOrdinal+=1;const terminal=lifecycle==='deprovisioned';
+    return {lifecycle,concurrencyVersion:version,featureFlagCountEnabled:0,runtimeControlReadOnlyCount:2,runtimeControlProviderEnabledCount:0,activeMembershipCount:0,activeProfileCount:0,activeOrganizationCount:0,activeWorkspaceCount:0,activePilotEnvironmentCount:0,activePilotTenantCount:0,activeSessionCount:0,boundPersonaCount:12,immutableHistoryRetained:true,domainRowsDeleted:0,
+      operationEventCount:terminal?5:2,operationEventSequence:terminal?5:2,operationEventDigest:terminal?d('deprovision-event'):d('quiesce-event'),immutableHistoryDigest:terminal?d('final-history'):d('quiesced-history'),quiescedHistoryDigest:quiescedHistoryDigest??(terminal?d('quiesced-history'):null),
+      safety:{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0},postInspectionDigest:terminal?d('stable-deprovisioned-inspection'):d('stable-quiesced-inspection'),inspectionObservedAt:`2026-09-04T10:0${terminal?6:2}:${terminal?30+inspectionOrdinal:41}.000Z`,inspectionAttemptDigest:d(`real-producer-inspection-${inspectionOrdinal}`)};
+  };
+  const userIds=Array.from({length:12},(_,index)=>`40000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`);
+  const database={inspect:async()=>inventory(),prepareRecovery:async()=>undefined,completeRecovery:async()=>undefined,
+    quiesce:async()=>{lifecycle='read_only';version=2;return {lifecycle,concurrencyVersion:2,operationEventSequence:2,transitionedAt:'2026-09-04T10:02:40.500Z'}},
+    lifecycleInspection,bindQuiescedHistory:async(_context,expected,digest)=>{assert.equal(expected,2);quiescedHistoryDigest=digest},
+    revokeSessions:async()=>3,boundUserIds:async()=>userIds,
+    finalizeDeprovision:async()=>{lifecycle='deprovisioned';version=3;return {lifecycle,concurrencyVersion:3,operationEventSequence:5,lateSessionsRevoked:0,quiescedHistoryDigest:d('quiesced-history')}}};
+  const context={...common};
+  const producedQuiesce={...await quiesce(context,database,1),authorityDigest:prepared.backend.controllerPhaseDigests.verify};
+  const producedDeprovision={...await deprovision(context,database,2,{disableUsers:async ids=>ids.length}),authorityDigest:canonicalDigest(producedQuiesce)};
+  const producedPost={...await postDeprovisionVerify(context,database),authorityDigest:canonicalDigest(producedDeprovision)};
+  assert.equal(producedPost.postInspectionDigest,producedDeprovision.postInspectionDigest);
+  assert.notEqual(producedPost.inspectionAttemptDigest,producedDeprovision.inspectionAttemptDigest);
+  assert.equal(producedDeprovision.operationEventSequence,5);
+  const verified=buildVerifiedHumanSession({preparation:prepared,checkpoints:checkpoints(producedQuiesce,prepared),quiesceRecord:producedQuiesce,deprovisionRecord:producedDeprovision,postDeprovisionRecord:producedPost,signingKey,completedAt:'2026-09-04T10:07:00Z'});
+  assert.equal(verified.status,'passed');
 });
 
 test('rejects provider traffic first observed after human checkpoint capture', () => {

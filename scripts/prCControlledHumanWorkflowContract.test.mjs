@@ -24,6 +24,33 @@ const assertNoJobSecrets = workflow => {
   for (const job of Object.values(workflow.jobs)) for (const value of Object.values(job.env ?? {})) assert.doesNotMatch(String(value), /secrets\./u);
 };
 
+const PINNED_CA_VERIFY_COMMAND = 'node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
+const DATABASE_TLS_GUARDS = new Map([
+  [CHECKPOINT_WORKFLOW, [
+    ['Derive backend observer records from the exact synthetic read-only scope', 'Verify pinned Supabase CA for backend observer'],
+  ]],
+  [EDGE_DEPLOY_WORKFLOW, [
+    ['Apply and verify exact additive migration on the dedicated database', 'Verify pinned Supabase CA for controlled migration'],
+  ]],
+  [PREPARE_WORKFLOW, [
+    ['Preflight dedicated synthetic target', 'Verify pinned Supabase CA for target preflight'],
+    ['Apply bounded synthetic seed', 'Verify pinned Supabase CA for seed apply'],
+    ['Verify exact seed and zero-egress boundary', 'Verify pinned Supabase CA for seed verification'],
+    ['Protected exact-bound abort recovery after failed seed or evidence assembly', 'Verify pinned Supabase CA for abort recovery'],
+  ]],
+  [QUIESCE_WORKFLOW, [
+    ['Reverify exact preview and active synthetic state', 'Verify pinned Supabase CA for active-state verification'],
+    ['Enter exact server-enforced read-only state before any read-only human observation', 'Verify pinned Supabase CA for read-only transition'],
+  ]],
+  [RECOVERY_WORKFLOW, [
+    ['Complete exact server-authorized abort or expiry recovery', 'Verify pinned Supabase CA for abort or expiry recovery'],
+  ]],
+  [VERIFY_WORKFLOW, [
+    ['Deprovision exact synthetic exercise directly from frozen read-only state', 'Verify pinned Supabase CA for deprovision'],
+    ['Independently re-inspect post-deprovision state', 'Verify pinned Supabase CA for post-deprovision inspection'],
+  ]],
+]);
+
 test('package and workflow authority expose no stale resume path', async () => {
   const packageJson=JSON.parse(await readFile('package.json','utf8'));
   assert.equal(Object.hasOwn(packageJson.scripts,'pr-c-controlled-human:resume'),false);
@@ -41,6 +68,27 @@ test('every reusable phase binds the protected public target digest into control
     assert.match(source,/PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST/u);
   }
 });
+
+test('every direct PostgreSQL workflow step immediately verifies the tracked pinned Supabase CA', async () => {
+  for (const [workflowPath, expectedBindings] of DATABASE_TLS_GUARDS) {
+    const { source, workflow } = await load(workflowPath);
+    const jobs = Object.values(workflow.jobs);
+    assert.equal(jobs.length, 1, `${workflowPath} must retain one auditable job`);
+    const steps = jobs[0].steps;
+    const actualVerifierSteps = steps.filter(step => step.run === PINNED_CA_VERIFY_COMMAND);
+    assert.equal(actualVerifierSteps.length, expectedBindings.length, `${workflowPath} verifier count`);
+    for (const [databaseStepName, verifierStepName] of expectedBindings) {
+      const databaseIndex = steps.findIndex(step => step.name === databaseStepName);
+      assert.ok(databaseIndex > 0, `${workflowPath}:${databaseStepName} must exist after a guard`);
+      const verifier = steps[databaseIndex - 1];
+      assert.equal(verifier.name, verifierStepName, `${workflowPath}:${databaseStepName} guard name`);
+      assert.equal(verifier.run, PINNED_CA_VERIFY_COMMAND, `${workflowPath}:${databaseStepName} guard command`);
+      assert.equal(verifier.env, undefined, `${workflowPath}:${databaseStepName} guard must not receive credentials`);
+    }
+    assert.doesNotMatch(source, /NODE_EXTRA_CA_CERTS|PGSSLROOTCERT|BEGIN (?:RSA )?PRIVATE KEY|BEGIN CERTIFICATE|sslmode=(?:disable|allow|prefer|require|verify-ca)|rejectUnauthorized\s*[:=]\s*false/iu);
+    assert.doesNotMatch(source, /secrets\.[A-Z0-9_]*(?:CA|CERTIFICATE|SSLROOTCERT)/u);
+  }
+});
 const assertProtectedEnvironmentSecrets = ({ source, workflow }, names) => {
   assert.equal(workflow.on.workflow_call.inputs.exercise_id, undefined);
   assert.equal(workflow.on.workflow_call.secrets, undefined);
@@ -56,6 +104,11 @@ test('preparation is reusable from exact-head PR CI, action-pinned, and step-sco
   assert.match(source,/pull\.head\.sha !== process\.env\.EXPECTED_HEAD/u); assert.match(source,/artifact\.digest !== process\.env\.EXPECTED_ARTIFACT_DIGEST/u);
   assert.match(source,/run\.event !== 'pull_request'/u); assert.match(source,/output\/controlled-human\/verify\.json/u);
   assert.match(source,/recover-reset --reason abort/u);
+  const abortVerifier=job.steps.find(step=>step.name==='Verify pinned Supabase CA for abort recovery');
+  const abortRecovery=job.steps.find(step=>step.name==='Protected exact-bound abort recovery after failed seed or evidence assembly');
+  assert.equal(abortVerifier.id,'verify_abort_recovery_ca');
+  assert.equal(abortVerifier.if,"${{ failure() && steps.apply.outcome != 'skipped' }}");
+  assert.equal(abortRecovery.if,"${{ failure() && steps.apply.outcome != 'skipped' && steps.verify_abort_recovery_ca.outcome == 'success' }}");
   const checkout=job.steps.find(step=>String(step.uses??'').startsWith('actions/checkout@')); assert.equal(checkout.with['persist-credentials'],false);
   assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
 });
@@ -119,15 +172,18 @@ test('final verification validates signed evidence then deprovisions directly fr
   assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
 });
 
-test('manual recovery is protected, exact-pr-history bound, and supports abort or expiry after head advance', async () => {
+test('manual recovery executes only trusted current PR code while prior exact-head authority remains data', async () => {
   const {source,workflow}=await load(RECOVERY_WORKFLOW);assertPinned(source);assertNoJobSecrets(workflow);
   assert.deepEqual(Object.keys(workflow.on),['workflow_call','workflow_dispatch']);
-  for (const input of ['exact_head_sha','netlify_deploy_id','exercise_digest','target_fingerprint','public_target_digest','reason']) assert.equal(workflow.on.workflow_call.inputs[input].required,true);
+  for (const input of ['exact_head_sha','trusted_execution_sha','netlify_deploy_id','exercise_digest','target_fingerprint','public_target_digest','reason']) assert.equal(workflow.on.workflow_call.inputs[input].required,true);
   assert.equal(workflow.on.workflow_dispatch.inputs.public_target_digest.required,true);
   assert.deepEqual(workflow.on.workflow_dispatch.inputs.reason.options,['abort','expiry']);
   const job=workflow.jobs.recover;assert.equal(job.environment,'hosted-nonproduction-pilot');assert.equal(workflow.concurrency['cancel-in-progress'],false);
   assert.equal(job.env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST,'${{ inputs.exercise_digest }}');
-  assert.match(source,/pulls\.listCommits/u);assert.match(source,/head was not part of PR 264/u);assert.match(source,/untrusted PR source/u);
+  assert.match(source,/pulls\.listCommits/u);assert.match(source,/head was not part of PR 264/u);assert.match(source,/untrusted PR source/u);assert.match(source,/unauthorized actor/u);
+  assert.match(source,/pull\.head\.sha !== process\.env\.TRUSTED_EXECUTION_SHA/u);
+  assert.match(source,/ref: \$\{\{ inputs\.trusted_execution_sha \}\}/u);assert.doesNotMatch(source,/ref: \$\{\{ inputs\.exact_head_sha \}\}/u);
+  assert.match(source,/PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA: \$\{\{ inputs\.trusted_execution_sha \}\}/u);assert.match(source,/PR_C_CONTROLLED_HUMAN_RECOVERY_MODE: trusted-current-pr-head/u);
   assert.match(source,/recover-reset --reason \$\{\{ inputs\.reason \}\}/u);assert.match(source,/pr_c_controlled_human_recovery_authorities/u);
   assert.match(source,/secrets\.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY/u);assert.doesNotMatch(source,/secrets:\s*inherit/u);
   assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
@@ -147,9 +203,11 @@ test('primary PR C workflow exposes only exact trusted label phases and prior im
   assert.match(source, /preview\.headers\.get\('x-avalaos-netlify-deploy-id'\)/u);
   assert.match(source, /new Set\(\[\.\.\.selected\.values\(\)\]/u);
   assert.match(source, /RECOVERY_HEAD_SHA/u);
+  assert.match(source, /trusted-execution-sha/u);
   assert.match(source, /EXPECTED_PUBLIC_TARGET_DIGEST/u);
   assert.match(source, /pulls\.listCommits/u);
   assert.match(source, /phase === 'abort' \|\| phase === 'expiry'/u);
+  assert.match(source, /trusted_execution_sha: \$\{\{ needs\.controlled_human_authority\.outputs\.trusted-execution-sha \}\}/u);
   assert.match(source, /needs: \[controlled_human_authority, controlled_human_requester\]/u);
   assert.match(source, /needs: \[controlled_human_authority, controlled_human_approver\]/u);
 for (const called of [EDGE_DEPLOY_WORKFLOW, PREPARE_WORKFLOW, QUIESCE_WORKFLOW, CHECKPOINT_WORKFLOW, VERIFY_WORKFLOW, RECOVERY_WORKFLOW]) assert.match(source, new RegExp(`uses: \\.\\/${called.replaceAll('.', '\\.').replaceAll('/', '\\/')}`, 'u'));

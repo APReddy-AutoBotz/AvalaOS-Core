@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   ATTESTATION_VERSION, EXPECTED_MIGRATION_TIP, apply, assertTargetInventory, canonicalJson,
-  checkpointObserve, controlledHumanStepEvidenceSpec, deprovision, deriveBoundNegativeEffectCounts, deriveContext, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
+  checkpointObserve, controlledHumanObserverLifecycleWitness, controlledHumanStepEvidenceSpec, deprovision, deriveBoundNegativeEffectCounts, deriveContext, deriveOperationEventSequence, deriveUnboundAbsenceEffectCounts, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
   validatePrivilegedPostgresConnectionString,
 } from './prCControlledHumanEnvironment.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
@@ -39,21 +39,40 @@ test('canonical digests and deterministic identifiers are stable and scoped',()=
 
 test('negative observer effects are request-causal and require an explicit none effect family',()=>{
   const requestId='40000000-0000-4000-8000-000000000401';
-  const binding={observation_kind:'negative_attempt',request_id:requestId};
+  const binding={observation_kind:'negative_attempt',request_id:requestId,actor_id:'same-actor',action:'delivery.package.revision.commit'};
   const unrelatedRequestId='40000000-0000-4000-8000-000000000402';
   const sameMillisecond='2026-09-04T13:00:00.123Z';
   const unrelated={
-    receipts:[{id:'unrelated-receipt',request_id:unrelatedRequestId,actor_id:'same-actor',action:'same.action',status:'committed',event_at:sameMillisecond}],
-    audits:[{id:'unrelated-audit',request_id:unrelatedRequestId,actor_id:'same-actor',action:'same.action',outcome:'succeeded',created_at:sameMillisecond}],
-    deliveryEffects:[{id:'unrelated-effect',receipt_id:'unrelated-receipt',audit_id:'unrelated-audit',created_at:sameMillisecond}],
+    receipts:[{source:'delivery',id:'unrelated-receipt',request_id:unrelatedRequestId,actor_id:'same-actor',action:binding.action,status:'committed',event_at:sameMillisecond}],
+    audits:[{id:'unrelated-audit',request_id:unrelatedRequestId,actor_id:'same-actor',action:binding.action,outcome:'succeeded',created_at:sameMillisecond}],
+    deliveryEffects:[{id:'unrelated-effect',receipt_id:'unrelated-receipt',audit_id:'unrelated-audit',actor_id:'same-actor',action:binding.action,created_at:sameMillisecond}],
     aiEffects:[],
   };
   assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',...unrelated}),{receipt:0,audit:0,effect:0});
-  const exactFailedReceipt={id:'exact-failed-receipt',request_id:requestId,actor_id:'same-actor',action:'same.action',status:'failed',event_at:sameMillisecond};
-  const exactDeniedAudit={id:'exact-denied-audit',request_id:requestId,actor_id:'same-actor',action:'same.action',outcome:'denied',created_at:sameMillisecond};
-  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[exactFailedReceipt],audits:[exactDeniedAudit],deliveryEffects:[{id:'exact-effect',receipt_id:exactFailedReceipt.id,audit_id:exactDeniedAudit.id,created_at:sameMillisecond}],aiEffects:[]}),{receipt:0,audit:0,effect:1});
+  const exactFailedReceipt={source:'delivery',id:'exact-failed-receipt',request_id:requestId,actor_id:'same-actor',action:binding.action,status:'failed',event_at:sameMillisecond};
+  const exactDeniedAudit={id:'exact-denied-audit',request_id:requestId,actor_id:'same-actor',action:binding.action,outcome:'denied',created_at:sameMillisecond};
+  const exactEffect={id:'exact-effect',receipt_id:exactFailedReceipt.id,audit_id:exactDeniedAudit.id,actor_id:'same-actor',action:binding.action,created_at:sameMillisecond};
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[exactFailedReceipt],audits:[exactDeniedAudit],deliveryEffects:[exactEffect],aiEffects:[]}),{receipt:0,audit:0,effect:1});
   assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[{...exactFailedReceipt,status:'committed'}],audits:[{...exactDeniedAudit,outcome:'succeeded'}],deliveryEffects:[],aiEffects:[]}),{receipt:1,audit:1,effect:0});
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[{...exactFailedReceipt,source:'assess'}],audits:[],deliveryEffects:[exactEffect],aiEffects:[]}),{receipt:0,audit:0,effect:0});
+  assert.deepEqual(deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[{...exactFailedReceipt,id:'cross-family-id',source:'assess'}],audits:[],deliveryEffects:[{...exactEffect,receipt_id:'cross-family-id'}],aiEffects:[]}),{receipt:0,audit:0,effect:0});
+  assert.throws(()=>deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[exactFailedReceipt],audits:[exactDeniedAudit],deliveryEffects:[{...exactEffect,actor_id:'wrong-actor'}],aiEffects:[]}),/EFFECT_METADATA_REJECTED/u);
+  assert.throws(()=>deriveBoundNegativeEffectCounts({binding,effectFamily:'none',receipts:[exactFailedReceipt],audits:[exactDeniedAudit],deliveryEffects:[{...exactEffect,action:'delivery.package.approve'}],aiEffects:[]}),/EFFECT_METADATA_REJECTED/u);
   assert.throws(()=>deriveBoundNegativeEffectCounts({binding,effectFamily:'delivery_work_package',...unrelated}),/OBSERVER_CATALOG_REJECTED/u);
+});
+
+test('unbound human/no-effect evidence uses an actor-and-scope absence witness rather than action guessing',()=>{
+  const start=Date.parse('2026-09-04T13:00:00.000Z');const completed=start+1000;
+  const base={actorId:'exact-actor',start,completed,receipts:[],audits:[],deliveryEffects:[],aiEffects:[],ownership:[]};
+  assert.deepEqual(deriveUnboundAbsenceEffectCounts(base),{receipt:0,audit:0,target:0,itemVersion:0,approval:0,baseline:0});
+  const at=new Date(start+500).toISOString();
+  assert.deepEqual(deriveUnboundAbsenceEffectCounts({...base,
+    receipts:[{actor_id:'exact-actor',status:'committed',event_at:at},{actor_id:'other-actor',status:'committed',event_at:at}],
+    audits:[{actor_id:'exact-actor',outcome:'succeeded',created_at:at}],
+    deliveryEffects:[{actor_id:'exact-actor',created_at:at}],aiEffects:[{actor_id:'exact-actor',terminal_status:'committed',created_at:at}],
+    ownership:[{resource_family:'delivery_work_package',created_at:at},{resource_family:'evidence_source',created_at:at},{resource_family:'monitor_baseline',created_at:at}]}),
+  {receipt:1,audit:1,target:4,itemVersion:0,approval:0,baseline:1});
+  assert.throws(()=>deriveUnboundAbsenceEffectCounts({...base,completed:start}),/ABSENCE_WITNESS_REJECTED/u);
 });
 
 test('one-use exercise identity is deploy-independent while every context retains its exact deployment binding',()=>{
@@ -117,6 +136,15 @@ test('exact preview, environment, PR, SHA, exercise, fingerprint, and clean chec
   assert.throws(()=>deriveContext(baseEnv,fixtureState,{head:'c'.repeat(40),dirty:''}),/SHA_REJECTED/u);
   assert.equal(deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:context.exerciseDigest},fixtureState,{head,dirty:''}).exerciseDigest,context.exerciseDigest);
   assert.throws(()=>deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:`sha256:${'b'.repeat(64)}`},fixtureState,{head,dirty:''}),/EXERCISE_REJECTED/u);
+});
+
+test('historical recovery authority is data while only an explicitly trusted current PR head may execute',()=>{
+  const trustedHead='c'.repeat(40);const recoveryEnv={...baseEnv,PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA:trustedHead,PR_C_CONTROLLED_HUMAN_RECOVERY_MODE:'trusted-current-pr-head'};
+  const recovered=deriveContext(recoveryEnv,fixtureState,{head:trustedHead,dirty:''},{allowTrustedRecoveryCheckout:true});
+  assert.equal(recovered.releaseSha,head);assert.equal(recovered.trustedRecoverySha,trustedHead);assert.equal(recovered.exerciseDigest,context.exerciseDigest);
+  assert.throws(()=>deriveContext(recoveryEnv,fixtureState,{head:trustedHead,dirty:''}),/RECOVERY_CHECKOUT_REJECTED/u);
+  assert.throws(()=>deriveContext({...recoveryEnv,PR_C_CONTROLLED_HUMAN_RECOVERY_MODE:'historical-code'},fixtureState,{head:trustedHead,dirty:''},{allowTrustedRecoveryCheckout:true}),/RECOVERY_CHECKOUT_REJECTED/u);
+  assert.throws(()=>deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA:'not-a-sha',PR_C_CONTROLLED_HUMAN_RECOVERY_MODE:'trusted-current-pr-head'},fixtureState,{head:trustedHead,dirty:''},{allowTrustedRecoveryCheckout:true}),/RECOVERY_CHECKOUT_REJECTED/u);
 });
 
 test('fixture contract owns twelve distinct personas, every exact flag, zero-authority law, and seed/reset intent',()=>{
@@ -219,6 +247,15 @@ test('verification binds the exact public attestation and never upgrades authori
 });
 
 test('checkpoint observer accepts only the exact duty-owned ordered non-overlapping request and binds its digest',async()=>{
+  const eventDigest=sha256('frozen-events');const historyDigest=sha256('frozen-history');
+  const witness=controlledHumanObserverLifecycleWitness({lifecycle:'read_only',concurrencyVersion:2,operationEventCount:2,operationEventSequence:2,operationEventDigest:eventDigest,immutableHistoryDigest:historyDigest});
+  assert.deepEqual(witness,{lifecycle:'read_only',concurrencyVersion:2,operationEventSequence:2,operationEventDigest:eventDigest,immutableHistoryDigest:historyDigest});
+  for(const observerPath of ['fresh','replay'])assert.throws(()=>controlledHumanObserverLifecycleWitness({lifecycle:'read_only',concurrencyVersion:2,operationEventCount:2,operationEventSequence:3,operationEventDigest:eventDigest,immutableHistoryDigest:historyDigest}),/OBSERVER_EVENT_HISTORY_REJECTED/u,observerPath);
+  assert.equal(deriveOperationEventSequence([{sequence:1},{sequence:2}]),2);
+  assert.throws(()=>deriveOperationEventSequence([{sequence:1},{sequence:3}]),/OPERATION_SEQUENCE_REJECTED/u);
+  const environmentSource=await readFile('scripts/prCControlledHumanEnvironment.mjs','utf8');
+  assert.equal(environmentSource.split('...controlledHumanObserverLifecycleWitness(lifecycle)').length-1,2,'fresh and replay observer returns must share the fail-closed lifecycle witness');
+  assert.doesNotMatch(environmentSource,/operationEventSequence\s*:\s*lifecycle\.operationEventCount/u);
   const catalog=new Map(CONTROLLED_HUMAN_CATALOG.map(record=>[record.checkpointId,record]));let cursor=Date.parse('2026-09-04T12:00:00.000Z');
   const steps=CONTROLLED_HUMAN_EXECUTION_ORDER.flatMap(checkpointId=>catalog.get(checkpointId).steps.filter(step=>HUMAN_DUTY_BY_PERSONA[step.personaKey]==='approver').map(step=>{
     const spec=controlledHumanStepEvidenceSpec(step.stepId,step.negative);
@@ -254,8 +291,8 @@ test('server-observable steps map canonical actions to the exact controlled reso
 test('deprovision orders quiesce, exact session revocation, credential disablement, finalization, and rejects partial reset',async()=>{
   let lifecycle='read_only';let version=2;const order=[];const frozenDigest=sha256('history');
   const userIds=Array.from({length:12},(_,index)=>deterministicUuid(context.exerciseId,`deprovision-user-${index}`));
-  const inspection=()=>({lifecycle,concurrencyVersion:version,featureFlagCountEnabled:0,runtimeControlReadOnlyCount:2,runtimeControlProviderEnabledCount:0,activeMembershipCount:0,activeProfileCount:0,activeOrganizationCount:0,activeWorkspaceCount:0,activePilotEnvironmentCount:0,activePilotTenantCount:0,activeSessionCount:0,boundPersonaCount:12,immutableHistoryRetained:true,domainRowsDeleted:0,postInspectionDigest:sha256(`post-${lifecycle}`),immutableHistoryDigest:lifecycle==='read_only'?frozenDigest:sha256('final-history'),quiescedHistoryDigest:frozenDigest,operationEventCount:lifecycle==='read_only'?2:5,operationEventDigest:sha256(`events-${lifecycle}`),safety:{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0}});
-  const database={inspect:async()=>{const inventory=emptyInventory();inventory.exercise={...activeExercise(),lifecycle,concurrency_version:String(version)};inventory.counts={auth_users:12,profiles:12,organizations:2,workspaces:3,exercises:1};inventory.domainCounts=domainCounts(1);inventory.ownedResourceCounts=ownedCounts(1);return inventory},prepareRecovery:async()=>order.push('prepare'),completeRecovery:async()=>order.push('complete'),revokeSessions:async()=>{order.push('sessions');return 3},boundUserIds:async()=>userIds,finalizeDeprovision:async(_context,expected,sessionCount,credentialCount)=>{assert.equal(expected,2);assert.equal(sessionCount,3);assert.equal(credentialCount,12);order.push('finalize');lifecycle='deprovisioned';version=3;return {lifecycle,concurrencyVersion:version,lateSessionsRevoked:0,quiescedHistoryDigest:frozenDigest}},lifecycleInspection:async()=>inspection()};
+  const inspection=()=>({lifecycle,concurrencyVersion:version,featureFlagCountEnabled:0,runtimeControlReadOnlyCount:2,runtimeControlProviderEnabledCount:0,activeMembershipCount:0,activeProfileCount:0,activeOrganizationCount:0,activeWorkspaceCount:0,activePilotEnvironmentCount:0,activePilotTenantCount:0,activeSessionCount:0,boundPersonaCount:12,immutableHistoryRetained:true,domainRowsDeleted:0,postInspectionDigest:sha256(`post-${lifecycle}`),immutableHistoryDigest:lifecycle==='read_only'?frozenDigest:sha256('final-history'),quiescedHistoryDigest:frozenDigest,operationEventCount:lifecycle==='read_only'?2:5,operationEventSequence:lifecycle==='read_only'?2:5,operationEventDigest:sha256(`events-${lifecycle}`),safety:{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0}});
+  const database={inspect:async()=>{const inventory=emptyInventory();inventory.exercise={...activeExercise(),lifecycle,concurrency_version:String(version)};inventory.counts={auth_users:12,profiles:12,organizations:2,workspaces:3,exercises:1};inventory.domainCounts=domainCounts(1);inventory.ownedResourceCounts=ownedCounts(1);return inventory},prepareRecovery:async()=>order.push('prepare'),completeRecovery:async()=>order.push('complete'),revokeSessions:async()=>{order.push('sessions');return 3},boundUserIds:async()=>userIds,finalizeDeprovision:async(_context,expected,sessionCount,credentialCount)=>{assert.equal(expected,2);assert.equal(sessionCount,3);assert.equal(credentialCount,12);order.push('finalize');lifecycle='deprovisioned';version=3;return {lifecycle,concurrencyVersion:version,operationEventSequence:5,lateSessionsRevoked:0,quiescedHistoryDigest:frozenDigest}},lifecycleInspection:async()=>inspection()};
   const admin={disableUsers:async ids=>{assert.deepEqual(ids,userIds);order.push('credentials');return ids.length}};
   const result=await deprovision(context,database,2,admin);assert.deepEqual(order,['prepare','sessions','credentials','finalize','complete']);assert.equal(result.lifecycle,'deprovisioned');assert.equal(result.credentialsDisabled,12);assert.equal(result.domainRowsDeleted,0);assert.equal(result.immutableHistoryRetained,true);assert.equal(result.quiescedHistoryDigest,frozenDigest);
   const partial={inspect:async()=>{const inventory=emptyInventory();inventory.exercise={...activeExercise(),lifecycle:'read_only',concurrency_version:'no'};inventory.counts={auth_users:12,profiles:12,organizations:2,workspaces:3,exercises:1};inventory.domainCounts=domainCounts(1);inventory.ownedResourceCounts=ownedCounts(1);return inventory}};
@@ -268,8 +305,8 @@ test('deprovision recovers every post-mutation boundary without leaving read-onl
     let lifecycle='read_only';let version=2;let activeSessions=3;let disabled=false;let recovery='absent';const frozen=sha256(`deprovision-frozen-${boundary}`);
     const userIds=Array.from({length:12},(_,index)=>deterministicUuid(context.exerciseId,`${boundary}-user-${index}`));
     const inventory=()=>{const value=emptyInventory();value.exercise={...activeExercise(),lifecycle,concurrency_version:String(version)};value.counts={auth_users:12,profiles:12,organizations:2,workspaces:3,exercises:1};value.domainCounts=domainCounts(1);value.ownedResourceCounts=ownedCounts(1);return value};
-    const inspectLifecycle=()=>({lifecycle,concurrencyVersion:version,featureFlagCountEnabled:0,runtimeControlReadOnlyCount:2,runtimeControlProviderEnabledCount:0,activeMembershipCount:lifecycle==='deprovisioned'?0:11,activeProfileCount:lifecycle==='deprovisioned'?0:11,activeOrganizationCount:lifecycle==='deprovisioned'?0:2,activeWorkspaceCount:lifecycle==='deprovisioned'?0:3,activePilotEnvironmentCount:lifecycle==='deprovisioned'?0:1,activePilotTenantCount:lifecycle==='deprovisioned'?0:1,activeSessionCount:activeSessions,boundPersonaCount:12,immutableHistoryRetained:true,domainRowsDeleted:0,postInspectionDigest:sha256(`${boundary}-${lifecycle}`),immutableHistoryDigest:lifecycle==='read_only'?frozen:sha256(`${frozen}-terminal`),quiescedHistoryDigest:frozen,operationEventCount:lifecycle==='read_only'?2:5,operationEventDigest:sha256(`${boundary}-events-${lifecycle}`),safety:{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0}});
-    const database={inspect:async()=>inventory(),prepareRecovery:async()=>{recovery='prepared'},completeRecovery:async()=>{recovery='completed'},lifecycleInspection:async()=>inspectLifecycle(),revokeSessions:async()=>{const removed=activeSessions;activeSessions=0;return removed},boundUserIds:async()=>userIds,finalizeDeprovision:async(_c,expected)=>{assert.equal(expected,2);lifecycle='deprovisioned';version=3;return {lifecycle,concurrencyVersion:version,lateSessionsRevoked:0,quiescedHistoryDigest:frozen}}};
+    const inspectLifecycle=()=>({lifecycle,concurrencyVersion:version,featureFlagCountEnabled:0,runtimeControlReadOnlyCount:2,runtimeControlProviderEnabledCount:0,activeMembershipCount:lifecycle==='deprovisioned'?0:11,activeProfileCount:lifecycle==='deprovisioned'?0:11,activeOrganizationCount:lifecycle==='deprovisioned'?0:2,activeWorkspaceCount:lifecycle==='deprovisioned'?0:3,activePilotEnvironmentCount:lifecycle==='deprovisioned'?0:1,activePilotTenantCount:lifecycle==='deprovisioned'?0:1,activeSessionCount:activeSessions,boundPersonaCount:12,immutableHistoryRetained:true,domainRowsDeleted:0,postInspectionDigest:sha256(`${boundary}-${lifecycle}`),immutableHistoryDigest:lifecycle==='read_only'?frozen:sha256(`${frozen}-terminal`),quiescedHistoryDigest:frozen,operationEventCount:lifecycle==='read_only'?2:5,operationEventSequence:lifecycle==='read_only'?2:5,operationEventDigest:sha256(`${boundary}-events-${lifecycle}`),safety:{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0}});
+    const database={inspect:async()=>inventory(),prepareRecovery:async()=>{recovery='prepared'},completeRecovery:async()=>{recovery='completed'},lifecycleInspection:async()=>inspectLifecycle(),revokeSessions:async()=>{const removed=activeSessions;activeSessions=0;return removed},boundUserIds:async()=>userIds,finalizeDeprovision:async(_c,expected)=>{assert.equal(expected,2);lifecycle='deprovisioned';version=3;return {lifecycle,concurrencyVersion:version,operationEventSequence:5,lateSessionsRevoked:0,quiescedHistoryDigest:frozen}}};
     const admin={disableUsers:async(ids,afterExternalMutation=async()=>undefined)=>{assert.deepEqual(ids,userIds);for(const [index,id] of ids.entries())await afterExternalMutation(id,index+1);disabled=true;return ids.length}};
     let injected=false;const crash=new Error(`crash-${boundary}`);crash.simulatedCrash=true;
     await assert.rejects(deprovision(context,database,2,admin,{afterMutation:async name=>{if(!injected&&name===boundary){injected=true;throw crash}}}),new RegExp(`crash-${boundary}`,'u'));
@@ -327,6 +364,7 @@ test('migration is fail-closed, owner-only for control, public-safe for attestat
   assert.match(controller,/config[.]status='disabled'[\s\S]*config[.]key_ref_id is null[\s\S]*config[.]default_model='synthetic-no-provider'/u);
   assert.match(controller,/job[.]token_input is null and job[.]token_output is null and job[.]latency_ms is null/u);
   assert.match(sql,/lateSessionsRevoked/u);
+  assert.match(sql,/'operationEventSequence',next_sequence\+2/u);
   assert.match(sql,/quiesced_history_digest IS NOT NULL/u);
   assert.doesNotMatch(sql,/pr_c_controlled_human_resume/u);
   assert.doesNotMatch(sql,/DELETE FROM public[.]enterprise_(delivery|monitor)|DISABLE TRIGGER/u);

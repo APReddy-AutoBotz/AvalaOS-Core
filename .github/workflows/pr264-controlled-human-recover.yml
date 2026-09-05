@@ -7,6 +7,10 @@ on:
         description: Exact prior PR 264 head whose server-held recovery authority must be completed
         required: true
         type: string
+      trusted_execution_sha:
+        description: Current reviewed PR 264 head whose recovery implementation is permitted to execute
+        required: true
+        type: string
       netlify_deploy_id:
         description: Exact 24-character Deploy Preview ID stored in recovery authority
         required: true
@@ -31,6 +35,10 @@ on:
     inputs:
       exact_head_sha:
         description: Exact prior PR 264 head whose server-held recovery authority must be completed
+        required: true
+        type: string
+      trusted_execution_sha:
+        description: Current reviewed PR 264 head whose recovery implementation is permitted to execute
         required: true
         type: string
       netlify_deploy_id:
@@ -84,36 +92,43 @@ jobs:
       PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
       PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
     steps:
-      - name: Verify exact prior PR 264 head and bounded inputs
+      - name: Verify trusted current execution head, exact prior authority, actor, and bounded inputs
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         env:
           EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          TRUSTED_EXECUTION_SHA: ${{ inputs.trusted_execution_sha }}
           EXPECTED_DEPLOY: ${{ inputs.netlify_deploy_id }}
           EXPECTED_EXERCISE: ${{ inputs.exercise_digest }}
           EXPECTED_TARGET: ${{ inputs.target_fingerprint }}
           EXPECTED_PUBLIC_TARGET: ${{ inputs.public_target_digest }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         with:
           script: |
             const fail = message => core.setFailed(`PR 264 controlled-human recovery rejected: ${message}`);
             if (!/^[0-9a-f]{40}$/.test(process.env.EXPECTED_HEAD)) return fail('invalid head');
+            if (!/^[0-9a-f]{40}$/.test(process.env.TRUSTED_EXECUTION_SHA)) return fail('invalid trusted execution head');
             if (!/^[0-9a-f]{24}$/.test(process.env.EXPECTED_DEPLOY)) return fail('invalid deploy');
             if (!/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_EXERCISE) || !/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_TARGET) || !/^sha256:[0-9a-f]{64}$/.test(process.env.EXPECTED_PUBLIC_TARGET)) return fail('invalid digest');
+            const trusted = value => String(value || '').toLowerCase() === 'apreddy-autobotz';
+            if (!trusted(context.actor) || !trusted(process.env.TRIGGERING_ACTOR)) return fail('unauthorized actor');
             const { data: pull } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: 264 });
-            if (pull.head.ref !== 'controller/governed-delivery-monitor-pr-c-20260831' || pull.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) return fail('untrusted PR source');
+            if (pull.state !== 'open' || pull.head.sha !== process.env.TRUSTED_EXECUTION_SHA || pull.head.ref !== 'controller/governed-delivery-monitor-pr-c-20260831' || pull.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` || pull.base.ref !== 'main') return fail('untrusted PR source');
             const commits = await github.paginate(github.rest.pulls.listCommits, { owner: context.repo.owner, repo: context.repo.repo, pull_number: 264, per_page: 100 });
             if (!commits.some(commit => commit.sha === process.env.EXPECTED_HEAD)) return fail('head was not part of PR 264');
 
-      - name: Checkout exact recoverable PR head
+      - name: Checkout trusted current recovery implementation
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.exact_head_sha }}
+          ref: ${{ inputs.trusted_execution_sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Require exact checkout and recovery-capable source
+        env:
+          TRUSTED_EXECUTION_SHA: ${{ inputs.trusted_execution_sha }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$PR_C_CONTROLLED_HUMAN_RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$TRUSTED_EXECUTION_SHA"
           grep -F "pr_c_controlled_human_recovery_authorities" supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql >/dev/null
           grep -F "recover-reset" scripts/prCControlledHumanEnvironment.mjs >/dev/null
 
@@ -132,8 +147,13 @@ jobs:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
         run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
 
+      - name: Verify pinned Supabase CA for abort or expiry recovery
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+
       - name: Complete exact server-authorized abort or expiry recovery
         env:
+          PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA: ${{ inputs.trusted_execution_sha }}
+          PR_C_CONTROLLED_HUMAN_RECOVERY_MODE: trusted-current-pr-head
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
           PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
           PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}

@@ -122,6 +122,9 @@ jobs:
             const observerRequest = { humanRole: payload.humanRole, steps: payload.observations.flatMap(checkpoint => checkpoint.steps.map(step => ({ checkpointId: checkpoint.checkpointId, stepId: step.stepId, personaKey: step.personaKey, startedAt: step.startedAt, completedAt: step.completedAt, attemptDigest: `sha256:${crypto.createHash('sha256').update(canonical(step.browserArtifact)).digest('hex')}`, bindingToken: step.browserArtifact.serverBinding?.bindingToken ?? null }))) };
             fs.writeFileSync('output/controlled-human/private/observer-request.json', JSON.stringify(observerRequest), { flag: 'wx', mode: 0o600 });
 
+      - name: Verify pinned Supabase CA for backend observer
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+
       - name: Derive backend observer records from the exact synthetic read-only scope
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}

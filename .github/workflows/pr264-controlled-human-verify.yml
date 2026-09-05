@@ -187,6 +187,9 @@ jobs:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
         run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
 
+      - name: Verify pinned Supabase CA for deprovision
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+
       - name: Deprovision exact synthetic exercise directly from frozen read-only state
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
@@ -194,6 +197,9 @@ jobs:
           PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
           PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/prCControlledHumanEnvironment.mjs deprovision --authority output/controlled-human/input/quiesce.json --output output/controlled-human/deprovision.json
+
+      - name: Verify pinned Supabase CA for post-deprovision inspection
+        run: node scripts/prCControlledHumanPostgresTls.mjs verify-ca
 
       - name: Independently re-inspect post-deprovision state
         env:
