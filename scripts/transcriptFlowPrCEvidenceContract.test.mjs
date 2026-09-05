@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import { runPrCEvidenceCommand } from './prCEvidenceCommandRunner.mjs';
 import { runtimeContextMatches, validatePrCRegistryStructure } from './transcriptFlowPrCEvidenceContract.mjs';
 import { collectChangedPrCFiles, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 
@@ -71,6 +74,89 @@ const makeContract = () => ({
 });
 
 const validates = value => validatePrCRegistryStructure(process.cwd(), value.registry, value.provenance, { verifyDigests: false });
+
+class FakeCommandChild extends EventEmitter {
+  constructor() {
+    super();
+    this.stdout = new PassThrough();
+    this.stderr = new PassThrough();
+    this.wasKilled = false;
+  }
+
+  kill() {
+    this.wasKilled = true;
+    queueMicrotask(() => this.emit('close', null, 'SIGTERM'));
+    return true;
+  }
+}
+
+test('PR C evidence commands stream live output while retaining exact bounded bytes', async () => {
+  const child = new FakeCommandChild();
+  let streamedStdout = '';
+  let streamedStderr = '';
+  const completed = runPrCEvidenceCommand({
+    command: 'npm run focused',
+    commandId: 'focused',
+    cwd: process.cwd(),
+    environment: {},
+    platform: 'linux',
+    spawnImpl: () => child,
+    stdoutSink: { write: chunk => { streamedStdout += chunk; } },
+    stderrSink: { write: chunk => { streamedStderr += chunk; } },
+  });
+
+  child.stdout.write('live stdout\n');
+  child.stderr.write('live stderr\n');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(streamedStdout, 'live stdout\n');
+  assert.equal(streamedStderr, 'live stderr\n');
+  child.stdout.end();
+  child.stderr.end();
+  child.emit('close', 3, null);
+
+  assert.deepEqual(await completed, {
+    status: 3,
+    signal: null,
+    stdout: 'live stdout\n',
+    stderr: 'live stderr\n',
+    error: null,
+  });
+});
+
+test('PR C evidence command capture fails closed instead of retaining unbounded output', async () => {
+  const child = new FakeCommandChild();
+  const completed = runPrCEvidenceCommand({
+    command: 'npm run focused',
+    commandId: 'focused',
+    cwd: process.cwd(),
+    environment: {},
+    platform: 'linux',
+    spawnImpl: () => child,
+    stdoutSink: { write: () => {} },
+    stderrSink: { write: () => {} },
+    maxOutputBytes: 4,
+  });
+
+  child.stdout.write('12345');
+  const result = await completed;
+  assert.equal(child.wasKilled, true);
+  assert.equal(result.status, 1);
+  assert.equal(result.signal, 'SIGTERM');
+  assert.equal(result.stdout, '');
+  assert.equal(result.error?.code, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+  assert.match(result.error?.message || '', /PR_C_COMMAND_OUTPUT_LIMIT:focused:stdout/u);
+});
+
+test('retained Playwright uses only the internal synthetic build entrypoint for loopback fixtures', () => {
+  const config = readFileSync('playwright.config.ts', 'utf8');
+  assert.match(config, /npm run build -- --config vite[.]synthetic-browser-test[.]config[.]ts/u);
+  assert.match(config, /npm run preview -- --config vite[.]synthetic-browser-test[.]config[.]ts/u);
+  assert.match(
+    config,
+    /VITE_SUPABASE_ANON_KEY:\s*'sb_publishable_synthetic_public_key_264'/u,
+  );
+  assert.doesNotMatch(config, /command:\s*'npm run build &&/u);
+});
 
 test('accepts a complete assertion-owned PR C boundary', () => {
   const contract = makeContract();

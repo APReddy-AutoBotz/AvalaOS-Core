@@ -25,6 +25,7 @@ import {
   resolvePrCCanonicalEvidenceDirectory,
 } from './transcriptFlowPrCExecutionIdentity.mjs';
 import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA } from './transcriptFlowPrCEvidenceScope.mjs';
+import { runPrCEvidenceCommand } from './prCEvidenceCommandRunner.mjs';
 
 const root = process.cwd();
 const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -45,19 +46,11 @@ const execute = (command, commandId) => {
   for (const required of command.requiredEnvironment || []) {
     if (!process.env[required]) throw new Error(`PR_C_REQUIRED_ENVIRONMENT:${commandId}:${required}`);
   }
-  const [executable, ...args] = command.command.split(' ');
-  const options = {
+  return runPrCEvidenceCommand({
+    command: command.command,
+    commandId: command.id,
     cwd: root,
-    encoding: 'utf8',
-    env: { ...process.env, PR_C_EVIDENCE_COMMAND_ID: command.id },
-    maxBuffer: 128 * 1024 * 1024,
-    windowsHide: true,
-  };
-  if (process.platform === 'win32' && (executable === 'npm' || executable === 'npm.cmd')) {
-    const shell = process.env.ComSpec || 'cmd.exe';
-    return spawnSync(shell, ['/d', '/s', '/c', ['npm.cmd', ...args].join(' ')], options);
-  }
-  return spawnSync(executable, args, options);
+  });
 };
 
 const { registry, provenance } = loadPrCContract(root);
@@ -84,11 +77,9 @@ for (const command of registry.commands) {
   const startedAt = new Date().toISOString();
   const started = performance.now();
   process.stdout.write(`\n[PR C evidence] ${command.id}: ${command.command}\n`);
-  const result = execute(command, command.id);
+  const result = await execute(command, command.id);
   const stdout = result.stdout || '';
   const stderr = result.stderr || '';
-  process.stdout.write(stdout);
-  process.stderr.write(stderr);
   const markers = [...parseMarkers(command.id, stdout), ...parseMarkers(command.id, stderr)];
   for (const marker of markers) {
     const key = markerKey(marker);
@@ -241,4 +232,13 @@ writeFileSync(path.join(evidenceDir, 'manifest.sha256'), `${prCSha256(manifestBy
 process.stdout.write(`\nPR C evidence directory: ${evidenceDir}\n`);
 process.stdout.write(`PR C evidence summary: ${JSON.stringify({ result: manifest.result, commands: manifest.commandCount, assertions: manifest.assertionCount, notRun: manifest.notRun.length, identity })}\n`);
 
-if (failed) throw new Error(`PR_C_EVIDENCE_FAILED:${JSON.stringify({ missing, lastCommand: commandRecords.at(-1)?.id })}`);
+if (failed) {
+  const lastCommand = commandRecords.at(-1);
+  throw new Error(`PR_C_EVIDENCE_FAILED:${JSON.stringify({
+    missing,
+    lastCommand: lastCommand?.id,
+    exitCode: lastCommand?.exitCode,
+    stdoutSha256: lastCommand?.stdoutSha256,
+    stderrSha256: lastCommand?.stderrSha256,
+  })}`);
+}

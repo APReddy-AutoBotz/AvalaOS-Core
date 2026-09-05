@@ -214,8 +214,42 @@ $$;
 -- boundary. The only non-zero provider-adjacent state it accepts is disabled,
 -- keyless, attempt-free offline provenance tied to an exact retained exercise.
 CREATE OR REPLACE FUNCTION public.pr_c_controlled_human_provider_state()
-RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT jsonb_build_object(
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE required_relation text;
+BEGIN
+ -- The retained PR 1A migration harness deliberately installs every migration
+ -- except PR 1A before recreating its two legacy audit relations.  Defer parsing
+ -- the accounting query so this later migration remains installable in that
+ -- supported upgrade/failure scenario, but never interpret a missing authority
+ -- relation as an empty (and therefore safe) provider state.
+ FOREACH required_relation IN ARRAY ARRAY[
+   'public.pr_c_controlled_human_exercises',
+   'public.ai_provider_configs',
+   'public.enterprise_ai_capability_routes',
+   'public.enterprise_ai_job_ledger',
+   'public.enterprise_transcript_extraction_bindings',
+   'public.enterprise_ai_command_receipts',
+   'public.enterprise_evidence_candidates',
+   'public.ai_provider_key_refs',
+   'public.pilot_operations_provider_bindings',
+   'public.hosted_pilot_provider_simulations',
+   'public.enterprise_ai_budget_reservations',
+   'public.enterprise_provider_secret_cleanup_jobs',
+   'public.ai_provider_audit_events',
+   'public.enterprise_ai_usage_ledger',
+   'public.enterprise_ai_job_attempts',
+   'public.enterprise_ai_extraction_staged_results',
+   'public.ai_generation_jobs',
+   'public.ai_usage_events',
+   'public.enterprise_ai_effect_journal',
+   'public.studio_artifact_generation_attempts'
+ ] LOOP
+   IF pg_catalog.to_regclass(required_relation) IS NULL THEN
+     RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_PROVIDER_SCHEMA_MISMATCH';
+   END IF;
+ END LOOP;
+
+ RETURN (SELECT jsonb_build_object(
    'unsafeRows',
      (SELECT count(*) FROM public.ai_provider_configs config WHERE NOT(
        config.provider='groq' AND config.status='disabled' AND config.key_ref_id IS NULL AND config.default_model='synthetic-no-provider'
@@ -292,7 +326,8 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS
      +(SELECT count(*) FROM public.ai_usage_events)
      +(SELECT count(*) FROM public.enterprise_ai_command_receipts receipt
        WHERE receipt.runtime_area='provider')
- )
+ ));
+END
 $$;
 
 CREATE OR REPLACE FUNCTION public.pr_c_controlled_human_assert_provider_state()
