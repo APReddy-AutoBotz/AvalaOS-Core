@@ -10,6 +10,7 @@ import type {
   MonitorApprovedBaselinesProjection,
   MonitorBaselineEligibilityProjection,
 } from '../../services/deliveryMonitor';
+import { getControlledHumanEvidenceState, isControlledHumanRuntimeEnabled } from '../../services/supabaseClient';
 
 interface Props {
   projection: DeliveryWorkspaceProjection;
@@ -148,8 +149,11 @@ export default function GovernedDeliveryWorkspace({ projection, monitorProjectio
         : pending.action === 'delivery.handoff.review.resolve' ? { action: pending.action, handoffId: pending.handoff.id, expectedVersion: pending.handoff.version, outcome: pending.outcome ?? 'approved', rationale }
         : { action: 'delivery.handoff.approval.resolve', handoffId: pending.handoff.id, expectedVersion: pending.handoff.version, outcome: pending.outcome === 'rejected' ? 'rejected' : 'approved', rationale };
     } else if (pending.kind === 'item') {
-      command = pending.outcome === 'edited' ? { action: 'delivery.item.review', itemAggregateId: pending.item.aggregateId, expectedAggregateVersion: pending.item.aggregateVersion, expectedItemVersionId: pending.item.currentVersionId, outcome: 'edited', rationale, authored: { type: pending.item.type, title: edit.title, description: edit.description, acceptanceCriteria: edit.acceptanceCriteria.split('\n').map(value => value.trim()).filter(Boolean), nonFunctionalRequirements: edit.nonFunctionalRequirements.split('\n').map(value => value.trim()).filter(Boolean) } }
-        : { action: 'delivery.item.review', itemAggregateId: pending.item.aggregateId, expectedAggregateVersion: pending.item.aggregateVersion, expectedItemVersionId: pending.item.currentVersionId, outcome: pending.outcome, rationale };
+      const completeSet = isControlledHumanRuntimeEnabled() && getControlledHumanEvidenceState().armedStep?.stepId === 'decide-every-current-proposal'
+        ? pending.deliveryPackage.items.map(item => ({ itemAggregateId: item.aggregateId, expectedAggregateVersion: item.aggregateVersion, expectedItemVersionId: item.currentVersionId }))
+        : undefined;
+      command = pending.outcome === 'edited' ? { action: 'delivery.item.review', itemAggregateId: pending.item.aggregateId, expectedAggregateVersion: pending.item.aggregateVersion, expectedItemVersionId: pending.item.currentVersionId, outcome: 'edited', rationale, authored: { type: pending.item.type, title: edit.title, description: edit.description, acceptanceCriteria: edit.acceptanceCriteria.split('\n').map(value => value.trim()).filter(Boolean), nonFunctionalRequirements: edit.nonFunctionalRequirements.split('\n').map(value => value.trim()).filter(Boolean) }, ...(completeSet ? { controlledHumanCompleteItemSet: completeSet } : {}) }
+        : { action: 'delivery.item.review', itemAggregateId: pending.item.aggregateId, expectedAggregateVersion: pending.item.aggregateVersion, expectedItemVersionId: pending.item.currentVersionId, outcome: pending.outcome, rationale, ...(completeSet ? { controlledHumanCompleteItemSet: completeSet } : {}) };
     } else if (pending.kind === 'package') {
       if (pending.action === 'delivery.package.review.resolve') {
         command = { action: 'delivery.package.review.resolve', workPackageId: pending.deliveryPackage.id, expectedPackageVersion: pending.deliveryPackage.currentVersion, expectedPackageVersionId: pending.deliveryPackage.currentVersionId, expectedPackageAggregateVersion: pending.deliveryPackage.aggregateVersion, outcome: pending.outcome ?? 'approved', rationale };

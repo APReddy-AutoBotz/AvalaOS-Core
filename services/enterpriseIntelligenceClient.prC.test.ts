@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DeliveryMonitorCommandInputError, buildDeliveryMonitorSelectorPayload, type DeliveryMonitorCommandInput } from './deliveryMonitor/commands';
 import { DELIVERY_MONITOR_FIXTURE_IDS as ids } from './deliveryMonitor/fixtures';
-import { enterpriseIntelligenceClient } from './enterpriseIntelligenceClient';
+import { controlledHumanTarget, enterpriseIntelligenceClient } from './enterpriseIntelligenceClient';
 import { emitPrCAssertion } from '../supabase/functions/_shared/deliveryMonitorPrCTestEvidence';
 
 type Invocation = {
@@ -125,6 +125,14 @@ const cases: Array<{
 ];
 
 const run = async () => {
+assert.deepEqual(controlledHumanTarget('delivery.package.revision.commit', ids.workspaceId, {
+  workPackageId: ids.packageId, expectedPackageVersion: 7, expectedPackageAggregateVersion: 19,
+}), { targetFamily: 'delivery_work_package', targetId: ids.packageId, expectedVersion: 19 });
+for (const action of ['delivery.package.review.resolve', 'delivery.package.approval.resolve', 'monitor.baseline.create']) {
+  assert.deepEqual(controlledHumanTarget(action, ids.workspaceId, {
+    workPackageId: ids.packageId, expectedPackageVersion: 7, expectedPackageAggregateVersion: 19,
+  }), { targetFamily: 'delivery_work_package', targetId: ids.packageId, expectedVersion: 7 });
+}
 for (const testCase of cases) {
   invocations.length = 0;
   await testCase.invoke();

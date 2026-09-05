@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
+const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercise_authority.sql';
 const sql=readFileSync(`supabase/migrations/${migrationName}`,'utf8');
 const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')).sort();
 const emit=(testId,assertionId,lineage)=>console.log(`PR_C_ASSERTION ${JSON.stringify({
@@ -15,7 +16,9 @@ const body=name=>{
 };
 
 assert.equal(migrations.filter(name=>name===migrationName).length,1);
-assert.equal(migrations.at(-1),migrationName);
+assert.equal(migrations.filter(name=>name===controlledHumanMigrationName).length,1);
+assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
+assert.equal(migrations.at(-1),controlledHumanMigrationName);
 assert.ok(sql.indexOf('DO $pr_c_preflight$')<sql.indexOf('INSERT INTO public.capabilities'));
 assert.match(sql,/PR_C_DIRTY_SCHEMA/);assert.match(sql,/PR_C_BACKFILL_PRECONDITION_FAILED/);assert.match(sql,/PR_C_BACKFILL_CARDINALITY_MISMATCH/);
 assert.match(sql,/SET migration_tip='20260831062024'/);assert.match(sql,/CHECK\(migration_tip='20260831062024'\)/);

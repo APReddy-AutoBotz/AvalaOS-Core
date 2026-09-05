@@ -1,0 +1,235 @@
+name: PR 264 Controlled Human Verification
+
+on:
+  workflow_call:
+    inputs:
+      exact_head_sha: { required: true, type: string }
+      preparation_run_id: { required: true, type: string }
+      preparation_run_attempt: { required: true, type: string }
+      quiesce_run_id: { required: true, type: string }
+      quiesce_run_attempt: { required: true, type: string }
+      requester_run_id: { required: true, type: string }
+      requester_run_attempt: { required: true, type: string }
+      reviewer_run_id: { required: true, type: string }
+      reviewer_run_attempt: { required: true, type: string }
+      approver_run_id: { required: true, type: string }
+      approver_run_attempt: { required: true, type: string }
+      exercise_digest: { required: true, type: string }
+      target_fingerprint: { required: true, type: string }
+      public_target_digest: { required: true, type: string }
+      netlify_deploy_id: { required: true, type: string }
+      defect_history_json: { required: true, type: string }
+permissions:
+  actions: read
+  contents: read
+  issues: read
+
+jobs:
+  verify:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 264 && github.event.pull_request.head.sha == inputs.exact_head_sha }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS: hosted_nonproduction_pilot
+      PR_C_CONTROLLED_HUMAN_PR_NUMBER: 264
+      PR_C_CONTROLLED_HUMAN_RELEASE_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
+      PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ inputs.public_target_digest }}
+      PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.exact_head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require exact checkout
+        run: test "$(git rev-parse HEAD)" = "$PR_C_CONTROLLED_HUMAN_RELEASE_SHA"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies before protected values
+        run: npm ci
+
+      - name: Verify exact completed PR workflow runs and immutable artifact names
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          PREPARATION_RUN_ID: ${{ inputs.preparation_run_id }}
+          PREPARATION_RUN_ATTEMPT: ${{ inputs.preparation_run_attempt }}
+          QUIESCE_RUN_ID: ${{ inputs.quiesce_run_id }}
+          QUIESCE_RUN_ATTEMPT: ${{ inputs.quiesce_run_attempt }}
+          REQUESTER_RUN_ID: ${{ inputs.requester_run_id }}
+          REQUESTER_RUN_ATTEMPT: ${{ inputs.requester_run_attempt }}
+          REVIEWER_RUN_ID: ${{ inputs.reviewer_run_id }}
+          REVIEWER_RUN_ATTEMPT: ${{ inputs.reviewer_run_attempt }}
+          APPROVER_RUN_ID: ${{ inputs.approver_run_id }}
+          APPROVER_RUN_ATTEMPT: ${{ inputs.approver_run_attempt }}
+        with:
+          script: |
+            const bindings = [
+              ['preparation', process.env.PREPARATION_RUN_ID, process.env.PREPARATION_RUN_ATTEMPT],
+              ['quiesce', process.env.QUIESCE_RUN_ID, process.env.QUIESCE_RUN_ATTEMPT],
+              ['requester', process.env.REQUESTER_RUN_ID, process.env.REQUESTER_RUN_ATTEMPT],
+              ['reviewer', process.env.REVIEWER_RUN_ID, process.env.REVIEWER_RUN_ATTEMPT],
+              ['approver', process.env.APPROVER_RUN_ID, process.env.APPROVER_RUN_ATTEMPT],
+            ];
+            for (const [role,id,attempt] of bindings) {
+              if (!/^[1-9][0-9]{0,19}$/.test(id) || !/^[1-9][0-9]*$/.test(attempt)) return core.setFailed('invalid run binding');
+              const runId = Number(id);
+              const { data: run } = await github.rest.actions.getWorkflowRun({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId });
+              if (!Number.isSafeInteger(runId) || String(run.path || '').split('@',1)[0] !== '.github/workflows/transcript-flow-pr-c.yml' || run.head_sha !== process.env.EXPECTED_HEAD || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion !== 'success' || String(run.run_attempt) !== attempt) return core.setFailed('run identity mismatch');
+              const artifactName = role === 'preparation'
+                ? `pr264-controlled-human-preparation-${process.env.EXPECTED_HEAD}-${id}-${attempt}`
+                : role === 'quiesce'
+                  ? `pr264-controlled-human-quiesce-${process.env.EXPECTED_HEAD}-${id}-${attempt}`
+                  : `pr264-controlled-human-${role}-${id}-${attempt}`;
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 });
+              const artifact = data.artifacts.find(item => item.name === artifactName);
+              if (!artifact || artifact.expired || !/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')) return core.setFailed('immutable artifact missing');
+            }
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-preparation-${{ inputs.exact_head_sha }}-${{ inputs.preparation_run_id }}-${{ inputs.preparation_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.preparation_run_id }}
+          path: output/controlled-human/input
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-quiesce-${{ inputs.exact_head_sha }}-${{ inputs.quiesce_run_id }}-${{ inputs.quiesce_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.quiesce_run_id }}
+          path: output/controlled-human/input
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-requester-${{ inputs.requester_run_id }}-${{ inputs.requester_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.requester_run_id }}
+          path: output/controlled-human/input
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-reviewer-${{ inputs.reviewer_run_id }}-${{ inputs.reviewer_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reviewer_run_id }}
+          path: output/controlled-human/input
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-approver-${{ inputs.approver_run_id }}-${{ inputs.approver_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.approver_run_id }}
+          path: output/controlled-human/input
+
+      - name: Revalidate immutable human comments and exact signed observation bytes
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          EXPECTED_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const reject = message => { throw new Error(`PR264_CONTROLLED_HUMAN_COMMENT_REJECTED:${message}`); };
+            const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value);
+            const signingKey = process.env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY;
+            if (typeof signingKey !== 'string' || signingKey.length < 32) reject('signing-key');
+            for (const role of ['requester', 'reviewer', 'approver']) {
+              const checkpoint = JSON.parse(fs.readFileSync(`output/controlled-human/input/checkpoint-${role}.json`, 'utf8'));
+              const commentId = Number(checkpoint.capture?.commentId);
+              if (!Number.isSafeInteger(commentId) || commentId < 1) reject(`${role}-comment-id`);
+              const { data: comment } = await github.rest.issues.getComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: commentId });
+              if (comment.issue_url.split('/').at(-1) !== '264' || comment.user?.type !== 'User' || !comment.user.login
+                || comment.created_at !== comment.updated_at || comment.created_at !== checkpoint.capture.commentCreatedAt) reject(`${role}-provenance`);
+              const signerDigest = `hmac-sha256:${crypto.createHmac('sha256', signingKey).update(`actor\0${comment.user.login}`).digest('hex')}`;
+              if (checkpoint.humanRole !== role || checkpoint.signerDigest !== signerDigest) reject(`${role}-signer`);
+              let body;
+              try { body = JSON.parse(comment.body); } catch { reject(`${role}-json`); }
+              if (canonical(Object.keys(body).sort()) !== canonical(['exactHead','exerciseDigest','humanRole','kind','observations','preparationDigest'])) reject(`${role}-keys`);
+              if (body.kind !== 'pr264-controlled-human-observation' || body.humanRole !== role || body.exactHead !== process.env.EXPECTED_HEAD
+                || body.exerciseDigest !== process.env.EXPECTED_EXERCISE_DIGEST || body.preparationDigest !== checkpoint.preparationDigest) reject(`${role}-binding`);
+              const retainedObservations = checkpoint.checkpoints.map(record => ({
+                checkpointId: record.checkpointId,
+                journeyId: record.journeyId,
+                testIds: record.testIds,
+                steps: record.steps.map(step => ({
+                  stepId: step.stepId,
+                  personaKey: step.personaKey,
+                  outcome: step.outcome,
+                  startedAt: step.startedAt,
+                  completedAt: step.completedAt,
+                  browserArtifact: step.browserArtifact.content,
+                })),
+              }));
+              if (canonical(body.observations) !== canonical(retainedObservations)) reject(`${role}-observation-bytes`);
+            }
+
+      - name: Validate preparation and every signed human/server checkpoint before reset
+        env:
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+        run: node --input-type=module -e "import {readFile} from 'node:fs/promises'; import {validatePreparationEvidence,validateHumanCheckpoint} from './scripts/prCControlledHumanEvidenceContract.mjs'; const p=JSON.parse(await readFile('output/controlled-human/input/preparation.json','utf8')); const q=JSON.parse(await readFile('output/controlled-human/input/quiesce.json','utf8')); validatePreparationEvidence(p); for(const role of ['requester','reviewer','approver']) validateHumanCheckpoint({preparation:p,quiesceRecord:q,checkpoint:JSON.parse(await readFile('output/controlled-human/input/checkpoint-'+role+'.json','utf8')),signingKey:process.env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY});"
+
+      - name: Bind Supabase project, API and database before lifecycle mutation
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
+
+      - name: Deprovision exact synthetic exercise directly from frozen read-only state
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/prCControlledHumanEnvironment.mjs deprovision --authority output/controlled-human/input/quiesce.json --output output/controlled-human/deprovision.json
+
+      - name: Independently re-inspect post-deprovision state
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/prCControlledHumanEnvironment.mjs post-deprovision-verify --authority output/controlled-human/deprovision.json --output output/controlled-human/post-deprovision.json
+
+      - name: Reverify exact PR-only Deploy Preview
+        run: node scripts/verifyPr264ControlledHumanPreview.mjs
+
+      - name: Write sanitized defect history
+        env:
+          DEFECT_HISTORY_JSON: ${{ inputs.defect_history_json }}
+        run: node --input-type=module -e "import {mkdir,writeFile} from 'node:fs/promises'; await mkdir('output/controlled-human/input',{recursive:true}); JSON.parse(process.env.DEFECT_HISTORY_JSON); await writeFile('output/controlled-human/input/defect-history.json',process.env.DEFECT_HISTORY_JSON,{flag:'wx',mode:0o600})"
+
+      - name: Record completion timestamp
+        id: timestamp
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build verified human session from recomputed evidence
+        env:
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+          PR_C_CONTROLLED_HUMAN_COMPLETED_AT: ${{ steps.timestamp.outputs.value }}
+        run: node scripts/verifyPrCControlledHumanSession.mjs --preparation output/controlled-human/input/preparation.json --requester output/controlled-human/input/checkpoint-requester.json --reviewer output/controlled-human/input/checkpoint-reviewer.json --approver output/controlled-human/input/checkpoint-approver.json --quiesce output/controlled-human/input/quiesce.json --deprovision output/controlled-human/deprovision.json --post-deprovision output/controlled-human/post-deprovision.json --defect-history output/controlled-human/input/defect-history.json --output output/controlled-human/verified-session.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-controlled-human-verified-${{ inputs.exact_head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/controlled-human/verified-session.json
+            output/controlled-human/deprovision.json
+            output/controlled-human/post-deprovision.json
+            output/controlled-human/input/preparation.json
+            output/controlled-human/input/quiesce.json
+            output/controlled-human/input/checkpoint-requester.json
+            output/controlled-human/input/checkpoint-reviewer.json
+            output/controlled-human/input/checkpoint-approver.json
+          if-no-files-found: error
+          retention-days: 14

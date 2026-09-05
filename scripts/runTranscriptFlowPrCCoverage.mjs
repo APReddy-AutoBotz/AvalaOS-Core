@@ -62,8 +62,34 @@ const options = {
 const host = ts.createCompilerHost(options);
 const originalReadFile = host.readFile.bind(host);
 const supabaseClient = path.resolve('services/supabaseClient.ts');
+const SUPABASE_CLIENT_STUB = `
+type ControlledHumanObservationKind='server_event'|'negative_attempt';
+interface ControlledHumanStepBindingOption{checkpointId:string;stepId:string;action:string;observationKind:ControlledHumanObservationKind;state:'unanchored'|'anchored'|'completed';safeAnchor:ControlledHumanSafeStepAnchor|null;safeBinding:ControlledHumanSafeStepBinding|null}
+interface ControlledHumanSafeStepAnchor{contractVersion:'pr-c-controlled-human-step-anchor-1';stepId:string;action:string;targetFamily:string;targetDigest:string;expectedVersion:number;transitionKind:'same'|'increment_one'|'create_one'|'create_zero'|'replay_existing';selectorDigest:string;intentDigest:string;requestDigest:string;challengeToken:string;anchoredAt:string}
+interface ControlledHumanSafeStepBinding{contractVersion:'pr-c-controlled-human-step-binding-3';stepId:string;action:string;result:'succeeded'|'denied';resourceFamily:string;resourceDigest:string;expectedVersion:number;observedVersion:number;requestDigest:string;receiptDigest:string;auditDigest:string;intentDigest:string;denialCodeDigest:string;bindingToken:string;anchorToken:string;causalParentBindingToken:string;causalParentResourceDigest:string;causalLineageDigest:string;issuedAt:string}
+interface ControlledHumanCommandAnchor{safeAnchor:ControlledHumanSafeStepAnchor;requestId:string;businessIdempotencyKey?:string}
+const rejectControlledHumanCoverageInvocation=():never=>{throw new Error('UNEXPECTED_CONTROLLED_HUMAN_COVERAGE_STUB_INVOCATION')};
+export const getRuntimeDataAccess=(): 'server' => 'server';
+export const isSupabaseConfigured=():boolean=>true;
+export const isControlledHumanRuntimeEnabled=():boolean=>false;
+export const getControlledHumanEvidenceState=():{armedStep:ControlledHumanStepBindingOption|null;safeAnchor:ControlledHumanSafeStepAnchor|null}=>({armedStep:null,safeAnchor:null});
+export const beginControlledHumanCommand=async(_input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>rejectControlledHumanCoverageInvocation();
+export const completeControlledHumanCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>rejectControlledHumanCoverageInvocation();
+export const executeControlledHumanDeniedCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>rejectControlledHumanCoverageInvocation();
+export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__prCInvoke||(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__prCRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}};
+`;
+const enterpriseClientSource = fs.readFileSync(path.resolve('services/enterpriseIntelligenceClient.ts'), 'utf8');
+const supabaseImport = enterpriseClientSource.match(/import\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/supabaseClient['"]/u);
+if (!supabaseImport) throw new Error('PR_C_COVERAGE_SUPABASE_IMPORT_NOT_FOUND');
+const importedSupabaseNames = supabaseImport[1].split(',')
+  .map(value => value.trim().replace(/^type\s+/u, '').split(/\s+as\s+/u)[0])
+  .filter(Boolean);
+const stubExportNames = new Set([...SUPABASE_CLIENT_STUB.matchAll(/export\s+(?:const|function|class|type|interface)\s+([A-Za-z_$][\w$]*)/gu)]
+  .map(match => match[1]));
+const missingStubExports = importedSupabaseNames.filter(name => !stubExportNames.has(name));
+if (missingStubExports.length) throw new Error(`PR_C_COVERAGE_SUPABASE_STUB_EXPORT_DRIFT:${missingStubExports.join(',')}`);
 host.readFile = file => path.resolve(file) === supabaseClient
-  ? `export const getRuntimeDataAccess=()=> 'server';export const isSupabaseConfigured=()=>true;export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__prCInvoke||(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__prCRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}};`
+  ? SUPABASE_CLIENT_STUB
   : originalReadFile(file);
 
 const rootNames = [

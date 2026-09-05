@@ -59,6 +59,14 @@
       "environment": "controlled-node-22"
     },
     {
+      "id": "pr-c-controlled-human-source",
+      "command": "npm run test:pr-c-controlled-human-source",
+      "environment": "controlled-postgresql-16",
+      "requiredEnvironment": [
+        "PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL"
+      ]
+    },
+    {
       "id": "historical-evidence-drift",
       "command": "git diff --exit-code 5433cad41721355e3ec5a29bc2f87772540c77b5 -- testing/process-lifecycle/contracts/pr-a-assertion-registry.json testing/process-lifecycle/contracts/pr-b-assertion-registry.json docs/quality/governed-multisource-transcript-pr-a-evidence.md docs/quality/governed-multisource-studio-pr-b-evidence.md",
       "environment": "controlled-git"
@@ -406,11 +414,11 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "b02a95bdb40ef10f471cd54e793c8bd59d3508c0d84a1d689e3957c6d6113c4f"
+      "sha256": "67882ee9ce75e2727acb743e9d758d584a86343c609586b13fc6b3e193aff8cc"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
-      "sha256": "60cc66e05555dd731374e185ebd1a7d8b51a1fe3435a8a74b14f93303c619200"
+      "sha256": "220ace64d997023d2c86c7644397fc1b6929a6bbf633c5be612500ea8466fa13"
     },
     "domain": {
       "path": "services/deliveryMonitor/contracts.test.ts",
@@ -426,7 +434,7 @@
     },
     "client-transport": {
       "path": "services/enterpriseIntelligenceClient.prC.test.ts",
-      "sha256": "d5b5279e859b6583c30c9c28c91450f3ce7e0cfce89ce3120cc074115d27191c"
+      "sha256": "ec674c009b598b9b007e45c21b4cb89879966d3339c98296a9424a3af20474c5"
     },
     "api-command": {
       "path": "supabase/functions/_shared/deliveryMonitorCommand.test.ts",
@@ -446,7 +454,7 @@
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "c8ae8f34b12facdfebdc442fc2cb051a2368fd8679e8dce284a2fc2f0a1ce6e1"
+      "sha256": "a8f2cfa5809ca0319664ddc2b49955dca16b28da6c6587af611336158009bef8"
     }
   },
   "assertions": [
@@ -2019,7 +2027,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260831062024",
+        "migrationTip": "20260904120000",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -8087,7 +8095,7 @@
       "owner": "boundary",
       "testName": "Controlled human walkthrough",
       "command": null,
-      "reason": "Sanitized seed identities and the walkthrough are prepared, but an authenticated controlled-human session has not been scheduled or executed and therefore remains not_run.",
+      "reason": "The AP authorized a dedicated synthetic PR #264 preview exercise, but automation and source contracts cannot substitute for an actually completed, signed three-distinct-human session; until that exact session verifies after deprovision, this boundary remains not_run.",
       "applicableExecutionClassifications": [
         "github_candidate",
         "local_candidate"
@@ -8130,7 +8138,7 @@
       "owner": "boundary",
       "testName": "Deployment verification",
       "command": null,
-      "reason": "No deployment or live-infrastructure inspection is authorized for PR C, so deployment state and behavior remain unverified.",
+      "reason": "Only the bounded PR #264 controlled-human preview and dedicated synthetic backend are authorized. The canonical PR C evidence workflow does not deploy or inspect them, so general deployment verification remains not_run.",
       "applicableExecutionClassifications": [
         "github_candidate",
         "local_candidate"

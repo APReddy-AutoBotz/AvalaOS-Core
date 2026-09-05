@@ -359,8 +359,10 @@ test('Studio artifacts mode prebuilds its harness and owns the preview lifecycle
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 3);
   assert.ok(calls[0].arguments_.includes('build'));
+  assert.deepEqual(calls[0].arguments_.slice(-3), ['build', '--config', 'vite.synthetic-browser-test.config.ts']);
   assert.equal(calls[0].options.env.STUDIO_ARTIFACT_BROWSER_TEST_BUILD, 'true');
   assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('vite.synthetic-browser-test.config.ts'));
   assert.ok(calls[1].arguments_.includes('--strictPort'));
   assert.ok(calls[1].arguments_.includes('4187'));
   assert.ok(calls[2].arguments_.includes('--config=playwright.studio-artifacts.config.ts'));
@@ -483,9 +485,11 @@ test('Pilot Operations mode owns its Vite lifecycle and preserves automated-test
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 3);
   assert.ok(calls[0].arguments_.includes('build'));
+  assert.deepEqual(calls[0].arguments_.slice(-3), ['build', '--config', 'vite.synthetic-browser-test.config.ts']);
   assert.equal(calls[0].options.env.PILOT_OPERATIONS_BROWSER_TEST_BUILD, 'true');
   assert.equal(calls[0].options.env.VITE_AVALA_RUNTIME_MODE, 'automated_test');
   assert.ok(calls[1].arguments_.includes('preview'));
+  assert.ok(calls[1].arguments_.includes('vite.synthetic-browser-test.config.ts'));
   assert.ok(calls[1].arguments_.includes('--strictPort'));
   assert.ok(calls[1].arguments_.includes('4427'));
   assert.equal(calls[1].options.env.VITE_AVALA_RUNTIME_MODE, 'automated_test');

@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
+import {
+  collectReferencedRepositoryMjs,
+  copyReferencedRepositoryMjs,
+} from './typescriptRuntimeMjsGraph.mjs';
 
 const rootNames = process.argv.slice(2);
 if (rootNames.length === 0) {
@@ -15,19 +19,23 @@ fs.rmSync(outputDir, { recursive: true, force: true });
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(path.join(outputDir, 'package.json'), JSON.stringify({ type: 'commonjs' }, null, 2));
 
+const compilerOptions = {
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.CommonJS,
+  moduleResolution: ts.ModuleResolutionKind.Node10,
+  skipLibCheck: true,
+  outDir: outputDir,
+  noEmit: false,
+  esModuleInterop: true,
+  rewriteRelativeImportExtensions: true,
+};
+
 const program = ts.createProgram({
   rootNames,
-  options: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.CommonJS,
-    moduleResolution: ts.ModuleResolutionKind.Node10,
-    skipLibCheck: true,
-    outDir: outputDir,
-    noEmit: false,
-    esModuleInterop: true,
-    rewriteRelativeImportExtensions: true,
-  },
+  options: compilerOptions,
 });
+
+const mjsCopies = collectReferencedRepositoryMjs({ program });
 
 const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length > 0) {
@@ -45,6 +53,10 @@ if (result.emitSkipped) {
   console.error('TypeScript regression compilation failed.');
   process.exit(1);
 }
+
+// TypeScript emits explicit `.mjs` imports unchanged. Copy only the canonical,
+// compiler-owned local runtime graph to the same repository-relative location.
+copyReferencedRepositoryMjs({ copies: mjsCopies, outputDir });
 
 const compiledEntry = path.join(outputDir, testEntry.replace(/\.ts$/, '.js'));
 execFileSync(process.execPath, [compiledEntry], {

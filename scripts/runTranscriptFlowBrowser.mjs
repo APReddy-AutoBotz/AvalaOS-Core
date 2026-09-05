@@ -8,6 +8,7 @@ export const READINESS_TIMEOUT_MS = 120_000;
 const READINESS_REQUEST_TIMEOUT_MS = 1_000;
 const READINESS_POLL_INTERVAL_MS = 250;
 const OUTPUT_CAPTURE_LIMIT = 4_000;
+export const SYNTHETIC_BROWSER_VITE_CONFIG = 'vite.synthetic-browser-test.config.ts';
 
 export const browserModeByFlag = new Map([
   ['--full-platform', {
@@ -379,13 +380,14 @@ export const runBrowserHarness = async ({
   now = Date.now,
 }) => {
   await portPreflightImpl({ host: '127.0.0.1', port: mode.port, label: mode.label });
+  const viteConfig = mode.viteConfig ?? SYNTHETIC_BROWSER_VITE_CONFIG;
 
   const serverEnvironment = {
     ...environment,
     ...mode.environment,
     VITE_AVALA_RUNTIME_MODE: mode.runtimeMode ?? 'pilot',
     VITE_SUPABASE_URL: 'https://127.0.0.1:59999',
-    VITE_SUPABASE_ANON_KEY: 'browser-test-placeholder',
+    VITE_SUPABASE_ANON_KEY: 'sb_publishable_synthetic_public_key_264',
     VITE_AI_EDGE_FUNCTIONS_ENABLED: 'false',
   };
   const playwrightEnvironment = {
@@ -398,7 +400,7 @@ export const runBrowserHarness = async ({
       arguments_: [
         path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
         'build',
-        ...(mode.viteConfig ? ['--config', mode.viteConfig] : []),
+        '--config', viteConfig,
       ],
       root,
       environment: serverEnvironment,
@@ -413,7 +415,7 @@ export const runBrowserHarness = async ({
   const server = spawnImpl(process.execPath, [
     path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
     ...(mode.serverCommand === 'preview' ? ['preview'] : []),
-    ...(mode.viteConfig ? ['--config', mode.viteConfig] : []),
+    '--config', viteConfig,
     '--host', '127.0.0.1', '--port', mode.port, '--strictPort', '--clearScreen', 'false',
   ], {
     cwd: root,

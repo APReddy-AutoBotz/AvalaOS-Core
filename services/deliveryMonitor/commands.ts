@@ -7,8 +7,8 @@ export type DeliveryMonitorCommandInput =
   | { action: 'delivery.handoff.withdraw'; handoffId: string; expectedVersion: number; rationale: string }
   | { action: 'delivery.handoff.consume'; handoffId: string; expectedVersion: number }
   | { action: 'delivery.package.create.manual'; manualBrief: string; items: ManualDeliveryItemInput[] }
-  | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'edited'; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType } }
-  | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'accepted' | 'rejected'; rationale: string }
+  | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'edited'; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType }; controlledHumanCompleteItemSet?: DeliveryItemIdentityInput[] }
+  | { action: 'delivery.item.review'; itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; outcome: 'accepted' | 'rejected'; rationale: string; controlledHumanCompleteItemSet?: DeliveryItemIdentityInput[] }
   | { action: 'delivery.package.revision.commit'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; expectedItems: DeliveryItemIdentityInput[]; itemRevisions: Array<{ itemAggregateId: string; expectedAggregateVersion: number; expectedItemVersionId: string; rationale: string; authored: DeliveryItemAuthoredFields & { type: DeliveryItemType } }> }
   | { action: 'delivery.package.review.resolve'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; outcome: 'approved' | 'changes_requested' | 'rejected'; rationale: string }
   | { action: 'delivery.package.approval.resolve'; workPackageId: string; expectedPackageVersion: number; expectedPackageVersionId: string; expectedPackageAggregateVersion: number; outcome: 'approved' | 'rejected'; rationale: string }
@@ -119,8 +119,8 @@ export const buildDeliveryMonitorSelectorPayload = (input: DeliveryMonitorComman
     }
     case 'delivery.item.review':
       exactInputKeys(input, input.outcome === 'edited'
-        ? ['action', 'itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'outcome', 'rationale', 'authored']
-        : ['action', 'itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'outcome', 'rationale']);
+        ? ['action', 'itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'outcome', 'rationale', 'authored', 'controlledHumanCompleteItemSet']
+        : ['action', 'itemAggregateId', 'expectedAggregateVersion', 'expectedItemVersionId', 'outcome', 'rationale', 'controlledHumanCompleteItemSet']);
       return {
         itemAggregateId: id(input.itemAggregateId), expectedAggregateVersion: integer(input.expectedAggregateVersion), expectedItemVersionId: id(input.expectedItemVersionId),
         outcome: input.outcome, rationale: text(input.rationale, 1, 4_000), ...(input.outcome === 'edited' ? { item: { itemType: sqlItemType(input.authored.type), ...authored(input.authored) } } : {}),

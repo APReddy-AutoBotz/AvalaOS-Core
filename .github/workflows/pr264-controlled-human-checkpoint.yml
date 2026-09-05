@@ -1,0 +1,149 @@
+name: PR 264 Controlled Human Checkpoint
+
+on:
+  workflow_call:
+    inputs:
+      exact_head_sha: { required: true, type: string }
+      preparation_run_id: { required: true, type: string }
+      preparation_run_attempt: { required: true, type: string }
+      quiesce_run_id: { required: true, type: string }
+      quiesce_run_attempt: { required: true, type: string }
+      human_role: { required: true, type: string }
+      comment_id: { required: true, type: string }
+      exercise_digest: { required: true, type: string }
+      target_fingerprint: { required: true, type: string }
+      public_target_digest: { required: true, type: string }
+      netlify_deploy_id: { required: true, type: string }
+permissions:
+  actions: read
+  contents: read
+  issues: read
+
+jobs:
+  capture:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 264 && github.event.pull_request.head.sha == inputs.exact_head_sha }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS: hosted_nonproduction_pilot
+      PR_C_CONTROLLED_HUMAN_PR_NUMBER: 264
+      PR_C_CONTROLLED_HUMAN_RELEASE_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
+      PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+      PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ inputs.target_fingerprint }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ inputs.public_target_digest }}
+      PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW: .github/workflows/pr264-controlled-human-checkpoint.yml
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.exact_head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require exact checkout
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies before protected values
+        run: npm ci
+
+      - name: Verify completed exact-head preparation run and immutable artifact
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          PREPARATION_RUN_ID: ${{ inputs.preparation_run_id }}
+          PREPARATION_RUN_ATTEMPT: ${{ inputs.preparation_run_attempt }}
+          QUIESCE_RUN_ID: ${{ inputs.quiesce_run_id }}
+          QUIESCE_RUN_ATTEMPT: ${{ inputs.quiesce_run_attempt }}
+        with:
+          script: |
+            const bindings = [
+              ['preparation', process.env.PREPARATION_RUN_ID, process.env.PREPARATION_RUN_ATTEMPT, (id,attempt) => `pr264-controlled-human-preparation-${process.env.EXPECTED_HEAD}-${id}-${attempt}`],
+              ['quiesce', process.env.QUIESCE_RUN_ID, process.env.QUIESCE_RUN_ATTEMPT, (id,attempt) => `pr264-controlled-human-quiesce-${process.env.EXPECTED_HEAD}-${id}-${attempt}`],
+            ];
+            for (const [kind,id,attempt,nameFor] of bindings) {
+              if (!/^[1-9][0-9]{0,19}$/.test(id) || !/^[1-9][0-9]*$/.test(attempt)) return core.setFailed(`invalid ${kind} run binding`);
+              const runId = Number(id);
+              const { data: run } = await github.rest.actions.getWorkflowRun({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId });
+              if (!Number.isSafeInteger(runId) || String(run.path || '').split('@',1)[0] !== '.github/workflows/transcript-flow-pr-c.yml' || run.head_sha !== process.env.EXPECTED_HEAD || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion !== 'success' || String(run.run_attempt) !== attempt) return core.setFailed(`${kind} run identity mismatch`);
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({ owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 });
+              const matches = data.artifacts.filter(item => item.name === nameFor(id,attempt) && !item.expired);
+              if (matches.length !== 1 || !/^sha256:[0-9a-f]{64}$/.test(matches[0].digest || '')) return core.setFailed(`immutable ${kind} artifact missing or ambiguous`);
+            }
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-preparation-${{ inputs.exact_head_sha }}-${{ inputs.preparation_run_id }}-${{ inputs.preparation_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.preparation_run_id }}
+          path: output/controlled-human/input
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr264-controlled-human-quiesce-${{ inputs.exact_head_sha }}-${{ inputs.quiesce_run_id }}-${{ inputs.quiesce_run_attempt }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.quiesce_run_id }}
+          path: output/controlled-human/input
+
+      - name: Validate the exact pre-comment read-only transition
+        run: node --input-type=module -e "import {readFile} from 'node:fs/promises'; import {validateQuiesceRecord} from './scripts/prCControlledHumanEvidenceContract.mjs'; const preparation=JSON.parse(await readFile('output/controlled-human/input/preparation.json','utf8')); const quiesce=JSON.parse(await readFile('output/controlled-human/input/quiesce.json','utf8')); validateQuiesceRecord(preparation,quiesce)"
+
+      - name: Retrieve immutable human duty comment and reject edited or substituted evidence
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          EXPECTED_ROLE: ${{ inputs.human_role }}
+          EXPECTED_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+          COMMENT_ID: ${{ inputs.comment_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            if (!['requester','reviewer','approver'].includes(process.env.EXPECTED_ROLE) || !/^[1-9][0-9]{0,19}$/.test(process.env.COMMENT_ID)) return core.setFailed('invalid comment binding');
+            const preparationBytes = fs.readFileSync('output/controlled-human/input/preparation.json');
+            const preparation = JSON.parse(preparationBytes);
+            const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value);
+            const preparationDigest = `sha256:${crypto.createHash('sha256').update(canonical(preparation)).digest('hex')}`;
+            const { data: comment } = await github.rest.issues.getComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: Number(process.env.COMMENT_ID) });
+            if (comment.issue_url.split('/').at(-1) !== '264' || comment.user?.type !== 'User' || !comment.user.login || comment.created_at !== comment.updated_at) return core.setFailed('comment provenance mismatch');
+            let payload; try { payload = JSON.parse(comment.body); } catch { return core.setFailed('comment must contain only canonical JSON'); }
+            if (payload.kind !== 'pr264-controlled-human-observation' || payload.humanRole !== process.env.EXPECTED_ROLE || payload.exactHead !== process.env.EXPECTED_HEAD || payload.preparationDigest !== preparationDigest || payload.exerciseDigest !== process.env.EXPECTED_EXERCISE_DIGEST || !Array.isArray(payload.observations)) return core.setFailed('comment evidence binding mismatch');
+            fs.mkdirSync('output/controlled-human/private', { recursive: true });
+            fs.writeFileSync('output/controlled-human/private/comment.json', JSON.stringify({ ...payload, actor: comment.user.login, commentId: String(comment.id), createdAt: comment.created_at, updatedAt: comment.updated_at }), { flag: 'wx', mode: 0o600 });
+            const observerRequest = { humanRole: payload.humanRole, steps: payload.observations.flatMap(checkpoint => checkpoint.steps.map(step => ({ checkpointId: checkpoint.checkpointId, stepId: step.stepId, personaKey: step.personaKey, startedAt: step.startedAt, completedAt: step.completedAt, attemptDigest: `sha256:${crypto.createHash('sha256').update(canonical(step.browserArtifact)).digest('hex')}`, bindingToken: step.browserArtifact.serverBinding?.bindingToken ?? null }))) };
+            fs.writeFileSync('output/controlled-human/private/observer-request.json', JSON.stringify(observerRequest), { flag: 'wx', mode: 0o600 });
+
+      - name: Derive backend observer records from the exact synthetic read-only scope
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/prCControlledHumanEnvironment.mjs checkpoint-observe --request output/controlled-human/private/observer-request.json --output output/controlled-human/private/server-observer.json
+
+      - name: Record capture timestamp
+        id: timestamp
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Sign human attestation and independently observed server evidence
+        env:
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+          PR_C_CONTROLLED_HUMAN_CAPTURED_AT: ${{ steps.timestamp.outputs.value }}
+        run: node scripts/capturePrCControlledHumanCheckpoint.mjs --preparation output/controlled-human/input/preparation.json --quiesce output/controlled-human/input/quiesce.json --comment output/controlled-human/private/comment.json --observer output/controlled-human/private/server-observer.json --output "output/controlled-human/checkpoint-${{ inputs.human_role }}.json"
+
+      - name: Remove raw actor-bearing input before artifact upload
+        run: node --input-type=module -e "import {rmSync} from 'node:fs'; rmSync('output/controlled-human/private',{recursive:true,force:true})"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-controlled-human-${{ inputs.human_role }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/controlled-human/checkpoint-${{ inputs.human_role }}.json
+          if-no-files-found: error
+          retention-days: 14

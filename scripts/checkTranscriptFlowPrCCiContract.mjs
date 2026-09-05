@@ -7,7 +7,8 @@ const pkg = JSON.parse(read('package.json'));
 const scripts = pkg.scripts || {};
 
 for (const pattern of [
-  /permissions:\s*\r?\n\s+contents: read/u,
+  /permissions:\s*\r?\n\s+actions: read\s*\r?\n\s+contents: read\s*\r?\n\s+issues: read\s*\r?\n\s+pull-requests: read/u,
+  /types: \[opened, synchronize, reopened, labeled\]/u,
   /image: postgres:16/u,
   /node-version: '22'/u,
   /fetch-depth: 0/u,
@@ -17,6 +18,7 @@ for (const pattern of [
   /PR_C_WORKFLOW_PATH: \.github\/workflows\/transcript-flow-pr-c\.yml/u,
   /PR_C_WORKFLOW_RUN_ID: \$\{\{ github\.run_id \}\}/u,
   /PR_C_RUN_ATTEMPT: \$\{\{ github\.run_attempt \}\}/u,
+  /PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL: postgresql:\/\/postgres:postgres@127\.0\.0\.1:5432\/postgres/u,
   /git rev-parse HEAD/u,
   /git merge-base/u,
   /npm ci/u,
@@ -24,11 +26,28 @@ for (const pattern of [
   /test:transcript-flow:delivery-monitor-evidence-contract/u,
   /runTranscriptFlowPrCEvidence\.mjs/u,
   /test:transcript-flow:delivery-monitor-evidence/u,
-  /upload-artifact@v4/u,
+  /actions\/checkout@11bd71901bbe5b1630ceea73d27597364c9af683/u,
+  /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/u,
+  /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/u,
   /governed-delivery-monitor-pr-c-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u,
   /output\/process-lifecycle-pr-c\//u,
+  /pr264-controlled-human-edge/u,
+  /pr264-controlled-human-prepare/u,
+  /pr264-controlled-human-quiesce/u,
+  /pr264-controlled-human-checkpoints/u,
+  /pr264-controlled-human-final/u,
+  /run\.id !== context\.runId/u,
+  /run\.status === 'completed'/u,
+  /run\.conclusion === 'success'/u,
+  /environment: hosted-nonproduction-pilot/u,
+  /uses: \.\/\.github\/workflows\/pr264-controlled-human-edge-deploy\.yml/u,
+  /uses: \.\/\.github\/workflows\/pr264-controlled-human-prepare\.yml/u,
+  /uses: \.\/\.github\/workflows\/pr264-controlled-human-quiesce\.yml/u,
+  /uses: \.\/\.github\/workflows\/pr264-controlled-human-checkpoint\.yml/u,
+  /uses: \.\/\.github\/workflows\/pr264-controlled-human-verify\.yml/u,
 ]) assert.match(workflow, pattern);
 assert.doesNotMatch(workflow, /continue-on-error/u);
+assert.doesNotMatch(workflow, /secrets:\s*inherit/u);
 
 const requiredScripts = [
   'test:transcript-flow:delivery-monitor-domain',
@@ -42,6 +61,7 @@ const requiredScripts = [
   'test:transcript-flow:delivery-monitor-adversarial',
   'test:transcript-flow:delivery-monitor-evidence-contract',
   'test:transcript-flow:delivery-monitor-evidence',
+  'test:pr-c-controlled-human-source',
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
 assert.match(
@@ -249,11 +269,47 @@ for (const file of [
   'scripts/runRetainedEvidenceContract.test.mjs',
   'scripts/runTranscriptFlowPrCEvidence.mjs',
   'scripts/verifyTranscriptFlowPrCEvidence.mjs',
+  'scripts/prCControlledHumanEnvironment.mjs',
+  'scripts/prCControlledHumanEnvironmentMigration.mjs',
+  'scripts/prCControlledHumanEnvironment.test.mjs',
+  'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
+  'scripts/prCControlledHumanEnvironmentPostgres.test.mjs',
+  'scripts/prCControlledHumanEvidenceContract.mjs',
+  'scripts/prCControlledHumanEvidenceContract.test.mjs',
+  'scripts/prCControlledHumanWorkflowContract.test.mjs',
+  'scripts/buildPrCControlledHumanPreparation.mjs',
+  'scripts/capturePrCControlledHumanCheckpoint.mjs',
+  'scripts/producePrCControlledHumanEdgeDeploymentManifest.mjs',
+  'scripts/validatePrCControlledHumanPreparation.mjs',
+  'scripts/verifyPr264ControlledHumanPreview.mjs',
+  'scripts/verifyPrCControlledHumanEdgeDeployment.mjs',
+  'scripts/verifyPrCControlledHumanSession.mjs',
+  'scripts/writePrCControlledHumanObservationTemplates.mjs',
+  '.github/workflows/pr264-controlled-human-edge-deploy.yml',
+  '.github/workflows/pr264-controlled-human-prepare.yml',
+  '.github/workflows/pr264-controlled-human-quiesce.yml',
+  '.github/workflows/pr264-controlled-human-checkpoint.yml',
+  '.github/workflows/pr264-controlled-human-verify.yml',
+  'services/studioArtifacts/prCControlledHumanSyntheticGeneration.ts',
+  'services/studioArtifacts/prCControlledHumanSyntheticGeneration.test.ts',
+  'components/docs/PrCControlledHumanSyntheticGeneration.test.mjs',
+  'supabase/functions/_shared/prCControlledHumanSyntheticGeneration.ts',
+  'supabase/functions/_shared/prCControlledHumanSyntheticGeneration.test.ts',
+  'supabase/functions/pr-c-controlled-human-synthetic-generation/index.ts',
+  'testing/process-lifecycle/contracts/pr-c-controlled-human-preparation.schema.json',
+  'testing/process-lifecycle/contracts/pr-c-controlled-human-checkpoint.schema.json',
+  'testing/process-lifecycle/contracts/pr-c-controlled-human-edge-deployment.schema.json',
+  'testing/process-lifecycle/contracts/pr-c-controlled-human-session.schema.json',
+  'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json',
+  'supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql',
 ]) assert.equal(existsSync(file), true, `missing PR C CI artifact ${file}`);
 
 const migrations = readdirSync('supabase/migrations').filter(name => name.endsWith('_governed_delivery_monitor_pr_c.sql'));
-assert.equal(migrations.length, 1, 'PR C requires exactly one CLI-created migration');
+const controlledHumanMigrations = readdirSync('supabase/migrations').filter(name => name.endsWith('_pr_c_controlled_human_exercise_authority.sql'));
+assert.equal(migrations.length, 1, 'PR C requires exactly one Delivery/Monitor implementation migration');
+assert.equal(controlledHumanMigrations.length, 1, 'PR C requires exactly one controlled-human exercise authority migration');
 const migrationNames = readdirSync('supabase/migrations').filter(name => name.endsWith('.sql')).sort();
-assert.equal(migrationNames.at(-1), migrations[0], 'PR C migration must be the canonical migration tip');
+assert.ok(migrationNames.indexOf(migrations[0]) < migrationNames.indexOf(controlledHumanMigrations[0]), 'controlled-human authority must follow the Delivery/Monitor implementation migration');
+assert.equal(migrationNames.at(-1), controlledHumanMigrations[0], 'controlled-human authority must be the canonical migration tip');
 
-console.log(`PR C CI contract passed: ${JSON.stringify({ workflow: '.github/workflows/transcript-flow-pr-c.yml', scripts: requiredScripts.length, migration: migrations[0] })}`);
+console.log(`PR C CI contract passed: ${JSON.stringify({ workflow: '.github/workflows/transcript-flow-pr-c.yml', scripts: requiredScripts.length, migration: migrations[0], controlledHumanMigration: controlledHumanMigrations[0] })}`);

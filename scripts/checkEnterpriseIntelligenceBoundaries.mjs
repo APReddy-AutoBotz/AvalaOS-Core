@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { assertEnterpriseClientIdempotencyBoundary } from './enterpriseIntelligenceIdempotencyBoundary.mjs';
 
 const root = process.cwd();
 const requiredFiles = [
@@ -95,9 +96,7 @@ for (const required of [
 ]) {
   if (!approvalCommands.includes(required)) throw new Error(`Canonical approval command flow is missing ${required}.`);
 }
-if (client.includes('stableFingerprint(material)') || client.includes("subtle.digest('SHA-256'")) {
-  throw new Error('Browser action idempotency keys must not be deterministic payload hashes.');
-}
+assertEnterpriseClientIdempotencyBoundary(client);
 for (const pattern of [/localStorage/u, /sessionStorage/u, /indexedDB/u, /console\.(?:log|info|debug|warn|error)/u]) {
   if (pattern.test(`${client}\n${view}`)) {
     throw new Error(`Provider browser action code may not persist or log raw key material: ${pattern}.`);

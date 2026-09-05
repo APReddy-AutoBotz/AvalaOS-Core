@@ -63,7 +63,7 @@ const notRun = [
   },
   {
     testId: 'CONTROLLED-HUMAN', owner: 'boundary', testName: 'Controlled human walkthrough', command: null,
-    reason: 'Sanitized seed identities and the walkthrough are prepared, but an authenticated controlled-human session has not been scheduled or executed and therefore remains not_run.',
+    reason: 'The AP authorized a dedicated synthetic PR #264 preview exercise, but automation and source contracts cannot substitute for an actually completed, signed three-distinct-human session; until that exact session verifies after deprovision, this boundary remains not_run.',
     applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
@@ -83,7 +83,7 @@ const notRun = [
   },
   {
     testId: 'DEPLOYMENT-VERIFICATION', owner: 'boundary', testName: 'Deployment verification', command: null,
-    reason: 'No deployment or live-infrastructure inspection is authorized for PR C, so deployment state and behavior remain unverified.',
+    reason: 'Only the bounded PR #264 controlled-human preview and dedicated synthetic backend are authorized. The canonical PR C evidence workflow does not deploy or inspect them, so general deployment verification remains not_run.',
     applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {
