@@ -1,8 +1,16 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { get as httpGet } from 'node:http';
 import { createServer } from 'node:net';
 import path from 'node:path';
+import {
+  createAcceptanceReportMetadata,
+  createSyntheticRegressionOutputRoot,
+  decodeAcceptanceExecutionProfile,
+  verifySyntheticRegressionResultInventory,
+} from './acceptanceExecutionProfile.mjs';
 
 export const READINESS_TIMEOUT_MS = 120_000;
 const READINESS_REQUEST_TIMEOUT_MS = 1_000;
@@ -10,7 +18,45 @@ const READINESS_POLL_INTERVAL_MS = 250;
 const OUTPUT_CAPTURE_LIMIT = 4_000;
 export const SYNTHETIC_BROWSER_VITE_CONFIG = 'vite.synthetic-browser-test.config.ts';
 
+const syntheticRegressionCommon = {
+  readinessPath: '/sandbox',
+  serverCommand: 'preview',
+  build: true,
+  environment: {
+    AVALAOS_HOSTED_NONPRODUCTION_STABLE_TESTING: 'authorized',
+    SITE_NAME: 'avalaos-pilot',
+  },
+};
+
 export const browserModeByFlag = new Map([
+  ['--preview-sandbox-regression', {
+    ...syntheticRegressionCommon,
+    label: 'PR #264 exact-head synthetic Sandbox regression',
+    port: '4201',
+    config: 'playwright.local-sandbox-regression.config.ts',
+    localAcceptance: {
+      flag: '--preview-sandbox-regression',
+      reportArea: 'sandbox',
+      sourcePaths: [
+        'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+        'tests/acceptance/execution-bindings.json',
+        'tests/acceptance/catalog/test-catalog.json',
+      ],
+      inventory: 'sandbox',
+    },
+  }],
+  ['--preview-navigation-regression', {
+    ...syntheticRegressionCommon,
+    label: 'PR #264 exact-head synthetic navigation regression',
+    port: '4202',
+    config: 'playwright.local-navigation-regression.config.ts',
+    localAcceptance: {
+      flag: '--preview-navigation-regression',
+      reportArea: 'navigation',
+      sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+      inventory: 'navigation',
+    },
+  }],
   ['--full-platform', {
     label: 'Full-platform fixture campaign',
     // Keep the governed campaign isolated from the retained default suite,
@@ -376,6 +422,103 @@ const runOwnedCommand = ({ arguments_, root, environment, spawnImpl }) => new Pr
   child.once('close', (code, signal) => resolve(code ?? (signal ? 1 : 0)));
 });
 
+export const resolveCurrentCheckoutSha = ({ root, spawnSyncImpl = spawnSync }) => {
+  const result = spawnSyncImpl('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  const sha = typeof result.stdout === 'string' ? result.stdout.trim() : '';
+  if (result.status !== 0 || !/^[0-9a-f]{40}$/u.test(sha)) {
+    throw new Error('LOCAL_SOURCE_FIXTURE_CHECKOUT_SHA_UNAVAILABLE');
+  }
+  return sha;
+};
+
+export const createLocalAcceptanceInvocationId = () => randomBytes(16).toString('hex');
+
+const prepareLocalAcceptanceExecution = ({
+  mode,
+  root,
+  environment,
+  spawnSyncImpl,
+  invocationIdFactory,
+}) => {
+  if (!mode.localAcceptance) return null;
+  const checkoutSha = resolveCurrentCheckoutSha({ root, spawnSyncImpl });
+  const invocationId = invocationIdFactory();
+  const localEnvironment = {
+    ...environment,
+    ACCEPTANCE_EXECUTION_KIND: 'local_source_fixture',
+    ACCEPTANCE_RELEASE_SHA: checkoutSha,
+    ACCEPTANCE_CHECKOUT_SHA: checkoutSha,
+    ACCEPTANCE_INVOCATION_ID: invocationId,
+    LOCAL_ACCEPTANCE_BASE_URL: `http://127.0.0.1:${mode.port}`,
+  };
+  const profile = decodeAcceptanceExecutionProfile(localEnvironment, { expectedCheckoutSha: checkoutSha });
+  const exactCommand = ['node', 'scripts/runTranscriptFlowBrowser.mjs', mode.localAcceptance.flag];
+  const metadata = createAcceptanceReportMetadata({
+    profile,
+    exactCommand,
+    configPath: mode.config,
+    sourcePaths: mode.localAcceptance.sourcePaths,
+  });
+  const relativeOutputRoot = createSyntheticRegressionOutputRoot({
+    profile,
+    reportArea: mode.localAcceptance.reportArea,
+  });
+  const outputRoot = path.join(root, ...relativeOutputRoot.split('/'));
+  if (existsSync(outputRoot)) throw new Error('SYNTHETIC_REGRESSION_INVOCATION_ALREADY_EXISTS');
+  return {
+    checkoutSha,
+    invocationId,
+    environment: localEnvironment,
+    metadata,
+    profile,
+    reportPath: path.join(outputRoot, 'playwright-results.json'),
+  };
+};
+
+const expectedSyntheticRegressionInventory = ({ mode, root }) => {
+  if (mode.localAcceptance.inventory === 'navigation') {
+    return {
+      expectedProjects: ['desktop-chromium', 'pixel-7-chromium'],
+      expectedTestIds: ['CONTROLLER-NAV-HISTORY-001'],
+      executableTestIds: ['CONTROLLER-NAV-HISTORY-001'],
+    };
+  }
+  const bindings = JSON.parse(readFileSync(path.join(root, 'tests', 'acceptance', 'execution-bindings.json'), 'utf8')).hostedTests;
+  return {
+    expectedProjects: ['desktop-chromium', 'pixel-7-chromium'],
+    expectedTestIds: bindings.map(binding => binding.testId),
+    executableTestIds: bindings.filter(binding => binding.scenario).map(binding => binding.testId),
+  };
+};
+
+export const verifyLocalAcceptanceReport = ({ mode, root, metadata, profile, reportPath }) => {
+  if (!mode.localAcceptance) throw new Error('SYNTHETIC_REGRESSION_MODE_REQUIRED');
+  const expectedRelativeRoot = createSyntheticRegressionOutputRoot({
+    profile,
+    reportArea: mode.localAcceptance.reportArea,
+  });
+  const expectedReportPath = path.join(root, ...expectedRelativeRoot.split('/'), 'playwright-results.json');
+  if (reportPath !== expectedReportPath || metadata.invocationId !== profile.invocationId) {
+    throw new Error('SYNTHETIC_REGRESSION_INVOCATION_BINDING_MISMATCH');
+  }
+  let report;
+  try {
+    report = JSON.parse(readFileSync(expectedReportPath, 'utf8'));
+  } catch {
+    throw new Error('SYNTHETIC_REGRESSION_REPORT_UNAVAILABLE');
+  }
+  return verifySyntheticRegressionResultInventory({
+    report,
+    expectedMetadata: metadata,
+    ...expectedSyntheticRegressionInventory({ mode, root }),
+  });
+};
+
 export const runBrowserHarness = async ({
   mode,
   playwrightArguments = [],
@@ -390,7 +533,18 @@ export const runBrowserHarness = async ({
   portPreflightImpl = assertBrowserPortAvailable,
   sleep = delay,
   now = Date.now,
+  invocationIdFactory = createLocalAcceptanceInvocationId,
 }) => {
+  if (mode.localAcceptance && (!Array.isArray(playwrightArguments) || playwrightArguments.length > 0)) {
+    throw new Error('SYNTHETIC_REGRESSION_PARTIAL_EXECUTION_REJECTED');
+  }
+  const localAcceptance = prepareLocalAcceptanceExecution({
+    mode,
+    root,
+    environment,
+    spawnSyncImpl,
+    invocationIdFactory,
+  });
   await portPreflightImpl({ host: '127.0.0.1', port: mode.port, label: mode.label });
   const viteConfig = mode.viteConfig ?? SYNTHETIC_BROWSER_VITE_CONFIG;
 
@@ -405,6 +559,7 @@ export const runBrowserHarness = async ({
   const playwrightEnvironment = {
     ...environment,
     ...mode.playwrightEnvironment,
+    ...localAcceptance?.environment,
   };
 
   if (mode.build) {
@@ -472,6 +627,16 @@ export const runBrowserHarness = async ({
       environment: playwrightEnvironment,
       spawnImpl,
     });
+    if (exitCode === 0 && localAcceptance) {
+      const inventory = verifyLocalAcceptanceReport({
+        mode,
+        root,
+        metadata: localAcceptance.metadata,
+        profile: localAcceptance.profile,
+        reportPath: localAcceptance.reportPath,
+      });
+      console.log(`Synthetic regression inventory verified: ${inventory.passed} passed, ${inventory.skipped} not_run, ${inventory.total} total.`);
+    }
   } finally {
     await stopOwnedBrowserServer({ server, spawnState, label: mode.label, spawnSyncImpl, sleep });
   }
@@ -481,6 +646,9 @@ export const runBrowserHarness = async ({
 export const runBrowserCli = async (arguments_ = process.argv.slice(2)) => {
   const [firstArgument, ...remainingArguments] = arguments_;
   const selectedMode = browserModeByFlag.get(firstArgument);
+  if (selectedMode?.localAcceptance && remainingArguments.length > 0) {
+    throw new Error('SYNTHETIC_REGRESSION_PARTIAL_EXECUTION_REJECTED');
+  }
   return runBrowserHarness({
     mode: selectedMode ?? defaultBrowserMode,
     playwrightArguments: selectedMode ? remainingArguments : arguments_,

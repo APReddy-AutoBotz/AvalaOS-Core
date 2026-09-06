@@ -10,9 +10,38 @@ permissions:
 env:
   RELEASE_SHA: ${{ github.event.pull_request.head.sha }}
   PREVIEW_ALIAS_URL: https://deploy-preview-${{ github.event.number }}--avalaos-pilot.netlify.app
+  ACCEPTANCE_EXECUTION_KIND: hosted_preview
 
 jobs:
+  select-pr264-controlled-preview:
+    runs-on: ubuntu-latest
+    outputs:
+      profile: ${{ steps.selection.outputs.profile }}
+    steps:
+      - name: Select exact same-repository PR 264 head branch
+        id: selection
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          if [ "$PR_NUMBER" != "264" ] && [ "$PR_HEAD_REF" != "controller/governed-delivery-monitor-pr-c-20260831" ]; then
+            echo "profile=ordinary" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$PR_NUMBER" = "264" ] \
+            && [ "$PR_HEAD_REF" = "controller/governed-delivery-monitor-pr-c-20260831" ] \
+            && [ "$PR_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then
+            echo "profile=controlled" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "PR264_CONTROLLED_PREVIEW_PARTIAL_IDENTITY_REJECTED" >&2
+          exit 1
+
   preview-exhaustive-browser-qa:
+    needs: select-pr264-controlled-preview
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -41,10 +70,7 @@ jobs:
       - name: Validate exhaustive browser contracts
         run: |
           npm run test:acceptance:catalog
-          node scripts/runExhaustiveAcceptanceReport.test.mjs
-          node scripts/exhaustiveAcceptanceEvidence.test.mjs
-          node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
-          node tests/browser/previewExhaustiveBrowserQaWorkflowContract.test.mjs
+          npm run test:pr-c-preview-profile-contract
           node tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs
 
       - name: Wait for exact PR preview and bind immutable deploy identity
@@ -94,7 +120,46 @@ jobs:
           EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
         run: npx playwright test --config=playwright.hosted-pilot.config.ts --workers=1
 
+      - name: Run controlled preview fail-closed boundary on Desktop Chrome and Pixel 7
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+          NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+          HOSTED_PILOT_URL: ${{ env.PREVIEW_ALIAS_URL }}
+          CONTROLLED_PREVIEW_ALIAS_URL: ${{ env.PREVIEW_ALIAS_URL }}
+          CONTROLLED_PREVIEW_IMMUTABLE_URL: ${{ env.HOSTED_PILOT_URL }}
+        run: npx playwright test --config=playwright.controlled-preview-boundary.config.ts --workers=1
+
+      - name: Verify controlled preview result inventory
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        env:
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+          EXPECTED_NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
+          ACCEPTANCE_WORKFLOW_PATH: .github/workflows/preview-exhaustive-browser-qa.yml
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: node scripts/verifyPreviewBrowserEvidence.mjs --report artifacts/controlled-preview-boundary/playwright-results.json --output artifacts/controlled-preview-boundary/result-inventory.json
+
+      - name: Run exact-head local Sandbox regression on Desktop Chrome and Pixel 7
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        env:
+          HOSTED_PILOT_URL: ''
+          NETLIFY_DEPLOY_ID: ''
+        run: node scripts/runTranscriptFlowBrowser.mjs --preview-sandbox-regression
+
+      - name: Run exact-head local navigation regression on Desktop Chrome and Pixel 7
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        env:
+          HOSTED_PILOT_URL: ''
+          NETLIFY_DEPLOY_ID: ''
+        run: node scripts/runTranscriptFlowBrowser.mjs --preview-navigation-regression
+
       - name: Run exhaustive Desktop Chrome and Pixel 7 Sandbox acceptance
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'ordinary'
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
@@ -102,20 +167,56 @@ jobs:
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1
 
       - name: Run controller navigation history on Desktop Chrome and Pixel 7
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'ordinary'
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           NETLIFY_DEPLOY_ID: ${{ env.NETLIFY_DEPLOY_ID }}
         run: npx playwright test --config=playwright.controller-navigation-history.config.ts --workers=1
 
-      - name: Upload browser evidence
+      - name: Upload hosted baseline browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: preview-exhaustive-browser-qa-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: preview-hosted-baseline-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 14
+          path: test-results/
+
+      - name: Upload controlled preview boundary evidence
+        if: always() && needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-controlled-boundary-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: artifacts/controlled-preview-boundary/
+
+      - name: Upload local Sandbox regression evidence
+        if: always() && needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-local-sandbox-regression-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: output/playwright/pr264-synthetic-regression/${{ env.RELEASE_SHA }}/sandbox/
+
+      - name: Upload local navigation regression evidence
+        if: always() && needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-local-navigation-regression-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: output/playwright/pr264-synthetic-regression/${{ env.RELEASE_SHA }}/navigation/
+
+      - name: Upload ordinary preview exhaustive evidence
+        if: always() && needs.select-pr264-controlled-preview.outputs.profile == 'ordinary'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-exhaustive-browser-qa-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
           path: |
-            test-results/
             artifacts/exhaustive-acceptance/
             artifacts/controller-navigation-history/

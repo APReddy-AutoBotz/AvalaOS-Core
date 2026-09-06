@@ -67,6 +67,21 @@
       ]
     },
     {
+      "id": "pr-c-preview-profile-contract",
+      "command": "npm run test:pr-c-preview-profile-contract",
+      "environment": "controlled-node-22"
+    },
+    {
+      "id": "pr-c-preview-sandbox-regression",
+      "command": "node scripts/runTranscriptFlowBrowser.mjs --preview-sandbox-regression",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
+      "id": "pr-c-preview-navigation-regression",
+      "command": "node scripts/runTranscriptFlowBrowser.mjs --preview-navigation-regression",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
       "id": "pilot-trust-browser",
       "command": "npm run test:browser:trust-assurance",
       "environment": "controlled-browser-two-profile"
@@ -459,7 +474,7 @@
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "32d7967bd115ea420ad1d51311622feef1cd98dd13acdf280b6a3f9fe9b85d5b"
+      "sha256": "d56b208299c1402f3f92402efd3edb69eed15f4b9ce759f442b3c722280f0838"
     }
   },
   "assertions": [

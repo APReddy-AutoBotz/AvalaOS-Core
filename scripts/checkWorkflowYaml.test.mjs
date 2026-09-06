@@ -128,7 +128,8 @@ assert.match(
 const controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');
 assert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\.spec\.ts'/u, 'the controller QA config must exclusively own its history specification');
 const previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');
-assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controller-navigation-history\.config\.ts/u, 'controller history QA must execute only after immutable preview identity binding');
+assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controlled-preview-boundary\.config\.ts[\s\S]*--preview-sandbox-regression[\s\S]*--preview-navigation-regression/u, 'the controlled hosted boundary and both exact-head local regression profiles must execute only after immutable preview identity binding');
+assert.match(previewQaWorkflow, /if: needs\.select-pr264-controlled-preview\.outputs\.profile == 'ordinary'[\s\S]*npx playwright test --config=playwright\.controller-navigation-history\.config\.ts/u, 'ordinary preview QA must retain its hosted navigation regression without admitting it into the controlled profile');
 
 assert.throws(
   () => parseWorkflowYaml(`jobs:\n  evidence:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n        ref: candidate-sha\n          fetch-depth: 0\n`, 'malformed-checkout.yml'),

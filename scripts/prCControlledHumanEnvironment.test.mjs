@@ -7,7 +7,8 @@ import {
   checkpointObserve, controlledHumanObserverLifecycleWitness, controlledHumanStepEvidenceSpec, deprovision, deriveBoundNegativeEffectCounts, deriveContext, deriveOperationEventSequence, deriveUnboundAbsenceEffectCounts, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
   validatePrivilegedPostgresConnectionString,
 } from './prCControlledHumanEnvironment.mjs';
-import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
+import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
+import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
 
 const head='83cab00bee481df22351302cc8c1c00bda3f1664';
 const baseEnv={
@@ -71,6 +72,96 @@ test('canonical digests and deterministic identifiers are stable and scoped',()=
   assert.match(sha256({b:1,a:2}),/^sha256:[0-9a-f]{64}$/u);
   assert.equal(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-requester'));
   assert.notEqual(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-reviewer'));
+});
+
+test('controlled-human observation fixture records exact server-clock intervals in canonical order',async()=>{
+  const orderedSteps=[
+    {checkpointId:'CH-01',stepId:'browser-one',personaKey:'requester'},
+    {checkpointId:'CH-01',stepId:'machine-one',personaKey:'requester'},
+    {checkpointId:'CH-02',stepId:'browser-two',personaKey:'reviewer'},
+    {checkpointId:'CH-02',stepId:'machine-two',personaKey:'reviewer'},
+    {checkpointId:'CH-03',stepId:'post-quiesce',personaKey:'reviewer'},
+  ];
+  const base=Date.parse('2026-09-04T12:00:00.000Z');let clock=base;
+  const iso=value=>new Date(value).toISOString();
+  const fixture=createControlledHumanObservationFixture({
+    orderedSteps,machineStepKeys:new Set(['CH-01\0machine-one','CH-02\0machine-two']),postQuiesceStepKeys:['CH-03\0post-quiesce'],
+    expectedExerciseDigest:'sha256:exercise',expectedScopeDigest:'sha256:scope',exerciseStartedAt:iso(base),
+    captureAbsence:async step=>{const started=Math.max(clock+1,step.after+1);const completed=started+2;clock=completed;return{...step,exerciseDigest:'sha256:exercise',scopeDigest:'sha256:scope',phase:step.expectedPhase,startedAt:iso(started),completedAt:iso(completed),serverObservedAt:iso(completed),stateDigest:sha256({step:step.stepId,started,completed}),blockedActivityCount:0,foreignActivityCount:0}},
+    waitForServerTimeAfter:async after=>{clock=Math.max(clock+1,after+1);return{serverObservedAt:iso(clock)}},
+  });
+  await fixture.drainUnboundBeforeMachineStep('CH-01','machine-one');
+  await assert.rejects(fixture.drainUnboundBeforeMachineStep('CH-01','machine-one'),/MACHINE_ORDER_REJECTED/u);
+  await fixture.beforeMachineStep('CH-01','machine-one');
+  const firstAnchor={stepId:'machine-one',challengeToken:'anchor-one',anchoredAt:iso(clock)};clock+=1;
+  const firstBinding={stepId:'machine-one',anchorToken:'anchor-one',bindingToken:'binding-one',issuedAt:iso(clock)};
+  await fixture.recordMachineStep({checkpointId:'CH-01',stepId:'machine-one',anchor:firstAnchor,binding:firstBinding});
+  await fixture.beforeMachineStep('CH-02','machine-two');
+  const secondAnchor={stepId:'machine-two',challengeToken:'anchor-two',anchoredAt:iso(clock)};clock+=1;
+  const secondBinding={stepId:'machine-two',anchorToken:'anchor-two',bindingToken:'binding-two',issuedAt:iso(clock)};
+  await fixture.recordMachineStep({checkpointId:'CH-02',stepId:'machine-two',anchor:secondAnchor,binding:secondBinding});
+  await fixture.captureRemaining();const records=fixture.complete();
+  assert.deepEqual(records.get('CH-01\0browser-one'),{started:base+1,completed:base+3,anchorAt:null,bindingAt:null,bindingToken:null});
+  assert.equal(records.get('CH-01\0machine-one').anchorAt,Date.parse(firstAnchor.anchoredAt));
+  assert.equal(records.get('CH-01\0machine-one').bindingAt,Date.parse(firstBinding.issuedAt));
+  assert.equal(records.get('CH-01\0machine-one').bindingToken,'binding-one');
+  assert.ok(records.get('CH-03\0post-quiesce').started>records.get('CH-02\0machine-two').completed);
+});
+
+test('controlled-human observation fixture captures every canonical browser-only and post-quiesce step independently',async()=>{
+  const catalog=new Map(CONTROLLED_HUMAN_CATALOG.map(record=>[record.checkpointId,record]));
+  const orderedSteps=CONTROLLED_HUMAN_EXECUTION_ORDER.flatMap(checkpointId=>catalog.get(checkpointId).steps.map(step=>({checkpointId,...step})));
+  const machineStepKeys=new Set(CONTROLLED_HUMAN_SERVER_ACTIONS.map(step=>`${step.checkpointId}\0${step.stepId}`));
+  let clock=Date.parse('2026-09-04T12:00:00.000Z');const captured=[];const iso=value=>new Date(value).toISOString();
+  const fixture=createControlledHumanObservationFixture({orderedSteps,machineStepKeys,postQuiesceStepKeys:['CH-13\0verify-history-readable-and-actions-absent'],
+    expectedExerciseDigest:'sha256:exercise',expectedScopeDigest:'sha256:scope',exerciseStartedAt:iso(clock),
+    captureAbsence:async step=>{const started=++clock;const completed=++clock;captured.push({...step,started,completed});return{...step,exerciseDigest:'sha256:exercise',scopeDigest:'sha256:scope',phase:step.expectedPhase,startedAt:iso(started),completedAt:iso(completed),serverObservedAt:iso(completed),stateDigest:sha256({step:step.stepId,started,completed}),blockedActivityCount:0,foreignActivityCount:0}},
+    waitForServerTimeAfter:async after=>{clock=Math.max(clock+1,after+1);return{serverObservedAt:iso(clock)}},
+  });
+  for(const step of orderedSteps.filter(step=>machineStepKeys.has(`${step.checkpointId}\0${step.stepId}`))){
+    await fixture.beforeMachineStep(step.checkpointId,step.stepId);const anchorAt=++clock;const bindingAt=++clock;
+    await fixture.recordMachineStep({checkpointId:step.checkpointId,stepId:step.stepId,anchor:{stepId:step.stepId,challengeToken:`anchor-${step.stepId}`,anchoredAt:iso(anchorAt)},binding:{stepId:step.stepId,anchorToken:`anchor-${step.stepId}`,bindingToken:`binding-${step.stepId}`,issuedAt:iso(bindingAt)}});
+  }
+  await fixture.captureRemaining();const records=fixture.complete();
+  assert.equal(records.size,orderedSteps.length);assert.equal(captured.length,orderedSteps.length-machineStepKeys.size);
+  assert.equal(captured.filter(step=>step.checkpointId==='CH-14').length,catalog.get('CH-14').steps.length);
+  assert.equal(captured.filter(step=>step.expectedPhase==='read_only').map(step=>step.stepId).join(','),'verify-history-readable-and-actions-absent');
+  assert.ok(captured.every((step,index)=>index===0||step.started>captured[index-1].completed));
+});
+
+test('controlled-human observation fixture rejects foreign, active, reordered, omitted, past, and future evidence',async()=>{
+  const start='2026-09-04T12:00:00.000Z';const iso=value=>new Date(value).toISOString();const base=Date.parse(start);
+  const build=overrides=>createControlledHumanObservationFixture({
+    orderedSteps:[{checkpointId:'CH-01',stepId:'browser',personaKey:'requester'},{checkpointId:'CH-01',stepId:'machine',personaKey:'requester'}],
+    machineStepKeys:new Set(['CH-01\0machine']),expectedExerciseDigest:'sha256:exercise',expectedScopeDigest:'sha256:scope',exerciseStartedAt:start,
+    captureAbsence:async step=>({checkpointId:step.checkpointId,stepId:step.stepId,exerciseDigest:'sha256:exercise',scopeDigest:'sha256:scope',phase:'active',startedAt:iso(base+1),completedAt:iso(base+2),serverObservedAt:iso(base+2),stateDigest:sha256('state'),blockedActivityCount:0,foreignActivityCount:0,...overrides}),
+    waitForServerTimeAfter:async after=>({serverObservedAt:iso(after+1)}),
+  });
+  await assert.rejects(build({exerciseDigest:'sha256:foreign'}).beforeMachineStep('CH-01','machine'),/FOREIGN_REJECTED/u);
+  await assert.rejects(build({blockedActivityCount:1}).beforeMachineStep('CH-01','machine'),/ACTIVITY_REJECTED/u);
+  await assert.rejects(build({foreignActivityCount:1}).beforeMachineStep('CH-01','machine'),/ACTIVITY_REJECTED/u);
+  await assert.rejects(build({startedAt:iso(base-1),completedAt:iso(base+1)}).beforeMachineStep('CH-01','machine'),/TIME_REJECTED/u);
+  await assert.rejects(build({completedAt:iso(base+3),serverObservedAt:iso(base+2)}).beforeMachineStep('CH-01','machine'),/TIME_REJECTED/u);
+  const reordered=createControlledHumanObservationFixture({
+    orderedSteps:[{checkpointId:'CH-01',stepId:'machine-one'},{checkpointId:'CH-01',stepId:'machine-two'}],machineStepKeys:new Set(['CH-01\0machine-one','CH-01\0machine-two']),
+    expectedExerciseDigest:'sha256:exercise',expectedScopeDigest:'sha256:scope',exerciseStartedAt:start,
+    captureAbsence:async()=>assert.fail('machine-only fixture must not capture absence'),waitForServerTimeAfter:async after=>({serverObservedAt:iso(after+1)}),
+  });
+  await assert.rejects(reordered.drainUnboundBeforeMachineStep('CH-01','machine-two'),/MACHINE_ORDER_REJECTED/u);
+  const wrongPhase=createControlledHumanObservationFixture({
+    orderedSteps:[{checkpointId:'CH-13',stepId:'post-quiesce'}],machineStepKeys:new Set(),postQuiesceStepKeys:['CH-13\0post-quiesce'],
+    expectedExerciseDigest:'sha256:exercise',expectedScopeDigest:'sha256:scope',exerciseStartedAt:start,
+    captureAbsence:async step=>({...step,exerciseDigest:'sha256:exercise',scopeDigest:'sha256:scope',phase:'active',startedAt:iso(base+1),completedAt:iso(base+2),serverObservedAt:iso(base+2),stateDigest:sha256('state'),blockedActivityCount:0,foreignActivityCount:0}),
+    waitForServerTimeAfter:async after=>({serverObservedAt:iso(after+1)}),
+  });
+  await assert.rejects(wrongPhase.captureRemaining(),/PHASE_REJECTED/u);
+  const omitted=build({});await assert.rejects(omitted.captureRemaining(),/MACHINE_OMITTED/u);
+  const preparedOmitted=build({});await preparedOmitted.drainUnboundBeforeMachineStep('CH-01','machine');
+  await assert.rejects(preparedOmitted.captureRemaining(),/MACHINE_OMITTED/u);
+  await assert.rejects(preparedOmitted.beforeMachineStep('CH-99','machine-later'),/MACHINE_ORDER_REJECTED/u);
+  const pending=build({});await pending.beforeMachineStep('CH-01','machine');
+  await assert.rejects(pending.captureRemaining(),/MACHINE_OMITTED/u);
+  await assert.rejects(pending.recordMachineStep({checkpointId:'CH-01',stepId:'machine',anchor:{stepId:'machine',challengeToken:'one',anchoredAt:iso(base+3)},binding:{stepId:'machine',anchorToken:'two',bindingToken:'binding',issuedAt:iso(base+4)}}),/MACHINE_BINDING_REJECTED/u);
 });
 
 test('negative observer effects are request-causal and require an explicit none effect family',()=>{

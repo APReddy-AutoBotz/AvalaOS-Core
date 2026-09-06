@@ -1,12 +1,40 @@
 import { defineConfig, devices } from '@playwright/test';
-import { validateHostedUrl, validateResolvedHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
+import {
+  createAcceptanceReportMetadata,
+  decodeAcceptanceExecutionProfile,
+} from './scripts/acceptanceExecutionProfile.mjs';
+import { validateResolvedHostedUrl } from './scripts/verify-hosted-pilot-evidence.mjs';
+import {
+  createHostedAcceptanceWorkflowRuntime,
+  EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW,
+  resolveHostedAcceptanceWorkflowPath,
+} from './scripts/hostedAcceptanceReportProvenance.mjs';
 
-const rawUrl = process.env.HOSTED_PILOT_URL;
-if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; exhaustive hosted acceptance cannot silently use localhost');
-const isExactHostedExecution = process.env.NETLIFY_DEPLOY_ID && process.env.NETLIFY_DEPLOY_ID !== 'pull-request-not-deployed';
-const hostedOrigin = isExactHostedExecution
-  ? await validateResolvedHostedUrl(rawUrl)
-  : validateHostedUrl(rawUrl);
+const executionProfile = decodeAcceptanceExecutionProfile(process.env);
+const hostedOrigin = executionProfile.executionKind === 'hosted_preview'
+  ? await validateResolvedHostedUrl(executionProfile.targetOrigin!)
+  : undefined;
+const reportMetadata = createAcceptanceReportMetadata({
+  profile: executionProfile,
+  exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+});
+const workflowPath = resolveHostedAcceptanceWorkflowPath({
+  environment: process.env,
+  allowedWorkflowPaths: [EXHAUSTIVE_ACCEPTANCE_WORKFLOW, PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW],
+});
+const metadata = executionProfile.executionKind === 'hosted_preview'
+  ? {
+      ...reportMetadata,
+      workflowRuntime: createHostedAcceptanceWorkflowRuntime({
+        environment: process.env,
+        workflowPath,
+        releaseSha: executionProfile.releaseSha,
+      }),
+    }
+  : reportMetadata;
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -23,6 +51,7 @@ export default defineConfig({
     ['junit', { outputFile: 'artifacts/exhaustive-acceptance/junit.xml' }],
     ['html', { outputFolder: 'artifacts/exhaustive-acceptance/playwright-report', open: 'never' }],
   ],
+  metadata,
   use: {
     baseURL: hostedOrigin,
     trace: 'off',

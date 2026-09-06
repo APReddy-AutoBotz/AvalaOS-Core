@@ -3,12 +3,17 @@ import { expect, test, type Page, type Request, type TestInfo } from '@playwrigh
 import type { WebSocket as PlaywrightWebSocket } from '@playwright/test';
 import fs from 'node:fs';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
+import { decodeAcceptanceExecutionProfile } from '../../scripts/acceptanceExecutionProfile.mjs';
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
 
-const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
-const deployId = process.env.NETLIFY_DEPLOY_ID;
-const rawHostedUrl = process.env.HOSTED_PILOT_URL;
-const hostedOrigin = rawHostedUrl ? new URL(rawHostedUrl).origin : null;
+const executionProfile = decodeAcceptanceExecutionProfile(process.env, {
+  expectedCheckoutSha: process.env.ACCEPTANCE_EXECUTION_KIND === 'local_source_fixture'
+    ? process.env.ACCEPTANCE_CHECKOUT_SHA
+    : undefined,
+});
+const releaseSha = executionProfile.releaseSha;
+const deployId = executionProfile.deployId;
+const hostedOrigin = executionProfile.targetOrigin;
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
 const indexHtml = fs.readFileSync('index.html', 'utf8');
@@ -109,9 +114,16 @@ const classifyNetworkWebSocket = (socket: PlaywrightWebSocket): NetworkViolation
 };
 
 test.beforeAll(() => {
+  if (executionProfile.executionKind === 'declaration_only') throw new Error('ACCEPTANCE_DECLARATION_IS_NOT_EXECUTABLE');
   expect(releaseSha, 'acceptance must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
-  expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
-  expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
+  if (executionProfile.executionKind === 'hosted_preview') {
+    expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
+    expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
+  } else if (executionProfile.executionKind === 'local_source_fixture') {
+    expect(deployId, 'local source fixture must not synthesize a Netlify deployment ID').toBeNull();
+    expect(hostedOrigin, 'local source fixture must bind the owned loopback origin').toMatch(/^http:\/\/127\.0\.0\.1:/u);
+    expect(executionProfile.checkoutSha, 'local source fixture must bind the exact checkout').toBe(releaseSha);
+  }
   expect(declaredGoogleStylesheetUrls.size, 'hosted acceptance must bind Google Fonts to index.html stylesheet declarations').toBeGreaterThan(0);
   expect(declaredJsDelivrScriptPaths.size, 'hosted acceptance must bind jsDelivr to index.html script declarations').toBeGreaterThan(0);
   expect(declaredAiStudioScriptRules.length, 'hosted acceptance must bind AI Studio CDN to index.html import-map declarations').toBeGreaterThan(0);
@@ -120,9 +132,18 @@ test.beforeAll(() => {
 const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {
   expect(response?.ok(), 'hosted response').toBeTruthy();
   const headers = response?.headers() ?? {};
-  expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
-  expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
-  expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+  if (executionProfile.executionKind === 'hosted_preview') {
+    expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
+    expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
+    expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+  } else if (executionProfile.executionKind === 'local_source_fixture') {
+    expect(new URL(response!.url()).origin, 'local source fixture response origin').toBe(hostedOrigin);
+    expect(headers['x-avalaos-release'], 'local source fixture must not synthesize hosted release headers').toBeUndefined();
+    expect(headers['x-avalaos-environment'], 'local source fixture must not synthesize hosted environment headers').toBeUndefined();
+    expect(headers['x-avalaos-netlify-deploy-id'], 'local source fixture must not synthesize hosted deploy headers').toBeUndefined();
+  } else {
+    throw new Error('ACCEPTANCE_DECLARATION_IS_NOT_EXECUTABLE');
+  }
 };
 
 let startupScopeMutationSequence = 0;
@@ -618,7 +639,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
 for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: string | null; projects: string[]; blockedReason?: string }>) {
   const testCase = catalogById.get(binding.testId) as any;
   if (!testCase) throw new Error(`Hosted binding references unknown Test ID ${binding.testId}`);
-  const title = `[${binding.testId}] ${testCase.title}`;
+  const title = executionProfile.executionKind === 'local_source_fixture'
+    ? `[SYNTHETIC-REGRESSION:${binding.testId}] ${testCase.title}`
+    : `[${binding.testId}] ${testCase.title}`;
   test(title, async ({ page }, testInfo) => {
     test.skip(!binding.projects.includes(testInfo.project.name), `Not required in ${testInfo.project.name}`);
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');

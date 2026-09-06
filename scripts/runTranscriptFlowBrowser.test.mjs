@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import {
+  createAcceptanceReportMetadata,
+  createSyntheticRegressionOutputRoot,
+  decodeAcceptanceExecutionProfile,
+} from './acceptanceExecutionProfile.mjs';
 import {
   assertBrowserPortAvailable,
   browserModeByFlag,
@@ -11,6 +19,8 @@ import {
   createOwnedListeningState,
   defaultBrowserMode,
   requestBrowserReadiness,
+  resolveCurrentCheckoutSha,
+  runBrowserCli,
   runBrowserHarness,
 } from './runTranscriptFlowBrowser.mjs';
 
@@ -304,6 +314,192 @@ test('full-platform fixture mode owns an isolated local preview lifecycle before
   assert.equal(calls[2].options.env.FULL_PLATFORM_EXECUTION_MODE, 'fixture');
   assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
   assert.equal(server.wasKilled, true);
+});
+
+const syntheticHead = 'a'.repeat(40);
+const navigationInvocation = '1'.repeat(32);
+const staleNavigationInvocation = '2'.repeat(32);
+
+const writeSyntheticNavigationReport = ({
+  root,
+  invocationId,
+  metadataInvocationId = invocationId,
+}) => {
+  const profile = decodeAcceptanceExecutionProfile({
+    ACCEPTANCE_EXECUTION_KIND: 'local_source_fixture',
+    ACCEPTANCE_RELEASE_SHA: syntheticHead,
+    ACCEPTANCE_CHECKOUT_SHA: syntheticHead,
+    ACCEPTANCE_INVOCATION_ID: invocationId,
+    LOCAL_ACCEPTANCE_BASE_URL: 'http://127.0.0.1:4202',
+  }, { expectedCheckoutSha: syntheticHead });
+  const metadata = createAcceptanceReportMetadata({
+    profile,
+    exactCommand: ['node', 'scripts/runTranscriptFlowBrowser.mjs', '--preview-navigation-regression'],
+    configPath: 'playwright.local-navigation-regression.config.ts',
+    sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+  });
+  metadata.invocationId = metadataInvocationId;
+  const outputRoot = path.join(
+    root,
+    ...createSyntheticRegressionOutputRoot({ profile, reportArea: 'navigation' }).split('/'),
+  );
+  mkdirSync(outputRoot, { recursive: true });
+  writeFileSync(path.join(outputRoot, 'playwright-results.json'), JSON.stringify({
+    config: { metadata: { ...metadata, actualWorkers: 1 } },
+    errors: [],
+    suites: [{
+      specs: [{
+        title: '[SYNTHETIC-REGRESSION:CONTROLLER-NAV-HISTORY-001] navigation history',
+        tests: ['desktop-chromium', 'pixel-7-chromium'].map(projectName => ({
+          projectName,
+          status: 'expected',
+          expectedStatus: 'passed',
+          annotations: [],
+          results: [{ status: 'passed', retry: 0, errors: [] }],
+        })),
+      }],
+    }],
+  }));
+};
+
+const runSyntheticNavigationHarness = ({ root, invocationId, writeFreshReport }) => {
+  const mode = browserModeByFlag.get('--preview-navigation-regression');
+  const server = new FakeChild();
+  const spawnImpl = (_command, arguments_, options) => {
+    if (arguments_.includes('build')) {
+      const build = new FakeChild();
+      queueMicrotask(() => {
+        build.exitCode = 0;
+        build.emit('close', 0, null);
+      });
+      return build;
+    }
+    if (arguments_.includes('preview')) {
+      queueMicrotask(() => server.stdout.write('  ➜  Local:   http://127.0.0.1:4202/\n'));
+      return server;
+    }
+    const playwright = new FakeChild();
+    queueMicrotask(() => {
+      writeFreshReport?.(options.env.ACCEPTANCE_INVOCATION_ID);
+      playwright.exitCode = 0;
+      playwright.emit('close', 0, null);
+    });
+    return playwright;
+  };
+  return runBrowserHarness({
+    mode,
+    root,
+    environment: {},
+    spawnImpl,
+    spawnSyncImpl: () => ({ status: 0, stdout: `${syntheticHead}\n`, stderr: '' }),
+    fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    readinessTimeoutMs: 100,
+    readinessPollIntervalMs: 1,
+    portPreflightImpl: async () => {},
+    invocationIdFactory: () => invocationId,
+  });
+};
+
+test('PR #264 synthetic regression modes own distinct loopback configs and full inventories', () => {
+  const sandbox = browserModeByFlag.get('--preview-sandbox-regression');
+  const navigation = browserModeByFlag.get('--preview-navigation-regression');
+  assert.equal(sandbox.port, '4201');
+  assert.equal(sandbox.config, 'playwright.local-sandbox-regression.config.ts');
+  assert.equal(sandbox.localAcceptance.inventory, 'sandbox');
+  assert.equal(navigation.port, '4202');
+  assert.equal(navigation.config, 'playwright.local-navigation-regression.config.ts');
+  assert.equal(navigation.localAcceptance.inventory, 'navigation');
+  assert.notEqual(sandbox.localAcceptance.reportArea, navigation.localAcceptance.reportArea);
+});
+
+test('local synthetic regression resolves the exact real checkout SHA and rejects partial CLI filters', async () => {
+  const exactHead = 'a'.repeat(40);
+  assert.equal(resolveCurrentCheckoutSha({
+    root: process.cwd(),
+    spawnSyncImpl: (command, arguments_, options) => {
+      assert.equal(command, 'git');
+      assert.deepEqual(arguments_, ['rev-parse', 'HEAD']);
+      assert.equal(options.cwd, process.cwd());
+      return { status: 0, stdout: `${exactHead}\n`, stderr: '' };
+    },
+  }), exactHead);
+  await assert.rejects(
+    runBrowserCli(['--preview-sandbox-regression', '--grep', 'SANDBOX-001']),
+    /SYNTHETIC_REGRESSION_PARTIAL_EXECUTION_REJECTED/u,
+  );
+  let exportedHarnessPreflightCalled = false;
+  await assert.rejects(
+    runBrowserHarness({
+      mode: browserModeByFlag.get('--preview-sandbox-regression'),
+      playwrightArguments: ['--list'],
+      portPreflightImpl: async () => { exportedHarnessPreflightCalled = true; },
+    }),
+    /SYNTHETIC_REGRESSION_PARTIAL_EXECUTION_REJECTED/u,
+  );
+  assert.equal(exportedHarnessPreflightCalled, false, 'exported harness must reject before checkout or process preflight');
+});
+
+test('green local child cannot reuse a prior valid same-head report when it writes no fresh invocation report', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'pr264-local-freshness-'));
+  try {
+    writeSyntheticNavigationReport({ root, invocationId: staleNavigationInvocation });
+    await assert.rejects(
+      runSyntheticNavigationHarness({ root, invocationId: navigationInvocation }),
+      /SYNTHETIC_REGRESSION_REPORT_UNAVAILABLE/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('local wrapper rejects invocation substitution inside a freshly written report', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'pr264-local-nonce-'));
+  try {
+    await assert.rejects(
+      runSyntheticNavigationHarness({
+        root,
+        invocationId: navigationInvocation,
+        writeFreshReport: actualInvocationId => writeSyntheticNavigationReport({
+          root,
+          invocationId: actualInvocationId,
+          metadataInvocationId: staleNavigationInvocation,
+        }),
+      }),
+      /SYNTHETIC_REGRESSION_METADATA_MISMATCH/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('local wrapper accepts only the complete report from its current invocation directory', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'pr264-local-current-'));
+  try {
+    assert.equal(await runSyntheticNavigationHarness({
+      root,
+      invocationId: navigationInvocation,
+      writeFreshReport: actualInvocationId => writeSyntheticNavigationReport({
+        root,
+        invocationId: actualInvocationId,
+      }),
+    }), 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('local synthetic regression refuses an ambient hosted deploy identity before starting a process', async () => {
+  let preflightCalled = false;
+  await assert.rejects(
+    runBrowserHarness({
+      mode: browserModeByFlag.get('--preview-navigation-regression'),
+      environment: { ...process.env, NETLIFY_DEPLOY_ID: 'b'.repeat(24) },
+      spawnSyncImpl: () => ({ status: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' }),
+      portPreflightImpl: async () => { preflightCalled = true; },
+    }),
+    /LOCAL_SOURCE_FIXTURE_DEPLOY_ID_REJECTED/u,
+  );
+  assert.equal(preflightCalled, false);
 });
 
 test('Studio artifacts mode prebuilds its harness and owns the preview lifecycle', async () => {

@@ -3,11 +3,35 @@ import {
   evaluateHostedTest,
   evaluateCompositeTest,
   evaluateRetainedTest,
+  flattenPlaywright,
+  validateHostedPlaywrightReport,
   validateOracleManifest,
   validateRetainedManifest,
   validateRetainedProducerResults,
   validateServerManifest,
 } from './exhaustiveAcceptanceEvidence.mjs';
+import {
+  EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW,
+  resolveHostedAcceptanceWorkflowPath,
+} from './hostedAcceptanceReportProvenance.mjs';
+
+const workflowEnvironment = workflowPath => ({
+  GITHUB_ACTIONS: 'true',
+  GITHUB_REPOSITORY: 'owner/repository',
+  GITHUB_WORKFLOW_REF: `owner/repository/${workflowPath}@refs/heads/main`,
+});
+const hostedWorkflowAllowlist = [EXHAUSTIVE_ACCEPTANCE_WORKFLOW, PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW];
+for (const workflowPath of hostedWorkflowAllowlist) {
+  assert.equal(resolveHostedAcceptanceWorkflowPath({
+    environment: workflowEnvironment(workflowPath),
+    allowedWorkflowPaths: hostedWorkflowAllowlist,
+  }), workflowPath);
+}
+assert.throws(() => resolveHostedAcceptanceWorkflowPath({
+  environment: workflowEnvironment('.github/workflows/substituted.yml'),
+  allowedWorkflowPaths: hostedWorkflowAllowlist,
+}), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u);
 
 const scope = { evidenceScope: 'executed-fixture', fixtureId: 'fixture-1', organizationId: '10000000-0000-4000-8000-000000000001', workspaceId: '20000000-0000-4000-8000-000000000001' };
 const provenance = {
@@ -160,31 +184,187 @@ assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, statu
 assert.ok(validateOracleManifest({ ...oracle, results: [...oracle.results, oracle.results[0]] }, oracleExpected).some(item => item.startsWith('duplicate-or-missing-oracle:')));
 assert.ok(validateOracleManifest({ ...oracle, results: [] }, oracleExpected).some(item => item.startsWith('oracle-result-missing:')), 'missing exact oracle result must fail closed');
 
-const passedExecution = {
-  title: '[SANDBOX-001] Sandbox: access',
-  project: 'desktop-chromium',
-  results: [{ status: 'passed', attachments: [] }],
+const hostedMetadata = {
+  schemaVersion: 'acceptance-report-profile-v1',
+  evidenceKind: 'hosted-preview-acceptance',
+  executionKind: 'hosted_preview',
+  exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  exactHead: 'a'.repeat(40),
+  targetOrigin: 'https://avalaos-pilot.netlify.app',
+  deployId: 'b'.repeat(24),
+  workflowRuntime: {
+    authority: 'github-actions',
+    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
+    workflowRef: 'owner/repository/.github/workflows/exhaustive-acceptance.yml@refs/heads/main',
+    repository: 'owner/repository',
+    eventName: 'workflow_dispatch',
+    runId: '123456',
+    runAttempt: '2',
+    workflowSha: 'c'.repeat(40),
+    releaseSha: 'a'.repeat(40),
+  },
 };
+const hostedTest = (projectName = 'desktop-chromium') => ({
+  projectName,
+  status: 'expected',
+  expectedStatus: 'passed',
+  annotations: [],
+  results: [{ status: 'passed', retry: 0, attachments: [] }],
+});
+const fullHostedReport = {
+  config: { metadata: { ...hostedMetadata, actualWorkers: 1 }, workers: 1 },
+  errors: [],
+  suites: [{
+    title: 'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    specs: [{ title: '[SANDBOX-001] Sandbox: access', tests: [hostedTest()] }],
+    suites: [],
+  }],
+  stats: { expected: 1, unexpected: 0, skipped: 0 },
+};
+const [passedExecution] = flattenPlaywright(fullHostedReport);
+const validHostedValidation = validateHostedPlaywrightReport({ report: fullHostedReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(validHostedValidation.errors, []);
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [passedExecution],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: validHostedValidation,
 }).status, 'PASS');
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [],
   requiredProjects: ['desktop-chromium'],
-}).status, 'BLOCKED');
+}).status, 'BLOCKED', 'a raw hosted-labelled execution without a validator-owned binding must remain blocked');
+
+const duplicateReport = {
+  ...fullHostedReport,
+  suites: [{ specs: [{ title: passedExecution.title, tests: [hostedTest(), hostedTest()] }] }],
+};
+const duplicateValidation = validateHostedPlaywrightReport({ report: duplicateReport, expectedMetadata: hostedMetadata });
+assert.ok(duplicateValidation.errors.some(value => value.startsWith('hosted-report-duplicate:')));
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [passedExecution, passedExecution],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: duplicateValidation,
 }).status, 'BLOCKED');
+
+const failedReport = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'unexpected', results: [{ status: 'failed', retry: 0, error: { message: 'deterministic failure' }, attachments: [] }] }],
+  }] }],
+};
+const failedValidation = validateHostedPlaywrightReport({ report: failedReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(failedValidation.errors, []);
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [{ ...passedExecution, results: [{ status: 'failed', error: { message: 'deterministic failure' }, attachments: [] }] }],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: failedValidation,
 }).status, 'FAIL');
+failedReport.suites[0].specs[0].tests[0].status = 'expected';
+failedReport.suites[0].specs[0].tests[0].results[0].status = 'passed';
+delete failedReport.suites[0].specs[0].tests[0].results[0].error;
+assert.equal(evaluateHostedTest({
+  title: passedExecution.title,
+  requiredProjects: ['desktop-chromium'],
+  reportValidation: failedValidation,
+}).status, 'FAIL', 'mutating the caller report after validation cannot promote the detached validated result');
+
+const mutateMetadata = change => ({
+  ...fullHostedReport,
+  config: { ...fullHostedReport.config, metadata: { ...fullHostedReport.config.metadata, ...change } },
+});
+for (const [label, report] of [
+  ['wrong kind', mutateMetadata({ executionKind: 'local_source_fixture' })],
+  ['wrong head', mutateMetadata({ exactHead: 'd'.repeat(40) })],
+  ['wrong deploy', mutateMetadata({ deployId: 'e'.repeat(24) })],
+  ['wrong command', mutateMetadata({ exactCommand: ['npx', 'playwright', 'test', '--config=substituted.ts', '--workers=1'] })],
+  ['wrong run', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runId: '654321' } })],
+  ['wrong attempt', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runAttempt: '1' } })],
+  ['duplicate metadata shape', mutateMetadata({ substitutedAuthority: true })],
+]) {
+  assert.ok(validateHostedPlaywrightReport({ report, expectedMetadata: hostedMetadata }).errors.length > 0, `${label} must fail closed`);
+}
+assert.ok(validateHostedPlaywrightReport({ report: null, expectedMetadata: hostedMetadata }).errors.includes('hosted-report-missing-or-invalid'));
+assert.ok(validateHostedPlaywrightReport({
+  report: { ...fullHostedReport, config: {} },
+  expectedMetadata: hostedMetadata,
+}).errors.includes('hosted-report-metadata-missing'));
+assert.ok(validateHostedPlaywrightReport({
+  report: { ...fullHostedReport, errors: [{ message: 'suite-level failure' }] },
+  expectedMetadata: hostedMetadata,
+}).errors.includes('hosted-report-errors'));
+const skippedUnderGreen = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'skipped', results: [{ status: 'skipped', retry: 0, attachments: [] }] }],
+  }] }],
+  stats: { expected: 1, unexpected: 0, skipped: 0 },
+};
+assert.ok(validateHostedPlaywrightReport({ report: skippedUnderGreen, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-skipped:')), 'an unknown skipped assertion cannot hide under a green suite summary');
+const canonicalSkip = {
+  ...skippedUnderGreen,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{
+      ...hostedTest(),
+      status: 'skipped',
+      expectedStatus: 'skipped',
+      annotations: [{ type: 'skip', description: 'Independently catalog-bound hosted scenario is not executable.' }],
+      results: [{ status: 'skipped', retry: 0, attachments: [] }],
+    }],
+  }] }],
+};
+const canonicalSkipKey = `${passedExecution.title}\0desktop-chromium`;
+assert.deepEqual(validateHostedPlaywrightReport({
+  report: canonicalSkip,
+  expectedMetadata: hostedMetadata,
+  allowedSkippedExecutions: new Map([[canonicalSkipKey, 'Independently catalog-bound hosted scenario is not executable.']]),
+}).errors, [], 'an exact independently bound catalog-unbound skip remains valid report inventory');
+assert.ok(validateHostedPlaywrightReport({
+  report: canonicalSkip,
+  expectedMetadata: hostedMetadata,
+  allowedSkippedExecutions: new Map([[canonicalSkipKey, 'Substituted reason']]),
+}).errors.some(value => value.startsWith('hosted-report-skipped:')), 'the skip reason must match the independently bound catalog reason');
+const retryUnderGreen = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), results: [{ status: 'failed', retry: 0 }, { status: 'passed', retry: 1 }] }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: retryUnderGreen, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-attempt-count:')), 'a passing retry cannot replace an exact first-attempt result');
+const unexpectedExpectedStatus = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), expectedStatus: 'failed' }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: unexpectedExpectedStatus, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-expected-status:')), 'non-default expected status cannot manufacture a hosted pass');
+const aggregateGreenStatusMismatch = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'unexpected' }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: aggregateGreenStatusMismatch, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-status:')), 'a passed attempt must retain Playwright expected status');
+const passedWithError = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), results: [{ status: 'passed', retry: 0, error: { message: 'hidden failure' }, attachments: [] }] }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: passedWithError, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-passed-errors:')), 'a passed attempt carrying an error cannot earn hosted credit');
 
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'PASS' }]).status, 'PASS');
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'BLOCKED' }]).status, 'BLOCKED');

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
+const executionProfileSource = fs.readFileSync(new URL('../../scripts/acceptanceExecutionProfile.mjs', import.meta.url), 'utf8');
+const localSandboxConfig = fs.readFileSync(new URL('../../playwright.local-sandbox-regression.config.ts', import.meta.url), 'utf8');
+const localNavigationConfig = fs.readFileSync(new URL('../../playwright.local-navigation-regression.config.ts', import.meta.url), 'utf8');
+const executionBindings = JSON.parse(fs.readFileSync(new URL('../acceptance/execution-bindings.json', import.meta.url), 'utf8'));
 const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
 const adminWorkbenchSource = fs.readFileSync(new URL('../../components/admin/AdminWorkbench.tsx', import.meta.url), 'utf8');
@@ -18,6 +22,29 @@ const fieldAssociations = [
   ['process-department', 'input'],
   ['process-criticality', 'select'],
 ];
+
+const executableProjectCases = executionBindings.hostedTests
+  .filter(binding => binding.scenario)
+  .reduce((count, binding) => count + binding.projects.length, 0);
+const catalogUnboundProjectCases = executionBindings.hostedTests
+  .filter(binding => !binding.scenario)
+  .reduce((count, binding) => count + binding.projects.length, 0);
+assert.equal(executableProjectCases, 38, 'local Sandbox regression must execute all 38 scenario-bound project cases');
+assert.equal(catalogUnboundProjectCases, 30, 'the 30 catalog-unbound project cases must remain explicit not_run skips');
+assert.match(hostedSpec, /decodeAcceptanceExecutionProfile\(process\.env/u, 'the shared Sandbox spec must require an explicit execution profile');
+assert.match(hostedSpec, /\[SYNTHETIC-REGRESSION:\$\{binding\.testId\}\]/u, 'local results must carry distinct synthetic-regression Test-ID titles');
+assert.match(hostedSpec, /test\.skip\(!binding\.scenario/u, 'catalog-unbound cases must remain skipped rather than synthesized as passes');
+assert.match(executionProfileSource, /LOCAL_SOURCE_FIXTURE_DEPLOY_ID_REJECTED/u, 'local execution must reject a Netlify deploy identity');
+assert.match(executionProfileSource, /target\.protocol !== 'http:' \|\| target\.hostname !== '127\.0\.0\.1'/u, 'local execution must bind only exact IPv4 loopback');
+assert.match(executionProfileSource, /HOSTED_PREVIEW_NON_LOOPBACK_HTTPS_REQUIRED/u, 'hosted execution must reject loopback origins');
+for (const [config, expectedPath] of [
+  [localSandboxConfig, 'output/playwright/pr264-synthetic-regression'],
+  [localNavigationConfig, 'output/playwright/pr264-synthetic-regression'],
+]) {
+  assert.match(config, /executionKind !== 'local_source_fixture'/u, 'local Playwright config must fail closed on the execution kind');
+  assert.ok(config.includes(expectedPath), 'local Playwright evidence must use its dedicated synthetic-regression artifact tree');
+  assert.match(config, /metadata,/u, 'local Playwright report must retain its exact execution metadata');
+}
 
 for (const [id, control] of fieldAssociations) {
   assert.match(processModal, new RegExp(`<label\\s+htmlFor="${id}"`, 'u'), `${id} must have an associated visible label`);
