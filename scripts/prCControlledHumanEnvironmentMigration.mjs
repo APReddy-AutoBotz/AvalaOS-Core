@@ -1,5 +1,7 @@
 import {readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
 import process from 'node:process';
+import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 import {deriveContext,loadFixture,safeResult,sha256} from './prCControlledHumanEnvironment.mjs';
 import {createControlledHumanPostgresClientConfig} from './prCControlledHumanPostgresTls.mjs';
@@ -141,4 +143,4 @@ async function main(){
   const adapter=new PostgresEnvironmentMigrationAdapter(process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL,migration.sql);await adapter.connect();
   try{if(phase==='preflight')return emit(await migrationPreflight(context,adapter),outputPath);if(phase==='apply')return emit(await migrationApply(context,adapter,migration),outputPath);return emit(await migrationVerify(context,adapter),outputPath)}finally{await adapter.close()}
 }
-if(process.argv[1]&&new URL(import.meta.url).pathname.replace(/^\/[A-Za-z]:/u,value=>value.slice(1)).replaceAll('/','\\').toLowerCase()===process.argv[1].toLowerCase())main().catch(error=>{process.stderr.write(`${error instanceof Error?error.message:'PR_C_CONTROLLED_HUMAN_MIGRATION_FAILED'}\n`);process.exitCode=1});
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(error=>{process.stderr.write(`${error instanceof Error?error.message:'PR_C_CONTROLLED_HUMAN_MIGRATION_FAILED'}\n`);process.exitCode=1});

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
@@ -23,6 +24,41 @@ const baseEnv={
   PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',
 };
 const fixtureState=await loadFixture();
+
+test('controlled-human controller entrypoints execute cross-platform and reject missing phases fail-closed',()=>{
+  const cases=[
+    ['scripts/prCControlledHumanEnvironment.mjs','usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]'],
+    ['scripts/prCControlledHumanEnvironmentMigration.mjs','usage: prCControlledHumanEnvironmentMigration.mjs <preflight|apply|verify> [--output path]'],
+  ];
+  for(const [script,usage] of cases){
+    const result=spawnSync(process.execPath,[script],{encoding:'utf8'});
+    assert.equal(result.error,undefined,script);
+    assert.equal(result.signal,null,script);
+    assert.equal(result.status,1,script);
+    assert.equal(result.stdout,'',script);
+    assert.equal(result.stderr,`${usage}\n`,script);
+    const invoked=spawnSync(process.execPath,[script,'preflight'],{
+      encoding:'utf8',env:{...process.env,PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'invalid'},
+    });
+    assert.equal(invoked.error,undefined,script);
+    assert.equal(invoked.signal,null,script);
+    assert.equal(invoked.status,1,script);
+    assert.equal(invoked.stdout,'',script);
+    assert.equal(invoked.stderr,'PR_C_CONTROLLED_HUMAN_ENVIRONMENT_REJECTED\n',script);
+  }
+});
+
+test('controlled-human bootstrap and comment transport entrypoints execute cross-platform and reject invalid arguments',()=>{
+  const cases=[
+    ['scripts/derivePrCControlledHumanBootstrap.mjs',['--invalid'],'usage: derivePrCControlledHumanBootstrap.mjs [--output path]'],
+    ['scripts/compactPrCControlledHumanComment.mjs',[],'usage: compactPrCControlledHumanComment.mjs --input path --output path'],
+  ];
+  for(const [script,args,usage] of cases){
+    const result=spawnSync(process.execPath,[script,...args],{encoding:'utf8'});
+    assert.equal(result.error,undefined,script);assert.equal(result.signal,null,script);assert.equal(result.status,1,script);
+    assert.equal(result.stdout,'',script);assert.equal(result.stderr,`${usage}\n`,script);
+  }
+});
 const context=deriveContext(baseEnv,fixtureState,{head,dirty:''});
 const emptyDomainCounts=()=>({assess_processes:0,assess_v2_cases:0,assess_v2_studio_handoffs:0,enterprise_module_handoffs:0,studio_artifacts:0,studio_source_packages:0,delivery_handoffs:0,delivery_packages:0,monitor_baselines:0,pilot_environments:0,pilot_tenants:0});
 const domainCounts=cycles=>({assess_processes:cycles,assess_v2_cases:cycles,assess_v2_studio_handoffs:cycles,enterprise_module_handoffs:cycles,studio_artifacts:2*cycles,studio_source_packages:2*cycles,delivery_handoffs:0,delivery_packages:2*cycles,monitor_baselines:cycles,pilot_environments:cycles,pilot_tenants:cycles});

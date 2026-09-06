@@ -103,6 +103,12 @@ test('preparation is reusable from exact-head PR CI, action-pinned, and step-sco
   assert.equal(job.environment,'hosted-nonproduction-pilot'); assert.equal(job.env.PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN,PREVIEW_ORIGIN);
   assert.match(source,/pull\.head\.sha !== process\.env\.EXPECTED_HEAD/u); assert.match(source,/artifact\.digest !== process\.env\.EXPECTED_ARTIFACT_DIGEST/u);
   assert.match(source,/run\.event !== 'pull_request'/u); assert.match(source,/output\/controlled-human\/verify\.json/u);
+  const preparationIndex=job.steps.findIndex(step=>String(step.run??'').startsWith('node scripts/buildPrCControlledHumanPreparation.mjs '));
+  const templateIndex=job.steps.findIndex(step=>String(step.run??'').startsWith('node scripts/writePrCControlledHumanObservationTemplates.mjs '));
+  assert.ok(preparationIndex>=0&&templateIndex>preparationIndex);
+  assert.equal(job.steps[templateIndex].run,'node scripts/writePrCControlledHumanObservationTemplates.mjs --preparation output/controlled-human/preparation.json --output-directory output/controlled-human/templates');
+  assert.equal(job.env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA,'${{ inputs.exact_head_sha }}');
+  assert.equal(job.env.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST,'${{ inputs.exercise_digest }}');
   assert.match(source,/recover-reset --reason abort/u);
   const abortVerifier=job.steps.find(step=>step.name==='Verify pinned Supabase CA for abort recovery');
   const abortRecovery=job.steps.find(step=>step.name==='Protected exact-bound abort recovery after failed seed or evidence assembly');

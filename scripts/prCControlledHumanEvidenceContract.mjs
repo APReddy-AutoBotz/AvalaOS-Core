@@ -805,6 +805,33 @@ const validateHumanStep = (observation, expected, code) => {
   return artifact;
 };
 
+export const validateHumanObservationComment = payload => {
+  assertExactKeys(payload, ['kind', 'humanRole', 'exactHead', 'preparationDigest', 'exerciseDigest', 'observations'], [], 'PR_C_CH_COMMENT_PAYLOAD');
+  assert(payload.kind === 'pr264-controlled-human-observation', 'PR_C_CH_COMMENT_KIND');
+  assert(['requester', 'reviewer', 'approver'].includes(payload.humanRole), 'PR_C_CH_COMMENT_ROLE');
+  assert(typeof payload.exactHead === 'string' && SHA.test(payload.exactHead), 'PR_C_CH_COMMENT_HEAD');
+  assertDigest(payload.preparationDigest, 'PR_C_CH_COMMENT_PREPARATION');
+  assertDigest(payload.exerciseDigest, 'PR_C_CH_COMMENT_EXERCISE');
+  const expectedSteps = expectedDutySteps(payload.humanRole);
+  const expectedIds = [...new Set(expectedSteps.map(record => record.checkpointId))];
+  assert(Array.isArray(payload.observations)
+    && JSON.stringify(payload.observations.map(record => record.checkpointId)) === JSON.stringify(expectedIds), 'PR_C_CH_COMMENT_CHECKPOINT_SET');
+  const artifactDigests=[];
+  payload.observations.forEach((record, recordIndex) => {
+    const expected = catalogByCheckpoint.get(record.checkpointId);
+    assertExactKeys(record, ['checkpointId', 'journeyId', 'testIds', 'steps'], [], `PR_C_CH_COMMENT_CHECKPOINT:${recordIndex}`);
+    assert(record.journeyId === expected?.journeyId, `PR_C_CH_COMMENT_JOURNEY:${record.checkpointId}`);
+    sortedUnique(record.testIds, `PR_C_CH_COMMENT_TEST_IDS:${record.checkpointId}`);
+    assert(JSON.stringify(record.testIds) === JSON.stringify(expected.testIds), `PR_C_CH_COMMENT_TEST_ID_SET:${record.checkpointId}`);
+    const owned = expected.steps.filter(item => HUMAN_DUTY_BY_PERSONA[item.personaKey] === payload.humanRole);
+    assert(Array.isArray(record.steps) && record.steps.length === owned.length, `PR_C_CH_COMMENT_STEP_SET:${record.checkpointId}`);
+    record.steps.forEach((observation,index)=>artifactDigests.push(validateHumanStep(observation,owned[index],`PR_C_CH_COMMENT_STEP:${record.checkpointId}:${index}`).digest));
+  });
+  assert(new Set(artifactDigests).size === artifactDigests.length, 'PR_C_CH_COMMENT_BROWSER_DIGEST_REUSE');
+  recursivelyRejectUnsafeEvidence(payload);
+  return payload;
+};
+
 const validateObservedDeltas = (deltas, negative, code) => {
   const fields = ['receipt', 'audit', 'target', 'itemVersion', 'approval', 'baseline'];
   assertExactKeys(deltas, fields, [], code);

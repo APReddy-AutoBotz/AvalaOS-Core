@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalSupabasePublicOrigin } from '../services/supabasePublicCredential.mjs';
@@ -303,6 +304,38 @@ export function checkoutIdentity(cwd = process.cwd()) {
   return { head, dirty };
 }
 
+export function deriveControlledHumanExerciseBinding(values, fixtureState) {
+  if (values.environmentClass !== 'hosted_nonproduction_pilot') fail('PR_C_CONTROLLED_HUMAN_ENVIRONMENT_REJECTED');
+  if (values.prNumber !== 264) fail('PR_C_CONTROLLED_HUMAN_PR_REJECTED');
+  if (!SHA.test(values.releaseSha ?? '') || values.reviewHeadSha !== values.releaseSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
+  if (!UUID.test(values.exerciseId ?? '')) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
+  if (!DIGEST.test(values.targetFingerprint ?? '')) fail('PR_C_CONTROLLED_HUMAN_TARGET_REJECTED');
+  if (!DIGEST.test(values.publicTargetDigest ?? '')) fail('PR_C_CONTROLLED_HUMAN_PUBLIC_TARGET_REJECTED');
+  if (fixtureState?.fixture?.preview?.originPattern !== '^https://deploy-preview-264--avalaos-pilot\\.netlify\\.app$'
+    || !DIGEST.test(fixtureState?.personaManifestDigest ?? '') || !DIGEST.test(fixtureState?.fixtureManifestDigest ?? '')) {
+    fail('PR_C_CONTROLLED_HUMAN_PREVIEW_CONTRACT_REJECTED');
+  }
+  const exerciseDigest = sha256({
+    contractVersion: CONTROLLER_VERSION,
+    environmentClass: values.environmentClass,
+    prNumber: values.prNumber,
+    releaseSha: values.releaseSha,
+    reviewHeadSha: values.reviewHeadSha,
+    exerciseId: values.exerciseId,
+    targetFingerprint: values.targetFingerprint,
+    publicTargetDigest: values.publicTargetDigest,
+    personaManifestDigest: fixtureState.personaManifestDigest,
+    fixtureManifestDigest: fixtureState.fixtureManifestDigest,
+    migrationTip: EXPECTED_MIGRATION_TIP,
+  });
+  return Object.freeze({
+    exerciseDigest,
+    personaManifestDigest: fixtureState.personaManifestDigest,
+    fixtureManifestDigest: fixtureState.fixtureManifestDigest,
+    migrationTip: EXPECTED_MIGRATION_TIP,
+  });
+}
+
 export function deriveContext(env, fixtureState, checkout = checkoutIdentity(), { allowTrustedRecoveryCheckout = false } = {}) {
   const values = {
     environmentClass: env.PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS,
@@ -321,33 +354,14 @@ export function deriveContext(env, fixtureState, checkout = checkoutIdentity(), 
   const expectedCheckoutSha=trustedRecoverySha??values.releaseSha;
   if(trustedRecoverySha!==undefined&&(!allowTrustedRecoveryCheckout||env.PR_C_CONTROLLED_HUMAN_RECOVERY_MODE!=='trusted-current-pr-head'||!SHA.test(trustedRecoverySha)))
     fail('PR_C_CONTROLLED_HUMAN_RECOVERY_CHECKOUT_REJECTED');
-  if (values.environmentClass !== 'hosted_nonproduction_pilot') fail('PR_C_CONTROLLED_HUMAN_ENVIRONMENT_REJECTED');
-  if (values.prNumber !== 264) fail('PR_C_CONTROLLED_HUMAN_PR_REJECTED');
-  if (!SHA.test(values.releaseSha ?? '') || values.reviewHeadSha !== values.releaseSha || checkout.head !== expectedCheckoutSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
+  const exerciseBinding=deriveControlledHumanExerciseBinding(values,fixtureState);
+  if (checkout.head !== expectedCheckoutSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
   if (checkout.dirty) fail('PR_C_CONTROLLED_HUMAN_DIRTY_CHECKOUT');
   if (!DEPLOY_ID.test(values.deployId ?? '')) fail('PR_C_CONTROLLED_HUMAN_DEPLOY_REJECTED');
   if (values.deployOrigin !== PREVIEW_ORIGIN || values.siteName !== 'avalaos-pilot' || values.netlifyContext !== 'deploy-preview') fail('PR_C_CONTROLLED_HUMAN_PREVIEW_REJECTED');
-  if (!UUID.test(values.exerciseId ?? '')) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
-  if (!DIGEST.test(values.targetFingerprint ?? '')) fail('PR_C_CONTROLLED_HUMAN_TARGET_REJECTED');
-  if (!DIGEST.test(values.publicTargetDigest ?? '')) fail('PR_C_CONTROLLED_HUMAN_PUBLIC_TARGET_REJECTED');
-  if (fixtureState.fixture.preview.originPattern !== '^https://deploy-preview-264--avalaos-pilot\\.netlify\\.app$') fail('PR_C_CONTROLLED_HUMAN_PREVIEW_CONTRACT_REJECTED');
-  const exerciseDigest = sha256({
-    contractVersion: CONTROLLER_VERSION,
-    environmentClass: values.environmentClass,
-    prNumber: values.prNumber,
-    releaseSha: values.releaseSha,
-    reviewHeadSha: values.reviewHeadSha,
-    exerciseId: values.exerciseId,
-    targetFingerprint: values.targetFingerprint,
-    publicTargetDigest: values.publicTargetDigest,
-    personaManifestDigest: fixtureState.personaManifestDigest,
-    fixtureManifestDigest: fixtureState.fixtureManifestDigest,
-    migrationTip: EXPECTED_MIGRATION_TIP,
-  });
   if (env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== undefined
-    && env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== exerciseDigest) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
-  return Object.freeze({ ...values, exerciseDigest, trustedRecoverySha:trustedRecoverySha??null, personaManifestDigest: fixtureState.personaManifestDigest,
-    fixtureManifestDigest: fixtureState.fixtureManifestDigest, migrationTip: EXPECTED_MIGRATION_TIP });
+    && env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== exerciseBinding.exerciseDigest) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
+  return Object.freeze({ ...values, ...exerciseBinding, trustedRecoverySha:trustedRecoverySha??null });
 }
 
 export function safeResult(phase, status, context, extra = {}) {
@@ -1315,6 +1329,6 @@ async function main() {
   } finally { await database.close(); }
 }
 
-if (process.argv[1] && new URL(import.meta.url).pathname.replace(/^\/[A-Za-z]:/u,value=>value.slice(1)).replaceAll('/','\\').toLowerCase()===process.argv[1].toLowerCase()) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error=>{ process.stderr.write(`${error instanceof Error?error.message:'PR_C_CONTROLLED_HUMAN_FAILED'}\n`);process.exitCode=1; });
 }

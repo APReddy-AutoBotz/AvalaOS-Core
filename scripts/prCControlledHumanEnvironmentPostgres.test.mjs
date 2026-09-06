@@ -905,21 +905,45 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const persistedProofPairs=persistedPairs.map(row=>({checkpointId:row.checkpoint_id,stepId:row.step_id,anchor:row.safe_anchor,binding:row.safe_record}));
     validateControlledHumanProofPairs(persistedProofPairs);assert.equal(persistedProofPairs.length,42);
     const timingByStep=new Map(persistedPairs.map(row=>[`${row.checkpoint_id}\0${row.step_id}`,{anchorAt:new Date(row.anchor_at).getTime(),bindingAt:new Date(row.binding_at).getTime(),bindingToken:row.safe_record.bindingToken}]));
-    const dutySteps=humanRole=>CONTROLLED_HUMAN_EXECUTION_ORDER.flatMap(checkpointId=>catalog.get(checkpointId).steps.filter(step=>HUMAN_DUTY_BY_PERSONA[step.personaKey]===humanRole).map(step=>({checkpointId,...step})));
-    const buildObservedDutyRequest=humanRole=>{
-      const expected=dutySteps(humanRole);const ch14Ordinal=new Map(expected.filter(step=>step.checkpointId==='CH-14').map((step,index)=>[step.stepId,index]));let cursor=seededTime;return expected.map((step,index)=>{
-        const timing=timingByStep.get(`${step.checkpointId}\0${step.stepId}`);let started;let completed;
-        if(timing){started=timing.anchorAt;completed=Math.max(timing.bindingAt,started+1);assert.ok(started>cursor,`${humanRole}:${step.stepId} real action order drifted`);}
-        else if(step.stepId==='verify-history-readable-and-actions-absent'){started=Math.max(cursor+1,finalQuiesceTime+1);completed=started+1;}
-        else if(step.checkpointId==='CH-14'){
-          const ordinal=ch14Ordinal.get(step.stepId);assert.ok(Number.isSafeInteger(ordinal));started=ch14WindowStartedAt+1+(ordinal*2);completed=started+1;
-          assert.ok(started>cursor&&completed<ch14WindowCompletedAt,`${humanRole}:${step.stepId} escaped the reserved CH-14 observation window`);
-          const next=expected.slice(index+1).map(item=>timingByStep.get(`${item.checkpointId}\0${item.stepId}`)).find(Boolean);if(next)assert.ok(completed<next.anchorAt,`${humanRole}:${step.stepId} crossed its next authentic action`);
+    const blockedObservationTimes=new Set((await database.client.query(`select occurred_at from (
+      select coalesce(completed_at,created_at) occurred_at from public.assess_command_receipts where org_id=$1 and workspace_id=$2
+      union all select coalesce(completed_at,created_at) from public.studio_artifact_command_receipts where org_id=$1 and workspace_id=$2
+      union all select coalesce(completed_at,created_at) from public.studio_tenant_template_command_receipts where org_id=$1 and workspace_id=$2
+      union all select coalesce(completed_at,created_at) from public.enterprise_module_handoff_command_receipts where org_id=$1 and workspace_id=$2
+      union all select coalesce(completed_at,created_at) from public.enterprise_delivery_monitor_command_receipts where org_id=$1 and workspace_id=$2
+      union all select coalesce(completed_at,created_at) from public.enterprise_ai_command_receipts where org_id=$1 and workspace_id=$2
+      union all select receipt.completed_at from public.pr_c_controlled_human_synthetic_generation_receipts receipt join public.pr_c_controlled_human_exercises exercise on exercise.id=receipt.exercise_id where exercise.exercise_digest=$3
+      union all select created_at from public.privileged_audit_events where org_id=$1 and workspace_id=$2
+      union all select created_at from public.enterprise_delivery_monitor_effects where org_id=$1 and workspace_id=$2
+      union all select committed_at from public.enterprise_ai_effect_journal where org_id=$1 and workspace_id=$2
+      union all select ownership.created_at from public.pr_c_controlled_human_resource_ownership ownership join public.pr_c_controlled_human_exercises exercise on exercise.id=ownership.exercise_id where exercise.exercise_digest=$3
+      union all select anchor.created_at from public.pr_c_controlled_human_action_anchors anchor join public.pr_c_controlled_human_exercises exercise on exercise.id=anchor.exercise_id where exercise.exercise_digest=$3
+      union all select binding.created_at from public.pr_c_controlled_human_action_bindings binding join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id where exercise.exercise_digest=$3
+    ) activity where occurred_at is not null`,[generationBinding.org_id,generationBinding.workspace_id,context.exerciseDigest])).rows.map(row=>new Date(row.occurred_at).getTime()));
+    const orderedSteps=CONTROLLED_HUMAN_EXECUTION_ORDER.flatMap(checkpointId=>catalog.get(checkpointId).steps.map(step=>({checkpointId,...step})));
+    const nextGlobalTiming=index=>orderedSteps.slice(index+1).map(candidate=>timingByStep.get(`${candidate.checkpointId}\0${candidate.stepId}`)).find(Boolean);
+    const reserveQuietInterval=(after,before,label)=>{
+      for(let started=after+1;started+1<before;started+=2){
+        const completed=started+1;if(!blockedObservationTimes.has(started)&&!blockedObservationTimes.has(completed)){
+          blockedObservationTimes.add(started);blockedObservationTimes.add(completed);return{started,completed};
         }
-        else {started=cursor+1;completed=started+1;const next=expected.slice(index+1).map(item=>timingByStep.get(`${item.checkpointId}\0${item.stepId}`)).find(Boolean);if(next)assert.ok(completed<next.anchorAt,`${humanRole}:${step.stepId} lacks an authentic observation interval`);else assert.ok(completed<finalQuiesceTime,`${humanRole}:${step.stepId} crossed quiesce`);}
-        cursor=completed;return{checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,startedAt:new Date(started).toISOString(),completedAt:new Date(completed).toISOString(),attemptDigest:sha256({humanRole,checkpointId:step.checkpointId,stepId:step.stepId,started}),bindingToken:timing?.bindingToken??null};
-      });
+      }
+      assert.fail(`${label} lacks an authentic observation interval`);
     };
+    const observedTimingByStep=new Map();let globalCursor=seededTime;
+    for(const [index,step] of orderedSteps.entries()){
+      const timing=timingByStep.get(`${step.checkpointId}\0${step.stepId}`);let interval;
+      if(timing){assert.ok(timing.anchorAt>globalCursor,`${step.checkpointId}:${step.stepId} real action order drifted`);interval={started:timing.anchorAt,completed:Math.max(timing.bindingAt,timing.anchorAt+1)};}
+      else if(step.stepId==='verify-history-readable-and-actions-absent')interval=reserveQuietInterval(Math.max(globalCursor,finalQuiesceTime),finalQuiesceTime+60000,`${step.checkpointId}:${step.stepId}`);
+      else if(step.checkpointId==='CH-14')interval=reserveQuietInterval(Math.max(globalCursor,ch14WindowStartedAt),ch14WindowCompletedAt,`${step.checkpointId}:${step.stepId}`);
+      else interval=reserveQuietInterval(globalCursor,nextGlobalTiming(index)?.anchorAt??finalQuiesceTime,`${step.checkpointId}:${step.stepId}`);
+      observedTimingByStep.set(`${step.checkpointId}\0${step.stepId}`,{...interval,bindingToken:timing?.bindingToken??null});globalCursor=interval.completed;
+    }
+    const dutySteps=humanRole=>orderedSteps.filter(step=>HUMAN_DUTY_BY_PERSONA[step.personaKey]===humanRole);
+    const buildObservedDutyRequest=humanRole=>dutySteps(humanRole).map(step=>{
+      const timing=observedTimingByStep.get(`${step.checkpointId}\0${step.stepId}`);assert.ok(timing);
+      return{checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,startedAt:new Date(timing.started).toISOString(),completedAt:new Date(timing.completed).toISOString(),attemptDigest:sha256({humanRole,checkpointId:step.checkpointId,stepId:step.stepId,started:timing.started}),bindingToken:timing.bindingToken};
+    });
     const unrelatedProbe=(await database.client.query(`select exercise.org_id,exercise.workspace_id,binding.actor_id,binding.action,binding.resource_id,binding.created_at event_at,authority.version authorization_version
       from public.pr_c_controlled_human_action_bindings binding
       join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id

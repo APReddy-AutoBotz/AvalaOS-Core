@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -19,6 +21,8 @@ import {
 import { verifyPr264DeployPreview } from './buildPrCControlledHumanPreparation.mjs';
 import { deprovision, postDeprovisionVerify, quiesce } from './prCControlledHumanEnvironment.mjs';
 import { captureProviderDeployment } from './producePrCControlledHumanEdgeDeploymentManifest.mjs';
+import { MAX_CONTROLLED_HUMAN_COMMENT_BYTES, compactControlledHumanComment } from './compactPrCControlledHumanComment.mjs';
+import { buildBoundHumanObservationTemplates, main as writeObservationTemplates } from './writePrCControlledHumanObservationTemplates.mjs';
 
 const root = path.resolve('.');
 const head = 'a'.repeat(40);
@@ -231,6 +235,57 @@ test('final session rejects a signed, well-formed second-valid CH-03 generation 
 });
 
 test('keeps absent controlled-human evidence not_run', () => assert.equal(controlledHumanEvidenceDisposition().result, 'not_run'));
+
+test('canonicalizes complete human comments below a conservative transport limit and rejects unsafe, partial, or oversized payloads',()=>{
+  const payload={kind:'pr264-controlled-human-observation',humanRole:'requester',exactHead:head,preparationDigest:d('preparation'),exerciseDigest:d('exercise'),observations:observations('requester')};
+  const compacted=compactControlledHumanComment(payload);
+  assert.equal(compacted.content,canonicalJson(payload));
+  assert.equal(compacted.byteLength,Buffer.byteLength(compacted.content,'utf8'));
+  assert.ok(compacted.byteLength<MAX_CONTROLLED_HUMAN_COMMENT_BYTES);
+  assert.ok(Buffer.byteLength(JSON.stringify(payload,null,2),'utf8')>compacted.byteLength);
+  assert.deepEqual(JSON.parse(compacted.content),JSON.parse(JSON.stringify(payload)));
+  const partial=structuredClone(payload);partial.observations[0].steps.pop();
+  assert.throws(()=>compactControlledHumanComment(partial),/COMMENT_STEP_SET/u);
+  const unsafe=structuredClone(payload);unsafe.observations[0].steps[0].browserArtifact.assertions=['sk-abcdefghijklmnopqrst'];
+  assert.throws(()=>compactControlledHumanComment(unsafe),/CREDENTIAL/u);
+  const oversized=structuredClone(payload);
+  oversized.observations[0].steps[0].browserArtifact.assertions=Array.from({length:6000},(_,index)=>`assertion-${String(index).padStart(5,'0')}`);
+  assert.throws(()=>compactControlledHumanComment(oversized),/COMMENT_TRANSPORT_TOO_LARGE/u);
+});
+
+test('downloaded role templates bind verified preparation and reach compaction by completing observations only',async()=>{
+  const prepared=preparation();
+  const env={PR_C_CONTROLLED_HUMAN_RELEASE_SHA:head,PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST:prepared.backend.exerciseDigest};
+  const templates=buildBoundHumanObservationTemplates(prepared,env);
+  assert.deepEqual(templates.map(value=>value.humanRole),['requester','reviewer','approver']);
+  for(const template of templates){
+    assert.deepEqual(Object.keys(template).sort(),['exactHead','exerciseDigest','humanRole','kind','observations','preparationDigest']);
+    assert.equal(template.exactHead,head);assert.equal(template.preparationDigest,canonicalDigest(prepared));
+    assert.equal(template.exerciseDigest,prepared.backend.exerciseDigest);
+    assert.deepEqual(template.observations,buildHumanObservationTemplate(template.humanRole));
+    assert.throws(()=>compactControlledHumanComment(template),/PR_C_CH_COMMENT_STEP:CH-\d{2}:\d+_OUTCOME/u);
+  }
+  assert.throws(()=>buildBoundHumanObservationTemplates(prepared,{...env,PR_C_CONTROLLED_HUMAN_RELEASE_SHA:'c'.repeat(40)}),/TEMPLATE_PREPARATION_BINDING/u);
+  assert.throws(()=>buildBoundHumanObservationTemplates(prepared,{...env,PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST:d('other-exercise')}),/TEMPLATE_PREPARATION_BINDING/u);
+  assert.throws(()=>buildBoundHumanObservationTemplates({...prepared,controlledHumanDisposition:'passed'},env),/PREPARATION_STATUS/u);
+  assert.throws(()=>buildBoundHumanObservationTemplates(prepared,{}),/TEMPLATE_PREPARATION_BINDING/u);
+  const directory=await mkdtemp(path.join(os.tmpdir(),'pr264-bound-templates-'));
+  try{
+    const input=path.join(directory,'preparation.json');const output=path.join(directory,'templates');
+    await writeFile(input,JSON.stringify(prepared));
+    await assert.rejects(writeObservationTemplates(['--output-directory',output],env),/TEMPLATE_ARGUMENTS/u);
+    await writeObservationTemplates(['--preparation',input,'--output-directory',output],env);
+    for(const expected of templates){
+      const downloaded=JSON.parse(await readFile(path.join(output,`${expected.humanRole}-observations.json`),'utf8'));
+      assert.deepEqual(downloaded,expected);
+      downloaded.observations=observations(downloaded.humanRole);
+      const compacted=compactControlledHumanComment(downloaded);
+      assert.ok(compacted.byteLength<=MAX_CONTROLLED_HUMAN_COMMENT_BYTES);
+      assert.deepEqual(JSON.parse(compacted.content),downloaded);
+    }
+    await assert.rejects(writeObservationTemplates(['--preparation',input,'--output-directory',output],env),/EEXIST/u);
+  }finally{await rm(directory,{recursive:true,force:true})}
+});
 
 test('maps every application persona to exactly one human duty and reconstructs all checkpoints', () => {
   assert.deepEqual(CONTROLLED_HUMAN_EXECUTION_ORDER, ['CH-01','CH-02','CH-03','CH-04','CH-05','CH-06','CH-07','CH-08','CH-09','CH-10','CH-11','CH-12','CH-14','CH-13']);

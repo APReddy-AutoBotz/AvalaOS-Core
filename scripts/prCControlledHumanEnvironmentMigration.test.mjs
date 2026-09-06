@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import test from 'node:test';
 import {loadFixture} from './prCControlledHumanEnvironment.mjs';
+import {buildControlledHumanBootstrapBindings,runControlledHumanBootstrapCli} from './derivePrCControlledHumanBootstrap.mjs';
 import {
   MIGRATION_NAME,MIGRATION_VERSION,PRIOR_MIGRATION_VERSION,assertMigrationInventory,buildPreTipProviderCountSql,derivePreTipProviderRelations,
   deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify,
@@ -25,6 +31,70 @@ test('migration context binds exact source digest and checkout head',()=>{
   const query=buildPreTipProviderCountSql(migration.sql);
   assert.match(query,/enterprise_ai_command_receipts/u);
   assert.doesNotMatch(query,/pr_c_controlled_human_/u);
+});
+
+test('bootstrap derives only safe exact-head bindings from an empty prior-tip hosted target',()=>{
+  const projectRef='abcdefghijklmnopqrst';
+  const bootstrapEnv={...env,
+    PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:projectRef,
+    PR_C_CONTROLLED_HUMAN_SUPABASE_URL:`https://${projectRef}.supabase.co`,
+    PR_C_CONTROLLED_HUMAN_DATABASE_URL:`postgresql://postgres:never-emitted@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+  };
+  delete bootstrapEnv.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST;
+  const result=buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}});
+  assert.equal(result.status,'bindings_derived');
+  assert.equal(result.exactHead,head);assert.equal(result.reviewHeadSha,head);
+  assert.equal(result.priorMigrationTip,PRIOR_MIGRATION_VERSION);assert.equal(result.migrationTip,MIGRATION_VERSION);
+  assert.equal(result.targetFingerprint,context.targetFingerprint);
+  assert.equal(result.githubEnvironmentVariables.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST,result.exerciseDigest);
+  assert.equal(result.netlifyBranchVariables.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST,result.publicTargetDigest);
+  assert.doesNotMatch(JSON.stringify(result),/never-emitted|database|project.?ref|exercise.?id|supabase[.]co/iu);
+  assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:'package.json'}}),/BOOTSTRAP_DIRTY_CHECKOUT/u);
+  assert.throws(()=>buildControlledHumanBootstrapBindings({env:{...bootstrapEnv,PR_C_CONTROLLED_HUMAN_SUPABASE_URL:'https://avalaos.com'},fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}}),/SUPABASE_TARGET_MISMATCH/u);
+  assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(MIGRATION_VERSION),checkout:{head,dirty:''}}),/BOOTSTRAP_PRIOR_TIP_REQUIRED/u);
+  assert.throws(()=>buildControlledHumanBootstrapBindings({env:{...bootstrapEnv,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'f'.repeat(64)}`},fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}}),/BOOTSTRAP_PUBLIC_TARGET_REJECTED/u);
+});
+
+test('bootstrap CLI sanitizes every adapter failure while preserving safe successful output and exclusive files',async()=>{
+  const projectRef='abcdefghijklmnopqrst';
+  const bootstrapEnv={...env,PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:projectRef,
+    PR_C_CONTROLLED_HUMAN_SUPABASE_URL:`https://${projectRef}.supabase.co`,
+    PR_C_CONTROLLED_HUMAN_DATABASE_URL:`postgresql://postgres:never-emitted@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`};
+  delete bootstrapEnv.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST;
+  const options={fixtureState:fixture,migration,checkout:{head,dirty:''}};
+  const capture=()=>{const output={stdout:'',stderr:''};return {output,io:{stdout:{write:value=>{output.stdout+=value}},stderr:{write:value=>{output.stderr+=value}}}}};
+  for(const phase of ['connect','inspect','close']){
+    for(const thrown of [new Error(`DNS/TLS ${bootstrapEnv.PR_C_CONTROLLED_HUMAN_DATABASE_URL}`),{message:`database ${projectRef}`,cause:new Error('private-database-role')}]){
+      const adapter={};for(const method of ['connect','inspect','close'])adapter[method]=async()=>{if(method===phase)throw thrown;return method==='inspect'?inventory():undefined};
+      const {output,io}=capture();
+      assert.equal(await runControlledHumanBootstrapCli([],bootstrapEnv,{...options,adapter},io),1);
+      assert.deepEqual(output,{stdout:'',stderr:'PR_C_CONTROLLED_HUMAN_BOOTSTRAP_FAILED\n'});
+    }
+  }
+  const directory=mkdtempSync(path.join(os.tmpdir(),'pr264-bootstrap-output-'));
+  try{
+    const target=path.join(directory,'safe-bindings.json');const success=capture();
+    assert.equal(await runControlledHumanBootstrapCli(['--output',target],bootstrapEnv,{...options,inventory:inventory()},success.io),0);
+    assert.equal(success.output.stderr,'');const emitted=JSON.parse(success.output.stdout);
+    assert.deepEqual(Object.keys(emitted).sort(),['bootstrapDigest','exactHead','status']);
+    assert.equal(emitted.status,'bindings_derived');assert.equal(emitted.exactHead,head);
+    const retained=readFileSync(target,'utf8');assert.equal(JSON.parse(retained).bootstrapDigest,emitted.bootstrapDigest);
+    assert.doesNotMatch(retained,/never-emitted|abcdefghijklmnopqrst|supabase[.]co/u);
+    const existing=capture();assert.equal(await runControlledHumanBootstrapCli(['--output',target],bootstrapEnv,{...options,inventory:inventory()},existing.io),1);
+    assert.deepEqual(existing.output,{stdout:'',stderr:'PR_C_CONTROLLED_HUMAN_BOOTSTRAP_FAILED\n'});
+    assert.equal(readFileSync(target,'utf8'),retained);
+  }finally{rmSync(directory,{recursive:true,force:true})}
+});
+
+test('bootstrap Git failure cannot relay child stderr before the sanitized caller diagnostic',()=>{
+  const directory=mkdtempSync(path.join(os.tmpdir(),'pr264-bootstrap-git-'));
+  try{
+    const moduleUrl=pathToFileURL(path.resolve('scripts/derivePrCControlledHumanBootstrap.mjs')).href;
+    const code=`import {bootstrapCheckoutIdentity} from ${JSON.stringify(moduleUrl)};try{bootstrapCheckoutIdentity(${JSON.stringify(directory)})}catch{process.stderr.write('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_FAILED\\n');process.exitCode=1}`;
+    const result=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8'});
+    assert.equal(result.error,undefined);assert.equal(result.status,1);assert.equal(result.stdout,'');
+    assert.equal(result.stderr,'PR_C_CONTROLLED_HUMAN_BOOTSTRAP_FAILED\n');
+  }finally{rmSync(directory,{recursive:true,force:true})}
 });
 
 test('migration inventory accepts only exact prior empty or exact current accounted state',()=>{

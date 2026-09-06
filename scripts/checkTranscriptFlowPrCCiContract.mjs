@@ -62,6 +62,8 @@ const requiredScripts = [
   'test:transcript-flow:delivery-monitor-evidence-contract',
   'test:transcript-flow:delivery-monitor-evidence',
   'test:pr-c-controlled-human-source',
+  'pr-c-controlled-human:bootstrap-bindings',
+  'pr-c-controlled-human:compact-comment',
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
 assert.match(
@@ -271,6 +273,8 @@ for (const file of [
   'scripts/verifyTranscriptFlowPrCEvidence.mjs',
   'scripts/prCControlledHumanEnvironment.mjs',
   'scripts/prCControlledHumanEnvironmentMigration.mjs',
+  'scripts/derivePrCControlledHumanBootstrap.mjs',
+  'scripts/compactPrCControlledHumanComment.mjs',
   'scripts/prCControlledHumanEnvironment.test.mjs',
   'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
   'scripts/prCControlledHumanEnvironmentPostgres.test.mjs',

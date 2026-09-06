@@ -252,7 +252,7 @@ jobs:
         run: node scripts/buildPrCControlledHumanPreparation.mjs --preflight output/controlled-human/preflight.json --plan output/controlled-human/plan.json --apply output/controlled-human/apply.json --verify output/controlled-human/verify.json --edge-deployment output/controlled-human/edge-deployment.json --output output/controlled-human/preparation.json
 
       - name: Write role-owned human observation templates
-        run: node scripts/writePrCControlledHumanObservationTemplates.mjs --output-directory output/controlled-human/templates
+        run: node scripts/writePrCControlledHumanObservationTemplates.mjs --preparation output/controlled-human/preparation.json --output-directory output/controlled-human/templates
 
       - name: Verify pinned Supabase CA for abort recovery
         id: verify_abort_recovery_ca
