@@ -2,6 +2,13 @@ name: PR 264 Controlled Human Checkpoint
 
 on:
   workflow_call:
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL:
+        required: true
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY:
+        required: true
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID:
+        required: true
     inputs:
       exact_head_sha: { required: true, type: string }
       preparation_run_id: { required: true, type: string }
@@ -55,6 +62,13 @@ jobs:
 
       - name: Install exact dependencies before protected values
         run: npm ci
+
+      - name: Require exact protected checkpoint phase secrets
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/prCControlledHumanWorkflowSecrets.mjs checkpoint
 
       - name: Verify completed exact-head preparation run and immutable artifact
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1

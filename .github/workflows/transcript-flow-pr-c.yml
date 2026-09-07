@@ -310,6 +310,13 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'edge' }}
     uses: ./.github/workflows/pr264-controlled-human-edge-deploy.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       ci_run_id: ${{ needs.controlled_human_authority.outputs.ci-run-id }}
@@ -325,6 +332,14 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'prepare' }}
     uses: ./.github/workflows/pr264-controlled-human-prepare.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       ci_run_id: ${{ needs.controlled_human_authority.outputs.ci-run-id }}
@@ -343,6 +358,11 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'quiesce' }}
     uses: ./.github/workflows/pr264-controlled-human-quiesce.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
@@ -356,6 +376,10 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' }}
     uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
@@ -373,6 +397,10 @@ jobs:
     needs: [controlled_human_authority, controlled_human_requester]
     if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_requester.result == 'success' }}
     uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
@@ -390,6 +418,10 @@ jobs:
     needs: [controlled_human_authority, controlled_human_approver]
     if: ${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_approver.result == 'success' }}
     uses: ./.github/workflows/pr264-controlled-human-checkpoint.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
@@ -407,6 +439,13 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'final' }}
     uses: ./.github/workflows/pr264-controlled-human-verify.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       preparation_run_id: ${{ needs.controlled_human_authority.outputs.preparation-run-id }}
@@ -429,6 +468,12 @@ jobs:
     needs: controlled_human_authority
     if: ${{ needs.controlled_human_authority.outputs.phase == 'abort' || needs.controlled_human_authority.outputs.phase == 'expiry' }}
     uses: ./.github/workflows/pr264-controlled-human-recover.yml
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: PR264_ENVIRONMENT_SECRET_REQUIRED
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL: PR264_ENVIRONMENT_SECRET_REQUIRED
     with:
       exact_head_sha: ${{ needs.controlled_human_authority.outputs.exact-head-sha }}
       trusted_execution_sha: ${{ needs.controlled_human_authority.outputs.trusted-execution-sha }}

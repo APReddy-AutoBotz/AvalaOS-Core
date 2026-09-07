@@ -2,6 +2,21 @@ name: PR 264 Controlled Human Preparation
 
 on:
   workflow_call:
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL:
+        required: true
+      PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY:
+        required: true
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID:
+        required: true
+      PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL:
+        required: true
     inputs:
       exact_head_sha:
         description: Exact 40-character PR 264 head already proved by terminal PR C CI
@@ -158,6 +173,17 @@ jobs:
 
       - name: Install exact dependencies
         run: npm ci
+
+      - name: Require exact protected preparation phase secrets
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON: ${{ secrets.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+        run: node scripts/prCControlledHumanWorkflowSecrets.mjs prepare
 
       - name: Verify controlled-human evidence and workflow contracts
         run: node --test scripts/prCControlledHumanEvidenceContract.test.mjs scripts/prCControlledHumanWorkflowContract.test.mjs

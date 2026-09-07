@@ -2,6 +2,17 @@ name: PR 264 Controlled Human Exact Recovery
 
 on:
   workflow_call:
+    secrets:
+      PR_C_CONTROLLED_HUMAN_DATABASE_URL:
+        required: true
+      PR_C_CONTROLLED_HUMAN_EXERCISE_ID:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY:
+        required: true
+      PR_C_CONTROLLED_HUMAN_SUPABASE_URL:
+        required: true
     inputs:
       exact_head_sha:
         description: Exact prior PR 264 head whose server-held recovery authority must be completed
@@ -139,6 +150,15 @@ jobs:
 
       - name: Install exact dependencies before protected values
         run: npm ci
+
+      - name: Require exact protected recovery phase secrets
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+        run: node scripts/prCControlledHumanWorkflowSecrets.mjs recover
 
       - name: Bind Supabase project, API, and database to one exact synthetic target
         env:
