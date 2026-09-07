@@ -54,6 +54,7 @@ const PR_C_FOCUSED_COMMANDS = [
   { id: 'pr-c-evidence-contract', command: 'npm run test:transcript-flow:delivery-monitor-evidence-contract', environment: 'controlled-node-22' },
   { id: 'pr-c-controlled-human-source', command: 'npm run test:pr-c-controlled-human-source', environment: 'controlled-postgresql-16', requiredEnvironment: ['PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL'] },
   { id: 'pr-c-preview-profile-contract', command: 'npm run test:pr-c-preview-profile-contract', environment: 'controlled-node-22' },
+  { id: 'pr-c-preview-route-termination', command: 'npm run test:pr-c-preview-route-termination', environment: 'controlled-browser-two-profile' },
   { id: 'pr-c-retained-hosted-contract', command: 'npm run test:hosted-pilot', environment: 'controlled-node-22' },
   { id: 'pr-c-retained-localhost-browser', command: 'npm run test:browser', environment: 'controlled-browser-two-profile' },
   { id: 'pr-c-preview-sandbox-regression', command: 'node scripts/runTranscriptFlowBrowser.mjs --preview-sandbox-regression', environment: 'controlled-browser-two-profile' },

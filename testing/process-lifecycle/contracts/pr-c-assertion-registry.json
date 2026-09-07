@@ -72,6 +72,11 @@
       "environment": "controlled-node-22"
     },
     {
+      "id": "pr-c-preview-route-termination",
+      "command": "npm run test:pr-c-preview-route-termination",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
       "id": "pr-c-retained-hosted-contract",
       "command": "npm run test:hosted-pilot",
       "environment": "controlled-node-22"

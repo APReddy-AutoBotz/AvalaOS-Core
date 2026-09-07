@@ -67,6 +67,16 @@ const observeRequests = (page: Page) => createControlledPreviewNetworkObserver({
   expectedDeployId,
 });
 
+type NetworkObserver = Awaited<ReturnType<typeof observeRequests>>;
+
+const runObservedScenario = async <T>(
+  page: Page,
+  operation: (observer: NetworkObserver) => Promise<T>,
+): Promise<{ value: T; counts: SanitizedCounts }> => {
+  const observer = await observeRequests(page);
+  return observer.run(() => operation(observer)) as Promise<{ value: T; counts: SanitizedCounts }>;
+};
+
 const loadBrowserBinding = async (
   page: Page,
   observer: Awaited<ReturnType<typeof observeRequests>>,
@@ -166,78 +176,84 @@ type ScenarioId = (typeof CONTROLLED_PREVIEW_SCENARIOS)[number]['id'];
 const title = (id: ScenarioId) => controlledPreviewTitle(scenarioById.get(id)!);
 
 test(title('sandbox-root-blocked'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const url = `${CONTROLLED_PREVIEW_ORIGIN}/sandbox`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
-  await assertNoAuthority(page);
-  assertZeroServerAuthority(await observer.finish());
+  const { counts } = await runObservedScenario(page, async () => {
+    const url = `${CONTROLLED_PREVIEW_ORIGIN}/sandbox`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
+    await assertNoAuthority(page);
+  });
+  assertZeroServerAuthority(counts);
 });
 
 test(title('sandbox-descendant-blocked'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const url = `${CONTROLLED_PREVIEW_ORIGIN}/sandbox/unexpected-deep-link`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
-  await expect(page.getByText('Workspace access blocked', { exact: true })).toHaveCount(0);
-  await assertNoAuthority(page);
-  assertZeroServerAuthority(await observer.finish());
+  const { counts } = await runObservedScenario(page, async () => {
+    const url = `${CONTROLLED_PREVIEW_ORIGIN}/sandbox/unexpected-deep-link`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
+    await expect(page.getByText('Workspace access blocked', { exact: true })).toHaveCount(0);
+    await assertNoAuthority(page);
+  });
+  assertZeroServerAuthority(counts);
 });
 
 test(title('immutable-sign-in-blocked'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const url = `${immutableOrigin}/sign-in`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign-in blocked' })).toBeDisabled();
-  await assertNoAuthority(page);
-  assertZeroServerAuthority(await observer.finish());
+  const { counts } = await runObservedScenario(page, async () => {
+    const url = `${immutableOrigin}/sign-in`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await expect(page.getByTestId('controlled-human-environment-blocked')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign-in blocked' })).toBeDisabled();
+    await assertNoAuthority(page);
+  });
+  assertZeroServerAuthority(counts);
 });
 
 test(title('malformed-attestation-blocked'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const binding = await loadBrowserBinding(page, observer);
   let intercepted = 0;
-  await page.route(`**${ATTESTATION_PATH}`, async route => {
-    intercepted += 1;
-    parseAttestationRequest(route.request(), binding);
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...attestationFor(binding), unexpected: true }) });
+  const { counts } = await runObservedScenario(page, async observer => {
+    const binding = await loadBrowserBinding(page, observer);
+    await page.route(`**${ATTESTATION_PATH}`, async route => {
+      intercepted += 1;
+      parseAttestationRequest(route.request(), binding);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...attestationFor(binding), unexpected: true }) });
+    });
+    const url = `${CONTROLLED_PREVIEW_ORIGIN}/sign-in`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await submitDummyCredentials(page);
+    await assertNoAuthority(page);
+    expect(intercepted).toBe(1);
+    expect(bindingDigest(binding)).toMatch(SAFE_DIGEST);
   });
-  const url = `${CONTROLLED_PREVIEW_ORIGIN}/sign-in`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await submitDummyCredentials(page);
-  await assertNoAuthority(page);
-  expect(intercepted).toBe(1);
-  expect(bindingDigest(binding)).toMatch(SAFE_DIGEST);
-  assertBlockedBeforeCredentials(await observer.finish());
+  assertBlockedBeforeCredentials(counts);
 });
 
 test(title('wrong-tip-attestation-blocked'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const binding = await loadBrowserBinding(page, observer);
   let intercepted = 0;
-  await page.route(`**${ATTESTATION_PATH}`, async route => {
-    intercepted += 1;
-    parseAttestationRequest(route.request(), binding);
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...attestationFor(binding), migrationTip: '20260904115959' }) });
+  const { counts } = await runObservedScenario(page, async observer => {
+    const binding = await loadBrowserBinding(page, observer);
+    await page.route(`**${ATTESTATION_PATH}`, async route => {
+      intercepted += 1;
+      parseAttestationRequest(route.request(), binding);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...attestationFor(binding), migrationTip: '20260904115959' }) });
+    });
+    const url = `${CONTROLLED_PREVIEW_ORIGIN}/sign-in`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await submitDummyCredentials(page);
+    await assertNoAuthority(page);
+    expect(intercepted).toBe(1);
+    expect(bindingDigest(binding)).toMatch(SAFE_DIGEST);
   });
-  const url = `${CONTROLLED_PREVIEW_ORIGIN}/sign-in`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await submitDummyCredentials(page);
-  await assertNoAuthority(page);
-  expect(intercepted).toBe(1);
-  expect(bindingDigest(binding)).toMatch(SAFE_DIGEST);
-  assertBlockedBeforeCredentials(await observer.finish());
+  assertBlockedBeforeCredentials(counts);
 });
 
 test(title('public-cta-sign-in'), async ({ page }) => {
-  const observer = await observeRequests(page);
-  const url = `${CONTROLLED_PREVIEW_ORIGIN}/`;
-  responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
-  await page.getByRole('button', { name: 'Access AvalaOS', exact: true }).first().click();
-  await expect(page).toHaveURL(`${CONTROLLED_PREVIEW_ORIGIN}/sign-in`);
-  await expect(page.getByRole('heading', { name: 'Sign in securely' })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
-  await expect(page.locator('#app-main')).toHaveCount(0);
-  assertZeroServerAuthority(await observer.finish());
+  const { counts } = await runObservedScenario(page, async () => {
+    const url = `${CONTROLLED_PREVIEW_ORIGIN}/`;
+    responseIdentity(await page.goto(url, { waitUntil: 'domcontentloaded' }), url);
+    await page.getByRole('button', { name: 'Access AvalaOS', exact: true }).first().click();
+    await expect(page).toHaveURL(`${CONTROLLED_PREVIEW_ORIGIN}/sign-in`);
+    await expect(page.getByRole('heading', { name: 'Sign in securely' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toHaveCount(0);
+    await expect(page.locator('#app-main')).toHaveCount(0);
+  });
+  assertZeroServerAuthority(counts);
 });

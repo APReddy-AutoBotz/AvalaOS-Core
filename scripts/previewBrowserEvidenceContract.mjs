@@ -185,6 +185,8 @@ export const createControlledPreviewNetworkObserver = async ({
   expectedDeployId,
   drainTimeoutMs = 5_000,
   drainQuietMs = 25,
+  fetchGuardTimeoutMs = 30_000,
+  terminalGuardTimeoutMs = 5_000,
   now = Date.now,
   sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
 }) => {
@@ -194,29 +196,101 @@ export const createControlledPreviewNetworkObserver = async ({
   let finishStarted = false;
   let callbackGeneration = 0;
   const pendingCallbacks = new Set();
-  const callbackFailures = [];
+  const pendingRouteOperations = new Set();
+  const routeOperationCancellers = new Set();
+  let firstFailure = null;
+  let resolveFailureSignal;
+  const failureSignal = new Promise(resolve => { resolveFailureSignal = resolve; });
+  const fixedFailure = (phase, category) => Object.freeze({ phase, category });
+  const failureError = failure => {
+    const error = new Error(`CONTROLLED_PREVIEW_NETWORK_FAILED:${failure.phase}:${failure.category}`);
+    error.code = 'CONTROLLED_PREVIEW_NETWORK_FAILED';
+    error.phase = failure.phase;
+    error.category = failure.category;
+    return error;
+  };
+  const recordFailure = (phase, category) => {
+    if (firstFailure) return firstFailure;
+    firstFailure = fixedFailure(phase, category);
+    resolveFailureSignal(firstFailure);
+    return firstFailure;
+  };
+  const boundedRouteOperation = async ({ operation, timeoutMs, phase, rejectedCategory, timeoutCategory }) => {
+    let timer;
+    let cancel;
+    const started = Promise.resolve().then(operation);
+    pendingRouteOperations.add(started);
+    started.then(
+      () => pendingRouteOperations.delete(started),
+      () => pendingRouteOperations.delete(started),
+    );
+    const outcome = await Promise.race([
+      started.then(
+        value => ({ kind: 'settled', value }),
+        () => ({ kind: 'rejected' }),
+      ),
+      new Promise(resolve => {
+        timer = setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs);
+        cancel = () => {
+          clearTimeout(timer);
+          resolve({ kind: 'cancelled' });
+        };
+        routeOperationCancellers.add(cancel);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (cancel) routeOperationCancellers.delete(cancel);
+    if (outcome.kind === 'settled') return outcome.value;
+    const category = outcome.kind === 'timeout'
+      ? timeoutCategory
+      : outcome.kind === 'cancelled'
+        ? 'late-callback'
+        : rejectedCategory;
+    throw failureError(recordFailure(phase, category));
+  };
+  const cancelPendingRouteOperations = () => {
+    for (const cancel of [...routeOperationCancellers]) cancel();
+  };
+  const abortRoute = async route => boundedRouteOperation({
+    operation: () => route.abort('blockedbyclient'),
+    timeoutMs: terminalGuardTimeoutMs,
+    phase: 'abort',
+    rejectedCategory: 'abort-rejected',
+    timeoutCategory: 'abort-timeout',
+  });
+  const abortAfterFailure = async route => {
+    try {
+      await abortRoute(route);
+    } catch {
+      // The first sanitized failure remains authoritative. Context disposal is
+      // the bounded last resort when Playwright cannot settle the route.
+    }
+  };
   const trackCallback = (kind, callback) => {
     callbackGeneration += 1;
-    let pending;
+    let invoked;
     try {
-      pending = Promise.resolve(callback());
+      invoked = Promise.resolve(callback());
     } catch {
-      pending = Promise.reject(new Error('CONTROLLED_PREVIEW_NETWORK_CALLBACK_FAILED'));
+      invoked = Promise.reject(new Error('callback-rejected'));
     }
+    const pending = invoked.catch(() => {
+      throw failureError(recordFailure(kind, 'callback-rejected'));
+    });
     pendingCallbacks.add(pending);
     pending.then(
       () => pendingCallbacks.delete(pending),
       () => {
-        callbackFailures.push(kind);
+        recordFailure(kind, 'callback-rejected');
         pendingCallbacks.delete(pending);
       },
     );
-    // The framework receives a settled handler promise; finish() owns and
-    // reports the sanitized callback failure after closing the owned context.
+    // Playwright 1.61 reports a rejected RouteHandler promise as an unhandled
+    // framework error. The guard itself owns terminal action or bounded cleanup;
+    // the observer's failure signal and finish() remain the test authority.
     return pending.catch(() => undefined);
   };
-  const drainCallbacks = async code => {
-    const deadline = now() + drainTimeoutMs;
+  const drainCallbacks = async (code, deadline) => {
     while (now() < deadline) {
       if (pendingCallbacks.size > 0) {
         await sleep(Math.min(drainQuietMs, Math.max(1, deadline - now())));
@@ -228,18 +302,13 @@ export const createControlledPreviewNetworkObserver = async ({
     }
     throw new Error(code);
   };
-  const settleBounded = async (operation, code) => {
-    let outcome = 'pending';
-    Promise.resolve().then(operation).then(
-      () => { outcome = 'settled'; },
-      () => { outcome = 'failed'; },
-    );
-    const deadline = now() + drainTimeoutMs;
-    while (outcome === 'pending' && now() < deadline) {
-      await sleep(Math.min(drainQuietMs, Math.max(1, deadline - now())));
-    }
-    if (outcome !== 'settled') throw new Error(code);
-  };
+  const settleCleanupBounded = async (operation, categoryPrefix, deadline) => boundedRouteOperation({
+    operation,
+    timeoutMs: Math.max(1, deadline - now()),
+    phase: 'cleanup',
+    rejectedCategory: `${categoryPrefix}-rejected`,
+    timeoutCategory: `${categoryPrefix}-timeout`,
+  });
   const inspect = request => inspectControlledPreviewRequest(counts, request);
   const inspectPopup = openedPage => {
     if (openedPage === page) return;
@@ -252,6 +321,11 @@ export const createControlledPreviewNetworkObserver = async ({
   context.on('page', inspectPopup);
   context.on('serviceworker', inspectServiceWorker);
   const guard = async route => {
+    if (lifecycle === 'finished') {
+      recordFailure('post-closure', 'post-closure-callback');
+      await abortAfterFailure(route);
+      throw failureError(firstFailure);
+    }
     const disposition = controlledPreviewRequestDisposition({
       request: route.request(),
       aliasOrigin,
@@ -260,28 +334,69 @@ export const createControlledPreviewNetworkObserver = async ({
     if (disposition.action === 'continue') {
       if (lifecycle !== 'active') {
         counts.closingAllowedRequests += 1;
-        await route.abort('blockedbyclient');
+        await abortRoute(route);
         return;
       }
       const requestUrl = route.request().url();
-      const response = await route.fetch({ maxRedirects: 0 });
-      if (response.url() !== requestUrl || (response.status() >= 300 && response.status() < 400)) {
-        counts.unexpectedRequests += 1;
-        const category = response.url() !== requestUrl ? 'redirect-final-url' : 'redirect-status';
-        counts.unexpectedCategories[category] = (counts.unexpectedCategories[category] ?? 0) + 1;
-        await route.abort('blockedbyclient');
+      let response;
+      try {
+        response = await boundedRouteOperation({
+          operation: () => route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30_000 }),
+          timeoutMs: fetchGuardTimeoutMs,
+          phase: 'fetch',
+          rejectedCategory: 'fetch-rejected',
+          timeoutCategory: 'fetch-timeout',
+        });
+      } catch {
+        await abortAfterFailure(route);
+        throw failureError(firstFailure);
+      }
+      if (lifecycle !== 'active') {
+        counts.closingAllowedRequests += 1;
+        await abortRoute(route);
         return;
       }
-      const headers = response.headers();
+      let responseUrl;
+      let responseStatus;
+      let headers;
+      try {
+        responseUrl = response.url();
+        responseStatus = response.status();
+        headers = response.headers();
+      } catch {
+        recordFailure('response-identity', 'response-inspection');
+        await abortAfterFailure(route);
+        throw failureError(firstFailure);
+      }
+      if (responseUrl !== requestUrl || responseStatus < 200 || responseStatus >= 300) {
+        counts.unexpectedRequests += 1;
+        const category = responseUrl !== requestUrl ? 'redirect-final-url' : 'response-status';
+        counts.unexpectedCategories[category] = (counts.unexpectedCategories[category] ?? 0) + 1;
+        recordFailure('response-identity', 'response-identity');
+        await abortAfterFailure(route);
+        throw failureError(firstFailure);
+      }
       if (headers['x-avalaos-release'] !== expectedHead
         || headers['x-avalaos-netlify-deploy-id'] !== expectedDeployId
         || headers['x-avalaos-environment'] !== 'hosted_nonproduction_pilot') {
         counts.unexpectedRequests += 1;
         counts.unexpectedCategories['response-identity'] = (counts.unexpectedCategories['response-identity'] ?? 0) + 1;
-        await route.abort('blockedbyclient');
-        return;
+        recordFailure('response-identity', 'response-identity');
+        await abortAfterFailure(route);
+        throw failureError(firstFailure);
       }
-      await route.fulfill({ response });
+      try {
+        await boundedRouteOperation({
+          operation: () => route.fulfill({ response }),
+          timeoutMs: terminalGuardTimeoutMs,
+          phase: 'fulfill',
+          rejectedCategory: 'fulfill-rejected',
+          timeoutCategory: 'fulfill-timeout',
+        });
+      } catch {
+        await abortAfterFailure(route);
+        throw failureError(firstFailure);
+      }
       return;
     }
     if (disposition.action === 'abort-external-static') counts.blockedExternalStaticRequests += 1;
@@ -290,7 +405,7 @@ export const createControlledPreviewNetworkObserver = async ({
       counts.unexpectedRequests += 1;
       counts.unexpectedCategories[disposition.category] = (counts.unexpectedCategories[disposition.category] ?? 0) + 1;
     }
-    await route.abort('blockedbyclient');
+    await abortRoute(route);
   };
   await context.route('**/*', route => trackCallback('http-route', () => guard(route)));
   await context.routeWebSocket(/.*/u, socket => trackCallback('websocket-route', async () => {
@@ -316,12 +431,14 @@ export const createControlledPreviewNetworkObserver = async ({
   const finish = async () => {
     if (finishStarted || lifecycle !== 'active') throw new Error('CONTROLLED_PREVIEW_OBSERVER_ALREADY_FINISHED');
     finishStarted = true;
+    const cleanupDeadline = now() + drainTimeoutMs;
     let terminalFailure = null;
-    const captureFailure = async operation => {
+    const captureFailure = async (operation, category = null) => {
       try {
         await operation();
       } catch (error) {
         terminalFailure ??= error instanceof Error ? error.message : 'CONTROLLED_PREVIEW_OBSERVER_FINISH_FAILED';
+        if (category) recordFailure('cleanup', category);
       }
     };
     const closeOwnedPage = async ownedPage => {
@@ -338,23 +455,34 @@ export const createControlledPreviewNetworkObserver = async ({
       if (!ownedPage.isClosed()) await closed;
       if (!closeObserved) ownedPage.off('close', onClose);
     };
-    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_ACTIVE_DRAIN_TIMEOUT'));
+    if (!firstFailure) await captureFailure(
+      () => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_ACTIVE_DRAIN_TIMEOUT', cleanupDeadline),
+      'active-drain-timeout',
+    );
     lifecycle = 'closing';
-    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_PRE_CLOSE_DRAIN_TIMEOUT'));
-    await captureFailure(() => settleBounded(
+    if (!firstFailure) await captureFailure(
+      () => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_PRE_CLOSE_DRAIN_TIMEOUT', cleanupDeadline),
+      'pre-close-drain-timeout',
+    );
+    await captureFailure(() => settleCleanupBounded(
       () => Promise.all(context.pages()
         .filter(ownedPage => !ownedPage.isClosed())
         .map(closeOwnedPage)),
-      'CONTROLLED_PREVIEW_PAGE_CLOSE_FAILED',
+      'page-close',
+      cleanupDeadline,
     ));
-    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_POST_PAGE_DRAIN_TIMEOUT'));
-    await captureFailure(() => settleBounded(
+    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_POST_PAGE_DRAIN_TIMEOUT', cleanupDeadline));
+    await captureFailure(() => settleCleanupBounded(
       () => context.close(),
-      'CONTROLLED_PREVIEW_CONTEXT_CLOSE_FAILED',
+      'context-close',
+      cleanupDeadline,
     ));
-    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_POST_CONTEXT_DRAIN_TIMEOUT'));
+    if (pendingRouteOperations.size > 0) recordFailure('cleanup', 'late-callback');
+    cancelPendingRouteOperations();
+    await captureFailure(() => drainCallbacks('CONTROLLED_PREVIEW_CALLBACK_POST_CONTEXT_DRAIN_TIMEOUT', cleanupDeadline));
     lifecycle = 'finished';
-    if (callbackFailures.length > 0) throw new Error('CONTROLLED_PREVIEW_NETWORK_CALLBACK_FAILED');
+    cancelPendingRouteOperations();
+    if (firstFailure) throw failureError(firstFailure);
     if (terminalFailure) throw new Error(terminalFailure);
     return Object.freeze({
       ...counts,
@@ -362,7 +490,45 @@ export const createControlledPreviewNetworkObserver = async ({
     });
   };
 
-  return Object.freeze({ accountApiContextRequest, finish });
+  const run = async operation => {
+    if (typeof operation !== 'function') throw new Error('CONTROLLED_PREVIEW_OBSERVER_OPERATION_REQUIRED');
+    const started = Promise.resolve().then(operation);
+    const operationOutcome = started.then(
+      value => ({ kind: 'success', value }),
+      error => ({ kind: 'operation-failure', error }),
+    );
+    const networkOutcome = failureSignal.then(failure => ({ kind: 'network-failure', error: failureError(failure) }));
+    const outcome = await Promise.race([operationOutcome, networkOutcome]);
+    let countsResult;
+    let cleanupError = null;
+    try {
+      countsResult = await finish();
+    } catch (error) {
+      cleanupError = error;
+    }
+    if (outcome.kind === 'network-failure') {
+      let timer;
+      const postCleanupOutcome = await Promise.race([
+        operationOutcome,
+        new Promise(resolve => {
+          timer = setTimeout(() => resolve({ kind: 'post-cleanup-timeout' }), terminalGuardTimeoutMs);
+        }),
+      ]);
+      if (timer) clearTimeout(timer);
+      if (postCleanupOutcome.kind === 'post-cleanup-timeout') {
+        recordFailure('cleanup', 'observed-operation-timeout');
+      }
+    }
+    if (outcome.kind === 'success' && cleanupError) throw cleanupError;
+    if (outcome.kind === 'network-failure') throw outcome.error;
+    if (cleanupError) throw new Error('CONTROLLED_PREVIEW_SCENARIO_CLEANUP_FAILED');
+    if (outcome.kind === 'operation-failure') throw outcome.error;
+    return Object.freeze({ value: outcome.value, counts: countsResult });
+  };
+
+  const failure = () => firstFailure;
+
+  return Object.freeze({ accountApiContextRequest, failure, finish, run });
 };
 
 const validateControlledPreviewBindingResourceUrl = value => {

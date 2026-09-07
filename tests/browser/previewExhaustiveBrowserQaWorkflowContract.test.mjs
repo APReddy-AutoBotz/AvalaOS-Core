@@ -7,6 +7,7 @@ const workflowPath = '.github/workflows/preview-exhaustive-browser-qa.yml';
 const workflow = fs.readFileSync(new URL(`../../${workflowPath}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const controlledSpec = fs.readFileSync(new URL('./controlledPreviewBoundary.spec.ts', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const controlledConfig = fs.readFileSync(new URL('../../playwright.controlled-preview-boundary.config.ts', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const packageScripts = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts;
 const parsed = parseWorkflowYaml(workflow, workflowPath);
 
 const selection = parsed.jobs['select-pr264-controlled-preview'];
@@ -33,6 +34,8 @@ const checkout = steps.find(step => step.name === 'Checkout exact PR head');
 assert.equal(checkout?.with?.ref, '${{ env.RELEASE_SHA }}');
 
 const contracts = steps.find(step => step.name === 'Validate exhaustive browser contracts');
+const chromium = steps.find(step => step.name === 'Install official Chromium');
+const routeTermination = steps.find(step => step.name === 'Verify controlled observer route termination on loopback');
 const exactPreviewBinding = steps.find(step => step.name === 'Wait for exact PR preview and bind immutable deploy identity');
 const immutableAccessibility = steps.find(step => step.name === 'Run exact immutable-preview accessibility and performance');
 const hostedShell = steps.find(step => step.name === 'Run strict hosted shell and offline acceptance');
@@ -46,6 +49,45 @@ for (const [name, step] of Object.entries({ contracts, exactPreviewBinding, immu
   assert.ok(step, `${name} must remain an explicit required step`);
 }
 assert.match(contracts.run, /npm run test:pr-c-preview-profile-contract/u);
+const assertRouteTerminationGate = candidateSteps => {
+  const matches = name => candidateSteps.filter(step => step.name === name);
+  const gateMatches = matches('Verify controlled observer route termination on loopback');
+  assert.equal(gateMatches.length, 1, 'one mandatory real route regression must remain');
+  const [gate] = gateMatches;
+  const [install] = matches('Install official Chromium');
+  const [pure] = matches('Validate exhaustive browser contracts');
+  const [hosted] = matches('Run exact immutable-preview accessibility and performance');
+  assert.ok(install && pure && hosted);
+  assert.equal(gate.run, 'npm run test:pr-c-preview-route-termination');
+  assert.equal(gate.if, "needs.select-pr264-controlled-preview.outputs.profile == 'controlled'");
+  assert.equal(gate['continue-on-error'], undefined);
+  assert.deepEqual(gate.env, {
+    HOSTED_PILOT_URL: '', NETLIFY_DEPLOY_ID: '', ACCEPTANCE_EXECUTION_KIND: 'local_source_fixture',
+  });
+  assert.ok(candidateSteps.indexOf(pure) < candidateSteps.indexOf(install), 'pure contracts stay browser-free');
+  assert.ok(candidateSteps.indexOf(install) < candidateSteps.indexOf(gate));
+  assert.ok(candidateSteps.indexOf(gate) < candidateSteps.indexOf(hosted));
+};
+assertRouteTerminationGate(steps);
+assert.equal(packageScripts['test:pr-c-preview-route-termination'], 'node scripts/testControlledPreviewRouteTermination.mjs');
+for (const [name, mutate] of Object.entries({
+  missing: items => items.splice(items.findIndex(step => step.name === routeTermination.name), 1),
+  duplicate: items => items.push(structuredClone(routeTermination)),
+  substitutedCommand: items => { items.find(step => step.name === routeTermination.name).run = 'node -e "process.exit(0)"'; },
+  ignoredFailure: items => { items.find(step => step.name === routeTermination.name)['continue-on-error'] = true; },
+  skippedGate: items => { items.find(step => step.name === routeTermination.name).if = 'false'; },
+  hostedPromotion: items => { items.find(step => step.name === routeTermination.name).env.ACCEPTANCE_EXECUTION_KIND = 'hosted_preview'; },
+  inheritedDeploy: items => { delete items.find(step => step.name === routeTermination.name).env.NETLIFY_DEPLOY_ID; },
+  beforeBrowserInstall: items => {
+    const index = items.findIndex(step => step.name === routeTermination.name);
+    const [gate] = items.splice(index, 1);
+    items.splice(items.findIndex(step => step.name === chromium.name), 0, gate);
+  },
+})) {
+  const candidate = structuredClone(steps);
+  mutate(candidate);
+  assert.throws(() => assertRouteTerminationGate(candidate), undefined, `route regression gate rejects ${name}`);
+}
 assert.ok(steps.indexOf(contracts) < steps.indexOf(exactPreviewBinding));
 assert.ok(steps.indexOf(immutableAccessibility) > steps.indexOf(exactPreviewBinding));
 assert.ok(steps.indexOf(hostedShell) > steps.indexOf(immutableAccessibility));

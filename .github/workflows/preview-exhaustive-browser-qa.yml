@@ -107,6 +107,14 @@ jobs:
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Verify controlled observer route termination on loopback
+        if: needs.select-pr264-controlled-preview.outputs.profile == 'controlled'
+        env:
+          HOSTED_PILOT_URL: ''
+          NETLIFY_DEPLOY_ID: ''
+          ACCEPTANCE_EXECUTION_KIND: local_source_fixture
+        run: npm run test:pr-c-preview-route-termination
+
       - name: Run exact immutable-preview accessibility and performance
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}

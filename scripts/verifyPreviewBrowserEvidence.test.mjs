@@ -251,6 +251,49 @@ test('binding loader disables redirects, verifies every final response identity,
   );
 });
 
+const createRouteFaultHarness = async (observerOptions = {}) => {
+  const context = new EventEmitter();
+  let guard;
+  let contextClosed = false;
+  context.route = async (_pattern, handler) => { guard = handler; };
+  context.routeWebSocket = async () => {};
+  context.pages = () => [];
+  context.close = async () => { contextClosed = true; };
+  const page = { context: () => context };
+  const observer = await createControlledPreviewNetworkObserver({
+    page,
+    aliasOrigin: CONTROLLED_PREVIEW_ORIGIN,
+    immutableOrigin: `https://${deploy}--avalaos-pilot.netlify.app`,
+    expectedHead: head,
+    expectedDeployId: deploy,
+    drainQuietMs: 1,
+    ...observerOptions,
+  });
+  return {
+    context,
+    observer,
+    guard: route => guard(route),
+    contextClosed: () => contextClosed,
+  };
+};
+
+const allowedRouteRequest = (pathname = '/brand/logo.png', resourceType = 'image') => ({
+  url: () => `${CONTROLLED_PREVIEW_ORIGIN}${pathname}`,
+  method: () => 'GET',
+  resourceType: () => resourceType,
+  postData: () => null,
+});
+
+const exactRouteResponse = request => ({
+  url: () => request.url(),
+  status: () => 200,
+  headers: () => ({
+    'x-avalaos-release': head,
+    'x-avalaos-netlify-deploy-id': deploy,
+    'x-avalaos-environment': 'hosted_nonproduction_pilot',
+  }),
+});
+
 test('network observer keeps its context guard active through unload and context closure', async () => {
   const events = [];
   const context = new EventEmitter();
@@ -327,7 +370,7 @@ test('network observer keeps its context guard active through unload and context
   );
 });
 
-test('context guard fetches allowed first-party URLs once and rejects a foreign redirect before following it', async () => {
+test('context guard rejects a foreign redirect with one fetch and one terminal abort', async () => {
   const context = new EventEmitter();
   let guard;
   let fetchCalls = 0;
@@ -351,11 +394,11 @@ test('context guard fetches allowed first-party URLs once and rejects a foreign 
     resourceType: () => 'document',
     postData: () => null,
   };
-  await guard({
+  await assert.rejects(observer.run(() => guard({
     request: () => request,
     fetch: async options => {
       fetchCalls += 1;
-      assert.deepEqual(options, { maxRedirects: 0 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
       return {
         url: () => allowedUrl,
         status: () => 302,
@@ -364,7 +407,35 @@ test('context guard fetches allowed first-party URLs once and rejects a foreign 
     },
     fulfill: async () => actions.push('fulfilled-redirect'),
     abort: async reason => actions.push(`aborted-${reason}`),
+  })), /CONTROLLED_PREVIEW_NETWORK_FAILED:response-identity:response-identity/u);
+  assert.equal(fetchCalls, 1);
+  assert.deepEqual(actions, ['aborted-blockedbyclient']);
+});
+
+test('context guard fulfills one exact first-party response with no retry or substituted response', async () => {
+  const context = new EventEmitter();
+  let guard;
+  let fetchCalls = 0;
+  const actions = [];
+  context.route = async (_pattern, handler) => { guard = handler; };
+  context.routeWebSocket = async () => {};
+  context.pages = () => [];
+  context.close = async () => {};
+  const page = { context: () => context };
+  const observer = await createControlledPreviewNetworkObserver({
+    page,
+    aliasOrigin: CONTROLLED_PREVIEW_ORIGIN,
+    immutableOrigin: `https://${deploy}--avalaos-pilot.netlify.app`,
+    expectedHead: head,
+    expectedDeployId: deploy,
   });
+  const allowedUrl = `${CONTROLLED_PREVIEW_ORIGIN}/sign-in`;
+  const request = {
+    url: () => allowedUrl,
+    method: () => 'GET',
+    resourceType: () => 'document',
+    postData: () => null,
+  };
   const successResponse = {
     url: () => allowedUrl,
     status: () => 200,
@@ -378,17 +449,17 @@ test('context guard fetches allowed first-party URLs once and rejects a foreign 
     request: () => request,
     fetch: async options => {
       fetchCalls += 1;
-      assert.deepEqual(options, { maxRedirects: 0 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
       return successResponse;
     },
     fulfill: async options => actions.push(options.response === successResponse ? 'fulfilled-exact' : 'fulfilled-substituted'),
     abort: async reason => actions.push(`aborted-success-${reason}`),
   });
   const counts = await observer.finish();
-  assert.equal(fetchCalls, 2, 'each browser request must cause exactly one non-redirecting network fetch');
-  assert.deepEqual(actions, ['aborted-blockedbyclient', 'fulfilled-exact']);
-  assert.equal(counts.unexpectedRequests, 1);
-  assert.deepEqual(counts.unexpectedCategories, { 'redirect-status': 1 });
+  assert.equal(fetchCalls, 1, 'each browser request must cause exactly one non-redirecting network fetch');
+  assert.deepEqual(actions, ['fulfilled-exact']);
+  assert.equal(counts.unexpectedRequests, 0);
+  assert.deepEqual(counts.unexpectedCategories, {});
 });
 
 test('finish drains an already-started allowed image fetch before page and context disposal', async () => {
@@ -430,7 +501,7 @@ test('finish drains an already-started allowed image fetch before page and conte
   const routeCompletion = guard({
     request: () => request,
     fetch: async options => {
-      assert.deepEqual(options, { maxRedirects: 0 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
       return deferredFetch;
     },
     fulfill: async () => { order.push(['image-fulfilled']); },
@@ -485,7 +556,7 @@ test('callback rejection is reported after owned context cleanup', async () => {
     fulfill: async () => {},
     abort: async () => {},
   });
-  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_NETWORK_CALLBACK_FAILED/u);
+  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_NETWORK_FAILED:fetch:fetch-rejected/u);
   assert.equal(contextClosed, true);
 });
 
@@ -509,8 +580,38 @@ test('run-before-unload close must emit a real page close before context disposa
     drainTimeoutMs: 20,
     drainQuietMs: 2,
   });
-  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_PAGE_CLOSE_FAILED/u);
+  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_NETWORK_FAILED:cleanup:page-close-timeout/u);
   assert.equal(contextClosed, true);
+});
+
+test('context close rejection and hang remain sanitized and bounded', async () => {
+  for (const mode of ['reject', 'hang']) {
+    const context = new EventEmitter();
+    const page = { context: () => context };
+    let closeCalls = 0;
+    context.route = async () => {};
+    context.routeWebSocket = async () => {};
+    context.pages = () => [];
+    context.close = async () => {
+      closeCalls += 1;
+      if (mode === 'reject') throw new Error('raw close failure must be sanitized');
+      return new Promise(() => {});
+    };
+    const observer = await createControlledPreviewNetworkObserver({
+      page,
+      aliasOrigin: CONTROLLED_PREVIEW_ORIGIN,
+      immutableOrigin: `https://${deploy}--avalaos-pilot.netlify.app`,
+      expectedHead: head,
+      expectedDeployId: deploy,
+      drainTimeoutMs: 30,
+      drainQuietMs: 1,
+    });
+    await assert.rejects(
+      observer.finish(),
+      new RegExp(`CONTROLLED_PREVIEW_NETWORK_FAILED:cleanup:context-close-${mode === 'reject' ? 'rejected' : 'timeout'}`, 'u'),
+    );
+    assert.equal(closeCalls, 1);
+  }
 });
 
 test('hanging callback drain fails boundedly and still attempts owned context cleanup', async () => {
@@ -543,8 +644,263 @@ test('hanging callback drain fails boundedly and still attempts owned context cl
     fulfill: async () => {},
     abort: async () => {},
   });
-  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_CALLBACK_ACTIVE_DRAIN_TIMEOUT/u);
+  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_NETWORK_FAILED:cleanup:active-drain-timeout/u);
   assert.equal(contextClosed, true);
+});
+
+test('throwing response accessors abort once and expose only the fixed response-inspection category', async () => {
+  for (const accessor of ['url', 'status', 'headers']) {
+    const harness = await createRouteFaultHarness({ drainTimeoutMs: 30, terminalGuardTimeoutMs: 20 });
+    const request = allowedRouteRequest();
+    const response = exactRouteResponse(request);
+    response[accessor] = () => { throw new Error('raw response failure must be sanitized'); };
+    const actions = [];
+    await assert.rejects(harness.observer.run(() => harness.guard({
+      request: () => request,
+      fetch: async () => response,
+      fulfill: async () => actions.push('fulfill'),
+      abort: async () => actions.push('abort'),
+    })), error => {
+      assert.equal(error.message, 'CONTROLLED_PREVIEW_NETWORK_FAILED:response-identity:response-inspection');
+      assert.equal(error.message.includes('raw response'), false);
+      return true;
+    });
+    assert.deepEqual(actions, ['abort']);
+  }
+});
+
+test('request fetched before closing is rechecked and aborted instead of fulfilled during cleanup', async () => {
+  let releaseFetch;
+  const fetchResponse = new Promise(resolve => { releaseFetch = resolve; });
+  const context = new EventEmitter();
+  let guard;
+  const actions = [];
+  const request = allowedRouteRequest();
+  const page = { context: () => context };
+  context.route = async (_pattern, handler) => { guard = handler; };
+  context.routeWebSocket = async () => {};
+  context.pages = () => [];
+  context.close = async () => {
+    actions.push('context-close');
+    releaseFetch(exactRouteResponse(request));
+  };
+  const observer = await createControlledPreviewNetworkObserver({
+    page,
+    aliasOrigin: CONTROLLED_PREVIEW_ORIGIN,
+    immutableOrigin: `https://${deploy}--avalaos-pilot.netlify.app`,
+    expectedHead: head,
+    expectedDeployId: deploy,
+    fetchGuardTimeoutMs: 500,
+    terminalGuardTimeoutMs: 20,
+    drainTimeoutMs: 20,
+    drainQuietMs: 1,
+  });
+  const routeCompletion = guard({
+    request: () => request,
+    fetch: async () => fetchResponse,
+    fulfill: async () => actions.push('fulfill'),
+    abort: async () => actions.push('abort'),
+  }).catch(error => error);
+  await assert.rejects(observer.finish(), /CONTROLLED_PREVIEW_NETWORK_FAILED:cleanup:active-drain-timeout/u);
+  assert.equal(await routeCompletion, undefined);
+  assert.deepEqual(actions, ['context-close', 'abort']);
+});
+
+test('async fetch rejection aborts exactly once, signals the observed operation, and cleans the context', async () => {
+  const harness = await createRouteFaultHarness({ drainTimeoutMs: 30, terminalGuardTimeoutMs: 20 });
+  const request = allowedRouteRequest();
+  const actions = [];
+  await assert.rejects(harness.observer.run(() => harness.guard({
+    request: () => request,
+    fetch: async options => {
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      throw new Error('must be sanitized');
+    },
+    fulfill: async () => actions.push('fulfill'),
+    abort: async reason => actions.push(`abort-${reason}`),
+  })), /CONTROLLED_PREVIEW_NETWORK_FAILED:fetch:fetch-rejected/u);
+  assert.deepEqual(actions, ['abort-blockedbyclient']);
+  assert.equal(harness.contextClosed(), true);
+});
+
+test('ignored fetch timeout is bounded, invokes one fallback abort, and exposes no raw diagnostic', async () => {
+  const harness = await createRouteFaultHarness({
+    fetchGuardTimeoutMs: 15,
+    terminalGuardTimeoutMs: 15,
+    drainTimeoutMs: 20,
+  });
+  const request = allowedRouteRequest();
+  const actions = [];
+  const started = Date.now();
+  await assert.rejects(harness.observer.run(() => harness.guard({
+    request: () => request,
+    fetch: async options => {
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      return new Promise(() => {});
+    },
+    fulfill: async () => actions.push('fulfill'),
+    abort: async reason => actions.push(`abort-${reason}`),
+  })), error => {
+    assert.equal(error.message, 'CONTROLLED_PREVIEW_NETWORK_FAILED:fetch:fetch-timeout');
+    assert.equal(error.message.includes('https:'), false);
+    return true;
+  });
+  assert.ok(Date.now() - started < 250, 'fault cleanup must remain bounded');
+  assert.deepEqual(actions, ['abort-blockedbyclient']);
+  assert.equal(harness.contextClosed(), true);
+});
+
+test('fulfill rejection cannot become success and falls back to exactly one abort', async () => {
+  const harness = await createRouteFaultHarness({ drainTimeoutMs: 30, terminalGuardTimeoutMs: 20 });
+  const request = allowedRouteRequest();
+  const actions = [];
+  const response = exactRouteResponse(request);
+  await assert.rejects(harness.observer.run(() => harness.guard({
+    request: () => request,
+    fetch: async () => response,
+    fulfill: async () => {
+      actions.push('fulfill');
+      throw new Error('must be sanitized');
+    },
+    abort: async reason => actions.push(`abort-${reason}`),
+  })), /CONTROLLED_PREVIEW_NETWORK_FAILED:fulfill:fulfill-rejected/u);
+  assert.deepEqual(actions, ['fulfill', 'abort-blockedbyclient']);
+  assert.equal(harness.contextClosed(), true);
+});
+
+test('abort rejection and abort hang fail boundedly without continuing or fabricating a response', async () => {
+  for (const mode of ['reject', 'hang']) {
+    const harness = await createRouteFaultHarness({ terminalGuardTimeoutMs: 15, drainTimeoutMs: 20 });
+    const request = allowedRouteRequest('/blocked', 'document');
+    const actions = [];
+    const started = Date.now();
+    await assert.rejects(harness.observer.run(() => harness.guard({
+      request: () => request,
+      fetch: async () => { actions.push('fetch'); },
+      fulfill: async () => { actions.push('fulfill'); },
+      continue: async () => { actions.push('continue'); },
+      abort: async () => {
+        actions.push('abort');
+        if (mode === 'reject') throw new Error('must be sanitized');
+        return new Promise(() => {});
+      },
+    })), new RegExp(`CONTROLLED_PREVIEW_NETWORK_FAILED:abort:abort-${mode === 'reject' ? 'rejected' : 'timeout'}`, 'u'));
+    assert.ok(Date.now() - started < 250, 'abort failure cleanup must remain bounded');
+    assert.deepEqual(actions, ['abort']);
+    assert.equal(harness.contextClosed(), true);
+  }
+});
+
+test('a timed-out fulfill is aborted, drained during context cleanup, and never reported as success', async () => {
+  let releaseFulfill;
+  const fulfill = new Promise(resolve => { releaseFulfill = resolve; });
+  const harness = await createRouteFaultHarness({ terminalGuardTimeoutMs: 15, drainTimeoutMs: 30 });
+  const request = allowedRouteRequest();
+  const actions = [];
+  harness.context.close = async () => {
+    actions.push('context-close');
+    releaseFulfill();
+  };
+  await assert.rejects(harness.observer.run(() => harness.guard({
+    request: () => request,
+    fetch: async () => exactRouteResponse(request),
+    fulfill: async () => {
+      actions.push('fulfill-start');
+      await fulfill;
+      actions.push('fulfill-settled');
+    },
+    abort: async () => actions.push('abort'),
+  })), /CONTROLLED_PREVIEW_NETWORK_FAILED:fulfill:fulfill-timeout/u);
+  assert.deepEqual(actions, ['fulfill-start', 'abort', 'context-close', 'fulfill-settled']);
+});
+
+test('post-closure provider callback aborts once and rejects as a sanitized late callback', async () => {
+  const harness = await createRouteFaultHarness({ drainTimeoutMs: 100, terminalGuardTimeoutMs: 15 });
+  await harness.observer.finish();
+  const actions = [];
+  const providerRequest = {
+    url: () => 'https://api.openai.com/v1/responses',
+    method: () => 'POST',
+    resourceType: () => 'fetch',
+    postData: () => null,
+  };
+  await harness.guard({
+    request: () => providerRequest,
+    fetch: async () => actions.push('fetch'),
+    fulfill: async () => actions.push('fulfill'),
+    continue: async () => actions.push('continue'),
+    abort: async () => actions.push('abort'),
+  });
+  assert.deepEqual(harness.observer.failure(), {
+    phase: 'post-closure',
+    category: 'post-closure-callback',
+  });
+  assert.deepEqual(actions, ['abort']);
+});
+
+test('combined fetch, abort, page-close, and context-close hangs share one bounded cleanup deadline', async () => {
+  const context = new EventEmitter();
+  let guard;
+  const actions = [];
+  const request = allowedRouteRequest();
+  const page = new EventEmitter();
+  page.context = () => context;
+  page.isClosed = () => false;
+  page.close = async () => {
+    actions.push('page-close');
+    return new Promise(() => {});
+  };
+  context.route = async (_pattern, handler) => { guard = handler; };
+  context.routeWebSocket = async () => {};
+  context.pages = () => [page];
+  context.close = async () => {
+    actions.push('context-close');
+    return new Promise(() => {});
+  };
+  const observer = await createControlledPreviewNetworkObserver({
+    page,
+    aliasOrigin: CONTROLLED_PREVIEW_ORIGIN,
+    immutableOrigin: `https://${deploy}--avalaos-pilot.netlify.app`,
+    expectedHead: head,
+    expectedDeployId: deploy,
+    fetchGuardTimeoutMs: 20,
+    terminalGuardTimeoutMs: 20,
+    drainTimeoutMs: 40,
+    drainQuietMs: 1,
+  });
+  const started = Date.now();
+  await assert.rejects(observer.run(() => guard({
+    request: () => request,
+    fetch: async () => new Promise(() => {}),
+    fulfill: async () => actions.push('fulfill'),
+    abort: async () => {
+      actions.push('abort');
+      return new Promise(() => {});
+    },
+  })), /CONTROLLED_PREVIEW_NETWORK_FAILED:fetch:fetch-timeout/u);
+  assert.ok(Date.now() - started < 150, 'combined failure must use one cleanup deadline');
+  assert.deepEqual(actions, ['abort', 'page-close', 'context-close']);
+});
+
+test('concurrent assertion failure still closes the context and cannot leave a route detached', async () => {
+  const harness = await createRouteFaultHarness({
+    fetchGuardTimeoutMs: 15,
+    terminalGuardTimeoutMs: 15,
+    drainTimeoutMs: 20,
+  });
+  const request = allowedRouteRequest();
+  let routeCompletion;
+  await assert.rejects(harness.observer.run(async () => {
+    routeCompletion = harness.guard({
+      request: () => request,
+      fetch: async () => new Promise(() => {}),
+      fulfill: async () => {},
+      abort: async () => {},
+    }).catch(error => error);
+    throw new Error('synthetic assertion failure');
+  }), /CONTROLLED_PREVIEW_SCENARIO_CLEANUP_FAILED/u);
+  assert.equal(await routeCompletion, undefined);
+  assert.equal(harness.contextClosed(), true);
 });
 
 test('local, unknown, cross-substituted, wrong-head, wrong-deploy, wrong-config, wrong-path, and foreign-source evidence reject', () => {
