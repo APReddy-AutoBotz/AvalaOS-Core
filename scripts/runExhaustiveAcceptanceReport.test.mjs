@@ -36,6 +36,7 @@ const hostedEnvironment = () => ({
 
 const hostedMetadata = () => ({
   schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
   evidenceKind: 'hosted-preview-acceptance',
   executionKind: 'hosted_preview',
   exactCommand: hostedCommand,

@@ -119,6 +119,30 @@ assert.match(
   /testIgnore: \[[^\]]*'exhaustiveHostedAcceptance\.spec\.ts'/u,
   'default/local Playwright discovery must exclude the dedicated hosted exhaustive suite',
 );
+assert.match(
+  defaultPlaywrightConfig,
+  /testIgnore: \[[^\]]*'controlledPreviewBoundary\.spec\.ts'/u,
+  'default/local Playwright discovery must exclude the dedicated controlled-preview boundary suite',
+);
+for (const retainedDedicatedSpec of [
+  'pr1d.spec.ts',
+  'pr1e.spec.ts',
+  'studioArtifacts.spec.ts',
+  'studioPrivateArtifacts.spec.ts',
+  'enterpriseIntelligence.spec.ts',
+  'enterpriseIntelligencePrCScope.spec.ts',
+  'transcriptFlowPrA.spec.ts',
+  'studioPrB/studioPrB.spec.ts',
+  'deliveryMonitorPrC/deliveryMonitorPrC.spec.ts',
+  'pilotOperations.spec.ts',
+  'hostedPilot.spec.ts',
+  'hostedAccessibilityPerformance.spec.ts',
+  'exhaustiveHostedAcceptance.spec.ts',
+  'controllerNavigationHistory.spec.ts',
+  'fullPlatformCampaign.spec.ts',
+]) {
+  assert.ok(defaultPlaywrightConfig.includes(`'${retainedDedicatedSpec}'`), `default Playwright ownership lost ${retainedDedicatedSpec}`);
+}
 const exhaustivePlaywrightConfig = await readFile('playwright.exhaustive-acceptance.config.ts', 'utf8');
 assert.match(
   exhaustivePlaywrightConfig,
@@ -127,6 +151,18 @@ assert.match(
 );
 const controllerPlaywrightConfig = await readFile('playwright.controller-navigation-history.config.ts', 'utf8');
 assert.match(controllerPlaywrightConfig, /testMatch: 'controllerNavigationHistory\.spec\.ts'/u, 'the controller QA config must exclusively own its history specification');
+const controlledPreviewConfig = await readFile('playwright.controlled-preview-boundary.config.ts', 'utf8');
+assert.match(controlledPreviewConfig, /testMatch: 'controlledPreviewBoundary\.spec\.ts'/u, 'the controlled-preview config must exclusively own its boundary specification');
+for (const [configPath, contents] of [
+  ['playwright.config.ts', defaultPlaywrightConfig],
+  ['playwright.controlled-preview-boundary.config.ts', controlledPreviewConfig],
+  ['playwright.exhaustive-acceptance.config.ts', exhaustivePlaywrightConfig],
+  ['playwright.local-sandbox-regression.config.ts', await readFile('playwright.local-sandbox-regression.config.ts', 'utf8')],
+  ['playwright.local-navigation-regression.config.ts', await readFile('playwright.local-navigation-regression.config.ts', 'utf8')],
+  ['playwright.controller-navigation-history.config.ts', controllerPlaywrightConfig],
+]) {
+  assert.match(contents, /captureGitInfo:\s*\{\s*commit:\s*false,\s*diff:\s*false\s*\}/u, `${configPath} must disable Playwright git metadata capture`);
+}
 const previewQaWorkflow = await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8');
 assert.match(previewQaWorkflow, /Wait for exact PR preview[\s\S]*playwright\.controlled-preview-boundary\.config\.ts[\s\S]*--preview-sandbox-regression[\s\S]*--preview-navigation-regression/u, 'the controlled hosted boundary and both exact-head local regression profiles must execute only after immutable preview identity binding');
 assert.match(previewQaWorkflow, /if: needs\.select-pr264-controlled-preview\.outputs\.profile == 'ordinary'[\s\S]*npx playwright test --config=playwright\.controller-navigation-history\.config\.ts/u, 'ordinary preview QA must retain its hosted navigation regression without admitting it into the controlled profile');

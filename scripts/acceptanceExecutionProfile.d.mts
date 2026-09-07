@@ -10,12 +10,11 @@ export interface AcceptanceExecutionProfile {
   invocationId: string | null;
   targetOrigin: string | null;
   deployId: string | null;
-  sourceIdentity?: 'governed_working_tree_candidate';
-  invocationId?: string;
 }
 
 export interface AcceptanceReportMetadata {
   schemaVersion: 'acceptance-report-profile-v1';
+  ci: Record<string, never>;
   evidenceKind: AcceptanceExecutionProfile['evidenceKind'];
   executionKind: AcceptanceExecutionKind;
   exactCommand: string[];
@@ -24,6 +23,8 @@ export interface AcceptanceReportMetadata {
   exactHead: string;
   targetOrigin: string | null;
   deployId: string | null;
+  sourceIdentity?: 'governed_working_tree_candidate';
+  invocationId?: string;
 }
 
 export function decodeAcceptanceExecutionProfile(

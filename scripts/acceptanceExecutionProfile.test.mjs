@@ -81,7 +81,17 @@ test('hosted preview requires non-loopback HTTPS and an exact deploy ID', () => 
     HOSTED_PILOT_URL: 'https://deploy-preview-264--avalaos-pilot.netlify.app',
     NETLIFY_DEPLOY_ID: 'b'.repeat(24),
   };
-  assert.equal(decodeAcceptanceExecutionProfile(hosted).executionKind, 'hosted_preview');
+  assert.deepEqual(decodeAcceptanceExecutionProfile(hosted), {
+    schemaVersion: 'acceptance-execution-profile-v1',
+    evidenceKind: 'hosted-preview-acceptance',
+    executionKind: 'hosted_preview',
+    releaseSha: head,
+    checkoutSha: null,
+    sourceIdentity: 'committed_exact_head',
+    invocationId: null,
+    targetOrigin: 'https://deploy-preview-264--avalaos-pilot.netlify.app',
+    deployId: 'b'.repeat(24),
+  });
   assert.throws(() => decodeAcceptanceExecutionProfile({ ...hosted, HOSTED_PILOT_URL: 'http://127.0.0.1:4201' }), /NON_LOOPBACK_HTTPS_REQUIRED/u);
   assert.throws(() => decodeAcceptanceExecutionProfile({ ...hosted, HOSTED_PILOT_URL: 'https://localhost:4201' }), /NON_LOOPBACK_HTTPS_REQUIRED/u);
   assert.throws(() => decodeAcceptanceExecutionProfile({ ...hosted, NETLIFY_DEPLOY_ID: undefined }), /DEPLOY_ID_REQUIRED/u);
@@ -107,6 +117,7 @@ const metadata = createAcceptanceReportMetadata({
   configPath: 'playwright.local-sandbox-regression.config.ts',
   sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
 });
+assert.deepEqual(metadata.ci, {}, 'reserved empty CI metadata must prevent Playwright auto-enrichment');
 const reportWith = tests => ({
   config: { metadata: { ...metadata, actualWorkers: 1 } },
   errors: [],
@@ -159,6 +170,31 @@ test('result inventory rejects green zero-test, partial, duplicate, fake pass, a
     { title: '[SYNTHETIC-REGRESSION:SANDBOX-001] sandbox', projectName: 'desktop-chromium', status: 'expected' },
     { title: '[SYNTHETIC-REGRESSION:ASSESS-002] blocked', projectName: 'desktop-chromium', status: 'skipped' },
   ]), config: { metadata: { ...metadata, exactHead: 'b'.repeat(40) } } } }), /METADATA_MISMATCH/u);
+  for (const mutation of [
+    { ci: { branch: 'refs/heads/private' } },
+    { gitCommit: { id: 'b'.repeat(40) } },
+    { gitDiff: 'private patch content' },
+  ]) {
+    assert.throws(() => verifySyntheticRegressionResultInventory({ ...expected, report: {
+      ...reportWith([
+        { title: '[SYNTHETIC-REGRESSION:SANDBOX-001] sandbox', projectName: 'desktop-chromium', status: 'expected' },
+        { title: '[SYNTHETIC-REGRESSION:ASSESS-002] blocked', projectName: 'desktop-chromium', status: 'skipped' },
+      ]),
+      config: { metadata: { ...metadata, ...mutation, actualWorkers: 1 } },
+    } }), /METADATA_MISMATCH/u);
+    const pollutedExpectedMetadata = { ...metadata, ...mutation };
+    assert.throws(() => verifySyntheticRegressionResultInventory({
+      ...expected,
+      expectedMetadata: pollutedExpectedMetadata,
+      report: {
+        ...reportWith([
+          { title: '[SYNTHETIC-REGRESSION:SANDBOX-001] sandbox', projectName: 'desktop-chromium', status: 'expected' },
+          { title: '[SYNTHETIC-REGRESSION:ASSESS-002] blocked', projectName: 'desktop-chromium', status: 'skipped' },
+        ]),
+        config: { metadata: { ...pollutedExpectedMetadata, actualWorkers: 1 } },
+      },
+    }), /METADATA_MISMATCH/u);
+  }
 });
 
 test('result inventory rejects summary-only status, retries, annotations, and top-level errors', () => {

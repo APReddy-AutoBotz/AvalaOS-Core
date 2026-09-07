@@ -17,6 +17,7 @@ const metadata = createAcceptanceReportMetadata({
 });
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'controllerNavigationHistory.spec.ts',
   forbidOnly: true,

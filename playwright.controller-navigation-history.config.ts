@@ -28,6 +28,7 @@ const metadata = executionProfile.executionKind === 'hosted_preview'
   : reportMetadata;
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser', testMatch: 'controllerNavigationHistory.spec.ts', forbidOnly: true,
   fullyParallel: false, workers: 1, retries: 0, timeout: 60_000,
   outputDir: 'artifacts/controller-navigation-history/playwright-output',

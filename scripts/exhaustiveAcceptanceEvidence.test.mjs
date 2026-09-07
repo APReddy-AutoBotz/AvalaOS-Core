@@ -186,6 +186,7 @@ assert.ok(validateOracleManifest({ ...oracle, results: [] }, oracleExpected).som
 
 const hostedMetadata = {
   schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
   evidenceKind: 'hosted-preview-acceptance',
   executionKind: 'hosted_preview',
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
@@ -283,6 +284,9 @@ for (const [label, report] of [
   ['wrong run', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runId: '654321' } })],
   ['wrong attempt', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runAttempt: '1' } })],
   ['duplicate metadata shape', mutateMetadata({ substitutedAuthority: true })],
+  ['nonempty CI metadata', mutateMetadata({ ci: { branch: 'refs/heads/private' } })],
+  ['git commit enrichment', mutateMetadata({ gitCommit: { id: 'd'.repeat(40) } })],
+  ['git diff enrichment', mutateMetadata({ gitDiff: 'private patch content' })],
 ]) {
   assert.ok(validateHostedPlaywrightReport({ report, expectedMetadata: hostedMetadata }).errors.length > 0, `${label} must fail closed`);
 }

@@ -52,6 +52,7 @@ export const validateControlledPreviewResultInventory = ({ report, expected }) =
   const expectedMetadataKeys = [
     'actualWorkers',
     'canonicalAlias',
+    'ci',
     'configPath',
     'deployId',
     'evidenceKind',
@@ -69,6 +70,8 @@ export const validateControlledPreviewResultInventory = ({ report, expected }) =
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)
     || canonical(Object.keys(metadata).sort()) !== canonical(expectedMetadataKeys)
     || metadata.actualWorkers !== 1) errors.push('controlled-preview-metadata-shape');
+  if (!metadata?.ci || typeof metadata.ci !== 'object' || Array.isArray(metadata.ci)
+    || Object.keys(metadata.ci).length !== 0) errors.push('controlled-preview-ci-metadata');
   if (metadata?.schemaVersion !== 'acceptance-report-profile-v1') errors.push('controlled-preview-metadata-schema');
   if (metadata?.previewEvidenceKind !== profile.evidenceKind) errors.push('controlled-preview-evidence-kind');
   if (metadata?.executionKind !== profile.executionKind) errors.push('controlled-preview-execution-kind');

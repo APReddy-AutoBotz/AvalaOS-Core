@@ -72,6 +72,16 @@
       "environment": "controlled-node-22"
     },
     {
+      "id": "pr-c-retained-hosted-contract",
+      "command": "npm run test:hosted-pilot",
+      "environment": "controlled-node-22"
+    },
+    {
+      "id": "pr-c-retained-localhost-browser",
+      "command": "npm run test:browser",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
       "id": "pr-c-preview-sandbox-regression",
       "command": "node scripts/runTranscriptFlowBrowser.mjs --preview-sandbox-regression",
       "environment": "controlled-browser-two-profile"

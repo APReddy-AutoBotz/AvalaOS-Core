@@ -61,6 +61,7 @@ const metadata = {
 };
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'controlledPreviewBoundary.spec.ts',
   forbidOnly: true,

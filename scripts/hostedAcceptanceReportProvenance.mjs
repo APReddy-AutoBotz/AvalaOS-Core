@@ -100,6 +100,7 @@ export const deriveExpectedHostedAcceptanceMetadata = ({
   if (!runtime) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REQUIRED');
   return Object.freeze({
     schemaVersion: 'acceptance-report-profile-v1',
+    ci: {},
     evidenceKind: 'hosted-preview-acceptance',
     executionKind: 'hosted_preview',
     exactCommand: [...exactCommand],

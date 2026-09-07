@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { REQUIRED_GATES, safeHash, validateHostedUrl, validateResolvedHostedUrl, verifyActivationRun, verifyManifest } from './verify-hosted-pilot-evidence.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import {HOSTED_EVIDENCE_FAMILIES,HOSTED_EVIDENCE_FAMILY_CONTRACTS,hostedEvidenceFamilyContractSha256,hostedEvidenceObservationSetSha256} from './hostedEvidenceFamilyAttestation.mjs';
 import { loadCanonicalMigrationInventory } from './hostedPilotActivation.mjs';
+import { DEFAULT_HOSTED_PILOT_MANIFEST_PATH, resolveHostedPilotManifestOutput } from './produce-hosted-pilot-activation-manifest.mjs';
+import { collectChangedPrCFiles } from './transcriptFlowPrCEvidenceScope.mjs';
 const head = 'a'.repeat(40), canonicalMigrationDigest = 'c'.repeat(64);
 const scope={organizationId:'11111111-1111-4111-8111-111111111111',workspaceId:'22222222-2222-4222-8222-222222222222',exerciseRunId:'33333333-3333-4333-8333-333333333333'};
 const activationRun = { id: '123456789', attempt: '2', workflow: '.github/workflows/hosted-pilot-activation-evidence-producer.yml', repository: 'APReddy-AutoBotz/AvalaOS-Core', event: 'workflow_dispatch', head, conclusion: 'success' };
@@ -33,6 +36,16 @@ const assertOrderedTokens = (source, tokens, label) => {
     assert.ok(next > cursor, `${label}: expected ${JSON.stringify(token)} after prior step`);
     cursor = next;
   }
+};
+const assertOwnedTemporaryRoot = (temporaryRoot, prefix) => {
+  const resolvedBase = path.resolve(tmpdir());
+  const resolvedRoot = path.resolve(temporaryRoot);
+  assert.equal(
+    resolvedRoot.startsWith(`${resolvedBase}${path.sep}`) && path.basename(resolvedRoot).startsWith(prefix),
+    true,
+    `temporary root must be contained and use prefix ${prefix}`,
+  );
+  return resolvedRoot;
 };
 test('accepts exact-head complete hosted evidence bound to the selected activation run', () => assert.equal(verifyManifest(manifest, context), true));
 test('fails closed for wrong head, missing gate, production authority, and unsafe URL', () => {
@@ -161,7 +174,11 @@ test('sandbox local-authority evidence exercises every declared persona', async 
 });
 test('every hosted navigation rechecks exact release environment and deployment identity', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
-  assert.match(spec, /const deployId = process\.env\.NETLIFY_DEPLOY_ID/u);
+  assert.match(spec, /import \{ decodeAcceptanceExecutionProfile \} from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u);
+  assert.match(spec, /const executionProfile = decodeAcceptanceExecutionProfile\(process\.env,/u);
+  assert.match(spec, /const releaseSha = executionProfile\.releaseSha/u);
+  assert.match(spec, /const deployId = executionProfile\.deployId/u);
+  assert.match(spec, /const hostedOrigin = executionProfile\.targetOrigin/u);
   assert.match(spec, /const assertHostedResponseIdentity/u);
   assert.match(spec, /x-avalaos-release/u);
   assert.match(spec, /x-avalaos-environment/u);
@@ -269,7 +286,32 @@ test('deployment verification requires exact release, nonproduction, and deploym
   await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: deployId, fetchImpl: async () => new Response('<div id="root"></div>') }), /mismatch/);
   await assert.rejects(verifyHostedDeployment({ hostedUrl: 'https://pilot.example.test', expectedHead: head, expectedDeployId: 'invalid', fetchImpl }), /24-character lowercase hex/);
 });
+test('manifest producer output resolver preserves the workflow default and rejects malformed grammar', () => {
+  const repositoryRoot = process.cwd();
+  assert.equal(DEFAULT_HOSTED_PILOT_MANIFEST_PATH, 'artifacts/hosted-pilot/manifest.json');
+  assert.equal(
+    resolveHostedPilotManifestOutput([], repositoryRoot),
+    path.resolve(repositoryRoot, 'artifacts/hosted-pilot/manifest.json'),
+  );
+  assert.equal(
+    resolveHostedPilotManifestOutput(['--output', 'output/synthetic-hosted-manifest.json'], repositoryRoot),
+    path.resolve(repositoryRoot, 'output/synthetic-hosted-manifest.json'),
+  );
+  for (const args of [
+    ['--output'],
+    ['--output', ''],
+    ['--output', ' manifest.json'],
+    ['--output', '--output'],
+    ['--output', 'manifest.json', 'extra'],
+    ['--output', 'first.json', '--output', 'second.json'],
+    ['--unknown', 'manifest.json'],
+    ['manifest.json'],
+  ]) {
+    assert.throws(() => resolveHostedPilotManifestOutput(args, repositoryRoot), /HOSTED_PILOT_OUTPUT_ARGUMENTS_INVALID/u);
+  }
+});
 test('manifest producer and verifier entrypoints reach repository-bound source validation', async () => {
+  const repositoryRoot = process.cwd();
   const actualHead = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
   const canonical = await loadCanonicalMigrationInventory();
   const entrypointDeploymentFingerprint = safeHash('https://pilot.example.test');
@@ -291,18 +333,13 @@ test('manifest producer and verifier entrypoints reach repository-bound source v
       item.hostedFamilyAssertion.observationSetSha256=hostedEvidenceObservationSetSha256(item.hostedFamilyAssertion.observationBinding,item.hostedFamilyAssertion.assertionOutcomes);
     }
   }
-  const currentManifest = {
-    ...structuredClone(manifest),
-    gitCommit: actualHead,
-    migrationChainHash: `sha256:${canonical.digest}`,
-    deploymentTargetFingerprint: entrypointDeploymentFingerprint,
-    hostedEvidenceFamilyState: currentState,
-    evidence: currentEvidence,
-  };
   const working = await mkdtemp(path.join(tmpdir(), 'avalaos-hosted-entrypoint-'));
+  const resolvedWorking = assertOwnedTemporaryRoot(working, 'avalaos-hosted-entrypoint-');
+  const defaultManifestPath = path.resolve(repositoryRoot, DEFAULT_HOSTED_PILOT_MANIFEST_PATH);
+  const defaultManifestBefore = existsSync(defaultManifestPath) ? await readFile(defaultManifestPath) : null;
   try {
-    const manifestPath = path.join(working, 'manifest.json');
-    await writeFile(manifestPath, JSON.stringify(currentManifest));
+    const manifestPath = path.join(resolvedWorking, 'produced', 'manifest.json');
+    const verifiedPath = path.join(resolvedWorking, 'verified.json');
     const commonEnv = {
       ...process.env,
       EXPECTED_RELEASE_SHA: actualHead,
@@ -317,9 +354,16 @@ test('manifest producer and verifier entrypoints reach repository-bound source v
       WORKFLOW_REPOSITORY: activationRun.repository,
       TRUSTED_GATE_RESULTS_JSON: JSON.stringify({ ...currentEvidence, __hostedEvidenceFamilyState: currentState }),
     };
-    const produced = spawnSync(process.execPath, ['scripts/produce-hosted-pilot-activation-manifest.mjs'], { encoding: 'utf8', env: commonEnv });
+    const produced = spawnSync(process.execPath, [
+      'scripts/produce-hosted-pilot-activation-manifest.mjs', '--output', manifestPath,
+    ], { cwd: repositoryRoot, encoding: 'utf8', env: commonEnv, timeout: 30_000, maxBuffer: 1_048_576, windowsHide: true });
     assert.equal(produced.status, 0,produced.stderr);
     assert.doesNotMatch(produced.stderr, /readSource is not defined|ReferenceError/);
+    assert.equal(existsSync(manifestPath), true, 'producer must write the requested temporary manifest');
+    const producedManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    assert.equal(producedManifest.gitCommit, actualHead);
+    assert.equal(producedManifest.migrationChainHash, `sha256:${canonical.digest}`);
+    assert.equal(producedManifest.deploymentTargetFingerprint, entrypointDeploymentFingerprint);
     const verified = spawnSync(process.execPath, [
       'scripts/verify-hosted-pilot-evidence.mjs', '--manifest', manifestPath, '--expected-head', actualHead,
       '--expected-deployment-fingerprint', entrypointDeploymentFingerprint,
@@ -327,12 +371,85 @@ test('manifest producer and verifier entrypoints reach repository-bound source v
       '--activation-run-id', activationRun.id, '--activation-run-attempt', activationRun.attempt,
       '--activation-workflow', activationRun.workflow, '--activation-repository', activationRun.repository,
       '--activation-event', activationRun.event, '--activation-head', actualHead, '--activation-conclusion', activationRun.conclusion,
-      '--output', path.join(working, 'verified.json'),
-    ], { encoding: 'utf8' });
+      '--output', verifiedPath,
+    ], { cwd: repositoryRoot, encoding: 'utf8', timeout: 30_000, maxBuffer: 1_048_576, windowsHide: true });
     assert.equal(verified.status, 0,verified.stderr);
     assert.match(verified.stdout,/Hosted non-production evidence verified/);
     assert.doesNotMatch(verified.stderr, /readSource is not defined|ReferenceError/);
+    assert.equal(existsSync(verifiedPath), true);
+    for (const args of [
+      ['--output'],
+      ['--output', manifestPath, 'extra'],
+      ['--output', manifestPath, '--output', manifestPath],
+      ['--unknown', manifestPath],
+    ]) {
+      const rejected = spawnSync(process.execPath, ['scripts/produce-hosted-pilot-activation-manifest.mjs', ...args], {
+        cwd: repositoryRoot,
+        encoding: 'utf8',
+        env: commonEnv,
+        timeout: 30_000,
+        maxBuffer: 1_048_576,
+        windowsHide: true,
+      });
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, /HOSTED_PILOT_OUTPUT_ARGUMENTS_INVALID/u);
+    }
   } finally {
-    await rm(working, { recursive: true, force: true });
+    try {
+      const defaultManifestAfter = existsSync(defaultManifestPath) ? await readFile(defaultManifestPath) : null;
+      if (defaultManifestBefore === null) assert.equal(defaultManifestAfter, null, 'custom output must not create the workflow default artifact');
+      else assert.deepEqual(defaultManifestAfter, defaultManifestBefore, 'custom output must not modify the workflow default artifact');
+    } finally {
+      assertOwnedTemporaryRoot(resolvedWorking, 'avalaos-hosted-entrypoint-');
+      await rm(resolvedWorking, { recursive: true, force: true });
+    }
+  }
+});
+
+test('exact hosted-pilot manifest ignore remains narrow and does not hide governed source', async () => {
+  const working = await mkdtemp(path.join(tmpdir(), 'avalaos-hosted-ignore-'));
+  const resolvedWorking = assertOwnedTemporaryRoot(working, 'avalaos-hosted-ignore-');
+  const git = args => {
+    const result = spawnSync('git', args, {
+      cwd: resolvedWorking,
+      encoding: 'utf8',
+      timeout: 30_000,
+      maxBuffer: 1_048_576,
+      windowsHide: true,
+    });
+    assert.equal(result.status, 0, `HOSTED_PILOT_IGNORE_GIT_FAILED:${args[0]}`);
+    return result.stdout.trim();
+  };
+  try {
+    git(['init', '--quiet']);
+    git(['config', 'user.email', 'hosted-pilot-ignore@example.invalid']);
+    git(['config', 'user.name', 'Hosted pilot ignore fixture']);
+    git(['config', 'core.autocrlf', 'false']);
+    const ignoreSource = await readFile('.gitignore', 'utf8');
+    assert.match(ignoreSource, /^\/artifacts\/hosted-pilot\/manifest\.json$/mu);
+    await writeFile(path.join(resolvedWorking, '.gitignore'), ignoreSource);
+    await writeFile(path.join(resolvedWorking, 'governed-source.txt'), 'base governed source\n');
+    git(['add', '.gitignore', 'governed-source.txt']);
+    git(['commit', '--quiet', '-m', 'base governed fixture']);
+    const untrackedBase = git(['rev-parse', 'HEAD']);
+
+    const hostedArtifactDirectory = path.join(resolvedWorking, 'artifacts', 'hosted-pilot');
+    await mkdir(hostedArtifactDirectory, { recursive: true });
+    await writeFile(path.join(hostedArtifactDirectory, 'manifest.json'), '{"synthetic":true}\n');
+    await writeFile(path.join(hostedArtifactDirectory, 'adjacent.json'), '{"governed":true}\n');
+    const untrackedChanged = collectChangedPrCFiles(resolvedWorking, untrackedBase);
+    assert.equal(untrackedChanged.includes('artifacts/hosted-pilot/manifest.json'), false, 'exact generated artifact must be ignored while untracked');
+    assert.equal(untrackedChanged.includes('artifacts/hosted-pilot/adjacent.json'), true, 'adjacent untracked artifacts must remain governed');
+
+    git(['add', 'artifacts/hosted-pilot/adjacent.json']);
+    git(['add', '--force', 'artifacts/hosted-pilot/manifest.json']);
+    git(['commit', '--quiet', '-m', 'tracked artifact fixture']);
+    const trackedBase = git(['rev-parse', 'HEAD']);
+    await writeFile(path.join(hostedArtifactDirectory, 'manifest.json'), '{"synthetic":"modified"}\n');
+    const trackedChanged = collectChangedPrCFiles(resolvedWorking, trackedBase);
+    assert.equal(trackedChanged.includes('artifacts/hosted-pilot/manifest.json'), true, 'ignore rules must not hide tracked modifications from governance');
+  } finally {
+    assertOwnedTemporaryRoot(resolvedWorking, 'avalaos-hosted-ignore-');
+    await rm(resolvedWorking, { recursive: true, force: true });
   }
 });

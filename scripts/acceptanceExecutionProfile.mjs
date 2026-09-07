@@ -134,6 +134,7 @@ export const createAcceptanceReportMetadata = ({ profile, exactCommand, configPa
   // verifier below admits no other metadata fields.
   return {
     schemaVersion: 'acceptance-report-profile-v1',
+    ci: {},
     evidenceKind: profile.evidenceKind,
     executionKind: profile.executionKind,
     exactCommand: [...exactCommand],
@@ -184,6 +185,20 @@ const collectPlaywrightTests = report => {
 };
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const LOCAL_REPORT_METADATA_KEYS = [
+  'ci',
+  'configPath',
+  'deployId',
+  'evidenceKind',
+  'exactCommand',
+  'exactHead',
+  'executionKind',
+  'invocationId',
+  'schemaVersion',
+  'sourceIdentity',
+  'sourcePaths',
+  'targetOrigin',
+].sort();
 
 export const verifySyntheticRegressionResultInventory = ({
   report,
@@ -201,7 +216,16 @@ export const verifySyntheticRegressionResultInventory = ({
   const expectedMetadataKeys = Object.keys(expectedMetadata).sort();
   const actualMetadataKeys = Object.keys(actualMetadata).filter(key => key !== 'actualWorkers').sort();
   if (
-    !sameJson(actualMetadataKeys, expectedMetadataKeys)
+    !sameJson(expectedMetadataKeys, LOCAL_REPORT_METADATA_KEYS)
+    || !sameJson(actualMetadataKeys, LOCAL_REPORT_METADATA_KEYS)
+    || !expectedMetadata.ci
+    || typeof expectedMetadata.ci !== 'object'
+    || Array.isArray(expectedMetadata.ci)
+    || Object.keys(expectedMetadata.ci).length !== 0
+    || !actualMetadata.ci
+    || typeof actualMetadata.ci !== 'object'
+    || Array.isArray(actualMetadata.ci)
+    || Object.keys(actualMetadata.ci).length !== 0
     || expectedMetadataKeys.some(key => !sameJson(actualMetadata[key], expectedMetadata[key]))
     || actualMetadata.actualWorkers !== 1
   ) {

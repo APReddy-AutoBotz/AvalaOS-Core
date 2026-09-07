@@ -21,6 +21,7 @@ const metadata = createAcceptanceReportMetadata({
 });
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'exhaustiveHostedAcceptance.spec.ts',
   forbidOnly: true,

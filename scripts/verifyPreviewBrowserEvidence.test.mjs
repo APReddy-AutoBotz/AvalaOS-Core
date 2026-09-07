@@ -30,6 +30,7 @@ const workflowRef = `owner/repository/${CONTROLLED_PREVIEW_WORKFLOW}@refs/pull/2
 const profile = CONTROLLED_PREVIEW_EVIDENCE_PROFILE;
 const metadata = {
   schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
   evidenceKind: 'hosted-preview-acceptance',
   executionKind: 'hosted_preview',
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.controlled-preview-boundary.config.ts', '--workers=1'],
@@ -554,6 +555,9 @@ test('local, unknown, cross-substituted, wrong-head, wrong-deploy, wrong-config,
     [{ ...metadata, exactHead: 'c'.repeat(40) }, expected],
     [{ ...metadata, deployId: 'd'.repeat(24) }, expected],
     [{ ...metadata, configPath: 'playwright.local-sandbox-regression.config.ts' }, expected],
+    [{ ...metadata, ci: { branch: 'refs/heads/private' } }, expected],
+    [{ ...metadata, gitCommit: { id: 'c'.repeat(40) } }, expected],
+    [{ ...metadata, gitDiff: 'private patch content' }, expected],
     [{ ...metadata, workflowRuntime: null }, expected],
     [{ ...metadata, workflowRuntime: { ...metadata.workflowRuntime, runId: '12344' } }, expected],
     [{ ...metadata, workflowRuntime: { ...metadata.workflowRuntime, runAttempt: '1' } }, expected],
