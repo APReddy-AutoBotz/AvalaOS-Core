@@ -191,6 +191,14 @@ export default defineConfig({
     assert.equal(Object.hasOwn(metadata, 'gitCommit'), false);
     assert.equal(Object.hasOwn(metadata, 'gitDiff'), false);
     assert.equal(report.errors?.length, 0);
+    const scenarioDirectory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+    if (scenarioDirectory) {
+      writeFileSync(path.join(scenarioDirectory, 'acceptance-playwright-metadata-scenarios.json'), JSON.stringify({
+        contractVersion: 'pr-c-control-script-scenarios-1',
+        producer: 'scripts/acceptancePlaywrightMetadata.test.mjs',
+        scenarios: [{ name: 'acceptance-playwright-metadata-installed-synthetic-config', status: 'passed' }],
+      }), { flag: 'wx' });
+    }
   } finally {
     if (
       resolvedTemporaryRoot.startsWith(`${resolvedTempBase}${path.sep}`)

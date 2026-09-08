@@ -17,6 +17,7 @@ const workflowSha = 'c'.repeat(40);
 const workflowPath = '.github/workflows/exhaustive-acceptance.yml';
 const workflowRef = `owner/repository/${workflowPath}@refs/pull/264/merge`;
 const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
+const passedControlScriptScenarios = new Set();
 
 const hostedEnvironment = () => ({
   ACCEPTANCE_EXECUTION_KIND: 'hosted_preview',
@@ -166,6 +167,7 @@ test('declaration parse failure emits sanitized fail-closed report artifacts', (
       assert.equal(run.stderr.includes(forbidden), false, 'raw declaration content must not enter stderr');
     }
     assert.match(run.stderr, /DECLARATION_PREFLIGHT_FAILED/u);
+    passedControlScriptScenarios.add('exhaustive-report-malformed-declaration-fails-closed');
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -195,6 +197,7 @@ test('green hosted execution cannot promote a planned fixture scope', () => {
     const sandbox = report.results.find(item => item.testId === 'SANDBOX-001');
     assert.equal(sandbox.status, 'BLOCKED');
     assert.match(sandbox.failureReason, /no separately validated same-run executed fixture scope/u);
+    passedControlScriptScenarios.add('exhaustive-report-planned-scope-blocked');
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -230,6 +233,7 @@ test('ambient execution kind cannot relabel a locally green Playwright report as
     assert.equal(sandbox.status, 'BLOCKED');
     assert.match(sandbox.failureReason, /report provenance invalid/u);
     assert.equal(report.summary.browserExecutionKind, 'local_source_fixture');
+    passedControlScriptScenarios.add('exhaustive-report-local-hosted-substitution-blocked');
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -272,4 +276,15 @@ test('hostile hosted report provenance substitutions remain blocked under a gree
       rmSync(temp, { recursive: true, force: true });
     }
   }
+  passedControlScriptScenarios.add('exhaustive-report-hostile-provenance-blocked');
+});
+
+test.after(() => {
+  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+  if (!directory || passedControlScriptScenarios.size !== 4) return;
+  writeFileSync(path.join(directory, 'exhaustive-acceptance-report-scenarios.json'), JSON.stringify({
+    contractVersion: 'pr-c-control-script-scenarios-1',
+    producer: 'scripts/runExhaustiveAcceptanceReport.test.mjs',
+    scenarios: [...passedControlScriptScenarios].sort().map(name => ({ name, status: 'passed' })),
+  }), { flag: 'wx' });
 });

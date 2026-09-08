@@ -483,6 +483,14 @@ test('local wrapper accepts only the complete report from its current invocation
         invocationId: actualInvocationId,
       }),
     }), 0);
+    const scenarioDirectory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+    if (scenarioDirectory) {
+      writeFileSync(path.join(scenarioDirectory, 'transcript-flow-browser-scenarios.json'), JSON.stringify({
+        contractVersion: 'pr-c-control-script-scenarios-1',
+        producer: 'scripts/runTranscriptFlowBrowser.test.mjs',
+        scenarios: [{ name: 'transcript-flow-browser-exported-local-consumer', status: 'passed' }],
+      }), { flag: 'wx' });
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

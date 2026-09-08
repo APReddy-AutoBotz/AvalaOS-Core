@@ -19,6 +19,9 @@ export const CONTROL_SCRIPT_SOURCES = Object.freeze([
   'scripts/transcriptFlowPrCEvidenceScope.mjs',
   'scripts/verifyPrCControlledHumanEdgeDeployment.mjs',
   'scripts/verifyPrCControlledHumanSession.mjs',
+  'scripts/acceptanceExecutionProfile.mjs',
+  'scripts/exhaustiveAcceptanceEvidence.mjs',
+  'scripts/runPrCControlledHumanScriptCoverage.mjs',
 ]);
 export const CONTROL_SCRIPT_TESTS = Object.freeze([
   'scripts/prCControlledHumanPostgresTls.test.mjs',
@@ -31,9 +34,23 @@ export const CONTROL_SCRIPT_TESTS = Object.freeze([
   'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs',
   'scripts/prCControlledHumanControlScriptCoverageSupport.test.mjs',
   'scripts/transcriptFlowPrCEvidenceScope.test.mjs',
+  'scripts/runPrCControlledHumanScriptCoverage.test.mjs',
+  'scripts/acceptanceExecutionProfile.test.mjs',
+  'scripts/exhaustiveAcceptanceEvidence.test.mjs',
+  'scripts/runExhaustiveAcceptanceReport.test.mjs',
+  'scripts/acceptancePlaywrightMetadata.test.mjs',
+  'scripts/runTranscriptFlowBrowser.test.mjs',
 ]);
 export const CONTROL_SCRIPT_SCENARIOS = Object.freeze([
+  'acceptance-execution-profile-direct-import',
+  'acceptance-playwright-metadata-installed-synthetic-config',
   'artifact-over-16-kib',
+  'control-script-coverage-runner-self-test',
+  'exhaustive-acceptance-evidence-direct-import',
+  'exhaustive-report-hostile-provenance-blocked',
+  'exhaustive-report-local-hosted-substitution-blocked',
+  'exhaustive-report-malformed-declaration-fails-closed',
+  'exhaustive-report-planned-scope-blocked',
   'password-non-string',
   'password-over-128',
   'production-entry-dirty-source',
@@ -44,14 +61,54 @@ export const CONTROL_SCRIPT_SCENARIOS = Object.freeze([
   'production-entry-wrong-output-path',
   'signing-key-leading-trailing-whitespace',
   'signing-key-under-32-over-4096',
+  'transcript-flow-browser-exported-local-consumer',
 ]);
 
 const OUTPUT_PARENT = 'output/pr-c-controlled-human-script-coverage';
 const SUMMARY_FILE = 'pr-c-control-script-coverage.json';
-const SCENARIO_PRODUCERS = Object.freeze({
+export const CONTROL_SCRIPT_SCENARIO_PRODUCERS = Object.freeze({
+  'acceptance-execution-profile-scenarios.json': 'scripts/acceptanceExecutionProfile.test.mjs',
+  'acceptance-playwright-metadata-scenarios.json': 'scripts/acceptancePlaywrightMetadata.test.mjs',
+  'control-script-coverage-runner-scenarios.json': 'scripts/runPrCControlledHumanScriptCoverage.test.mjs',
   'credential-preflight-entry-scenarios.json': 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs',
   'credential-preflight-unit-scenarios.json': 'scripts/prCControlledHumanCredentialPreflight.test.mjs',
+  'exhaustive-acceptance-evidence-scenarios.json': 'scripts/exhaustiveAcceptanceEvidence.test.mjs',
+  'exhaustive-acceptance-report-scenarios.json': 'scripts/runExhaustiveAcceptanceReport.test.mjs',
+  'transcript-flow-browser-scenarios.json': 'scripts/runTranscriptFlowBrowser.test.mjs',
 });
+export const CONTROL_SCRIPT_SCENARIOS_BY_REPORT = Object.freeze({
+  'acceptance-execution-profile-scenarios.json': Object.freeze(['acceptance-execution-profile-direct-import']),
+  'acceptance-playwright-metadata-scenarios.json': Object.freeze(['acceptance-playwright-metadata-installed-synthetic-config']),
+  'control-script-coverage-runner-scenarios.json': Object.freeze(['control-script-coverage-runner-self-test']),
+  'credential-preflight-entry-scenarios.json': Object.freeze([
+    'production-entry-dirty-source',
+    'production-entry-existing-output-collision',
+    'production-entry-nonancestor-base',
+    'production-entry-source-change-during-execution',
+    'production-entry-source-identity-happy-path',
+    'production-entry-wrong-output-path',
+  ]),
+  'credential-preflight-unit-scenarios.json': Object.freeze([
+    'artifact-over-16-kib',
+    'password-non-string',
+    'password-over-128',
+    'signing-key-leading-trailing-whitespace',
+    'signing-key-under-32-over-4096',
+  ]),
+  'exhaustive-acceptance-evidence-scenarios.json': Object.freeze(['exhaustive-acceptance-evidence-direct-import']),
+  'exhaustive-acceptance-report-scenarios.json': Object.freeze([
+    'exhaustive-report-hostile-provenance-blocked',
+    'exhaustive-report-local-hosted-substitution-blocked',
+    'exhaustive-report-malformed-declaration-fails-closed',
+    'exhaustive-report-planned-scope-blocked',
+  ]),
+  'transcript-flow-browser-scenarios.json': Object.freeze(['transcript-flow-browser-exported-local-consumer']),
+});
+const MANDATORY_NONEMPTY_MEASURED_SOURCES = Object.freeze([
+  'scripts/acceptanceExecutionProfile.mjs',
+  'scripts/exhaustiveAcceptanceEvidence.mjs',
+  'scripts/runPrCControlledHumanScriptCoverage.mjs',
+]);
 const normalize = value => value.replaceAll('\\', '/');
 const digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const fail = code => { throw new Error(`PR_C_CONTROL_SCRIPT_COVERAGE_REJECTED:${code}`); };
@@ -136,7 +193,7 @@ export function parseControlScriptLcov(lcov, inventory, root = process.cwd()) {
 
 export function readControlScriptScenarios(directory) {
   const entries = readdirSync(directory).sort();
-  if (JSON.stringify(entries) !== JSON.stringify(Object.keys(SCENARIO_PRODUCERS).sort())) fail('scenario-file-set');
+  if (JSON.stringify(entries) !== JSON.stringify(Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).sort())) fail('scenario-file-set');
   const scenarios = [];
   const reports = entries.map(name => {
     const bytes = readFileSync(path.join(directory, name));
@@ -144,13 +201,15 @@ export function readControlScriptScenarios(directory) {
     let report;
     try { report = JSON.parse(bytes.toString('utf8')); } catch { fail('scenario-json'); }
     exactKeys(report, ['contractVersion', 'producer', 'scenarios'], 'scenario-shape');
-    if (report.contractVersion !== 'pr-c-control-script-scenarios-1' || report.producer !== SCENARIO_PRODUCERS[name]
+    if (report.contractVersion !== 'pr-c-control-script-scenarios-1' || report.producer !== CONTROL_SCRIPT_SCENARIO_PRODUCERS[name]
       || !Array.isArray(report.scenarios) || report.scenarios.length === 0) fail('scenario-identity');
     for (const scenario of report.scenarios) {
       exactKeys(scenario, ['name', 'status'], 'scenario-result-shape');
       if (typeof scenario.name !== 'string' || scenario.status !== 'passed') fail('scenario-result');
       scenarios.push(scenario.name);
     }
+    const actualNames = report.scenarios.map(scenario => scenario.name).sort();
+    if (JSON.stringify(actualNames) !== JSON.stringify([...CONTROL_SCRIPT_SCENARIOS_BY_REPORT[name]].sort())) fail('scenario-producer-inventory');
     return { file: name, producer: report.producer, sha256: digest(bytes) };
   });
   if (new Set(scenarios).size !== scenarios.length || JSON.stringify(scenarios.sort()) !== JSON.stringify([...CONTROL_SCRIPT_SCENARIOS].sort())) fail('scenario-inventory');
@@ -178,12 +237,12 @@ export function verifyControlScriptCoverageMeasurement(report, expectedInventory
       || JSON.stringify(report.governedFiles) !== JSON.stringify(expectedBinding.governedFiles)) fail('expected-binding');
   }
   parseControlScriptTap(Object.entries(report.testSummary).map(([name, value]) => `# ${name} ${value}`).join('\n'));
-  if (!Array.isArray(report.scenarioReports) || report.scenarioReports.length !== 2) fail('scenario-report-binding');
-  for (let index = 0; index < Object.keys(SCENARIO_PRODUCERS).sort().length; index += 1) {
-    const file = Object.keys(SCENARIO_PRODUCERS).sort()[index];
+  if (!Array.isArray(report.scenarioReports) || report.scenarioReports.length !== Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).length) fail('scenario-report-binding');
+  for (let index = 0; index < Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).sort().length; index += 1) {
+    const file = Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).sort()[index];
     const item = report.scenarioReports[index];
     exactKeys(item, ['file', 'producer', 'sha256'], 'scenario-report-shape');
-    if (item.file !== file || item.producer !== SCENARIO_PRODUCERS[file] || !/^sha256:[0-9a-f]{64}$/u.test(item.sha256)) fail('scenario-report-binding');
+    if (item.file !== file || item.producer !== CONTROL_SCRIPT_SCENARIO_PRODUCERS[file] || !/^sha256:[0-9a-f]{64}$/u.test(item.sha256)) fail('scenario-report-binding');
   }
   if (!Array.isArray(report.sources) || report.sources.length !== expectedInventory.length) fail('source-inventory');
   for (let index = 0; index < expectedInventory.length; index += 1) {
@@ -200,6 +259,8 @@ export function verifyControlScriptCoverageMeasurement(report, expectedInventory
     if (![source.uncoveredLines, source.uncoveredBranches, source.uncoveredFunctions].every(Array.isArray)) fail('uncovered-shape');
     if (!source.loaded && (source.lines.found !== 0 || source.branches.found !== 0 || source.functions.found !== 0
       || source.uncoveredLines.length !== 0 || source.uncoveredBranches.length !== 0 || source.uncoveredFunctions.length !== 0)) fail('unloaded-source');
+    if (MANDATORY_NONEMPTY_MEASURED_SOURCES.includes(source.path)
+      && (!source.loaded || source.lines.found === 0 || source.lines.hit === 0)) fail('mandatory-source-unmeasured');
   }
   return report;
 }

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
 import {
   evaluateHostedTest,
@@ -438,3 +440,12 @@ assert.ok(validateHostedPlaywrightReport({ report: replayedContrast, expectedMet
   .some(value => value.startsWith('hosted-report-contrast-summary:')), 'old contrast summaries cannot enter a fresh otherwise-valid workflow attempt');
 
 console.log('Exhaustive acceptance evidence adversarial tests passed.');
+
+const controlScriptScenarioDirectory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+if (controlScriptScenarioDirectory) {
+  writeFileSync(path.join(controlScriptScenarioDirectory, 'exhaustive-acceptance-evidence-scenarios.json'), JSON.stringify({
+    contractVersion: 'pr-c-control-script-scenarios-1',
+    producer: 'scripts/exhaustiveAcceptanceEvidence.test.mjs',
+    scenarios: [{ name: 'exhaustive-acceptance-evidence-direct-import', status: 'passed' }],
+  }), { flag: 'wx' });
+}

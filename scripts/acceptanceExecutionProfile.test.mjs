@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import {
   createAcceptanceReportMetadata,
@@ -454,4 +456,21 @@ test('result inventory rejects summary-only status, retries, annotations, and to
   assert.throws(() => verifySyntheticRegressionResultInventory({ ...expected, report: { ...base, suites: [{ specs: [{ title: base.suites[0].specs[0].title, tests: [{ ...testResult, results: [{ ...testResult.results[0], retry: 1 }] }] }] }] } }), /ATTEMPT_INVALID/u);
   assert.throws(() => verifySyntheticRegressionResultInventory({ ...expected, report: { ...base, suites: [{ specs: [{ title: base.suites[0].specs[0].title, tests: [{ ...testResult, annotations: [{ type: 'slow' }] }] }] }] } }), /STATUS_MISMATCH/u);
   assert.throws(() => verifySyntheticRegressionResultInventory({ ...expected, report: { ...base, errors: [{ message: 'hidden setup error' }] } }), /REPORT_ERRORS/u);
+});
+
+test('coverage scenario directly exercises the acceptance execution profile authority', () => {
+  const profile = decodeAcceptanceExecutionProfile(localEnvironment, { expectedCheckoutSha: head });
+  assert.equal(profile.executionKind, 'local_source_fixture');
+  assert.equal(profile.sourceIdentity, 'governed_working_tree_candidate');
+  assert.equal(createSyntheticRegressionOutputRoot({ profile, reportArea: 'coverage' }),
+    `output/playwright/pr264-synthetic-regression/${head}/coverage/${invocationId}`);
+
+  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+  if (directory) {
+    writeFileSync(path.join(directory, 'acceptance-execution-profile-scenarios.json'), JSON.stringify({
+      contractVersion: 'pr-c-control-script-scenarios-1',
+      producer: 'scripts/acceptanceExecutionProfile.test.mjs',
+      scenarios: [{ name: 'acceptance-execution-profile-direct-import', status: 'passed' }],
+    }), { flag: 'wx' });
+  }
 });
