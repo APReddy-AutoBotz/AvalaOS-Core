@@ -2,20 +2,24 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-export const PREPARATION_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-controlled-human-preparation-2';
-export const EDGE_MANIFEST_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-edge-deployment-manifest-2';
-export const CHECKPOINT_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-human-checkpoint-3';
-export const SESSION_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-human-session-2';
+export const PREPARATION_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-controlled-human-preparation-3';
+export const EDGE_MANIFEST_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-edge-deployment-manifest-3';
+export const CHECKPOINT_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-human-checkpoint-4';
+export const SESSION_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-human-session-3';
 export const CONTROLLER_SCHEMA_VERSION = 'pr-c-controlled-human-controller-1';
 export const PR_NUMBER = 264;
 export const PR_BRANCH = 'controller/governed-delivery-monitor-pr-c-20260831';
 export const ENVIRONMENT = 'hosted_nonproduction_pilot';
 export const PR_C_WORKFLOW = '.github/workflows/transcript-flow-pr-c.yml';
-export const PREPARE_WORKFLOW = '.github/workflows/pr264-controlled-human-prepare.yml';
-export const QUIESCE_WORKFLOW = '.github/workflows/pr264-controlled-human-quiesce.yml';
-export const CHECKPOINT_WORKFLOW = '.github/workflows/pr264-controlled-human-checkpoint.yml';
-export const VERIFY_WORKFLOW = '.github/workflows/pr264-controlled-human-verify.yml';
-export const EDGE_DEPLOY_WORKFLOW = '.github/workflows/pr264-controlled-human-edge-deploy.yml';
+export const PREPARE_WORKFLOW = PR_C_WORKFLOW;
+export const QUIESCE_WORKFLOW = PR_C_WORKFLOW;
+export const CHECKPOINT_WORKFLOW = PR_C_WORKFLOW;
+export const VERIFY_WORKFLOW = PR_C_WORKFLOW;
+export const EDGE_DEPLOY_WORKFLOW = PR_C_WORKFLOW;
+export const EDGE_DEPLOY_JOB = 'controlled_human_edge';
+export const PREPARE_JOB = 'controlled_human_prepare';
+export const FINAL_JOB = 'controlled_human_final';
+export const CHECKPOINT_JOBS = Object.freeze(['controlled_human_requester', 'controlled_human_reviewer', 'controlled_human_approver']);
 export const RECOVERY_WORKFLOW = '.github/workflows/pr264-controlled-human-recover.yml';
 export const PREVIEW_ORIGIN = 'https://deploy-preview-264--avalaos-pilot.netlify.app';
 
@@ -27,6 +31,15 @@ const DEPLOY_ID = /^[0-9a-f]{24}$/u;
 const SAFE_LABEL = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
 let SERVER_EVENT_STEPS;
+
+export const deriveControlledHumanPullRequestRuntime = (env, expectedJob) => {
+  assert(typeof expectedJob === 'string' && ([EDGE_DEPLOY_JOB, PREPARE_JOB, FINAL_JOB].includes(expectedJob) || CHECKPOINT_JOBS.includes(expectedJob)), 'PR_C_CH_RUNTIME_JOB_EXPECTATION');
+  assert(env.GITHUB_EVENT_NAME === 'pull_request' && env.GITHUB_REPOSITORY === 'APReddy-AutoBotz/AvalaOS-Core'
+    && env.GITHUB_WORKFLOW_REF === `APReddy-AutoBotz/AvalaOS-Core/${PR_C_WORKFLOW}@refs/pull/264/merge`
+    && env.GITHUB_JOB === expectedJob && RUN_ID.test(String(env.GITHUB_RUN_ID))
+    && Number.isSafeInteger(Number(env.GITHUB_RUN_ATTEMPT)) && Number(env.GITHUB_RUN_ATTEMPT) > 0, 'PR_C_CH_RUNTIME_IDENTITY');
+  return Object.freeze({ workflowPath: PR_C_WORKFLOW, job: expectedJob, event: 'pull_request', runId: String(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) });
+};
 
 const loadServerActionCatalog = () => {
   const migration = readFileSync(path.resolve('supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql'), 'utf8');
@@ -410,8 +423,8 @@ export const validateEdgeDeploymentManifest = (manifest, { root, exactHead, targ
   assert(manifest.targetFingerprint === targetFingerprint && DIGEST.test(targetFingerprint), 'PR_C_CH_EDGE_TARGET');
   assert(manifest.exerciseDigest === exerciseDigest && DIGEST.test(exerciseDigest), 'PR_C_CH_EDGE_EXERCISE');
   assert(manifest.productionAuthorized === false && manifest.customerDataAuthorized === false && manifest.realProviderCallsAuthorized === false, 'PR_C_CH_EDGE_STOP_STATES');
-  assertExactKeys(manifest.producer, ['workflowPath', 'event', 'runId', 'runAttempt', 'conclusion', 'artifactName'], [], 'PR_C_CH_EDGE_PRODUCER');
-  assert(manifest.producer.workflowPath === EDGE_DEPLOY_WORKFLOW && manifest.producer.event === 'pull_request' && RUN_ID.test(manifest.producer.runId) && Number.isSafeInteger(manifest.producer.runAttempt) && manifest.producer.runAttempt > 0 && manifest.producer.conclusion === 'success', 'PR_C_CH_EDGE_PRODUCER_IDENTITY');
+  assertExactKeys(manifest.producer, ['workflowPath', 'job', 'event', 'runId', 'runAttempt', 'conclusion', 'artifactName'], [], 'PR_C_CH_EDGE_PRODUCER');
+  assert(manifest.producer.workflowPath === EDGE_DEPLOY_WORKFLOW && manifest.producer.job === EDGE_DEPLOY_JOB && manifest.producer.event === 'pull_request' && RUN_ID.test(manifest.producer.runId) && Number.isSafeInteger(manifest.producer.runAttempt) && manifest.producer.runAttempt > 0 && manifest.producer.conclusion === 'success', 'PR_C_CH_EDGE_PRODUCER_IDENTITY');
   assertSafeLabel(manifest.producer.artifactName, 'PR_C_CH_EDGE_ARTIFACT_NAME');
   if (producer) assert(canonicalJson(manifest.producer) === canonicalJson(producer), 'PR_C_CH_EDGE_PRODUCER_BINDING');
   assertExactKeys(manifest.migration, ['sourcePath', 'sourceDigest', 'priorMigrationTip', 'migrationTip', 'phaseDigests'], [], 'PR_C_CH_EDGE_MIGRATION');
@@ -515,7 +528,7 @@ export const validateQuiesceRecord = (preparation, quiesceRecord) => {
   return quiesceRecord;
 };
 
-export const buildPreparationEvidence = ({ root, exactHead, github, preview, controllerRecords, edgeDeployment, edgeProducer, edgeSigningKey, edgeArtifactDigest, createdAt }) => {
+export const buildPreparationEvidence = ({ root, exactHead, producer, github, preview, controllerRecords, edgeDeployment, edgeProducer, edgeSigningKey, edgeArtifactDigest, createdAt }) => {
   assert(SHA.test(exactHead), 'PR_C_CH_PREPARATION_HEAD');
   assertExactKeys(github, ['workflowPath', 'runId', 'runAttempt', 'conclusion', 'artifactName', 'artifactDigest'], [], 'PR_C_CH_GITHUB');
   assert(github.workflowPath === PR_C_WORKFLOW && RUN_ID.test(String(github.runId)) && Number.isSafeInteger(github.runAttempt) && github.runAttempt > 0 && github.conclusion === 'success', 'PR_C_CH_GITHUB_IDENTITY');
@@ -540,6 +553,7 @@ export const buildPreparationEvidence = ({ root, exactHead, github, preview, con
   validateEdgeDeploymentManifest(edgeDeployment, { root, exactHead, targetFingerprint: common.targetFingerprint, exerciseDigest: common.exerciseDigest, producer: edgeProducer, signingKey: edgeSigningKey });
   assertDigest(edgeArtifactDigest, 'PR_C_CH_EDGE_ARTIFACT_DIGEST');
   assertTimestamp(createdAt, 'PR_C_CH_PREPARATION_TIMESTAMP');
+  assert(producer?.workflowPath === PR_C_WORKFLOW && producer?.job === PREPARE_JOB && producer?.event === 'pull_request' && RUN_ID.test(producer?.runId) && Number.isSafeInteger(producer?.runAttempt) && producer.runAttempt > 0, 'PR_C_CH_PREPARATION_PRODUCER');
   const result = {
     schemaVersion: PREPARATION_SCHEMA_VERSION,
     status: 'ready_for_controlled_human',
@@ -548,6 +562,7 @@ export const buildPreparationEvidence = ({ root, exactHead, github, preview, con
     branch: PR_BRANCH,
     exactHead,
     environment: ENVIRONMENT,
+    producer,
     github,
     preview,
     backend: {
@@ -579,8 +594,9 @@ export const buildPreparationEvidence = ({ root, exactHead, github, preview, con
 };
 
 export const validatePreparationEvidence = preparation => {
-  assertExactKeys(preparation, ['schemaVersion', 'status', 'controlledHumanDisposition', 'prNumber', 'branch', 'exactHead', 'environment', 'github', 'preview', 'backend', 'edgeDeployment', 'createdAt'], [], 'PR_C_CH_PREPARATION');
+  assertExactKeys(preparation, ['schemaVersion', 'status', 'controlledHumanDisposition', 'prNumber', 'branch', 'exactHead', 'environment', 'producer', 'github', 'preview', 'backend', 'edgeDeployment', 'createdAt'], [], 'PR_C_CH_PREPARATION');
   assert(preparation.schemaVersion === PREPARATION_SCHEMA_VERSION && preparation.status === 'ready_for_controlled_human' && preparation.controlledHumanDisposition === 'not_run', 'PR_C_CH_PREPARATION_STATUS');
+  assert(preparation.producer?.workflowPath === PR_C_WORKFLOW && preparation.producer?.job === PREPARE_JOB && preparation.producer?.event === 'pull_request' && RUN_ID.test(preparation.producer?.runId) && Number.isSafeInteger(preparation.producer?.runAttempt) && preparation.producer.runAttempt > 0, 'PR_C_CH_PREPARATION_PRODUCER');
   assert(preparation.prNumber === PR_NUMBER && preparation.branch === PR_BRANCH && SHA.test(preparation.exactHead) && preparation.environment === ENVIRONMENT, 'PR_C_CH_PREPARATION_SCOPE');
   assertExactKeys(preparation.github, ['workflowPath', 'runId', 'runAttempt', 'conclusion', 'artifactName', 'artifactDigest'], [], 'PR_C_CH_PREPARATION_GITHUB_RECORD');
   assert(preparation.github.workflowPath === PR_C_WORKFLOW && RUN_ID.test(String(preparation.github.runId)) && Number.isSafeInteger(preparation.github.runAttempt) && preparation.github.runAttempt > 0 && preparation.github.conclusion === 'success', 'PR_C_CH_PREPARATION_GITHUB');
@@ -602,8 +618,8 @@ export const validatePreparationEvidence = preparation => {
   assertExactKeys(preparation.edgeDeployment, ['manifestDigest', 'artifactDigest', 'producer', 'migration', 'functions'], [], 'PR_C_CH_PREPARATION_EDGE_RECORD');
   assertDigest(preparation.edgeDeployment.manifestDigest, 'PR_C_CH_PREPARATION_EDGE_DIGEST');
   assertDigest(preparation.edgeDeployment.artifactDigest, 'PR_C_CH_PREPARATION_EDGE_ARTIFACT_DIGEST');
-  assertExactKeys(preparation.edgeDeployment.producer, ['workflowPath', 'event', 'runId', 'runAttempt', 'conclusion', 'artifactName'], [], 'PR_C_CH_PREPARATION_EDGE_PRODUCER');
-  assert(preparation.edgeDeployment.producer.workflowPath === EDGE_DEPLOY_WORKFLOW && preparation.edgeDeployment.producer.event === 'pull_request' && preparation.edgeDeployment.producer.conclusion === 'success' && RUN_ID.test(preparation.edgeDeployment.producer.runId) && Number.isSafeInteger(preparation.edgeDeployment.producer.runAttempt) && preparation.edgeDeployment.producer.runAttempt > 0, 'PR_C_CH_PREPARATION_EDGE_PRODUCER_IDENTITY');
+  assertExactKeys(preparation.edgeDeployment.producer, ['workflowPath', 'job', 'event', 'runId', 'runAttempt', 'conclusion', 'artifactName'], [], 'PR_C_CH_PREPARATION_EDGE_PRODUCER');
+  assert(preparation.edgeDeployment.producer.workflowPath === EDGE_DEPLOY_WORKFLOW && preparation.edgeDeployment.producer.job === EDGE_DEPLOY_JOB && preparation.edgeDeployment.producer.event === 'pull_request' && preparation.edgeDeployment.producer.conclusion === 'success' && RUN_ID.test(preparation.edgeDeployment.producer.runId) && Number.isSafeInteger(preparation.edgeDeployment.producer.runAttempt) && preparation.edgeDeployment.producer.runAttempt > 0, 'PR_C_CH_PREPARATION_EDGE_PRODUCER_IDENTITY');
   assertExactKeys(preparation.edgeDeployment.migration, ['sourcePath', 'sourceDigest', 'priorMigrationTip', 'migrationTip', 'phaseDigests'], [], 'PR_C_CH_PREPARATION_MIGRATION');
   assert(preparation.edgeDeployment.migration.sourcePath === CONTROLLED_HUMAN_MIGRATION_PATH
     && preparation.edgeDeployment.migration.sourceDigest === sha256Digest(readFileSync(path.resolve(CONTROLLED_HUMAN_MIGRATION_PATH)))
@@ -955,7 +971,7 @@ const checkpointSigningPayload = checkpoint => {
 
 const hmac = (key, value) => createHmac('sha256', key).update(value).digest('hex');
 
-export const createHumanCheckpoint = ({ preparation, quiesceRecord, humanRole, actor, comment, workflowRunId, workflowRunAttempt, observations, serverObserver, signingKey, capturedAt }) => {
+export const createHumanCheckpoint = ({ preparation, quiesceRecord, humanRole, captureJob, actor, comment, workflowRunId, workflowRunAttempt, observations, serverObserver, signingKey, capturedAt }) => {
   validatePreparationEvidence(preparation);
   const common = {
     exactHead: preparation.exactHead,
@@ -970,6 +986,7 @@ export const createHumanCheckpoint = ({ preparation, quiesceRecord, humanRole, a
   assert(typeof signingKey === 'string' && signingKey.length >= 32, 'PR_C_CH_SIGNING_KEY');
   assert(typeof actor === 'string' && actor.length > 0, 'PR_C_CH_ACTOR');
   assert(['requester', 'reviewer', 'approver'].includes(humanRole), 'PR_C_CH_HUMAN_ROLE');
+  assert(captureJob === `controlled_human_${humanRole}` && CHECKPOINT_JOBS.includes(captureJob), 'PR_C_CH_CAPTURE_JOB_ROLE');
   const expectedSteps = expectedDutySteps(humanRole);
   const expectedIds = [...new Set(expectedSteps.map(record => record.checkpointId))];
   assert(Array.isArray(observations) && JSON.stringify(observations.map(record => record.checkpointId)) === JSON.stringify(expectedIds), 'PR_C_CH_ROLE_CHECKPOINT_SET');
@@ -1018,7 +1035,7 @@ export const createHumanCheckpoint = ({ preparation, quiesceRecord, humanRole, a
     quiesceDigest: canonicalDigest(quiesceRecord),
     humanRole,
     signerDigest,
-    capture: { workflowPath: CHECKPOINT_WORKFLOW, event: 'pull_request', runId: String(workflowRunId), runAttempt: workflowRunAttempt, commentId: String(comment.commentId), commentCreatedAt: comment.createdAt, capturedAt },
+    capture: { workflowPath: CHECKPOINT_WORKFLOW, job: captureJob, event: 'pull_request', runId: String(workflowRunId), runAttempt: workflowRunAttempt, commentId: String(comment.commentId), commentCreatedAt: comment.createdAt, capturedAt },
     serverObserver: { artifactDigest: canonicalDigest(serverObserver), record: serverObserver },
     checkpoints: normalized,
   };
@@ -1043,8 +1060,8 @@ export const validateHumanCheckpoint = ({ preparation, quiesceRecord, checkpoint
   assert(checkpoint.preparationDigest === canonicalDigest(preparation), 'PR_C_CH_CHECKPOINT_PREPARATION');
   assert(checkpoint.quiesceDigest === canonicalDigest(quiesceRecord), 'PR_C_CH_CHECKPOINT_QUIESCE');
   assert(HMAC_DIGEST.test(checkpoint.signerDigest) && HMAC_DIGEST.test(checkpoint.signature), 'PR_C_CH_CHECKPOINT_SIGNATURE_FORMAT');
-  assertExactKeys(checkpoint.capture, ['workflowPath', 'event', 'runId', 'runAttempt', 'commentId', 'commentCreatedAt', 'capturedAt'], [], 'PR_C_CH_CHECKPOINT_CAPTURE');
-  assert(checkpoint.capture.workflowPath === CHECKPOINT_WORKFLOW && checkpoint.capture.event === 'pull_request' && RUN_ID.test(checkpoint.capture.runId) && Number.isSafeInteger(checkpoint.capture.runAttempt) && checkpoint.capture.runAttempt > 0 && RUN_ID.test(checkpoint.capture.commentId), 'PR_C_CH_CHECKPOINT_CAPTURE_IDENTITY');
+  assertExactKeys(checkpoint.capture, ['workflowPath', 'job', 'event', 'runId', 'runAttempt', 'commentId', 'commentCreatedAt', 'capturedAt'], [], 'PR_C_CH_CHECKPOINT_CAPTURE');
+  assert(checkpoint.capture.workflowPath === CHECKPOINT_WORKFLOW && checkpoint.capture.job === `controlled_human_${checkpoint.humanRole}` && CHECKPOINT_JOBS.includes(checkpoint.capture.job) && checkpoint.capture.event === 'pull_request' && RUN_ID.test(checkpoint.capture.runId) && Number.isSafeInteger(checkpoint.capture.runAttempt) && checkpoint.capture.runAttempt > 0 && RUN_ID.test(checkpoint.capture.commentId), 'PR_C_CH_CHECKPOINT_CAPTURE_IDENTITY');
   assertTimestamp(checkpoint.capture.commentCreatedAt, 'PR_C_CH_CHECKPOINT_COMMENT_TIME');
   assertTimestamp(checkpoint.capture.capturedAt, 'PR_C_CH_CHECKPOINT_CAPTURED_AT');
   assertExactKeys(checkpoint.serverObserver, ['artifactDigest', 'record'], [], 'PR_C_CH_CHECKPOINT_SERVER_OBSERVER');
@@ -1097,8 +1114,9 @@ const validateDefectHistory = (records, exactHead) => {
   }
 };
 
-export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRecord, deprovisionRecord, postDeprovisionRecord, signingKey, defectHistory = [], completedAt }) => {
+export const buildVerifiedHumanSession = ({ preparation, producer, checkpoints, quiesceRecord, deprovisionRecord, postDeprovisionRecord, signingKey, defectHistory = [], completedAt }) => {
   validatePreparationEvidence(preparation);
+  assert(producer?.workflowPath === PR_C_WORKFLOW && producer?.job === FINAL_JOB && producer?.event === 'pull_request' && RUN_ID.test(producer?.runId) && Number.isSafeInteger(producer?.runAttempt) && producer.runAttempt > 0, 'PR_C_CH_SESSION_PRODUCER');
   assert(Array.isArray(checkpoints) && checkpoints.length === 3, 'PR_C_CH_SESSION_CHECKPOINT_FILES');
   checkpoints.forEach(checkpoint => validateHumanCheckpoint({ preparation, quiesceRecord, checkpoint, signingKey }));
   const byRole = new Map(checkpoints.map(checkpoint => [checkpoint.humanRole, checkpoint]));
@@ -1114,6 +1132,7 @@ export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRec
   assert(ordered.every(record => record.steps.every(stepRecord => stepRecord.outcome === 'passed')), 'PR_C_CH_SESSION_STEP_FAILURE');
   const common = {
     exactHead: preparation.exactHead,
+    producer,
     deployId: preparation.preview.deployId,
     exerciseDigest: preparation.backend.exerciseDigest,
     targetFingerprint: preparation.backend.targetFingerprint,
@@ -1169,6 +1188,7 @@ export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRec
     evidenceBasis: 'human_attested_plus_server_observed',
     preparationDigest: canonicalDigest(preparation),
     exactHead: preparation.exactHead,
+    producer,
     github: preparation.github,
     preview: preparation.preview,
     backendBinding: {
@@ -1206,10 +1226,11 @@ export const buildVerifiedHumanSession = ({ preparation, checkpoints, quiesceRec
 };
 
 export const validateVerifiedHumanSession = session => {
-  assertExactKeys(session, ['schemaVersion', 'status', 'controlledHumanDisposition', 'evidenceBasis', 'preparationDigest', 'exactHead', 'github', 'preview', 'backendBinding', 'humanParticipants', 'journeys', 'checkpoints', 'totals', 'defectHistory', 'lifecycleControl', 'reset', 'completedAt'], [], 'PR_C_CH_SESSION');
+  assertExactKeys(session, ['schemaVersion', 'status', 'controlledHumanDisposition', 'evidenceBasis', 'preparationDigest', 'exactHead', 'producer', 'github', 'preview', 'backendBinding', 'humanParticipants', 'journeys', 'checkpoints', 'totals', 'defectHistory', 'lifecycleControl', 'reset', 'completedAt'], [], 'PR_C_CH_SESSION');
   assert(session.schemaVersion === SESSION_SCHEMA_VERSION && session.status === 'passed' && session.controlledHumanDisposition === 'executed' && session.evidenceBasis === 'human_attested_plus_server_observed', 'PR_C_CH_SESSION_STATUS');
   assertDigest(session.preparationDigest, 'PR_C_CH_SESSION_PREPARATION');
   assert(SHA.test(session.exactHead), 'PR_C_CH_SESSION_HEAD');
+  assert(session.producer?.workflowPath === PR_C_WORKFLOW && session.producer?.job === FINAL_JOB && session.producer?.event === 'pull_request' && RUN_ID.test(session.producer?.runId) && Number.isSafeInteger(session.producer?.runAttempt) && session.producer.runAttempt > 0, 'PR_C_CH_SESSION_PRODUCER');
   assertExactKeys(session.github, ['workflowPath', 'runId', 'runAttempt', 'conclusion', 'artifactName', 'artifactDigest'], [], 'PR_C_CH_SESSION_GITHUB');
   assert(session.github.workflowPath === PR_C_WORKFLOW && RUN_ID.test(String(session.github.runId)) && Number.isSafeInteger(session.github.runAttempt) && session.github.runAttempt > 0 && session.github.conclusion === 'success', 'PR_C_CH_SESSION_GITHUB_IDENTITY');
   assertDigest(session.github.artifactDigest, 'PR_C_CH_SESSION_ARTIFACT');

@@ -1,18 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-preparation-2.json",
+  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-preparation-3.json",
   "title": "Governed Delivery and Monitor PR C controlled-human preparation evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "status", "controlledHumanDisposition", "prNumber", "branch", "exactHead", "environment", "github", "preview", "backend", "edgeDeployment", "createdAt"],
+  "required": ["schemaVersion", "status", "controlledHumanDisposition", "prNumber", "branch", "exactHead", "environment", "producer", "github", "preview", "backend", "edgeDeployment", "createdAt"],
   "properties": {
-    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-controlled-human-preparation-2" },
+    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-controlled-human-preparation-3" },
     "status": { "const": "ready_for_controlled_human" },
     "controlledHumanDisposition": { "const": "not_run" },
     "prNumber": { "const": 264 },
     "branch": { "const": "controller/governed-delivery-monitor-pr-c-20260831" },
     "exactHead": { "$ref": "#/$defs/sha" },
     "environment": { "const": "hosted_nonproduction_pilot" },
+    "producer": { "$ref": "#/$defs/preparationProducer" },
     "github": { "$ref": "#/$defs/ciRecord" },
     "preview": { "$ref": "#/$defs/preview" },
     "backend": {
@@ -65,6 +66,7 @@
     "createdAt": { "type": "string", "format": "date-time" }
   },
   "$defs": {
+    "preparationProducer": { "type": "object", "additionalProperties": false, "required": ["workflowPath", "job", "event", "runId", "runAttempt"], "properties": { "workflowPath": { "const": ".github/workflows/transcript-flow-pr-c.yml" }, "job": { "const": "controlled_human_prepare" }, "event": { "const": "pull_request" }, "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" }, "runAttempt": { "type": "integer", "minimum": 1 } } },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "safeLabel": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._:/-]+$" },
@@ -88,9 +90,9 @@
     },
     "producer": {
       "type": "object", "additionalProperties": false,
-      "required": ["workflowPath", "event", "runId", "runAttempt", "conclusion", "artifactName"],
+      "required": ["workflowPath", "job", "event", "runId", "runAttempt", "conclusion", "artifactName"],
       "properties": {
-        "workflowPath": { "const": ".github/workflows/pr264-controlled-human-edge-deploy.yml" }, "event": { "const": "pull_request" },
+        "workflowPath": { "const": ".github/workflows/transcript-flow-pr-c.yml" }, "job": { "const": "controlled_human_edge" }, "event": { "const": "pull_request" },
         "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" }, "runAttempt": { "type": "integer", "minimum": 1 },
         "conclusion": { "const": "success" }, "artifactName": { "$ref": "#/$defs/safeLabel" }
       }

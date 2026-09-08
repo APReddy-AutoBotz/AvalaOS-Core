@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPreparationEvidence,
+  deriveControlledHumanPullRequestRuntime,
   ENVIRONMENT,
   PREVIEW_ORIGIN,
   PR_NUMBER,
+  PREPARE_JOB,
 } from './prCControlledHumanEvidenceContract.mjs';
 
 const parseArgs = argv => {
@@ -43,7 +45,7 @@ export const verifyPr264DeployPreview = async ({ exactHead, deployId, fetchImpl 
   return { origin: PREVIEW_ORIGIN, deployId, releaseSha: exactHead, context: 'deploy-preview', reviewId: PR_NUMBER, siteName: 'avalaos-pilot', environment: ENVIRONMENT };
 };
 
-export async function main(argv = process.argv.slice(2), env = process.env) {
+export async function main(argv = process.argv.slice(2), env = process.env, fetchImpl = fetch) {
   const args = parseArgs(argv);
   const required = ['preflight', 'plan', 'apply', 'verify', 'edge-deployment', 'output'];
   if (required.some(key => !args[key])) throw new Error('PR_C_CH_PREPARATION_ARGUMENTS');
@@ -56,16 +58,18 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     artifactName: env.PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_NAME,
     artifactDigest: env.PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_DIGEST,
   };
-  const preview = await verifyPr264DeployPreview({ exactHead, deployId: env.PR_C_CONTROLLED_HUMAN_DEPLOY_ID });
+  const preview = await verifyPr264DeployPreview({ exactHead, deployId: env.PR_C_CONTROLLED_HUMAN_DEPLOY_ID, fetchImpl });
   const preparation = buildPreparationEvidence({
     root: path.resolve(args.root ?? '.'),
     exactHead,
+    producer: deriveControlledHumanPullRequestRuntime(env, PREPARE_JOB),
     github,
     preview,
     controllerRecords: await Promise.all(['preflight', 'plan', 'apply', 'verify'].map(key => readJson(args[key]))),
     edgeDeployment: await readJson(args['edge-deployment']),
     edgeProducer: {
       workflowPath: env.PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW,
+      job: 'controlled_human_edge',
       event: 'pull_request',
       runId: env.PR_C_CONTROLLED_HUMAN_EDGE_RUN_ID,
       runAttempt: Number(env.PR_C_CONTROLLED_HUMAN_EDGE_RUN_ATTEMPT),

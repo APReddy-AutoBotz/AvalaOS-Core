@@ -75,6 +75,20 @@
   ],
   "entries": [
     {
+      "pattern": "GROQ_API_KEY",
+      "path": "scripts/prCControlledHumanCredentialPreflight.test.mjs",
+      "lines": [101],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this name only in the no-PAT preflight rejection fixture, which supplies a fixed synthetic non-key value and proves that provider credentials reject before access. Never load a real provider key."
+    },
+    {
+      "pattern": "GEMINI_API_KEY",
+      "path": "scripts/prCControlledHumanCredentialPreflight.test.mjs",
+      "lines": [101],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this name only in the no-PAT preflight rejection fixture, which supplies a fixed synthetic non-key value and proves that provider credentials reject before access. Never load a real provider key."
+    },
+    {
       "pattern": "localStorage",
       "path": "tests/browser/pr1c.spec.ts",
       "lines": [

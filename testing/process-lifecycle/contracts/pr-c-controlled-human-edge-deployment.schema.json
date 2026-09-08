@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-edge-deployment-2.json",
+  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-edge-deployment-3.json",
   "title": "Governed Delivery and Monitor PR C Edge exact-source deployment manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "environment", "exactHead", "targetFingerprint", "exerciseDigest", "productionAuthorized", "customerDataAuthorized", "realProviderCallsAuthorized", "producer", "migration", "functions", "signature"],
   "properties": {
-    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-edge-deployment-manifest-2" },
+    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-edge-deployment-manifest-3" },
     "environment": { "const": "hosted_nonproduction_pilot" },
     "exactHead": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "targetFingerprint": { "$ref": "#/$defs/digest" },
@@ -16,9 +16,10 @@
     "realProviderCallsAuthorized": { "const": false },
     "producer": {
       "type": "object", "additionalProperties": false,
-      "required": ["workflowPath", "event", "runId", "runAttempt", "conclusion", "artifactName"],
+      "required": ["workflowPath", "job", "event", "runId", "runAttempt", "conclusion", "artifactName"],
       "properties": {
-        "workflowPath": { "const": ".github/workflows/pr264-controlled-human-edge-deploy.yml" },
+        "workflowPath": { "const": ".github/workflows/transcript-flow-pr-c.yml" },
+        "job": { "const": "controlled_human_edge" },
         "event": { "const": "pull_request" },
         "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "runAttempt": { "type": "integer", "minimum": 1 },

@@ -32,6 +32,7 @@ for (const pattern of [
   /governed-delivery-monitor-pr-c-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u,
   /output\/process-lifecycle-pr-c\//u,
   /pr264-controlled-human-edge/u,
+  /pr264-controlled-human-credentials-preflight/u,
   /pr264-controlled-human-prepare/u,
   /pr264-controlled-human-quiesce/u,
   /pr264-controlled-human-checkpoints/u,
@@ -40,14 +41,20 @@ for (const pattern of [
   /run\.status === 'completed'/u,
   /run\.conclusion === 'success'/u,
   /environment: hosted-nonproduction-pilot/u,
-  /uses: \.\/\.github\/workflows\/pr264-controlled-human-edge-deploy\.yml/u,
-  /uses: \.\/\.github\/workflows\/pr264-controlled-human-prepare\.yml/u,
-  /uses: \.\/\.github\/workflows\/pr264-controlled-human-quiesce\.yml/u,
-  /uses: \.\/\.github\/workflows\/pr264-controlled-human-checkpoint\.yml/u,
-  /uses: \.\/\.github\/workflows\/pr264-controlled-human-verify\.yml/u,
+  /controlled_human_credentials_preflight:/u,
+  /controlled_human_edge:/u,
+  /controlled_human_prepare:/u,
+  /controlled_human_quiesce:/u,
+  /controlled_human_requester:/u,
+  /controlled_human_approver:/u,
+  /controlled_human_reviewer:/u,
+  /controlled_human_final:/u,
+  /controlled_human_recovery:/u,
 ]) assert.match(workflow, pattern);
-assert.doesNotMatch(workflow, /continue-on-error/u);
 assert.doesNotMatch(workflow, /secrets:\s*inherit/u);
+assert.doesNotMatch(workflow, /uses:\s*\.\/\.github\/workflows\/pr264-controlled-human/u);
+assert.equal(workflow.match(/continue-on-error:\s*true/gu)?.length, 1, 'only bounded preparation cleanup may continue');
+assert.match(workflow, /name: Protected exact-bound abort recovery after failed seed or evidence assembly[\s\S]*?if: \$\{\{ failure\(\) && steps\.apply\.outcome != 'skipped' && steps\.verify_abort_recovery_ca\.outcome == 'success' \}\}[\s\S]*?continue-on-error: true/u);
 
 const requiredScripts = [
   'test:transcript-flow:delivery-monitor-domain',
@@ -66,6 +73,33 @@ const requiredScripts = [
   'pr-c-controlled-human:compact-comment',
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
+const sourceCommandSegments = scripts['test:pr-c-controlled-human-source'].split(' && ');
+const sourceNodeTests = sourceCommandSegments[0].split(' ');
+assert.deepEqual(sourceNodeTests.slice(0, 2), ['node', '--test']);
+const requiredControlScriptCoverageCommands = [
+  'node --test scripts/runPrCControlledHumanScriptCoverage.test.mjs',
+  'node scripts/runPrCControlledHumanScriptCoverage.mjs',
+];
+assert.deepEqual(sourceCommandSegments.slice(-2), requiredControlScriptCoverageCommands,
+  'the actual measured control-script gate and its adversarial selftest must run after the retained source suites');
+for (const command of requiredControlScriptCoverageCommands) {
+  assert.equal(sourceCommandSegments.filter(segment => segment === command).length, 1,
+    `the controlled-human source command must execute ${command} exactly once`);
+}
+for (const requiredTest of [
+  'scripts/prCControlledHumanPostgresTls.test.mjs',
+  'scripts/prCControlledHumanEnvironment.test.mjs',
+  'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
+  'scripts/prCControlledHumanEnvironmentPostgres.test.mjs',
+  'scripts/prCControlledHumanEvidenceContract.test.mjs',
+  'scripts/prCControlledHumanWorkflowContract.test.mjs',
+  'scripts/prCControlledHumanSecurityContract.test.mjs',
+  'scripts/prCControlledHumanCredentialPreflight.test.mjs',
+  'scripts/prCControlledHumanDocumentationContract.test.mjs',
+]) {
+  assert.equal(sourceNodeTests.filter(argument => argument === requiredTest).length, 1,
+    `the controlled-human source command must execute ${requiredTest} exactly once`);
+}
 assert.match(
   scripts['test:transcript-flow:delivery-monitor-evidence-contract'],
   /node --test scripts\/runRetainedEvidenceContract\.test\.mjs/u,
@@ -281,19 +315,26 @@ for (const file of [
   'scripts/prCControlledHumanEvidenceContract.mjs',
   'scripts/prCControlledHumanEvidenceContract.test.mjs',
   'scripts/prCControlledHumanWorkflowContract.test.mjs',
+  'scripts/prCControlledHumanCredentialPreflight.mjs',
+  'scripts/prCControlledHumanCredentialPreflight.test.mjs',
   'scripts/buildPrCControlledHumanPreparation.mjs',
+  'scripts/prCControlledHumanDocumentationContract.test.mjs',
   'scripts/capturePrCControlledHumanCheckpoint.mjs',
+  'scripts/prCControlledHumanControlScriptCoverageSupport.test.mjs',
+  'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs',
+  'scripts/prCControlledHumanCredentialPreflightEntryFixture.mjs',
+  'scripts/prCControlledHumanCredentialPreflightEntryLoader.mjs',
+  'scripts/prCControlledHumanCredentialPreflightEntryTransport.mjs',
+  'scripts/runPrCControlledHumanScriptCoverage.mjs',
+  'scripts/runPrCControlledHumanScriptCoverage.test.mjs',
+  'testing/process-lifecycle/contracts/pr-c-control-script-coverage.md',
   'scripts/producePrCControlledHumanEdgeDeploymentManifest.mjs',
   'scripts/validatePrCControlledHumanPreparation.mjs',
   'scripts/verifyPr264ControlledHumanPreview.mjs',
   'scripts/verifyPrCControlledHumanEdgeDeployment.mjs',
   'scripts/verifyPrCControlledHumanSession.mjs',
   'scripts/writePrCControlledHumanObservationTemplates.mjs',
-  '.github/workflows/pr264-controlled-human-edge-deploy.yml',
-  '.github/workflows/pr264-controlled-human-prepare.yml',
-  '.github/workflows/pr264-controlled-human-quiesce.yml',
-  '.github/workflows/pr264-controlled-human-checkpoint.yml',
-  '.github/workflows/pr264-controlled-human-verify.yml',
+  '.github/workflows/pr264-controlled-human-recover.yml',
   'services/studioArtifacts/prCControlledHumanSyntheticGeneration.ts',
   'services/studioArtifacts/prCControlledHumanSyntheticGeneration.test.ts',
   'components/docs/PrCControlledHumanSyntheticGeneration.test.mjs',

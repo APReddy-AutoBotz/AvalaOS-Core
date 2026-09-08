@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { canonicalDigest, createEdgeDeploymentManifest, EDGE_DEPLOY_WORKFLOW, REQUIRED_EDGE_FUNCTIONS, sha256Digest } from './prCControlledHumanEvidenceContract.mjs';
+import { canonicalDigest, createEdgeDeploymentManifest, deriveControlledHumanPullRequestRuntime, EDGE_DEPLOY_JOB, REQUIRED_EDGE_FUNCTIONS, sha256Digest } from './prCControlledHumanEvidenceContract.mjs';
 
 const writeExclusive = async (file, value) => {
   const output = path.resolve(file);
@@ -77,7 +77,8 @@ export const captureProviderDeployment = async ({ env, baseline, fetchImpl = fet
 };
 
 export async function main(argv = process.argv.slice(2), env = process.env, fetchImpl = fetch) {
-  if (env.GITHUB_EVENT_NAME !== 'pull_request' || env.PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW_PATH !== EDGE_DEPLOY_WORKFLOW) throw new Error('PR_C_CH_EDGE_PRODUCER_WORKFLOW');
+  const runtime = deriveControlledHumanPullRequestRuntime(env, EDGE_DEPLOY_JOB);
+  if (env.PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW_PATH !== runtime.workflowPath) throw new Error('PR_C_CH_EDGE_PRODUCER_WORKFLOW');
   if (argv.length === 2 && argv[0] === '--provider-baseline') {
     const baseline = await captureProviderBaseline(env, fetchImpl);
     await writeExclusive(argv[1], baseline);
@@ -99,7 +100,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, fetc
     root: path.resolve('.'), exactHead: env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA, targetFingerprint: env.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT,
     exerciseDigest: env.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST, deployId: env.PR_C_CONTROLLED_HUMAN_DEPLOY_ID,
     personaManifestDigest: preflight.personaManifestDigest, fixtureManifestDigest: preflight.fixtureManifestDigest, migrationRecords, providerObservation,
-    producer: { workflowPath: EDGE_DEPLOY_WORKFLOW, event: 'pull_request', runId: env.GITHUB_RUN_ID, runAttempt: Number(env.GITHUB_RUN_ATTEMPT), conclusion: 'success', artifactName: `pr264-controlled-human-edge-deployment-${env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA}-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}` },
+    producer: { ...runtime, conclusion: 'success', artifactName: `pr264-controlled-human-edge-deployment-${env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA}-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}` },
     signingKey: env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY,
   });
   await writeExclusive(argv[11], manifest);

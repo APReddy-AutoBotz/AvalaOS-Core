@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildVerifiedHumanSession, canonicalDigest, controlledHumanEvidenceDisposition } from './prCControlledHumanEvidenceContract.mjs';
+import { buildVerifiedHumanSession, canonicalDigest, controlledHumanEvidenceDisposition, deriveControlledHumanPullRequestRuntime, FINAL_JOB } from './prCControlledHumanEvidenceContract.mjs';
 
 const parseArgs = argv => {
   const values = {};
@@ -22,6 +22,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const preparation = await readJson(args.preparation);
   const session = buildVerifiedHumanSession({
     preparation,
+    producer: deriveControlledHumanPullRequestRuntime(env, FINAL_JOB),
     checkpoints: await Promise.all(['requester', 'reviewer', 'approver'].map(role => readJson(args[role]))),
     quiesceRecord: await readJson(args.quiesce),
     deprovisionRecord: await readJson(args.deprovision),

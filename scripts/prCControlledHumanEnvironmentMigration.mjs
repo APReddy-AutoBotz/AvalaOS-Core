@@ -78,9 +78,18 @@ export function assertMigrationInventory(inventory,context){
 }
 
 export class PostgresEnvironmentMigrationAdapter{
-  constructor(connectionString,migrationSql){if(!connectionString)fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REQUIRED');this.preTipProviderCountSql=buildPreTipProviderCountSql(migrationSql);this.client=new Client(createControlledHumanPostgresClientConfig(connectionString,{applicationName:'avalaos_pr_c_controlled_human_migration'}))}
+  constructor(connectionString,migrationSql,{readOnly=false}={}){
+    if(!connectionString)fail('PR_C_CONTROLLED_HUMAN_DATABASE_URL_REQUIRED');
+    if(typeof readOnly!=='boolean')fail('PR_C_CONTROLLED_HUMAN_DATABASE_MODE_REJECTED');
+    this.readOnly=readOnly;
+    this.preTipProviderCountSql=buildPreTipProviderCountSql(migrationSql);
+    const config=createControlledHumanPostgresClientConfig(connectionString,{applicationName:'avalaos_pr_c_controlled_human_migration',...(readOnly?{allowLoopback:false,connectionTimeoutMillis:15000}:{})});
+    // Do not set pooled session defaults. The preflight verifies an explicit
+    // READ ONLY transaction and uses SET LOCAL timeouts, then rolls it back.
+    this.client=new Client({...config,...(readOnly?{query_timeout:20000}:{})});
+  }
   async connect(){await this.client.connect()}
-  async close(){await this.client.end().catch(()=>undefined)}
+  async close(){if(this.readOnly)await this.client.end();else await this.client.end().catch(()=>undefined)}
   async inspect(){
     const identity=(await this.client.query(`select (select system_identifier::text from pg_control_system()) system_identifier,current_database() database_name,current_user database_role`)).rows[0];
     const actualTargetFingerprint=sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`);
@@ -115,6 +124,7 @@ export class PostgresEnvironmentMigrationAdapter{
     return{actualTargetFingerprint,marker,counts,domainCounts,providerRows,unsafeDeprovisionedRows,history:{version:latest?.version??null,name:latest?.name??null,columns},schemaReady,exerciseHistory};
   }
   async apply(context,migration){
+    if(this.readOnly)fail('PR_C_CONTROLLED_HUMAN_READ_ONLY_MUTATION_REJECTED');
     if(!migration||migration.digest!==context.migrationDigest||sha256(migration.sql)!==context.migrationDigest)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST_REJECTED');
     await this.client.query('begin');
     try{

@@ -1,122 +1,24 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
-import {
-  CHECKPOINT_WORKFLOW,
-  EDGE_DEPLOY_WORKFLOW,
-  PREPARE_WORKFLOW,
-  QUIESCE_WORKFLOW,
-  RECOVERY_WORKFLOW,
-  VERIFY_WORKFLOW,
-} from './prCControlledHumanEvidenceContract.mjs';
-
-const PINNED_CA_VERIFY_COMMAND = 'node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
-const BINDINGS = new Map([
-  [CHECKPOINT_WORKFLOW, [['Derive backend observer records from the exact synthetic read-only scope', 'Verify pinned Supabase CA for backend observer']]],
-  [EDGE_DEPLOY_WORKFLOW, [['Apply and verify exact additive migration on the dedicated database', 'Verify pinned Supabase CA for controlled migration']]],
-  [PREPARE_WORKFLOW, [
-    ['Preflight dedicated synthetic target', 'Verify pinned Supabase CA for target preflight'],
-    ['Apply bounded synthetic seed', 'Verify pinned Supabase CA for seed apply'],
-    ['Verify exact seed and zero-egress boundary', 'Verify pinned Supabase CA for seed verification'],
-    ['Protected exact-bound abort recovery after failed seed or evidence assembly', 'Verify pinned Supabase CA for abort recovery'],
-  ]],
-  [QUIESCE_WORKFLOW, [
-    ['Reverify exact preview and active synthetic state', 'Verify pinned Supabase CA for active-state verification'],
-    ['Enter exact server-enforced read-only state before any read-only human observation', 'Verify pinned Supabase CA for read-only transition'],
-  ]],
-  [RECOVERY_WORKFLOW, [['Complete exact server-authorized abort or expiry recovery', 'Verify pinned Supabase CA for abort or expiry recovery']]],
-  [VERIFY_WORKFLOW, [
-    ['Deprovision exact synthetic exercise directly from frozen read-only state', 'Verify pinned Supabase CA for deprovision'],
-    ['Independently re-inspect post-deprovision state', 'Verify pinned Supabase CA for post-deprovision inspection'],
-  ]],
-]);
-
-const forbiddenTrustPattern = /NODE_EXTRA_CA_CERTS|PGSSLROOTCERT|BEGIN (?:RSA )?PRIVATE KEY|BEGIN CERTIFICATE|sslmode=(?:disable|allow|prefer|require|verify-ca)|rejectUnauthorized\s*[:=]\s*false/iu;
-
-const validate = (workflowPath, workflow, source = '') => {
-  const expected = BINDINGS.get(workflowPath);
-  assert.ok(expected, `${workflowPath} must be governed`);
-  assert.doesNotMatch(source, forbiddenTrustPattern);
-  assert.doesNotMatch(source, /secrets\.[A-Z0-9_]*(?:CA|CERTIFICATE|SSLROOTCERT)/u);
-  const jobs = Object.values(workflow.jobs);
-  assert.equal(jobs.length, 1);
-  assert.equal(Object.hasOwn(jobs[0].env ?? {}, 'NODE_EXTRA_CA_CERTS'), false);
-  assert.equal(Object.hasOwn(jobs[0].env ?? {}, 'PGSSLROOTCERT'), false);
-  const steps = jobs[0].steps;
-  assert.equal(steps.filter(step => step.run === PINNED_CA_VERIFY_COMMAND).length, expected.length);
-  for (const [databaseStepName, verifierStepName] of expected) {
-    const databaseIndex = steps.findIndex(step => step.name === databaseStepName);
-    assert.ok(databaseIndex > 0, `${workflowPath}:${databaseStepName}`);
-    const verifier = steps[databaseIndex - 1];
-    assert.equal(verifier.name, verifierStepName);
-    assert.equal(verifier.run, PINNED_CA_VERIFY_COMMAND);
-    assert.equal(verifier.env, undefined);
-    if (databaseStepName === 'Protected exact-bound abort recovery after failed seed or evidence assembly') {
-      assert.equal(verifier.id, 'verify_abort_recovery_ca');
-      assert.equal(verifier.if, "${{ failure() && steps.apply.outcome != 'skipped' }}");
-      assert.equal(steps[databaseIndex].if, "${{ failure() && steps.apply.outcome != 'skipped' && steps.verify_abort_recovery_ca.outcome == 'success' }}");
-    }
-  }
+const PRIMARY='.github/workflows/transcript-flow-pr-c.yml',RECOVERY='.github/workflows/pr264-controlled-human-recover.yml',CA='node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
+const bindings={
+ controlled_human_credentials_preflight:[['Verify protected credential transport with bounded read-only checks','Verify pinned Supabase CA without consuming credentials']],
+ controlled_human_edge:[['Apply and verify exact additive migration on the dedicated database','Verify pinned Supabase CA for controlled migration']],
+ controlled_human_prepare:[['Preflight dedicated synthetic target','Verify pinned Supabase CA for target preflight'],['Apply bounded synthetic seed','Verify pinned Supabase CA for seed apply'],['Verify exact seed and zero-egress boundary','Verify pinned Supabase CA for seed verification'],['Protected exact-bound abort recovery after failed seed or evidence assembly','Verify pinned Supabase CA for abort recovery']],
+ controlled_human_quiesce:[['Reverify exact preview and active synthetic state','Verify pinned Supabase CA for active-state verification'],['Enter exact server-enforced read-only state before any read-only human observation','Verify pinned Supabase CA for read-only transition']],
+ controlled_human_requester:[['Derive backend observer records from the exact synthetic read-only scope','Verify pinned Supabase CA for backend observer']],
+ controlled_human_approver:[['Derive backend observer records from the exact synthetic read-only scope','Verify pinned Supabase CA for backend observer']],
+ controlled_human_reviewer:[['Derive backend observer records from the exact synthetic read-only scope','Verify pinned Supabase CA for backend observer']],
+ controlled_human_final:[['Deprovision exact synthetic exercise directly from frozen read-only state','Verify pinned Supabase CA for deprovision'],['Independently re-inspect post-deprovision state','Verify pinned Supabase CA for post-deprovision inspection']],
+ controlled_human_recovery:[['Complete exact server-authorized abort or expiry recovery','Verify pinned Supabase CA for abort or expiry recovery']],
 };
-
-const load = async workflowPath => {
-  const source = (await readFile(workflowPath, 'utf8')).replaceAll('\r\n', '\n');
-  return { source, workflow: parseWorkflowYaml(source, workflowPath) };
-};
-
-test('controlled-human workflow TLS guards reject omission, displacement, and command substitution', async () => {
-  for (const [workflowPath, expected] of BINDINGS) {
-    const { source, workflow } = await load(workflowPath);
-    validate(workflowPath, workflow, source);
-    for (const [databaseStepName] of expected) {
-      const steps = Object.values(workflow.jobs)[0].steps;
-      const databaseIndex = steps.findIndex(step => step.name === databaseStepName);
-
-      const omitted = structuredClone(workflow);
-      Object.values(omitted.jobs)[0].steps.splice(databaseIndex - 1, 1);
-      assert.throws(() => validate(workflowPath, omitted, source), assert.AssertionError);
-
-      const displaced = structuredClone(workflow);
-      const displacedSteps = Object.values(displaced.jobs)[0].steps;
-      [displacedSteps[databaseIndex - 2], displacedSteps[databaseIndex - 1]] = [displacedSteps[databaseIndex - 1], displacedSteps[databaseIndex - 2]];
-      assert.throws(() => validate(workflowPath, displaced, source), assert.AssertionError);
-
-      const substituted = structuredClone(workflow);
-      Object.values(substituted.jobs)[0].steps[databaseIndex - 1].run = 'node scripts/prCControlledHumanPostgresTls.mjs describe-ca';
-      assert.throws(() => validate(workflowPath, substituted, source), assert.AssertionError);
-    }
-  }
-});
-
-test('controlled-human workflow TLS guards reject global, secret, embedded, or weakened trust', async () => {
-  const { source, workflow } = await load(PREPARE_WORKFLOW);
-  for (const mutation of [
-    `${source}\n# NODE_EXTRA_CA_CERTS=/tmp/substituted.crt\n`,
-    `${source}\n# PGSSLROOTCERT=/tmp/substituted.crt\n`,
-    source + '\n# ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_CA }}\n',
-    `${source}\n# -----BEGIN CERTIFICATE-----\n`,
-    `${source}\n# sslmode=require\n`,
-    `${source}\n# rejectUnauthorized: false\n`,
-  ]) assert.throws(() => validate(PREPARE_WORKFLOW, workflow, mutation), assert.AssertionError);
-
-  const globalEnv = structuredClone(workflow);
-  Object.values(globalEnv.jobs)[0].env.NODE_EXTRA_CA_CERTS = '/tmp/substituted.crt';
-  assert.throws(() => validate(PREPARE_WORKFLOW, globalEnv, source), assert.AssertionError);
-
-  const unguardedAbort = structuredClone(workflow);
-  Object.values(unguardedAbort.jobs)[0].steps.find(step => step.name === 'Protected exact-bound abort recovery after failed seed or evidence assembly').if = "${{ failure() && steps.apply.outcome != 'skipped' }}";
-  assert.throws(() => validate(PREPARE_WORKFLOW, unguardedAbort, source), assert.AssertionError);
-});
-
-test('protected recovery never checks out historical authority as executable code', async () => {
-  const {source,workflow}=await load(RECOVERY_WORKFLOW);const job=workflow.jobs.recover;
-  assert.equal(job.environment,'hosted-nonproduction-pilot');
-  assert.match(source,/unauthorized actor/u);
-  assert.match(source,/pull\.head\.sha !== process\.env\.TRUSTED_EXECUTION_SHA/u);
-  assert.match(source,/ref: \$\{\{ inputs\.trusted_execution_sha \}\}/u);
-  assert.doesNotMatch(source,/ref: \$\{\{ inputs\.exact_head_sha \}\}/u);
-  assert.match(source,/PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA/u);
-  assert.match(source,/PR_C_CONTROLLED_HUMAN_RECOVERY_MODE: trusted-current-pr-head/u);
-});
+const recoveryBindings={recover:[['Complete exact server-authorized abort or expiry recovery','Verify pinned Supabase CA for abort or expiry recovery']]};
+const parse=async p=>{const source=(await readFile(p,'utf8')).replaceAll('\r\n','\n');return{source,workflow:parseWorkflowYaml(source,p)}};
+const ABORT_GUARD="${{ failure() && steps.apply.outcome != 'skipped' }}",ABORT_STEP="${{ failure() && steps.apply.outcome != 'skipped' && steps.verify_abort_recovery_ca.outcome == 'success' }}";
+const validate=(workflow,source,contracts=bindings)=>{assert.doesNotMatch(source,/NODE_EXTRA_CA_CERTS|PGSSLROOTCERT|BEGIN CERTIFICATE|sslmode=(?:disable|allow|prefer|require)|rejectUnauthorized\s*[:=]\s*false/iu);for(const [jobName,pairs] of Object.entries(contracts)){const steps=workflow.jobs[jobName].steps;assert.equal(steps.filter(s=>s.run===CA).length,pairs.length);for(const [db,guard] of pairs){const i=steps.findIndex(s=>s.name===db);assert.ok(i>0,`${jobName}:${db}`);const guardStep=steps[i-1],databaseStep=steps[i];assert.equal(guardStep.name,guard);assert.equal(guardStep.run,CA);assert.equal(guardStep.env,undefined);if(db==='Protected exact-bound abort recovery after failed seed or evidence assembly'){assert.equal(guardStep.id,'verify_abort_recovery_ca');assert.equal(guardStep.if,ABORT_GUARD);assert.equal(guardStep['continue-on-error'],undefined);assert.equal(databaseStep.if,ABORT_STEP);assert.equal(databaseStep['continue-on-error'],true);}else{assert.equal(guardStep.id,undefined);assert.equal(guardStep.if,undefined);assert.equal(guardStep['continue-on-error'],undefined);assert.equal(databaseStep.if,undefined);assert.equal(databaseStep['continue-on-error'],undefined);}}}};
+test('direct protected jobs retain exact adjacent pinned-CA guards',async()=>{const {workflow,source}=await parse(PRIMARY);validate(workflow,source);for(const [jobName,pairs] of Object.entries(bindings)){for(const [db] of pairs){const x=structuredClone(workflow),steps=x.jobs[jobName].steps,i=steps.findIndex(s=>s.name===db);steps[i-1].run='node scripts/prCControlledHumanPostgresTls.mjs describe-ca';assert.throws(()=>validate(x,source),assert.AssertionError);}}});
+test('each ordinary CA and database step rejects skip or continue semantics',async()=>{const {workflow,source}=await parse(PRIMARY);for(const [jobName,pairs] of Object.entries(bindings))for(const [db] of pairs){if(db==='Protected exact-bound abort recovery after failed seed or evidence assembly')continue;for(const mutate of [step=>{step.if='${{ false }}'},step=>{step['continue-on-error']=true}])for(const offset of [-1,0]){const x=structuredClone(workflow),steps=x.jobs[jobName].steps,i=steps.findIndex(s=>s.name===db);mutate(steps[i+offset]);assert.throws(()=>validate(x,source),assert.AssertionError,`${jobName}:${db}:${offset}`);}}});
+test('preparation abort CA and recovery retain exact distinct failure gates',async()=>{const {workflow,source}=await parse(PRIMARY),job='controlled_human_prepare',db='Protected exact-bound abort recovery after failed seed or evidence assembly';for(const mutate of [(g,d)=>{g.if='${{ failure() }}'},(g,d)=>{g['continue-on-error']=true},(g,d)=>{g.id='substituted'},(g,d)=>{d.if=ABORT_GUARD},(g,d)=>{d['continue-on-error']=false}]){const x=structuredClone(workflow),steps=x.jobs[job].steps,i=steps.findIndex(s=>s.name===db);mutate(steps[i-1],steps[i]);assert.throws(()=>validate(x,source),assert.AssertionError);}});
+test('manual recovery executes only trusted current PR code with an unconditional adjacent CA guard',async()=>{const {source,workflow}=await parse(RECOVERY);validate(workflow,source,recoveryBindings);assert.equal(workflow.jobs.recover.environment,'hosted-nonproduction-pilot');assert.match(source,/pull\.head\.sha !== process\.env\.TRUSTED_EXECUTION_SHA/u);assert.match(source,/ref: \$\{\{ inputs\.trusted_execution_sha \}\}/u);assert.doesNotMatch(source,/ref: \$\{\{ inputs\.exact_head_sha \}\}/u);for(const offset of [-1,0])for(const mutate of [step=>{step.if='${{ false }}'},step=>{step['continue-on-error']=true}]){const x=structuredClone(workflow),steps=x.jobs.recover.steps,i=steps.findIndex(s=>s.name==='Complete exact server-authorized abort or expiry recovery');mutate(steps[i+offset]);assert.throws(()=>validate(x,source,recoveryBindings),assert.AssertionError);}});

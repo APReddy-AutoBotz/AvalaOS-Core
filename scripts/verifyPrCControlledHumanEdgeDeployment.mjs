@@ -24,6 +24,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     exerciseDigest: env.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST,
     producer: {
       workflowPath: env.PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW,
+      job: 'controlled_human_edge',
       event: 'pull_request',
       runId: env.PR_C_CONTROLLED_HUMAN_EDGE_RUN_ID,
       runAttempt: Number(env.PR_C_CONTROLLED_HUMAN_EDGE_RUN_ATTEMPT),

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-checkpoint-3.json",
+  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-checkpoint-4.json",
   "title": "Governed Delivery and Monitor PR C signed human checkpoint",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "status", "automationGenerated", "preparationDigest", "quiesceDigest", "humanRole", "signerDigest", "capture", "serverObserver", "checkpoints", "signature"],
   "properties": {
-    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-human-checkpoint-3" },
+    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-human-checkpoint-4" },
     "status": { "const": "human_observation" },
     "automationGenerated": { "const": false },
     "preparationDigest": { "$ref": "#/$defs/digest" },
@@ -15,9 +15,9 @@
     "signerDigest": { "$ref": "#/$defs/hmac" },
     "capture": {
       "type": "object", "additionalProperties": false,
-      "required": ["workflowPath", "event", "runId", "runAttempt", "commentId", "commentCreatedAt", "capturedAt"],
+      "required": ["workflowPath", "job", "event", "runId", "runAttempt", "commentId", "commentCreatedAt", "capturedAt"],
       "properties": {
-        "workflowPath": { "const": ".github/workflows/pr264-controlled-human-checkpoint.yml" }, "event": { "const": "pull_request" },
+        "workflowPath": { "const": ".github/workflows/transcript-flow-pr-c.yml" }, "job": { "enum": ["controlled_human_requester", "controlled_human_reviewer", "controlled_human_approver"] }, "event": { "const": "pull_request" },
         "runId": { "$ref": "#/$defs/id" }, "runAttempt": { "type": "integer", "minimum": 1 }, "commentId": { "$ref": "#/$defs/id" },
         "commentCreatedAt": { "type": "string", "format": "date-time" }, "capturedAt": { "type": "string", "format": "date-time" }
       }

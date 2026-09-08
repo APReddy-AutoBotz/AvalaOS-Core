@@ -1,47 +1,6 @@
 name: PR 264 Controlled Human Exact Recovery
 
 on:
-  workflow_call:
-    secrets:
-      PR_C_CONTROLLED_HUMAN_DATABASE_URL:
-        required: true
-      PR_C_CONTROLLED_HUMAN_EXERCISE_ID:
-        required: true
-      PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:
-        required: true
-      PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY:
-        required: true
-      PR_C_CONTROLLED_HUMAN_SUPABASE_URL:
-        required: true
-    inputs:
-      exact_head_sha:
-        description: Exact prior PR 264 head whose server-held recovery authority must be completed
-        required: true
-        type: string
-      trusted_execution_sha:
-        description: Current reviewed PR 264 head whose recovery implementation is permitted to execute
-        required: true
-        type: string
-      netlify_deploy_id:
-        description: Exact 24-character Deploy Preview ID stored in recovery authority
-        required: true
-        type: string
-      exercise_digest:
-        description: Exact safe exercise digest derived from the protected exercise ID
-        required: true
-        type: string
-      target_fingerprint:
-        description: Exact safe dedicated-backend fingerprint stored in recovery authority
-        required: true
-        type: string
-      public_target_digest:
-        description: Protected digest of the exact public Supabase origin
-        required: true
-        type: string
-      reason:
-        description: Protected terminal recovery reason (abort or expiry)
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       exact_head_sha:

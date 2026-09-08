@@ -7,6 +7,7 @@ import { PostgresEnvironmentAdapter, assertTargetInventory, buildIdentifiers, co
 import {MIGRATION_FILE,PostgresEnvironmentMigrationAdapter,deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify} from './prCControlledHumanEnvironmentMigration.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA,validateControlledHumanObservedDuty,validateControlledHumanProofPairs} from './prCControlledHumanEvidenceContract.mjs';
 import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
+import {inspectPreflightTargetReadOnly} from './prCControlledHumanCredentialPreflight.mjs';
 
 const {Client}=pg;
 const adminUrl=process.env.PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL;
@@ -33,6 +34,19 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const baseEnvironment={PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:'264',PR_C_CONTROLLED_HUMAN_RELEASE_SHA:head,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:head,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6a99cc001122334455667788',PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000264',PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:targetFingerprint,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'1'.repeat(64)}`,PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview'};
     const context=deriveContext(baseEnvironment,fixtureState,{head,dirty:''});const migrationContext=deriveMigrationContext({...baseEnvironment,PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest},fixtureState,migration,{head,dirty:''});
     migrationAdapter=new PostgresEnvironmentMigrationAdapter(databaseUrl.toString(),migration.sql);await migrationAdapter.connect();assert.equal((await migrationPreflight(migrationContext,migrationAdapter)).disposition,'exact_additive_apply');
+    // Exercise the production read-only transaction protocol against real PG16.
+    // Only the transport is loopback in this disposable fixture; hosted TLS is
+    // independently pinned by the preflight client configuration contract.
+    const priorInventory=await migrationAdapter.inspect();
+    const readOnlyAdapter=new PostgresEnvironmentMigrationAdapter(databaseUrl.toString(),migration.sql);
+    const readOnlyObserved=await inspectPreflightTargetReadOnly(readOnlyAdapter);
+    assert.deepEqual(readOnlyObserved.inventory,priorInventory);
+    assert.equal(readOnlyObserved.databaseTransactionReadOnly,true);
+    assert.equal(readOnlyObserved.databaseTransactionRolledBack,true);
+    const rejectedMutationAdapter=new PostgresEnvironmentMigrationAdapter(databaseUrl.toString(),migration.sql);
+    rejectedMutationAdapter.inspect=async()=>rejectedMutationAdapter.client.query("update public.hosted_pilot_environment_identity set product_key='must-not-write' where singleton");
+    await assert.rejects(inspectPreflightTargetReadOnly(rejectedMutationAdapter),error=>error.code==='25006');
+    assert.deepEqual(await migrationAdapter.inspect(),priorInventory);
     try { assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,false); }
     catch(error) { throw new Error(`${error.message} position=${error.position??'unknown'} where=${error.where??'unknown'}`,{cause:error}); }
     await migrationVerify(migrationContext,migrationAdapter);assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,true);await migrationAdapter.close();migrationAdapter=null;

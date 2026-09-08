@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { canonicalDigest, createHumanCheckpoint } from './prCControlledHumanEvidenceContract.mjs';
+import { canonicalDigest, createHumanCheckpoint, deriveControlledHumanPullRequestRuntime } from './prCControlledHumanEvidenceContract.mjs';
 
 const parseArgs = argv => {
   const values = {};
@@ -16,18 +16,21 @@ const parseArgs = argv => {
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
   if (!args.preparation || !args.quiesce || !args.comment || !args.observer || !args.output) throw new Error('PR_C_CH_CHECKPOINT_ARGUMENTS');
-  if (env.GITHUB_EVENT_NAME !== 'pull_request' || env.PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW !== '.github/workflows/pr264-controlled-human-checkpoint.yml') throw new Error('PR_C_CH_CHECKPOINT_WORKFLOW');
+  const outputRole = args.output.match(/checkpoint-(requester|reviewer|approver)\.json$/u)?.[1];
+  const runtime = deriveControlledHumanPullRequestRuntime(env, `controlled_human_${outputRole ?? ''}`);
+  if (env.PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW !== runtime.workflowPath) throw new Error('PR_C_CH_CHECKPOINT_WORKFLOW');
   const preparation = JSON.parse(await readFile(args.preparation, 'utf8'));
   const quiesceRecord = JSON.parse(await readFile(args.quiesce, 'utf8'));
   const comment = JSON.parse(await readFile(args.comment, 'utf8'));
   const serverObserver = JSON.parse(await readFile(args.observer, 'utf8'));
-  if (!comment || comment.kind !== 'pr264-controlled-human-observation' || !['requester', 'reviewer', 'approver'].includes(comment.humanRole)
+  if (!comment || comment.kind !== 'pr264-controlled-human-observation' || comment.humanRole !== outputRole || runtime.job !== `controlled_human_${comment.humanRole}`
     || comment.exactHead !== preparation.exactHead || comment.preparationDigest !== canonicalDigest(preparation)
     || comment.exerciseDigest !== preparation.backend.exerciseDigest || typeof comment.actor !== 'string' || !comment.actor) throw new Error('PR_C_CH_COMMENT_BINDING');
   const checkpoint = createHumanCheckpoint({
     preparation,
     quiesceRecord,
     humanRole: comment.humanRole,
+    captureJob: runtime.job,
     actor: comment.actor,
     comment: { commentId: comment.commentId, createdAt: comment.createdAt, updatedAt: comment.updatedAt },
     workflowRunId: env.GITHUB_RUN_ID,

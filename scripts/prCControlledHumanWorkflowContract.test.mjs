@@ -1,624 +1,164 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
-import { CHECKPOINT_WORKFLOW, EDGE_DEPLOY_WORKFLOW, PREPARE_WORKFLOW, PREVIEW_ORIGIN, QUIESCE_WORKFLOW, RECOVERY_WORKFLOW, VERIFY_WORKFLOW } from './prCControlledHumanEvidenceContract.mjs';
-import {
-  CONTROLLED_HUMAN_PHASE_SECRETS,
-  CONTROLLED_HUMAN_SECRET_SENTINEL,
-  validateControlledHumanWorkflowSecrets,
-} from './prCControlledHumanWorkflowSecrets.mjs';
+import { CONTROLLED_HUMAN_PHASE_SECRETS } from './prCControlledHumanWorkflowSecrets.mjs';
 
-const PRIMARY_WORKFLOW = '.github/workflows/transcript-flow-pr-c.yml';
-const PHASE_BY_WORKFLOW = new Map([
-  [EDGE_DEPLOY_WORKFLOW, 'edge'],
-  [PREPARE_WORKFLOW, 'prepare'],
-  [QUIESCE_WORKFLOW, 'quiesce'],
-  [CHECKPOINT_WORKFLOW, 'checkpoint'],
-  [VERIFY_WORKFLOW, 'verify'],
-  [RECOVERY_WORKFLOW, 'recover'],
-]);
-const EXPECTED_PROTECTED_CALLERS = Object.freeze({
-  controlled_human_edge: Object.freeze({
-    phase: 'edge',
-    uses: `./${EDGE_DEPLOY_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'edge' }}",
-    needs: 'controlled_human_authority',
-  }),
-  controlled_human_prepare: Object.freeze({
-    phase: 'prepare',
-    uses: `./${PREPARE_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'prepare' }}",
-    needs: 'controlled_human_authority',
-  }),
-  controlled_human_quiesce: Object.freeze({
-    phase: 'quiesce',
-    uses: `./${QUIESCE_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'quiesce' }}",
-    needs: 'controlled_human_authority',
-  }),
-  controlled_human_requester: Object.freeze({
-    phase: 'checkpoint',
-    uses: `./${CHECKPOINT_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' }}",
-    needs: 'controlled_human_authority',
-  }),
-  controlled_human_approver: Object.freeze({
-    phase: 'checkpoint',
-    uses: `./${CHECKPOINT_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_requester.result == 'success' }}",
-    needs: Object.freeze(['controlled_human_authority', 'controlled_human_requester']),
-  }),
-  controlled_human_reviewer: Object.freeze({
-    phase: 'checkpoint',
-    uses: `./${CHECKPOINT_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_approver.result == 'success' }}",
-    needs: Object.freeze(['controlled_human_authority', 'controlled_human_approver']),
-  }),
-  controlled_human_final: Object.freeze({
-    phase: 'verify',
-    uses: `./${VERIFY_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'final' }}",
-    needs: 'controlled_human_authority',
-  }),
-  controlled_human_recovery: Object.freeze({
-    phase: 'recover',
-    uses: `./${RECOVERY_WORKFLOW}`,
-    if: "${{ needs.controlled_human_authority.outputs.phase == 'abort' || needs.controlled_human_authority.outputs.phase == 'expiry' }}",
-    needs: 'controlled_human_authority',
-  }),
-});
-
-const DATABASE_URL = 'PR_C_CONTROLLED_HUMAN_DATABASE_URL';
-const EVIDENCE_HMAC_KEY = 'PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY';
-const EXERCISE_ID = 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID';
-const PASSWORD_BUNDLE_JSON = 'PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON';
-const PROJECT_REF = 'PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF';
-const SERVICE_ROLE_KEY = 'PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY';
-const SUPABASE_URL = 'PR_C_CONTROLLED_HUMAN_SUPABASE_URL';
-const ACCESS_TOKEN = 'PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN';
-const ALL_PROTECTED_SECRET_NAMES = Object.freeze([...new Set(Object.values(CONTROLLED_HUMAN_PHASE_SECRETS).flat())].sort());
-const sameBindings = (...names) => Object.fromEntries(names.map(name => [name, name]));
-const EXPECTED_PHASE_SECRET_CONSUMERS = new Map([
-  [EDGE_DEPLOY_WORKFLOW, [
-    ['Bind Supabase project, API and database without disclosure', { SUPABASE_PROJECT_REF: PROJECT_REF, ...sameBindings(SUPABASE_URL, DATABASE_URL) }],
-    ['Capture provider deployment baseline', { SUPABASE_PROJECT_REF: PROJECT_REF, SUPABASE_ACCESS_TOKEN: ACCESS_TOKEN }],
-    ['Apply and verify exact additive migration on the dedicated database', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Deploy only the allowlisted functions', { SUPABASE_PROJECT_REF: PROJECT_REF, SUPABASE_ACCESS_TOKEN: ACCESS_TOKEN }],
-    ['Produce provider-attested deployment and runtime manifest', { SUPABASE_PROJECT_REF: PROJECT_REF, SUPABASE_ACCESS_TOKEN: ACCESS_TOKEN, ...sameBindings(EVIDENCE_HMAC_KEY) }],
-  ]],
-  [PREPARE_WORKFLOW, [
-    ['Verify signed exact deployed Edge source manifest before backend access', sameBindings(EVIDENCE_HMAC_KEY)],
-    ['Bind Supabase Admin API and database to the exact deployed project', { SUPABASE_PROJECT_REF: PROJECT_REF, ...sameBindings(SUPABASE_URL, DATABASE_URL) }],
-    ['Authenticate service-role authority against the exact Supabase API without retaining response data', sameBindings(SUPABASE_URL, SERVICE_ROLE_KEY)],
-    ['Preflight dedicated synthetic target', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Produce bounded seed plan', sameBindings(EXERCISE_ID)],
-    ['Apply bounded synthetic seed', sameBindings(DATABASE_URL, EXERCISE_ID, SUPABASE_URL, SERVICE_ROLE_KEY, PASSWORD_BUNDLE_JSON)],
-    ['Verify exact seed and zero-egress boundary', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Build immutable preparation binding', sameBindings(EVIDENCE_HMAC_KEY)],
-    ['Protected exact-bound abort recovery after failed seed or evidence assembly', sameBindings(DATABASE_URL, EXERCISE_ID, SUPABASE_URL, SERVICE_ROLE_KEY)],
-  ]],
-  [QUIESCE_WORKFLOW, [
-    ['Bind Supabase project, API and database before lifecycle mutation', { SUPABASE_PROJECT_REF: PROJECT_REF, ...sameBindings(SUPABASE_URL, DATABASE_URL) }],
-    ['Reverify exact preview and active synthetic state', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Enter exact server-enforced read-only state before any read-only human observation', sameBindings(DATABASE_URL, EXERCISE_ID)],
-  ]],
-  [CHECKPOINT_WORKFLOW, [
-    ['Derive backend observer records from the exact synthetic read-only scope', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Sign human attestation and independently observed server evidence', sameBindings(EVIDENCE_HMAC_KEY)],
-  ]],
-  [VERIFY_WORKFLOW, [
-    ['Revalidate immutable human comments and exact signed observation bytes', sameBindings(EVIDENCE_HMAC_KEY)],
-    ['Validate preparation and every signed human/server checkpoint before reset', sameBindings(EVIDENCE_HMAC_KEY)],
-    ['Bind Supabase project, API and database before lifecycle mutation', { SUPABASE_PROJECT_REF: PROJECT_REF, ...sameBindings(SUPABASE_URL, DATABASE_URL) }],
-    ['Deprovision exact synthetic exercise directly from frozen read-only state', sameBindings(DATABASE_URL, EXERCISE_ID, SUPABASE_URL, SERVICE_ROLE_KEY)],
-    ['Independently re-inspect post-deprovision state', sameBindings(DATABASE_URL, EXERCISE_ID)],
-    ['Build verified human session from recomputed evidence', sameBindings(EVIDENCE_HMAC_KEY)],
-  ]],
-  [RECOVERY_WORKFLOW, [
-    ['Bind Supabase project, API, and database to one exact synthetic target', { SUPABASE_PROJECT_REF: PROJECT_REF, ...sameBindings(SUPABASE_URL, DATABASE_URL) }],
-    ['Complete exact server-authorized abort or expiry recovery', sameBindings(DATABASE_URL, EXERCISE_ID, SUPABASE_URL, SERVICE_ROLE_KEY)],
-  ]],
-]);
-
-const load = async workflowPath => {
-  const source = (await readFile(workflowPath, 'utf8')).replaceAll('\r\n','\n');
-  return { source, workflow: parseWorkflowYaml(source, workflowPath) };
+const PRIMARY='.github/workflows/transcript-flow-pr-c.yml', RECOVERY='.github/workflows/pr264-controlled-human-recover.yml';
+const expected={
+ controlled_human_credentials_preflight:['preflight','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'credentials-preflight' }}"],
+ controlled_human_edge:['edge','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'edge' }}"],
+ controlled_human_prepare:['prepare','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'prepare' }}"],
+ controlled_human_quiesce:['quiesce','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'quiesce' }}"],
+ controlled_human_requester:['checkpoint','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' }}"],
+ controlled_human_approver:['checkpoint',['controlled_human_authority','controlled_human_requester'],"${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_requester.result == 'success' }}"],
+ controlled_human_reviewer:['checkpoint',['controlled_human_authority','controlled_human_approver'],"${{ needs.controlled_human_authority.outputs.phase == 'checkpoints' && needs.controlled_human_approver.result == 'success' }}"],
+ controlled_human_final:['verify','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'final' }}"],
+ controlled_human_recovery:['recover','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'abort' || needs.controlled_human_authority.outputs.phase == 'expiry' }}"],
 };
-const assertReusable = ({source,workflow}) => {
-  assert.deepEqual(Object.keys(workflow.on), ['workflow_call']);
-  assert.doesNotMatch(source, /workflow_dispatch/u);
-  assert.match(source, /github\.event_name == 'pull_request'/u);
-  assert.match(source, /github\.event\.pull_request\.number == 264/u);
+const jobDigests={controlled_human_authority:'7165a6cee90e2ea2ae891486b4fa94c2d9d9df665d2be7a345304fd3c74e3c67',controlled_human_credentials_preflight:'c54771d38b86efd1f4bb4d8a0803844bdc625da6168bc73580538087cdd28af4',controlled_human_edge:'0e59503ce009dda21732313e0b9f0b07bf38d3c60eeafbe709f2f651ae3248ee',controlled_human_prepare:'cea2ee914d6e9b3d4a290824d92e3bc55f10c898808697274a6e88f0e699fa0a',controlled_human_quiesce:'88dcd0807dbf2a02d219c1d35787c232b945c7c0922cbea97757c8fe499cea87',controlled_human_requester:'5dce65c7cf0f1f4bcecdd9eb2408bfeb2b50f65d83cc7b3d63cc4a812fa4d72c',controlled_human_approver:'dbb06f7169a8bf86282f1aad4bbc2a52cc8a09097dbfc2c115470c33b2758783',controlled_human_reviewer:'5644096e7765a51c10bb637c359afcd8737e77510c8e0c4b7b45f3e6d6182024',controlled_human_final:'0cf67b297f8e34973f5a3f55f62eb758ce162bf3ee7144637927260e0438ddd5',controlled_human_recovery:'9bf83e3609e7f463df82a786415f680122db72a1a103aea3e565dc168ae3d97e'};
+const canonical=v=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
+const digest=v=>createHash('sha256').update(canonical(v)).digest('hex');
+const load=async p=>{const source=(await readFile(p,'utf8')).replaceAll('\r\n','\n');return{source,workflow:parseWorkflowYaml(source,p)}};
+const secret=name=>`\${{ secrets.${name} }}`, guard=phase=>`node scripts/prCControlledHumanWorkflowSecrets.mjs ${phase}`;
+const DATABASE_URL='PR_C_CONTROLLED_HUMAN_DATABASE_URL', HMAC='PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY', EXERCISE='PR_C_CONTROLLED_HUMAN_EXERCISE_ID', PASSWORD='PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON', PROJECT='PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF', SERVICE='PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY', URL='PR_C_CONTROLLED_HUMAN_SUPABASE_URL', ACCESS='PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN';
+const same=(...names)=>Object.fromEntries(names.map(name=>[name,name]));
+const binding=(name,env,command,uses)=>({name,env,command,uses});
+const targetBinding=name=>binding(name,{SUPABASE_PROJECT_REF:PROJECT,...same(URL,DATABASE_URL)},/^node --input-type=module -e "import \{validateSupabaseTargetTuple\} from '\.\/scripts\/prCControlledHumanEnvironment\.mjs'; validateSupabaseTargetTuple\(process\.env\.SUPABASE_PROJECT_REF,process\.env\.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process\.env\.PR_C_CONTROLLED_HUMAN_DATABASE_URL\)"$/u);
+const consumerContracts={
+ controlled_human_credentials_preflight:[binding('Verify protected credential transport with bounded read-only checks',same(DATABASE_URL,HMAC,EXERCISE,PASSWORD,PROJECT,SERVICE,URL),'node scripts/prCControlledHumanCredentialPreflight.mjs')],
+ controlled_human_edge:[
+  targetBinding('Bind Supabase project, API and database without disclosure'),
+  binding('Capture provider deployment baseline',{SUPABASE_PROJECT_REF:PROJECT,SUPABASE_ACCESS_TOKEN:ACCESS},'node scripts/producePrCControlledHumanEdgeDeploymentManifest.mjs --provider-baseline output/controlled-human/provider-baseline.json'),
+  binding('Apply and verify exact additive migration on the dedicated database',same(DATABASE_URL,EXERCISE),'npm run pr-c-controlled-human:migration-preflight -- --output output/controlled-human/migration-preflight.json\nnpm run pr-c-controlled-human:migration-apply -- --output output/controlled-human/migration-apply.json\nnpm run pr-c-controlled-human:migration-verify -- --output output/controlled-human/migration-verify.json\nnpm run pr-c-controlled-human:preflight -- --output output/controlled-human/edge-preflight.json\n'),
+  binding('Deploy only the allowlisted functions',{SUPABASE_PROJECT_REF:PROJECT,SUPABASE_ACCESS_TOKEN:ACCESS},'set -euo pipefail\nfor function_name in assess-command assess-v2-command enterprise-intelligence-command enterprise-intelligence-query studio-artifact-command studio-private-artifact-command tenant-context tenant-session pr-c-controlled-human-synthetic-generation; do\n  log_file="$RUNNER_TEMP/pr264-edge-${function_name}.log"\n  if ! supabase functions deploy "$function_name" --project-ref "$SUPABASE_PROJECT_REF" >"$log_file" 2>&1; then\n    node --input-type=module -e "import {rmSync} from \'node:fs\'; rmSync(process.argv[1],{force:true})" "$log_file"\n    echo "::error::PR_C_CONTROLLED_HUMAN_EDGE_DEPLOYMENT_FAILED:${function_name}"\n    exit 1\n  fi\n  node --input-type=module -e "import {rmSync} from \'node:fs\'; rmSync(process.argv[1],{force:true})" "$log_file"\ndone\n'),
+  binding('Produce provider-attested deployment and runtime manifest',{SUPABASE_PROJECT_REF:PROJECT,SUPABASE_ACCESS_TOKEN:ACCESS,...same(HMAC)},'node scripts/producePrCControlledHumanEdgeDeploymentManifest.mjs --migration-preflight output/controlled-human/migration-preflight.json --migration-apply output/controlled-human/migration-apply.json --migration-verify output/controlled-human/migration-verify.json --preflight output/controlled-human/edge-preflight.json --provider-baseline output/controlled-human/provider-baseline.json --output output/controlled-human/edge-deployment.json'),
+ ],
+ controlled_human_prepare:[
+  binding('Verify signed exact deployed Edge source manifest before backend access',same(HMAC),'node scripts/verifyPrCControlledHumanEdgeDeployment.mjs --input output/controlled-human/edge-input/edge-deployment.json --output output/controlled-human/edge-deployment.json'),
+  targetBinding('Bind Supabase Admin API and database to the exact deployed project'),
+  binding('Authenticate service-role authority against the exact Supabase API without retaining response data',same(URL,SERVICE),'node --input-type=module -e "try { const base=new URL(process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL); if(base.pathname!==\'/\'||base.search||base.hash||!base.hostname.endsWith(\'.supabase.co\')) throw new Error(); const response=await fetch(new URL(\'/auth/v1/admin/users?page=1&per_page=1\',base),{redirect:\'error\',headers:{apikey:process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY,Authorization:\'Bearer \'+process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY},signal:AbortSignal.timeout(15000)}); await response.body?.cancel(); if(!response.ok) throw new Error(); } catch { throw new Error(\'PR_C_CONTROLLED_HUMAN_SUPABASE_ADMIN_AUTHORITY_REJECTED\'); }"'),
+  binding('Preflight dedicated synthetic target',same(DATABASE_URL,EXERCISE),'npm run pr-c-controlled-human:preflight -- --output output/controlled-human/preflight.json'),
+  binding('Produce bounded seed plan',same(EXERCISE),'npm run pr-c-controlled-human:plan -- --output output/controlled-human/plan.json'),
+  binding('Apply bounded synthetic seed',same(DATABASE_URL,EXERCISE,URL,SERVICE,PASSWORD),'npm run pr-c-controlled-human:apply -- --output output/controlled-human/apply.json'),
+  binding('Verify exact seed and zero-egress boundary',same(DATABASE_URL,EXERCISE),'npm run pr-c-controlled-human:verify -- --output output/controlled-human/verify.json'),
+  binding('Build immutable preparation binding',same(HMAC),'node scripts/buildPrCControlledHumanPreparation.mjs --preflight output/controlled-human/preflight.json --plan output/controlled-human/plan.json --apply output/controlled-human/apply.json --verify output/controlled-human/verify.json --edge-deployment output/controlled-human/edge-deployment.json --output output/controlled-human/preparation.json'),
+  binding('Protected exact-bound abort recovery after failed seed or evidence assembly',same(DATABASE_URL,EXERCISE,URL,SERVICE),'node scripts/prCControlledHumanEnvironment.mjs recover-reset --reason abort --output output/controlled-human/emergency-deprovision.json'),
+ ],
+ controlled_human_quiesce:[
+  targetBinding('Bind Supabase project, API and database before lifecycle mutation'),
+  binding('Reverify exact preview and active synthetic state',same(DATABASE_URL,EXERCISE),'node scripts/verifyPr264ControlledHumanPreview.mjs\nnode scripts/prCControlledHumanEnvironment.mjs verify --output output/controlled-human/current-verify.json\n'),
+  binding('Enter exact server-enforced read-only state before any read-only human observation',same(DATABASE_URL,EXERCISE),'node scripts/prCControlledHumanEnvironment.mjs quiesce --authority output/controlled-human/current-verify.json --output output/controlled-human/quiesce.json'),
+ ],
+ checkpoint:[
+  binding('Derive backend observer records from the exact synthetic read-only scope',same(DATABASE_URL,EXERCISE),'node scripts/prCControlledHumanEnvironment.mjs checkpoint-observe --request output/controlled-human/private/observer-request.json --output output/controlled-human/private/server-observer.json'),
+  binding('Sign human attestation and independently observed server evidence',same(HMAC),jobName=>`node scripts/capturePrCControlledHumanCheckpoint.mjs --preparation output/controlled-human/input/preparation.json --quiesce output/controlled-human/input/quiesce.json --comment output/controlled-human/private/comment.json --observer output/controlled-human/private/server-observer.json --output "output/controlled-human/checkpoint-${jobName.replace('controlled_human_','')}.json"`),
+ ],
+ controlled_human_final:[
+  binding('Revalidate immutable human comments and exact signed observation bytes',same(HMAC),undefined,'actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea'),
+  binding('Validate preparation and every signed human/server checkpoint before reset',same(HMAC),/^node --input-type=module -e "import \{readFile\} from 'node:fs\/promises'; import \{validatePreparationEvidence,validateHumanCheckpoint\}/u),
+  targetBinding('Bind Supabase project, API and database before lifecycle mutation'),
+  binding('Deprovision exact synthetic exercise directly from frozen read-only state',same(DATABASE_URL,EXERCISE,URL,SERVICE),'node scripts/prCControlledHumanEnvironment.mjs deprovision --authority output/controlled-human/input/quiesce.json --output output/controlled-human/deprovision.json'),
+  binding('Independently re-inspect post-deprovision state',same(DATABASE_URL,EXERCISE),'node scripts/prCControlledHumanEnvironment.mjs post-deprovision-verify --authority output/controlled-human/deprovision.json --output output/controlled-human/post-deprovision.json'),
+  binding('Build verified human session from recomputed evidence',same(HMAC),'node scripts/verifyPrCControlledHumanSession.mjs --preparation output/controlled-human/input/preparation.json --requester output/controlled-human/input/checkpoint-requester.json --reviewer output/controlled-human/input/checkpoint-reviewer.json --approver output/controlled-human/input/checkpoint-approver.json --quiesce output/controlled-human/input/quiesce.json --deprovision output/controlled-human/deprovision.json --post-deprovision output/controlled-human/post-deprovision.json --defect-history output/controlled-human/input/defect-history.json --output output/controlled-human/verified-session.json'),
+ ],
+ controlled_human_recovery:[
+  targetBinding('Bind Supabase project, API, and database to one exact synthetic target'),
+  binding('Complete exact server-authorized abort or expiry recovery',same(DATABASE_URL,EXERCISE,URL,SERVICE),/^node scripts\/prCControlledHumanEnvironment\.mjs recover-reset --reason \$\{\{ needs\.controlled_human_authority\.outputs\.phase \}\} --output output\/controlled-human\/recovery\.json$/u),
+ ],
+ manual_recovery:[
+  targetBinding('Bind Supabase project, API, and database to one exact synthetic target'),
+  binding('Complete exact server-authorized abort or expiry recovery',same(DATABASE_URL,EXERCISE,URL,SERVICE),/^node scripts\/prCControlledHumanEnvironment\.mjs recover-reset --reason \$\{\{ inputs\.reason \}\} --output output\/controlled-human\/recovery\.json$/u),
+ ],
 };
-const assertPinned = source => {
-  const uses = [...source.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)/gmu)].map(match=>match[1]);
-  assert.ok(uses.length > 0);
-  for (const use of uses) assert.match(use, /^[^@]+@[0-9a-f]{40}$/u);
+const secretRe=/\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?:(?!\}\})[\s\S])*?\}\}/iu;
+const walk=(v,path='$',out=[])=>{if(Array.isArray(v))v.forEach((x,i)=>walk(x,`${path}[${i}]`,out));else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v)){if(k==='env'&&x&&typeof x==='object')for(const n of Object.keys(x))assert.doesNotMatch(n,/^GITHUB_/u);walk(x,`${path}.${k}`,out)}else if(typeof v==='string'&&secretRe.test(v))out.push({path,value:v});return out};
+const protectedNames=new Set(Object.values(CONTROLLED_HUMAN_PHASE_SECRETS).flat());
+const exactActions={
+ checkout:'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
+ node:'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+ upload:'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+ github:'actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea',
+ download:'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+ supabase:'supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf',
 };
-const assertNoJobSecrets = workflow => {
-  for (const job of Object.values(workflow.jobs)) for (const value of Object.values(job.env ?? {})) assert.doesNotMatch(String(value), /secrets\./u);
+const uploadContracts={
+ controlled_human_credentials_preflight:{name:'pr264-controlled-human-credential-preflight-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/pr-c-controlled-human-credential-preflight/credential-preflight.json'},
+ controlled_human_edge:{name:'pr264-controlled-human-edge-deployment-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/edge-deployment.json\noutput/controlled-human/provider-baseline.json\n'},
+ controlled_human_prepare:{name:'pr264-controlled-human-preparation-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/preparation.json\noutput/controlled-human/edge-deployment.json\noutput/controlled-human/verify.json\noutput/controlled-human/templates/\n'},
+ controlled_human_quiesce:{name:'pr264-controlled-human-quiesce-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/quiesce.json'},
+ controlled_human_requester:{name:'pr264-controlled-human-requester-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/checkpoint-requester.json'},
+ controlled_human_approver:{name:'pr264-controlled-human-approver-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/checkpoint-approver.json'},
+ controlled_human_reviewer:{name:'pr264-controlled-human-reviewer-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/checkpoint-reviewer.json'},
+ controlled_human_final:{name:'pr264-controlled-human-verified-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/verified-session.json\noutput/controlled-human/deprovision.json\noutput/controlled-human/post-deprovision.json\noutput/controlled-human/input/preparation.json\noutput/controlled-human/input/quiesce.json\noutput/controlled-human/input/checkpoint-requester.json\noutput/controlled-human/input/checkpoint-reviewer.json\noutput/controlled-human/input/checkpoint-approver.json\n'},
+ controlled_human_recovery:{name:'pr264-controlled-human-recovery-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/recovery.json'},
+ manual_recovery:{name:'pr264-controlled-human-recovery-${{ inputs.exact_head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}',path:'output/controlled-human/recovery.json'},
 };
-
-const sorted = values => [...values].sort();
-// Include whole-context serialization, not only dotted or indexed secret access.
-const SECRET_EXPRESSION = /\$\{\{(?:(?!\}\})[\s\S])*?\bsecrets\b(?:(?!\}\})[\s\S])*\}\}/iu;
-const pathKey = key => `[${JSON.stringify(key)}]`;
-const walkYaml = (value, path = '$', leaves = []) => {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => walkYaml(item, `${path}[${index}]`, leaves));
-  } else if (value && typeof value === 'object') {
-    for (const [key, item] of Object.entries(value)) walkYaml(item, `${path}${pathKey(key)}`, leaves);
-  } else {
-    leaves.push({ path, value });
-  }
-  return leaves;
+const assertPinnedUses=workflow=>{for(const {value,path} of walkAll(workflow).filter(x=>x.path.endsWith('.uses'))){assert.match(value,/^[^@]+@[0-9a-f]{40}$/u,path);assert.ok(Object.values(exactActions).includes(value),path);}};
+const walkAll=(v,path='$',out=[])=>{if(Array.isArray(v))v.forEach((x,i)=>walkAll(x,`${path}[${i}]`,out));else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))walkAll(x,`${path}.${k}`,out);else out.push({path,value:v});return out};
+const assertBootstrap=(job,guardIndex,ref)=>{
+ const checkout=job.steps.flatMap((step,index)=>step.uses===exactActions.checkout?[{step,index}]:[]);
+ const setup=job.steps.flatMap((step,index)=>step.uses===exactActions.node?[{step,index}]:[]);
+ const install=job.steps.flatMap((step,index)=>step.run==='npm ci'?[{step,index}]:[]);
+ assert.equal(checkout.length,1);assert.equal(setup.length,1);assert.equal(install.length,1);
+ assert.ok(checkout[0].index<setup[0].index&&setup[0].index<install[0].index&&install[0].index<guardIndex);
+ assert.equal(install[0].index+1,guardIndex);
+ assert.deepEqual(checkout[0].step.with,{ref,'fetch-depth':checkout[0].step.with['fetch-depth'],'persist-credentials':false});
+ assert.ok([0,1].includes(checkout[0].step.with['fetch-depth']));
+ assert.deepEqual(setup[0].step.with,{'node-version':22,cache:'npm'});
 };
-const secretExpressionLeaves = value => walkYaml(value).filter(leaf => typeof leaf.value === 'string' && SECRET_EXPRESSION.test(leaf.value));
-const exactSecretExpression = name => `\${{ secrets.${name} }}`;
-const sortedLeaves = leaves => [...leaves].sort((left, right) => left.path.localeCompare(right.path));
-const stepPath = (jobName, stepIndex, envName) => `$${pathKey('jobs')}${pathKey(jobName)}${pathKey('steps')}[${stepIndex}]${pathKey('env')}${pathKey(envName)}`;
-
-const assertProtectedStepDoesNotExport = (step, workflowPath) => {
-  const run = String(step.run ?? '');
-  assert.doesNotMatch(run, /GITHUB_(?:ENV|OUTPUT|PATH|STEP_SUMMARY)/u, `${workflowPath}:${step.name} persistence channel`);
-  assert.doesNotMatch(String(step.uses ?? ''), /^actions\/upload-artifact@/u, `${workflowPath}:${step.name} upload channel`);
-  assert.equal(step.outputs, undefined, `${workflowPath}:${step.name} step outputs`);
-  const secretEnvNames = Object.keys(step.env ?? {}).filter(name => SECRET_EXPRESSION.test(String(step.env[name])));
-  const diagnosticSink = /(?:\becho\b|\bprintf\b|\bprintenv\b|console\.(?:log|error|warn|info)|core\.(?:setOutput|notice|warning|error|debug)|::(?:debug|notice|warning|error))/u;
-  for (const line of run.split('\n').filter(candidate => diagnosticSink.test(candidate))) {
-    for (const envName of secretEnvNames) {
-      const escaped = envName.replaceAll(/[$()*+.?[\]^{|}\\]/gu, '\\$&');
-      assert.doesNotMatch(line, new RegExp(`(?:\\$\\{?${escaped}\\}?|process\\.env\\.${escaped}|process\\.env\\[['\"]${escaped}['\"]\\])`, 'u'));
-    }
-  }
+const assertConsumerContracts=(job,contractKey,jobName=contractKey)=>{
+ const expectedConsumers=consumerContracts[contractKey];
+ const expectedLeaves=[];
+ for(const contract of expectedConsumers){
+  const indexes=job.steps.flatMap((step,index)=>step.name===contract.name?[index]:[]);assert.equal(indexes.length,1,`${contractKey}:${contract.name}:count`);
+  const index=indexes[0],step=job.steps[index];
+  const actualSecretEnv=Object.fromEntries(Object.entries(step.env??{}).filter(([,value])=>secretRe.test(String(value))).map(([alias,value])=>[alias,String(value).match(/^\$\{\{ secrets\.([A-Z0-9_]+) \}\}$/u)?.[1]??value]));
+  assert.deepEqual(actualSecretEnv,contract.env,`${contractKey}:${contract.name}:secret-bindings`);
+  if(typeof contract.command==='string')assert.equal(step.run,contract.command,`${contractKey}:${contract.name}:command`);
+  else if(typeof contract.command==='function')assert.equal(step.run,contract.command(jobName),`${contractKey}:${contract.name}:command`);
+  else if(contract.command instanceof RegExp)assert.match(String(step.run??''),contract.command,`${contractKey}:${contract.name}:command`);
+  if(contract.uses!==undefined){assert.equal(step.uses,contract.uses,`${contractKey}:${contract.name}:uses`);assert.equal(step.run,undefined,`${contractKey}:${contract.name}:action-only`);}else assert.equal(step.uses,undefined,`${contractKey}:${contract.name}:run-only`);
+  for(const [alias,name] of Object.entries(contract.env))expectedLeaves.push({path:`${index}:${alias}`,value:secret(name)});
+ }
+ return expectedLeaves.sort((a,b)=>a.path.localeCompare(b.path));
 };
-
-const assertPhaseSecretContract = ({ source, workflow }, workflowPath) => {
-  const phase = PHASE_BY_WORKFLOW.get(workflowPath);
-  assert.ok(phase, `known phase for ${workflowPath}`);
-  const expected = CONTROLLED_HUMAN_PHASE_SECRETS[phase];
-  const declarations = workflow.on.workflow_call.secrets;
-  assert.deepEqual(sorted(Object.keys(declarations ?? {})), sorted(expected));
-  for (const name of expected) assert.deepEqual(declarations[name], { required: true });
-
-  const jobs = Object.entries(workflow.jobs);
-  assert.equal(jobs.length, 1);
-  const [jobName, job] = jobs[0];
-  assert.equal(job.environment, 'hosted-nonproduction-pilot');
-  assertNoJobSecrets(workflow);
-  for (const name of ALL_PROTECTED_SECRET_NAMES) assert.equal(Object.hasOwn(job.env ?? {}, name), false, `${workflowPath} must step-scope ${name}`);
-  const command = `node scripts/prCControlledHumanWorkflowSecrets.mjs ${phase}`;
-  const guardIndexes = job.steps.flatMap((step, index) => step.run === command ? [index] : []);
-  assert.equal(guardIndexes.length, 1, `${workflowPath} exact secret guard count`);
-  const [guardIndex] = guardIndexes;
-  const installIndexes = job.steps.flatMap((step, index) => step.run === 'npm ci' ? [index] : []);
-  assert.equal(installIndexes.length, 1, `${workflowPath} exact dependency install count`);
-  assert.equal(guardIndex, installIndexes[0] + 1, `${workflowPath} guard must immediately follow dependency installation`);
-  const guard = job.steps[guardIndex];
-  assert.equal(guard.if, undefined, `${workflowPath} secret guard cannot be conditional`);
-  assert.equal(guard['continue-on-error'], undefined, `${workflowPath} secret guard cannot continue on error`);
-  assert.deepEqual(sorted(Object.keys(guard.env ?? {})), sorted(expected));
-  const expectedLeaves = [];
-  for (const name of expected) {
-    assert.equal(guard.env[name], exactSecretExpression(name));
-    expectedLeaves.push({ path: stepPath(jobName, guardIndex, name), value: exactSecretExpression(name) });
-  }
-
-  for (const [stepName, bindings] of EXPECTED_PHASE_SECRET_CONSUMERS.get(workflowPath)) {
-    const indexes = job.steps.flatMap((step, index) => step.name === stepName ? [index] : []);
-    assert.equal(indexes.length, 1, `${workflowPath}:${stepName} exact consumer count`);
-    const [index] = indexes;
-    for (const [envName, secretName] of Object.entries(bindings)) {
-      assert.equal(job.steps[index].env?.[envName], exactSecretExpression(secretName), `${workflowPath}:${stepName}:${envName}`);
-      expectedLeaves.push({ path: stepPath(jobName, index, envName), value: exactSecretExpression(secretName) });
-    }
-  }
-
-  const actualLeaves = secretExpressionLeaves(workflow);
-  assert.deepEqual(sortedLeaves(actualLeaves), sortedLeaves(expectedLeaves), `${workflowPath} secret expression paths`);
-  const firstSecretIndex = job.steps.findIndex(step => secretExpressionLeaves(step).length > 0);
-  assert.equal(firstSecretIndex, guardIndex, `${workflowPath} guards the first protected reference`);
-  for (const step of job.steps.filter(candidate => secretExpressionLeaves(candidate.env ?? {}).length > 0)) assertProtectedStepDoesNotExport(step, workflowPath);
-  assert.doesNotMatch(source, /secrets:\s*inherit/u);
-};
-
-const assertCallerSecretContract = ({ source, workflow }) => {
-  assert.doesNotMatch(source, /secrets:\s*inherit/u);
-  assert.deepEqual(secretExpressionLeaves(workflow), [], 'primary workflow cannot read secret contexts');
-  const protectedUses = new Set(Object.values(EXPECTED_PROTECTED_CALLERS).map(entry => entry.uses));
-  const actualProtectedCallers = Object.entries(workflow.jobs)
-    .filter(([, job]) => job.secrets !== undefined || protectedUses.has(job.uses) || String(job.uses ?? '').startsWith('./.github/workflows/pr264-controlled-human-'))
-    .map(([jobName]) => jobName);
-  assert.deepEqual(sorted(actualProtectedCallers), sorted(Object.keys(EXPECTED_PROTECTED_CALLERS)));
-  for (const [jobName, contract] of Object.entries(EXPECTED_PROTECTED_CALLERS)) {
-    const job = workflow.jobs[jobName];
-    assert.equal(job.uses, contract.uses, `${jobName} exact called workflow`);
-    assert.equal(job.if, contract.if, `${jobName} exact phase condition`);
-    assert.deepEqual(job.needs, contract.needs, `${jobName} exact sequencing`);
-    const mapping = job.secrets;
-    const expected = CONTROLLED_HUMAN_PHASE_SECRETS[contract.phase];
-    assert.deepEqual(sorted(Object.keys(mapping ?? {})), sorted(expected));
-    for (const name of expected) assert.equal(mapping[name], CONTROLLED_HUMAN_SECRET_SENTINEL);
-  }
-  for (const [jobName, job] of Object.entries(workflow.jobs)) {
-    if (!Object.hasOwn(EXPECTED_PROTECTED_CALLERS, jobName)) assert.equal(job.secrets, undefined, `${jobName} must not receive protected values`);
-  }
-};
-
-const syntheticPhaseValues = phase => Object.fromEntries(
-  CONTROLLED_HUMAN_PHASE_SECRETS[phase].map((name, index) => [name, `synthetic-marker-${phase}-${index}`]),
-);
-
-const runSecretCli = (phase, values = {}) => spawnSync(
-  process.execPath,
-  ['scripts/prCControlledHumanWorkflowSecrets.mjs', phase],
-  {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-    env: values,
-  },
-);
-
-const PINNED_CA_VERIFY_COMMAND = 'node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
-const DATABASE_TLS_GUARDS = new Map([
-  [CHECKPOINT_WORKFLOW, [
-    ['Derive backend observer records from the exact synthetic read-only scope', 'Verify pinned Supabase CA for backend observer'],
-  ]],
-  [EDGE_DEPLOY_WORKFLOW, [
-    ['Apply and verify exact additive migration on the dedicated database', 'Verify pinned Supabase CA for controlled migration'],
-  ]],
-  [PREPARE_WORKFLOW, [
-    ['Preflight dedicated synthetic target', 'Verify pinned Supabase CA for target preflight'],
-    ['Apply bounded synthetic seed', 'Verify pinned Supabase CA for seed apply'],
-    ['Verify exact seed and zero-egress boundary', 'Verify pinned Supabase CA for seed verification'],
-    ['Protected exact-bound abort recovery after failed seed or evidence assembly', 'Verify pinned Supabase CA for abort recovery'],
-  ]],
-  [QUIESCE_WORKFLOW, [
-    ['Reverify exact preview and active synthetic state', 'Verify pinned Supabase CA for active-state verification'],
-    ['Enter exact server-enforced read-only state before any read-only human observation', 'Verify pinned Supabase CA for read-only transition'],
-  ]],
-  [RECOVERY_WORKFLOW, [
-    ['Complete exact server-authorized abort or expiry recovery', 'Verify pinned Supabase CA for abort or expiry recovery'],
-  ]],
-  [VERIFY_WORKFLOW, [
-    ['Deprovision exact synthetic exercise directly from frozen read-only state', 'Verify pinned Supabase CA for deprovision'],
-    ['Independently re-inspect post-deprovision state', 'Verify pinned Supabase CA for post-deprovision inspection'],
-  ]],
-]);
-
-test('each reusable phase declares, scopes, and preflights only its exact protected secret set', async () => {
-  for (const workflowPath of PHASE_BY_WORKFLOW.keys()) {
-    assertPhaseSecretContract(await load(workflowPath), workflowPath);
-  }
-});
-
-test('protected secret presence validation fails closed without disclosing synthetic values', () => {
-  for (const phase of Object.keys(CONTROLLED_HUMAN_PHASE_SECRETS)) {
-    const valid = syntheticPhaseValues(phase);
-    assert.deepEqual(
-      validateControlledHumanWorkflowSecrets(phase, valid, { exact: true }),
-      { status: 'present', phase },
-    );
-    for (const name of CONTROLLED_HUMAN_PHASE_SECRETS[phase]) {
-      for (const rejected of [undefined, '', '   ', CONTROLLED_HUMAN_SECRET_SENTINEL, `  ${CONTROLLED_HUMAN_SECRET_SENTINEL}  `]) {
-        const candidate = { ...valid };
-        if (rejected === undefined) delete candidate[name];
-        else candidate[name] = rejected;
-        assert.throws(
-          () => validateControlledHumanWorkflowSecrets(phase, candidate),
-          error => {
-            assert.match(error.message, /^PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED:[a-z-]+:[A-Z0-9_-]+$/u);
-            for (const marker of Object.values(valid)) assert.doesNotMatch(error.message, new RegExp(marker, 'u'));
-            assert.doesNotMatch(error.message, /length|hash|https?:|postgres|eyJ|-----BEGIN/iu);
-            return true;
-          },
-        );
-      }
-    }
-    assert.throws(
-      () => validateControlledHumanWorkflowSecrets(phase, { ...valid, PR_C_CONTROLLED_HUMAN_UNKNOWN: 'synthetic-extra' }, { exact: true }),
-      /PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED/u,
-    );
-  }
-  assert.throws(
-    () => validateControlledHumanWorkflowSecrets('unknown', {}),
-    /PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED:unknown-phase/u,
-  );
-});
-
-test('protected secret CLI accepts only known complete phases and emits bounded diagnostics', () => {
-  for (const phase of Object.keys(CONTROLLED_HUMAN_PHASE_SECRETS)) {
-    const values = syntheticPhaseValues(phase);
-    const accepted = runSecretCli(phase, values);
-    assert.equal(accepted.status, 0, accepted.stderr);
-    assert.deepEqual(JSON.parse(accepted.stdout), {
-      status: 'PR264_CONTROLLED_HUMAN_WORKFLOW_SECRETS_PRESENT',
-      phase,
-    });
-    assert.equal(accepted.stderr, '');
-    for (const marker of Object.values(values)) {
-      assert.doesNotMatch(`${accepted.stdout}${accepted.stderr}`, new RegExp(marker, 'u'));
-    }
-
-    for (const name of CONTROLLED_HUMAN_PHASE_SECRETS[phase]) {
-      for (const rejectedValue of [undefined, '', '   ', CONTROLLED_HUMAN_SECRET_SENTINEL, `  ${CONTROLLED_HUMAN_SECRET_SENTINEL}  `]) {
-        const candidate = { ...values };
-        if (rejectedValue === undefined) delete candidate[name];
-        else candidate[name] = rejectedValue;
-        const rejected = runSecretCli(phase, candidate);
-        assert.notEqual(rejected.status, 0);
-        assert.equal(rejected.stdout, '');
-        assert.match(rejected.stderr, /^PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED:[a-z-]+:[A-Z0-9_-]+\r?\n$/u);
-        for (const marker of Object.values(values)) {
-          assert.doesNotMatch(`${rejected.stdout}${rejected.stderr}`, new RegExp(marker, 'u'));
-        }
-      }
-    }
-  }
-  const unknown = runSecretCli('unknown-phase');
-  assert.notEqual(unknown.status, 0);
-  assert.equal(unknown.stdout, '');
-  assert.equal(unknown.stderr, 'PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED:unknown-phase:invalid-input\n');
-});
-
-test('workflow secret contracts reject declaration, mapping, environment, and ordering mutations', async () => {
-  const phaseCases = [];
-  for (const workflowPath of PHASE_BY_WORKFLOW.keys()) phaseCases.push([workflowPath, await load(workflowPath)]);
-
-  const [edgePath, edgeLoaded] = phaseCases.find(([workflowPath]) => workflowPath === EDGE_DEPLOY_WORKFLOW);
-  const edgePhase = PHASE_BY_WORKFLOW.get(edgePath);
-  const edgeSecret = CONTROLLED_HUMAN_PHASE_SECRETS[edgePhase][0];
-  const edgeJob = loaded => Object.values(loaded.workflow.jobs)[0];
-  const edgeStep = (loaded, name) => edgeJob(loaded).steps.find(step => step.name === name);
-  const edgeConsumerName = 'Bind Supabase project, API and database without disclosure';
-  for (const [mutationName, mutate] of [
-    ['missing declaration', loaded => { delete loaded.workflow.on.workflow_call.secrets[edgeSecret]; }],
-    ['optional declaration', loaded => { loaded.workflow.on.workflow_call.secrets[edgeSecret].required = false; }],
-    ['extra declaration', loaded => { loaded.workflow.on.workflow_call.secrets.PR_C_CONTROLLED_HUMAN_UNKNOWN = { required: true }; }],
-    ['wrong environment', loaded => { edgeJob(loaded).environment = 'another-environment'; }],
-    ['job-global secret expression', loaded => { edgeJob(loaded).env[DATABASE_URL] = exactSecretExpression(DATABASE_URL); }],
-    ['job-global phase secret literal', loaded => { edgeJob(loaded).env[DATABASE_URL] = CONTROLLED_HUMAN_SECRET_SENTINEL; }],
-    ['job-global cross-phase secret literal', loaded => { edgeJob(loaded).env[PASSWORD_BUNDLE_JSON] = CONTROLLED_HUMAN_SECRET_SENTINEL; }],
-    ['displaced guard', loaded => {
-      const steps = Object.values(loaded.workflow.jobs)[0].steps;
-      const guardIndex = steps.findIndex(step => step.run === `node scripts/prCControlledHumanWorkflowSecrets.mjs ${edgePhase}`);
-      steps.push(steps.splice(guardIndex, 1)[0]);
-    }],
-    ['duplicate guard', loaded => { edgeJob(loaded).steps.push(structuredClone(edgeStep(loaded, 'Require exact protected Edge phase secrets'))); }],
-    ['conditional guard', loaded => { edgeStep(loaded, 'Require exact protected Edge phase secrets').if = '${{ always() }}'; }],
-    ['continuing guard', loaded => { edgeStep(loaded, 'Require exact protected Edge phase secrets')['continue-on-error'] = true; }],
-    ['pre-guard reference', loaded => { edgeJob(loaded).steps[0].env = { [DATABASE_URL]: exactSecretExpression(DATABASE_URL) }; }],
-    ['run expression', loaded => { edgeJob(loaded).steps[0].run = `echo ${exactSecretExpression(DATABASE_URL)}`; }],
-    ['whole secret context in pre-guard run', loaded => { edgeJob(loaded).steps[0].run = '${{ toJSON(secrets) }}'; }],
-    ['with expression and bracket syntax', loaded => { edgeJob(loaded).steps[0].with.leak = "${{ secrets['PR_C_CONTROLLED_HUMAN_DATABASE_URL'] }}"; }],
-    ['job condition expression', loaded => { edgeJob(loaded).if = exactSecretExpression(DATABASE_URL); }],
-    ['job output expression', loaded => { edgeJob(loaded).outputs = { leak: exactSecretExpression(DATABASE_URL) }; }],
-    ['step output expression', loaded => { edgeStep(loaded, edgeConsumerName).outputs = { leak: exactSecretExpression(DATABASE_URL) }; }],
-    ['workflow defaults expression', loaded => { loaded.workflow.defaults = { run: { shell: exactSecretExpression(DATABASE_URL) } }; }],
-    ['container expression', loaded => { edgeJob(loaded).container = { credentials: { password: exactSecretExpression(DATABASE_URL) } }; }],
-    ['service expression', loaded => { edgeJob(loaded).services = { synthetic: { env: { TOKEN: exactSecretExpression(DATABASE_URL) } } }; }],
-    ['arbitrary alias', loaded => {
-      const step = edgeStep(loaded, edgeConsumerName);
-      step.env.PROJECT_REF_ALIAS = step.env.SUPABASE_PROJECT_REF;
-      delete step.env.SUPABASE_PROJECT_REF;
-    }],
-    ['mismatched alias value', loaded => { edgeStep(loaded, edgeConsumerName).env.SUPABASE_PROJECT_REF = exactSecretExpression(DATABASE_URL); }],
-    ['diagnostic value', loaded => { edgeStep(loaded, edgeConsumerName).run += '\necho "$SUPABASE_PROJECT_REF"'; }],
-    ...['GITHUB_ENV', 'GITHUB_OUTPUT', 'GITHUB_PATH', 'GITHUB_STEP_SUMMARY'].map(channel => [
-      `${channel} persistence`,
-      loaded => { edgeStep(loaded, edgeConsumerName).run += `\nprintf '%s' "$SUPABASE_PROJECT_REF" >> "$${channel}"`; },
-    ]),
-    ['upload with protected env', loaded => {
-      edgeJob(loaded).steps.push({
-        name: 'Forbidden upload',
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
-        env: { [DATABASE_URL]: exactSecretExpression(DATABASE_URL) },
-        with: { path: 'synthetic-output' },
-      });
-    }],
-    ['new diagnostic consumer', loaded => {
-      edgeJob(loaded).steps.push({
-        env: { [edgeSecret]: exactSecretExpression(edgeSecret) },
-        run: 'echo forbidden >> "$GITHUB_ENV"',
-      });
-    }],
-  ]) {
-    const changed = structuredClone(edgeLoaded);
-    mutate(changed);
-    assert.throws(() => assertPhaseSecretContract(changed, edgePath), mutationName);
-  }
-
-  const primary = await load(PRIMARY_WORKFLOW);
-  const caller = 'controlled_human_edge';
-  const callerSecret = CONTROLLED_HUMAN_PHASE_SECRETS.edge[0];
-  for (const [mutationName, mutate] of [
-    ['missing caller mapping', loaded => { delete loaded.workflow.jobs[caller].secrets[callerSecret]; }],
-    ['caller secret expression', loaded => { loaded.workflow.jobs[caller].secrets[callerSecret] = exactSecretExpression(DATABASE_URL); }],
-    ['whole secret context in caller with', loaded => { loaded.workflow.jobs[caller].with.leak = '${{ secrets }}'; }],
-    ['extra caller mapping', loaded => { loaded.workflow.jobs[caller].secrets.PR_C_CONTROLLED_HUMAN_UNKNOWN = CONTROLLED_HUMAN_SECRET_SENTINEL; }],
-    ['inherited caller secrets', loaded => { loaded.workflow.jobs[caller].secrets = 'inherit'; loaded.source += '\n# secrets: inherit\n'; }],
-    ['alternate caller alias', loaded => { loaded.workflow.jobs[caller].secrets[callerSecret] = 'alternate-alias'; }],
-    ['cross-phase caller name', loaded => { loaded.workflow.jobs[caller].secrets[PASSWORD_BUNDLE_JSON] = CONTROLLED_HUMAN_SECRET_SENTINEL; }],
-    ['swapped called workflow', loaded => { loaded.workflow.jobs[caller].uses = `./${PREPARE_WORKFLOW}`; }],
-    ['wrong phase condition', loaded => { loaded.workflow.jobs[caller].if = "${{ needs.controlled_human_authority.outputs.phase == 'prepare' }}"; }],
-    ['extra protected caller', loaded => { loaded.workflow.jobs.controlled_human_extra = structuredClone(loaded.workflow.jobs[caller]); }],
-    ['broken checkpoint sequence', loaded => { loaded.workflow.jobs.controlled_human_reviewer.needs = ['controlled_human_authority', 'controlled_human_requester']; }],
-  ]) {
-    const changed = structuredClone(primary);
-    mutate(changed);
-    assert.throws(() => assertCallerSecretContract(changed), mutationName);
-  }
-});
-
-test('package and workflow authority expose no stale resume path', async () => {
-  const packageJson=JSON.parse(await readFile('package.json','utf8'));
-  assert.equal(Object.hasOwn(packageJson.scripts,'pr-c-controlled-human:resume'),false);
-  for(const workflowPath of [CHECKPOINT_WORKFLOW,EDGE_DEPLOY_WORKFLOW,PREPARE_WORKFLOW,QUIESCE_WORKFLOW,RECOVERY_WORKFLOW,VERIFY_WORKFLOW]) {
-    const source=await readFile(workflowPath,'utf8');
-    assert.doesNotMatch(source,/pr-c-controlled-human:resume|prCControlledHumanEnvironment[.]mjs resume|\bresume --authority\b/u);
-  }
-});
-test('every reusable phase binds the protected public target digest into controller context',async()=>{
-  for(const workflowPath of [CHECKPOINT_WORKFLOW,EDGE_DEPLOY_WORKFLOW,PREPARE_WORKFLOW,QUIESCE_WORKFLOW,RECOVERY_WORKFLOW,VERIFY_WORKFLOW]) {
-    const {source,workflow}=await load(workflowPath);
-    assert.equal(workflow.on.workflow_call.inputs.public_target_digest.required,true);
-    const job=Object.values(workflow.jobs)[0];
-    assert.equal(job.env.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST,'${{ inputs.public_target_digest }}');
-    assert.match(source,/PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST/u);
-  }
-});
-
-test('every direct PostgreSQL workflow step immediately verifies the tracked pinned Supabase CA', async () => {
-  for (const [workflowPath, expectedBindings] of DATABASE_TLS_GUARDS) {
-    const { source, workflow } = await load(workflowPath);
-    const jobs = Object.values(workflow.jobs);
-    assert.equal(jobs.length, 1, `${workflowPath} must retain one auditable job`);
-    const steps = jobs[0].steps;
-    const actualVerifierSteps = steps.filter(step => step.run === PINNED_CA_VERIFY_COMMAND);
-    assert.equal(actualVerifierSteps.length, expectedBindings.length, `${workflowPath} verifier count`);
-    for (const [databaseStepName, verifierStepName] of expectedBindings) {
-      const databaseIndex = steps.findIndex(step => step.name === databaseStepName);
-      assert.ok(databaseIndex > 0, `${workflowPath}:${databaseStepName} must exist after a guard`);
-      const verifier = steps[databaseIndex - 1];
-      assert.equal(verifier.name, verifierStepName, `${workflowPath}:${databaseStepName} guard name`);
-      assert.equal(verifier.run, PINNED_CA_VERIFY_COMMAND, `${workflowPath}:${databaseStepName} guard command`);
-      assert.equal(verifier.env, undefined, `${workflowPath}:${databaseStepName} guard must not receive credentials`);
-    }
-    assert.doesNotMatch(source, /NODE_EXTRA_CA_CERTS|PGSSLROOTCERT|BEGIN (?:RSA )?PRIVATE KEY|BEGIN CERTIFICATE|sslmode=(?:disable|allow|prefer|require|verify-ca)|rejectUnauthorized\s*[:=]\s*false/iu);
-    assert.doesNotMatch(source, /secrets\.[A-Z0-9_]*(?:CA|CERTIFICATE|SSLROOTCERT)/u);
-  }
-});
-const assertProtectedEnvironmentSecrets = ({ source, workflow }, names) => {
-  assert.equal(workflow.on.workflow_call.inputs.exercise_id, undefined);
-  assert.deepEqual(sorted(Object.keys(workflow.on.workflow_call.secrets)), sorted(names));
-  for (const name of names) assert.match(source, new RegExp(`secrets\\.${name}`, 'u'));
-  assert.doesNotMatch(source, /secrets\.(?:database_url|exercise_id|supabase_url|supabase_access_token|supabase_project_ref|supabase_service_role_key|password_bundle_json|evidence_hmac_key)/u);
-};
-
-test('preparation is reusable from exact-head PR CI, action-pinned, and step-scopes protected values', async () => {
-  const loaded=await load(PREPARE_WORKFLOW); assertReusable(loaded); assertPinned(loaded.source); assertNoJobSecrets(loaded.workflow);
-  assertProtectedEnvironmentSecrets(loaded, ['PR_C_CONTROLLED_HUMAN_DATABASE_URL', 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID', 'PR_C_CONTROLLED_HUMAN_SUPABASE_URL', 'PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY', 'PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF', 'PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON', 'PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY']);
-  const {source,workflow}=loaded; const job=workflow.jobs.prepare;
-  assert.equal(job.environment,'hosted-nonproduction-pilot'); assert.equal(job.env.PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN,PREVIEW_ORIGIN);
-  assert.match(source,/pull\.head\.sha !== process\.env\.EXPECTED_HEAD/u); assert.match(source,/artifact\.digest !== process\.env\.EXPECTED_ARTIFACT_DIGEST/u);
-  assert.match(source,/run\.event !== 'pull_request'/u); assert.match(source,/output\/controlled-human\/verify\.json/u);
-  const preparationIndex=job.steps.findIndex(step=>String(step.run??'').startsWith('node scripts/buildPrCControlledHumanPreparation.mjs '));
-  const templateIndex=job.steps.findIndex(step=>String(step.run??'').startsWith('node scripts/writePrCControlledHumanObservationTemplates.mjs '));
-  assert.ok(preparationIndex>=0&&templateIndex>preparationIndex);
-  assert.equal(job.steps[templateIndex].run,'node scripts/writePrCControlledHumanObservationTemplates.mjs --preparation output/controlled-human/preparation.json --output-directory output/controlled-human/templates');
-  assert.equal(job.env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA,'${{ inputs.exact_head_sha }}');
-  assert.equal(job.env.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST,'${{ inputs.exercise_digest }}');
-  assert.match(source,/recover-reset --reason abort/u);
-  const abortVerifier=job.steps.find(step=>step.name==='Verify pinned Supabase CA for abort recovery');
-  const abortRecovery=job.steps.find(step=>step.name==='Protected exact-bound abort recovery after failed seed or evidence assembly');
-  assert.equal(abortVerifier.id,'verify_abort_recovery_ca');
-  assert.equal(abortVerifier.if,"${{ failure() && steps.apply.outcome != 'skipped' }}");
-  assert.equal(abortRecovery.if,"${{ failure() && steps.apply.outcome != 'skipped' && steps.verify_abort_recovery_ca.outcome == 'success' }}");
-  const checkout=job.steps.find(step=>String(step.uses??'').startsWith('actions/checkout@')); assert.equal(checkout.with['persist-credentials'],false);
-  assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
-});
-
-test('Edge workflow retains provider baseline, provider receipt and runtime observation without claiming local equality', async () => {
-  const loaded=await load(EDGE_DEPLOY_WORKFLOW); assertReusable(loaded); assertPinned(loaded.source); assertNoJobSecrets(loaded.workflow);
-  assertProtectedEnvironmentSecrets(loaded, ['PR_C_CONTROLLED_HUMAN_DATABASE_URL', 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID', 'PR_C_CONTROLLED_HUMAN_SUPABASE_URL', 'PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN', 'PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF', 'PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY']);
-  const {source,workflow}=loaded; const job=workflow.jobs['deploy-exact-edge-source']; assert.equal(job.environment,'hosted-nonproduction-pilot');
-  assert.match(source,/--provider-baseline output\/controlled-human\/provider-baseline\.json/u);
-  assert.match(source,/provider-attested deployment and runtime manifest/u);
-  assert.match(source,/pr-c-controlled-human-synthetic-generation/u);
-  assert.doesNotMatch(source,/verified_exact_source|deployedSourceDigest/u);
-  assert.match(source,/supabase\/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf/u);
-  assert.doesNotMatch(source,/console\.(?:log|error)|response\.(?:text|arrayBuffer)\(/u);
-});
-
-test('checkpoint workflow binds immutable PR comments to application duties and backend observations', async () => {
-  const loaded=await load(CHECKPOINT_WORKFLOW); assertReusable(loaded); assertPinned(loaded.source); assertNoJobSecrets(loaded.workflow);
-  assertProtectedEnvironmentSecrets(loaded, ['PR_C_CONTROLLED_HUMAN_DATABASE_URL', 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID', 'PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY']);
-  const {source,workflow}=loaded; const job=workflow.jobs.capture; assert.equal(job.environment,'hosted-nonproduction-pilot');
-  assert.match(source,/issues\.getComment/u); assert.match(source,/comment\.created_at !== comment\.updated_at/u);
-  assert.match(source,/\$\{kind\} run identity mismatch/u); assert.match(source,/immutable \$\{kind\} artifact missing or ambiguous/u);
-  assert.match(source,/comment\.user\?\.type !== 'User'/u); assert.match(source,/checkpoint-observe --request/u);
-  assert.match(source,/serverBinding\?\.bindingToken \?\? null/u);
-  assert.match(source,/quiesce_run_id/u); assert.match(source,/Validate the exact pre-comment read-only transition/u);
-  assert.doesNotMatch(source,/prCControlledHumanEnvironment\.mjs quiesce/u);
-  assert.match(source,/--quiesce .* --comment .* --observer /u); assert.match(source,/rmSync\('output\/controlled-human\/private'/u);
-  assert.doesNotMatch(source,/OBSERVATIONS_JSON|GITHUB_ACTOR/u);
-});
-
-test('quiesce workflow enters server-enforced read-only before comments can attest that state', async () => {
-  const loaded=await load(QUIESCE_WORKFLOW); assertReusable(loaded); assertPinned(loaded.source); assertNoJobSecrets(loaded.workflow);
-  assertProtectedEnvironmentSecrets(loaded, ['PR_C_CONTROLLED_HUMAN_DATABASE_URL', 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID', 'PR_C_CONTROLLED_HUMAN_SUPABASE_URL', 'PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF']);
-  const {source,workflow}=loaded; const job=workflow.jobs.quiesce; assert.equal(job.environment,'hosted-nonproduction-pilot');
-  const active=job.steps.findIndex(step=>step.name==='Reverify exact preview and active synthetic state');
-  const transition=job.steps.findIndex(step=>step.name==='Enter exact server-enforced read-only state before any read-only human observation');
-  const upload=job.steps.findIndex(step=>String(step.uses??'').startsWith('actions/upload-artifact@'));
-  assert.ok(active>=0 && active<transition && transition<upload);
-  assert.match(source,/quiesce --authority output\/controlled-human\/current-verify\.json/u);
-  assert.match(source,/pr264-controlled-human-quiesce-/u);
-  assert.doesNotMatch(source,/issues\.(?:getComment|listComments)/u);
-});
-
-test('final verification validates signed evidence then deprovisions directly from frozen read-only state', async () => {
-  const loaded=await load(VERIFY_WORKFLOW); assertReusable(loaded); assertPinned(loaded.source); assertNoJobSecrets(loaded.workflow);
-  assertProtectedEnvironmentSecrets(loaded, ['PR_C_CONTROLLED_HUMAN_DATABASE_URL', 'PR_C_CONTROLLED_HUMAN_EXERCISE_ID', 'PR_C_CONTROLLED_HUMAN_SUPABASE_URL', 'PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY', 'PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF', 'PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY']);
-  const {source,workflow}=loaded; const steps=workflow.jobs.verify.steps;
-  const immutableComments=steps.findIndex(step=>step.name==='Revalidate immutable human comments and exact signed observation bytes');
-  const validate=steps.findIndex(step=>step.name==='Validate preparation and every signed human/server checkpoint before reset');
-  const deprovision=steps.findIndex(step=>step.name==='Deprovision exact synthetic exercise directly from frozen read-only state');
-  const post=steps.findIndex(step=>step.name==='Independently re-inspect post-deprovision state');
-  const session=steps.findIndex(step=>step.name==='Build verified human session from recomputed evidence');
-  assert.ok(immutableComments>=0 && immutableComments<validate && validate<deprovision && deprovision<post && post<session);
-  assert.doesNotMatch(source,/\bresume\b/u); assert.match(source,/deprovision --authority .*quiesce\.json/u);
-  assert.match(source,/post-deprovision-verify --authority .*deprovision\.json/u);
-  assert.match(source,/--post-deprovision .*post-deprovision\.json/u);
-  assert.match(source,/issues\.getComment/u); assert.match(source,/comment\.created_at !== comment\.updated_at/u);
-  assert.match(source,/checkpoint\.signerDigest !== signerDigest/u); assert.match(source,/observation-bytes/u);
-  assert.equal(workflow.permissions.issues, 'read');
-  assert.doesNotMatch(source,/gh pr merge|git push|netlify deploy|supabase functions deploy/iu);
-  assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
-});
-
-test('manual recovery executes only trusted current PR code while prior exact-head authority remains data', async () => {
-  const {source,workflow}=await load(RECOVERY_WORKFLOW);assertPinned(source);assertNoJobSecrets(workflow);
-  assert.deepEqual(Object.keys(workflow.on),['workflow_call','workflow_dispatch']);
-  for (const input of ['exact_head_sha','trusted_execution_sha','netlify_deploy_id','exercise_digest','target_fingerprint','public_target_digest','reason']) assert.equal(workflow.on.workflow_call.inputs[input].required,true);
-  assert.equal(workflow.on.workflow_dispatch.inputs.public_target_digest.required,true);
-  assert.deepEqual(workflow.on.workflow_dispatch.inputs.reason.options,['abort','expiry']);
-  const job=workflow.jobs.recover;assert.equal(job.environment,'hosted-nonproduction-pilot');assert.equal(workflow.concurrency['cancel-in-progress'],false);
-  assert.equal(job.env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST,'${{ inputs.exercise_digest }}');
-  assert.match(source,/pulls\.listCommits/u);assert.match(source,/head was not part of PR 264/u);assert.match(source,/untrusted PR source/u);assert.match(source,/unauthorized actor/u);
-  assert.match(source,/pull\.head\.sha !== process\.env\.TRUSTED_EXECUTION_SHA/u);
-  assert.match(source,/ref: \$\{\{ inputs\.trusted_execution_sha \}\}/u);assert.doesNotMatch(source,/ref: \$\{\{ inputs\.exact_head_sha \}\}/u);
-  assert.match(source,/PR_C_CONTROLLED_HUMAN_TRUSTED_RECOVERY_SHA: \$\{\{ inputs\.trusted_execution_sha \}\}/u);assert.match(source,/PR_C_CONTROLLED_HUMAN_RECOVERY_MODE: trusted-current-pr-head/u);
-  assert.match(source,/recover-reset --reason \$\{\{ inputs\.reason \}\}/u);assert.match(source,/pr_c_controlled_human_recovery_authorities/u);
-  assert.match(source,/secrets\.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY/u);assert.doesNotMatch(source,/secrets:\s*inherit/u);
-  assert.doesNotMatch(source,/https:\/\/(?:www\.)?avalaos\.com/iu);
-});
-
-test('primary PR C workflow exposes only exact trusted label phases and prior immutable producers', async () => {
-  const { source, workflow } = await load('.github/workflows/transcript-flow-pr-c.yml');
-  assertCallerSecretContract({ source, workflow });
-  assert.deepEqual(workflow.on.pull_request.types, ['opened', 'synchronize', 'reopened', 'labeled']);
-  assert.equal(workflow.concurrency['cancel-in-progress'], false);
-  for (const permission of ['actions', 'contents', 'issues', 'pull-requests']) assert.equal(workflow.permissions[permission], 'read');
-  for (const label of ['pr264-controlled-human-edge', 'pr264-controlled-human-prepare', 'pr264-controlled-human-quiesce', 'pr264-controlled-human-checkpoints', 'pr264-controlled-human-final', 'pr264-controlled-human-abort', 'pr264-controlled-human-expiry']) assert.match(source, new RegExp(label, 'u'));
-  assert.match(source, /github\.event\.action == 'labeled'/u);
-  assert.match(source, /apreddy-autobotz/u);
-  assert.match(source, /run\.id !== context\.runId/u);
-  assert.match(source, /run\.status === 'completed'/u);
-  assert.match(source, /run\.conclusion === 'success'/u);
-  assert.match(source, /preview\.headers\.get\('x-avalaos-netlify-deploy-id'\)/u);
-  assert.match(source, /new Set\(\[\.\.\.selected\.values\(\)\]/u);
-  assert.match(source, /RECOVERY_HEAD_SHA/u);
-  assert.match(source, /trusted-execution-sha/u);
-  assert.match(source, /EXPECTED_PUBLIC_TARGET_DIGEST/u);
-  assert.match(source, /pulls\.listCommits/u);
-  assert.match(source, /phase === 'abort' \|\| phase === 'expiry'/u);
-  assert.match(source, /trusted_execution_sha: \$\{\{ needs\.controlled_human_authority\.outputs\.trusted-execution-sha \}\}/u);
-  assert.match(source, /needs: \[controlled_human_authority, controlled_human_requester\]/u);
-  assert.match(source, /needs: \[controlled_human_authority, controlled_human_approver\]/u);
-for (const called of [EDGE_DEPLOY_WORKFLOW, PREPARE_WORKFLOW, QUIESCE_WORKFLOW, CHECKPOINT_WORKFLOW, VERIFY_WORKFLOW, RECOVERY_WORKFLOW]) assert.match(source, new RegExp(`uses: \\.\\/${called.replaceAll('.', '\\.').replaceAll('/', '\\/')}`, 'u'));
-  assert.doesNotMatch(source, /secrets:\s*inherit/u);
-});
+const assertUpload=(job,contractKey)=>{const uploads=job.steps.filter(step=>step.uses===exactActions.upload);assert.equal(uploads.length,1,`${contractKey}:upload-count`);const upload=uploads[0],contract=uploadContracts[contractKey];assert.equal(upload.if,contractKey==='controlled_human_credentials_preflight'?'${{ success() }}':undefined);assert.equal(upload['continue-on-error'],undefined);assert.equal(upload.env,undefined);assert.deepEqual(upload.with,{name:contract.name,path:contract.path,'if-no-files-found':'error','retention-days':14});};
+const assertExpressionRoots=(workflow,allowed)=>{for(const {path,value} of walkAll(workflow)){if(typeof value!=='string')continue;for(const match of value.matchAll(/\$\{\{\s*([A-Za-z_][A-Za-z0-9_-]*)/gu))assert.ok(allowed.has(match[1]),`${path}:unknown-expression-root:${match[1]}`);}};
+const assertAuthority=workflow=>{const job=workflow.jobs.controlled_human_authority;assert.equal(job.environment,'hosted-nonproduction-pilot');assert.equal(job.needs,undefined);assert.equal(job.secrets,undefined);assert.equal(job.permissions,undefined);assert.equal(job.steps.length,1);assert.equal(job.steps[0].id,'authority');assert.equal(job.steps[0].uses,exactActions.github);assert.equal(job.steps[0].if,undefined);assert.equal(job.steps[0]['continue-on-error'],undefined);const script=job.steps[0].with.script;for(const marker of ["context.payload.action !== 'labeled'","context.payload.pull_request?.number !== 264","expectedBranch = 'controller/governed-delivery-monitor-pr-c-20260831'","trusted(context.actor)","trusted(process.env.TRIGGERING_ACTOR)","pull.state !== 'open'","run.event === 'pull_request'","run.status === 'completed'","run.conclusion === 'success'","run.id !== context.runId","preview.status !== 200","environment !== 'hosted_nonproduction_pilot'","pulls.listCommits","phase === 'abort' || phase === 'expiry'"])assert.match(script,new RegExp(marker.replaceAll(/[.*+?^${}()|[\]\\]/gu,'\\$&'),'u'));for(const [label,phase] of [['credentials-preflight','credentials-preflight'],['edge','edge'],['prepare','prepare'],['quiesce','quiesce'],['checkpoints','checkpoints'],['final','final'],['abort','abort'],['expiry','expiry']])assert.match(script,new RegExp(`\\['pr264-controlled-human-${label}', '${phase}'\\]`,'u'));assert.equal(walk(job).length,0);};
+export function validateSemanticWorkflow(workflow){
+ assert.deepEqual(Object.keys(workflow.on),['pull_request','workflow_dispatch']);assert.deepEqual(workflow.on.pull_request.types,['opened','synchronize','reopened','labeled']);assert.equal(workflow.on.workflow_dispatch,null);assert.deepEqual(workflow.permissions,{actions:'read',contents:'read',issues:'read','pull-requests':'read'});assert.equal(workflow.env,undefined);assert.equal(workflow.defaults,undefined);assertPinnedUses(workflow);assertExpressionRoots(workflow,new Set(['failure','github','needs','secrets','steps','success','vars']));
+ assert.deepEqual(Object.keys(workflow.jobs),['exact-head-governed-evidence','controlled_human_authority',...Object.keys(expected)]);
+ assert.equal(workflow.concurrency['cancel-in-progress'],false);assertAuthority(workflow);const jobs=Object.fromEntries(Object.entries(workflow.jobs).filter(([n])=>n.startsWith('controlled_human_')&&n!=='controlled_human_authority'));
+ assert.deepEqual(Object.keys(jobs),Object.keys(expected));
+ for(const [name,[phase,needs,condition]] of Object.entries(expected)){
+  const job=jobs[name];assert.equal(job.uses,undefined);assert.equal(job.secrets,undefined);assert.equal(job.with,undefined);assert.equal(job.environment,'hosted-nonproduction-pilot');assert.deepEqual(job.needs,needs);assert.equal(job.if,condition);assert.equal(job.services,undefined);assert.equal(job.container,undefined);assert.equal(job.outputs,undefined);assert.equal(job.permissions,undefined);
+  assert.equal(job['continue-on-error'],undefined);for(const [key,v] of Object.entries(job.env??{})){assert.equal(protectedNames.has(key),false,`${name}:job-env:${key}`);assert.doesNotMatch(String(v),/\bsecrets\b/iu);}
+  const guardIndexes=job.steps.flatMap((step,index)=>step.run===guard(phase)?[index]:[]);assert.equal(guardIndexes.length,1,`${name}:guard-count`);const i=guardIndexes[0];assert.ok(i>=4,`${name}:guard`);const g=job.steps[i];assert.equal(g.if,undefined);assert.equal(g['continue-on-error'],undefined);
+  assertBootstrap(job,i,name==='controlled_human_recovery'?'${{ needs.controlled_human_authority.outputs.trusted-execution-sha }}':'${{ needs.controlled_human_authority.outputs.exact-head-sha }}');
+  assert.deepEqual(Object.keys(g.env??{}).sort(),[...CONTROLLED_HUMAN_PHASE_SECRETS[phase]].sort());for(const key of CONTROLLED_HUMAN_PHASE_SECRETS[phase])assert.equal(g.env[key],secret(key));
+  assert.equal(job.steps.findIndex(s=>Object.values(s.env??{}).some(v=>String(v).includes('secrets.'))),i);
+  const expectedLeaves=[...Object.keys(g.env).map(alias=>({path:`${i}:${alias}`,value:g.env[alias]})),...assertConsumerContracts(job,name in consumerContracts?name:'checkpoint',name)].sort((a,b)=>a.path.localeCompare(b.path));
+  const actualLeaves=job.steps.flatMap((step,index)=>Object.entries(step.env??{}).filter(([,value])=>secretRe.test(String(value))).map(([alias,value])=>({path:`${index}:${alias}`,value}))).sort((a,b)=>a.path.localeCompare(b.path));assert.deepEqual(actualLeaves,expectedLeaves,`${name}:all-secret-paths`);
+  const actual=job.steps.filter(s=>s!==g&&Object.values(s.env??{}).some(v=>secretRe.test(String(v))));
+  for(const step of job.steps){const outside=JSON.stringify({run:step.run,with:step.with,if:step.if,outputs:step.outputs});assert.doesNotMatch(outside,/\bsecrets\b/iu);if(Object.values(step.env??{}).some(v=>String(v).includes('secrets.'))){assert.doesNotMatch(String(step.run??''),/GITHUB_(?:ENV|OUTPUT|PATH|STEP_SUMMARY)/u);assert.doesNotMatch(String(step.uses??''),/^actions\/upload-artifact@/u);if(step.name==='Protected exact-bound abort recovery after failed seed or evidence assembly'){assert.equal(step.if,"${{ failure() && steps.apply.outcome != 'skipped' && steps.verify_abort_recovery_ca.outcome == 'success' }}");assert.equal(step['continue-on-error'],true);}else{assert.equal(step['continue-on-error'],undefined);}}}
+  assertUpload(job,name);
+  if(name==='controlled_human_credentials_preflight')assert.deepEqual(job.steps.map(step=>step.name??null),[null,'Require exact checkout and accepted base',null,'Install exact dependencies before protected values','Require exact protected credential preflight secrets','Verify pinned Supabase CA without consuming credentials','Verify protected credential transport with bounded read-only checks','Upload sanitized credential transport report']);
+ }
+ for(const leaf of walk(workflow))assert.match(leaf.path,/\.jobs\.controlled_human_[a-z_]+\.steps\[\d+\]\.env\.[A-Z0-9_]+$/u,leaf.path);
+}
+const validate=validateSemanticWorkflow;
+export function validateSemanticRecovery(workflow){const job=workflow.jobs.recover;assert.deepEqual(Object.keys(workflow.on),['workflow_dispatch']);const inputs=workflow.on.workflow_dispatch.inputs;assert.deepEqual(Object.keys(inputs),['exact_head_sha','trusted_execution_sha','netlify_deploy_id','exercise_digest','target_fingerprint','public_target_digest','reason']);for(const [name,input] of Object.entries(inputs)){assert.equal(input.required,true,`recover:${name}:required`);assert.equal(input.type,name==='reason'?'choice':'string');}assert.deepEqual(inputs.reason.options,['abort','expiry']);assert.deepEqual(workflow.permissions,{actions:'read',contents:'read','pull-requests':'read'});assert.deepEqual(workflow.concurrency,{group:'pr264-controlled-human-${{ inputs.exercise_digest }}','cancel-in-progress':false});assert.equal(workflow.env,undefined);assert.equal(workflow.defaults,undefined);assert.deepEqual(Object.keys(workflow.jobs),['recover']);assertPinnedUses(workflow);assertExpressionRoots(workflow,new Set(['github','inputs','secrets']));assert.equal(job.environment,'hosted-nonproduction-pilot');assert.equal(job.secrets,undefined);assert.equal(job.uses,undefined);assert.equal(job.services,undefined);assert.equal(job.container,undefined);assert.equal(job.outputs,undefined);assert.equal(job.permissions,undefined);for(const name of Object.keys(job.env??{})){assert.doesNotMatch(name,/^GITHUB_/u);assert.equal(protectedNames.has(name),false);}const guards=job.steps.filter(s=>s.run===guard('recover'));assert.equal(guards.length,1);assert.equal(guards[0].if,undefined);assert.equal(guards[0]['continue-on-error'],undefined);assert.deepEqual(Object.keys(guards[0].env).sort(),[...CONTROLLED_HUMAN_PHASE_SECRETS.recover].sort());for(const key of CONTROLLED_HUMAN_PHASE_SECRETS.recover)assert.equal(guards[0].env[key],secret(key));const guardIndex=job.steps.indexOf(guards[0]);assertBootstrap(job,guardIndex,'${{ inputs.trusted_execution_sha }}');const first=job.steps.findIndex(s=>Object.values(s.env??{}).some(v=>secretRe.test(String(v))));assert.equal(job.steps[first],guards[0]);const expectedLeaves=[...Object.keys(guards[0].env).map(alias=>({path:`${guardIndex}:${alias}`,value:guards[0].env[alias]})),...assertConsumerContracts(job,'manual_recovery')].sort((a,b)=>a.path.localeCompare(b.path));const actualLeaves=job.steps.flatMap((step,index)=>Object.entries(step.env??{}).filter(([,value])=>secretRe.test(String(value))).map(([alias,value])=>({path:`${index}:${alias}`,value}))).sort((a,b)=>a.path.localeCompare(b.path));assert.deepEqual(actualLeaves,expectedLeaves);for(const step of job.steps)if(Object.values(step.env??{}).some(value=>secretRe.test(String(value)))){assert.doesNotMatch(String(step.run??''),/GITHUB_(?:ENV|OUTPUT|PATH|STEP_SUMMARY)/u);assert.equal(step['continue-on-error'],undefined);}assertUpload(job,'manual_recovery');for(const leaf of walk(workflow))assert.match(leaf.path,/\.jobs\.recover\.steps\[\d+\]\.env\.[A-Z0-9_]+$/u);}
+test('primary owns exact direct protected jobs without reusable secret transport',async()=>{const {source,workflow}=await load(PRIMARY);validate(workflow);for(const [name,hash] of Object.entries(jobDigests))assert.equal(digest(workflow.jobs[name]),hash);assert.doesNotMatch(source,/PR264_ENVIRONMENT_SECRET_REQUIRED|secrets:\s*inherit|uses:\s*\.\/\.github\/workflows\/pr264-controlled-human/u);for(const n of ['edge-deploy','prepare','quiesce','checkpoint','verify'])assert.equal(existsSync(`.github/workflows/pr264-controlled-human-${n}.yml`),false);});
+test('direct contract rejects missing, displaced, skippable, persisted, and global guards',async()=>{const {workflow}=await load(PRIMARY),xs=[];{const x=structuredClone(workflow);x.jobs.controlled_human_edge.steps=x.jobs.controlled_human_edge.steps.filter(s=>s.run!==guard('edge'));xs.push(x)}{const x=structuredClone(workflow),s=x.jobs.controlled_human_edge.steps,i=s.findIndex(v=>v.run===guard('edge')),j=s.findIndex((v,n)=>n>i&&Object.values(v.env??{}).some(value=>String(value).includes('secrets.')));[s[i],s[j]]=[s[j],s[i]];xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_prepare.steps.find(s=>s.run===guard('prepare')).if='${{ false }}';xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_quiesce.steps.find(s=>s.run===guard('quiesce'))['continue-on-error']=true;xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_final.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL=secret('PR_C_CONTROLLED_HUMAN_DATABASE_URL');xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_requester.steps.find(s=>s.run===guard('checkpoint')).run+='\necho x >> "$GITHUB_OUTPUT"';xs.push(x)}for(const x of xs)assert.throws(()=>validate(x),assert.AssertionError);});
+test('credential preflight is PAT-free, CA-adjacent, read-only and uploads one report',async()=>{const {workflow}=await load(PRIMARY),j=workflow.jobs.controlled_human_credentials_preflight,s=j.steps,i=s.findIndex(x=>x.run===guard('preflight'));assert.equal(s[i+1].run,'node scripts/prCControlledHumanPostgresTls.mjs verify-ca');assert.equal(s[i+2].run,'node scripts/prCControlledHumanCredentialPreflight.mjs');assert.equal(JSON.stringify(j).includes('SUPABASE_ACCESS_TOKEN'),false);const u=s.filter(x=>String(x.uses??'').startsWith('actions/upload-artifact@'));assert.equal(u.length,1);assert.equal(u[0].if,'${{ success() }}');assert.equal(u[0].with.path,'output/pr-c-controlled-human-credential-preflight/credential-preflight.json');assert.equal(u[0].with['if-no-files-found'],'error');});
+test('manual recovery is separate direct environment dispatch',async()=>{const {source,workflow}=await load(RECOVERY);validateSemanticRecovery(workflow);assert.equal(digest(workflow.jobs.recover),'772753ccec55f3ecd9c4a0195f469ce53093a7c8d5f05b30c1ce105fdd3aa277');assert.equal(workflow.jobs.recover.environment,'hosted-nonproduction-pilot');assert.doesNotMatch(source,/workflow_call|PR264_ENVIRONMENT_SECRET_REQUIRED|secrets:\s*inherit/u);assert.match(source,/ref: \$\{\{ inputs\.trusted_execution_sha \}\}/u);});
+test('every direct phase rejects secret transport, bracket access, duplicate guards, and built-in overrides',async()=>{const {workflow}=await load(PRIMARY);for(const [name,[phase]] of Object.entries(expected)){for(const mutate of [job=>{job.secrets='inherit'},job=>{job.steps.push({name:'unsafe',run:"echo ${{ secrets['PR_C_CONTROLLED_HUMAN_DATABASE_URL'] }}"})},job=>{job.steps.push(structuredClone(job.steps.find(s=>s.run===guard(phase))))},job=>{job.env.GITHUB_JOB='substituted'}]){const x=structuredClone(workflow);mutate(x.jobs[name]);assert.throws(()=>validate(x),assert.AssertionError,`${name}:${phase}`);}}});
+test('semantic phase contracts reject command, alias, upload, service, output, and early-secret substitutions',async()=>{const {workflow}=await load(PRIMARY);for(const [name] of Object.entries(expected)){const key=name in consumerContracts?name:'checkpoint',first=consumerContracts[key][0];for(const mutate of [job=>{job.steps.find(step=>step.name===first.name).run='echo substituted'},job=>{const step=job.steps.find(candidate=>candidate.name===first.name),alias=Object.keys(first.env)[0];step.env[alias]=secret(CONTROLLED_HUMAN_PHASE_SECRETS[expected[name][0]].find(value=>value!==first.env[alias])??'PR_C_CONTROLLED_HUMAN_UNKNOWN')},job=>{job.steps.find(step=>step.uses===exactActions.upload).with.name='substituted'},job=>{job.services={leak:{env:{TOKEN:secret(DATABASE_URL)}}}},job=>{job.outputs={leak:secret(DATABASE_URL)}},job=>{job.steps.unshift({name:'early',env:{LEAK:secret(CONTROLLED_HUMAN_PHASE_SECRETS[expected[name][0]][0])},run:'true'})}]){const x=structuredClone(workflow);mutate(x.jobs[name]);assert.throws(()=>validate(x),assert.AssertionError,`${name}:${first.name}`);}}});
+test('semantic authority contract rejects trigger, actor, phase, expression-root, permission and protected-job substitutions',async()=>{const {workflow}=await load(PRIMARY);for(const [label,mutate] of [['trigger',x=>{x.on.pull_request.types=['opened']}],['permission',x=>{x.permissions.actions='write'}],['event-check',x=>{x.jobs.controlled_human_authority.steps[0].with.script=x.jobs.controlled_human_authority.steps[0].with.script.replace("context.payload.action !== 'labeled'","false")}],['phase',x=>{x.jobs.controlled_human_authority.steps[0].with.script=x.jobs.controlled_human_authority.steps[0].with.script.replace('pr264-controlled-human-edge','pr264-controlled-human-other')}],['actor',x=>{x.jobs.controlled_human_authority.steps[0].with.script=x.jobs.controlled_human_authority.steps[0].with.script.replace("trusted(context.actor)",'true')}],['bare-role-expression',x=>{x.jobs.controlled_human_requester.steps.find(step=>step.name==='Retrieve immutable human duty comment and reject edited or substituted evidence').env.EXPECTED_ROLE='${{ requester }}'}],['unknown-expression-root',x=>{x.jobs.controlled_human_edge.steps[0].with.ref='${{ untrusted.sha }}'}],['extra-job',x=>{x.jobs.controlled_human_extra=structuredClone(x.jobs.controlled_human_edge)}]]){const changed=structuredClone(workflow);mutate(changed);assert.throws(()=>validate(changed),assert.AssertionError,label);}});
+test('preflight has no provider, admin, migration, seed, deploy, mutation, or broad permission path',async()=>{const {workflow}=await load(PRIMARY),job=workflow.jobs.controlled_human_credentials_preflight,runs=job.steps.map(s=>String(s.run??'')).join('\n');assert.doesNotMatch(runs,/provider|admin|migration|seed|deploy|apply|write|mutat/iu);assert.equal(job.permissions,undefined);assert.equal(job.services,undefined);assert.equal(job.container,undefined);assert.equal(job.steps.some(s=>s['continue-on-error']!==undefined),false);});
+test('preflight semantic contract rejects added mutation/provider/Admin/deploy and broad permission steps',async()=>{const {workflow}=await load(PRIMARY);for(const run of ['node provider.mjs','node admin.mjs','npm run migration','npm run seed','npm run deploy','node write.mjs']){const changed=structuredClone(workflow);changed.jobs.controlled_human_credentials_preflight.steps.splice(-1,0,{name:'unsafe extension',run});assert.throws(()=>validate(changed),assert.AssertionError);}for(const mutate of [job=>{job.permissions={contents:'write'}},job=>{job.steps.find(step=>step.run===guard('preflight')).if='${{ false }}'},job=>{job.steps.find(step=>step.run===guard('preflight'))['continue-on-error']=true}]){const changed=structuredClone(workflow);mutate(changed.jobs.controlled_human_credentials_preflight);assert.throws(()=>validate(changed),assert.AssertionError);}});
+test('manual recovery semantic guard rejects transport, early secrets, skipping and built-in overrides',async()=>{const {workflow}=await load(RECOVERY);for(const mutate of [j=>{j.secrets='inherit'},j=>{j.env.GITHUB_JOB='recover'},j=>{j.steps.unshift({name:'early',run:'echo ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}'})},j=>{j.steps.find(s=>s.run===guard('recover')).if='${{ false }}'},j=>{j.steps.push(structuredClone(j.steps.find(s=>s.run===guard('recover'))))}]){const x=structuredClone(workflow);mutate(x.jobs.recover);assert.throws(()=>validateSemanticRecovery(x),assert.AssertionError);}});
+test('manual recovery rejects command, alias, upload, trigger, expression-root, permission and checkout substitutions',async()=>{const {workflow}=await load(RECOVERY);for(const mutate of [x=>{x.on.workflow_dispatch.inputs.reason.options=['abort']},x=>{x.permissions.contents='write'},x=>{x.jobs.recover.steps.find(step=>step.name===consumerContracts.manual_recovery[0].name).env.SUPABASE_PROJECT_REF=secret(DATABASE_URL)},x=>{x.jobs.recover.steps.find(step=>step.name===consumerContracts.manual_recovery[1].name).run='echo substituted'},x=>{x.jobs.recover.steps.find(step=>step.uses===exactActions.upload).with.name='substituted'},x=>{x.jobs.recover.steps.find(step=>step.uses===exactActions.checkout).with.ref='${{ requester }}'},x=>{x.jobs.recover.steps.find(step=>step.uses===exactActions.checkout).with.ref='${{ inputs.exact_head_sha }}'}]){const changed=structuredClone(workflow);mutate(changed);assert.throws(()=>validateSemanticRecovery(changed),assert.AssertionError);}});

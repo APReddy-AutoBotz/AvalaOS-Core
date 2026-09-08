@@ -1,17 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-session-2.json",
+  "$id": "https://avalaos.invalid/schemas/pr-c-controlled-human-session-3.json",
   "title": "Governed Delivery and Monitor PR C verified controlled-human session",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "status", "controlledHumanDisposition", "evidenceBasis", "preparationDigest", "exactHead", "github", "preview", "backendBinding", "humanParticipants", "journeys", "checkpoints", "totals", "defectHistory", "lifecycleControl", "reset", "completedAt"],
+  "required": ["schemaVersion", "status", "controlledHumanDisposition", "evidenceBasis", "preparationDigest", "exactHead", "producer", "github", "preview", "backendBinding", "humanParticipants", "journeys", "checkpoints", "totals", "defectHistory", "lifecycleControl", "reset", "completedAt"],
   "properties": {
-    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-human-session-2" },
+    "schemaVersion": { "const": "governed-delivery-monitor-pr-c-human-session-3" },
     "status": { "const": "passed" },
     "controlledHumanDisposition": { "const": "executed" },
     "evidenceBasis": { "const": "human_attested_plus_server_observed" },
     "preparationDigest": { "$ref": "#/$defs/digest" },
     "exactHead": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "producer": { "$ref": "#/$defs/finalProducer" },
     "github": { "$ref": "#/$defs/ciRecord" },
     "preview": { "$ref": "#/$defs/preview" },
     "backendBinding": {
@@ -52,6 +53,7 @@
     "completedAt": { "type": "string", "format": "date-time" }
   },
   "$defs": {
+    "finalProducer": { "type": "object", "additionalProperties": false, "required": ["workflowPath", "job", "event", "runId", "runAttempt"], "properties": { "workflowPath": { "const": ".github/workflows/transcript-flow-pr-c.yml" }, "job": { "const": "controlled_human_final" }, "event": { "const": "pull_request" }, "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" }, "runAttempt": { "type": "integer", "minimum": 1 } } },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "hmac": { "type": "string", "pattern": "^hmac-sha256:[0-9a-f]{64}$" },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },

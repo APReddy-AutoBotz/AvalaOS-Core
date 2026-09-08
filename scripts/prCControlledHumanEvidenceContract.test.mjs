@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -13,16 +13,35 @@ import {
   CHECKPOINT_SCHEMA_VERSION, CONTROLLED_HUMAN_CATALOG, CONTROLLED_HUMAN_EXECUTION_ORDER,
   CONTROLLED_HUMAN_SERVER_ACTIONS,
   CONTROLLED_HUMAN_MIGRATION_PATH, controlledHumanEvidenceDisposition, createEdgeDeploymentManifest,
-  createHumanCheckpoint, EDGE_DEPLOY_WORKFLOW, EDGE_MANIFEST_SCHEMA_VERSION, ENVIRONMENT,
+  createHumanCheckpoint, deriveControlledHumanPullRequestRuntime, EDGE_DEPLOY_WORKFLOW, EDGE_MANIFEST_SCHEMA_VERSION, ENVIRONMENT,
   HUMAN_DUTY_BY_PERSONA, PREPARATION_SCHEMA_VERSION, PREVIEW_ORIGIN, PR_C_WORKFLOW,
   REQUIRED_EDGE_FUNCTIONS, REQUIRED_JOURNEYS, SESSION_SCHEMA_VERSION, sha256Digest,
   validateControlledHumanProofPairs, validateEdgeDeploymentManifest, validateHumanCheckpoint, validatePreparationEvidence, validateVerifiedHumanSession,
 } from './prCControlledHumanEvidenceContract.mjs';
-import { verifyPr264DeployPreview } from './buildPrCControlledHumanPreparation.mjs';
+
+test('runtime producer identity rejects workflow, ref, repository, job, run, and attempt substitution',()=>{
+  const valid={GITHUB_EVENT_NAME:'pull_request',GITHUB_REPOSITORY:'APReddy-AutoBotz/AvalaOS-Core',GITHUB_WORKFLOW_REF:'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/transcript-flow-pr-c.yml@refs/pull/264/merge',GITHUB_JOB:'controlled_human_edge',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'2'};
+  assert.equal(deriveControlledHumanPullRequestRuntime(valid,'controlled_human_edge').job,'controlled_human_edge');
+  for(const key of ['GITHUB_EVENT_NAME','GITHUB_REPOSITORY','GITHUB_WORKFLOW_REF','GITHUB_JOB','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT'])assert.throws(()=>deriveControlledHumanPullRequestRuntime({...valid,[key]:'substituted'},'controlled_human_edge'),/RUNTIME_IDENTITY/u);
+});
+
+test('actual Edge verifier and preparation CLI preserve direct producer job identity',async()=>{const dir=await mkdtemp(path.join(os.tmpdir(),'pr264-direct-producer-'));try{const files={};for(const phase of ['preflight','plan','apply','verify']){files[phase]=path.join(dir,`${phase}.json`);await writeFile(files[phase],JSON.stringify(controllerRecord(phase)));}files.edge=path.join(dir,'edge.json');await writeFile(files.edge,JSON.stringify(edgeDeployment()));files.verified=path.join(dir,'verified-edge.json');files.output=path.join(dir,'preparation.json');const commonEnv={PR_C_CONTROLLED_HUMAN_RELEASE_SHA:head,PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:common.targetFingerprint,PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST:common.exerciseDigest,PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW:PR_C_WORKFLOW,PR_C_CONTROLLED_HUMAN_EDGE_RUN_ID:edgeProducer.runId,PR_C_CONTROLLED_HUMAN_EDGE_RUN_ATTEMPT:String(edgeProducer.runAttempt),PR_C_CONTROLLED_HUMAN_EDGE_ARTIFACT_NAME:edgeProducer.artifactName,PR_C_CONTROLLED_HUMAN_EDGE_ARTIFACT_DIGEST:d('edge-artifact'),PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY:signingKey};await verifyEdgeMain(['--input',files.edge,'--output',files.verified],commonEnv);const env={...commonEnv,GITHUB_EVENT_NAME:'pull_request',GITHUB_REPOSITORY:'APReddy-AutoBotz/AvalaOS-Core',GITHUB_WORKFLOW_REF:'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/transcript-flow-pr-c.yml@refs/pull/264/merge',GITHUB_JOB:'controlled_human_prepare',GITHUB_RUN_ID:preparationProducer.runId,GITHUB_RUN_ATTEMPT:String(preparationProducer.runAttempt),PR_C_CONTROLLED_HUMAN_CI_WORKFLOW:PR_C_WORKFLOW,PR_C_CONTROLLED_HUMAN_CI_RUN_ID:'123456789',PR_C_CONTROLLED_HUMAN_CI_RUN_ATTEMPT:'2',PR_C_CONTROLLED_HUMAN_CI_CONCLUSION:'success',PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_NAME:'governed-delivery-monitor-pr-c-123456789-2',PR_C_CONTROLLED_HUMAN_CI_ARTIFACT_DIGEST:d('ci-artifact'),PR_C_CONTROLLED_HUMAN_DEPLOY_ID:deployId,PR_C_CONTROLLED_HUMAN_CREATED_AT:createdAt};const response=new Response('<div id="root"></div>',{status:200,headers:{'x-avalaos-release':head,'x-avalaos-environment':ENVIRONMENT,'x-avalaos-netlify-deploy-id':deployId}});const built=await buildPreparationMain(['--preflight',files.preflight,'--plan',files.plan,'--apply',files.apply,'--verify',files.verify,'--edge-deployment',files.verified,'--output',files.output],env,async()=>response);assert.deepEqual(built.producer,preparationProducer);assert.equal(built.edgeDeployment.producer.job,'controlled_human_edge');}finally{await removeOwnedTempDirectory(dir,'pr264-direct-producer-');}});
+import { main as buildPreparationMain, verifyPr264DeployPreview } from './buildPrCControlledHumanPreparation.mjs';
+import { main as verifyEdgeMain } from './verifyPrCControlledHumanEdgeDeployment.mjs';
 import { deprovision, postDeprovisionVerify, quiesce } from './prCControlledHumanEnvironment.mjs';
 import { captureProviderDeployment } from './producePrCControlledHumanEdgeDeploymentManifest.mjs';
 import { MAX_CONTROLLED_HUMAN_COMMENT_BYTES, compactControlledHumanComment } from './compactPrCControlledHumanComment.mjs';
 import { buildBoundHumanObservationTemplates, main as writeObservationTemplates } from './writePrCControlledHumanObservationTemplates.mjs';
+
+const removeOwnedTempDirectory = async (directory, prefix) => {
+  const resolved = path.resolve(directory);
+  const actual = await realpath(directory);
+  const actualTempRoot = await realpath(os.tmpdir());
+  assert.equal(actual, resolved);
+  assert.equal(path.dirname(actual), actualTempRoot);
+  assert.match(path.basename(actual), new RegExp(`^${prefix}[A-Za-z0-9_-]+$`, 'u'));
+  await rm(actual, { recursive: true, force: true });
+};
 
 const root = path.resolve('.');
 const head = 'a'.repeat(40);
@@ -67,11 +86,13 @@ const providerObservation = () => REQUIRED_EDGE_FUNCTIONS.map((name, index) => (
   name, identityDigest: d(`provider-id-${name}`), bundleDigest: d(`provider-bundle-${name}`), deploymentReceiptDigest: d(`provider-receipt-${name}`),
   version: index + 1, updatedAtDigest: d(`provider-updated-${name}`), runtimeStatus: 401, observedAt: `2026-09-04T10:00:${String(index).padStart(2,'0')}Z`,
 }));
-const edgeProducer = { workflowPath: EDGE_DEPLOY_WORKFLOW, event: 'pull_request', runId: '987654321', runAttempt: 3, conclusion: 'success', artifactName: `pr264-controlled-human-edge-deployment-${head}-987654321-3` };
+const edgeProducer = { workflowPath: EDGE_DEPLOY_WORKFLOW, job: 'controlled_human_edge', event: 'pull_request', runId: '987654321', runAttempt: 3, conclusion: 'success', artifactName: `pr264-controlled-human-edge-deployment-${head}-987654321-3` };
+const preparationProducer = { workflowPath: PR_C_WORKFLOW, job: 'controlled_human_prepare', event: 'pull_request', runId: '987654322', runAttempt: 1 };
+const finalProducer = { workflowPath: PR_C_WORKFLOW, job: 'controlled_human_final', event: 'pull_request', runId: '987654323', runAttempt: 1 };
 const edgeDeployment = () => createEdgeDeploymentManifest({ root, exactHead: head, targetFingerprint: common.targetFingerprint, exerciseDigest: common.exerciseDigest, deployId, personaManifestDigest: common.personaManifestDigest, fixtureManifestDigest: common.fixtureManifestDigest, migrationRecords: ['migration-preflight','migration-apply','migration-verify'].map(migrationRecord), providerObservation: providerObservation(), producer: edgeProducer, signingKey });
 
 const preparation = () => buildPreparationEvidence({
-  root, exactHead: head,
+  root, exactHead: head, producer: preparationProducer,
   github: { workflowPath: PR_C_WORKFLOW, runId: '123456789', runAttempt: 2, conclusion: 'success', artifactName: 'governed-delivery-monitor-pr-c-123456789-2', artifactDigest: d('ci-artifact') },
   preview: { origin: PREVIEW_ORIGIN, deployId, releaseSha: head, context: 'deploy-preview', reviewId: 264, siteName: 'avalaos-pilot', environment: ENVIRONMENT },
   controllerRecords: ['preflight','plan','apply','verify'].map(controllerRecord), edgeDeployment: edgeDeployment(), edgeProducer, edgeSigningKey: signingKey, edgeArtifactDigest: d('edge-artifact'), createdAt,
@@ -167,9 +188,9 @@ const serverObserver = (role, roleObservations=observations(role)) => {
   return { contractVersion: 'pr-c-controlled-human-controller-1', phase: 'checkpoint-observe', status: 'passed', ...common, humanRole: role, requestDigest: canonicalDigest(buildServerObserverRequest(role, roleObservations)), observedAt: '2026-09-04T10:04:30Z', lifecycle: 'read_only', concurrencyVersion: 2, operationEventSequence: 2, operationEventDigest: d('quiesce-event'), immutableHistoryDigest: d('quiesced-history'), inspectionDigest: d(`observer-${role}`), steps };
 };
 
-const checkpoint = (role, actor, runId, commentId, prepared=preparation(), quiesceRecord=controllerRecord('quiesce')) => createHumanCheckpoint({ preparation: prepared, quiesceRecord, humanRole: role, actor, comment: { commentId, createdAt: '2026-09-04T10:05:00Z', updatedAt: '2026-09-04T10:05:00Z' }, workflowRunId: runId, workflowRunAttempt: 1, observations: observations(role), serverObserver: serverObserver(role), signingKey, capturedAt: '2026-09-04T10:06:00Z' });
+const checkpoint = (role, actor, runId, commentId, prepared=preparation(), quiesceRecord=controllerRecord('quiesce'), captureJob=`controlled_human_${role}`) => createHumanCheckpoint({ preparation: prepared, quiesceRecord, humanRole: role, captureJob, actor, comment: { commentId, createdAt: '2026-09-04T10:05:00Z', updatedAt: '2026-09-04T10:05:00Z' }, workflowRunId: runId, workflowRunAttempt: 1, observations: observations(role), serverObserver: serverObserver(role), signingKey, capturedAt: '2026-09-04T10:06:00Z' });
 const checkpoints = (quiesceRecord=controllerRecord('quiesce'),prepared=preparation()) => [checkpoint('requester','human-one','1001','2001',prepared,quiesceRecord),checkpoint('reviewer','human-two','1002','2002',prepared,quiesceRecord),checkpoint('approver','human-three','1003','2003',prepared,quiesceRecord)];
-const session = () => buildVerifiedHumanSession({ preparation: preparation(), checkpoints: checkpoints(), quiesceRecord: controllerRecord('quiesce'), deprovisionRecord: controllerRecord('deprovision'), postDeprovisionRecord: controllerRecord('post-deprovision-verify'), signingKey, completedAt: '2026-09-04T10:07:00Z' });
+const session = () => buildVerifiedHumanSession({ producer:finalProducer, preparation: preparation(), checkpoints: checkpoints(), quiesceRecord: controllerRecord('quiesce'), deprovisionRecord: controllerRecord('deprovision'), postDeprovisionRecord: controllerRecord('post-deprovision-verify'), signingKey, completedAt: '2026-09-04T10:07:00Z' });
 const clone = structuredClone;
 const resignCheckpoint = signed => {
   const {signature: _signature,...payload}=signed;
@@ -214,9 +235,9 @@ test('final session rejects a signed, well-formed second-valid CH-03 generation 
   hybrid.browserArtifact.serverBinding.causalParentBindingToken=generated.bindingToken;
   hybrid.browserArtifact.serverBinding.causalParentResourceDigest=generated.resourceDigest;
   hybrid.browserArtifact.serverBinding.causalLineageDigest=generated.causalLineageDigest;
-  const requester=createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:requesterObservations,serverObserver:serverObserver('requester',requesterObservations),signingKey,capturedAt:'2026-09-04T10:06:00Z'});
-  const approver=createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'approver',actor:'human-three',comment:{commentId:'2003',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1003',workflowRunAttempt:1,observations:approverObservations,serverObserver:serverObserver('approver',approverObservations),signingKey,capturedAt:'2026-09-04T10:06:00Z'});
-  assert.throws(()=>buildVerifiedHumanSession({preparation:preparation(),checkpoints:[requester,checkpoint('reviewer','human-two','1002','2002'),approver],quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}),/AUTHENTIC_CH03_GENERATION_CHAIN/u);
+  const requester=createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',captureJob:'controlled_human_requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:requesterObservations,serverObserver:serverObserver('requester',requesterObservations),signingKey,capturedAt:'2026-09-04T10:06:00Z'});
+  const approver=createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'approver',captureJob:'controlled_human_approver',actor:'human-three',comment:{commentId:'2003',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1003',workflowRunAttempt:1,observations:approverObservations,serverObserver:serverObserver('approver',approverObservations),signingKey,capturedAt:'2026-09-04T10:06:00Z'});
+  assert.throws(()=>buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:[requester,checkpoint('reviewer','human-two','1002','2002'),approver],quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}),/AUTHENTIC_CH03_GENERATION_CHAIN/u);
 
   const causallyEdited=checkpoint('requester','human-one','1001','2001');
   const retained=causallyEdited.checkpoints.flatMap(record=>record.steps).find(step=>step.stepId==='generate-source-bound-document');
@@ -231,7 +252,7 @@ test('final session rejects a signed, well-formed second-valid CH-03 generation 
   causallyEdited.serverObserver.record.requestDigest=canonicalDigest(buildServerObserverRequest('requester',raw));
   causallyEdited.serverObserver.artifactDigest=canonicalDigest(causallyEdited.serverObserver.record);
   resignCheckpoint(causallyEdited);
-  assert.throws(()=>buildVerifiedHumanSession({preparation:preparation(),checkpoints:[causallyEdited,checkpoint('reviewer','human-two','1002','2002'),checkpoint('approver','human-three','1003','2003')],quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}),/SAFE_BINDING_DIGEST/u);
+  assert.throws(()=>buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:[causallyEdited,checkpoint('reviewer','human-two','1002','2002'),checkpoint('approver','human-three','1003','2003')],quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}),/SAFE_BINDING_DIGEST/u);
 });
 
 test('keeps absent controlled-human evidence not_run', () => assert.equal(controlledHumanEvidenceDisposition().result, 'not_run'));
@@ -284,7 +305,7 @@ test('downloaded role templates bind verified preparation and reach compaction b
       assert.deepEqual(JSON.parse(compacted.content),downloaded);
     }
     await assert.rejects(writeObservationTemplates(['--preparation',input,'--output-directory',output],env),/EEXIST/u);
-  }finally{await rm(directory,{recursive:true,force:true})}
+  }finally{await removeOwnedTempDirectory(directory,'pr264-bound-templates-')}
 });
 
 test('maps every application persona to exactly one human duty and reconstructs all checkpoints', () => {
@@ -295,25 +316,25 @@ test('maps every application persona to exactly one human duty and reconstructs 
 
 test('rejects caller-authored counters, digests, and partial duty coverage', () => {
   const records = observations('requester'); records[0].steps[0].providerEgressCount = 0;
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:records, serverObserver:serverObserver('requester'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /UNKNOWN/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', captureJob:'controlled_human_requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:records, serverObserver:serverObserver('requester'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /UNKNOWN/u);
   const partial=observations('reviewer'); partial[0].steps.pop();
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:partial, serverObserver:serverObserver('reviewer'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /STEP_SET/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:partial, serverObserver:serverObserver('reviewer'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /STEP_SET/u);
 });
 
 test('rejects random or reused browser and server digests', () => {
   const records=observations('requester'); records[0].steps[1].browserArtifact=clone(records[0].steps[0].browserArtifact);
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:records, serverObserver:serverObserver('requester'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /SERVER_OBSERVER_REQUEST|BROWSER_DIGEST_REUSE/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', captureJob:'controlled_human_requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:records, serverObserver:serverObserver('requester'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /SERVER_OBSERVER_REQUEST|BROWSER_DIGEST_REUSE/u);
   const observer=serverObserver('reviewer'); observer.steps[1].inspectionDigest=observer.steps[0].inspectionDigest;
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /DIGEST_REUSE/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /DIGEST_REUSE/u);
   const reusedEvent=serverObserver('reviewer');const eventSteps=reusedEvent.steps.filter(step=>step.observationKind==='server_event');assert.ok(eventSteps.length>1);eventSteps[1].causalEventDigest=eventSteps[0].causalEventDigest;
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:reusedEvent, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /CAUSAL_EVENT_REUSE/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:reusedEvent, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /CAUSAL_EVENT_REUSE/u);
 });
 
 test('rejects stale or reused step times and edited comments', () => {
   const records=observations('approver'); records[0].steps[0].startedAt='2026-09-04T09:59:00Z';
   const observer=serverObserver('approver'); observer.requestDigest=canonicalDigest(buildServerObserverRequest('approver',records));
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'approver', actor:'h', comment:{commentId:'3',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'3', workflowRunAttempt:1, observations:records, serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /TIME_BOUNDARY/u);
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'approver', actor:'h', comment:{commentId:'3',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:01Z'}, workflowRunId:'3', workflowRunAttempt:1, observations:observations('approver'), serverObserver:serverObserver('approver'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /COMMENT_IDENTITY/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'approver', captureJob:'controlled_human_approver', actor:'h', comment:{commentId:'3',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'3', workflowRunAttempt:1, observations:records, serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /TIME_BOUNDARY/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'approver', captureJob:'controlled_human_approver', actor:'h', comment:{commentId:'3',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:01Z'}, workflowRunId:'3', workflowRunAttempt:1, observations:observations('approver'), serverObserver:serverObserver('approver'), signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /COMMENT_IDENTITY/u);
 });
 
 test('rejects active work after quiesce and read-only observation before quiesce', () => {
@@ -321,7 +342,7 @@ test('rejects active work after quiesce and read-only observation before quiesce
   lateActive[0].steps[0].completedAt='2026-09-04T10:03:00Z';
   const lateObserver=serverObserver('requester');
   lateObserver.requestDigest=canonicalDigest(buildServerObserverRequest('requester',lateActive));
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:lateActive, serverObserver:lateObserver, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /ACTIVE_STEP_AFTER_QUIESCE/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'requester', captureJob:'controlled_human_requester', actor:'h', comment:{commentId:'1',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'1', workflowRunAttempt:1, observations:lateActive, serverObserver:lateObserver, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /ACTIVE_STEP_AFTER_QUIESCE/u);
 
   const earlyReadOnly=observations('reviewer');
   const readOnlyStep=earlyReadOnly.flatMap(record=>record.steps).find(step=>step.stepId==='verify-history-readable-and-actions-absent');
@@ -329,20 +350,20 @@ test('rejects active work after quiesce and read-only observation before quiesce
   readOnlyStep.completedAt='2026-09-04T10:02:40.250Z';
   const earlyObserver=serverObserver('reviewer');
   earlyObserver.requestDigest=canonicalDigest(buildServerObserverRequest('reviewer',earlyReadOnly));
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:earlyReadOnly, serverObserver:earlyObserver, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /READ_ONLY_STEP_BEFORE_QUIESCE/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:earlyReadOnly, serverObserver:earlyObserver, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /READ_ONLY_STEP_BEFORE_QUIESCE/u);
 });
 
 test('rejects persona/actor substitution and one human filling multiple duties', () => {
   const observer=serverObserver('reviewer'); observer.steps[0].personaKey='requester';
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /IDENTITY/u);
-  assert.throws(() => buildVerifiedHumanSession({ preparation:preparation(), checkpoints:[checkpoint('requester','same','1001','2001'),checkpoint('reviewer','same','1002','2002'),checkpoint('approver','same','1003','2003')], quiesceRecord:controllerRecord('quiesce'), deprovisionRecord:controllerRecord('deprovision'), postDeprovisionRecord:controllerRecord('post-deprovision-verify'), signingKey, completedAt:'2026-09-04T10:07:00Z' }), /DISTINCT_HUMANS/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /IDENTITY/u);
+  assert.throws(() => buildVerifiedHumanSession({ producer:finalProducer, preparation:preparation(), checkpoints:[checkpoint('requester','same','1001','2001'),checkpoint('reviewer','same','1002','2002'),checkpoint('approver','same','1003','2003')], quiesceRecord:controllerRecord('quiesce'), deprovisionRecord:controllerRecord('deprovision'), postDeprovisionRecord:controllerRecord('post-deprovision-verify'), signingKey, completedAt:'2026-09-04T10:07:00Z' }), /DISTINCT_HUMANS/u);
 });
 
 test('rejects fake zeroes and accepted-versus-denied confusion from server observer', () => {
   const egress=serverObserver('reviewer'); egress.steps[0].safety.providerEgress=1;
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:egress, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /STOP_COUNT/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:egress, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /STOP_COUNT/u);
   const denial=serverObserver('reviewer'); const negative=denial.steps.find(record=>record.observationKind==='negative_attempt'); negative.result='succeeded';
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:denial, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /RESULT|DENIAL_PROOF/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:denial, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /RESULT|DENIAL_PROOF/u);
 });
 
 test('distinguishes attempted denials, no-effect observations, human attestations, and exact server events', () => {
@@ -353,11 +374,11 @@ test('distinguishes attempted denials, no-effect observations, human attestation
   assert.equal(observer.steps.find(record=>record.stepId==='request-handoff-changes').observationKind,'server_event');
   assert.equal(observer.steps.find(record=>record.stepId==='compare-enterprise-and-primary-monitor').observationKind,'human_attestation');
   const substituted=serverObserver('reviewer'); substituted.steps.find(record=>record.observationKind==='negative_attempt').denialProofKind='not_applicable';
-  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:substituted, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /DENIAL_PROOF/u);
+  assert.throws(() => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:observations('reviewer'), serverObserver:substituted, signingKey, capturedAt:'2026-09-04T10:06:00Z' }), /DENIAL_PROOF/u);
 });
 
 test('rejects exact-binding target, version, family, request, time, and reuse substitutions', () => {
-  const invoke = (records, observer) => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:records, serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' });
+  const invoke = (records, observer) => createHumanCheckpoint({ preparation:preparation(), quiesceRecord:controllerRecord('quiesce'), humanRole:'reviewer', captureJob:'controlled_human_reviewer', actor:'h', comment:{commentId:'2',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'}, workflowRunId:'2', workflowRunAttempt:1, observations:records, serverObserver:observer, signingKey, capturedAt:'2026-09-04T10:06:00Z' });
   for (const [field,value] of [['resourceDigest',d('different-valid-owned-resource')],['resourceFamily','different_valid_family'],['expectedVersion',2],['requestDigest',d('substituted-request')],['receiptDigest',d('aggregate-receipt')],['action','different.valid.action']]) {
     const records=observations('reviewer'); const bound=records.flatMap(record=>record.steps).find(step=>step.browserArtifact.serverBinding);
     bound.browserArtifact.serverBinding[field]=value;
@@ -378,7 +399,7 @@ test('rejects missing artifact bytes and tampered server attestation', () => {
   assert.throws(() => validateHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),checkpoint:signed,signingKey}), /REQUIRED/u);
   const tampered=checkpoint('requester','human-one','1001','2001'); tampered.serverObserver.record.steps[0].auditDigest=d('fake-audit');
   assert.throws(() => validateHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),checkpoint:tampered,signingKey}), /SERVER_OBSERVER_DIGEST|SIGNATURE/u);
-  const invoke=observer=>createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:observations('requester'),serverObserver:observer,signingKey,capturedAt:'2026-09-04T10:06:00Z'});
+  const invoke=observer=>createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',captureJob:'controlled_human_requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:observations('requester'),serverObserver:observer,signingKey,capturedAt:'2026-09-04T10:06:00Z'});
   const altered=serverObserver('requester');altered.steps.find(step=>step.stepId==='generate-source-bound-document').safeBindingDigest=d('altered-server-safe-binding');
   assert.throws(()=>invoke(altered),/SAFE_BINDING_DIGEST/u);
   const omitted=serverObserver('requester');delete omitted.steps[0].safeBindingDigest;
@@ -417,7 +438,7 @@ test('rejects stale provider inventory and missing runtime deployment', async ()
 });
 
 test('requires real pre-comment CH-13 quiesce binding and independent post-deprovision inspection', () => {
-  const invokeObserver=observer=>createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:observations('requester'),serverObserver:observer,signingKey,capturedAt:'2026-09-04T10:06:00Z'});
+  const invokeObserver=observer=>createHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),humanRole:'requester',captureJob:'controlled_human_requester',actor:'human-one',comment:{commentId:'2001',createdAt:'2026-09-04T10:05:00Z',updatedAt:'2026-09-04T10:05:00Z'},workflowRunId:'1001',workflowRunAttempt:1,observations:observations('requester'),serverObserver:observer,signingKey,capturedAt:'2026-09-04T10:06:00Z'});
   for(const [field,value] of [['lifecycle','active'],['concurrencyVersion',3],['operationEventSequence',3],['operationEventDigest',d('substituted-event-history')],['immutableHistoryDigest',d('substituted-immutable-history')]]){
     const observer=serverObserver('requester');observer[field]=value;
     assert.throws(()=>invokeObserver(observer),/SERVER_OBSERVER_(?:LIFECYCLE|QUIESCE_BINDING)/u,`create:${field}`);
@@ -426,15 +447,15 @@ test('requires real pre-comment CH-13 quiesce binding and independent post-depro
     assert.throws(()=>validateHumanCheckpoint({preparation:preparation(),quiesceRecord:controllerRecord('quiesce'),checkpoint:retained,signingKey}),/SERVER_OBSERVER_(?:LIFECYCLE|QUIESCE_BINDING)/u,`retained:${field}`);
   }
   const wrong=controllerRecord('quiesce'); wrong.operationEventDigest=d('wrong');
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:wrong,deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /CHECKPOINT_QUIESCE/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:wrong,deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /CHECKPOINT_QUIESCE/u);
   const copied=controllerRecord('post-deprovision-verify'); copied.inspectionAttemptDigest=controllerRecord('deprovision').inspectionAttemptDigest;
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:copied,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_INDEPENDENCE/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:copied,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_INDEPENDENCE/u);
   const changedState=controllerRecord('post-deprovision-verify'); changedState.postInspectionDigest=d('unstable-deprovisioned-inspection');
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:changedState,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_STABLE_STATE/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:changedState,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_STABLE_STATE/u);
   const missingSequence=controllerRecord('deprovision'); delete missingSequence.operationEventSequence;
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:missingSequence,postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /EVENT_SEQUENCE/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:missingSequence,postDeprovisionRecord:controllerRecord('post-deprovision-verify'),signingKey,completedAt:'2026-09-04T10:07:00Z'}), /EVENT_SEQUENCE/u);
   const staleSequence=controllerRecord('post-deprovision-verify'); staleSequence.operationEventSequence=4;
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:staleSequence,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_EVENT_HISTORY/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:staleSequence,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /POST_DEPROVISION_EVENT_HISTORY/u);
 });
 
 test('real quiesce and deprovision producer shapes assemble one stable independently reinspected session', async () => {
@@ -461,13 +482,13 @@ test('real quiesce and deprovision producer shapes assemble one stable independe
   assert.equal(producedPost.postInspectionDigest,producedDeprovision.postInspectionDigest);
   assert.notEqual(producedPost.inspectionAttemptDigest,producedDeprovision.inspectionAttemptDigest);
   assert.equal(producedDeprovision.operationEventSequence,5);
-  const verified=buildVerifiedHumanSession({preparation:prepared,checkpoints:checkpoints(producedQuiesce,prepared),quiesceRecord:producedQuiesce,deprovisionRecord:producedDeprovision,postDeprovisionRecord:producedPost,signingKey,completedAt:'2026-09-04T10:07:00Z'});
+  const verified=buildVerifiedHumanSession({producer:finalProducer,preparation:prepared,checkpoints:checkpoints(producedQuiesce,prepared),quiesceRecord:producedQuiesce,deprovisionRecord:producedDeprovision,postDeprovisionRecord:producedPost,signingKey,completedAt:'2026-09-04T10:07:00Z'});
   assert.equal(verified.status,'passed');
 });
 
 test('rejects provider traffic first observed after human checkpoint capture', () => {
   const post=controllerRecord('post-deprovision-verify'); post.safety.providerEgress=1;
-  assert.throws(() => buildVerifiedHumanSession({preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:post,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /STOP_COUNT/u);
+  assert.throws(() => buildVerifiedHumanSession({producer:finalProducer,preparation:preparation(),checkpoints:checkpoints(),quiesceRecord:controllerRecord('quiesce'),deprovisionRecord:controllerRecord('deprovision'),postDeprovisionRecord:post,signingKey,completedAt:'2026-09-04T10:07:00Z'}), /STOP_COUNT/u);
 });
 
 test('rejects wrong preview and unsafe evidence', () => {
@@ -509,4 +530,22 @@ test('validates authentic built artifacts against every published JSON Schema an
     assert.equal(sessionSchema(altered),false,`${count} steps must fail schema validation`);
   }
   assert.equal(CONTROLLED_HUMAN_CATALOG.reduce((total,checkpoint)=>total+checkpoint.steps.length,0),83);
+});
+test('checkpoint evidence rejects runtime job and human-role substitution',()=>{assert.throws(()=>checkpoint('requester','human-one','1001','2001',preparation(),controllerRecord('quiesce'),'controlled_human_reviewer'),/CAPTURE_JOB_ROLE/u);});
+test('retained producer evidence rejects stale workflow, wrong job, run attempt, and schema identity',()=>{
+  for(const [mutate,code] of [
+    [value=>{value.producer.workflowPath='.github/workflows/pr264-controlled-human-prepare.yml'},/PR_C_CH_PREPARATION_PRODUCER/u],
+    [value=>{value.producer.job='controlled_human_edge'},/PR_C_CH_PREPARATION_PRODUCER/u],
+    [value=>{value.producer.runId='0'},/PR_C_CH_PREPARATION_PRODUCER/u],
+    [value=>{value.producer.runAttempt=0},/PR_C_CH_PREPARATION_PRODUCER/u],
+    [value=>{value.schemaVersion='pr-c-controlled-human-preparation-2'},/PR_C_CH_PREPARATION_STATUS/u],
+  ]){const value=clone(preparation());mutate(value);assert.throws(()=>validatePreparationEvidence(value),code);}
+  for(const [mutate,code] of [
+    [value=>{value.producer.workflowPath='.github/workflows/pr264-controlled-human-verify.yml'},/PR_C_CH_SESSION_PRODUCER/u],
+    [value=>{value.producer.job='controlled_human_prepare'},/PR_C_CH_SESSION_PRODUCER/u],
+    [value=>{value.producer.runId='0'},/PR_C_CH_SESSION_PRODUCER/u],
+    [value=>{value.producer.runAttempt=0},/PR_C_CH_SESSION_PRODUCER/u],
+    [value=>{value.schemaVersion='pr-c-controlled-human-session-2'},/PR_C_CH_SESSION_STATUS/u],
+  ]){const value=clone(session());mutate(value);assert.throws(()=>validateVerifiedHumanSession(value),code);}
+  for(const [mutate,code] of [[value=>{value.producer.workflowPath='.github/workflows/pr264-controlled-human-edge-deploy.yml'},/PR_C_CH_EDGE_PRODUCER_IDENTITY/u],[value=>{value.producer.job='controlled_human_prepare'},/PR_C_CH_EDGE_PRODUCER_IDENTITY/u],[value=>{value.producer.runAttempt=0},/PR_C_CH_EDGE_PRODUCER_IDENTITY/u],[value=>{value.schemaVersion='pr-c-controlled-human-edge-deployment-2'},/PR_C_CH_EDGE_SCHEMA/u]]){const value=clone(edgeDeployment());mutate(value);assert.throws(()=>validateEdgeDeploymentManifest(value,{root,exactHead:head,targetFingerprint:common.targetFingerprint,exerciseDigest:common.exerciseDigest,producer:edgeProducer,signingKey}),code);}
 });

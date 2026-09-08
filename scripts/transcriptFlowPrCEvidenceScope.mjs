@@ -9,25 +9,27 @@ export const PR_C_WORKFLOW_PATH = '.github/workflows/transcript-flow-pr-c.yml';
 const normalizePath = value => value.replaceAll('\\', '/');
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const lines = value => value.split(/\r?\n/gu).map(item => item.trim()).filter(Boolean).map(normalizePath);
-const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const governedPath = relative => !relative.startsWith('output/') && !relative.startsWith('.agent/');
 
 export const canonicalFileSha256 = file => sha256(readFileSync(file, 'utf8').replace(/\r\n?/gu, '\n'));
 
 export const collectChangedPrCFiles = (root, baseGitSha = PR_C_BASE_SHA) => {
-  const deleted = [...new Set([
-    ...lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=D', `${baseGitSha}...HEAD`])),
-    ...lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=D'])),
-    ...lines(git(root, ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=D'])),
-  ])].filter(governedPath).sort();
+  // Compare the effective worktree directly with the accepted ancestor. Removing
+  // a PR-added file is a net non-change, but deleting an accepted file is never
+  // silently removed from provenance. This works both before and after commit.
+  let ancestor;
+  try { ancestor = git(root, ['merge-base', baseGitSha, 'HEAD']); }
+  catch { throw new Error('PR_C_ACCEPTED_BASE_NOT_ANCESTOR'); }
+  if (ancestor !== baseGitSha) throw new Error('PR_C_ACCEPTED_BASE_NOT_ANCESTOR');
+  const deleted = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=D', baseGitSha, '--']))
+    .filter(governedPath).sort();
   if (deleted.length > 0) {
     throw new Error(`PR_C_SCOPED_DELETION_UNSUPPORTED:${JSON.stringify(deleted)}`);
   }
-  const committed = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=ACMR', `${baseGitSha}...HEAD`]));
-  const tracked = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=ACMR']));
-  const staged = lines(git(root, ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=ACMR']));
+  const tracked = lines(git(root, ['diff', '--no-renames', '--name-only', '--diff-filter=ACMR', baseGitSha, '--']));
   const untracked = lines(git(root, ['ls-files', '--others', '--exclude-standard']));
-  return [...new Set([...committed, ...tracked, ...staged, ...untracked])]
+  return [...new Set([...tracked, ...untracked])]
     .filter(governedPath)
     .sort();
 };
