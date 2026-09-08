@@ -174,7 +174,7 @@ test('sandbox local-authority evidence exercises every declared persona', async 
 });
 test('every hosted navigation rechecks exact release environment and deployment identity', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
-  assert.match(spec, /import \{ decodeAcceptanceExecutionProfile \} from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u);
+  assert.match(spec, /import \{[^}]*\bdecodeAcceptanceExecutionProfile\b[^}]*\} from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u);
   assert.match(spec, /const executionProfile = decodeAcceptanceExecutionProfile\(process\.env,/u);
   assert.match(spec, /const releaseSha = executionProfile\.releaseSha/u);
   assert.match(spec, /const deployId = executionProfile\.deployId/u);

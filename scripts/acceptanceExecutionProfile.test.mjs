@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createAcceptanceReportMetadata,
+  createFullPageContrastAttachment,
   createSyntheticRegressionOutputRoot,
   decodeAcceptanceExecutionProfile,
+  summarizeFullPageColorContrast,
+  verifyFullPageContrastAttachments,
   verifySyntheticRegressionResultInventory,
 } from './acceptanceExecutionProfile.mjs';
 
@@ -118,6 +121,225 @@ const metadata = createAcceptanceReportMetadata({
   sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
 });
 assert.deepEqual(metadata.ci, {}, 'reserved empty CI metadata must prevent Playwright auto-enrichment');
+
+const contrastPersonas = [
+  'Process Analyst',
+  'AP Process Owner',
+  'Delivery Lead',
+  'Control Reviewer',
+  'Automation Contributor',
+  'Buyer Viewer',
+  'Platform Admin',
+];
+const axeNode = (checkIds = ['color-contrast'], extra = {}) => ({
+  any: checkIds.map(id => ({ id, data: { raw: 'not retained' } })),
+  all: [],
+  none: [],
+  html: '<div data-private="not-retained">payload</div>',
+  target: ['#private-selector'],
+  failureSummary: 'raw failure detail',
+  ...extra,
+});
+const axeResult = (id, nodes) => ({ id, nodes, description: 'raw rule description' });
+const axeResults = ({ passes = [], violations = [], incomplete = [], inapplicable = [] } = {}) => ({
+  passes,
+  violations,
+  incomplete,
+  inapplicable,
+});
+
+test('full-page contrast summary classifies empty, unresolved, violating, mixed, and resolved Axe observations', () => {
+  const empty = summarizeFullPageColorContrast(axeResults());
+  assert.deepEqual(empty, {
+    classification: 'empty_scan',
+    positiveNodeCount: 0,
+    violationNodeCount: 0,
+    incompleteNodeCount: 0,
+    observedNodeCount: 0,
+    incompleteResultCount: 0,
+    diagnostics: [],
+  });
+  assert.equal(summarizeFullPageColorContrast(axeResults({
+    inapplicable: [axeResult('color-contrast', [axeNode()])],
+  })).classification, 'empty_scan', 'inapplicable nodes are not observed contrast evidence');
+
+  const unresolved = summarizeFullPageColorContrast(axeResults({
+    incomplete: [
+      axeResult('color-contrast', [axeNode(['color-contrast']), axeNode(['bg-image'])]),
+      axeResult('color-contrast', [axeNode([])]),
+    ],
+  }));
+  assert.deepEqual(unresolved, {
+    classification: 'unresolved_manual',
+    positiveNodeCount: 0,
+    violationNodeCount: 0,
+    incompleteNodeCount: 3,
+    observedNodeCount: 3,
+    incompleteResultCount: 2,
+    diagnostics: [
+      { resultOrdinal: 1, nodeCount: 2, reasonCategoryCounts: { 'color-contrast': 1, unknown_reason: 1 } },
+      { resultOrdinal: 2, nodeCount: 1, reasonCategoryCounts: { unknown_reason: 1 } },
+    ],
+  });
+
+  const mixed = summarizeFullPageColorContrast(axeResults({
+    passes: [axeResult('color-contrast', [axeNode(), axeNode()])],
+    incomplete: [axeResult('color-contrast', [axeNode(['contrast-background'])])],
+  }));
+  assert.equal(mixed.classification, 'unresolved_manual');
+  assert.equal(mixed.observedNodeCount, 3);
+
+  const violating = summarizeFullPageColorContrast(axeResults({
+    passes: [axeResult('color-contrast', [axeNode()])],
+    violations: [axeResult('color-contrast', [axeNode()])],
+    incomplete: [axeResult('color-contrast', [axeNode()])],
+  }));
+  assert.equal(violating.classification, 'violations_detected');
+  assert.equal(violating.violationNodeCount, 1);
+
+  const resolved = summarizeFullPageColorContrast(axeResults({
+    passes: [axeResult('color-contrast', [axeNode(), axeNode()])],
+    violations: [axeResult('button-name', [axeNode()])],
+  }));
+  assert.equal(resolved.classification, 'resolved');
+  assert.equal(resolved.positiveNodeCount, 2);
+  assert.equal(resolved.observedNodeCount, 2);
+});
+
+test('full-page summary rejects malformed Axe structures and attachment output retains only sanitized aggregate data', () => {
+  for (const invalid of [
+    null,
+    {},
+    axeResults({ passes: [{ id: 'color-contrast', nodes: null }] }),
+    axeResults({ passes: [axeResult('color-contrast', [])] }),
+    axeResults({ incomplete: [axeResult('color-contrast', [{ any: [], all: [] }])] }),
+    axeResults({ incomplete: [axeResult('color-contrast', [{ any: [{ id: null }], all: [], none: [] }])] }),
+  ]) assert.throws(() => summarizeFullPageColorContrast(invalid), /FULL_PAGE_CONTRAST_AXE_/u);
+
+  const observedAt = '2026-09-08T12:00:01.000Z';
+  const results = axeResults({ incomplete: [axeResult('color-contrast', [axeNode(['bg-image'])])] });
+  const attachment = createFullPageContrastAttachment({
+    results,
+    metadata,
+    persona: 'Platform Admin',
+    profile: 'representative-surface',
+    project: 'pixel-7-chromium',
+    test: '[SYNTHETIC-REGRESSION:SAFETY-007] Cross-cutting: serious critical a11y',
+    observedAt,
+  });
+  assert.equal(attachment.name, 'full-page-contrast-summary-representative-surface-platform-admin');
+  assert.equal(attachment.contentType, 'application/json');
+  assert.equal(JSON.parse(attachment.body).classification, 'unresolved_manual');
+  assert.doesNotMatch(attachment.body, /private|selector|failure|payload|bg-image|raw rule/u);
+  const withFrameworkMetadata = createFullPageContrastAttachment({
+    results,
+    metadata: { ...metadata, actualWorkers: 1 },
+    persona: 'Platform Admin',
+    profile: 'representative-surface',
+    project: 'pixel-7-chromium',
+    test: '[SYNTHETIC-REGRESSION:SAFETY-007] Cross-cutting: serious critical a11y',
+    observedAt,
+  });
+  assert.equal(
+    JSON.parse(withFrameworkMetadata.body).executionBindingDigest,
+    JSON.parse(attachment.body).executionBindingDigest,
+    'framework-owned actualWorkers must not alter the execution binding',
+  );
+});
+
+const canonicalJson = value => JSON.stringify(Array.isArray(value)
+  ? value.map(item => JSON.parse(canonicalJson(item)))
+  : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, JSON.parse(canonicalJson(value[key]))]))
+    : value);
+const contrastAttempt = ({
+  profile = 'representative-surface',
+  project = 'pixel-7-chromium',
+  title = '[SYNTHETIC-REGRESSION:SAFETY-007] Cross-cutting: serious critical a11y',
+  observedAt = '2026-09-08T12:00:01.000Z',
+  resultsFor = persona => axeResults({
+    ...(persona === 'Platform Admin'
+      ? { incomplete: [axeResult('color-contrast', [axeNode(['bg-image']), axeNode([])])] }
+      : { passes: [axeResult('color-contrast', [axeNode()])] }),
+  }),
+} = {}) => ({
+  status: 'passed',
+  retry: 0,
+  startTime: '2026-09-08T12:00:00.000Z',
+  duration: 10_000,
+  attachments: contrastPersonas.map(persona => {
+    const attachment = createFullPageContrastAttachment({
+      results: resultsFor(persona), metadata, persona, profile, project, test: title, observedAt,
+    });
+    return { name: attachment.name, contentType: attachment.contentType, body: Buffer.from(attachment.body).toString('base64') };
+  }),
+});
+const mutateRetainedBody = (attempt, index, mutate) => {
+  const attachment = attempt.attachments[index];
+  const body = JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8'));
+  mutate(body);
+  attachment.body = Buffer.from(canonicalJson(body)).toString('base64');
+};
+
+test('full-page attachment verifier accepts seven bound summaries and reports unresolved personas without manufacturing PASS', () => {
+  const attempt = contrastAttempt();
+  assert.deepEqual(verifyFullPageContrastAttachments({
+    testId: 'SAFETY-007',
+    title: '[SYNTHETIC-REGRESSION:SAFETY-007] Cross-cutting: serious critical a11y',
+    project: 'pixel-7-chromium',
+    attempt,
+    metadata,
+  }), { summaryCount: 7, unresolvedPersonaCount: 1 });
+  assert.deepEqual(verifyFullPageContrastAttachments({
+    testId: 'SANDBOX-001', title: '[SANDBOX-001] other', project: 'desktop-chromium', attempt: {}, metadata: {},
+  }), { summaryCount: 0, unresolvedPersonaCount: 0 });
+});
+
+test('full-page attachment verifier rejects missing, duplicate, foreign, stale, unretained, malformed, forged, and substituted evidence', () => {
+  const verify = (attempt, overrides = {}) => verifyFullPageContrastAttachments({
+    testId: 'SAFETY-007',
+    title: '[SYNTHETIC-REGRESSION:SAFETY-007] Cross-cutting: serious critical a11y',
+    project: 'pixel-7-chromium',
+    attempt,
+    metadata,
+    ...overrides,
+  });
+  const adversaries = [
+    attempt => { attempt.attachments.pop(); },
+    attempt => { attempt.attachments[6] = structuredClone(attempt.attachments[0]); },
+    attempt => { delete attempt.attachments[6].body; attempt.attachments[6].path = 'substituted.json'; },
+    attempt => { attempt.attachments[6].body = 'not canonical base64'; },
+    attempt => mutateRetainedBody(attempt, 6, body => { body.persona = 'Foreign Persona'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.project = 'desktop-chromium'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.test = '[SYNTHETIC-REGRESSION:SAFETY-007] substituted'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.profile = 'initial-entry'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.observedAt = '2026-09-08T12:00:11.000Z'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.observedAt = '2026-09-08T11:59:59.999Z'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.classification = 'resolved'; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.observedNodeCount += 1; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.diagnostics[0].reasonCategoryCounts = { raw_check_id: 2 }; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.executionBindingDigest = `sha256:${'f'.repeat(64)}`; }),
+    attempt => mutateRetainedBody(attempt, 6, body => { body.html = '<p>raw payload</p>'; }),
+    attempt => { attempt.attachments[6].html = '<p>raw outer payload</p>'; },
+  ];
+  for (const mutate of adversaries) {
+    const attempt = contrastAttempt();
+    mutate(attempt);
+    assert.throws(() => verify(attempt), /FULL_PAGE_CONTRAST_/u);
+  }
+  const emptyAttempt = contrastAttempt({ resultsFor: () => axeResults() });
+  assert.throws(() => verify(emptyAttempt), /GREEN_RESULT_INVALID/u, 'an empty scan cannot enter a green report');
+  const violatingAttempt = contrastAttempt({
+    resultsFor: () => axeResults({ violations: [axeResult('color-contrast', [axeNode()])] }),
+  });
+  assert.throws(() => verify(violatingAttempt), /GREEN_RESULT_INVALID/u, 'a claimed green result cannot hide a contrast violation');
+
+  const staleMetadata = { ...metadata, invocationId: '2'.repeat(32) };
+  assert.throws(() => verify(contrastAttempt(), { metadata: staleMetadata }), /BODY_BINDING_INVALID/u);
+  assert.throws(() => verify(contrastAttempt(), { project: 'desktop-chromium' }), /ATTACHMENT_INVALID|BODY_BINDING_INVALID/u);
+  assert.throws(() => verify(contrastAttempt(), { title: '[SYNTHETIC-REGRESSION:SAFETY-007] substituted title' }), /BODY_BINDING_INVALID/u);
+  assert.throws(() => verify(contrastAttempt(), { title: '[SAFETY-007] hosted prefix in local evidence' }), /TEST_INVALID/u);
+});
 const reportWith = tests => ({
   config: { metadata: { ...metadata, actualWorkers: 1 } },
   errors: [],
@@ -131,6 +353,26 @@ const reportWith = tests => ({
       results: [{ status: item.status === 'skipped' ? 'skipped' : 'passed', retry: 0, errors: [] }],
     }],
   })) }],
+});
+
+test('synthetic result inventory requires bound full-page summaries for executed SANDBOX-009 and accepts its local title profile', () => {
+  const title = '[SYNTHETIC-REGRESSION:SANDBOX-009] keyboard accessibility';
+  const report = reportWith([{ title, projectName: 'desktop-chromium', status: 'expected' }]);
+  report.suites[0].specs[0].tests[0].results = [contrastAttempt({
+    profile: 'initial-entry',
+    project: 'desktop-chromium',
+    title,
+  })];
+  const expected = {
+    report,
+    expectedMetadata: metadata,
+    expectedProjects: ['desktop-chromium'],
+    expectedTestIds: ['SANDBOX-009'],
+    executableTestIds: ['SANDBOX-009'],
+  };
+  assert.deepEqual(verifySyntheticRegressionResultInventory(expected), { total: 1, passed: 1, skipped: 0 });
+  report.suites[0].specs[0].tests[0].results[0].attachments.pop();
+  assert.throws(() => verifySyntheticRegressionResultInventory(expected), /ATTACHMENT_COUNT_INVALID/u);
 });
 
 test('full result inventory distinguishes executed passes from explicit catalog-unbound skips', () => {

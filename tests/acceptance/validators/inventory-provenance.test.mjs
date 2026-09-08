@@ -8,6 +8,7 @@ import { canonicalSourceSha256 } from '../../../scripts/exhaustiveAcceptanceMode
 const root = process.cwd();
 const validator = path.join(root, 'scripts/exhaustiveAcceptanceValidate.mjs');
 const catalogPath = path.join(root, 'tests/acceptance/catalog/test-catalog.json');
+const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
 const bindingsPath = path.join(root, 'tests/acceptance/execution-bindings.json');
 const bindings = JSON.parse(readFileSync(bindingsPath, 'utf8'));
 const provenancePath = path.join(root, 'tests/acceptance/source-provenance.json');
@@ -30,8 +31,10 @@ assert.equal(
   'source provenance must hash canonical Git text independently of checkout line endings',
 );
 
-const run = (document, bindingsDocument = bindings, provenanceDocument = provenance, proofOwnerDocument = proofOwners) => {
+const run = (document, bindingsDocument = bindings, provenanceDocument = provenance, proofOwnerDocument = proofOwners, catalogDocument = catalog) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'acceptance-inventory-v3-'));
+  const generatedCatalogPath = path.join(directory, 'test-catalog.json');
+  writeFileSync(generatedCatalogPath, JSON.stringify(catalogDocument));
   const inventoryPath = path.join(directory, 'inventory.json');
   writeFileSync(inventoryPath, JSON.stringify(document));
   const generatedBindingsPath = path.join(directory, 'execution-bindings.json');
@@ -45,7 +48,7 @@ const run = (document, bindingsDocument = bindings, provenanceDocument = provena
     encoding: 'utf8',
     env: {
       ...process.env,
-      ACCEPTANCE_CATALOG: catalogPath,
+      ACCEPTANCE_CATALOG: generatedCatalogPath,
       ACCEPTANCE_BINDINGS: generatedBindingsPath,
       ACCEPTANCE_INVENTORY: inventoryPath,
       ACCEPTANCE_PROVENANCE: generatedProvenancePath,
@@ -102,6 +105,67 @@ const fakeSourceResult = run(inventory, bindings, fakeSource);
 assert.notEqual(fakeSourceResult.status, 0);
 assert.match(fakeSourceResult.stderr, /source-provenance-digest/u, 'a declared path with a substituted digest is not source proof');
 
+const keyboardCase = catalog.cases.find(item => item.testId === 'SANDBOX-009');
+const keyboardOwnership = proofOwners.contracts.find(item => item.testId === 'SANDBOX-009');
+assert.deepEqual(keyboardCase.sourceReference, ['App.tsx', 'components/shared/CustomDashboardView.tsx', 'index.css', 'services/hostedSandboxRoute.ts'], 'keyboard evidence must bind the actual focus, Home contrast target, shared motion and entry routing');
+assert.deepEqual(keyboardOwnership.sourceAnchorIds, ['hosted-sandbox-route', 'sandbox-main-focus-target', 'sandbox-readable-screen-motion', 'sandbox-home-contrast-target', 'sandbox-opaque-contrast-surface', 'sandbox-contrast-foreground-token']);
+assert.equal(provenance.sourceDigests['index.css'], canonicalSourceSha256(readFileSync(path.join(root, 'index.css'), 'utf8')), 'motion proof must bind the actual canonical CSS bytes');
+assert.equal(provenance.sourceDigests['components/shared/CustomDashboardView.tsx'], canonicalSourceSha256(readFileSync(path.join(root, 'components/shared/CustomDashboardView.tsx'), 'utf8')), 'the real contrast paragraph must bind its actual component bytes');
+assert.equal(
+  proofOwners.sourceAnchors.find(item => item.anchorId === 'sandbox-readable-screen-motion').selector,
+  '@keyframes kp-screen-in {\n  from {\n    transform: translateY(8px);\n  }\n  to {\n    transform: translateY(0);\n  }\n}',
+  'a keyframe name alone cannot prove that every screen-entry frame preserves readable content',
+);
+
+const routeOnlyCatalog = structuredClone(catalog);
+const routeOnlyProvenance = structuredClone(provenance);
+const routeOnlyOwners = structuredClone(proofOwners);
+routeOnlyCatalog.cases.find(item => item.testId === 'SANDBOX-009').sourceReference = ['services/hostedSandboxRoute.ts'];
+routeOnlyProvenance.contracts.find(item => item.testId === 'SANDBOX-009').sourceReferences = ['services/hostedSandboxRoute.ts'];
+routeOnlyOwners.contracts.find(item => item.testId === 'SANDBOX-009').sourceAnchorIds = ['hosted-sandbox-route'];
+const routeOnlyResult = run(inventory, bindings, routeOnlyProvenance, routeOnlyOwners, routeOnlyCatalog);
+assert.notEqual(routeOnlyResult.status, 0);
+assert.match(routeOnlyResult.stderr, /proof-owner-source-contract:SANDBOX-KEYBOARD_ACCESSIBILITY/u, 'coordinated route-only catalog/provenance/registry claims must fail against independent keyboard source ownership');
+
+const fakeMotionDigest = structuredClone(provenance);
+fakeMotionDigest.sourceDigests['index.css'] = `sha256:${'0'.repeat(64)}`;
+const fakeMotionDigestResult = run(inventory, bindings, fakeMotionDigest);
+assert.notEqual(fakeMotionDigestResult.status, 0);
+assert.match(fakeMotionDigestResult.stderr, /source-provenance-digest:SANDBOX-KEYBOARD_ACCESSIBILITY:index\.css/u, 'a substituted CSS digest cannot attest readable motion');
+
+for (const [anchorId, selector] of [
+  ['sandbox-main-focus-target', 'function App() {'],
+  ['sandbox-readable-screen-motion', '@keyframes kp-screen-in {'],
+  ['sandbox-home-contrast-target', 'Open work'],
+  ['sandbox-home-contrast-target', '<div className="av-stat-strip"><p className="av-eyebrow">Needs review</p>'],
+  ['sandbox-opaque-contrast-surface', '.av-stat-strip {'],
+  ['sandbox-contrast-foreground-token', '.av-eyebrow {'],
+]) {
+  const markerOnlyOwners = structuredClone(proofOwners);
+  markerOnlyOwners.sourceAnchors.find(item => item.anchorId === anchorId).selector = selector;
+  const markerOnlyResult = run(inventory, bindings, provenance, markerOnlyOwners);
+  assert.notEqual(markerOnlyResult.status, 0);
+  assert.match(markerOnlyResult.stderr, /proof-owner-anchor-source-contract/u, `${anchorId} must reject an existing but non-behavioral marker as source proof`);
+}
+
+const omittedMotionOwner = structuredClone(proofOwners);
+omittedMotionOwner.contracts.find(item => item.testId === 'SANDBOX-009').sourceAnchorIds = ['hosted-sandbox-route', 'sandbox-main-focus-target'];
+const omittedMotionResult = run(inventory, bindings, provenance, omittedMotionOwner);
+assert.notEqual(omittedMotionResult.status, 0);
+assert.match(omittedMotionResult.stderr, /proof-owner-(?:sources|source-contract):SANDBOX-KEYBOARD_ACCESSIBILITY/u, 'focus ownership without the actual CSS motion owner is incomplete proof');
+
+const omittedHomeOwner = structuredClone(proofOwners);
+omittedHomeOwner.contracts.find(item => item.testId === 'SANDBOX-009').sourceAnchorIds = keyboardOwnership.sourceAnchorIds.filter(id => id !== 'sandbox-home-contrast-target');
+const omittedHomeResult = run(inventory, bindings, provenance, omittedHomeOwner);
+assert.notEqual(omittedHomeResult.status, 0);
+assert.match(omittedHomeResult.stderr, /proof-owner-(?:sources|source-contract):SANDBOX-KEYBOARD_ACCESSIBILITY/u, 'CSS-only contrast ownership cannot substitute for the actual product paragraph');
+
+const fakeHomeDigest = structuredClone(provenance);
+fakeHomeDigest.sourceDigests['components/shared/CustomDashboardView.tsx'] = `sha256:${'0'.repeat(64)}`;
+const fakeHomeResult = run(inventory, bindings, fakeHomeDigest);
+assert.notEqual(fakeHomeResult.status, 0);
+assert.match(fakeHomeResult.stderr, /source-provenance-digest:SANDBOX-KEYBOARD_ACCESSIBILITY:components\/shared\/CustomDashboardView\.tsx/u, 'a substituted Home-component digest cannot prove real product contrast');
+
 const fakeOwner = structuredClone(provenance);
 fakeOwner.contracts.find(item => item.testId === 'SANDBOX-004').ownership[0].ownerId = 'network-observer-ended-early';
 const fakeOwnerResult = run(inventory, bindings, fakeOwner);
@@ -156,10 +220,11 @@ assert.equal(sandboxDescendant.expectedDenial, false, 'an accepted descendant ca
 assert.match(hostedRouteSource, /pathname\.startsWith\(`\$\{HOSTED_SANDBOX_ROUTE\}\/`\)/u, 'source routing explicitly accepts sandbox descendants');
 assert.match(hostedSpec, /const runObservedPersonaJourney[\s\S]*await signOutToSandbox\(page\);[\s\S]*await observer\.stopAfterQuiescence\([\s\S]*observer\.assertSafe\(\);/u, 'SANDBOX-004 must observe the complete post-entry and sign-out workflow through network quiescence');
 assert.match(hostedSpec, /case 'network-safety':[\s\S]*await runObservedPersonaJourney\(page, label, userName\);/u, 'SANDBOX-004 must use the full observed persona journey');
-for (const scenario of ['desktop-layout', 'mobile-layout', 'keyboard-a11y']) {
+for (const scenario of ['desktop-layout', 'mobile-layout']) {
   const block = new RegExp(`case '${scenario}':[\\s\\S]*for \\(const \\[label, userName\\] of personas\\)[\\s\\S]*await enterPersona\\(page, label\\)`, 'u');
   assert.match(hostedSpec, block, `${scenario} must enter every bounded persona post-entry`);
 }
+assert.match(hostedSpec, /case 'keyboard-a11y': \{\s*for \(const \[personaIndex, \[label, userName\]\] of personas\.entries\(\)\) \{\s*await page\.emulateMedia\(\{ reducedMotion: 'no-preference' \}\);\s*await enterPersona\(page, label\);\s*await assertActivePersona\(page, userName\);/u, 'keyboard-a11y must enumerate and enter every bounded persona, including the once-per-project negative oracle');
 
 assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*for \(const \[label, userName\] of personas\)[\s\S]*await runObservedPersonaJourney\(page, label, userName/u, 'SAFETY-007 must enter every bounded canonical persona through the observed journey');
 assert.match(hostedSpec, /case 'serious-critical-a11y':[\s\S]*item\.impact === 'serious' \|\| item\.impact === 'critical'/u);

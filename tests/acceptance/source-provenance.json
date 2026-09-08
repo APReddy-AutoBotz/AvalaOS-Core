@@ -71,6 +71,8 @@
     "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:50bf6974ecaf79fc8338a9310a866cfa40b074a45c62fd292536db44ca187ead",
     "tests/browser/transcriptFlowPrA.spec.ts": "sha256:26e43ebf1350aa86942ac034496afc9064105ea6f1406311f347d6e4294bcd5b",
     "App.tsx": "sha256:a02543ce1cb967f24a5b1e3717773e04521aca8da3b533f2dce9f11981bebe43",
+    "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
+    "index.css": "sha256:d82ba8a2a96554812648c6479d08a645ea3448be6ec9f76b435208e5c2102c66",
     "scripts/testPilotOperationsPostgres.mjs": "sha256:bac650ec023c34ecccbe467bf09ea9c6ab1f1f4958167f5ba4eab634afb38925",
     "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql": "sha256:ab7c4ac7367d6768b6bb4a15cc16dab3ece087404d1ea9f26204222871bd565c",
     "services/adminWorkbenchModel.ts": "sha256:65a48174ae1e0ee6bafbb7796f5ad3bb82851ff0a60edbc9b67d4e8b29c89156",
@@ -2010,6 +2012,9 @@
       "branchId": "SANDBOX-KEYBOARD_ACCESSIBILITY",
       "testId": "SANDBOX-009",
       "sourceReferences": [
+        "App.tsx",
+        "components/shared/CustomDashboardView.tsx",
+        "index.css",
         "services/hostedSandboxRoute.ts"
       ],
       "ownership": [

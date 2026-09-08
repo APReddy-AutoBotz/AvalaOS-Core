@@ -1,3 +1,5 @@
+import { verifyFullPageContrastAttachments } from './acceptanceExecutionProfile.mjs';
+
 export const normalizePlaywrightStatus = status => {
   if (status === 'passed') return 'PASS';
   if (['failed', 'timedOut', 'interrupted'].includes(status)) return 'FAIL';
@@ -286,6 +288,14 @@ export const validateHostedPlaywrightReport = ({ report, expectedMetadata, allow
     if (!['passed', 'failed', 'timedOut', 'interrupted'].includes(attempt.status)) {
       errors.push(`hosted-report-attempt-status:${execution.project}:${execution.title}`);
     }
+    if (attempt.status === 'passed') {
+      const testId = /^\[([A-Z0-9-]+)\]\s/u.exec(execution.title)?.[1];
+      try {
+        verifyFullPageContrastAttachments({ testId, title: execution.title, project: execution.project, attempt, metadata: expectedMetadata });
+      } catch {
+        errors.push(`hosted-report-contrast-summary:${execution.project}:${execution.title}`);
+      }
+    }
   }
   return reportValidation(errors, executions);
 };
@@ -348,11 +358,20 @@ export const evaluateHostedTest = ({
         ? 'BLOCKED'
         : normalizePlaywrightStatus(last?.status);
     statuses.push(status);
+    if (status === 'PASS') {
+      const testId = /^\[([A-Z0-9-]+)\]\s/u.exec(execution.title)?.[1];
+      const contrast = verifyFullPageContrastAttachments({
+        testId, title: execution.title, project, attempt: last, metadata: execution.reportMetadata,
+      });
+      if (contrast.unresolvedPersonaCount > 0) {
+        reasons.push(`${project}: ${contrast.unresolvedPersonaCount} persona contrast summaries remain unresolved_manual; the accessibility result establishes no determinate serious/critical violation, not complete contrast or WCAG proof.`);
+      }
+    }
     if (last?.error?.message) reasons.push(`${project}: ${last.error.message}`);
     for (const attachment of last?.attachments ?? []) if (attachment.path) evidenceReferences.push(attachment.path);
   }
 
   if (statuses.includes('FAIL')) return { status: 'FAIL', reason: reasons.join(' | ') || 'Hosted browser execution failed.', evidenceReferences };
   if (statuses.includes('BLOCKED')) return { status: 'BLOCKED', reason: reasons.join(' | ') || 'Hosted browser case was skipped or not executed.', evidenceReferences };
-  return { status: 'PASS', reason: null, evidenceReferences };
+  return { status: 'PASS', reason: reasons.length ? reasons.join(' | ') : null, evidenceReferences };
 };

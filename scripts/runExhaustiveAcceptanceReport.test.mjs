@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
 import {
   canonicalHostedTitle,
   loadCatalog,
@@ -83,10 +84,29 @@ const fullInventoryHostedReport = () => {
   const catalog = loadCatalog();
   const catalogByTestId = new Map(catalog.cases.map(item => [item.testId, item]));
   const hostedBindings = loadExecutionBindings().hostedTests;
+  const metadata = hostedMetadata();
+  const contrastProfiles = new Map([['SANDBOX-009', 'initial-entry'], ['SAFETY-007', 'representative-surface']]);
+  const withContrastSummaries = (binding, projectName) => {
+    const value = hostedTestResult(projectName);
+    const profile = contrastProfiles.get(binding.testId);
+    if (!profile) return value;
+    const title = canonicalHostedTitle(catalogByTestId.get(binding.testId));
+    const personas = ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin'];
+    value.results[0].startTime = '2026-09-08T12:00:00.000Z';
+    value.results[0].duration = 10_000;
+    value.results[0].attachments = personas.map(persona => {
+      const attachment = createFullPageContrastAttachment({
+        results: { passes: [{ id: 'color-contrast', nodes: [{ any: [{ id: 'color-contrast' }], all: [], none: [] }] }], violations: [], incomplete: [] },
+        metadata, persona, profile, project: projectName, test: title, observedAt: '2026-09-08T12:00:01.000Z',
+      });
+      return { name: attachment.name, contentType: attachment.contentType, body: Buffer.from(attachment.body).toString('base64') };
+    });
+    return value;
+  };
   const specs = hostedBindings.map(binding => ({
     title: canonicalHostedTitle(catalogByTestId.get(binding.testId)),
     tests: binding.projects.map(projectName => binding.scenario
-      ? hostedTestResult(projectName)
+      ? withContrastSummaries(binding, projectName)
       : {
           projectName,
           status: 'skipped',
@@ -100,7 +120,7 @@ const fullInventoryHostedReport = () => {
   assert.equal(executable, 38);
   assert.equal(skipped, 30);
   return {
-    config: { metadata: hostedMetadata() },
+    config: { metadata },
     errors: [],
     suites: [{ title: 'tests/browser/exhaustiveHostedAcceptance.spec.ts', specs }],
     stats: { expected: executable, unexpected: 0, skipped },

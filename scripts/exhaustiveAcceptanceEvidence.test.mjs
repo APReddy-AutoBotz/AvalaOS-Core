@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
 import {
   evaluateHostedTest,
   evaluateCompositeTest,
@@ -373,5 +374,67 @@ assert.ok(validateHostedPlaywrightReport({ report: passedWithError, expectedMeta
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'PASS' }]).status, 'PASS');
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'BLOCKED' }]).status, 'BLOCKED');
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'FAIL' }]).status, 'FAIL');
+
+const contrastPersonas = ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin'];
+const contrastTitle = '[SAFETY-007] Cross-cutting: serious critical a11y';
+const contrastStart = '2026-09-08T12:00:00.000Z';
+const contrastObserved = '2026-09-08T12:00:01.000Z';
+const contrastNode = () => ({ any: [{ id: 'color-contrast' }], all: [], none: [] });
+const contrastResults = unresolved => ({
+  passes: unresolved ? [] : [{ id: 'color-contrast', nodes: [contrastNode()] }],
+  violations: [],
+  incomplete: unresolved ? [{ id: 'color-contrast', nodes: [contrastNode(), contrastNode()] }] : [],
+});
+const makeContrastReport = (metadata = hostedMetadata) => ({
+  config: { metadata: { ...metadata, actualWorkers: 1 }, workers: 1 },
+  errors: [],
+  suites: [{ specs: [{ title: contrastTitle, tests: [{
+    ...hostedTest('pixel-7-chromium'),
+    results: [{ status: 'passed', retry: 0, startTime: contrastStart, duration: 10_000, attachments: contrastPersonas.map(persona => {
+      const value = createFullPageContrastAttachment({
+        results: contrastResults(persona === 'Platform Admin'), metadata, persona, profile: 'representative-surface',
+        project: 'pixel-7-chromium', test: contrastTitle, observedAt: contrastObserved,
+      });
+      return { name: value.name, contentType: value.contentType, body: Buffer.from(value.body).toString('base64') };
+    }) }],
+  }] }] }],
+});
+const contrastReport = makeContrastReport();
+const validContrast = validateHostedPlaywrightReport({ report: contrastReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(validContrast.errors, []);
+const unresolvedHosted = evaluateHostedTest({ title: contrastTitle, requiredProjects: ['pixel-7-chromium'], reportValidation: validContrast });
+assert.equal(unresolvedHosted.status, 'PASS', 'nonempty all-unresolved contrast is not a determinate serious/critical violation');
+assert.match(unresolvedHosted.reason, /1 persona contrast summaries remain unresolved_manual/u, 'the retained hosted result must disclose unresolved contrast instead of silently claiming full contrast PASS');
+assert.match(unresolvedHosted.reason, /not complete contrast or WCAG proof/u);
+const contrastAttempt = report => report.suites[0].specs[0].tests[0].results[0];
+const mutateContrastBody = (report, mutate) => {
+  const attachment = contrastAttempt(report).attachments.at(-1);
+  const value = JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8'));
+  mutate(value);
+  attachment.body = Buffer.from(JSON.stringify(value)).toString('base64');
+};
+for (const [name, mutate] of [
+  ['missing', report => contrastAttempt(report).attachments.pop()],
+  ['duplicate', report => contrastAttempt(report).attachments.push(structuredClone(contrastAttempt(report).attachments[0]))],
+  ['unretained', report => { const attachment = contrastAttempt(report).attachments.at(-1); delete attachment.body; attachment.path = 'not-retained.json'; }],
+  ['malformed', report => { contrastAttempt(report).attachments.at(-1).body = 'not canonical base64'; }],
+  ['late', report => mutateContrastBody(report, value => { value.observedAt = '2026-09-08T12:00:11.000Z'; })],
+  ['foreign persona', report => mutateContrastBody(report, value => { value.persona = 'Other Persona'; })],
+  ['foreign project', report => mutateContrastBody(report, value => { value.project = 'desktop-chromium'; })],
+  ['forged resolved', report => mutateContrastBody(report, value => { value.classification = 'resolved'; })],
+  ['raw diagnostic', report => mutateContrastBody(report, value => { value.html = '<p>unretained content</p>'; })],
+]) {
+  const altered = structuredClone(contrastReport);
+  mutate(altered);
+  const validation = validateHostedPlaywrightReport({ report: altered, expectedMetadata: hostedMetadata });
+  assert.ok(validation.errors.some(value => value.startsWith('hosted-report-contrast-summary:')), `${name} summary must invalidate a green hosted suite`);
+  assert.equal(evaluateHostedTest({ title: contrastTitle, requiredProjects: ['pixel-7-chromium'], reportValidation: validation }).status, 'BLOCKED');
+}
+const freshAttemptMetadata = structuredClone(hostedMetadata);
+freshAttemptMetadata.workflowRuntime.runAttempt = '3';
+const replayedContrast = structuredClone(contrastReport);
+replayedContrast.config.metadata = { ...freshAttemptMetadata, actualWorkers: 1 };
+assert.ok(validateHostedPlaywrightReport({ report: replayedContrast, expectedMetadata: freshAttemptMetadata }).errors
+  .some(value => value.startsWith('hosted-report-contrast-summary:')), 'old contrast summaries cannot enter a fresh otherwise-valid workflow attempt');
 
 console.log('Exhaustive acceptance evidence adversarial tests passed.');
