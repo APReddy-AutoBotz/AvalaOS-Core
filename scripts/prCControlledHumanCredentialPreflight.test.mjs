@@ -11,7 +11,8 @@ import { PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceSc
 import {
   PREFLIGHT_COMMAND, PREFLIGHT_FAILURE_PHASES, PREFLIGHT_FILE, PREFLIGHT_JOB, PREFLIGHT_LABEL, PREFLIGHT_OUTPUT,
   createCredentialPreflightReport, derivePreflightIdentity, inspectPreflightTargetReadOnly,
-  observePreflightPreview, validateNonPatPreflightInputs, verifyCredentialPreflightBundle, verifyCredentialPreflightReport,
+  observePreflightPreview, validateNonPatPreflightInputs, validatePreflightFailurePhase,
+  verifyCredentialPreflightBundle, verifyCredentialPreflightReport,
 } from './prCControlledHumanCredentialPreflight.mjs';
 
 const key = 'fixture-only-pr264-credential-preflight-authority';
@@ -88,7 +89,51 @@ test('runtime authority rejects unrelated events, actors, jobs, workflows and st
   assert.equal(identity.baseSha, PR_C_BASE_SHA);
 });
 
-test('every non-PAT field and six downstream phase guards reject absent blank sentinel and wrong-type input without value disclosure', () => {
+test('failure diagnostics use one exact immutable 27-phase allowlist and reject unowned tokens without disclosure', () => {
+  const expected = [
+    'ENTRY_ARGUMENTS',
+    'OUTPUT_PATH',
+    'SOURCE_IDENTITY',
+    'EVENT_AUTHORITY',
+    'FIXTURE',
+    'NONPAT_REQUIRED_FIELDS',
+    'NONPAT_FORBIDDEN_CREDENTIAL',
+    'NONPAT_SIGNING_AUTHORITY',
+    'NONPAT_TARGET_TUPLE',
+    'NONPAT_PASSWORD_JSON',
+    'NONPAT_PASSWORD_PERSONA_SET',
+    'NONPAT_PASSWORD_VALUES',
+    'MIGRATION',
+    'PINNED_CA',
+    'DATABASE_CONFIGURATION',
+    'DATABASE_CONNECT',
+    'DATABASE_BEGIN_READ_ONLY',
+    'DATABASE_VERIFY_READ_ONLY',
+    'DATABASE_TIMEOUTS',
+    'DATABASE_INVENTORY',
+    'DATABASE_ROLLBACK',
+    'DATABASE_CLOSE',
+    'BOOTSTRAP_BINDING',
+    'PREVIEW',
+    'SOURCE_RECHECK',
+    'REPORT',
+    'ARTIFACT_WRITE',
+  ];
+  assert.equal(Object.isFrozen(PREFLIGHT_FAILURE_PHASES), true);
+  assert.deepEqual(Object.values(PREFLIGHT_FAILURE_PHASES), expected);
+  assert.equal(new Set(expected).size, expected.length);
+  for (const phase of expected) assert.equal(validatePreflightFailurePhase(phase), phase);
+  assert.throws(() => { PREFLIGHT_FAILURE_PHASES.nonPatRequiredFields = 'hostile-phase-replacement'; }, TypeError);
+  for (const phase of ['hostile-phase-canary', 'toString', '__proto__', 'constructor', '', null, undefined, 7, {}, [], Symbol('hostile-symbol-canary')]) {
+    assert.throws(() => validatePreflightFailurePhase(phase), error => {
+      assert.equal(error.message, 'PR264_CREDENTIAL_PREFLIGHT_REJECTED:failure-phase');
+      assert.doesNotMatch(error.message, /hostile|toString|__proto__|constructor/u);
+      return true;
+    });
+  }
+});
+
+test('each non-PAT semantic predicate rejects its direct variants without changing the accepted contract', () => {
   for (const phase of ['unknown', 'toString', '__proto__', 'constructor']) assert.throws(() => validateControlledHumanWorkflowSecrets(phase, {}), error => error.message === 'PR264_CONTROLLED_HUMAN_WORKFLOW_SECRET_REJECTED:unknown-phase:invalid-input:invalid-input');
   for (const [phase, names] of Object.entries(CONTROLLED_HUMAN_PHASE_SECRETS)) {
     const good = Object.fromEntries(names.map(name => [name, 'fixture-only-present-value']));
@@ -98,10 +143,24 @@ test('every non-PAT field and six downstream phase guards reject absent blank se
     }
     assert.throws(() => validateControlledHumanWorkflowSecrets(phase, { ...good, FORBIDDEN: 'fixture-value' }, { exact: true }));
   }
+  for (const name of CONTROLLED_HUMAN_PHASE_SECRETS.preflight) {
+    const missing = { ...env };
+    delete missing[name];
+    assert.throws(() => validateNonPatPreflightInputs(missing, fixtureState), name);
+  }
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY']) {
     assert.throws(() => validateNonPatPreflightInputs({ ...env, [name]: 'fixture-only-unexpected' }, fixtureState), /forbidden-credential/u);
   }
-  for (const value of ['{}', '[]', '{', JSON.stringify({ requester: 'same-fixture-value-123', reviewer: 'same-fixture-value-123' }), JSON.stringify({ requester: 'short', reviewer: 'fixture-reviewer-value' })]) {
+  for (const value of [
+    '{}',
+    '[]',
+    '{',
+    JSON.stringify({ requester: 'fixture-requester-only-123' }),
+    JSON.stringify({ requester: 'fixture-requester-only-123', reviewer: 'fixture-reviewer-only-456', unexpected: 'fixture-unexpected-only-789' }),
+    JSON.stringify({ ['__proto__']: 'fixture-prototype-only-123' }),
+    JSON.stringify({ requester: 'same-fixture-value-123', reviewer: 'same-fixture-value-123' }),
+    JSON.stringify({ requester: 'short', reviewer: 'fixture-reviewer-value' }),
+  ]) {
     assert.throws(() => validateNonPatPreflightInputs({ ...env, PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON: value }, fixtureState));
   }
   for (const value of [7, null, { nested: 'fixture-only' }, 'x'.repeat(129)]) {
@@ -117,6 +176,10 @@ test('every non-PAT field and six downstream phase guards reject absent blank se
   assert.throws(() => validateNonPatPreflightInputs({ ...env, PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: `sha256:${'a'.repeat(64)}` }, fixtureState));
   assert.throws(() => validateNonPatPreflightInputs({ ...env, PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF: 'b'.repeat(20) }, fixtureState));
   assert.throws(() => validateNonPatPreflightInputs({ ...env, PR_C_CONTROLLED_HUMAN_DATABASE_URL: env.PR_C_CONTROLLED_HUMAN_DATABASE_URL.replace('verify-full', 'require') }, fixtureState));
+  assert.deepEqual(validateNonPatPreflightInputs(env, fixtureState), {
+    requiredNonPatFieldsPresent: true,
+    passwordBundleStructureValid: true,
+  });
 });
 
 const fakeAdapter = ({ readOnly = 'on', inspectFailure = false, rollbackFailure = false, closeFailure = false, connectFailure = false } = {}) => {
@@ -235,8 +298,6 @@ test('CLI accepts no caller-provided proof or adapter and exposes only one fixed
 });
 
 test('credential-preflight unit scenarios publish an exact measured-run contract', async () => {
-  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
-  if (!directory) return;
   const names = [...measuredScenarios].sort();
   assert.deepEqual(names, [
     'artifact-over-16-kib',
@@ -245,6 +306,8 @@ test('credential-preflight unit scenarios publish an exact measured-run contract
     'signing-key-leading-trailing-whitespace',
     'signing-key-under-32-over-4096',
   ]);
+  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+  if (!directory) return;
   await writeFile(path.join(directory, 'credential-preflight-unit-scenarios.json'), `${JSON.stringify({
     contractVersion: 'pr-c-control-script-scenarios-1',
     producer: 'scripts/prCControlledHumanCredentialPreflight.test.mjs',

@@ -23,7 +23,13 @@ export const PREFLIGHT_FAILURE_PHASES = Object.freeze({
   sourceIdentity: 'SOURCE_IDENTITY',
   eventAuthority: 'EVENT_AUTHORITY',
   fixture: 'FIXTURE',
-  nonPatInputs: 'NONPAT_INPUTS',
+  nonPatRequiredFields: 'NONPAT_REQUIRED_FIELDS',
+  nonPatForbiddenCredential: 'NONPAT_FORBIDDEN_CREDENTIAL',
+  nonPatSigningAuthority: 'NONPAT_SIGNING_AUTHORITY',
+  nonPatTargetTuple: 'NONPAT_TARGET_TUPLE',
+  nonPatPasswordJson: 'NONPAT_PASSWORD_JSON',
+  nonPatPasswordPersonaSet: 'NONPAT_PASSWORD_PERSONA_SET',
+  nonPatPasswordValues: 'NONPAT_PASSWORD_VALUES',
   migration: 'MIGRATION',
   pinnedCa: 'PINNED_CA',
   databaseConfiguration: 'DATABASE_CONFIGURATION',
@@ -58,8 +64,13 @@ const CHECKS = Object.freeze({ requiredNonPatFieldsPresent: true, passwordBundle
 const NOT_RUN = Object.freeze(['deployment', 'human-testing', 'service-credential-authentication', 'temporary-token-authentication', 'real-provider-verification']);
 const ZERO_MUTATIONS = Object.freeze({ migrations: 0, databaseWrites: 0, authMutations: 0, functionDeployments: 0, providerCalls: 0 });
 const fail = code => { throw new Error(`PR264_CREDENTIAL_PREFLIGHT_REJECTED:${code}`); };
+const PREFLIGHT_FAILURE_PHASE_ALLOWLIST = Object.freeze(Object.values(PREFLIGHT_FAILURE_PHASES));
 let activeFailurePhase = PREFLIGHT_FAILURE_PHASES.entryArguments;
-const enterFailurePhase = phase => { activeFailurePhase = phase; };
+export const validatePreflightFailurePhase = phase => {
+  if (typeof phase !== 'string' || !PREFLIGHT_FAILURE_PHASE_ALLOWLIST.includes(phase)) fail('failure-phase');
+  return phase;
+};
+const enterFailurePhase = phase => { activeFailurePhase = validatePreflightFailurePhase(phase); };
 const same = (left, right) => canonicalJson(left) === canonicalJson(right);
 const exactKeys = (value, keys, code) => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !same(Object.keys(value).sort(), [...keys].sort())) fail(code);
@@ -112,17 +123,24 @@ export function derivePreflightIdentity(env, event, source) {
 
 export function validateNonPatPreflightInputs(env, fixtureState) {
   const values = Object.fromEntries(CONTROLLED_HUMAN_PHASE_SECRETS.preflight.map(name => [name, env[name]]));
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatRequiredFields);
   validateControlledHumanWorkflowSecrets('preflight', values, { exact: true });
   // Never load a deployment PAT or a provider credential into this phase.
   const forbidden = /^(?:(?:PR_C_CONTROLLED_HUMAN_)?SUPABASE_ACCESS_TOKEN|(?:VITE_)?(?:OPENAI|GROQ|ANTHROPIC|GOOGLE|GEMINI|MISTRAL|COHERE|DEEPSEEK|XAI)_API_KEY)$/u;
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatForbiddenCredential);
   if (Object.keys(env).some(name => forbidden.test(name) && typeof env[name] === 'string' && env[name].trim() !== '')) fail('forbidden-credential');
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatSigningAuthority);
   const key = env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY;
   if (key.trim() !== key || key.length < 32 || key.length > 4096) fail('signing-authority');
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatTargetTuple);
   validateSupabaseTargetTuple(env.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF, env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,
     env.PR_C_CONTROLLED_HUMAN_DATABASE_URL, env.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST);
   let bundle;
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatPasswordJson);
   try { bundle = JSON.parse(env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON); } catch { fail('bundle-structure'); }
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatPasswordPersonaSet);
   exactKeys(bundle, fixtureState.personas.map(persona => persona.key), 'bundle-structure');
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatPasswordValues);
   const passwords = Object.values(bundle);
   if (new Set(passwords).size !== passwords.length || passwords.some(value => typeof value !== 'string' || value.length < 16 || value.length > 128)) fail('bundle-structure');
   // Presence is the only service-credential claim here. Its actual Admin API
@@ -265,7 +283,6 @@ export async function runCredentialPreflight(env = process.env) {
   const identity = derivePreflightIdentity(env, event, sourceBefore);
   enterFailurePhase(PREFLIGHT_FAILURE_PHASES.fixture);
   const fixtureState = await loadFixture();
-  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatInputs);
   const inputChecks = validateNonPatPreflightInputs(env, fixtureState);
   enterFailurePhase(PREFLIGHT_FAILURE_PHASES.migration);
   const migration = await loadMigration();

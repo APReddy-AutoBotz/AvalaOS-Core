@@ -17,6 +17,7 @@ import {
 } from './prCControlledHumanCredentialPreflightEntryFixture.mjs';
 
 const scenarios = [];
+const HOSTILE_CANARY = 'PR264_HOSTILE_SEMANTIC_INPUT_CANARY_MUST_NOT_APPEAR';
 const exists = target => readFile(target).then(() => true, error => {
   if (error.code === 'ENOENT') return false;
   throw error;
@@ -26,6 +27,7 @@ const assertSanitizedFailure = (result, phase, context = phase) => {
   assert.equal(result.status, 1, context);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, `PR264_CREDENTIAL_PREFLIGHT_FAILED:${phase}\n`);
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(HOSTILE_CANARY, 'u'), context);
 };
 const assertNoArtifact = async fixture => {
   await assert.rejects(readdir(path.join(fixture.repositoryRoot, PREFLIGHT_OUTPUT)), error => error.code === 'ENOENT');
@@ -144,16 +146,75 @@ test('production credential-preflight entrypoint rejects a clean nonancestor che
   }
 });
 
-test('production credential-preflight entrypoint emits only fixed early authority and input phases', async () => {
-  for (const scenario of [
-    { name: 'production-entry-event-authority-failure', phase: PREFLIGHT_FAILURE_PHASES.eventAuthority, override: { GITHUB_ACTOR: 'hostile-fixture-actor' } },
-    { name: 'production-entry-nonpat-input-failure', phase: PREFLIGHT_FAILURE_PHASES.nonPatInputs, override: { PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY: ' fixture-only-pr264-credential-preflight-authority' } },
-  ]) {
+test('production credential-preflight entrypoint emits only the fixed event-authority phase', async () => {
+  const fixture = await createCredentialPreflightEntryFixture();
+  try {
+    const env = await buildCredentialPreflightEntryEnvironment(fixture, { GITHUB_ACTOR: 'hostile-fixture-actor' });
+    assertSanitizedFailure(runCredentialPreflightEntry(fixture, env), PREFLIGHT_FAILURE_PHASES.eventAuthority, 'production-entry-event-authority-failure');
+    assert.equal(await readFile(env.PR_C_PREFLIGHT_FIXTURE_TRACE_PATH, 'utf8'), 'transport-installed\n');
+    await assertNoArtifact(fixture);
+    passed('production-entry-event-authority-failure');
+  } finally {
+    await removeCredentialPreflightEntryFixture(fixture);
+  }
+});
+
+test('seven non-PAT semantic failures execute the real production entrypoint and stop before transport', async () => {
+  const semanticScenarios = [
+    {
+      name: 'production-entry-nonpat-required-fields-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatRequiredFields,
+      mutate: env => { env.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY = ''; },
+    },
+    {
+      name: 'production-entry-nonpat-forbidden-credential-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatForbiddenCredential,
+      mutate: env => { env.PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN = HOSTILE_CANARY; },
+    },
+    {
+      name: 'production-entry-nonpat-signing-authority-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatSigningAuthority,
+      mutate: env => { env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY = ` ${HOSTILE_CANARY}`; },
+    },
+    {
+      name: 'production-entry-nonpat-target-tuple-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatTargetTuple,
+      mutate: env => { env.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF = HOSTILE_CANARY; },
+    },
+    {
+      name: 'production-entry-nonpat-password-json-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatPasswordJson,
+      mutate: env => { env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON = `{"${HOSTILE_CANARY}"`; },
+    },
+    {
+      name: 'production-entry-nonpat-password-persona-set-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatPasswordPersonaSet,
+      mutate: env => {
+        const bundle = JSON.parse(env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON);
+        bundle[HOSTILE_CANARY] = 'fixture-only-unexpected-persona-password';
+        env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON = JSON.stringify(bundle);
+      },
+    },
+    {
+      name: 'production-entry-nonpat-password-values-failure',
+      phase: PREFLIGHT_FAILURE_PHASES.nonPatPasswordValues,
+      mutate: env => {
+        const bundle = JSON.parse(env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON);
+        bundle[Object.keys(bundle)[0]] = { canary: HOSTILE_CANARY };
+        env.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON = JSON.stringify(bundle);
+      },
+    },
+  ];
+  for (const scenario of semanticScenarios) {
     const fixture = await createCredentialPreflightEntryFixture();
     try {
-      const env = await buildCredentialPreflightEntryEnvironment(fixture, scenario.override);
-      assertSanitizedFailure(runCredentialPreflightEntry(fixture, env), scenario.phase, scenario.name);
-      assert.equal(await readFile(env.PR_C_PREFLIGHT_FIXTURE_TRACE_PATH, 'utf8'), 'transport-installed\n');
+      const env = await buildCredentialPreflightEntryEnvironment(fixture, { PR_C_PREFLIGHT_HOSTILE_CANARY: HOSTILE_CANARY });
+      scenario.mutate(env);
+      const result = runCredentialPreflightEntry(fixture, env);
+      assertSanitizedFailure(result, scenario.phase, scenario.name);
+      const trace = await readFile(env.PR_C_PREFLIGHT_FIXTURE_TRACE_PATH, 'utf8');
+      assert.equal(trace, 'transport-installed\n', scenario.name);
+      assert.doesNotMatch(trace, new RegExp(HOSTILE_CANARY, 'u'), scenario.name);
       await assertNoArtifact(fixture);
       passed(scenario.name);
     } finally {
@@ -223,8 +284,6 @@ test('production credential-preflight entrypoint rejects source changed during e
 });
 
 test('production entry scenarios publish an exact measured-run contract', async () => {
-  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
-  if (!directory) return;
   assert.deepEqual(scenarios.map(item => item.name), [
     'production-entry-source-identity-happy-path',
     'production-entry-existing-output-collision',
@@ -232,7 +291,13 @@ test('production entry scenarios publish an exact measured-run contract', async 
     'production-entry-dirty-source',
     'production-entry-nonancestor-base',
     'production-entry-event-authority-failure',
-    'production-entry-nonpat-input-failure',
+    'production-entry-nonpat-required-fields-failure',
+    'production-entry-nonpat-forbidden-credential-failure',
+    'production-entry-nonpat-signing-authority-failure',
+    'production-entry-nonpat-target-tuple-failure',
+    'production-entry-nonpat-password-json-failure',
+    'production-entry-nonpat-password-persona-set-failure',
+    'production-entry-nonpat-password-values-failure',
     'production-entry-database-configuration-failure',
     'production-entry-database-connect-failure',
     'production-entry-database-begin-failure',
@@ -248,6 +313,9 @@ test('production entry scenarios publish an exact measured-run contract', async 
     'production-entry-preview-failure',
     'production-entry-source-change-during-execution',
   ]);
+  assert.equal(scenarios.length, 27);
+  const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+  if (!directory) return;
   await writeFile(path.join(directory, 'credential-preflight-entry-scenarios.json'), `${JSON.stringify({
     contractVersion: 'pr-c-control-script-scenarios-1',
     producer: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs',

@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 import { CONTROLLED_HUMAN_PHASE_SECRETS } from './prCControlledHumanWorkflowSecrets.mjs';
+import { PREFLIGHT_FAILURE_PHASES } from './prCControlledHumanCredentialPreflight.mjs';
+import { CONTROL_SCRIPT_SCENARIOS, CONTROL_SCRIPT_SCENARIOS_BY_REPORT, CONTROL_SCRIPT_SCENARIO_PRODUCERS, CONTROL_SCRIPT_SOURCES } from './runPrCControlledHumanScriptCoverage.mjs';
 
 const PRIMARY = '.github/workflows/transcript-flow-pr-c.yml';
 const RECOVERY = '.github/workflows/pr264-controlled-human-recover.yml';
@@ -28,10 +30,17 @@ async function snapshot() {
     primary: parseWorkflowYaml(await readFile(PRIMARY, 'utf8'), PRIMARY),
     recovery: parseWorkflowYaml(await readFile(RECOVERY, 'utf8'), RECOVERY),
     registry: JSON.parse(await readFile('testing/process-lifecycle/contracts/pr-c-assertion-registry.json', 'utf8')),
+    diagnosticTopology: {
+      phases: Object.values(PREFLIGHT_FAILURE_PHASES),
+      scenarioCount: CONTROL_SCRIPT_SCENARIOS.length,
+      entryScenarioCount: CONTROL_SCRIPT_SCENARIOS_BY_REPORT['credential-preflight-entry-scenarios.json'].length,
+      reportCount: Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).length,
+      sourceCount: CONTROL_SCRIPT_SOURCES.length,
+    },
   };
 }
 
-function validate({ documents, primary, recovery, registry }) {
+function validate({ documents, primary, recovery, registry, diagnosticTopology }) {
   const definitions = paragraph(documents.evidence, 'No current candidate result is claimed');
   assert.match(definitions, new RegExp(`defines ${registry.commands.length} exact commands, ${registry.assertions.length} assertion records, and nine explicit`, 'u'));
   assert.equal(registry.notRun.length, 9);
@@ -59,6 +68,23 @@ function validate({ documents, primary, recovery, registry }) {
   assert.doesNotMatch(documents.matrix, /All (?:44|29) focused|five ordered phase workflows|five ordered phase labels/u);
   assert.match(documents.matrix, /six ordered normal phase labels/u);
   assert.match(documents.matrix, /primary workflow's direct protected jobs and the separate protected manual-recovery workflow/u);
+  const semanticPhases = [
+    'NONPAT_REQUIRED_FIELDS', 'NONPAT_FORBIDDEN_CREDENTIAL', 'NONPAT_SIGNING_AUTHORITY',
+    'NONPAT_TARGET_TUPLE', 'NONPAT_PASSWORD_JSON', 'NONPAT_PASSWORD_PERSONA_SET', 'NONPAT_PASSWORD_VALUES',
+  ];
+  assert.equal(diagnosticTopology.phases.length, 27);
+  assert.equal(new Set(diagnosticTopology.phases).size, 27);
+  assert.deepEqual(diagnosticTopology.phases.filter(value => value.startsWith('NONPAT_')), semanticPhases);
+  assert.equal(diagnosticTopology.scenarioCount, 41);
+  assert.equal(diagnosticTopology.entryScenarioCount, 27);
+  assert.equal(diagnosticTopology.reportCount, 8);
+  assert.equal(diagnosticTopology.sourceCount, 13);
+  const diagnosticContract = paragraph(documents.walkthrough, 'The diagnostic continuation replaces');
+  for (const token of semanticPhases) assert.ok(diagnosticContract.includes(`\`${token}\``));
+  assert.match(diagnosticContract, /exact 27-token phase allowlist/u);
+  assert.match(diagnosticContract, /requires 41 scenarios, including 27 entry scenarios/u);
+  assert.match(paragraph(documents.plan, 'Non-PAT diagnostics must separately'), /41-scenario control inventory, including 27 entry scenarios/u);
+  assert.match(documents.matrix, /41 actual scenarios, including 27 entry scenarios, across eight reports and thirteen sources/u);
 }
 
 test('active controlled-human documentation binds actual registry, direct-job, secret and CA topology', async () => {
@@ -75,6 +101,10 @@ test('active documentation rejects stale counts, reusable topology and false Edg
     ['plan', 'Each of the fourteen direct PostgreSQL steps', 'Each of the eleven direct PostgreSQL steps'],
     ['walkthrough', 'Only the access token is exclusive to the Edge deployment job', 'Project reference and access token are Edge-only'],
     ['matrix', 'six ordered normal phase labels', 'five ordered phase labels'],
+    ['walkthrough', 'exact 27-token phase allowlist', 'exact 21-token phase allowlist'],
+    ['walkthrough', 'requires 41 scenarios, including 27 entry scenarios', 'requires 35 scenarios, including 21 entry scenarios'],
+    ['plan', '41-scenario control inventory, including 27 entry scenarios', '35-scenario control inventory, including 21 entry scenarios'],
+    ['matrix', '41 actual scenarios, including 27 entry scenarios', '35 actual scenarios, including 21 entry scenarios'],
   ]) {
     const changed = structuredClone(source);
     assert.ok(changed.documents[key].includes(before));
@@ -91,6 +121,13 @@ test('documentation contract detects executable registry or CA topology drift in
     value => { value.registry.notRun.pop(); },
     value => { value.primary.jobs.controlled_human_credentials_preflight.steps = value.primary.jobs.controlled_human_credentials_preflight.steps.filter(step => step.run !== CA); },
     value => { value.recovery.on.workflow_call = {}; },
+    value => { value.diagnosticTopology.phases.pop(); },
+    value => { value.diagnosticTopology.phases[0] = value.diagnosticTopology.phases[1]; },
+    value => { value.diagnosticTopology.phases[value.diagnosticTopology.phases.indexOf('NONPAT_PASSWORD_JSON')] = 'NONPAT_INPUTS'; },
+    value => { value.diagnosticTopology.scenarioCount -= 1; },
+    value => { value.diagnosticTopology.entryScenarioCount -= 1; },
+    value => { value.diagnosticTopology.reportCount -= 1; },
+    value => { value.diagnosticTopology.sourceCount -= 1; },
   ]) {
     const changed = structuredClone(source);
     mutate(changed);

@@ -57,7 +57,13 @@ const expectedScenarioOwnership = {
     'production-entry-event-authority-failure',
     'production-entry-existing-output-collision',
     'production-entry-nonancestor-base',
-    'production-entry-nonpat-input-failure',
+    'production-entry-nonpat-forbidden-credential-failure',
+    'production-entry-nonpat-password-json-failure',
+    'production-entry-nonpat-password-persona-set-failure',
+    'production-entry-nonpat-password-values-failure',
+    'production-entry-nonpat-required-fields-failure',
+    'production-entry-nonpat-signing-authority-failure',
+    'production-entry-nonpat-target-tuple-failure',
     'production-entry-preview-failure',
     'production-entry-source-change-during-execution',
     'production-entry-source-identity-happy-path',
@@ -189,7 +195,7 @@ test('scenario report reader binds every scenario to its exact producer and reje
 
     const valid = await writeScenarioFixture();
     directories.push(valid);
-    assert.equal(readControlScriptScenarios(valid).scenarios.length, 35);
+    assert.equal(readControlScriptScenarios(valid).scenarios.length, 41);
 
     const producerSubstitution = await writeScenarioFixture(reports => {
       reports['credential-preflight-entry-scenarios.json'].producer = 'scripts/substituted.test.mjs';
@@ -337,7 +343,13 @@ test('coverage runner inventory is independently pinned and its import guard per
     'production-entry-event-authority-failure',
     'production-entry-existing-output-collision',
     'production-entry-nonancestor-base',
-    'production-entry-nonpat-input-failure',
+    'production-entry-nonpat-forbidden-credential-failure',
+    'production-entry-nonpat-password-json-failure',
+    'production-entry-nonpat-password-persona-set-failure',
+    'production-entry-nonpat-password-values-failure',
+    'production-entry-nonpat-required-fields-failure',
+    'production-entry-nonpat-signing-authority-failure',
+    'production-entry-nonpat-target-tuple-failure',
     'production-entry-preview-failure',
     'production-entry-source-change-during-execution',
     'production-entry-source-identity-happy-path',
