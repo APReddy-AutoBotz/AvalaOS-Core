@@ -9,6 +9,17 @@ const record = value => {
   if (target) appendFileSync(target, value + '\n', 'utf8');
 };
 
+const failAt = mode => {
+  if (process.env.PR_C_PREFLIGHT_FIXTURE_MODE === mode + '-falsy') throw undefined;
+  if (process.env.PR_C_PREFLIGHT_FIXTURE_MODE === 'database-inventory-cleanup-failure'
+    && ['database-inventory-failure', 'database-rollback-failure', 'database-close-failure'].includes(mode)) {
+    throw new Error('host=private.invalid password=fixture-secret token=fixture-token ref=fixture-ref stack=fixture-stack');
+  }
+  if (process.env.PR_C_PREFLIGHT_FIXTURE_MODE === mode) {
+    throw new Error('host=private.invalid password=fixture-secret token=fixture-token ref=fixture-ref stack=fixture-stack');
+  }
+};
+
 const emptyDomainCounts = Object.freeze({
   assess_processes: 0,
   assess_v2_cases: 0,
@@ -27,10 +38,11 @@ class Client {
   constructor(config) {
     this.config = config;
     record('client-created');
+    failAt('database-configuration-failure');
   }
 
-  async connect() { record('connect'); }
-  async end() { record('close'); }
+  async connect() { record('connect'); failAt('database-connect-failure'); }
+  async end() { record('close'); failAt('database-close-failure'); }
 
   async query(input) {
     const sql = typeof input === 'string' ? input : input?.text;
@@ -38,26 +50,32 @@ class Client {
     const normalized = sql.replace(/\s+/gu, ' ').trim().toLowerCase();
     if (normalized === 'begin transaction isolation level repeatable read read only') {
       record('begin-read-only');
+      failAt('database-begin-failure');
       return { rows: [] };
     }
     if (normalized === 'show transaction_read_only') {
       record('show-read-only');
+      failAt('database-show-failure');
       return { rows: [{ transaction_read_only: 'on' }] };
     }
     if (normalized.startsWith('set local statement_timeout')) {
       record('statement-timeout');
+      failAt('database-statement-timeout-failure');
       return { rows: [] };
     }
     if (normalized.startsWith('set local idle_in_transaction_session_timeout')) {
       record('idle-timeout');
+      failAt('database-idle-timeout-failure');
       return { rows: [] };
     }
     if (normalized === 'rollback') {
       record('rollback');
+      failAt('database-rollback-failure');
       return { rows: [] };
     }
     if (normalized.includes('from pg_control_system()')) {
       record('inspect-target');
+      failAt('database-inventory-failure');
       return { rows: [{
         system_identifier: 'fixture-system',
         database_name: 'postgres',

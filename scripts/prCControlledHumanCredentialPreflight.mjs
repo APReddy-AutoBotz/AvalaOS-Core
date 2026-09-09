@@ -17,6 +17,29 @@ export const PREFLIGHT_LABEL = 'pr264-controlled-human-credentials-preflight';
 export const PREFLIGHT_OUTPUT = 'output/pr-c-controlled-human-credential-preflight';
 export const PREFLIGHT_FILE = 'credential-preflight.json';
 export const PREFLIGHT_COMMAND = 'node scripts/prCControlledHumanCredentialPreflight.mjs';
+export const PREFLIGHT_FAILURE_PHASES = Object.freeze({
+  entryArguments: 'ENTRY_ARGUMENTS',
+  outputPath: 'OUTPUT_PATH',
+  sourceIdentity: 'SOURCE_IDENTITY',
+  eventAuthority: 'EVENT_AUTHORITY',
+  fixture: 'FIXTURE',
+  nonPatInputs: 'NONPAT_INPUTS',
+  migration: 'MIGRATION',
+  pinnedCa: 'PINNED_CA',
+  databaseConfiguration: 'DATABASE_CONFIGURATION',
+  databaseConnect: 'DATABASE_CONNECT',
+  databaseBeginReadOnly: 'DATABASE_BEGIN_READ_ONLY',
+  databaseVerifyReadOnly: 'DATABASE_VERIFY_READ_ONLY',
+  databaseTimeouts: 'DATABASE_TIMEOUTS',
+  databaseInventory: 'DATABASE_INVENTORY',
+  databaseRollback: 'DATABASE_ROLLBACK',
+  databaseClose: 'DATABASE_CLOSE',
+  bootstrapBinding: 'BOOTSTRAP_BINDING',
+  preview: 'PREVIEW',
+  sourceRecheck: 'SOURCE_RECHECK',
+  report: 'REPORT',
+  artifactWrite: 'ARTIFACT_WRITE',
+});
 const REPOSITORY = 'APReddy-AutoBotz/AvalaOS-Core';
 const BRANCH = 'controller/governed-delivery-monitor-pr-c-20260831';
 const PREVIEW = 'https://deploy-preview-264--avalaos-pilot.netlify.app';
@@ -35,6 +58,8 @@ const CHECKS = Object.freeze({ requiredNonPatFieldsPresent: true, passwordBundle
 const NOT_RUN = Object.freeze(['deployment', 'human-testing', 'service-credential-authentication', 'temporary-token-authentication', 'real-provider-verification']);
 const ZERO_MUTATIONS = Object.freeze({ migrations: 0, databaseWrites: 0, authMutations: 0, functionDeployments: 0, providerCalls: 0 });
 const fail = code => { throw new Error(`PR264_CREDENTIAL_PREFLIGHT_REJECTED:${code}`); };
+let activeFailurePhase = PREFLIGHT_FAILURE_PHASES.entryArguments;
+const enterFailurePhase = phase => { activeFailurePhase = phase; };
 const same = (left, right) => canonicalJson(left) === canonicalJson(right);
 const exactKeys = (value, keys, code) => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !same(Object.keys(value).sort(), [...keys].sort())) fail(code);
@@ -107,22 +132,48 @@ export function validateNonPatPreflightInputs(env, fixtureState) {
 
 export async function inspectPreflightTargetReadOnly(adapter) {
   let transactionStarted = false;
+  let inventory;
+  let hasPrimaryFailure = false;
+  let primaryError;
   try {
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseConnect);
     await adapter.connect();
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseBeginReadOnly);
     await adapter.client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
     transactionStarted = true;
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseVerifyReadOnly);
     const result = await adapter.client.query('SHOW transaction_read_only');
     if (result.rows?.length !== 1 || result.rows[0]?.transaction_read_only !== 'on') fail('read-only-transaction');
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseTimeouts);
     await adapter.client.query("SET LOCAL statement_timeout = '15000ms'");
     await adapter.client.query("SET LOCAL idle_in_transaction_session_timeout = '20000ms'");
-    const inventory = await adapter.inspect();
-    await adapter.client.query('ROLLBACK');
-    transactionStarted = false;
-    return { inventory, databaseTransactionReadOnly: true, databaseTransactionRolledBack: true };
-  } finally {
-    try { if (transactionStarted) await adapter.client.query('ROLLBACK'); }
-    finally { await adapter.close(); }
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseInventory);
+    inventory = await adapter.inspect();
+  } catch (error) {
+    hasPrimaryFailure = true;
+    primaryError = error;
   }
+  if (transactionStarted) {
+    if (!hasPrimaryFailure) enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseRollback);
+    try { await adapter.client.query('ROLLBACK'); }
+    catch (error) {
+      if (!hasPrimaryFailure) {
+        hasPrimaryFailure = true;
+        primaryError = error;
+      }
+    }
+    transactionStarted = false;
+  }
+  if (!hasPrimaryFailure) enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseClose);
+  try { await adapter.close(); }
+  catch (error) {
+    if (!hasPrimaryFailure) {
+      hasPrimaryFailure = true;
+      primaryError = error;
+    }
+  }
+  if (hasPrimaryFailure) throw primaryError;
+  return { inventory, databaseTransactionReadOnly: true, databaseTransactionRolledBack: true };
 }
 
 export async function observePreflightPreview(identity, fetchImpl = fetch) {
@@ -195,6 +246,7 @@ const sourceIdentity = () => {
   const nodeMajor = Number(process.versions.node.split('.')[0]);
   if (command !== PREFLIGHT_COMMAND || nodeMajor !== 22) fail('execution-command');
   const checkout = bootstrapCheckoutIdentity();
+  if (checkout.dirty !== '') fail('dirty-source');
   const files = collectChangedPrCFiles(process.cwd());
   const base = execFileSync('git', ['merge-base', PR_C_BASE_SHA, 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   if (base !== PR_C_BASE_SHA) fail('base');
@@ -204,21 +256,35 @@ const sourceIdentity = () => {
 export async function runCredentialPreflight(env = process.env) {
   // No injectable inventory, adapter, event, source, signing payload or output
   // filename is accepted by the production entrypoint.
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.outputPath);
   if (env.PR_C_CONTROLLED_HUMAN_PREFLIGHT_OUTPUT !== PREFLIGHT_OUTPUT) fail('output-path');
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.sourceIdentity);
   const sourceBefore = sourceIdentity();
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.eventAuthority);
   const event = JSON.parse(await readFile(env.GITHUB_EVENT_PATH, 'utf8'));
   const identity = derivePreflightIdentity(env, event, sourceBefore);
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.fixture);
   const fixtureState = await loadFixture();
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.nonPatInputs);
   const inputChecks = validateNonPatPreflightInputs(env, fixtureState);
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.migration);
   const migration = await loadMigration();
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.pinnedCa);
   loadPinnedSupabaseRootCa();
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.databaseConfiguration);
   const adapter = new PostgresEnvironmentMigrationAdapter(env.PR_C_CONTROLLED_HUMAN_DATABASE_URL, migration.sql, { readOnly: true });
   const { inventory, ...databaseChecks } = await inspectPreflightTargetReadOnly(adapter);
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.bootstrapBinding);
   const bootstrap = buildControlledHumanBootstrapBindings({ env: { ...env, PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: identity.exerciseDigest }, fixtureState, migration, inventory, checkout: sourceBefore });
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.preview);
   const previewChecks = await observePreflightPreview(identity);
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.sourceRecheck);
   const sourceUnchanged = same(sourceBefore, sourceIdentity());
+  if (!sourceUnchanged) fail('source-changed');
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.report);
   const report = createCredentialPreflightReport({ identity, bootstrap, inputChecks, databaseChecks, previewChecks, sourceUnchanged,
     pinnedTls: true, observedAt: new Date().toISOString(), signingKey: env.PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY });
+  enterFailurePhase(PREFLIGHT_FAILURE_PHASES.artifactWrite);
   const output = path.resolve(PREFLIGHT_OUTPUT);
   await mkdir(path.dirname(output), { recursive: true });
   await mkdir(output, { recursive: false });
@@ -228,12 +294,13 @@ export async function runCredentialPreflight(env = process.env) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    enterFailurePhase(PREFLIGHT_FAILURE_PHASES.entryArguments);
     if (process.argv.length !== 2) fail('arguments');
     const report = await runCredentialPreflight();
     process.stdout.write(`${JSON.stringify({ status: report.status, runId: report.identity.runId, runAttempt: report.identity.runAttempt })}\n`);
   } catch {
     // Never relay Git, JSON, URL, PostgreSQL, fetch or filesystem diagnostics.
-    process.stderr.write('PR264_CREDENTIAL_PREFLIGHT_FAILED\n');
+    process.stderr.write(`PR264_CREDENTIAL_PREFLIGHT_FAILED:${activeFailurePhase}\n`);
     process.exitCode = 1;
   }
 }

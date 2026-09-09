@@ -9,7 +9,7 @@ import { PostgresEnvironmentMigrationAdapter, loadMigration } from './prCControl
 import { CONTROLLED_HUMAN_PHASE_SECRETS, CONTROLLED_HUMAN_SECRET_SENTINEL, validateControlledHumanWorkflowSecrets } from './prCControlledHumanWorkflowSecrets.mjs';
 import { PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 import {
-  PREFLIGHT_COMMAND, PREFLIGHT_FILE, PREFLIGHT_JOB, PREFLIGHT_LABEL, PREFLIGHT_OUTPUT,
+  PREFLIGHT_COMMAND, PREFLIGHT_FAILURE_PHASES, PREFLIGHT_FILE, PREFLIGHT_JOB, PREFLIGHT_LABEL, PREFLIGHT_OUTPUT,
   createCredentialPreflightReport, derivePreflightIdentity, inspectPreflightTargetReadOnly,
   observePreflightPreview, validateNonPatPreflightInputs, verifyCredentialPreflightBundle, verifyCredentialPreflightReport,
 } from './prCControlledHumanCredentialPreflight.mjs';
@@ -123,7 +123,8 @@ const fakeAdapter = ({ readOnly = 'on', inspectFailure = false, rollbackFailure 
   const calls = [];
   return { calls, connect: async () => { calls.push('connect'); if (connectFailure) throw new Error('fixture-sensitive-connect-message'); }, close: async () => { calls.push('close'); if (closeFailure) throw new Error('fixture-sensitive-close-message'); },
     inspect: async () => { calls.push('inspect'); if (inspectFailure) throw new Error('fixture-sensitive-database-message'); return { actualTargetFingerprint: identity.targetFingerprint }; },
-    client: { query: async query => { calls.push(query); if (query === 'ROLLBACK' && rollbackFailure) throw new Error('fixture-sensitive-rollback-message'); return { rows: [{ transaction_read_only: readOnly }] }; } },
+    client: { query: async query => { calls.push(query); if (query === 'ROLLBACK' && rollbackFailure === 'falsy') throw undefined;
+      if (query === 'ROLLBACK' && rollbackFailure) throw new Error('fixture-sensitive-rollback-message'); return { rows: [{ transaction_read_only: readOnly }] }; } },
   };
 };
 
@@ -133,7 +134,7 @@ test('database inspection verifies read-only transaction and rolls back before p
   assert.equal(result.databaseTransactionReadOnly, true);
   assert.equal(result.databaseTransactionRolledBack, true);
   assert.deepEqual(adapter.calls, ['connect', 'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SHOW transaction_read_only', "SET LOCAL statement_timeout = '15000ms'", "SET LOCAL idle_in_transaction_session_timeout = '20000ms'", 'inspect', 'ROLLBACK', 'close']);
-  for (const options of [{ readOnly: 'off' }, { inspectFailure: true }, { rollbackFailure: true }, { closeFailure: true }]) {
+  for (const options of [{ readOnly: 'off' }, { inspectFailure: true }, { rollbackFailure: true }, { rollbackFailure: 'falsy' }, { closeFailure: true }]) {
     const failed = fakeAdapter(options);
     await assert.rejects(inspectPreflightTargetReadOnly(failed));
     assert.equal(failed.calls.at(-1), 'close');
@@ -222,10 +223,11 @@ test('artifact verifier rejects green-without-report duplicate substituted and m
   }
 });
 
-test('CLI accepts no caller-provided proof or adapter and exposes only one fixed diagnostic', async () => {
+test('CLI accepts no caller-provided proof or adapter and exposes only one fixed phase diagnostic', async () => {
   const command = path.resolve('scripts/prCControlledHumanCredentialPreflight.mjs');
   const run = spawnSync(process.execPath, [command, '--inventory', 'fixture-sensitive-argument'], { encoding: 'utf8', env: { ...process.env, PR_C_CONTROLLED_HUMAN_PREFLIGHT_OUTPUT: PREFLIGHT_OUTPUT } });
-  assert.equal(run.status, 1); assert.equal(run.stdout, ''); assert.equal(run.stderr, 'PR264_CREDENTIAL_PREFLIGHT_FAILED\n');
+  assert.equal(run.status, 1); assert.equal(run.stdout, '');
+  assert.equal(run.stderr, `PR264_CREDENTIAL_PREFLIGHT_FAILED:${PREFLIGHT_FAILURE_PHASES.entryArguments}\n`);
   const script = await readFile(command, 'utf8');
   assert.match(script, /new PostgresEnvironmentMigrationAdapter\([^;]+\{ readOnly: true \}\)/u);
   assert.doesNotMatch(script, /SET SESSION|SET default_transaction_read_only/u);

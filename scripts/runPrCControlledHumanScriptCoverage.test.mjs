@@ -41,9 +41,24 @@ const expectedScenarioOwnership = {
   'acceptance-playwright-metadata-scenarios.json': ['acceptance-playwright-metadata-installed-synthetic-config'],
   'control-script-coverage-runner-scenarios.json': ['control-script-coverage-runner-self-test'],
   'credential-preflight-entry-scenarios.json': [
+    'production-entry-bootstrap-binding-failure',
+    'production-entry-database-begin-failure',
+    'production-entry-database-close-failure',
+    'production-entry-database-configuration-failure',
+    'production-entry-database-connect-failure',
+    'production-entry-database-idle-timeout-failure',
+    'production-entry-database-inventory-cleanup-failure',
+    'production-entry-database-inventory-failure',
+    'production-entry-database-rollback-failure',
+    'production-entry-database-rollback-falsy-failure',
+    'production-entry-database-show-failure',
+    'production-entry-database-statement-timeout-failure',
     'production-entry-dirty-source',
+    'production-entry-event-authority-failure',
     'production-entry-existing-output-collision',
     'production-entry-nonancestor-base',
+    'production-entry-nonpat-input-failure',
+    'production-entry-preview-failure',
     'production-entry-source-change-during-execution',
     'production-entry-source-identity-happy-path',
     'production-entry-wrong-output-path',
@@ -174,7 +189,7 @@ test('scenario report reader binds every scenario to its exact producer and reje
 
     const valid = await writeScenarioFixture();
     directories.push(valid);
-    assert.equal(readControlScriptScenarios(valid).scenarios.length, 20);
+    assert.equal(readControlScriptScenarios(valid).scenarios.length, 35);
 
     const producerSubstitution = await writeScenarioFixture(reports => {
       reports['credential-preflight-entry-scenarios.json'].producer = 'scripts/substituted.test.mjs';
@@ -306,9 +321,24 @@ test('coverage runner inventory is independently pinned and its import guard per
     'exhaustive-report-planned-scope-blocked',
     'password-non-string',
     'password-over-128',
+    'production-entry-bootstrap-binding-failure',
+    'production-entry-database-begin-failure',
+    'production-entry-database-close-failure',
+    'production-entry-database-configuration-failure',
+    'production-entry-database-connect-failure',
+    'production-entry-database-idle-timeout-failure',
+    'production-entry-database-inventory-cleanup-failure',
+    'production-entry-database-inventory-failure',
+    'production-entry-database-rollback-failure',
+    'production-entry-database-rollback-falsy-failure',
+    'production-entry-database-show-failure',
+    'production-entry-database-statement-timeout-failure',
     'production-entry-dirty-source',
+    'production-entry-event-authority-failure',
     'production-entry-existing-output-collision',
     'production-entry-nonancestor-base',
+    'production-entry-nonpat-input-failure',
+    'production-entry-preview-failure',
     'production-entry-source-change-during-execution',
     'production-entry-source-identity-happy-path',
     'production-entry-wrong-output-path',

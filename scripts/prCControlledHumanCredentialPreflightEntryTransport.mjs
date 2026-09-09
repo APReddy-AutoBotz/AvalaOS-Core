@@ -15,6 +15,9 @@ globalThis.fetch = async (url, options) => {
     throw new Error('fixture-unexpected-fetch');
   }
   trace('preview-fetch');
+  if (process.env.PR_C_PREFLIGHT_FIXTURE_MODE === 'preview-failure') {
+    throw new Error('url=https://private.invalid token=fixture-token ref=fixture-ref stack=fixture-stack');
+  }
   if (process.env.PR_C_PREFLIGHT_FIXTURE_MODE === 'source-change') {
     appendFileSync(path.resolve('scripts/prCControlledHumanCredentialPreflight.mjs'), '\n', 'utf8');
     trace('source-changed');
