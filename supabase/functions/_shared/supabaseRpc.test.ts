@@ -88,6 +88,15 @@ const governedSignals = [
   'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
   'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
   'ENTERPRISE_PROVIDER_ROUTE_BLOCKED',
+  'ENTERPRISE_DELIVERY_IDEMPOTENCY_CONFLICT',
+  'ENTERPRISE_DELIVERY_COMMAND_IN_PROGRESS',
+  'ENTERPRISE_DELIVERY_PERMISSION_DENIED',
+  'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE',
+  'ENTERPRISE_DELIVERY_RESOURCE_STALE',
+  'ENTERPRISE_DELIVERY_HANDOFF_STALE',
+  'ENTERPRISE_DELIVERY_FEATURE_DISABLED',
+  'ENTERPRISE_DELIVERY_READ_ONLY',
+  'ENTERPRISE_DELIVERY_COMMAND_BLOCKED',
 ] as const;
 for (const [index, signal] of governedSignals.entries()) {
   const status = [502, 503, 504][index % 3];
@@ -135,6 +144,14 @@ for (const forbidden of [
   assert.equal(serialized.includes(forbidden), false);
 }
 assert.equal(arbitraryToken.message, 'Supabase RPC failed.');
+
+const internalDeliverySignal = await captureFailure({
+  status: 409,
+  body: JSON.stringify({ code: 'P0001', message: 'DELIVERY_PARENT_NOT_IN_PACKAGE' }),
+});
+assert.ok(internalDeliverySignal instanceof SupabaseRpcError);
+assert.equal(internalDeliverySignal.databaseMessage, undefined);
+assert.equal(supabaseRpcErrorHasSignal(internalDeliverySignal, 'DELIVERY_PARENT_NOT_IN_PACKAGE'), false);
 
 globalThis.fetch = async () => { throw new TypeError('raw relay secret must not survive'); };
 let fetchFailure: unknown;

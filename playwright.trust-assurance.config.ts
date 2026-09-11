@@ -7,7 +7,7 @@ export default defineConfig({
   timeout: 180_000,
   workers: 1,
   retries: 1,
-  webServer: {
+  webServer: process.env.TRUST_ASSURANCE_EXTERNAL_SERVER === 'true' ? undefined : {
     command: 'npx vite preview --config vite.trust-assurance.config.ts --host 127.0.0.1 --port 4417 --strictPort',
     url: 'http://127.0.0.1:4417/tests/trust-assurance/browser/trustAssuranceHarness.html',
     reuseExistingServer: !process.env.CI,

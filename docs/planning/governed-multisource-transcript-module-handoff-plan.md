@@ -1,16 +1,18 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
-Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B implementation is authorized and active; PR C remains proposed and excluded
+Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized PR C corrective continuation and remains merge NO-GO pending full exact-head verification
 
 Plan date: 2026-08-25
 
-Planning baseline: accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`
+Planning baseline: post-PR-B `main` at `5433cad41721355e3ec5a29bc2f87772540c77b5`
 
 Deployment status: unknown; no hosted or live environment was inspected
 
-Implementation authority: PR A was accepted through PR #255; PR B was explicitly authorized on 2026-08-28; PR C requires separate execution approval
+Implementation authority: PR A was accepted through PR #255; PR B is merged through PR #263; the AP explicitly authorized PR C implementation and testing control on 2026-08-31
 
 PR A evidence boundary: accepted final head `460c44864b9d240321e727945411ced51dd0fe30`, merge `11e670003a73b0ab5a28650b70afac4b267760f4`, 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, all 15 applicable workflows, Netlify preview, and fresh independent review. Executed markers bind assertion-emitted runtime persona, canonical capabilities, tenant scope, fixtures, and exact exercised lineage. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification were not run.
+
+PR C execution boundary: one additive implementation PR owns Delivery and Monitor behavior, migrations, tests, assertion-owned evidence, rollback, and controlled-human readiness material. Its source/local/CI evidence may prove only the exact candidate it executes. On 2026-09-04 the AP separately authorized controlled-human preparation and execution only on a dedicated synthetic `hosted_nonproduction_pilot` backend and the PR #264 Netlify Deploy Preview; that authorization does not itself execute or pass the gate. `CONTROLLED-HUMAN` remains `not_run` until a signed three-distinct-human session binds every canonical step to the exact head, CI run/attempt/artifact, Deploy Preview, backend, seed, Edge deployment manifest, and verified deprovision. Production, AvalaOS.com/custom domains, customer/external data, real providers, pilot/production promotion, security certification, compliance certification, and readiness claims remain prohibited or `not_run`. `PERF-003` and `PERF-004` remain `not_run` until the AP approves numeric budgets.
 
 ## 1. Plan handling and authority
 
@@ -1207,8 +1209,14 @@ Delivers:
 Acceptance boundary:
 
 - all `DELIVERY-TR-*`, `MONITOR-TR-*`, remaining `PATH-*`, `HANDOFF-*`, end-to-end, accessibility, and performance gates pass;
+- a reviewer-blocked package exposes recovery only for its exact current package/version/aggregate identity; the production workspace loads the complete bounded descendant set, binds every current descendant selector, authors only explicitly selected materially changed descendants, and rejects unchanged, partial-knowledge, stale, foreign, replayed, or substituted input atomically;
+- a committed recovery creates a new immutable package version and fresh descendant decision state; its canonical result contains exactly one unique new item-version identity per expected aggregate and reuses no predecessor item-version identity from the complete set, so package review and approval must be repeated before any new Monitor baseline becomes eligible;
 - draft/rejected/stale/unresolved packages cannot affect Monitor;
 - Monitor remains read-only and shows exact lineage;
+- actor, organization, or workspace changes synchronously clear every secret, private-file byte, provider/source/route selector, candidate/draft selection, preview, pending action, status, and error before the new scope renders, and invalidate every in-flight file/mutation/Delivery/Monitor completion before it can repaint or mutate that scope; requested, outer, and nested Delivery/Monitor UUID scopes must match semantically;
+- two lost command responses lock fresh-key mutation until an authoritative reload reconciles the possibly committed effect; and
+- currently authorized exact committed receipt replay succeeds after mutable feature disablement or global read-only activation, while revoked authority still denies disclosure and new keys create no receipt or effect;
+- the manifest, command results, every passed assertion, and every `not_run` record bind the independently derived canonical workflow path, run ID, attempt, accepted base, exact head, execution classification, canonical evidence path, command/source/fixture/persona/runtime identity, and relevant record digest; base-tracked deletion or rename fails scope collection closed, and local evidence cannot satisfy a hosted gate; and
 - the full retained repository matrix passes.
 
 Rollback:
@@ -1295,7 +1303,25 @@ Use only synthetic identities and sources. Record:
 
 Do not capture keys, raw transcript content, storage identities, signed URLs, raw logs, or provider payloads.
 
+The executable evidence boundary is the four fail-closed JSON contracts under `testing/process-lifecycle/contracts/pr-c-controlled-human-*.schema.json` plus `scripts/prCControlledHumanEvidenceContract.mjs`. It defines eight canonical journeys and `CH-01` through `CH-14`; every checkpoint contains its exact ordered steps, persona, Test IDs, timestamps, evidence digest, zero-egress counts, and zero unexpected side-effect counts. A workflow, suite, or checkpoint aggregate cannot synthesize a missing step result.
+
+Every controlled-human PostgreSQL connection must retain `sslmode=verify-full` and load the tracked public Supabase Root 2021 CA from `testing/process-lifecycle/trust/supabase-prod-ca-2021.crt` through `scripts/prCControlledHumanPostgresTls.mjs`. The helper validates pinned raw bytes, certificate fingerprint and authority/lifetime properties before credentials reach the database client. Each of the fourteen direct PostgreSQL steps in the primary workflow and the one separate manual-recovery step has its own immediately preceding, credential-free `verify-ca` step; no job-global trust override, certificate secret, URL-supplied root-certificate path, weaker SSL mode, or `rejectUnauthorized: false` is permitted. Missing, displaced, substituted, expired, or otherwise invalid CA proof stops before that exact database step. API-only Edge deployment and static target-tuple parsing are not represented as PostgreSQL TLS proof.
+
+Six normal label phases in `.github/workflows/transcript-flow-pr-c.yml` select protected direct jobs under the `hosted-nonproduction-pilot` Environment: no-PAT credential preflight, exact allowlisted Edge deployment, preparation, server-authoritative quiesce, ordered checkpoint capture, and final verification. Abort and expiry select the primary workflow's direct recovery job; a separate protected manual-dispatch recovery entrypoint remains in `.github/workflows/pr264-controlled-human-recover.yml`. The Edge producer accepts only PR #264's exact branch/head, terminal successful PR C CI run/attempt/artifact digest, canonical `deploy-preview-264--avalaos-pilot.netlify.app`, and a server-attested dedicated backend with production/customer/provider authority false. It derives the raw-byte digest of the exact additive controlled-human migration from the checked-out source, accepts only the expected prior tip or exact replay, binds migration preflight/apply/verify phase digests, suppresses raw deployment CLI output, signs exact source digests, and uploads only a sanitized manifest. A partial run produces no trusted manifest and activates no exercise/feature flag. Preparation downloads that exact run/attempt/artifact and verifies its GitHub identity, artifact digest, HMAC, migration/source equality, and semantic seed counts; caller-authored JSON cannot substitute it. After all active human steps, the dedicated quiesce phase emits the exact server transition timestamp. Checkpoint capture HMAC-pseudonymizes human identity and rejects active steps at or after quiesce or read-only observation before it. Final verification requires three distinct GitHub actors mapped to requester, reviewer, and approver evidence roles, validates every human record before deprovisioning the exact exercise directly from frozen read-only state, and fails closed on any failed/blocked/skipped step, stale attempt, mismatched binding, unsafe evidence, provider egress, unexpected side effect, ordering violation, or partial reset.
+
+Final deprovision evidence binds the terminal SQL event sequence to the last ordered retained event and requires the independent post-deprovision query to reproduce the same stable state/history/event digests. Query independence is carried separately by a fresh server-generated inspection-attempt digest, non-regressing server time, and an authority digest over the first terminal record; a fabricated state difference is invalid. Denied-action observers count every effect linked through the exact source-qualified Delivery receipt or exact audit before validating denormalized actor/action consistency, so malformed linked metadata cannot hide a side effect. Recovery after a head advance executes only the current reviewed PR head under the trusted owner and protected environment, while the historical head remains bounded recovery data rather than executable source.
+
+A material defect invalidates the entire session and head. After a source fix, all exact-head gates, a new exercise, and all `CH-01` through `CH-14` must be repeated. A final artifact may record only sanitized defect/session digests and full-retest binding; automation cannot promote `CONTROLLED-HUMAN` without the signed human artifacts.
+
 ### 27.3 Ready-to-start gate
+
+Before requesting a temporary deployment token, the corrected exact head must pass its canonical source/coverage matrix, independent artifact verification, fresh final source reviews, CI, preview, and two independent bootstrap derivations. The AP must then approve the direct no-PAT credential-preflight job. That job uses only the seven existing non-PAT inputs, an explicitly verified read-only database transaction and rollback, and a fixed public preview request. Its single domain-separated HMAC report must independently match actual source, command, workflow/job/run/attempt, CI artifact, preview, and bootstrap authority. Service-role authentication, token validity, deployment, and human completion remain separate gates. Removal of a GitHub token secret is not proof of token revocation at Supabase.
+
+Changed critical JavaScript control scripts require measured exact-source coverage and executed mandatory production-entrypoint/adversarial scenarios, separately from the existing TypeScript numeric gate. Missing measurement, an unloaded source silently excluded, a skipped required scenario under green exit, substituted source/command, or an invalid output artifact blocks acceptance. Report the actual uncovered branches; do not invent a numeric JavaScript threshold or performance budget. Production entrypoints gain no test authority or injection override.
+
+Credential-preflight failures must identify only a fixed, source-owned execution stage. A generic failure without a signed report does not establish that the database was reached or identify a credential, TLS, network or SQL cause. Diagnostic stages must distinguish source/event authority, non-PAT semantic checks, database configuration/connection/read-only operations/cleanup, bootstrap, preview, source recheck and artifact output without exposing exception text, identifiers, URLs or secret-derived values. Adversarial tests must execute the actual entrypoint with synthetic transports and prove exact sanitized failure, no success artifact, early rejection before transport and required cleanup. Local transport substitutes and successful bootstrap observations must remain explicitly separate from actual hosted read-only transport proof. Do not change credentials, relax TLS/read-only checks or retry unchanged merely to guess a hidden cause. After any source correction, rerun current-source and exact-head gates; preserve the failed run and earlier evidence unchanged. The safe fallback is to leave protected deployment, seeding and human testing disabled until the signed preflight independently verifies.
+
+Non-PAT diagnostics must separately identify the seven unchanged sequential validation classes: required fields, forbidden credentials, signing authority, target tuple, password JSON, exact persona set, and password values. Only the immutable source-owned phase allowlist may enter diagnostic state; arbitrary, prototype-derived, or input-derived phase values must reject without disclosure. Each class requires its own actual-entrypoint negative proving exact one-line stderr, empty stdout, failure exit, no artifact, and no database or preview transport. These replace the former aggregate input scenario in the independently pinned 41-scenario control inventory, including 27 entry scenarios; they do not identify a particular secret, prove GitHub/local value equality, or change any validation, report, signature, command, TLS, workflow, or credential contract. Fresh full local canonical evidence, independent verification, final read-only reviews, and exact-head CI/preview are required before the next protected run.
 
 Controlled human testing may begin only when:
 
@@ -1307,8 +1333,11 @@ Controlled human testing may begin only when:
 - tenant/workspace, stale/revoked authority, concurrency, prompt injection, and response-loss cases pass;
 - unsupported providers are visibly unavailable;
 - seed/reset tooling is repeatable;
+- the pinned public Supabase CA and every exact workflow-to-PostgreSQL TLS guard pass their positive and adversarial source contracts, and the dedicated hosted connection succeeds with full CA and hostname verification;
 - creator, reviewer, and approver accounts are distinct; and
 - known limitations clearly state text-only ingestion, planning-only direct paths, no execution, no live telemetry, and no readiness claim.
+
+The dedicated synthetic target and Deploy Preview are the only authorized hosted surfaces for this gate. Stable Netlify production context, AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, and broad project/database reset are stop conditions.
 
 The PR remains Draft until controlled users complete the approved script and material defects are fixed and retested.
 
@@ -1334,8 +1363,8 @@ This workstream is complete only when:
 ## 29. Known unknowns and separate approvals
 
 - Exact provider/model choices and pricing are runtime configuration and require current verification before any real-provider smoke test.
-- Hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remain not run in this plan.
-- Real provider calls, live secrets, deployment, hosted tenant isolation, and customer data require separate explicit approval.
+- Dedicated synthetic Supabase and PR #264 Deploy Preview preparation/execution are authorized only for the controlled-human gate and remain `not_run` until exact evidence is produced. All other hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remains outside this plan.
+- Real provider calls/keys, production or customer credentials, stable/custom-domain deployment, production, and customer/external-user data require separate explicit approval.
 - Audio/video transcription, remote meeting integration, external issue-tracker sync, live telemetry, and task execution require new scope approval and their own threat model.
 - Any future execution path must require approved Assess ancestry even when planning-only direct Studio/Delivery paths exist.
 

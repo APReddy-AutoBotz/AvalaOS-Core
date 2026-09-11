@@ -1,4 +1,13 @@
-import { supabase, getRuntimeDataAccess, isSupabaseConfigured } from './supabaseClient';
+import {
+  beginControlledHumanCommand,
+  completeControlledHumanCommand,
+  executeControlledHumanDeniedCommand,
+  getControlledHumanEvidenceState,
+  getRuntimeDataAccess,
+  isControlledHumanRuntimeEnabled,
+  isSupabaseConfigured,
+  supabase,
+} from './supabaseClient';
 import {
   buildEnterpriseSelectorPayloads,
   decodeEnterpriseIntelligenceProjection,
@@ -10,6 +19,24 @@ import {
 } from './enterpriseIntelligence';
 import type { TranscriptAssessApplicationIntent } from './transcriptFlow/contracts';
 import { validateTranscriptSourceSetSelection } from './transcriptFlow/sourceSets';
+import {
+  buildDeliveryMonitorSelectorPayload,
+  type DeliveryMonitorCommandInput,
+} from './deliveryMonitor/commands';
+import type {
+  DeliveryBaselineEligibilityPageRequest,
+  DeliveryItemPageRequest,
+  DeliveryWorkspaceProjection,
+  MonitorApprovedBaselinesProjection,
+} from './deliveryMonitor/contracts';
+
+type DeliveryCommandFields<Action extends DeliveryMonitorCommandInput['action']> =
+  Extract<DeliveryMonitorCommandInput, { action: Action }> extends infer Command
+    ? Command extends DeliveryMonitorCommandInput ? Omit<Command, 'action'> : never
+    : never;
+
+type DeliveryCommandInput<Action extends DeliveryMonitorCommandInput['action']> =
+  DeliveryCommandFields<Action> & { organizationId: string; workspaceId: string };
 
 type TranscriptSourceSetLineageSelector = {
   sourceSetId: string;
@@ -104,6 +131,7 @@ const errorMessages: Record<string, string> = {
   RESOURCE_STALE: 'The selected resource changed on the server. Reload before continuing.',
   IDEMPOTENCY_CONFLICT: 'This request conflicts with a previously claimed operation. Reload before retrying.',
   COMMAND_IN_PROGRESS: 'The same operation is still in progress. Reload before retrying.',
+  COMMAND_OUTCOME_UNKNOWN: 'The server may have committed this command, but the response was lost. Reload committed state before retrying.',
   COMMAND_BLOCKED: 'The server blocked this lifecycle transition. No success was recorded.',
   COMMAND_UNAVAILABLE: 'The governed server operation is unavailable. No fallback was used.',
   BUDGET_EXHAUSTED: 'The configured provider budget is exhausted. No provider call was made.',
@@ -113,6 +141,9 @@ const errorMessages: Record<string, string> = {
   TRANSCRIPT_ASSESS_MATERIAL_CONFLICT_UNRESOLVED: 'Resolve every material conflict before applying or finalizing this Assess draft.',
   TRANSCRIPT_ASSESS_TARGET_STALE: 'The Assess draft or preview changed. Reload and preview the exact changes again.',
   ENTERPRISE_PROJECTION_UNAVAILABLE: 'The Enterprise Intelligence projection is unavailable. Existing records were not replaced with local data.',
+  HANDOFF_NOT_ELIGIBLE: 'The selected Studio version is not eligible for a Delivery handoff.',
+  HANDOFF_STALE: 'The handoff changed or its source is no longer current. Reload before continuing.',
+  MODULE_ROUTE_NOT_ALLOWED: 'The organization route policy does not permit this handoff.',
 };
 
 export class EnterpriseIntelligenceClientError extends Error {
@@ -129,30 +160,205 @@ const requireUuidSelector = (value: string) => {
   return value;
 };
 
+const sameUuidSelector = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+
+const canonicalControlledHumanJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalControlledHumanJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonicalControlledHumanJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const controlledHumanDigest = async (value: unknown) => {
+  if (!globalThis.crypto?.subtle) throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalControlledHumanJson(value)));
+  return `sha256:${Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+};
+
+const controlledHumanTextDigest = async (value: unknown) => {
+  if (typeof value !== 'string' || !globalThis.crypto?.subtle) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return `sha256:${Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+};
+
+export const controlledHumanTarget = (commandType: string, workspaceId: string, payload: Record<string, unknown>) => {
+  const id = (key: string) => typeof payload[key] === 'string' ? String(payload[key]) : '';
+  const version = (...keys: string[]) => {
+    const value = keys.map(key => payload[key]).find(candidate => Number.isSafeInteger(candidate) && Number(candidate) >= 0);
+    return Number(value ?? 1);
+  };
+  if (commandType === 'delivery.handoff.request') return { targetFamily: 'studio_artifact', targetId: id('studioArtifactId'), expectedVersion: version('expectedAggregateVersion') };
+  if (commandType.startsWith('delivery.handoff.')) return { targetFamily: 'delivery_handoff', targetId: id('handoffId'), expectedVersion: version('expectedHandoffVersion', 'expectedVersion') };
+  if (commandType === 'delivery.item.review') return { targetFamily: 'delivery_item', targetId: id('itemAggregateId'), expectedVersion: version('expectedAggregateVersion') };
+  if (commandType === 'delivery.package.revision.commit') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageAggregateVersion') };
+  if (commandType === 'delivery.package.review.resolve' || commandType === 'delivery.package.approval.resolve') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageVersion') };
+  if (commandType === 'monitor.baseline.create') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageVersion') };
+  if (commandType === 'delivery.package.create.manual') return { targetFamily: 'workspace', targetId: workspaceId, expectedVersion: 1 };
+  if (commandType === 'assessment_v2.review.resolve') return { targetFamily: 'assess_case', targetId: id('caseId'), expectedVersion: version('expectedVersion') };
+  if (commandType === 'transcript.assess.conflict.resolve') return { targetFamily: 'assess_conflict', targetId: id('conflictId'), expectedVersion: version('resolutionVersion') };
+  return null;
+};
+
+const controlledHumanSelectors = async (commandType: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> => {
+  const digest = (key: string) => controlledHumanDigest(payload[key] ?? null);
+  switch (commandType) {
+    case 'transcript.assess.conflict.resolve':
+      return {
+        conflictId: payload.conflictId, resolutionVersion: payload.resolutionVersion, resolution: payload.resolution,
+        candidateId: payload.candidateId ?? null, authoredValueDigest: await digest('authoredValue'), rationaleDigest: await digest('rationale'),
+      };
+    case 'delivery.handoff.request':
+      return {
+        targetWorkspaceId: payload.targetWorkspaceId, studioArtifactId: payload.studioArtifactId,
+        studioArtifactVersionId: payload.studioArtifactVersionId, expectedAggregateVersion: payload.expectedAggregateVersion,
+        expectedCurrentVersionId: payload.expectedCurrentVersionId, expectedApprovedVersionId: payload.expectedApprovedVersionId,
+      };
+    case 'delivery.handoff.review.resolve':
+    case 'delivery.handoff.approval.resolve':
+      return {
+        handoffId: payload.handoffId, expectedHandoffVersion: payload.expectedHandoffVersion,
+        outcome: payload.outcome, rationaleDigest: await digest('rationale'),
+      };
+    case 'delivery.handoff.consume':
+      return { handoffId: payload.handoffId, expectedHandoffVersion: payload.expectedHandoffVersion };
+    case 'delivery.package.create.manual':
+      if (getControlledHumanEvidenceState().armedStep?.observationKind === 'negative_attempt') {
+        const denialItems = [{
+          clientKey: 'item-0001', itemType: 'Task', title: 'Synthetic denial probe',
+          description: 'Synthetic non-production authorization denial probe.',
+          acceptanceCriteria: ['The real production authority rejects this request.'],
+          nonFunctionalRequirements: ['No side effect is committed.'],
+        }];
+        return {
+          manualBriefDigest: await controlledHumanTextDigest('Synthetic controlled-human denial probe'),
+          orderedItemsDigest: await controlledHumanDigest(denialItems), itemCount: 1,
+        };
+      }
+      return {
+        manualBriefDigest: await controlledHumanTextDigest(payload.manualBrief), orderedItemsDigest: await digest('items'),
+        itemCount: Array.isArray(payload.items) ? payload.items.length : -1,
+      };
+    case 'delivery.item.review':
+      {
+      const base = {
+        itemAggregateId: payload.itemAggregateId, expectedAggregateVersion: payload.expectedAggregateVersion,
+        expectedItemVersionId: payload.expectedItemVersionId, outcome: payload.outcome,
+        rationaleDigest: await digest('rationale'),
+        ...(payload.outcome === 'edited' ? { authoredItemDigest: await digest('item') } : {}),
+      };
+      if (getControlledHumanEvidenceState().armedStep?.stepId !== 'decide-every-current-proposal') return base;
+      const completeSet = Array.isArray(payload.controlledHumanCompleteItemSet)
+        ? [...payload.controlledHumanCompleteItemSet].sort((left, right) => String((left as Record<string, unknown>).itemAggregateId).localeCompare(String((right as Record<string, unknown>).itemAggregateId)))
+        : [];
+      return { ...base, completeItemSetDigest: await controlledHumanDigest(completeSet), completeItemCount: completeSet.length };
+      }
+    case 'delivery.package.revision.commit':
+      return {
+        workPackageId: payload.workPackageId, expectedPackageVersion: payload.expectedPackageVersion,
+        expectedPackageVersionId: payload.expectedPackageVersionId,
+        expectedPackageAggregateVersion: payload.expectedPackageAggregateVersion,
+        expectedItemsDigest: await digest('expectedItems'), expectedItemCount: Array.isArray(payload.expectedItems) ? payload.expectedItems.length : -1,
+        itemRevisionsDigest: await digest('itemRevisions'), revisionCount: Array.isArray(payload.itemRevisions) ? payload.itemRevisions.length : -1,
+      };
+    case 'delivery.package.review.resolve':
+    case 'delivery.package.approval.resolve':
+      return {
+        workPackageId: payload.workPackageId, expectedPackageVersion: payload.expectedPackageVersion,
+        expectedPackageVersionId: payload.expectedPackageVersionId,
+        expectedPackageAggregateVersion: payload.expectedPackageAggregateVersion,
+        outcome: payload.outcome, rationaleDigest: await digest('rationale'),
+      };
+    case 'monitor.baseline.create':
+      return {
+        workPackageId: payload.workPackageId, expectedPackageVersion: payload.expectedPackageVersion,
+        expectedPackageVersionId: payload.expectedPackageVersionId,
+      };
+    default:
+      throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  }
+};
+
 const invokeCommand = async <T>(input: {
   commandType: string;
   organizationId: string;
   workspaceId: string;
   payload: Record<string, unknown>;
+  controlledSelectorPayload?: Record<string, unknown>;
+  outcomeUnknownCodes?: readonly string[];
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
+  const controlledTarget = isControlledHumanRuntimeEnabled() ? controlledHumanTarget(input.commandType, input.workspaceId, input.payload) : null;
+  if (isControlledHumanRuntimeEnabled() && !controlledTarget) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  const controlledAnchor = controlledTarget ? await beginControlledHumanCommand({ action: input.commandType, ...controlledTarget, selectorBindings: await controlledHumanSelectors(input.commandType, input.controlledSelectorPayload ?? input.payload) }) : null;
+  if (controlledAnchor && getControlledHumanEvidenceState().armedStep?.observationKind === 'negative_attempt') {
+    await executeControlledHumanDeniedCommand(controlledAnchor);
+    throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
+  }
   const body = {
     commandType: input.commandType,
-    requestId: createId(),
-    idempotencyKey: createEnterpriseActionIdempotencyKey(input.commandType),
+    requestId: controlledAnchor?.requestId ?? createId(),
+    idempotencyKey: controlledAnchor?.businessIdempotencyKey ?? createEnterpriseActionIdempotencyKey(input.commandType),
     organizationId: input.organizationId,
     workspaceId: input.workspaceId,
     payload: input.payload,
   };
   let invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
   if (isRetryableTransportError(invocation.error)) {
-    invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body });
+    const retryBody = controlledAnchor && getControlledHumanEvidenceState().armedStep?.stepId === 'simulate-response-loss'
+      ? { ...body, requestId: createId() }
+      : body;
+    invocation = await supabase.functions.invoke('enterprise-intelligence-command', { body: retryBody });
+    if (isRetryableTransportError(invocation.error)) {
+      throw new EnterpriseIntelligenceClientError('COMMAND_OUTCOME_UNKNOWN');
+    }
   }
   const { data, error } = invocation;
   const response = data as { ok?: boolean; error?: { code?: string; message?: string }; [key: string]: unknown } | null;
-  if (error) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_UNAVAILABLE');
-  if (!response?.ok) throw new EnterpriseIntelligenceClientError(response?.error?.code || 'COMMAND_BLOCKED');
+  const errorCode = input.outcomeUnknownCodes?.length
+    ? await responseErrorCode(data, error)
+    : response?.error?.code;
+  if (input.outcomeUnknownCodes?.includes(errorCode || '')) {
+    throw new EnterpriseIntelligenceClientError('COMMAND_OUTCOME_UNKNOWN');
+  }
+  if (error) throw new EnterpriseIntelligenceClientError(errorCode || response?.error?.code || 'COMMAND_UNAVAILABLE');
+  if (!response?.ok) throw new EnterpriseIntelligenceClientError(errorCode || response?.error?.code || 'COMMAND_BLOCKED');
+  if (controlledAnchor) await completeControlledHumanCommand(controlledAnchor);
   return response as T;
+};
+
+const invokeDeliveryMonitor = <T>(input: {
+  organizationId: string;
+  workspaceId: string;
+  command: DeliveryMonitorCommandInput;
+}) => {
+  const payload = buildDeliveryMonitorSelectorPayload(input.command);
+  const completeSet = input.command.action === 'delivery.item.review' ? input.command.controlledHumanCompleteItemSet : undefined;
+  return invokeCommand<T>({
+    commandType: input.command.action,
+    organizationId: input.organizationId,
+    workspaceId: input.workspaceId,
+    payload,
+    ...(completeSet ? { controlledSelectorPayload: { ...payload, controlledHumanCompleteItemSet: completeSet } } : {}),
+    outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
+  });
+};
+
+const invokeDeliveryMonitorAction = <Action extends DeliveryMonitorCommandInput['action']>(
+  action: Action,
+  input: DeliveryCommandInput<Action>,
+) => {
+  const { organizationId, workspaceId, ...commandInput } = input as unknown as {
+    organizationId: string;
+    workspaceId: string;
+    [key: string]: unknown;
+  };
+  return invokeDeliveryMonitor({
+    organizationId,
+    workspaceId,
+    command: { ...commandInput, action } as unknown as DeliveryMonitorCommandInput,
+  });
 };
 
 const invokeProviderLifecycle = async <T>(input: {
@@ -287,23 +493,82 @@ const invokeProviderLifecycle = async <T>(input: {
   }
 };
 
-const loadProjection = async (input: {
+export type EnterpriseIntelligenceProjectionRequest = {
   organizationId: string;
   workspaceId: string;
   expectedAuthorizationVersion?: number;
-}): Promise<EnterpriseIntelligenceProjection> => {
+  deliveryItemPage?: DeliveryItemPageRequest;
+  deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
+};
+
+const loadProjection = async (input: EnterpriseIntelligenceProjectionRequest): Promise<EnterpriseIntelligenceProjection> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
-  const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', { body: input });
+  const requestedOrganizationId = requireUuidSelector(input.organizationId);
+  const requestedWorkspaceId = requireUuidSelector(input.workspaceId);
+  const armedProjection = isControlledHumanRuntimeEnabled() ? getControlledHumanEvidenceState().armedStep : null;
+  if (armedProjection?.observationKind === 'negative_attempt' && armedProjection.action === 'delivery.workspace.projection') {
+    const anchor = await beginControlledHumanCommand({ action: armedProjection.action, targetFamily: 'workspace', targetId: requestedWorkspaceId,
+      expectedVersion: input.expectedAuthorizationVersion ?? 1, selectorBindings: {} });
+    if (!anchor) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    await executeControlledHumanDeniedCommand(anchor);
+    throw new EnterpriseIntelligenceClientError('PERMISSION_DENIED');
+  }
+  const { data, error } = await supabase.functions.invoke('enterprise-intelligence-query', {
+    body: { ...input, organizationId: requestedOrganizationId, workspaceId: requestedWorkspaceId },
+  });
   const response = data as { projection?: unknown; code?: string } | null;
   if (error) {
     throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   }
   if (!response?.projection) throw new EnterpriseIntelligenceClientError(response?.code || 'ENTERPRISE_PROJECTION_UNAVAILABLE');
-  return decodeEnterpriseIntelligenceProjection(response.projection);
+  const projection = decodeEnterpriseIntelligenceProjection(response.projection);
+  if (!sameUuidSelector(projection.organizationId, requestedOrganizationId)
+    || !sameUuidSelector(projection.workspaceId, requestedWorkspaceId)) {
+    throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+  }
+  return projection;
 };
 
 export const enterpriseIntelligenceClient = {
   loadProjection,
+
+  async loadDeliveryWorkspace(input: Parameters<typeof loadProjection>[0]): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    if (!projection.deliveryWorkspace) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    return projection.deliveryWorkspace;
+  },
+
+  async loadDeliveryItemPage(input: EnterpriseIntelligenceProjectionRequest & { deliveryItemPage: DeliveryItemPageRequest }): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    const workspace = projection.deliveryWorkspace;
+    if (!workspace
+      || !sameUuidSelector(workspace.organizationId, input.organizationId)
+      || !sameUuidSelector(workspace.workspaceId, input.workspaceId)
+      || workspace.packages.length !== 1
+      || !sameUuidSelector(workspace.packages[0].id, input.deliveryItemPage.packageId)
+      || !workspace.packages[0].itemPage.cursorApplied) {
+      throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    }
+    return workspace;
+  },
+
+  async loadDeliveryBaselineEligibilityPage(input: EnterpriseIntelligenceProjectionRequest & { deliveryBaselineEligibilityPage: DeliveryBaselineEligibilityPageRequest }): Promise<DeliveryWorkspaceProjection> {
+    const projection = await loadProjection(input);
+    const workspace = projection.deliveryWorkspace;
+    if (!workspace
+      || !sameUuidSelector(workspace.organizationId, input.organizationId)
+      || !sameUuidSelector(workspace.workspaceId, input.workspaceId)
+      || !workspace.page.baselineEligibilityCursorApplied) {
+      throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    }
+    return workspace;
+  },
+
+  async loadMonitorApprovedBaselines(input: Parameters<typeof loadProjection>[0]): Promise<MonitorApprovedBaselinesProjection> {
+    const projection = await loadProjection(input);
+    if (!projection.monitorApprovedBaselines) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    return projection.monitorApprovedBaselines;
+  },
 
   registerProvider(input: {
     organizationId: string;
@@ -641,22 +906,52 @@ export const enterpriseIntelligenceClient = {
   },
 
   handoffStudioDocument(input: { organizationId: string; workspaceId: string; studioDocumentId: string; studioVersion?: number; studioContentHash?: string }) {
-    return invokeCommand({
-      commandType: 'studio.delivery.handoff',
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      payload: buildEnterpriseSelectorPayloads.studioHandoff(input.studioDocumentId),
-    });
+    void input;
+    throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
   },
 
-  createMonitorBaseline(input: { organizationId: string; workspaceId: string; workPackageId?: string; packageVersionId?: string; approvedItemIds?: string[] }) {
-    if (!input.workPackageId) throw new EnterpriseIntelligenceClientError('RESOURCE_STALE');
-    return invokeCommand({
-      commandType: 'monitor.baseline.create',
-      organizationId: input.organizationId,
-      workspaceId: input.workspaceId,
-      payload: buildEnterpriseSelectorPayloads.monitorBaseline(input.workPackageId),
-    });
+  requestDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.request'>) {
+    return invokeDeliveryMonitorAction('delivery.handoff.request', input);
+  },
+
+  resolveDeliveryHandoffReview(input: DeliveryCommandInput<'delivery.handoff.review.resolve'>) {
+    return invokeDeliveryMonitorAction('delivery.handoff.review.resolve', input);
+  },
+
+  resolveDeliveryHandoffApproval(input: DeliveryCommandInput<'delivery.handoff.approval.resolve'>) {
+    return invokeDeliveryMonitorAction('delivery.handoff.approval.resolve', input);
+  },
+
+  withdrawDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.withdraw'>) {
+    return invokeDeliveryMonitorAction('delivery.handoff.withdraw', input);
+  },
+
+  consumeDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.consume'>) {
+    return invokeDeliveryMonitorAction('delivery.handoff.consume', input);
+  },
+
+  createManualDeliveryPackage(input: DeliveryCommandInput<'delivery.package.create.manual'>) {
+    return invokeDeliveryMonitorAction('delivery.package.create.manual', input);
+  },
+
+  reviewDeliveryItem(input: DeliveryCommandInput<'delivery.item.review'>) {
+    return invokeDeliveryMonitorAction('delivery.item.review', input);
+  },
+
+  commitDeliveryPackageRevision(input: DeliveryCommandInput<'delivery.package.revision.commit'>) {
+    return invokeDeliveryMonitorAction('delivery.package.revision.commit', input);
+  },
+
+  resolveDeliveryPackageReview(input: DeliveryCommandInput<'delivery.package.review.resolve'>) {
+    return invokeDeliveryMonitorAction('delivery.package.review.resolve', input);
+  },
+
+  resolveDeliveryPackageApproval(input: DeliveryCommandInput<'delivery.package.approval.resolve'>) {
+    return invokeDeliveryMonitorAction('delivery.package.approval.resolve', input);
+  },
+
+  createMonitorBaseline(input: DeliveryCommandInput<'monitor.baseline.create'>) {
+    return invokeDeliveryMonitorAction('monitor.baseline.create', input);
   },
 
   createAssembleBlueprint(input: { organizationId: string; workspaceId: string; modernizationDecisionId: string; name: string }) {

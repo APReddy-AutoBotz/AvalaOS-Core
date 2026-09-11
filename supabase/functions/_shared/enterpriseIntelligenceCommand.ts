@@ -53,6 +53,14 @@ import {
   renewEnterpriseExternalWriteLease,
   type EnterpriseReceiptRow,
 } from './enterpriseReceipt.ts';
+import {
+  DELIVERY_MONITOR_CAPABILITIES,
+  DELIVERY_MONITOR_COMMANDS,
+  DeliveryMonitorCommandError,
+  executeDeliveryMonitorCommand,
+  type DeliveryMonitorCommandType,
+} from './deliveryMonitorCommand.ts';
+import { createDeliveryMonitorDatabase } from './deliveryMonitorDb.ts';
 import { handleOptions, jsonResponse } from './http.ts';
 import {
   getAuthUser,
@@ -99,6 +107,16 @@ export type EnterpriseCommandType =
   | 'approval.review.record'
   | 'approval.record'
   | 'studio.delivery.handoff'
+  | 'delivery.handoff.request'
+  | 'delivery.handoff.review.resolve'
+  | 'delivery.handoff.approval.resolve'
+  | 'delivery.handoff.withdraw'
+  | 'delivery.handoff.consume'
+  | 'delivery.package.create.manual'
+  | 'delivery.item.review'
+  | 'delivery.package.revision.commit'
+  | 'delivery.package.review.resolve'
+  | 'delivery.package.approval.resolve'
   | 'monitor.baseline.create'
   | 'assemble.blueprint.create';
 
@@ -127,9 +145,13 @@ export class EnterpriseCommandError extends Error {
       | 'INVALID_PAYLOAD'
       | 'COMMAND_BLOCKED'
       | 'COMMAND_UNAVAILABLE'
+      | 'COMMAND_OUTCOME_UNKNOWN'
       | 'SOURCE_SET_LIMIT_EXCEEDED'
       | 'SOURCE_VERSION_NOT_READY'
       | 'CONFLICT_UNRESOLVED'
+      | 'HANDOFF_NOT_ELIGIBLE'
+      | 'HANDOFF_STALE'
+      | 'MODULE_ROUTE_NOT_ALLOWED'
       | 'BUDGET_EXHAUSTED'
       | 'RECEIPT_FINALIZATION_FAILED',
     public readonly status = codeToStatus(code),
@@ -167,19 +189,19 @@ export const shouldPreserveClaimedEnterpriseReceipt = (
 export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandError => {
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT', 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
-    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT',
+    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT', 'ENTERPRISE_DELIVERY_IDEMPOTENCY_CONFLICT',
   )) return new EnterpriseCommandError('IDEMPOTENCY_CONFLICT');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE',
   )) return new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
-    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
+    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED', 'ENTERPRISE_DELIVERY_PERMISSION_DENIED',
   )) return new EnterpriseCommandError('PERMISSION_DENIED');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_AI_STALE_EXECUTION_FENCE', 'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
     'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED', 'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
-    'ENTERPRISE_AI_JOB_IN_PROGRESS',
+    'ENTERPRISE_AI_JOB_IN_PROGRESS', 'ENTERPRISE_DELIVERY_COMMAND_IN_PROGRESS',
   )) return new EnterpriseCommandError('COMMAND_IN_PROGRESS');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED', 'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
@@ -197,6 +219,19 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
     'ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT',
     'ENTERPRISE_MODERNIZATION_RESULT_IDENTITY_MISMATCH',
   )) return new EnterpriseCommandError('RESOURCE_STALE');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_HANDOFF_STALE')) {
+    return new EnterpriseCommandError('HANDOFF_STALE');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_RESOURCE_STALE')) {
+    return new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_DELIVERY_FEATURE_DISABLED', 'ENTERPRISE_DELIVERY_READ_ONLY',
+    'ENTERPRISE_DELIVERY_COMMAND_BLOCKED',
+  )) return new EnterpriseCommandError('COMMAND_BLOCKED');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE')) {
+    return new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+  }
   if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_SOURCE_SET_LIMIT_EXCEEDED')) {
     return new EnterpriseCommandError('SOURCE_SET_LIMIT_EXCEEDED');
   }
@@ -243,8 +278,10 @@ const codeToStatus = (code: EnterpriseCommandError['code']) => {
   if (code === 'RESOURCE_STALE') return 409;
   if (code === 'COMMAND_IN_PROGRESS') return 409;
   if (code === 'CONFLICT_UNRESOLVED') return 409;
+  if (code === 'HANDOFF_STALE') return 409;
+  if (code === 'HANDOFF_NOT_ELIGIBLE' || code === 'MODULE_ROUTE_NOT_ALLOWED') return 409;
   if (code === 'BUDGET_EXHAUSTED') return 409;
-  if (code === 'COMMAND_UNAVAILABLE' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
+  if (code === 'COMMAND_UNAVAILABLE' || code === 'COMMAND_OUTCOME_UNKNOWN' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   return 400;
 };
 
@@ -271,6 +308,7 @@ const commandTypes = new Set<EnterpriseCommandType>([
   'approval.review.record',
   'approval.record',
   'studio.delivery.handoff',
+  ...DELIVERY_MONITOR_COMMANDS,
   'monitor.baseline.create',
   'assemble.blueprint.create',
 ]);
@@ -631,7 +669,7 @@ export const enterpriseCommandStatusForTerminalReceipt = (receipt: EnterpriseRec
     'METHOD_NOT_ALLOWED', 'INVALID_COMMAND', 'AUTHENTICATION_REQUIRED', 'TENANT_ACCESS_DENIED',
     'PERMISSION_DENIED', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT', 'COMMAND_IN_PROGRESS',
     'RESOURCE_NOT_FOUND', 'RESOURCE_STALE', 'INVALID_PAYLOAD', 'COMMAND_BLOCKED',
-    'COMMAND_UNAVAILABLE', 'SOURCE_SET_LIMIT_EXCEEDED', 'SOURCE_VERSION_NOT_READY',
+    'COMMAND_UNAVAILABLE', 'COMMAND_OUTCOME_UNKNOWN', 'SOURCE_SET_LIMIT_EXCEEDED', 'SOURCE_VERSION_NOT_READY',
     'CONFLICT_UNRESOLVED', 'BUDGET_EXHAUSTED', 'RECEIPT_FINALIZATION_FAILED',
   ]);
   return known.has(responseError as EnterpriseCommandError['code'])
@@ -666,7 +704,7 @@ const enterpriseCommandCapabilities: Record<EnterpriseDomainCommandType, readonl
   'approval.review.record': ['approvals.review'],
   'approval.record': ['approvals.review'],
   'studio.delivery.handoff': ['docs.approve'],
-  'monitor.baseline.create': ['monitor.manage'],
+  ...DELIVERY_MONITOR_CAPABILITIES,
   'assemble.blueprint.create': ['assemble.manage'],
 };
 
@@ -2286,9 +2324,19 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
 };
 
 const approvalResourceTypes = new Set([
-  'evidence_candidate', 'modernization_decision', 'delivery_work_package',
-  'monitor_baseline', 'assemble_blueprint',
+  'evidence_candidate', 'modernization_decision', 'assemble_blueprint',
 ]);
+const canonicalPrCApprovalResourceTypes = new Set([
+  'delivery_work_package', 'delivery_work_package_version', 'monitor_baseline',
+]);
+
+const assertNotLegacyPrCApproval = (commandType: EnterpriseCommandType, payload: JsonObject) => {
+  if ((commandType === 'approval.review.record' || commandType === 'approval.record')
+    && typeof payload.resourceType === 'string'
+    && canonicalPrCApprovalResourceTypes.has(payload.resourceType)) {
+    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
+};
 
 const requireApprovalResourceType = (value: unknown) => {
   const resourceType = requireString(value, 80);
@@ -2437,6 +2485,10 @@ const extractStudioSections = (content: JsonObject, artifactType: string) => {
 };
 
 const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  // PR C replaces the legacy one-click Studio -> Delivery mutation with an
+  // explicit request, target review/approval, and one-time consume lifecycle.
+  // Retain the command name only as a fail-closed compatibility boundary.
+  if (authority || payload || receipt) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   requirePermission(authority, 'docs.approve');
   const studioDocumentId = requireUuid(payload.studioDocumentId);
   const aggregate = await findOne<StudioAggregateRow>(
@@ -2683,7 +2735,6 @@ const executeEnterpriseCommand = async (authority: Authority, envelope: Enterpri
     case 'approval.review.record': return commandApprovalReviewRecord(authority, envelope.payload, receipt);
     case 'approval.record': return commandApprovalRecord(authority, envelope.payload, receipt);
     case 'studio.delivery.handoff': return commandStudioDeliveryHandoff(authority, envelope.payload, receipt);
-    case 'monitor.baseline.create': return commandMonitorBaselineCreate(authority, envelope.payload, receipt);
     case 'assemble.blueprint.create': return commandAssembleBlueprintCreate(authority, envelope.payload, receipt);
   }
 };
@@ -2704,6 +2755,7 @@ export type EnterpriseIntelligenceHandlerOverrides = {
   failReceipt?: typeof failEnterpriseReceipt;
   executeCommand?: typeof executeEnterpriseCommand;
   transcriptCommandRequestBindingDependencies?: Partial<TranscriptCommandRequestBindingDependencies>;
+  deliveryMonitorDatabase?: ReturnType<typeof createDeliveryMonitorDatabase>;
 };
 
 export type TranscriptCommandRequestBindingDependencies = {
@@ -2995,6 +3047,7 @@ export const handleEnterpriseIntelligenceRequest = async (
   let claimedAuthority: Authority | null = null;
   let claimedCommandType: EnterpriseCommandType | null = null;
   let claimedCommandPayload: JsonObject | null = null;
+  let deliveryMonitorExecutionAttempted = false;
   try {
     const user = await (overrides.authenticate || getAuthUser)(request);
     const body = await request.json();
@@ -3005,6 +3058,28 @@ export const handleEnterpriseIntelligenceRequest = async (
       user.id, organizationId, envelope.workspaceId,
     );
     const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType, envelope.payload);
+    // PR C Delivery/Monitor decisions are terminal only through their canonical
+    // three-person commands. Deny the legacy generic route before any receipt,
+    // execution plan, RPC, effect, or domain mutation can be created.
+    assertNotLegacyPrCApproval(envelope.commandType, envelope.payload);
+    if ((DELIVERY_MONITOR_COMMANDS as readonly string[]).includes(envelope.commandType)) {
+      deliveryMonitorExecutionAttempted = true;
+      const result = await executeDeliveryMonitorCommand({
+        action: envelope.commandType as DeliveryMonitorCommandType,
+        payload: envelope.payload,
+        authority,
+        receipt: {
+          id: crypto.randomUUID(),
+          requestId: envelope.requestId,
+          idempotencyKey: envelope.idempotencyKey,
+          executionToken: crypto.randomUUID(),
+          executionFence: 1,
+        },
+        database: overrides.deliveryMonitorDatabase || createDeliveryMonitorDatabase(),
+      });
+      await assertCurrentAuthority(authority, envelope.commandType, envelope.payload);
+      return jsonResponse(result);
+    }
     const transcriptCommandBinding = await deriveTranscriptCommandRequestBinding(
       authority,
       envelope,
@@ -3064,13 +3139,24 @@ export const handleEnterpriseIntelligenceRequest = async (
     claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType, envelope.payload);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {
-    const commandError = error instanceof EnterpriseCommandError
+    // Delivery/Monitor SQL owns its receipt and effect transaction. Once that
+    // execution has been attempted, a later handler-level authority check can
+    // no longer prove whether the durable command committed. Preserve the
+    // pre-execution permission denial above, but force every post-execution
+    // EnterpriseCommandError through reconciliation before any fresh-key retry.
+    const commandError = deliveryMonitorExecutionAttempted && error instanceof EnterpriseCommandError
+      ? new EnterpriseCommandError('COMMAND_OUTCOME_UNKNOWN')
+      : error instanceof EnterpriseCommandError
       ? error
+      : error instanceof DeliveryMonitorCommandError
+        ? new EnterpriseCommandError(error.code === 'INVALID_PAYLOAD' ? 'INVALID_PAYLOAD' : 'COMMAND_OUTCOME_UNKNOWN')
       : error instanceof EnterpriseReceiptError
         ? new EnterpriseCommandError(error.code)
+        : deliveryMonitorExecutionAttempted && isSupabaseRpcTransportError(error)
+          ? new EnterpriseCommandError('COMMAND_OUTCOME_UNKNOWN')
         : isSupabaseRpcError(error)
           ? mapEnterpriseCommandRpcError(error)
-          : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+          : new EnterpriseCommandError(deliveryMonitorExecutionAttempted ? 'COMMAND_OUTCOME_UNKNOWN' : 'COMMAND_UNAVAILABLE');
     if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload) {
       try {
         claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);

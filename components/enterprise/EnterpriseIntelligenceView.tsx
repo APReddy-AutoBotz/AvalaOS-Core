@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EnterpriseWorkspace, Organization, User } from '../../types';
 import {
   ASSEMBLE_COMPONENT_CATALOG,
@@ -7,13 +7,19 @@ import {
   classifyEvidenceFile,
   type EnterpriseAiCapability,
   type EnterpriseAiProvider,
-  type EnterpriseApprovalResourceType,
   type EnterpriseIntelligenceProjection,
 } from '../../services/enterpriseIntelligence';
-import { bytesToBase64, enterpriseIntelligenceClient, getProviderLifecycleAuthorizationVersion } from '../../services/enterpriseIntelligenceClient';
+import { bytesToBase64, EnterpriseIntelligenceClientError, enterpriseIntelligenceClient, getProviderLifecycleAuthorizationVersion } from '../../services/enterpriseIntelligenceClient';
 import { getRuntimeDataAccess } from '../../services/supabaseClient';
 import { TranscriptSourceLibrary } from './TranscriptSourceLibrary';
 import { AssessTranscriptCandidateReview } from './AssessTranscriptCandidateReview';
+import GovernedDeliveryWorkspace, { MonitorApprovedBaselinePanel } from '../delivery/GovernedDeliveryWorkspace';
+import {
+  mergeDeliveryItemPage,
+  replaceDeliveryBaselineEligibilityPage,
+  type DeliveryMonitorCommandInput,
+  type DeliveryPackageProjection,
+} from '../../services/deliveryMonitor';
 
 type TabId = 'controls' | 'intake' | 'source-library' | 'review' | 'modernization' | 'handoff' | 'delivery' | 'monitor' | 'assemble';
 const tabs: Array<{ id: TabId; label: string; eyebrow: string }> = [
@@ -35,19 +41,47 @@ const secondary = 'inline-flex min-h-10 items-center justify-center rounded-xl b
 const label = (value: string) => <span className="text-xs font-black uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">{value}</span>;
 const Badge = ({ children }: { children: React.ReactNode }) => <span className="rounded-full border border-[var(--av-color-border-strong)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]">{children}</span>;
 
-export default function EnterpriseIntelligenceView({ organization, workspace, currentUser }: {
+type EnterpriseIntelligenceViewProps = {
   organization: Organization | null;
   workspace: EnterpriseWorkspace | null;
   currentUser: User | null;
-}) {
+};
+
+export default function EnterpriseIntelligenceView({ organization, workspace, currentUser }: EnterpriseIntelligenceViewProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('controls');
   const organizationId = organization?.id || '';
   const workspaceId = workspace?.id || '';
+  const actorId = currentUser?.id || '';
   const serverAuthorityReady = (() => {
     try { return getRuntimeDataAccess() === 'server'; } catch { return false; }
   })();
-  const scopeReady = Boolean(organizationId && workspaceId && currentUser?.id);
-  const [activeTab, setActiveTab] = useState<TabId>('controls');
-  const [projection, setProjection] = useState<EnterpriseIntelligenceProjection | null>(null);
+  const scopeReady = Boolean(organizationId && workspaceId && actorId);
+
+  if (!serverAuthorityReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.</p></section></div>;
+  if (!scopeReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
+
+  const scopeKey = `${organizationId}:${workspaceId}:${actorId}`;
+  return <EnterpriseIntelligenceWorkbench
+    key={scopeKey}
+    organizationId={organizationId}
+    workspaceId={workspaceId}
+    actorId={actorId}
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+  />;
+}
+
+function EnterpriseIntelligenceWorkbench({ organizationId, workspaceId, actorId, activeTab, setActiveTab }: {
+  key?: React.Key;
+  organizationId: string;
+  workspaceId: string;
+  actorId: string;
+  activeTab: TabId;
+  setActiveTab: React.Dispatch<React.SetStateAction<TabId>>;
+}) {
+  const scopeKey = `${organizationId}:${workspaceId}:${actorId}`;
+  const [projectionState, setProjectionState] = useState<{ scopeKey: string; value: EnterpriseIntelligenceProjection } | null>(null);
+  const projection = projectionState?.scopeKey === scopeKey ? projectionState.value : null;
   const [busy, setBusy] = useState(false);
   const [reloadRequired, setReloadRequired] = useState(false);
   const [transcriptReviewActivated, setTranscriptReviewActivated] = useState(false);
@@ -62,24 +96,17 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
   const [assessDraftId, setAssessDraftId] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [applicationId, setApplicationId] = useState('');
-  const [studioDocumentId, setStudioDocumentId] = useState('');
-  const [workPackageId, setWorkPackageId] = useState('');
   const [decisionId, setDecisionId] = useState('');
   const [blueprintName, setBlueprintName] = useState('');
-  const [approvalId, setApprovalId] = useState('');
-  const [approvalRationale, setApprovalRationale] = useState('');
+  const projectionRequestEpoch = useRef(0);
+  const fileReadEpoch = useRef(0);
+  const activeScopeKey = useRef(scopeKey);
+  activeScopeKey.current = scopeKey;
 
   const reload = useCallback(async () => {
-    if (!serverAuthorityReady) {
-      setProjection(null);
-      setError('');
-      setStatus('Enterprise Intelligence requires a server-authorized workspace. The local sandbox does not execute provider or persistence calls.');
-      return;
-    }
-    if (!scopeReady) {
-      setStatus('Select an authorized organization and workspace to load committed Enterprise Intelligence state.');
-      return;
-    }
+    const requestEpoch = ++projectionRequestEpoch.current;
+    const requestScopeKey = scopeKey;
+    const isCurrent = () => requestEpoch === projectionRequestEpoch.current && requestScopeKey === activeScopeKey.current;
     setBusy(true);
     setError('');
     try {
@@ -88,61 +115,181 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
         workspaceId,
         expectedAuthorizationVersion: projection?.authorizationVersion,
       });
-      setProjection(next);
+      if (!isCurrent()) return;
+      setProjectionState({ scopeKey: requestScopeKey, value: next });
       setReloadRequired(false);
       setStatus(next.availability === 'blocked' ? 'Server access is blocked for this workspace.' : 'Committed server state loaded.');
     } catch (cause) {
+      if (!isCurrent()) return;
       setReloadRequired(true);
       setError(cause instanceof Error ? cause.message : 'Committed state could not be loaded.');
       setStatus('Projection unavailable. No local fallback or success state is shown.');
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
-  }, [organizationId, workspaceId, scopeReady, serverAuthorityReady, projection?.authorizationVersion]);
+  }, [organizationId, workspaceId, scopeKey, projection?.authorizationVersion]);
 
-  useEffect(() => { void reload(); }, [organizationId, workspaceId]);
-  useEffect(() => { setTranscriptReviewActivated(false); }, [organizationId, workspaceId]);
+  useEffect(() => {
+    projectionRequestEpoch.current += 1;
+    fileReadEpoch.current += 1;
+    setBusy(false);
+    setProjectionState(null);
+    setReloadRequired(false);
+    setError('');
+    void reload();
+    return () => {
+      projectionRequestEpoch.current += 1;
+      fileReadEpoch.current += 1;
+    };
+  }, [scopeKey]);
+  useEffect(() => { setTranscriptReviewActivated(false); }, [scopeKey]);
   useEffect(() => {
     if (projection?.transcriptFlow.features.assessMultisourceApplyEnabled) setTranscriptReviewActivated(true);
   }, [projection?.transcriptFlow.features.assessMultisourceApplyEnabled]);
 
-  const mutate = async (action: () => Promise<unknown>, success: string): Promise<boolean> => {
+  const mutate = async (action: (isCurrent: () => boolean) => Promise<unknown>, success: string): Promise<boolean> => {
     if (!projection || reloadRequired) return false;
+    const requestEpoch = ++projectionRequestEpoch.current;
+    const requestScopeKey = scopeKey;
+    const requestOrganizationId = organizationId;
+    const requestWorkspaceId = workspaceId;
+    const requestProjection = projection;
+    const isCurrent = () => requestEpoch === projectionRequestEpoch.current && requestScopeKey === activeScopeKey.current;
     setBusy(true);
     setError('');
     setStatus('Submitting one server-authorized command.');
     try {
-      const result = await action();
+      const result = await action(isCurrent);
+      if (!isCurrent()) return false;
       try {
         const next = await enterpriseIntelligenceClient.loadProjection({
-          organizationId,
-          workspaceId,
-          expectedAuthorizationVersion: getProviderLifecycleAuthorizationVersion(result) || projection.authorizationVersion,
+          organizationId: requestOrganizationId,
+          workspaceId: requestWorkspaceId,
+          expectedAuthorizationVersion: getProviderLifecycleAuthorizationVersion(result) || requestProjection.authorizationVersion,
         });
-        setProjection(next);
+        if (!isCurrent()) return false;
+        setProjectionState({ scopeKey: requestScopeKey, value: next });
+        setReloadRequired(false);
         setStatus(success);
         return true;
       } catch (reloadError) {
+        if (!isCurrent()) return false;
         setReloadRequired(true);
         setStatus('Command committed, but projection reload failed. Reload committed state before another mutation.');
         setError(reloadError instanceof Error ? reloadError.message : 'Projection reload failed.');
         return false;
       }
     } catch (cause) {
+      if (!isCurrent()) return false;
+      if (cause instanceof EnterpriseIntelligenceClientError && cause.code === 'COMMAND_OUTCOME_UNKNOWN') {
+        setReloadRequired(true);
+        setStatus('Command outcome is unknown. Reload committed state before any retry.');
+        setError(cause.message);
+        return false;
+      }
       setStatus('The command was not confirmed. No success state was recorded.');
       setError(cause instanceof Error ? cause.message : 'The governed command failed.');
       return false;
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
 
   const selectedProvider = projection?.providers.find(item => item.id === providerId);
-  const selectedApproval = projection?.approvalResources.find(item => item.id === approvalId);
   const locked = busy || reloadRequired || !projection || projection.availability === 'blocked' || projection.availability === 'stale' || projection.availability === 'unavailable';
   const active = tabs.find(tab => tab.id === activeTab) || tabs[0];
   const acceptedForSource = projection?.evidenceCandidates.filter(item => item.sourceId === sourceId && ['accepted', 'edited'].includes(item.status)) || [];
   const selectableCandidateIds = new Set(acceptedForSource.map(item => item.id));
+
+  const executeDeliveryMonitorAction = (command: DeliveryMonitorCommandInput) => mutate(() => {
+    const tenant = { organizationId, workspaceId };
+    switch (command.action) {
+      case 'delivery.handoff.request': return enterpriseIntelligenceClient.requestDeliveryHandoff({ ...tenant, ...command });
+      case 'delivery.handoff.review.resolve': return enterpriseIntelligenceClient.resolveDeliveryHandoffReview({ ...tenant, ...command });
+      case 'delivery.handoff.approval.resolve': return enterpriseIntelligenceClient.resolveDeliveryHandoffApproval({ ...tenant, ...command });
+      case 'delivery.handoff.withdraw': return enterpriseIntelligenceClient.withdrawDeliveryHandoff({ ...tenant, ...command });
+      case 'delivery.handoff.consume': return enterpriseIntelligenceClient.consumeDeliveryHandoff({ ...tenant, ...command });
+      case 'delivery.package.create.manual': return enterpriseIntelligenceClient.createManualDeliveryPackage({ ...tenant, manualBrief: command.manualBrief, items: command.items });
+      case 'delivery.item.review': return enterpriseIntelligenceClient.reviewDeliveryItem({ ...tenant, ...command });
+      case 'delivery.package.revision.commit': return enterpriseIntelligenceClient.commitDeliveryPackageRevision({ ...tenant, ...command });
+      case 'delivery.package.review.resolve': return enterpriseIntelligenceClient.resolveDeliveryPackageReview({ ...tenant, ...command });
+      case 'delivery.package.approval.resolve': return enterpriseIntelligenceClient.resolveDeliveryPackageApproval({ ...tenant, ...command });
+      case 'monitor.baseline.create': return enterpriseIntelligenceClient.createMonitorBaseline({ ...tenant, ...command });
+    }
+  }, `${command.action} committed and exact Delivery/Monitor projection reloaded.`);
+
+  const loadNextDeliveryPage = useCallback(async (deliveryPackage: DeliveryPackageProjection) => {
+    const cursor = deliveryPackage.itemPage.nextCursor;
+    if (!projection?.deliveryWorkspace || !cursor || busy || reloadRequired) return;
+    const request = { packageId: deliveryPackage.id, cursor, limit: 100 };
+    const requestEpoch = ++projectionRequestEpoch.current;
+    const requestScopeKey = scopeKey;
+    const capturedProjection = projection;
+    const isCurrent = () => requestEpoch === projectionRequestEpoch.current && requestScopeKey === activeScopeKey.current;
+    setBusy(true);
+    setError('');
+    setStatus(`Loading the next authorized bounded page after ${deliveryPackage.items.length} canonical items.`);
+    try {
+      const page = await enterpriseIntelligenceClient.loadDeliveryItemPage({
+        organizationId,
+        workspaceId,
+        expectedAuthorizationVersion: projection.authorizationVersion,
+        deliveryItemPage: request,
+      });
+      if (!isCurrent()) return;
+      const merged = mergeDeliveryItemPage(projection.deliveryWorkspace, page, request);
+      setProjectionState(current => current?.scopeKey === requestScopeKey && current.value === capturedProjection
+        ? { scopeKey: requestScopeKey, value: { ...current.value, deliveryWorkspace: merged } }
+        : current);
+      const mergedPackage = merged.packages.find(value => value.id === deliveryPackage.id);
+      const loaded = mergedPackage?.items.length ?? deliveryPackage.items.length;
+      setStatus(mergedPackage?.itemPage.hasMore
+        ? `${loaded} canonical items loaded from bounded authorized pages. More items are available.`
+        : `All ${loaded} canonical items loaded from bounded authorized pages.`);
+    } catch (cause) {
+      if (!isCurrent()) return;
+      setError(cause instanceof Error ? cause.message : 'The next authorized item page could not be loaded.');
+      setStatus('The next item page was not loaded. Previously loaded items remain unchanged; retry the same server cursor.');
+    } finally {
+      if (isCurrent()) setBusy(false);
+    }
+  }, [busy, organizationId, projection, reloadRequired, scopeKey, workspaceId]);
+
+  const loadNextBaselineEligibilityPage = useCallback(async () => {
+    const workspace = projection?.deliveryWorkspace;
+    const cursor = workspace?.page.baselineEligibilityNextCursor;
+    if (!workspace || !cursor || busy || reloadRequired) return;
+    const request = { cursor, limit: 100 };
+    const requestEpoch = ++projectionRequestEpoch.current;
+    const requestScopeKey = scopeKey;
+    const capturedProjection = projection;
+    const isCurrent = () => requestEpoch === projectionRequestEpoch.current && requestScopeKey === activeScopeKey.current;
+    setBusy(true);
+    setError('');
+    setStatus('Loading the next authorized bounded Monitor-eligibility selector page.');
+    try {
+      const page = await enterpriseIntelligenceClient.loadDeliveryBaselineEligibilityPage({
+        organizationId,
+        workspaceId,
+        expectedAuthorizationVersion: projection.authorizationVersion,
+        deliveryBaselineEligibilityPage: request,
+      });
+      if (!isCurrent()) return;
+      const replaced = replaceDeliveryBaselineEligibilityPage(workspace, page, request);
+      setProjectionState(current => current?.scopeKey === requestScopeKey && current.value === capturedProjection
+        ? { scopeKey: requestScopeKey, value: { ...current.value, deliveryWorkspace: replaced } }
+        : current);
+      setStatus(replaced.page.baselineEligibilityHasMore
+        ? `${replaced.baselineEligibility.length} eligible package selectors loaded on this bounded page. More are available.`
+        : `${replaced.baselineEligibility.length} eligible package selectors loaded on the final bounded page.`);
+    } catch (cause) {
+      if (!isCurrent()) return;
+      setError(cause instanceof Error ? cause.message : 'The next eligible package page could not be loaded.');
+      setStatus('The next eligibility page was not loaded. The current selector page remains unchanged; retry the same server cursor.');
+    } finally {
+      if (isCurrent()) setBusy(false);
+    }
+  }, [busy, organizationId, projection, reloadRequired, scopeKey, workspaceId]);
 
   useEffect(() => {
     if (!projection) return;
@@ -157,27 +304,36 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
     if (!projection.assessDrafts.some(item => item.id === assessDraftId)) setAssessDraftId(projection.assessDrafts[0]?.id || '');
     setSelectedCandidateIds(current => current.filter(id => projection.evidenceCandidates.some(item => item.id === id && ['accepted', 'edited'].includes(item.status))));
     if (!projection.applications.some(item => item.id === applicationId)) setApplicationId(projection.applications.find(item => item.modernizationState === 'eligible')?.id || '');
-    if (!projection.studioDocuments.some(item => item.id === studioDocumentId)) setStudioDocumentId(projection.studioDocuments.find(item => item.handoffState !== 'already_handed_off')?.id || '');
-    if (!projection.deliveryPackages.some(item => item.id === workPackageId)) setWorkPackageId(projection.deliveryPackages.find(item => item.status === 'approved')?.id || '');
     if (!projection.modernizationDecisions.some(item => item.id === decisionId)) setDecisionId(projection.modernizationDecisions.find(item => item.assembleEligible)?.id || '');
-    if (!projection.approvalResources.some(item => item.id === approvalId)) setApprovalId(projection.approvalResources[0]?.id || '');
   }, [projection]);
 
   const scope = projection ? { organizationId, workspaceId, expectedAuthorizationVersion: projection.authorizationVersion } : null;
   const onFile = async (file?: File) => {
     if (!file) return;
+    const requestEpoch = ++fileReadEpoch.current;
+    const requestScopeKey = scopeKey;
+    const isCurrent = () => requestEpoch === fileReadEpoch.current && requestScopeKey === activeScopeKey.current;
     const support = classifyEvidenceFile(file.name, file.type, file.size);
     if (!support.supported || !support.mimeType) {
-      setSourceFile(null); setError(support.message); return;
+      if (isCurrent()) {
+        setSourceFile(null);
+        setError(support.message);
+      }
+      return;
     }
-    setError('');
-    setSourceFile({ name: file.name, mimeType: support.mimeType, size: file.size, base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())), note: support.message });
+    if (isCurrent()) setError('');
+    try {
+      const bytes = await file.arrayBuffer();
+      if (!isCurrent()) return;
+      setSourceFile({ name: file.name, mimeType: support.mimeType, size: file.size, base64: bytesToBase64(new Uint8Array(bytes)), note: support.message });
+    } catch (cause) {
+      if (!isCurrent()) return;
+      setSourceFile(null);
+      setError(cause instanceof Error ? cause.message : 'The selected evidence file could not be read.');
+    }
   };
 
-  if (!serverAuthorityReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.</p></section></div>;
-  if (!scopeReady) return <div className="mx-auto max-w-4xl p-8"><section className={panel}><h1 className="text-2xl font-black">Enterprise Intelligence unavailable</h1><p className="mt-3 text-sm font-semibold">Select an authenticated tenant workspace. There is no local authority fallback.</p></section></div>;
-
-  return <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-4 overflow-y-auto p-4 sm:p-6" data-testid="enterprise-intelligence-workspace">
+  return <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-4 overflow-y-auto p-4 sm:p-6" data-testid="enterprise-intelligence-workspace" data-projection-scope-ready={projection ? 'true' : 'false'}>
     <header className={panel}>
       <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="av-eyebrow">{active.eyebrow}</p><h1 className="mt-2 text-3xl font-black">Enterprise Intelligence</h1><p className="mt-2 max-w-3xl text-sm font-semibold text-[var(--av-color-text-muted)]">BYOK, evidence-to-Assess promotion, approved Studio handoff, Delivery/Monitor lineage, modernization, and draft-only Assemble blueprints.</p></div><div className="flex gap-2"><Badge>Server authority</Badge><Badge>Human approval</Badge><Badge>No live sync</Badge></div></div>
       <nav className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Enterprise Intelligence surfaces">{tabs.map(tab => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} aria-current={activeTab === tab.id ? 'page' : undefined} className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-black ${activeTab === tab.id ? 'bg-[#002C4B] text-white' : 'bg-[var(--av-color-bg-subtle)]'}`}>{tab.label}</button>)}</nav>
@@ -190,7 +346,7 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
       <button type="button" className={`${primary} mt-4`} disabled={locked || !scope || !providerForm.displayName.trim() || !providerForm.defaultModel.trim()} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.registerProvider({ ...scope, ...providerForm, modelAllowlist: [providerForm.defaultModel], capabilities: [...ENTERPRISE_AI_CAPABILITIES] }), 'Provider registered as pending review. Routes remain disabled.')}>Register provider metadata</button>
       <div className="mt-6 grid gap-4 md:grid-cols-2"><label>{label('Configured provider')}<select className={input} value={providerId} onChange={event => setProviderId(event.target.value)}><option value="">Select a provider</option>{projection?.providers.map(item => <option key={item.id} value={item.id}>{item.displayName} — {item.status}</option>)}</select></label><label>{label('Provider key (sent once)')}<input className={input} type="password" autoComplete="new-password" value={providerKey} onChange={event => setProviderKey(event.target.value)} /></label></div>
       {selectedProvider && <div className="mt-4 rounded-2xl bg-[var(--av-color-bg-subtle)] p-4 text-sm font-bold">Credential: {selectedProvider.credentialState.replaceAll('_', ' ')} · Validation: {selectedProvider.validationState.replaceAll('_', ' ')} · Budget: {selectedProvider.budgetState.replaceAll('_', ' ')}</div>}
-      <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={primary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async () => { try { await enterpriseIntelligenceClient.bindProviderSecret({ ...scope, providerConfigId: providerId, providerKey }); } finally { setProviderKey(''); } }, 'Secret bound through the approved backend; raw key discarded from form state.')}>Bind key securely</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.validateProvider({ ...scope, providerConfigId: providerId }), 'Provider validation recorded.')}>Validate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.activateProvider({ ...scope, providerConfigId: providerId }), 'Validated provider activated.')}>Activate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async () => { try { await enterpriseIntelligenceClient.rotateProviderSecret({ ...scope, providerConfigId: providerId, providerKey }); } finally { setProviderKey(''); } }, 'Provider key rotated and revalidated.')}>Rotate key</button><button type="button" className="min-h-10 rounded-xl border border-rose-300 px-4 text-sm font-black text-rose-700 disabled:opacity-50" disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.revokeProvider({ ...scope, providerConfigId: providerId }), 'Provider revoked and all routes disabled.')}>Revoke</button></div>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="button" className={primary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async isCurrent => { const submittedProviderKey = providerKey; try { await enterpriseIntelligenceClient.bindProviderSecret({ ...scope, providerConfigId: providerId, providerKey: submittedProviderKey }); } finally { if (isCurrent()) setProviderKey(''); } }, 'Secret bound through the approved backend; raw key discarded from form state.')}>Bind key securely</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.validateProvider({ ...scope, providerConfigId: providerId }), 'Provider validation recorded.')}>Validate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.activateProvider({ ...scope, providerConfigId: providerId }), 'Validated provider activated.')}>Activate</button><button type="button" className={secondary} disabled={locked || !scope || !providerId || providerKey.length < 8} onClick={() => scope && void mutate(async isCurrent => { const submittedProviderKey = providerKey; try { await enterpriseIntelligenceClient.rotateProviderSecret({ ...scope, providerConfigId: providerId, providerKey: submittedProviderKey }); } finally { if (isCurrent()) setProviderKey(''); } }, 'Provider key rotated and revalidated.')}>Rotate key</button><button type="button" className="min-h-10 rounded-xl border border-rose-300 px-4 text-sm font-black text-rose-700 disabled:opacity-50" disabled={locked || !scope || !providerId} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.revokeProvider({ ...scope, providerConfigId: providerId }), 'Provider revoked and all routes disabled.')}>Revoke</button></div>
       <div className="mt-5 grid gap-3">{selectedProvider?.routes.map(route => {
         const selectedRoles = routeRoleSelections[route.id] || route.allowedRoleIds;
         return <article key={route.id} className="rounded-2xl border border-[var(--av-color-border)] p-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black">{route.capability}</p><p className="text-xs font-semibold text-[var(--av-color-text-muted)]">{route.modelLabel} · {route.availability.replaceAll('_', ' ')}</p></div><button type="button" className={secondary} disabled={locked || !scope || (!route.enabled && selectedRoles.length === 0)} onClick={() => scope && void mutate(() => enterpriseIntelligenceClient.toggleProviderRoute({ ...scope, providerConfigId: selectedProvider.id, routeId: route.id, capability: route.capability, enabled: !route.enabled, ...(!route.enabled ? { allowedRoles: selectedRoles } : {}) }), `Route ${route.enabled ? 'disabled' : 'enabled'}.`)}>{route.enabled ? 'Disable route' : 'Enable route'}</button></div><fieldset className="mt-3"><legend className="text-xs font-black uppercase tracking-[0.12em] text-[var(--av-color-text-muted)]">Authorized roles</legend><div className="mt-2 flex flex-wrap gap-3">{selectedProvider.eligibleRouteRoles.map(option => <label key={option.id} className="flex min-h-10 items-center gap-2 text-sm font-bold"><input type="checkbox" checked={selectedRoles.includes(option.id)} disabled={locked || route.enabled} onChange={() => setRouteRoleSelections(current => ({ ...current, [route.id]: selectedRoles.includes(option.id) ? selectedRoles.filter(id => id !== option.id) : [...selectedRoles, option.id] }))} />{option.label} <span className="text-xs text-[var(--av-color-text-muted)]">({option.scope === 'workspace' ? 'workspace' : 'organization admin'})</span></label>)}</div>{selectedProvider.eligibleRouteRoles.length === 0 && <p className="mt-2 text-xs font-semibold text-rose-700">No active role is eligible for this workspace route.</p>}</fieldset></article>;
@@ -241,11 +397,14 @@ export default function EnterpriseIntelligenceView({ organization, workspace, cu
 
     {activeTab === 'modernization' && <section className={panel}><p className="av-eyebrow">Modernization and Assemble assessment</p><h2 className="mt-2 text-xl font-black">Evaluate the current approved application assessment</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">The server derives the exact approved assessment, factors, model version, blockers, and conflicts. PR1G scoring law is unchanged.</p><label className="mt-5 block">{label('Approved application')}<select className={input} value={applicationId} onChange={event => setApplicationId(event.target.value)}><option value="">Select an application</option>{projection?.applications.map(item => <option key={item.id} value={item.id}>{item.name} — {item.approvedAssessmentLabel} — {item.modernizationState.replaceAll('_', ' ')}</option>)}</select></label><button type="button" className={`${primary} mt-4`} disabled={locked || !applicationId} onClick={() => void mutate(() => enterpriseIntelligenceClient.evaluateModernization({ organizationId, workspaceId, applicationId }), 'Deterministic modernization decision recorded for review.')}>Evaluate disposition</button><div className="mt-5 grid gap-3">{projection?.modernizationDecisions.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><p className="font-black">{item.applicationName}: {item.primaryDisposition.replaceAll('_', ' ')}</p><p className="mt-1 text-sm font-semibold">Status {item.status}; Assemble {item.assembleEligible ? 'eligible' : 'not eligible'}.</p>{item.blockers.length > 0 && <p className="mt-2 text-xs font-bold">Blockers: {item.blockers.join(', ')}</p>}</article>)}</div></section>}
 
-    {activeTab === 'handoff' && <section className={panel}><p className="av-eyebrow">Studio to Delivery</p><h2 className="mt-2 text-xl font-black">Select a current approved document</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Version and content hash are derived and rechecked on the server; this browser never supplies them.</p><label className="mt-5 block">{label('Approved Studio document')}<select className={input} value={studioDocumentId} onChange={event => setStudioDocumentId(event.target.value)}><option value="">Select a document</option>{projection?.studioDocuments.map(item => <option key={item.id} value={item.id}>{item.label} — {item.approvedVersionLabel} — {item.handoffState.replaceAll('_', ' ')}</option>)}</select></label><button type="button" className={`${primary} mt-4`} disabled={locked || !studioDocumentId} onClick={() => void mutate(() => enterpriseIntelligenceClient.handoffStudioDocument({ organizationId, workspaceId, studioDocumentId }), 'Approved Studio document handed off to a governed Delivery draft.')}>Create Delivery draft</button></section>}
+    {activeTab === 'handoff' && projection?.deliveryWorkspace && <section className={panel}><p className="av-eyebrow">Studio to Delivery</p><h2 className="mt-2 text-xl font-black">Governed request, target decision, and consumption</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">A current approved Studio artifact may become eligible, but it never creates a Delivery package here. Open the Delivery tab to preview exact lineage, request the handoff, complete target review and approval, and explicitly consume it.</p></section>}
+    {activeTab === 'handoff' && !projection?.deliveryWorkspace && <section data-testid="legacy-studio-delivery-fallback" className={panel}><p className="av-eyebrow">Studio to Delivery · rollback fallback</p><h2 className="mt-2 text-xl font-black">Legacy Studio projection — read only</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">This retained projection supports rollback inspection only. It cannot request, approve, consume, or create a Delivery package.</p><div className="mt-5 grid gap-3">{projection?.studioDocuments.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><p className="font-black">{item.label}</p><p className="mt-1 text-sm font-semibold">{item.approvedVersionLabel} · {item.lifecycle} · {item.handoffState.replaceAll('_', ' ')}</p></article>)}</div>{projection?.studioDocuments.length === 0 && <p className="mt-4 text-sm font-bold">No retained Studio document is visible in this workspace.</p>}</section>}
 
-    {activeTab === 'delivery' && <section className={panel}><p className="av-eyebrow">Delivery and approval</p><h2 className="mt-2 text-xl font-black">Reloadable work packages with exact lineage</h2><div className="mt-5 grid gap-3">{projection?.deliveryPackages.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><div className="flex flex-wrap gap-2"><Badge>{item.status}</Badge><Badge>{item.lineageState}</Badge></div><p className="mt-3 font-black">{item.label} · {item.currentVersionLabel}</p><p className="mt-1 text-sm font-semibold">{item.sourceLabel}; {item.items.length} canonical items.</p></article>)}</div><div className="mt-6 grid gap-4 md:grid-cols-2"><label>{label('Review or approval resource')}<select className={input} value={approvalId} onChange={event => setApprovalId(event.target.value)}><option value="">Select a governed resource</option>{projection?.approvalResources.map(item => <option key={`${item.resourceType}-${item.id}`} value={item.id}>{item.label} — {item.separationOfDuties.replaceAll('_', ' ')}</option>)}</select></label><label>{label('Rationale')}<input className={input} value={approvalRationale} onChange={event => setApprovalRationale(event.target.value)} /></label></div>{selectedApproval && <p className="mt-3 text-sm font-bold">Review: {selectedApproval.independentReviewState.replaceAll('_', ' ')} · Approval: {selectedApproval.approvalState.replaceAll('_', ' ')}</p>}<div className="mt-4 flex gap-2"><button type="button" className={secondary} disabled={locked || !selectedApproval || approvalRationale.trim().length < 4 || selectedApproval.separationOfDuties !== 'eligible_for_review'} onClick={() => selectedApproval && void mutate(() => enterpriseIntelligenceClient.recordReview({ organizationId, workspaceId, resourceType: selectedApproval.resourceType as EnterpriseApprovalResourceType, resourceId: selectedApproval.id, rationale: approvalRationale }), 'Independent review recorded against current server state.')}>Record independent review</button><button type="button" className={primary} disabled={locked || !selectedApproval || approvalRationale.trim().length < 4 || selectedApproval.separationOfDuties !== 'eligible_for_approval'} onClick={() => selectedApproval && void mutate(() => enterpriseIntelligenceClient.recordApproval({ organizationId, workspaceId, resourceType: selectedApproval.resourceType, resourceId: selectedApproval.id, outcome: 'approved', rationale: approvalRationale }), 'Approval recorded after separation-of-duties checks.')}>Approve</button></div></section>}
+    {activeTab === 'delivery' && projection?.deliveryWorkspace && <GovernedDeliveryWorkspace projection={projection.deliveryWorkspace} monitorProjection={projection.monitorApprovedBaselines} busy={busy || reloadRequired} error={error} status={status} onAction={executeDeliveryMonitorAction} onLoadNextPage={loadNextDeliveryPage} onLoadNextBaselineEligibilityPage={loadNextBaselineEligibilityPage} />}
+    {activeTab === 'delivery' && !projection?.deliveryWorkspace && <section data-testid="legacy-delivery-fallback" className={panel}><p className="av-eyebrow">Delivery · rollback fallback</p><h2 className="mt-2 text-xl font-black">Legacy Delivery projection — read only</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Canonical Delivery actions are unavailable. These retained packages may be inspected during rollback, but they cannot be edited, reviewed, approved, or used to create Monitor state.</p><div className="mt-5 grid gap-3">{projection?.deliveryPackages.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><div className="flex flex-wrap gap-2"><Badge>{item.status}</Badge><Badge>{item.lineageState}</Badge></div><p className="mt-3 font-black">{item.label} · {item.currentVersionLabel}</p><p className="mt-1 text-sm font-semibold">{item.sourceLabel}; {item.items.length} retained items.</p></article>)}</div>{projection?.deliveryPackages.length === 0 && <p className="mt-4 text-sm font-bold">No retained Delivery package is visible in this workspace.</p>}</section>}
 
-    {activeTab === 'monitor' && <section className={panel}><p className="av-eyebrow">Monitor baseline</p><h2 className="mt-2 text-xl font-black">Derive a baseline from an approved Delivery package</h2><label className="mt-5 block">{label('Approved work package')}<select className={input} value={workPackageId} onChange={event => setWorkPackageId(event.target.value)}><option value="">Select a package</option>{projection?.deliveryPackages.map(item => <option key={item.id} value={item.id}>{item.label} — {item.status} — {item.lineageState}</option>)}</select></label><button type="button" className={`${primary} mt-4`} disabled={locked || !workPackageId || projection?.deliveryPackages.find(item => item.id === workPackageId)?.status !== 'approved'} onClick={() => void mutate(() => enterpriseIntelligenceClient.createMonitorBaseline({ organizationId, workspaceId, workPackageId }), 'Read-only Monitor baseline created from approved canonical items.')}>Create Monitor baseline</button><div className="mt-5 grid gap-3">{projection?.monitorBaselines.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><p className="font-black">{item.label}: {item.status}</p><p className="mt-1 text-sm font-semibold">{item.approvedItemCount} approved items · lineage {item.lineageComplete ? 'complete' : 'incomplete'} · live telemetry disabled.</p></article>)}</div></section>}
+    {activeTab === 'monitor' && projection?.monitorApprovedBaselines && <MonitorApprovedBaselinePanel projection={projection.monitorApprovedBaselines} heading="Enterprise Intelligence canonical baseline" />}
+    {activeTab === 'monitor' && !projection?.monitorApprovedBaselines && <section data-testid="legacy-monitor-fallback" className={panel}><p className="av-eyebrow">Monitor · rollback fallback</p><h2 className="mt-2 text-xl font-black">Legacy Monitor projection — read only</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Monitor does not infer or create an approved baseline from legacy package state. Retained records are displayed for rollback inspection only.</p><div className="mt-5 grid gap-3">{projection?.monitorBaselines.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><p className="font-black">{item.label}: {item.status}</p><p className="mt-1 text-sm font-semibold">{item.approvedItemCount} retained approved items · lineage {item.lineageComplete ? 'complete' : 'incomplete'} · live telemetry disabled.</p></article>)}</div>{projection?.monitorBaselines.length === 0 && <p className="mt-4 text-sm font-bold">No retained Monitor baseline is visible. No empty or completed canonical state is inferred.</p>}</section>}
 
     {activeTab === 'assemble' && <section className={panel}><p className="av-eyebrow">Assemble Phase 1</p><h2 className="mt-2 text-xl font-black">Create a draft-only blueprint</h2><p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Catalog: {ASSEMBLE_COMPONENT_CATALOG.join(', ')}. Code generation, deployment, infrastructure changes, credential access, source calls, and runtime agents remain disabled.</p><div className="mt-5 grid gap-4 md:grid-cols-2"><label>{label('Approved eligible modernization decision')}<select className={input} value={decisionId} onChange={event => setDecisionId(event.target.value)}><option value="">Select a decision</option>{projection?.modernizationDecisions.filter(item => item.assembleEligible).map(item => <option key={item.id} value={item.id}>{item.applicationName} — {item.primaryDisposition.replaceAll('_', ' ')}</option>)}</select></label><label>{label('Blueprint name')}<input className={input} value={blueprintName} onChange={event => setBlueprintName(event.target.value)} /></label></div><button type="button" className={`${primary} mt-4`} disabled={locked || !decisionId || !blueprintName.trim()} onClick={() => void mutate(() => enterpriseIntelligenceClient.createAssembleBlueprint({ organizationId, workspaceId, modernizationDecisionId: decisionId, name: blueprintName }), 'Assemble blueprint draft created; no execution occurred.')}>Create blueprint draft</button><div className="mt-5 grid gap-3">{projection?.blueprints.map(item => <article key={item.id} className="rounded-2xl border border-[var(--av-color-border)] p-4"><p className="font-black">{item.name} · {item.versionLabel}</p><p className="mt-1 text-sm font-semibold">{item.status} · {item.disposition.replaceAll('_', ' ')} · {item.components.length} components · runtime agents disabled.</p></article>)}</div></section>}
   </div>;

@@ -94,6 +94,7 @@ test('receipt finalization failure is explicit and fail-closed', () => {
       message: 'The Enterprise Intelligence command could not be completed.',
     },
   });
+  assert.equal(new EnterpriseCommandError('COMMAND_OUTCOME_UNKNOWN').status, 503);
 });
 
 test('uses one exhaustive command-to-current-capability mapping for replay authorization', () => {
@@ -114,7 +115,17 @@ test('uses one exhaustive command-to-current-capability mapping for replay autho
     'approval.review.record': 'approvals.review',
     'approval.record': 'approvals.review',
     'studio.delivery.handoff': 'docs.approve',
-    'monitor.baseline.create': 'monitor.manage',
+    'delivery.handoff.request': 'delivery.handoff.request',
+    'delivery.handoff.review.resolve': 'delivery.handoff.review',
+    'delivery.handoff.approval.resolve': 'delivery.handoff.approve',
+    'delivery.handoff.withdraw': 'delivery.handoff.request',
+    'delivery.handoff.consume': 'delivery.handoff.consume',
+    'delivery.package.create.manual': 'delivery.package.manage',
+    'delivery.item.review': 'delivery.package.manage',
+    'delivery.package.revision.commit': 'delivery.package.manage',
+    'delivery.package.review.resolve': 'delivery.package.review',
+    'delivery.package.approval.resolve': 'delivery.package.approve',
+    'monitor.baseline.create': 'monitor.baseline.create',
     'assemble.blueprint.create': 'assemble.manage',
   } as const;
   for (const [commandType, capability] of Object.entries(expected)) {
@@ -326,6 +337,34 @@ test('enforces source-owner capability separation and builds the Studio v2 bundl
 }
 
 {
+  const deliveryAuthority: Authority = { ...replayAuthority, permissions: new Set(['approvals.review']) };
+  for (const [index, resourceType] of ['delivery_work_package', 'delivery_work_package_version', 'monitor_baseline'].entries()) {
+    let receiptClaims = 0;
+    let commandExecutions = 0;
+    const response = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+      method: 'POST', body: JSON.stringify({
+        commandType: index === 2 ? 'approval.record' : 'approval.review.record',
+        requestId: `64200000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+        idempotencyKey: `pr-c-legacy-approval-guard-${index}`,
+        organizationId: base.organizationId, workspaceId: base.workspaceId,
+        payload: { resourceType, resourceId: '64200000-0000-4000-8000-000000000010', rationale: 'Legacy route must fail closed.', ...(index === 2 ? { outcome: 'approved' } : {}) },
+      }),
+    }), {
+      authenticate: async () => ({ id: deliveryAuthority.actorId }),
+      resolveOrganization: async () => deliveryAuthority.organizationId,
+      resolveCommandAuthority: async () => deliveryAuthority,
+      assertCurrentAuthority: async current => current,
+      claimReceipt: async () => { receiptClaims += 1; throw new Error('receipt must not be claimed'); },
+      executeCommand: async () => { commandExecutions += 1; throw new Error('command must not execute'); },
+    });
+    const body = await response.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'COMMAND_BLOCKED');
+    assert.deepEqual({ receiptClaims, commandExecutions }, { receiptClaims: 0, commandExecutions: 0 });
+  }
+  console.log('ok - legacy generic approval routes deny every PR C resource before receipt or effect');
+}
+
+{
   const previousDeno = (globalThis as typeof globalThis & { Deno?: unknown }).Deno;
   const previousFetch = globalThis.fetch;
   const documentId = '64100000-0000-4000-8000-000000000001';
@@ -336,7 +375,7 @@ test('enforces source-owner capability separation and builds the Studio v2 bundl
     SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
   } as Record<string, string>)[key] } };
   try {
-    for (const [index, sourceMode] of ['direct_transcript_bundle', 'assess_plus_transcript_bundle', 'manual_brief'].entries()) {
+    for (const [index, sourceMode] of ['assess_handoff', 'direct_transcript_bundle', 'assess_plus_transcript_bundle', 'manual_brief'].entries()) {
       let aggregateReads = 0;
       let downstreamEffects = 0;
       let authorityChecks = 0;
@@ -380,14 +419,14 @@ test('enforces source-owner capability separation and builds the Studio v2 bundl
       const responseBody = await response.json() as { error?: { code?: string } };
       assert.equal(response.status, 400, JSON.stringify(responseBody));
       assert.equal(responseBody.error?.code, 'COMMAND_BLOCKED');
-      assert.deepEqual({ aggregateReads, downstreamEffects }, { aggregateReads: 1, downstreamEffects: 0 });
+      assert.deepEqual({ aggregateReads, downstreamEffects }, { aggregateReads: 0, downstreamEffects: 0 });
       assert.ok(authorityChecks >= 5);
     }
   } finally {
     globalThis.fetch = previousFetch;
     (globalThis as typeof globalThis & { Deno?: unknown }).Deno = previousDeno;
   }
-  console.log('ok - blocks every non-Assess Studio source mode before any Delivery effect and retains payload-bound reauthorization');
+  console.log('ok - legacy one-click Studio Delivery command fails closed before source inspection or Delivery effect');
 }
 
 const replayCommands = [
@@ -396,7 +435,7 @@ const replayCommands = [
   'transcript.assess.extract', 'transcript.assess.candidate.review', 'transcript.assess.apply.preview',
   'transcript.assess.apply.commit', 'transcript.assess.conflict.resolve', 'transcript.journey.set-state',
   'modernization.evaluate', 'approval.review.record',
-  'approval.record', 'studio.delivery.handoff', 'monitor.baseline.create',
+  'approval.record', 'studio.delivery.handoff',
   'assemble.blueprint.create',
 ] as const;
 
@@ -1318,7 +1357,7 @@ const replayTranscriptCaseByCommand: Partial<Record<ReplayCommand, typeof select
 };
 
 const replayPayloadFor = (commandType: ReplayCommand) => {
-  if (commandType.startsWith('approval.')) return { resourceType: 'delivery_work_package' };
+  if (commandType.startsWith('approval.')) return { resourceType: 'evidence_candidate' };
   const transcriptCase = replayTranscriptCaseByCommand[commandType];
   return transcriptCase ? selectorPayload(transcriptCase, 0) : {};
 };
@@ -1476,7 +1515,7 @@ const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => 
                           : commandType === 'transcript.journey.set-state' ? 'journeyId'
             : commandType === 'modernization.evaluate' ? 'decisionId'
             : commandType === 'studio.delivery.handoff' ? 'workPackageId'
-              : commandType === 'monitor.baseline.create' || commandType === 'assemble.blueprint.create'
+              : commandType === 'assemble.blueprint.create'
                 ? 'id'
                 : null;
   if (lineageKey) result[lineageKey] = resourceId;
@@ -2452,6 +2491,27 @@ test('structured RPC domain signals map without exposing database text', () => {
       databaseMessage: signal,
     })).code, expectedCode);
   }
+  const deliveryPublicMappings = [
+    ['ENTERPRISE_DELIVERY_IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_CONFLICT'],
+    ['ENTERPRISE_DELIVERY_COMMAND_IN_PROGRESS', 'COMMAND_IN_PROGRESS'],
+    ['ENTERPRISE_DELIVERY_PERMISSION_DENIED', 'PERMISSION_DENIED'],
+    ['ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE', 'RESOURCE_NOT_FOUND'],
+    ['ENTERPRISE_DELIVERY_RESOURCE_STALE', 'RESOURCE_STALE'],
+    ['ENTERPRISE_DELIVERY_HANDOFF_STALE', 'HANDOFF_STALE'],
+    ['ENTERPRISE_DELIVERY_FEATURE_DISABLED', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_DELIVERY_READ_ONLY', 'COMMAND_BLOCKED'],
+    ['ENTERPRISE_DELIVERY_COMMAND_BLOCKED', 'COMMAND_BLOCKED'],
+  ] as const;
+  for (const [signal, expectedCode] of deliveryPublicMappings) {
+    assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({ status: 503, databaseMessage: signal })).code, expectedCode);
+  }
+  for (const internalSignal of [
+    'ENTERPRISE_DELIVERY_ACCEPTED_SET_MISMATCH',
+    'ENTERPRISE_DELIVERY_ITEM_VERSION_CONFLICT',
+    'ENTERPRISE_DELIVERY_MONITOR_BASELINE_BLOCKED',
+  ]) {
+    assert.equal(mapEnterpriseCommandRpcError(new SupabaseRpcError({ status: 503, databaseMessage: internalSignal })).code, 'COMMAND_UNAVAILABLE');
+  }
 });
 
 test('recovery retains the immutable planned route and model', () => {
@@ -2584,3 +2644,108 @@ const changedPayloadHash = await hashReceiptValue({ ...base, requestId: null, pa
 assert.equal(firstAttemptHash, replayAttemptHash);
 assert.notEqual(firstAttemptHash, changedPayloadHash);
 console.log('ok - requestId is correlation-only while changed payloads conflict');
+
+const deliveryHttpAuthority: Authority = {
+  ...replayAuthority,
+  permissions: new Set(['delivery.package.manage']),
+  organizationPermissions: new Set(),
+  workspacePermissions: new Set(['delivery.package.manage']),
+};
+const deliveryHttpEnvelope = {
+  commandType: 'delivery.package.create.manual',
+  requestId: '59000000-0000-4000-8000-000000000001',
+  idempotencyKey: 'delivery-http-error-mapping',
+  organizationId: deliveryHttpAuthority.organizationId,
+  workspaceId: deliveryHttpAuthority.workspaceId,
+  payload: { manualBrief: 'Bounded manual plan.', items: [{ clientKey: 'item-0001', itemType: 'Task', title: 'Plan', description: 'Plan description.', acceptanceCriteria: [], nonFunctionalRequirements: [] }] },
+} as const;
+const deliveryHttpOverrides = {
+  authenticate: async () => ({ id: deliveryHttpAuthority.actorId }),
+  resolveOrganization: async () => deliveryHttpAuthority.organizationId,
+  resolveCommandAuthority: async () => deliveryHttpAuthority,
+  assertCurrentAuthority: async () => deliveryHttpAuthority,
+};
+const invalidDeliveryResponse = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ ...deliveryHttpEnvelope, payload: { ...deliveryHttpEnvelope.payload, items: [{ ...deliveryHttpEnvelope.payload.items[0], sourceSectionLocator: 'brd.sections.1' }] } }),
+}), {
+  ...deliveryHttpOverrides,
+  deliveryMonitorDatabase: { execute: async () => { throw new Error('invalid payload must not reach SQL'); }, loadDeliveryProjection: async () => null, loadMonitorProjection: async () => null },
+});
+assert.equal(invalidDeliveryResponse.status, 400);
+assert.equal((await invalidDeliveryResponse.json() as { error: { code: string } }).error.code, 'INVALID_PAYLOAD');
+
+const invalidCanonicalDeliveryResponse = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deliveryHttpEnvelope),
+}), {
+  ...deliveryHttpOverrides,
+  deliveryMonitorDatabase: { execute: async () => ({ ok: true, action: 'delivery.package.create.manual' }), loadDeliveryProjection: async () => null, loadMonitorProjection: async () => null },
+});
+assert.equal(invalidCanonicalDeliveryResponse.status, 503);
+assert.equal((await invalidCanonicalDeliveryResponse.json() as { error: { code: string } }).error.code, 'COMMAND_OUTCOME_UNKNOWN');
+
+let committedDeliveryEffects = 0;
+const lostPostCommitDeliveryResponse = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deliveryHttpEnvelope),
+}), {
+  ...deliveryHttpOverrides,
+  deliveryMonitorDatabase: {
+    execute: async () => {
+      committedDeliveryEffects += 1;
+      throw new SupabaseRpcTransportError('response_decode_failed', true);
+    },
+    loadDeliveryProjection: async () => null,
+    loadMonitorProjection: async () => null,
+  },
+});
+assert.equal(lostPostCommitDeliveryResponse.status, 503);
+assert.equal((await lostPostCommitDeliveryResponse.json() as { error: { code: string } }).error.code, 'COMMAND_OUTCOME_UNKNOWN');
+assert.equal(committedDeliveryEffects, 1);
+
+let postExecuteAuthorityChecks = 0;
+let postExecuteAuthorityEffects = 0;
+const postExecuteAuthorityFailureResponse = await handleEnterpriseIntelligenceRequest(new Request('http://local/enterprise', {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deliveryHttpEnvelope),
+}), {
+  ...deliveryHttpOverrides,
+  assertCurrentAuthority: async current => {
+    postExecuteAuthorityChecks += 1;
+    if (postExecuteAuthorityChecks === 2) throw new EnterpriseCommandError('PERMISSION_DENIED');
+    return current;
+  },
+  deliveryMonitorDatabase: {
+    execute: async command => {
+      postExecuteAuthorityEffects += 1;
+      return {
+        ok: true,
+        outcome: 'committed',
+        receiptId: command.receiptId,
+        action: 'delivery.package.create.manual',
+        resourceId: '59000000-0000-4000-8000-000000000002',
+        resourceVersion: 1,
+        packageVersionId: '59000000-0000-4000-8000-000000000003',
+        packageHash: 'a'.repeat(64),
+        sourcePackageId: '59000000-0000-4000-8000-000000000006',
+        sourcePackageHash: 'c'.repeat(64),
+        lineageClassification: 'not_assessed',
+        planningOnly: true,
+        items: [{
+          clientKey: 'item-0001',
+          aggregateId: '59000000-0000-4000-8000-000000000004',
+          versionId: '59000000-0000-4000-8000-000000000005',
+          version: 1,
+          hash: 'b'.repeat(64),
+        }],
+      };
+    },
+    loadDeliveryProjection: async () => null,
+    loadMonitorProjection: async () => null,
+  },
+});
+assert.equal(postExecuteAuthorityFailureResponse.status, 503);
+const postExecuteAuthorityFailureBody = await postExecuteAuthorityFailureResponse.json() as { error: { code: string; message: string } };
+assert.equal(postExecuteAuthorityFailureBody.error.code, 'COMMAND_OUTCOME_UNKNOWN');
+assert.doesNotMatch(JSON.stringify(postExecuteAuthorityFailureBody), /permission|authority|resolver/i);
+assert.equal(postExecuteAuthorityChecks, 2);
+assert.equal(postExecuteAuthorityEffects, 1);
+console.log('ok - Delivery handler preserves invalid-payload 400 and classifies post-execute result, transport, and authority failures as outcome unknown');

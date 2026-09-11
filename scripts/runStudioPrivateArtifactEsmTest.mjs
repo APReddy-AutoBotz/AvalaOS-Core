@@ -31,7 +31,14 @@ const readFile = host.readFile.bind(host);
 const supabaseClient = path.resolve('services/supabaseClient.ts');
 host.readFile = file =>
   path.resolve(file) === supabaseClient
-    ? `export const supabase:any={
+    ? `export interface ControlledHumanCommandAnchor {requestId:string;businessIdempotencyKey?:string;safeAnchor:any};
+       export const isControlledHumanRuntimeEnabled=()=>false;
+       export const getControlledHumanBrowserBinding=()=>({status:'disabled'} as const);
+       export const requireControlledHumanBackendAttestation=async()=>null;
+       export const beginControlledHumanCommand=async(...args:any[])=>{const f=(globalThis as any).__controlledHumanBegin;return f?f(...args):null};
+       export const completeControlledHumanCommand=async(...args:any[])=>{const f=(globalThis as any).__controlledHumanComplete;return f?f(...args):null};
+       export const prepareControlledHumanOfflineLineage=async(...args:any[])=>{const f=(globalThis as any).__controlledHumanOfflineLineage;return f?f(...args):null};
+       export const supabase:any={
         functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},
         rpc:async(...args:any[])=>{const f=(globalThis as any).__studioRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)},
         auth:{getSession:async()=>({data:{session:null},error:null})}

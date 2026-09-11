@@ -1,4 +1,8 @@
-import { getRuntimeDataAccess, supabase } from '../supabaseClient';
+import {
+  getRuntimeDataAccess,
+  requireControlledHumanBackendAttestation,
+  supabase,
+} from '../supabaseClient';
 import { User } from '../../types';
 import { MOCK_LOGIN_PROFILES, MOCK_USERS } from '../../data/mockData';
 import { StorageKeys } from '../storage';
@@ -22,7 +26,8 @@ const mapSupabaseUserToAppUser = (authUser: any): User => {
 
 export const authAdapter = {
   async signIn(email: string, password?: string) {
-    if (getRuntimeDataAccess() === 'local') {
+    const dataAccess = getRuntimeDataAccess();
+    if (dataAccess === 'local') {
       const normalizedEmail = email.trim().toLowerCase();
       const user = MOCK_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
       const profile = user ? MOCK_LOGIN_PROFILES.find(p => p.userId === user.id) : null;
@@ -36,6 +41,7 @@ export const authAdapter = {
       return { user, error: null };
     }
 
+    await requireControlledHumanBackendAttestation();
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: password || '',
@@ -53,7 +59,8 @@ export const authAdapter = {
   },
 
   async getCurrentUser(): Promise<User | null> {
-    if (getRuntimeDataAccess() === 'local') {
+    const dataAccess = getRuntimeDataAccess();
+    if (dataAccess === 'local') {
       const stored = localStorage.getItem(StorageKeys.CURRENT_USER);
       if (!stored) return null;
       try {
@@ -65,6 +72,7 @@ export const authAdapter = {
       }
     }
 
+    await requireControlledHumanBackendAttestation();
     const { data: { user } } = await supabase.auth.getUser();
     return user ? mapSupabaseUserToAppUser(user) : null;
   },

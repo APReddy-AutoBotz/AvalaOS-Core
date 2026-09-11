@@ -3,11 +3,18 @@ import { MOCK_LOGIN_PROFILES, MOCK_USERS } from '../../data/mockData';
 import { CheckCircleIcon, KeyIcon, UsersIcon } from '../shared/icons';
 import { AvalaLifecycleLockup } from '../shared/brand';
 import { useAuth } from './AuthProvider';
-import { getRuntimeBoundaryError, isLocalRuntimeEnabled } from '../../services/supabaseClient';
+import {
+  getControlledHumanBrowserBinding,
+  getRuntimeBoundaryError,
+  isLocalRuntimeEnabled,
+} from '../../services/supabaseClient';
+import ControlledHumanNonProductionBanner from './ControlledHumanNonProductionBanner';
 
 const EnterpriseAccessView: React.FC = () => {
   const { signIn } = useAuth();
   const isDemoMode = isLocalRuntimeEnabled();
+  const controlledHumanBinding = getControlledHumanBrowserBinding();
+  const controlledHumanBlocked = controlledHumanBinding.status === 'blocked';
   const runtimeBoundaryError = getRuntimeBoundaryError();
   const [email, setEmail] = useState(isDemoMode ? MOCK_USERS[0]?.email || '' : '');
   const [password, setPassword] = useState(isDemoMode ? 'demo123' : '');
@@ -23,6 +30,10 @@ const EnterpriseAccessView: React.FC = () => {
   const selectedProfile = enrichedProfiles.find(profile => profile.userId === selectedUserId);
 
   const submitLogin = async (loginEmail = email, loginPassword = password) => {
+    if (controlledHumanBlocked) {
+      setError('Controlled test environment verification failed. Sign-in remains blocked.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -58,6 +69,7 @@ const EnterpriseAccessView: React.FC = () => {
   return (
     <div className="access-page min-h-screen bg-[var(--av-color-bg)] text-[var(--av-color-text)]">
       <a href="#access-main" className="av-skip-link">Skip to access</a>
+      <ControlledHumanNonProductionBanner />
       <header className="border-b border-[var(--av-color-border)] bg-[var(--av-color-surface)]">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
           <button type="button" onClick={returnToSite} className="brand-lockup flex items-center rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[var(--av-focus-ring)]" aria-label="Return to AvalaOS public site">
@@ -99,7 +111,7 @@ const EnterpriseAccessView: React.FC = () => {
             <form onSubmit={event => { event.preventDefault(); void submitLogin(); }} className="pt-6">
               {error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
               <div className="space-y-4"><div><label htmlFor="work-email" className="av-form-label">Work email</label><input id="work-email" type="email" value={email} onChange={event => setEmail(event.target.value)} className="av-input mt-2" placeholder="name@company.com" autoComplete="email" required /></div><div><label htmlFor="workspace-password" className="av-form-label">Password</label><input id="workspace-password" type="password" value={password} onChange={event => setPassword(event.target.value)} className="av-input mt-2" placeholder="Password" autoComplete="current-password" required /></div></div>
-              <button type="submit" disabled={loading} className="btn-primary mt-5 flex min-h-11 w-full items-center justify-center text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50">{loading ? 'Signing in…' : 'Sign in to AvalaOS'}</button>
+              <button type="submit" disabled={loading || controlledHumanBlocked} className="btn-primary mt-5 flex min-h-11 w-full items-center justify-center text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50">{loading ? 'Signing in…' : controlledHumanBlocked ? 'Sign-in blocked' : 'Sign in to AvalaOS'}</button>
               <p className="mt-4 text-center text-xs leading-5 text-[var(--av-color-text-subtle)]">Authentication and session authority remain unchanged. Access is subject to your organization configuration.</p>
             </form>
           )}

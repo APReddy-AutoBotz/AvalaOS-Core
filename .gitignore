@@ -47,3 +47,4 @@ output/
 artifacts/v1-rc/
 artifacts/pilot-acceptance/
 artifacts/pilot-operations/
+/artifacts/hosted-pilot/manifest.json

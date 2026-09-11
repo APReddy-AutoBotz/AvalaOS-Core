@@ -10,6 +10,7 @@ import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
+import ControlledHumanNonProductionBanner from './components/auth/ControlledHumanNonProductionBanner';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
@@ -17,10 +18,13 @@ import { useProcessService } from './services/processService';
 
 import { clearLegacyBrowserProviderKey, StorageKeys, usePersistentState } from './services/storage';
 import { useHandoffLedger } from './services/handoffLedgerService';
-import { isLocalRuntimeEnabled } from './services/supabaseClient';
+import { getControlledHumanBrowserBinding, isLocalRuntimeEnabled } from './services/supabaseClient';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
-import { resolveViewAccess } from './services/viewAccessGuard';
+import {
+  bindAuthoritativePresentationCapabilities,
+  resolveViewAccess,
+} from './services/viewAccessGuard';
 import {
   areScopesEqual,
   DEFAULT_PERSISTED_SCOPE,
@@ -89,6 +93,7 @@ const ViewLoadingFallback = () => (
 
 function App() {
   const localRuntimeEnabled = isLocalRuntimeEnabled();
+  const controlledHumanBrowserBinding = getControlledHumanBrowserBinding();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
@@ -216,8 +221,20 @@ function App() {
     localRuntime: localRuntimeEnabled,
   }), [currentOrganization, currentUser, currentWorkspace, guardLoading, localRuntimeEnabled, sessionState, tenantContext]);
   const authoritativeViewCapabilities = useMemo(() => (
-    governPresentationAccess.allowed && tenantContext ? tenantContext.capabilities : []
-  ), [governPresentationAccess.allowed, governPresentationAccess.contextKey, tenantContext]);
+    bindAuthoritativePresentationCapabilities({
+      userId: currentUser?.id,
+      organizationId: currentOrganization?.id,
+      workspaceId: currentWorkspace?.id,
+      sessionState,
+      tenantContext,
+    })
+  ), [
+    currentOrganization?.id,
+    currentUser?.id,
+    currentWorkspace?.id,
+    sessionState,
+    tenantContext,
+  ]);
   const governContextKey = useRef<string | null>(null);
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
@@ -1194,6 +1211,12 @@ function App() {
           onViewChange={handleViewChange}
           captureMode={productMarketingCapture}
           outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
+          canonicalMonitorContext={!productMarketingCapture && currentOrganization?.id && currentWorkspace?.id ? {
+            actorId: currentUser.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+            expectedAuthorizationVersion: tenantContext?.authorizationVersion,
+          } : undefined}
         />;
       case View.DOCS_FORGE:
         return <DocsForgeView
@@ -1445,6 +1468,20 @@ function App() {
     return <PublicWebsite />;
   }
 
+  if (controlledHumanBrowserBinding.status === 'blocked') {
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <ControlledHumanNonProductionBanner />
+      <main className="grid min-h-[calc(100vh-2.75rem)] place-items-center p-6">
+        <section className="w-full max-w-xl rounded-3xl border border-red-200 bg-white p-8 text-center shadow-xl dark:border-red-900 dark:bg-slate-900">
+          <p className="av-eyebrow">Controlled human test</p>
+          <h1 className="mt-3 text-3xl font-bold text-[#002C4B] dark:text-white">Workspace access blocked</h1>
+          <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-300">The connected test binding is no longer valid. No workspace projection or mutation is available.</p>
+          <a href="/sign-in" className="btn-primary mt-6 inline-flex min-h-11 items-center justify-center px-5 text-sm font-bold">Return to controlled sign-in</a>
+        </section>
+      </main>
+    </div>;
+  }
+
   if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {
     return <EnterpriseSessionStateView />;
   }
@@ -1474,6 +1511,7 @@ function App() {
         onMobileClose={() => setMobileNavigationOpen(false)}
       />
       <div className="flex flex-col flex-1 overflow-hidden relative">
+        <ControlledHumanNonProductionBanner />
         <Header
           theme={theme}
           toggleTheme={toggleTheme}

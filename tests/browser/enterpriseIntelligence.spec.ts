@@ -130,17 +130,21 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
 
   await tab(page, 'Studio Handoff').click();
   const handoff = activeSection(page);
-  await chooseFirst(handoff);
-  await handoff.getByRole('button', { name: /create delivery draft|create.*work.package/i }).click();
-  await expect(workspace(page).getByRole('status')).toContainText('Approved Studio document handed off to a governed Delivery draft.');
+  await expect(handoff).toContainText(/rollback fallback|legacy studio projection/i);
+  await expect(handoff).toContainText('Approved synthetic requirements');
+  await expect(handoff.locator('select')).toHaveCount(0);
+  await expect(handoff.getByRole('button', { name: /create delivery draft|create.*work.package/i })).toHaveCount(0);
   await tab(page, 'Work Package').click();
-  await expect(workspace(page)).toContainText('New synthetic Delivery draft');
+  await expect(activeSection(page)).toContainText(/legacy delivery projection.*read only/i);
+  await expect(workspace(page)).toContainText('Approved synthetic delivery package');
+  await expect(workspace(page)).not.toContainText('New synthetic Delivery draft');
 
   await tab(page, 'Monitor Baseline').click();
   const monitor = activeSection(page);
-  await chooseFirst(monitor);
-  await monitor.getByRole('button', { name: /(?:create|stage).*baseline/i }).click();
-  await expect(workspace(page)).toContainText('Synthetic read-only baseline');
+  await expect(monitor).toContainText(/legacy monitor projection.*read only/i);
+  await expect(monitor.locator('select')).toHaveCount(0);
+  await expect(monitor.getByRole('button', { name: /(?:create|stage).*baseline/i })).toHaveCount(0);
+  await expect(monitor).toContainText(/no retained monitor baseline/i);
 
   await tab(page, 'Assemble Blueprint').click();
   const assemble = activeSection(page);
@@ -154,9 +158,10 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
   await page.reload();
   await assertEnterpriseHarnessReady(page);
   await tab(page, 'Work Package').click();
-  await expect(workspace(page)).toContainText('New synthetic Delivery draft');
+  await expect(workspace(page)).toContainText('Approved synthetic delivery package');
+  await expect(workspace(page)).not.toContainText('New synthetic Delivery draft');
   await tab(page, 'Monitor Baseline').click();
-  await expect(workspace(page)).toContainText('Synthetic read-only baseline');
+  await expect(activeSection(page)).toContainText(/legacy monitor projection.*read only/i);
   await tab(page, 'Assemble Blueprint').click();
   await expect(workspace(page)).toContainText('Synthetic governed blueprint');
   await assertSafeBrowserProjection(page);
@@ -164,8 +169,9 @@ test('provider, evidence, Delivery, Monitor, and Assemble remain projection-driv
   expect(fixture.operations).toEqual(expect.arrayContaining([
     'provider.validate', 'provider.activate', 'provider.route.toggle', 'evidence.source.create',
     'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
-    'studio.delivery.handoff', 'monitor.baseline.create', 'assemble.blueprint.create',
+    'assemble.blueprint.create',
   ]));
+  expect(fixture.operations).not.toEqual(expect.arrayContaining(['studio.delivery.handoff', 'monitor.baseline.create']));
   const actionBodies = fixture.commandPayloads as Array<{
     operation?: string;
     commandType?: string;
@@ -326,17 +332,25 @@ test('keyboard navigation, DOCX intake, and command failure never show false suc
   await activeSection(page).locator('input[type="file"]').setInputFiles({ name: docx.name, mimeType: docx.mimeType, buffer: docx.create() });
   await expect(workspace(page)).toContainText(/DOCX|synthetic-evidence\.docx/i);
 
-  fixture.failNext('studio.delivery.handoff', 'RESOURCE_STALE');
   await tab(page, 'Studio Handoff').click();
   const handoff = activeSection(page);
-  await chooseFirst(handoff);
-  await handoff.getByRole('button', { name: /create delivery draft|create.*work.package/i }).click();
+  await expect(handoff).toContainText(/rollback fallback|legacy studio projection/i);
+  await expect(handoff.locator('select')).toHaveCount(0);
+  await expect(handoff.getByRole('button', { name: /create delivery draft|create.*work.package/i })).toHaveCount(0);
+  await tab(page, 'Work Package').click();
+  await expect(workspace(page)).not.toContainText('New synthetic Delivery draft');
+  fixture.failNext('assemble.blueprint.create', 'RESOURCE_STALE');
+  await tab(page, 'Assemble Blueprint').click();
+  const assemble = activeSection(page);
+  await chooseFirst(assemble);
+  await assemble.locator('input:not([type="hidden"])').first().fill('Must not appear after failure');
+  await assemble.getByRole('button', { name: /create.*blueprint/i }).click();
   await expect(workspace(page).getByRole('alert')).toContainText(/unavailable|no fallback/i);
-  await tab(page, 'Work Package').click();
-  await expect(workspace(page)).not.toContainText('New synthetic Delivery draft');
+  await expect(workspace(page)).not.toContainText('Must not appear after failure');
   await workspace(page).getByRole('button', { name: 'Reload committed state', exact: true }).click();
-  await tab(page, 'Work Package').click();
-  await expect(workspace(page)).not.toContainText('New synthetic Delivery draft');
+  await tab(page, 'Assemble Blueprint').click();
+  await expect(workspace(page)).not.toContainText('Must not appear after failure');
+  expect(fixture.operations).not.toEqual(expect.arrayContaining(['studio.delivery.handoff', 'monitor.baseline.create']));
   await assertSafeBrowserProjection(page);
   await assertA11yAndOverflow(page);
 });

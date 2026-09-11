@@ -160,6 +160,31 @@
       "selector": "function App() {"
     },
     {
+      "anchorId": "sandbox-main-focus-target",
+      "sourceReference": "App.tsx",
+      "selector": "<main id=\"app-main\" tabIndex={0} className=\"view-transition-enter view-transition-enter-active"
+    },
+    {
+      "anchorId": "sandbox-readable-screen-motion",
+      "sourceReference": "index.css",
+      "selector": "@keyframes kp-screen-in {\n  from {\n    transform: translateY(8px);\n  }\n  to {\n    transform: translateY(0);\n  }\n}"
+    },
+    {
+      "anchorId": "sandbox-home-contrast-target",
+      "sourceReference": "components/shared/CustomDashboardView.tsx",
+      "selector": "<div className=\"av-stat-strip\"><p className=\"av-eyebrow\">Open work</p>"
+    },
+    {
+      "anchorId": "sandbox-opaque-contrast-surface",
+      "sourceReference": "index.css",
+      "selector": ".av-surface,\n.av-public-panel,\n.av-stat-strip {\n  border: 1px solid var(--av-color-border);\n  border-radius: var(--av-radius-panel);\n  background: var(--av-color-surface);\n  box-shadow: var(--av-shadow-xs);\n}"
+    },
+    {
+      "anchorId": "sandbox-contrast-foreground-token",
+      "sourceReference": "index.css",
+      "selector": ".av-eyebrow {\n  color: var(--av-color-text-subtle);\n  font-size: 0.68rem;\n  font-weight: 700;\n  letter-spacing: 0.16em;\n  line-height: 1.25;\n  text-transform: uppercase;\n}"
+    },
+    {
       "anchorId": "assess-v1-scoring",
       "sourceReference": "services/scoringEngine.ts",
       "selector": "export const CURRENT_SCORE_VERSION = 'assess-core-2026-05';"
@@ -1637,7 +1662,12 @@
       "branchId": "SANDBOX-KEYBOARD_ACCESSIBILITY",
       "testId": "SANDBOX-009",
       "sourceAnchorIds": [
-        "hosted-sandbox-route"
+        "hosted-sandbox-route",
+        "sandbox-main-focus-target",
+        "sandbox-readable-screen-motion",
+        "sandbox-home-contrast-target",
+        "sandbox-opaque-contrast-surface",
+        "sandbox-contrast-foreground-token"
       ],
       "ownership": [
         {

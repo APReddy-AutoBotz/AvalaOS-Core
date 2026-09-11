@@ -7,4 +7,11 @@ export default defineConfig({
   cacheDir: path.join(tmpdir(), 'avalaos-studio-pr-b-vite-cache'),
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(process.cwd(), '.') } },
+  build: {
+    rollupOptions: {
+      input: {
+        studioPrBHarness: path.resolve(process.cwd(), 'tests/browser/studioPrB/harness.html'),
+      },
+    },
+  },
 });
