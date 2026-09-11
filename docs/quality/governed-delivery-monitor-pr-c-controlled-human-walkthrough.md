@@ -2,6 +2,16 @@
 
 Status: `not_run`
 
+## Direct controller environment correction
+
+The approved Edge attempt stopped with `PR_C_CONTROLLED_HUMAN_PREVIEW_REJECTED` before database-adapter construction. The provider baseline read completed, but controlled migration, function deployment, seed and human execution did not occur. Preserve its failed run/attempt and zero-artifact disposition in immutable external evidence; a later success must not overwrite it.
+
+Every actual controller CLI invocation in the primary and manual-recovery workflows must be discovered and validated, including emergency cleanup. Effective inputs come from the real job environment followed by step overrides and the preceding migration-digest export, never a handcrafted complete environment. The six normal jobs missing preview context require the literal site `avalaos-pilot` and context `deploy-preview`. All seven normal controller jobs must retain the evidence-facing exercise digest and separately bind `PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST` to the same authority output before any effects. Recovery retains its historical-exercise/current-code distinction.
+
+The regression inventory contains eighteen controller invocations. Each must pass the real context deriver with a closed synthetic expression map and exact clean synthetic checkout. Missing or substituted site/context, divergent exercise aliases, wrong heads, deployment/origin, environment class, PR, target/public/exercise/migration binding, step overrides, and unknown, duplicate or missing consumers must reject before any adapter, connection, provider or mutation. Opaque job hashes remain supplementary tamper detection, not behavioral proof.
+
+This source correction requires a fresh complete canonical eighty-command matrix, independent reviews, exact-head CI and preview, independent bootstrap, and an AP-approved no-PAT preflight before requesting another temporary token or Edge approval. No database reset is needed because no exercise began. Keep entry and protected execution fail closed on failure; repair or revert the coherent workflow/test correction within this PR and revalidate, without weakening controller, SQL, TLS, secrets or approval rules. GitHub secret removal and Supabase token revocation are separate cleanup actions. `CONTROLLED-HUMAN` remains `not_run`.
+
 The AP authorized preparation and execution of controlled-human testing for PR #264 on 2026-09-04. The authority is narrow: one dedicated synthetic `hosted_nonproduction_pilot` backend and only `https://deploy-preview-264--avalaos-pilot.netlify.app`. Production, stable Netlify production context, AvalaOS.com and every custom domain, customer or external-user data, real provider credentials/calls, live operations, pilot/production promotion, merge, and readiness or certification claims remain prohibited.
 
 Automation prepares and verifies evidence but cannot synthesize `CONTROLLED-HUMAN=passed`. That result exists only after three distinct humans perform all role-owned steps in the enforced active/read-only order, submit three immutable PR comments, the exact bound synthetic exercise is deprovisioned, and the final signed-session verifier passes.

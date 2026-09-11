@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
+import { deriveContext, deriveControlledHumanExerciseBinding, loadFixture } from './prCControlledHumanEnvironment.mjs';
+import { deriveMigrationContext, loadMigration } from './prCControlledHumanEnvironmentMigration.mjs';
 import { CONTROLLED_HUMAN_PHASE_SECRETS } from './prCControlledHumanWorkflowSecrets.mjs';
 
 const PRIMARY='.github/workflows/transcript-flow-pr-c.yml', RECOVERY='.github/workflows/pr264-controlled-human-recover.yml';
@@ -18,10 +23,164 @@ const expected={
  controlled_human_final:['verify','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'final' }}"],
  controlled_human_recovery:['recover','controlled_human_authority',"${{ needs.controlled_human_authority.outputs.phase == 'abort' || needs.controlled_human_authority.outputs.phase == 'expiry' }}"],
 };
-const jobDigests={controlled_human_authority:'7165a6cee90e2ea2ae891486b4fa94c2d9d9df665d2be7a345304fd3c74e3c67',controlled_human_credentials_preflight:'c54771d38b86efd1f4bb4d8a0803844bdc625da6168bc73580538087cdd28af4',controlled_human_edge:'0e59503ce009dda21732313e0b9f0b07bf38d3c60eeafbe709f2f651ae3248ee',controlled_human_prepare:'cea2ee914d6e9b3d4a290824d92e3bc55f10c898808697274a6e88f0e699fa0a',controlled_human_quiesce:'88dcd0807dbf2a02d219c1d35787c232b945c7c0922cbea97757c8fe499cea87',controlled_human_requester:'5dce65c7cf0f1f4bcecdd9eb2408bfeb2b50f65d83cc7b3d63cc4a812fa4d72c',controlled_human_approver:'dbb06f7169a8bf86282f1aad4bbc2a52cc8a09097dbfc2c115470c33b2758783',controlled_human_reviewer:'5644096e7765a51c10bb637c359afcd8737e77510c8e0c4b7b45f3e6d6182024',controlled_human_final:'0cf67b297f8e34973f5a3f55f62eb758ce162bf3ee7144637927260e0438ddd5',controlled_human_recovery:'9bf83e3609e7f463df82a786415f680122db72a1a103aea3e565dc168ae3d97e'};
+const jobDigests={controlled_human_authority:'7165a6cee90e2ea2ae891486b4fa94c2d9d9df665d2be7a345304fd3c74e3c67',controlled_human_credentials_preflight:'c54771d38b86efd1f4bb4d8a0803844bdc625da6168bc73580538087cdd28af4',controlled_human_edge:'dfa993b1cbb1482a3a34426885b4d90e6943b82bf88f27588731c51801ea5144',controlled_human_prepare:'e04bf067a21d5c4a9f1a3c5ee517985705d03971ecd7184c9b4ee2fe5166cba6',controlled_human_quiesce:'079d70df76ce47bc799c7ab3faea3ab729c4f8ad822a3576601777067f0e4df4',controlled_human_requester:'99d06fba91c7dc251061e9de0704c706f249259e6e6166c8f79313256802cb56',controlled_human_approver:'9a5d1c3f8b129834880b7a953875415daa0d0b9c7ddb5ccc87382a6c0ccfc9a0',controlled_human_reviewer:'3b561d020a41bdf134b24badea252d07e6cfed8076289d030bb025aced07e17e',controlled_human_final:'71684d7bc2664ee95ff897fb19d7caaba72c8ce1944d9b4e375cccb644bb5fbe',controlled_human_recovery:'9bf83e3609e7f463df82a786415f680122db72a1a103aea3e565dc168ae3d97e'};
 const canonical=v=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
 const digest=v=>createHash('sha256').update(canonical(v)).digest('hex');
 const load=async p=>{const source=(await readFile(p,'utf8')).replaceAll('\r\n','\n');return{source,workflow:parseWorkflowYaml(source,p)}};
+const loadPackageManifest=async()=>JSON.parse(await readFile('package.json','utf8'));
+
+const RUNTIME_SOURCE_SHA='1111111111111111111111111111111111111111';
+const RUNTIME_TRUSTED_RECOVERY_SHA='2222222222222222222222222222222222222222';
+const RUNTIME_DEPLOY_ID='333333333333333333333333';
+const RUNTIME_EXERCISE_ID='00000000-0000-4000-8000-000000000264';
+const RUNTIME_OTHER_EXERCISE_ID='00000000-0000-4000-8000-000000000265';
+const RUNTIME_TARGET_FINGERPRINT=`sha256:${'4'.repeat(64)}`;
+const RUNTIME_PUBLIC_TARGET_DIGEST=`sha256:${'5'.repeat(64)}`;
+const AUTHORITY_OUTPUT_PREFIX='${{ needs.controlled_human_authority.outputs.';
+const authorityOutput=name=>`${AUTHORITY_OUTPUT_PREFIX}${name} }}`;
+const input=name=>`\${{ inputs.${name} }}`;
+const normalRuntimeJobs=['controlled_human_edge','controlled_human_prepare','controlled_human_quiesce','controlled_human_requester','controlled_human_approver','controlled_human_reviewer','controlled_human_final'];
+const runtimeContextKeys=['PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS','PR_C_CONTROLLED_HUMAN_PR_NUMBER','PR_C_CONTROLLED_HUMAN_RELEASE_SHA','PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA','PR_C_CONTROLLED_HUMAN_DEPLOY_ID','PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN','PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST','PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST','PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT','PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST','PR_C_CONTROLLED_HUMAN_SITE_NAME','PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT'];
+const normalRuntimeEnv=Object.freeze({
+ PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:264,
+ PR_C_CONTROLLED_HUMAN_RELEASE_SHA:authorityOutput('exact-head-sha'),PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:authorityOutput('exact-head-sha'),
+ PR_C_CONTROLLED_HUMAN_DEPLOY_ID:authorityOutput('netlify-deploy-id'),PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',
+ PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST:authorityOutput('exercise-digest'),PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:authorityOutput('exercise-digest'),
+ PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:authorityOutput('target-fingerprint'),PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:authorityOutput('public-target-digest'),
+ PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',
+});
+const primaryRecoveryRuntimeEnv=Object.freeze({
+ PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:264,
+ PR_C_CONTROLLED_HUMAN_RELEASE_SHA:authorityOutput('exact-head-sha'),PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:authorityOutput('exact-head-sha'),
+ PR_C_CONTROLLED_HUMAN_DEPLOY_ID:authorityOutput('netlify-deploy-id'),PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',
+ PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:authorityOutput('exercise-digest'),PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:authorityOutput('target-fingerprint'),
+ PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:authorityOutput('public-target-digest'),PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',
+});
+const manualRecoveryRuntimeEnv=Object.freeze({
+ PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:264,
+ PR_C_CONTROLLED_HUMAN_RELEASE_SHA:input('exact_head_sha'),PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:input('exact_head_sha'),
+ PR_C_CONTROLLED_HUMAN_DEPLOY_ID:input('netlify_deploy_id'),PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',
+ PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:input('exercise_digest'),PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:input('target_fingerprint'),
+ PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:input('public_target_digest'),PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',
+});
+const expectedNpmRuntimeScripts=Object.freeze({
+ 'pr-c-controlled-human:migration-preflight':'node scripts/prCControlledHumanEnvironmentMigration.mjs preflight',
+ 'pr-c-controlled-human:migration-apply':'node scripts/prCControlledHumanEnvironmentMigration.mjs apply',
+ 'pr-c-controlled-human:migration-verify':'node scripts/prCControlledHumanEnvironmentMigration.mjs verify',
+ 'pr-c-controlled-human:preflight':'node scripts/prCControlledHumanEnvironment.mjs preflight',
+ 'pr-c-controlled-human:plan':'node scripts/prCControlledHumanEnvironment.mjs plan',
+ 'pr-c-controlled-human:apply':'node scripts/prCControlledHumanEnvironment.mjs apply',
+ 'pr-c-controlled-human:verify':'node scripts/prCControlledHumanEnvironment.mjs verify',
+});
+const expectedRuntimeInvocations=Object.freeze([
+ [PRIMARY,'controlled_human_edge','Apply and verify exact additive migration on the dedicated database','migration','preflight'],
+ [PRIMARY,'controlled_human_edge','Apply and verify exact additive migration on the dedicated database','migration','apply'],
+ [PRIMARY,'controlled_human_edge','Apply and verify exact additive migration on the dedicated database','migration','verify'],
+ [PRIMARY,'controlled_human_edge','Apply and verify exact additive migration on the dedicated database','environment','preflight'],
+ [PRIMARY,'controlled_human_prepare','Preflight dedicated synthetic target','environment','preflight'],
+ [PRIMARY,'controlled_human_prepare','Produce bounded seed plan','environment','plan'],
+ [PRIMARY,'controlled_human_prepare','Apply bounded synthetic seed','environment','apply'],
+ [PRIMARY,'controlled_human_prepare','Verify exact seed and zero-egress boundary','environment','verify'],
+ [PRIMARY,'controlled_human_prepare','Protected exact-bound abort recovery after failed seed or evidence assembly','environment','recover-reset'],
+ [PRIMARY,'controlled_human_quiesce','Reverify exact preview and active synthetic state','environment','verify'],
+ [PRIMARY,'controlled_human_quiesce','Enter exact server-enforced read-only state before any read-only human observation','environment','quiesce'],
+ [PRIMARY,'controlled_human_requester','Derive backend observer records from the exact synthetic read-only scope','environment','checkpoint-observe'],
+ [PRIMARY,'controlled_human_approver','Derive backend observer records from the exact synthetic read-only scope','environment','checkpoint-observe'],
+ [PRIMARY,'controlled_human_reviewer','Derive backend observer records from the exact synthetic read-only scope','environment','checkpoint-observe'],
+ [PRIMARY,'controlled_human_final','Deprovision exact synthetic exercise directly from frozen read-only state','environment','deprovision'],
+ [PRIMARY,'controlled_human_final','Independently re-inspect post-deprovision state','environment','post-deprovision-verify'],
+ [PRIMARY,'controlled_human_recovery','Complete exact server-authorized abort or expiry recovery','environment','recover-reset'],
+ [RECOVERY,'recover','Complete exact server-authorized abort or expiry recovery','environment','recover-reset'],
+]);
+const runtimeInvocationIdentity=invocation=>[invocation.workflowPath,invocation.jobName,invocation.stepName,invocation.entrypoint,invocation.phase];
+const sameRuntimeInvocation=(left,right)=>runtimeInvocationIdentity(left).toString()===runtimeInvocationIdentity(right).toString();
+const runtimeReference=/npm run pr-c-controlled-human:[a-z-]+|node scripts\/prCControlledHumanEnvironment(?:Migration)?[.]mjs\s+[a-z-]+/gu;
+const recognizedRuntimeReference=/npm run pr-c-controlled-human:(migration-preflight|migration-apply|migration-verify|preflight|plan|apply|verify)\b|node scripts\/prCControlledHumanEnvironment[.]mjs\s+([a-z-]+)\b/gu;
+function discoverRuntimeInvocations(workflowPath,workflow){
+ const invocations=[];
+ for(const [jobName,job] of Object.entries(workflow.jobs??{}))for(const [stepIndex,step] of (job.steps??[]).entries()){
+  const run=String(step.run??''),references=[...run.matchAll(runtimeReference)],recognized=[...run.matchAll(recognizedRuntimeReference)];
+  assert.equal(recognized.length,references.length,`${workflowPath}:${jobName}:${step.name}:unknown-runtime-reference`);
+  for(const match of recognized){
+   if(match[1]){
+    const npmPhase=match[1],entrypoint=npmPhase.startsWith('migration-')?'migration':'environment',phase=npmPhase.replace(/^migration-/u,'');
+    invocations.push({workflowPath,workflow,jobName,job,stepIndex,step,stepName:step.name,entrypoint,phase});
+   }else{
+    const phase=match[2];
+    assert.ok(['verify','quiesce','checkpoint-observe','deprovision','post-deprovision-verify','recover-reset'].includes(phase),`${workflowPath}:${jobName}:${step.name}:unknown-runtime-phase:${phase}`);
+    invocations.push({workflowPath,workflow,jobName,job,stepIndex,step,stepName:step.name,entrypoint:'environment',phase});
+   }
+  }
+ }
+ return invocations;
+}
+function assertRuntimeJobBindings(primary,recovery){
+ for(const name of normalRuntimeJobs){
+  const job=primary.jobs[name];
+  for(const [key,value] of Object.entries(normalRuntimeEnv))assert.equal(job.env?.[key],value,`${name}:${key}`);
+ }
+ for(const [key,value] of Object.entries(primaryRecoveryRuntimeEnv))assert.equal(primary.jobs.controlled_human_recovery.env?.[key],value,`controlled_human_recovery:${key}`);
+ for(const [key,value] of Object.entries(manualRecoveryRuntimeEnv))assert.equal(recovery.jobs.recover.env?.[key],value,`manual_recovery:${key}`);
+ const runtimeJobs=[...normalRuntimeJobs.map(name=>[name,primary.jobs[name]]),['controlled_human_recovery',primary.jobs.controlled_human_recovery],['manual_recovery',recovery.jobs.recover]];
+ for(const [name,job] of runtimeJobs)for(const step of job.steps??[])for(const key of runtimeContextKeys)assert.equal(Object.hasOwn(step.env??{},key),false,`${name}:${step.name}:step-context-override:${key}`);
+}
+function assertRuntimeAliases(packageManifest){for(const [name,target] of Object.entries(expectedNpmRuntimeScripts))assert.equal(packageManifest.scripts?.[name],target,`package.json:${name}`);}
+function syntheticExpressionValues(exerciseDigest){
+ return new Map([
+  [authorityOutput('exact-head-sha'),RUNTIME_SOURCE_SHA],[authorityOutput('trusted-execution-sha'),RUNTIME_TRUSTED_RECOVERY_SHA],
+  [authorityOutput('netlify-deploy-id'),RUNTIME_DEPLOY_ID],[authorityOutput('exercise-digest'),exerciseDigest],
+  [authorityOutput('target-fingerprint'),RUNTIME_TARGET_FINGERPRINT],[authorityOutput('public-target-digest'),RUNTIME_PUBLIC_TARGET_DIGEST],
+  [input('exact_head_sha'),RUNTIME_SOURCE_SHA],[input('trusted_execution_sha'),RUNTIME_TRUSTED_RECOVERY_SHA],
+  [input('netlify_deploy_id'),RUNTIME_DEPLOY_ID],[input('exercise_digest'),exerciseDigest],
+  [input('target_fingerprint'),RUNTIME_TARGET_FINGERPRINT],[input('public_target_digest'),RUNTIME_PUBLIC_TARGET_DIGEST],
+ ]);
+}
+const syntheticSecretValues=Object.freeze({
+ PR_C_CONTROLLED_HUMAN_DATABASE_URL:'postgresql://synthetic.invalid/postgres',PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY:'synthetic-hmac-key-with-at-least-32-bytes',
+ PR_C_CONTROLLED_HUMAN_EXERCISE_ID:RUNTIME_EXERCISE_ID,PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON:'{}',PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:'synthetic-project',
+ PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY:'synthetic-service-role',PR_C_CONTROLLED_HUMAN_SUPABASE_URL:'https://synthetic.supabase.co',PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN:'synthetic-access-token',
+});
+function materializeEnv(values,expressionValues,secretValues=syntheticSecretValues){
+ const result={};
+ for(const [key,raw] of Object.entries(values??{})){
+  if(typeof raw==='number'||typeof raw==='boolean'){result[key]=String(raw);continue;}
+  assert.equal(typeof raw,'string',`${key}:non-scalar-env`);
+  const secretMatch=raw.match(/^\$\{\{ secrets[.]([A-Z0-9_]+) \}\}$/u);
+  if(secretMatch){assert.ok(Object.hasOwn(secretValues,secretMatch[1]),`${key}:unknown-synthetic-secret`);result[key]=secretValues[secretMatch[1]];continue;}
+  if(raw.includes('${{')){assert.ok(expressionValues.has(raw),`${key}:unknown-runtime-expression:${raw}`);result[key]=expressionValues.get(raw);continue;}
+  result[key]=raw;
+ }
+ return result;
+}
+async function materializeMigrationGithubEnv(primary,migration){
+ const job=primary.jobs.controlled_human_edge,step=job.steps.find(candidate=>candidate.name==='Derive exact controlled-human migration digest');
+ assert.ok(step);const match=String(step.run??'').match(/^node --input-type=module -e "([\s\S]+)"$/u);assert.ok(match,'migration-digest-command');
+ const directory=await mkdtemp(join(tmpdir(),'pr264-workflow-env-')),path=join(directory,'github-env');
+ try{
+  execFileSync(process.execPath,['--input-type=module','-e',match[1]],{cwd:process.cwd(),env:{GITHUB_ENV:path},stdio:'pipe'});
+  const lines=(await readFile(path,'utf8')).trim().split(/\r?\n/u);assert.deepEqual(lines,[`PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST=${migration.digest}`]);
+  return Object.freeze({PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest});
+ }finally{await rm(directory,{recursive:true,force:true});}
+}
+function validateRuntimeInvocationMatrix({primary,recovery,packageManifest,fixtureState,migration,githubEnv,secretValues=syntheticSecretValues,runtimeEnvMutator,checkoutMutator}){
+ assertRuntimeJobBindings(primary,recovery);assertRuntimeAliases(packageManifest);
+ const invocations=[...discoverRuntimeInvocations(PRIMARY,primary),...discoverRuntimeInvocations(RECOVERY,recovery)];
+ assert.deepEqual(invocations.map(runtimeInvocationIdentity),expectedRuntimeInvocations);assert.equal(invocations.length,18);
+ const binding=deriveControlledHumanExerciseBinding({environmentClass:'hosted_nonproduction_pilot',prNumber:264,releaseSha:RUNTIME_SOURCE_SHA,reviewHeadSha:RUNTIME_SOURCE_SHA,exerciseId:RUNTIME_EXERCISE_ID,targetFingerprint:RUNTIME_TARGET_FINGERPRINT,publicTargetDigest:RUNTIME_PUBLIC_TARGET_DIGEST},fixtureState);
+ const expressionValues=syntheticExpressionValues(binding.exerciseDigest),contexts=[];
+ for(const invocation of invocations){
+  const edgeDigestStepIndex=invocation.workflowPath===PRIMARY&&invocation.jobName==='controlled_human_edge'?invocation.job.steps.findIndex(step=>step.name==='Derive exact controlled-human migration digest'):-1;
+  if(invocation.entrypoint==='migration')assert.ok(edgeDigestStepIndex>=0&&edgeDigestStepIndex<invocation.stepIndex,'migration-digest-order');
+  let env={...materializeEnv(invocation.job.env,expressionValues,secretValues),...(edgeDigestStepIndex>=0&&edgeDigestStepIndex<invocation.stepIndex?githubEnv:{}),...materializeEnv(invocation.step.env,expressionValues,secretValues)};
+  if(runtimeEnvMutator)env=runtimeEnvMutator({...env},invocation)??env;
+  const trustedRecovery=invocation.phase==='recover-reset'&&(invocation.jobName==='controlled_human_recovery'||invocation.workflowPath===RECOVERY);
+  let checkout={head:trustedRecovery?RUNTIME_TRUSTED_RECOVERY_SHA:RUNTIME_SOURCE_SHA,dirty:''};if(checkoutMutator)checkout=checkoutMutator({...checkout},invocation)??checkout;
+  const context=invocation.entrypoint==='migration'?deriveMigrationContext(env,fixtureState,migration,checkout):deriveContext(env,fixtureState,checkout,{allowTrustedRecoveryCheckout:invocation.phase==='recover-reset'});
+  contexts.push({identity:runtimeInvocationIdentity(invocation),exerciseDigest:context.exerciseDigest});
+ }
+ assert.equal(new Set(contexts.map(context=>context.exerciseDigest)).size,1);
+ return contexts;
+}
 const secret=name=>`\${{ secrets.${name} }}`, guard=phase=>`node scripts/prCControlledHumanWorkflowSecrets.mjs ${phase}`;
 const DATABASE_URL='PR_C_CONTROLLED_HUMAN_DATABASE_URL', HMAC='PR_C_CONTROLLED_HUMAN_EVIDENCE_HMAC_KEY', EXERCISE='PR_C_CONTROLLED_HUMAN_EXERCISE_ID', PASSWORD='PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON', PROJECT='PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF', SERVICE='PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY', URL='PR_C_CONTROLLED_HUMAN_SUPABASE_URL', ACCESS='PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN';
 const same=(...names)=>Object.fromEntries(names.map(name=>[name,name]));
@@ -151,6 +310,66 @@ export function validateSemanticWorkflow(workflow){
 }
 const validate=validateSemanticWorkflow;
 export function validateSemanticRecovery(workflow){const job=workflow.jobs.recover;assert.deepEqual(Object.keys(workflow.on),['workflow_dispatch']);const inputs=workflow.on.workflow_dispatch.inputs;assert.deepEqual(Object.keys(inputs),['exact_head_sha','trusted_execution_sha','netlify_deploy_id','exercise_digest','target_fingerprint','public_target_digest','reason']);for(const [name,input] of Object.entries(inputs)){assert.equal(input.required,true,`recover:${name}:required`);assert.equal(input.type,name==='reason'?'choice':'string');}assert.deepEqual(inputs.reason.options,['abort','expiry']);assert.deepEqual(workflow.permissions,{actions:'read',contents:'read','pull-requests':'read'});assert.deepEqual(workflow.concurrency,{group:'pr264-controlled-human-${{ inputs.exercise_digest }}','cancel-in-progress':false});assert.equal(workflow.env,undefined);assert.equal(workflow.defaults,undefined);assert.deepEqual(Object.keys(workflow.jobs),['recover']);assertPinnedUses(workflow);assertExpressionRoots(workflow,new Set(['github','inputs','secrets']));assert.equal(job.environment,'hosted-nonproduction-pilot');assert.equal(job.secrets,undefined);assert.equal(job.uses,undefined);assert.equal(job.services,undefined);assert.equal(job.container,undefined);assert.equal(job.outputs,undefined);assert.equal(job.permissions,undefined);for(const name of Object.keys(job.env??{})){assert.doesNotMatch(name,/^GITHUB_/u);assert.equal(protectedNames.has(name),false);}const guards=job.steps.filter(s=>s.run===guard('recover'));assert.equal(guards.length,1);assert.equal(guards[0].if,undefined);assert.equal(guards[0]['continue-on-error'],undefined);assert.deepEqual(Object.keys(guards[0].env).sort(),[...CONTROLLED_HUMAN_PHASE_SECRETS.recover].sort());for(const key of CONTROLLED_HUMAN_PHASE_SECRETS.recover)assert.equal(guards[0].env[key],secret(key));const guardIndex=job.steps.indexOf(guards[0]);assertBootstrap(job,guardIndex,'${{ inputs.trusted_execution_sha }}');const first=job.steps.findIndex(s=>Object.values(s.env??{}).some(v=>secretRe.test(String(v))));assert.equal(job.steps[first],guards[0]);const expectedLeaves=[...Object.keys(guards[0].env).map(alias=>({path:`${guardIndex}:${alias}`,value:guards[0].env[alias]})),...assertConsumerContracts(job,'manual_recovery')].sort((a,b)=>a.path.localeCompare(b.path));const actualLeaves=job.steps.flatMap((step,index)=>Object.entries(step.env??{}).filter(([,value])=>secretRe.test(String(value))).map(([alias,value])=>({path:`${index}:${alias}`,value}))).sort((a,b)=>a.path.localeCompare(b.path));assert.deepEqual(actualLeaves,expectedLeaves);for(const step of job.steps)if(Object.values(step.env??{}).some(value=>secretRe.test(String(value)))){assert.doesNotMatch(String(step.run??''),/GITHUB_(?:ENV|OUTPUT|PATH|STEP_SUMMARY)/u);assert.equal(step['continue-on-error'],undefined);}assertUpload(job,'manual_recovery');for(const leaf of walk(workflow))assert.match(leaf.path,/\.jobs\.recover\.steps\[\d+\]\.env\.[A-Z0-9_]+$/u);}
+test('actual workflow runtime matrix binds all 18 controller invocations through real pre-adapter derivation',async()=>{
+ const [{workflow:primary},{workflow:recovery},packageManifest,fixtureState,migration]=await Promise.all([load(PRIMARY),load(RECOVERY),loadPackageManifest(),loadFixture(),loadMigration()]);
+ const githubEnv=await materializeMigrationGithubEnv(primary,migration);let networkCalls=0;const originalFetch=globalThis.fetch;
+ globalThis.fetch=(..._arguments)=>{networkCalls++;throw new Error('UNEXPECTED_NETWORK_CALL');};
+ try{const contexts=validateRuntimeInvocationMatrix({primary,recovery,packageManifest,fixtureState,migration,githubEnv});assert.equal(contexts.length,18);}finally{globalThis.fetch=originalFetch;}
+ assert.equal(networkCalls,0);
+});
+test('runtime job authority rejects missing, substituted, divergent, or step-overridden bindings',async()=>{
+ const [{workflow:loadedPrimary},{workflow:loadedRecovery},packageManifest,fixtureState,migration]=await Promise.all([load(PRIMARY),load(RECOVERY),loadPackageManifest(),loadFixture(),loadMigration()]);
+ const githubEnv={PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest};
+ const reject=({primary=loadedPrimary,recovery=loadedRecovery,manifest=packageManifest}={})=>assert.throws(()=>validateRuntimeInvocationMatrix({primary,recovery,packageManifest:manifest,fixtureState,migration,githubEnv}),assert.AssertionError);
+ const jobs=[...normalRuntimeJobs.map(jobName=>({workflowPath:PRIMARY,jobName,expectedEnv:normalRuntimeEnv})),{workflowPath:PRIMARY,jobName:'controlled_human_recovery',expectedEnv:primaryRecoveryRuntimeEnv},{workflowPath:RECOVERY,jobName:'recover',expectedEnv:manualRecoveryRuntimeEnv}];
+ for(const {workflowPath,jobName,expectedEnv} of jobs){
+  for(const key of ['PR_C_CONTROLLED_HUMAN_SITE_NAME','PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT','PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST']){
+   const primary=structuredClone(loadedPrimary),recovery=structuredClone(loadedRecovery),workflow=workflowPath===PRIMARY?primary:recovery;delete workflow.jobs[jobName].env[key];reject({primary,recovery});
+  }
+  for(const key of Object.keys(expectedEnv)){
+   const primary=structuredClone(loadedPrimary),recovery=structuredClone(loadedRecovery),workflow=workflowPath===PRIMARY?primary:recovery;workflow.jobs[jobName].env[key]=key==='PR_C_CONTROLLED_HUMAN_PR_NUMBER'?265:'substituted';reject({primary,recovery});
+  }
+ }
+ for(const expectedInvocation of expectedRuntimeInvocations){
+  const [workflowPath,jobName,stepName]=expectedInvocation,primary=structuredClone(loadedPrimary),recovery=structuredClone(loadedRecovery),workflow=workflowPath===PRIMARY?primary:recovery;
+  workflow.jobs[jobName].steps.find(step=>step.name===stepName).env={...(workflow.jobs[jobName].steps.find(step=>step.name===stepName).env??{}),PR_C_CONTROLLED_HUMAN_SITE_NAME:'substituted'};reject({primary,recovery});
+ }
+ {const manifest=structuredClone(packageManifest);manifest.scripts['pr-c-controlled-human:preflight']='node scripts/prCControlledHumanEnvironment.mjs verify';reject({manifest});}
+});
+test('runtime invocation discovery rejects unknown, duplicate, and omitted controller consumers',async()=>{
+ const [{workflow:loadedPrimary},{workflow:loadedRecovery},packageManifest,fixtureState,migration]=await Promise.all([load(PRIMARY),load(RECOVERY),loadPackageManifest(),loadFixture(),loadMigration()]);
+ const githubEnv={PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest},reject=primary=>assert.throws(()=>validateRuntimeInvocationMatrix({primary,recovery:loadedRecovery,packageManifest,fixtureState,migration,githubEnv}),assert.AssertionError);
+ const locate=primary=>primary.jobs.controlled_human_quiesce.steps.find(candidate=>candidate.name==='Reverify exact preview and active synthetic state');
+ {const primary=structuredClone(loadedPrimary);locate(primary).run+='\nnode scripts/prCControlledHumanEnvironment.mjs verify --output duplicate.json';reject(primary);}
+ {const primary=structuredClone(loadedPrimary);locate(primary).run=locate(primary).run.replace('node scripts/prCControlledHumanEnvironment.mjs verify --output output/controlled-human/current-verify.json','');reject(primary);}
+ {const primary=structuredClone(loadedPrimary);locate(primary).run=locate(primary).run.replace('prCControlledHumanEnvironment.mjs verify','prCControlledHumanEnvironment.mjs unknown');reject(primary);}
+});
+test('every real runtime consumer rejects foreign context and checkout before adapter construction',async()=>{
+ const [{workflow:primary},{workflow:recovery},packageManifest,fixtureState,migration]=await Promise.all([load(PRIMARY),load(RECOVERY),loadPackageManifest(),loadFixture(),loadMigration()]);
+ const githubEnv={PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest},invocations=[...discoverRuntimeInvocations(PRIMARY,primary),...discoverRuntimeInvocations(RECOVERY,recovery)];assert.equal(invocations.length,18);
+ const runtimeCases=[
+  ['wrong-valid-exercise',env=>({...env,PR_C_CONTROLLED_HUMAN_EXERCISE_ID:RUNTIME_OTHER_EXERCISE_ID})],
+  ['wrong-environment',env=>({...env,PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'production'})],
+  ['wrong-pr',env=>({...env,PR_C_CONTROLLED_HUMAN_PR_NUMBER:'265'})],
+  ['wrong-head',env=>({...env,PR_C_CONTROLLED_HUMAN_RELEASE_SHA:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'})],
+  ['wrong-deploy',env=>({...env,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'invalid'})],
+  ['wrong-origin',env=>({...env,PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://example.invalid'})],
+  ['missing-site',env=>{delete env.PR_C_CONTROLLED_HUMAN_SITE_NAME;return env;}],['wrong-site',env=>({...env,PR_C_CONTROLLED_HUMAN_SITE_NAME:'substituted'})],
+  ['missing-context',env=>{delete env.PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT;return env;}],['wrong-context',env=>({...env,PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'production'})],
+  ['foreign-target',env=>({...env,PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:`sha256:${'8'.repeat(64)}`})],
+  ['foreign-public-target',env=>({...env,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'9'.repeat(64)}`})],
+  ['wrong-expected-exercise',env=>({...env,PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST:`sha256:${'a'.repeat(64)}`})],
+ ];
+ let networkCalls=0;const originalFetch=globalThis.fetch;globalThis.fetch=(..._arguments)=>{networkCalls++;throw new Error('UNEXPECTED_NETWORK_CALL');};
+ try{
+  for(const target of invocations){
+   for(const [name,mutate] of runtimeCases)assert.throws(()=>validateRuntimeInvocationMatrix({primary,recovery,packageManifest,fixtureState,migration,githubEnv,runtimeEnvMutator:(env,invocation)=>sameRuntimeInvocation(invocation,target)?mutate(env):env}),undefined,`${runtimeInvocationIdentity(target)}:${name}`);
+   assert.throws(()=>validateRuntimeInvocationMatrix({primary,recovery,packageManifest,fixtureState,migration,githubEnv,checkoutMutator:(checkout,invocation)=>sameRuntimeInvocation(invocation,target)?{...checkout,head:'cccccccccccccccccccccccccccccccccccccccc'}:checkout}),undefined,`${runtimeInvocationIdentity(target)}:checkout`);
+   if(target.entrypoint==='migration')assert.throws(()=>validateRuntimeInvocationMatrix({primary,recovery,packageManifest,fixtureState,migration,githubEnv,runtimeEnvMutator:(env,invocation)=>sameRuntimeInvocation(invocation,target)?{...env,PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:`sha256:${'b'.repeat(64)}`}:env}),undefined,`${runtimeInvocationIdentity(target)}:migration-digest`);
+  }
+ }finally{globalThis.fetch=originalFetch;}
+ assert.equal(networkCalls,0);
+});
 test('primary owns exact direct protected jobs without reusable secret transport',async()=>{const {source,workflow}=await load(PRIMARY);validate(workflow);for(const [name,hash] of Object.entries(jobDigests))assert.equal(digest(workflow.jobs[name]),hash);assert.doesNotMatch(source,/PR264_ENVIRONMENT_SECRET_REQUIRED|secrets:\s*inherit|uses:\s*\.\/\.github\/workflows\/pr264-controlled-human/u);for(const n of ['edge-deploy','prepare','quiesce','checkpoint','verify'])assert.equal(existsSync(`.github/workflows/pr264-controlled-human-${n}.yml`),false);});
 test('direct contract rejects missing, displaced, skippable, persisted, and global guards',async()=>{const {workflow}=await load(PRIMARY),xs=[];{const x=structuredClone(workflow);x.jobs.controlled_human_edge.steps=x.jobs.controlled_human_edge.steps.filter(s=>s.run!==guard('edge'));xs.push(x)}{const x=structuredClone(workflow),s=x.jobs.controlled_human_edge.steps,i=s.findIndex(v=>v.run===guard('edge')),j=s.findIndex((v,n)=>n>i&&Object.values(v.env??{}).some(value=>String(value).includes('secrets.')));[s[i],s[j]]=[s[j],s[i]];xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_prepare.steps.find(s=>s.run===guard('prepare')).if='${{ false }}';xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_quiesce.steps.find(s=>s.run===guard('quiesce'))['continue-on-error']=true;xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_final.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL=secret('PR_C_CONTROLLED_HUMAN_DATABASE_URL');xs.push(x)}{const x=structuredClone(workflow);x.jobs.controlled_human_requester.steps.find(s=>s.run===guard('checkpoint')).run+='\necho x >> "$GITHUB_OUTPUT"';xs.push(x)}for(const x of xs)assert.throws(()=>validate(x),assert.AssertionError);});
 test('credential preflight is PAT-free, CA-adjacent, read-only and uploads one report',async()=>{const {workflow}=await load(PRIMARY),j=workflow.jobs.controlled_human_credentials_preflight,s=j.steps,i=s.findIndex(x=>x.run===guard('preflight'));assert.equal(s[i+1].run,'node scripts/prCControlledHumanPostgresTls.mjs verify-ca');assert.equal(s[i+2].run,'node scripts/prCControlledHumanCredentialPreflight.mjs');assert.equal(JSON.stringify(j).includes('SUPABASE_ACCESS_TOKEN'),false);const u=s.filter(x=>String(x.uses??'').startsWith('actions/upload-artifact@'));assert.equal(u.length,1);assert.equal(u[0].if,'${{ success() }}');assert.equal(u[0].with.path,'output/pr-c-controlled-human-credential-preflight/credential-preflight.json');assert.equal(u[0].with['if-no-files-found'],'error');});

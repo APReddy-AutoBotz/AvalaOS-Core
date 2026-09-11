@@ -391,8 +391,11 @@ jobs:
       PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
       PR_C_CONTROLLED_HUMAN_EDGE_WORKFLOW_PATH: .github/workflows/transcript-flow-pr-c.yml
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -531,6 +534,7 @@ jobs:
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
       PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
     steps:
@@ -761,8 +765,11 @@ jobs:
       PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -868,8 +875,11 @@ jobs:
       PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
       PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW: .github/workflows/transcript-flow-pr-c.yml
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1007,8 +1017,11 @@ jobs:
       PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
       PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW: .github/workflows/transcript-flow-pr-c.yml
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1146,8 +1159,11 @@ jobs:
       PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ needs.controlled_human_authority.outputs.netlify-deploy-id }}
       PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
       PR_C_CONTROLLED_HUMAN_CAPTURE_WORKFLOW: .github/workflows/transcript-flow-pr-c.yml
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1287,6 +1303,9 @@ jobs:
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ needs.controlled_human_authority.outputs.target-fingerprint }}
       PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ needs.controlled_human_authority.outputs.public-target-digest }}
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ needs.controlled_human_authority.outputs.exercise-digest }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
