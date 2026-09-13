@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -11,12 +11,16 @@ import {
   CONTROL_SCRIPT_SCENARIOS,
   CONTROL_SCRIPT_SCENARIOS_BY_REPORT,
   CONTROL_SCRIPT_SOURCES,
+  CONTROL_SCRIPT_TEST_TIMEOUT_MS,
   CONTROL_SCRIPT_TESTS,
   buildControlScriptTestEnvironment,
+  buildControlScriptTestArguments,
   createExclusiveControlScriptOutputDirectory,
   parseControlScriptLcov,
   parseControlScriptTap,
   readControlScriptScenarios,
+  validateControlScriptTestCompletion,
+  validateControlScriptTestScheduling,
   validateExclusiveControlScriptAttempt,
   verifyControlScriptCoverageMeasurement,
 } from './runPrCControlledHumanScriptCoverage.mjs';
@@ -42,6 +46,11 @@ const expectedScenarioOwnership = {
   'control-script-coverage-runner-scenarios.json': ['control-script-coverage-runner-self-test'],
   'credential-preflight-entry-scenarios.json': [
     'production-entry-bootstrap-binding-failure',
+    'production-entry-current-empty-happy-path',
+    'production-entry-current-empty-null-installed-digest',
+    'production-entry-current-empty-orphan-mutable-row',
+    'production-entry-current-empty-statement-count-failure',
+    'production-entry-current-empty-wrong-installed-digest',
     'production-entry-database-begin-failure',
     'production-entry-database-close-failure',
     'production-entry-database-configuration-failure',
@@ -110,7 +119,7 @@ const writeScenarioFixture = async (mutate = () => {}) => {
 
 test('coverage parser reports every exact expected source and discloses zero-covered paths', () => {
   const sources = parseControlScriptLcov(lcov, inventory);
-  assert.equal(sources.length, 13);
+  assert.equal(sources.length, 17);
   assert.deepEqual(sources[0].lines, { hit: 0, found: 1, percent: 0 });
   assert.deepEqual(sources[0].uncoveredLines, [1]);
   assert.deepEqual(sources[0].uncoveredBranches, ['1:0:0']);
@@ -186,6 +195,34 @@ test('TAP verifier rejects green exits with skipped missing or incomplete test r
   ]) assert.throws(() => parseControlScriptTap(changed));
 });
 
+test('measured child containment is pinned to 900 seconds and every incomplete outcome fails closed', async () => {
+  const successfulChild = { status: 0, signal: null, error: undefined, stdout: '', stderr: '' };
+  assert.equal(CONTROL_SCRIPT_TEST_TIMEOUT_MS, 900_000);
+  assert.deepEqual(validateControlScriptTestCompletion(successfulChild, tap), {
+    tests: 7, pass: 7, fail: 0, cancelled: 0, skipped: 0, todo: 0,
+  });
+
+  const timeoutError = new Error('hostile timeout detail');
+  timeoutError.code = 'ETIMEDOUT';
+  for (const [child, expected] of [
+    [{ ...successfulChild, status: null, signal: 'SIGTERM', error: timeoutError }, /test-process-timeout/u],
+    [{ ...successfulChild, error: Object.assign(new Error('hostile spawn detail'), { code: 'EACCES' }) }, /test-process$/u],
+    [{ ...successfulChild, status: 1 }, /test-process$/u],
+    [{ ...successfulChild, signal: 'SIGTERM' }, /test-process$/u],
+    [{ ...successfulChild, stdout: 'unexpected output' }, /test-process$/u],
+    [{ ...successfulChild, stderr: 'unexpected error output' }, /test-process$/u],
+  ]) assert.throws(() => validateControlScriptTestCompletion(child, tap), expected);
+  assert.throws(
+    () => validateControlScriptTestCompletion(successfulChild, tap.replace('# todo 0\n', '')),
+    /tap-todo/u,
+  );
+
+  const runnerSource = await readFile(new URL('./runPrCControlledHumanScriptCoverage.mjs', import.meta.url), 'utf8');
+  assert.match(runnerSource, /timeout:\s*CONTROL_SCRIPT_TEST_TIMEOUT_MS/u);
+  assert.equal([...runnerSource.matchAll(/\btimeout:\s*/gu)].length, 1);
+  assert.doesNotMatch(runnerSource, /180_000/u);
+});
+
 test('scenario report reader binds every scenario to its exact producer and rejects incomplete or substituted proof', async () => {
   const emptyDirectory = await mkdtemp(path.join(os.tmpdir(), 'pr-c-control-script-scenarios-'));
   const directories = [emptyDirectory];
@@ -195,7 +232,7 @@ test('scenario report reader binds every scenario to its exact producer and reje
 
     const valid = await writeScenarioFixture();
     directories.push(valid);
-    assert.equal(readControlScriptScenarios(valid).scenarios.length, 41);
+    assert.equal(readControlScriptScenarios(valid).scenarios.length, 46);
 
     const producerSubstitution = await writeScenarioFixture(reports => {
       reports['credential-preflight-entry-scenarios.json'].producer = 'scripts/substituted.test.mjs';
@@ -281,8 +318,43 @@ test('measured child environment binds only the resolved root as safe Git direct
   }
 });
 
+test('measured test scheduling is exactly serial and rejects missing duplicated or substituted concurrency', async () => {
+  const args = buildControlScriptTestArguments('synthetic.tap', 'synthetic.lcov');
+  assert.deepEqual(args.filter(arg => arg.startsWith('--test-concurrency')), ['--test-concurrency=1']);
+  assert.deepEqual(args.slice(args.indexOf('--test') + 1), [...CONTROL_SCRIPT_TESTS]);
+  assert.equal(args.filter(arg => arg === '--test').length, 1);
+  assert.equal(validateControlScriptTestScheduling(args), true);
+  const without = args.filter(arg => !arg.startsWith('--test-concurrency'));
+  for (const mutation of [without, [...args, '--test-concurrency=1'], [...without, '--test-concurrency=2'],
+    [...without, '--test-concurrency=0'], [...without, '--test-concurrency', '1'], [...without, '--test-concurrency=auto']]) {
+    assert.throws(() => validateControlScriptTestScheduling(mutation), /test-scheduling/u);
+  }
+  const source = await readFile(new URL('./runPrCControlledHumanScriptCoverage.mjs', import.meta.url), 'utf8');
+  assert.match(source, /const args = buildControlScriptTestArguments\(tapPath, lcovPath\);/u);
+  assert.match(source, /validateControlScriptTestScheduling\(args\);\s*return args;/u);
+});
+
+test('Edge import safety uses an isolated canonical module identity without parent coverage aliases', async () => {
+  const source = await readFile(new URL('./prCControlledHumanEdgeDeploy.test.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /prCControlledHumanEdgeDeploy\.mjs[?#]/u);
+  assert.match(source, /new URL\('\.\/prCControlledHumanEdgeDeploy\.mjs', import\.meta\.url\)/u);
+  assert.match(source, /assert\.equal\(moduleUrl\.search, ''\)/u);
+  assert.match(source, /assert\.equal\(moduleUrl\.hash, ''\)/u);
+  assert.match(source, /const childEnvironment = Object\.fromEntries\(\s*\['SystemRoot', 'SYSTEMROOT', 'COMSPEC', 'TMP', 'TEMP', 'TMPDIR'\]/u);
+  assert.match(source, /spawnSync\(process\.execPath, \['--input-type=module'\],/u);
+  assert.match(source, /cwd: directory, env: childEnvironment, input: probe/u);
+  assert.match(source, /timeout: 10_000, maxBuffer: 64 \* 1024/u);
+  assert.match(source, /syncBuiltinESMExports\(\)/u);
+  assert.match(source, /assert\.equal\(blocked, before\)/u);
+  assert.match(source, /assert\.deepEqual\(await snapshot\(\), before\)/u);
+});
+
 test('coverage runner inventory is independently pinned and its import guard permits measured self-testing', async () => {
   assert.deepEqual([...CONTROL_SCRIPT_SOURCES], [
+    'scripts/checkPrCControlledHumanEdgeImports.mjs',
+    'scripts/checkPrCScoringLawDrift.mjs',
+    'scripts/prCControlledHumanEdgeDeploy.mjs',
+    'scripts/derivePrCControlledHumanBootstrap.mjs',
     'scripts/buildPrCControlledHumanPreparation.mjs',
     'scripts/capturePrCControlledHumanCheckpoint.mjs',
     'scripts/prCControlledHumanCredentialPreflight.mjs',
@@ -298,6 +370,9 @@ test('coverage runner inventory is independently pinned and its import guard per
     'scripts/runPrCControlledHumanScriptCoverage.mjs',
   ]);
   assert.deepEqual([...CONTROL_SCRIPT_TESTS], [
+    'scripts/checkPrCControlledHumanEdgeImports.test.mjs',
+    'scripts/checkPrCScoringLawDrift.test.mjs',
+    'scripts/prCControlledHumanEdgeDeploy.test.mjs',
     'scripts/prCControlledHumanPostgresTls.test.mjs',
     'scripts/prCControlledHumanEnvironment.test.mjs',
     'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
@@ -328,6 +403,11 @@ test('coverage runner inventory is independently pinned and its import guard per
     'password-non-string',
     'password-over-128',
     'production-entry-bootstrap-binding-failure',
+    'production-entry-current-empty-happy-path',
+    'production-entry-current-empty-null-installed-digest',
+    'production-entry-current-empty-orphan-mutable-row',
+    'production-entry-current-empty-statement-count-failure',
+    'production-entry-current-empty-wrong-installed-digest',
     'production-entry-database-begin-failure',
     'production-entry-database-close-failure',
     'production-entry-database-configuration-failure',

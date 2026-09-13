@@ -442,7 +442,7 @@
     },
     {
       "id": "scoring-drift",
-      "command": "git diff --exit-code 5433cad41721355e3ec5a29bc2f87772540c77b5 -- services/scoringEngine.ts services/scoringEngine.test.ts scripts/runScoringRegression.mjs",
+      "command": "node scripts/checkPrCScoringLawDrift.mjs",
       "environment": "controlled-git"
     }
   ],

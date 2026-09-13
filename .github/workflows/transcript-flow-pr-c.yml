@@ -418,6 +418,9 @@ jobs:
       - name: Install exact dependencies before protected values
         run: npm ci
 
+      - name: Verify exact local Edge import graph before protected values
+        run: node scripts/checkPrCControlledHumanEdgeImports.mjs
+
       - name: Require exact protected Edge phase secrets
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
@@ -486,21 +489,22 @@ jobs:
           npm run pr-c-controlled-human:preflight -- --output output/controlled-human/edge-preflight.json
 
       - name: Deploy only the allowlisted functions
+        id: edge_deploy
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_ACCESS_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for function_name in assess-command assess-v2-command enterprise-intelligence-command enterprise-intelligence-query studio-artifact-command studio-private-artifact-command tenant-context tenant-session pr-c-controlled-human-synthetic-generation; do
-            log_file="$RUNNER_TEMP/pr264-edge-${function_name}.log"
-            if ! supabase functions deploy "$function_name" --project-ref "$SUPABASE_PROJECT_REF" >"$log_file" 2>&1; then
-              node --input-type=module -e "import {rmSync} from 'node:fs'; rmSync(process.argv[1],{force:true})" "$log_file"
-              echo "::error::PR_C_CONTROLLED_HUMAN_EDGE_DEPLOYMENT_FAILED:${function_name}"
-              exit 1
-            fi
-            node --input-type=module -e "import {rmSync} from 'node:fs'; rmSync(process.argv[1],{force:true})" "$log_file"
-          done
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+        run: node scripts/prCControlledHumanEdgeDeploy.mjs --migration-preflight output/controlled-human/migration-preflight.json --migration-apply output/controlled-human/migration-apply.json --migration-verify output/controlled-human/migration-verify.json --provider-baseline output/controlled-human/provider-baseline.json --failure-output output/controlled-human/edge-deploy-failure.json
+
+      - name: Upload sanitized Edge deployment failure diagnostic
+        if: ${{ failure() && steps.edge_deploy.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-controlled-human-edge-deploy-failure-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/controlled-human/edge-deploy-failure.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Produce provider-attested deployment and runtime manifest
         env:
@@ -510,6 +514,7 @@ jobs:
         run: node scripts/producePrCControlledHumanEdgeDeploymentManifest.mjs --migration-preflight output/controlled-human/migration-preflight.json --migration-apply output/controlled-human/migration-apply.json --migration-verify output/controlled-human/migration-verify.json --preflight output/controlled-human/edge-preflight.json --provider-baseline output/controlled-human/provider-baseline.json --output output/controlled-human/edge-deployment.json
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ success() }}
         with:
           name: pr264-controlled-human-edge-deployment-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |

@@ -67,7 +67,7 @@ export const expectedPrCCommandRegistry = root => {
   const retainedPath = path.join(root, 'testing/process-lifecycle/contracts/pr-b-assertion-registry.json');
   const retained = JSON.parse(readFileSync(retainedPath, 'utf8')).commands.map(command => {
     if (command.id === 'scoring-drift') {
-      return { ...command, command: `git diff --exit-code ${PR_C_BASE_SHA} -- services/scoringEngine.ts services/scoringEngine.test.ts scripts/runScoringRegression.mjs` };
+      return { ...command, command: 'node scripts/checkPrCScoringLawDrift.mjs' };
     }
     if (command.id === 'pr-b-evidence-contract') {
       return { ...command, command: 'npm run test:transcript-flow:studio-evidence-contract:retained' };

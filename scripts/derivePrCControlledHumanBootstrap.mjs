@@ -19,7 +19,7 @@ import {
   loadMigration,
 } from './prCControlledHumanEnvironmentMigration.mjs';
 
-export const BOOTSTRAP_SCHEMA_VERSION = 'pr-c-controlled-human-bootstrap-bindings-1';
+export const BOOTSTRAP_SCHEMA_VERSION = 'pr-c-controlled-human-bootstrap-bindings-2';
 const SHA = /^[0-9a-f]{40}$/u;
 const FORBIDDEN_OUTPUT = /(?:postgres(?:ql)?:\/\/|password|service[_-]?role|database[_-]?(?:url|uri)|access[_-]?token|refresh[_-]?token|project[_-]?ref|exercise[_-]?id|[a-z0-9]{20}[.]supabase[.]co)/iu;
 
@@ -80,8 +80,24 @@ export function buildControlledHumanBootstrapBindings({ env, fixtureState, migra
     publicTargetDigest,
   };
   const exercise = deriveControlledHumanExerciseBinding(values, fixtureState);
-  const inventoryState = assertMigrationInventory(inventory, { ...values, ...exercise });
-  if (inventoryState !== 'pending') fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_PRIOR_TIP_REQUIRED');
+  const inventoryState = assertMigrationInventory(inventory, { ...values, ...exercise, migrationDigest: migration.digest });
+  let inventoryDisposition;
+  let observedMigrationTip;
+  let installedMigrationDigest;
+  if (inventoryState === 'pending') {
+    inventoryDisposition = 'prior_empty';
+    observedMigrationTip = PRIOR_MIGRATION_VERSION;
+    installedMigrationDigest = null;
+  } else if (inventoryState === 'current') {
+    const emptyCounts = value => value && Object.values(value).every(count => Number(count) === 0);
+    if (!emptyCounts(inventory.counts) || !emptyCounts(inventory.domainCounts) || Number(inventory.providerRows) !== 0
+      || Number(inventory.unsafeDeprovisionedRows) !== 0 || !Array.isArray(inventory.exerciseHistory) || inventory.exerciseHistory.length !== 0
+      || inventory.history?.version !== MIGRATION_VERSION || inventory.history?.statementCount !== 1
+      || inventory.history?.installedMigrationDigest !== migration.digest || inventory.history?.bootstrapMutableRows !== 0) fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_CURRENT_EMPTY_REQUIRED');
+    inventoryDisposition = 'current_empty';
+    observedMigrationTip = MIGRATION_VERSION;
+    installedMigrationDigest = migration.digest;
+  } else fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_INVENTORY_REJECTED');
   if (env.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT !== undefined && env.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT !== targetFingerprint) fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_TARGET_REJECTED');
   if (env.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST !== undefined && env.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST !== publicTargetDigest) fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_PUBLIC_TARGET_REJECTED');
   if (env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== undefined && env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== exercise.exerciseDigest) fail('PR_C_CONTROLLED_HUMAN_BOOTSTRAP_EXERCISE_REJECTED');
@@ -106,6 +122,9 @@ export function buildControlledHumanBootstrapBindings({ env, fixtureState, migra
     priorMigrationTip: PRIOR_MIGRATION_VERSION,
     migrationTip: MIGRATION_VERSION,
     migrationDigest: migration.digest,
+    inventoryDisposition,
+    observedMigrationTip,
+    installedMigrationDigest,
     targetFingerprint,
     publicTargetDigest,
     exerciseDigest: exercise.exerciseDigest,

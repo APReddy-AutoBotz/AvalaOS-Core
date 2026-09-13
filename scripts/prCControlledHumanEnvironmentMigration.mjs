@@ -11,6 +11,10 @@ export const MIGRATION_FILE='supabase/migrations/20260904120000_pr_c_controlled_
 export const MIGRATION_VERSION='20260904120000';
 export const PRIOR_MIGRATION_VERSION='20260831062024';
 export const MIGRATION_NAME='pr_c_controlled_human_exercise_authority';
+export const CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES=Object.freeze([
+  'exercises','recovery_authorities','persona_bindings','operation_events','resource_ownership',
+  'step_contracts','step_observations','action_bindings','action_anchors','synthetic_generation_receipts',
+]);
 const SHA=/^[0-9a-f]{40}$/u;const DIGEST=/^sha256:[0-9a-f]{64}$/u;const DEPLOY_ID=/^[0-9a-f]{24}$/u;
 const PREVIEW_ORIGIN='https://deploy-preview-264--avalaos-pilot.netlify.app';
 const DOMAIN_MULTIPLIERS=Object.freeze({assess_processes:1,assess_v2_cases:1,assess_v2_studio_handoffs:1,enterprise_module_handoffs:1,studio_artifacts:2,studio_source_packages:2,delivery_handoffs:0,delivery_packages:2,monitor_baselines:1,pilot_environments:1,pilot_tenants:1});
@@ -33,6 +37,9 @@ export function buildPreTipProviderCountSql(migrationSql){
   const relations=derivePreTipProviderRelations(migrationSql);
   return `select ${relations.map(name=>`(select count(*) from public.${name})`).join('+')} total`;
 }
+export function buildBootstrapMutableCountSql(){
+  return `select ${CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES.map(name=>`(select count(*) from public.pr_c_controlled_human_${name})`).join('+')} total`;
+}
 export function deriveMigrationContext(env,fixtureState,migration,checkout){
   const context=deriveContext(env,fixtureState,checkout);
   if(env.PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST!==migration.digest)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST_REJECTED');
@@ -46,13 +53,19 @@ export function assertMigrationInventory(inventory,context){
   if(!marker||marker.product_key!=='avalaos-core'||marker.environment_class!=='hosted_nonproduction_pilot'||marker.production_authorized!==false||marker.customer_data_authorized!==false||marker.real_provider_calls_authorized!==false)fail('PR_C_CONTROLLED_HUMAN_MARKER_MISMATCH');
   if(Number(inventory.providerRows)!==0)fail('PR_C_CONTROLLED_HUMAN_PROVIDER_STATE_REJECTED');
   if(Number(inventory.unsafeDeprovisionedRows)!==0)fail('PR_C_CONTROLLED_HUMAN_PARTIAL_RESET_REJECTED');
-  if(!inventory.history||!['version','name','statements'].every(column=>inventory.history.columns.includes(column)))fail('PR_C_CONTROLLED_HUMAN_MIGRATION_HISTORY_REJECTED');
+  const historyKeys=['version','name','columns','statementCount','installedMigrationDigest','bootstrapMutableRows'];
+  if(!inventory.history||JSON.stringify(Object.keys(inventory.history).sort())!==JSON.stringify(historyKeys.sort())
+    ||!Array.isArray(inventory.history.columns)||!['version','name','statements'].every(column=>inventory.history.columns.includes(column))
+    ||!Number.isSafeInteger(inventory.history.statementCount)||inventory.history.statementCount<1
+    ||!DIGEST.test(inventory.history.installedMigrationDigest??'')
+    ||!Number.isSafeInteger(inventory.history.bootstrapMutableRows)||inventory.history.bootstrapMutableRows<0)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_HISTORY_REJECTED');
   if(marker.migration_tip===PRIOR_MIGRATION_VERSION){
-    if(inventory.history.version!==PRIOR_MIGRATION_VERSION||inventory.schemaReady||Object.values(inventory.counts).some(value=>Number(value)!==0)||Object.values(inventory.domainCounts).some(value=>Number(value)!==0))fail('PR_C_CONTROLLED_HUMAN_MIGRATION_PRIOR_STATE_REJECTED');
+    if(inventory.history.version!==PRIOR_MIGRATION_VERSION||inventory.history.bootstrapMutableRows!==0||inventory.schemaReady||Object.values(inventory.counts).some(value=>Number(value)!==0)||Object.values(inventory.domainCounts).some(value=>Number(value)!==0))fail('PR_C_CONTROLLED_HUMAN_MIGRATION_PRIOR_STATE_REJECTED');
     return 'pending';
   }
   if(marker.migration_tip===MIGRATION_VERSION){
-    if(inventory.history.version!==MIGRATION_VERSION||inventory.history.name!==MIGRATION_NAME||!inventory.schemaReady)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_CURRENT_STATE_REJECTED');
+    if(inventory.history.version!==MIGRATION_VERSION||inventory.history.name!==MIGRATION_NAME||inventory.history.statementCount!==1
+      ||!DIGEST.test(context.migrationDigest??'')||inventory.history.installedMigrationDigest!==context.migrationDigest||!inventory.schemaReady)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_CURRENT_STATE_REJECTED');
     if(!Array.isArray(inventory.exerciseHistory))fail('PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED');
     let live=0;const digests=new Set();
     for(const exercise of inventory.exerciseHistory){
@@ -105,8 +118,12 @@ export class PostgresEnvironmentMigrationAdapter{
     const relation=(await this.client.query(`select to_regclass('supabase_migrations.schema_migrations') relation`)).rows[0].relation;
     if(!relation)fail('PR_C_CONTROLLED_HUMAN_MIGRATION_HISTORY_REJECTED');
     const columns=(await this.client.query(`select column_name from information_schema.columns where table_schema='supabase_migrations' and table_name='schema_migrations' order by column_name`)).rows.map(row=>row.column_name);
-    const latest=(await this.client.query(`select version,name from supabase_migrations.schema_migrations order by version desc limit 1`)).rows[0]??null;
+    const latest=(await this.client.query(`select version,name,cardinality(statements)::int statement_count,
+      case when cardinality(statements)=1 and array_lower(statements,1)=1
+        then 'sha256:'||encode(sha256(convert_to(statements[1],'UTF8')),'hex') else null end installed_migration_digest
+      from supabase_migrations.schema_migrations order by version desc limit 1`)).rows[0]??null;
     const schemaReady=(await this.client.query(`select to_regclass('public.pr_c_controlled_human_exercises') is not null and to_regprocedure('public.pr_c_controlled_human_public_attestation(text,text,text,text,text,text)') is not null ready`)).rows[0].ready;
+    const bootstrapMutableRows=schemaReady?Number((await this.client.query(buildBootstrapMutableCountSql())).rows[0].total):0;
     const providerState=schemaReady?(await this.client.query(`select public.pr_c_controlled_human_provider_state() state`)).rows[0].state:null;
     const providerRows=schemaReady
       ?Number(providerState.unsafeRows)+Number(providerState.providerEgress)+Number(providerState.providerCalls)
@@ -121,7 +138,7 @@ export class PostgresEnvironmentMigrationAdapter{
       (select count(*) from public.pilot_operations_environments environment join public.pr_c_controlled_human_exercises exercise on exercise.org_id=environment.org_id and exercise.workspace_id=environment.workspace_id where exercise.lifecycle='deprovisioned' and (environment.lifecycle<>'deactivated' or not environment.maintenance or not environment.read_only))+
       (select count(*) from public.pilot_operations_tenants tenant join public.pr_c_controlled_human_exercises exercise on exercise.org_id=tenant.org_id and exercise.workspace_id=tenant.workspace_id where exercise.lifecycle='deprovisioned' and tenant.lifecycle<>'deprovisioned')+
       (select count(*) from auth.sessions session join public.pr_c_controlled_human_persona_bindings binding on binding.auth_user_id=session.user_id join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id where exercise.lifecycle='deprovisioned') total`)).rows[0].total:0;
-    return{actualTargetFingerprint,marker,counts,domainCounts,providerRows,unsafeDeprovisionedRows,history:{version:latest?.version??null,name:latest?.name??null,columns},schemaReady,exerciseHistory};
+    return{actualTargetFingerprint,marker,counts,domainCounts,providerRows,unsafeDeprovisionedRows,history:{version:latest?.version??null,name:latest?.name??null,columns,statementCount:Number(latest?.statement_count??0),installedMigrationDigest:latest?.installed_migration_digest??null,bootstrapMutableRows},schemaReady,exerciseHistory};
   }
   async apply(context,migration){
     if(this.readOnly)fail('PR_C_CONTROLLED_HUMAN_READ_ONLY_MUTATION_REJECTED');

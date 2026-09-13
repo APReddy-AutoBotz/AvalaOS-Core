@@ -10,13 +10,13 @@
 import {
   decodeTranscriptFlowProjection,
   type TranscriptFlowProjection,
-} from './transcriptFlow/contracts';
+} from './transcriptFlow/contracts.ts';
 import {
   decodeDeliveryWorkspaceProjection,
   decodeMonitorApprovedBaselinesProjection,
   type DeliveryWorkspaceProjection,
   type MonitorApprovedBaselinesProjection,
-} from './deliveryMonitor/contracts';
+} from './deliveryMonitor/contracts.ts';
 
 export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';
 export const MODERNIZATION_MODEL_VERSION = 'modernization-disposition-1';

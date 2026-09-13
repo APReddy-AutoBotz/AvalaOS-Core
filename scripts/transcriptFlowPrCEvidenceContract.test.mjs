@@ -7,7 +7,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { runPrCEvidenceCommand } from './prCEvidenceCommandRunner.mjs';
-import { runtimeContextMatches, validatePrCRegistryStructure } from './transcriptFlowPrCEvidenceContract.mjs';
+import { expectedPrCCommandRegistry, runtimeContextMatches, validatePrCRegistryStructure } from './transcriptFlowPrCEvidenceContract.mjs';
 import { collectChangedPrCFiles, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const requiredIds = [
@@ -121,6 +121,21 @@ test('PR C evidence commands stream live output while retaining exact bounded by
     stderr: 'live stderr\n',
     error: null,
   });
+});
+
+test('command 80 is the standalone scoring-law source guard and cannot be replaced by the former raw diff', () => {
+  const expected = expectedPrCCommandRegistry(process.cwd());
+  assert.equal(expected.length, 80);
+  assert.deepEqual(expected.at(-1), {
+    id: 'scoring-drift', command: 'node scripts/checkPrCScoringLawDrift.mjs', environment: 'controlled-git',
+  });
+  assert.deepEqual(canonicalRegistry.commands, expected);
+  assert.equal(canonicalRegistry.assertions.length, 218);
+  assert.equal(canonicalRegistry.assertions.some(assertion => assertion.commandId === 'scoring-drift'), false);
+  const substituted = structuredClone(canonicalRegistry);
+  substituted.commands.at(-1).command = `git diff --exit-code ${PR_C_BASE_SHA} -- ${['services/scoringEngine.ts', 'services/scoringEngine.test.ts', 'scripts/runScoringRegression.mjs'].join(' ')}`;
+  const provenance = JSON.parse(readFileSync('testing/process-lifecycle/contracts/pr-c-source-provenance.json', 'utf8'));
+  assert.throws(() => validatePrCRegistryStructure(process.cwd(), substituted, provenance), /PR_C_COMMAND_SOURCE_CONTRACT/u);
 });
 
 test('PR C evidence command capture fails closed instead of retaining unbounded output', async () => {

@@ -8,8 +8,8 @@ import test from 'node:test';
 import {loadFixture} from './prCControlledHumanEnvironment.mjs';
 import {buildControlledHumanBootstrapBindings,runControlledHumanBootstrapCli} from './derivePrCControlledHumanBootstrap.mjs';
 import {
-  MIGRATION_NAME,MIGRATION_VERSION,PRIOR_MIGRATION_VERSION,assertMigrationInventory,buildPreTipProviderCountSql,derivePreTipProviderRelations,
-  deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify,
+  CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES,MIGRATION_NAME,MIGRATION_VERSION,PRIOR_MIGRATION_VERSION,assertMigrationInventory,buildBootstrapMutableCountSql,buildPreTipProviderCountSql,derivePreTipProviderRelations,
+  PostgresEnvironmentMigrationAdapter,deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify,
 } from './prCControlledHumanEnvironmentMigration.mjs';
 
 const head='83cab00bee481df22351302cc8c1c00bda3f1664';
@@ -18,10 +18,10 @@ const env={PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',
 const context=deriveMigrationContext(env,fixture,migration,{head,dirty:''});
 const marker=tip=>({product_key:'avalaos-core',environment_class:'hosted_nonproduction_pilot',migration_tip:tip,production_authorized:false,customer_data_authorized:false,real_provider_calls_authorized:false});
 const domainCounts=cycles=>({assess_processes:cycles,assess_v2_cases:cycles,assess_v2_studio_handoffs:cycles,enterprise_module_handoffs:cycles,studio_artifacts:2*cycles,studio_source_packages:2*cycles,delivery_handoffs:0,delivery_packages:2*cycles,monitor_baselines:cycles,pilot_environments:cycles,pilot_tenants:cycles});
-const inventory=(tip=PRIOR_MIGRATION_VERSION)=>({actualTargetFingerprint:context.targetFingerprint,marker:marker(tip),counts:{auth_users:0,profiles:0,organizations:0,workspaces:0},domainCounts:domainCounts(0),providerRows:'0',unsafeDeprovisionedRows:'0',history:{version:tip,name:tip===MIGRATION_VERSION?MIGRATION_NAME:'governed_delivery_monitor_pr_c',columns:['name','statements','version']},schemaReady:tip===MIGRATION_VERSION,exerciseHistory:[]});
+const inventory=(tip=PRIOR_MIGRATION_VERSION)=>({actualTargetFingerprint:context.targetFingerprint,marker:marker(tip),counts:{auth_users:0,profiles:0,organizations:0,workspaces:0},domainCounts:domainCounts(0),providerRows:'0',unsafeDeprovisionedRows:'0',history:{version:tip,name:tip===MIGRATION_VERSION?MIGRATION_NAME:'governed_delivery_monitor_pr_c',columns:['name','statements','version'],statementCount:1,installedMigrationDigest:tip===MIGRATION_VERSION?migration.digest:`sha256:${'2'.repeat(64)}`,bootstrapMutableRows:0},schemaReady:tip===MIGRATION_VERSION,exerciseHistory:[]});
 
 test('migration context binds exact source digest and checkout head',()=>{
-  assert.match(migration.digest,/^sha256:[0-9a-f]{64}$/u);
+  assert.equal(migration.digest,'sha256:9fae1ff1ba74c734d947cf03022207669abd8c2e92d227f6377358ab3e98490e');
   assert.throws(()=>deriveMigrationContext({...env,PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:`sha256:${'b'.repeat(64)}`},fixture,migration,{head,dirty:''}),/MIGRATION_DIGEST_REJECTED/u);
   assert.throws(()=>deriveMigrationContext(env,fixture,migration,{head:'b'.repeat(40),dirty:''}),/SHA_REJECTED/u);
   const relations=derivePreTipProviderRelations(migration.sql);
@@ -31,6 +31,16 @@ test('migration context binds exact source digest and checkout head',()=>{
   const query=buildPreTipProviderCountSql(migration.sql);
   assert.match(query,/enterprise_ai_command_receipts/u);
   assert.doesNotMatch(query,/pr_c_controlled_human_/u);
+  const created=[...migration.sql.matchAll(/CREATE TABLE public[.]pr_c_controlled_human_([a-z_]+)/gu)].map(match=>match[1]);
+  assert.deepEqual(CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES,[...created.filter(name=>name!=='intent_catalog')].sort((left,right)=>created.indexOf(left)-created.indexOf(right)));
+  assert.equal(Object.isFrozen(CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES),true);
+  const inspectionSource=PostgresEnvironmentMigrationAdapter.prototype.inspect.toString();
+  assert.match(inspectionSource,/cardinality\(statements\)=1 and array_lower\(statements,1\)=1/u);
+  assert.match(inspectionSource,/sha256\(convert_to\(statements\[1\],'UTF8'\)\)/u);
+  assert.doesNotMatch(inspectionSource,/select\s+version,name,statements(?:\s|,|from)/iu);
+  const mutableCountSql=buildBootstrapMutableCountSql();
+  for(const table of CONTROLLED_HUMAN_BOOTSTRAP_MUTABLE_TABLES)assert.match(mutableCountSql,new RegExp(`public[.]pr_c_controlled_human_${table}\\b`,'u'),table);
+  assert.doesNotMatch(mutableCountSql,/intent_catalog/u);
 });
 
 test('bootstrap derives only safe exact-head bindings from an empty prior-tip hosted target',()=>{
@@ -43,6 +53,8 @@ test('bootstrap derives only safe exact-head bindings from an empty prior-tip ho
   delete bootstrapEnv.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST;
   const result=buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}});
   assert.equal(result.status,'bindings_derived');
+  assert.equal(result.schemaVersion,'pr-c-controlled-human-bootstrap-bindings-2');
+  assert.equal(result.inventoryDisposition,'prior_empty');assert.equal(result.observedMigrationTip,PRIOR_MIGRATION_VERSION);assert.equal(result.installedMigrationDigest,null);
   assert.equal(result.exactHead,head);assert.equal(result.reviewHeadSha,head);
   assert.equal(result.priorMigrationTip,PRIOR_MIGRATION_VERSION);assert.equal(result.migrationTip,MIGRATION_VERSION);
   assert.equal(result.targetFingerprint,context.targetFingerprint);
@@ -51,8 +63,23 @@ test('bootstrap derives only safe exact-head bindings from an empty prior-tip ho
   assert.doesNotMatch(JSON.stringify(result),/never-emitted|database|project.?ref|exercise.?id|supabase[.]co/iu);
   assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:'package.json'}}),/BOOTSTRAP_DIRTY_CHECKOUT/u);
   assert.throws(()=>buildControlledHumanBootstrapBindings({env:{...bootstrapEnv,PR_C_CONTROLLED_HUMAN_SUPABASE_URL:'https://avalaos.com'},fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}}),/SUPABASE_TARGET_MISMATCH/u);
-  assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(MIGRATION_VERSION),checkout:{head,dirty:''}}),/BOOTSTRAP_PRIOR_TIP_REQUIRED/u);
+  const installed=buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(MIGRATION_VERSION),checkout:{head,dirty:''}});
+  assert.equal(installed.inventoryDisposition,'current_empty');assert.equal(installed.observedMigrationTip,MIGRATION_VERSION);assert.equal(installed.installedMigrationDigest,migration.digest);
   assert.throws(()=>buildControlledHumanBootstrapBindings({env:{...bootstrapEnv,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'f'.repeat(64)}`},fixtureState:fixture,migration,inventory:inventory(),checkout:{head,dirty:''}}),/BOOTSTRAP_PUBLIC_TARGET_REJECTED/u);
+});
+
+test('bootstrap current-empty route requires exact installed SQL and rejects every nonempty or foreign authority state',()=>{
+  const projectRef='abcdefghijklmnopqrst';
+  const bootstrapEnv={...env,PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF:projectRef,
+    PR_C_CONTROLLED_HUMAN_SUPABASE_URL:`https://${projectRef}.supabase.co`,
+    PR_C_CONTROLLED_HUMAN_DATABASE_URL:`postgresql://postgres:never-emitted@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`};
+  delete bootstrapEnv.PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST;
+  const reject=value=>assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:value,checkout:{head,dirty:''}}),/PR_C_CONTROLLED_HUMAN_/u);
+  for(const mutate of [value=>{value.history.installedMigrationDigest=`sha256:${'f'.repeat(64)}`},value=>{value.history.installedMigrationDigest=null},value=>{value.history.statementCount=2},value=>{delete value.history.bootstrapMutableRows},value=>{delete value.history},value=>{value.actualTargetFingerprint=`sha256:${'9'.repeat(64)}`},value=>{value.providerRows='1'},value=>{value.unsafeDeprovisionedRows='1'},value=>{value.counts.auth_users=1},value=>{value.counts.profiles=1},value=>{value.counts.organizations=1},value=>{value.counts.workspaces=1},value=>{value.domainCounts.monitor_baselines=1}]){const value=inventory(MIGRATION_VERSION);mutate(value);reject(value)}
+  const orphanRecoveryAuthority=inventory(MIGRATION_VERSION);orphanRecoveryAuthority.history.bootstrapMutableRows=1;reject(orphanRecoveryAuthority);
+  const accounted=lifecycle=>{const value=inventory(MIGRATION_VERSION);value.counts={auth_users:12,profiles:12,organizations:2,workspaces:3};value.domainCounts=domainCounts(1);value.exerciseHistory=[{exercise_digest:context.exerciseDigest,release_sha:context.releaseSha,review_head_sha:context.reviewHeadSha,deploy_id:context.deployId,deploy_origin:context.deployOrigin,target_fingerprint:context.targetFingerprint,public_target_digest:context.publicTargetDigest,persona_manifest_digest:context.personaManifestDigest,fixture_manifest_digest:context.fixtureManifestDigest,migration_tip:context.migrationTip,lifecycle}];return value};
+  for(const lifecycle of ['active','read_only','deprovisioned'])reject(accounted(lifecycle));
+  assert.throws(()=>buildControlledHumanBootstrapBindings({env:bootstrapEnv,fixtureState:fixture,migration,inventory:inventory(MIGRATION_VERSION),checkout:{head:'f'.repeat(40),dirty:''}}),/BOOTSTRAP_SHA_REJECTED/u);
 });
 
 test('bootstrap CLI sanitizes every adapter failure while preserving safe successful output and exclusive files',async()=>{
@@ -99,7 +126,8 @@ test('bootstrap Git failure cannot relay child stderr before the sanitized calle
 
 test('migration inventory accepts only exact prior empty or exact current accounted state',()=>{
   assert.equal(assertMigrationInventory(inventory(),context),'pending');assert.equal(assertMigrationInventory(inventory(MIGRATION_VERSION),context),'current');
-  for(const mutate of [value=>{value.marker.environment_class='production'},value=>{value.providerRows='1'},value=>{value.unsafeDeprovisionedRows='1'},value=>{value.counts.auth_users=1},value=>{value.domainCounts.monitor_baselines=1},value=>{value.history.version='20260828120000'},value=>{value.schemaReady=true}]){const value=structuredClone(inventory());mutate(value);assert.throws(()=>assertMigrationInventory(value,context),/PR_C_CONTROLLED_HUMAN_/u)}
+  for(const mutate of [value=>{value.marker.environment_class='production'},value=>{value.providerRows='1'},value=>{value.unsafeDeprovisionedRows='1'},value=>{value.counts.auth_users=1},value=>{value.domainCounts.monitor_baselines=1},value=>{value.history.version='20260828120000'},value=>{value.history.statementCount=0},value=>{value.history.installedMigrationDigest=null},value=>{delete value.history},value=>{value.schemaReady=true}]){const value=structuredClone(inventory());mutate(value);assert.throws(()=>assertMigrationInventory(value,context),/PR_C_CONTROLLED_HUMAN_/u)}
+  for(const mutate of [value=>{value.history.installedMigrationDigest=`sha256:${'f'.repeat(64)}`},value=>{value.history.installedMigrationDigest=null},value=>{value.history.statementCount=2},value=>{value.history.bootstrapMutableRows=-1},value=>{delete value.history.bootstrapMutableRows},value=>{value.history.columns=['name','version']}]){const value=inventory(MIGRATION_VERSION);mutate(value);assert.throws(()=>assertMigrationInventory(value,context),/PR_C_CONTROLLED_HUMAN_/u)}
   const retained=inventory(MIGRATION_VERSION);retained.counts={auth_users:12,profiles:12,organizations:2,workspaces:3};retained.domainCounts=domainCounts(1);retained.exerciseHistory=[{exercise_digest:`sha256:${'c'.repeat(64)}`,release_sha:'c'.repeat(40),review_head_sha:'c'.repeat(40),deploy_id:'cccccccccccccccccccccccc',deploy_origin:context.deployOrigin,target_fingerprint:context.targetFingerprint,public_target_digest:context.publicTargetDigest,persona_manifest_digest:`sha256:${'d'.repeat(64)}`,fixture_manifest_digest:`sha256:${'e'.repeat(64)}`,migration_tip:context.migrationTip,lifecycle:'deprovisioned'}];assert.equal(assertMigrationInventory(retained,context),'current');
   retained.exerciseHistory[0].lifecycle='active';assert.throws(()=>assertMigrationInventory(retained,context),/HISTORY_REJECTED/u);
   retained.exerciseHistory[0].lifecycle='deprovisioned';retained.exerciseHistory[0].review_head_sha='f'.repeat(40);assert.throws(()=>assertMigrationInventory(retained,context),/HISTORY_REJECTED/u);

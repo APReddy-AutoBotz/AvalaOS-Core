@@ -4,7 +4,14 @@ import test from 'node:test';
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 import { CONTROLLED_HUMAN_PHASE_SECRETS } from './prCControlledHumanWorkflowSecrets.mjs';
 import { PREFLIGHT_FAILURE_PHASES } from './prCControlledHumanCredentialPreflight.mjs';
-import { CONTROL_SCRIPT_SCENARIOS, CONTROL_SCRIPT_SCENARIOS_BY_REPORT, CONTROL_SCRIPT_SCENARIO_PRODUCERS, CONTROL_SCRIPT_SOURCES } from './runPrCControlledHumanScriptCoverage.mjs';
+import {
+  CONTROL_SCRIPT_SCENARIOS,
+  CONTROL_SCRIPT_SCENARIOS_BY_REPORT,
+  CONTROL_SCRIPT_SCENARIO_PRODUCERS,
+  CONTROL_SCRIPT_SOURCES,
+  CONTROL_SCRIPT_TEST_TIMEOUT_MS,
+  CONTROL_SCRIPT_TESTS,
+} from './runPrCControlledHumanScriptCoverage.mjs';
 
 const PRIMARY = '.github/workflows/transcript-flow-pr-c.yml';
 const RECOVERY = '.github/workflows/pr264-controlled-human-recover.yml';
@@ -13,6 +20,7 @@ const DOCUMENTS = {
   matrix: 'docs/quality/verification-command-matrix.md',
   plan: 'docs/planning/governed-multisource-transcript-module-handoff-plan.md',
   walkthrough: 'docs/quality/governed-delivery-monitor-pr-c-controlled-human-walkthrough.md',
+  coverage: 'testing/process-lifecycle/contracts/pr-c-control-script-coverage.md',
 };
 const CA = 'node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
 const countCa = workflow => Object.values(workflow.jobs).flatMap(job => job.steps ?? []).filter(step => step.run === CA).length;
@@ -36,6 +44,8 @@ async function snapshot() {
       entryScenarioCount: CONTROL_SCRIPT_SCENARIOS_BY_REPORT['credential-preflight-entry-scenarios.json'].length,
       reportCount: Object.keys(CONTROL_SCRIPT_SCENARIO_PRODUCERS).length,
       sourceCount: CONTROL_SCRIPT_SOURCES.length,
+      testCount: CONTROL_SCRIPT_TESTS.length,
+      timeoutMs: CONTROL_SCRIPT_TEST_TIMEOUT_MS,
     },
   };
 }
@@ -75,16 +85,29 @@ function validate({ documents, primary, recovery, registry, diagnosticTopology }
   assert.equal(diagnosticTopology.phases.length, 27);
   assert.equal(new Set(diagnosticTopology.phases).size, 27);
   assert.deepEqual(diagnosticTopology.phases.filter(value => value.startsWith('NONPAT_')), semanticPhases);
-  assert.equal(diagnosticTopology.scenarioCount, 41);
-  assert.equal(diagnosticTopology.entryScenarioCount, 27);
+  assert.equal(diagnosticTopology.scenarioCount, 46);
+  assert.equal(diagnosticTopology.entryScenarioCount, 32);
   assert.equal(diagnosticTopology.reportCount, 8);
-  assert.equal(diagnosticTopology.sourceCount, 13);
+  assert.equal(diagnosticTopology.sourceCount, 17);
+  assert.equal(diagnosticTopology.testCount, 19);
+  assert.equal(diagnosticTopology.timeoutMs, 900_000);
   const diagnosticContract = paragraph(documents.walkthrough, 'The diagnostic continuation replaces');
   for (const token of semanticPhases) assert.ok(diagnosticContract.includes(`\`${token}\``));
   assert.match(diagnosticContract, /exact 27-token phase allowlist/u);
-  assert.match(diagnosticContract, /requires 41 scenarios, including 27 entry scenarios/u);
-  assert.match(paragraph(documents.plan, 'Non-PAT diagnostics must separately'), /41-scenario control inventory, including 27 entry scenarios/u);
-  assert.match(documents.matrix, /41 actual scenarios, including 27 entry scenarios, across eight reports and thirteen sources/u);
+  assert.match(diagnosticContract, /requires 46 scenarios, including 32 entry scenarios/u);
+  assert.match(paragraph(documents.plan, 'Non-PAT diagnostics must separately'), /46-scenario control inventory, including 32 entry scenarios/u);
+  assert.match(documents.matrix, /46 actual scenarios, including 32 entry scenarios, across eight reports, seventeen sources and nineteen tests/u);
+  const coverageBoundary = paragraph(documents.coverage, 'This feature-owned gate measures');
+  assert.match(coverageBoundary, /exactly seventeen governed production JavaScript control sources/u);
+  assert.match(coverageBoundary, /exactly nineteen test files/u);
+  assert.match(paragraph(documents.coverage, '- The inventory contains'), /exactly the seventeen source paths/u);
+  assert.match(paragraph(documents.coverage, '- The independently pinned inventory'), /exactly 46 owned scenarios across eight reports, including 32 production-entrypoint scenarios/u);
+  const coverageTimeout = paragraph(documents.coverage, 'The whole nineteen-file measured child');
+  assert.match(coverageTimeout, /independently pinned 900,000 ms harness-containment timeout/u);
+  assert.match(coverageTimeout, /does not alter a product, provider, database, browser, or deployment performance threshold/u);
+  const coverageRollback = paragraph(documents.coverage, 'If this corrective gate must be rolled back');
+  assert.match(coverageRollback, /forward-fix the seventeen-source contract or its 900,000 ms whole-child containment/u);
+  assert.match(coverageRollback, /180,000 ms whole-child timeout are known insufficient/u);
 }
 
 test('active controlled-human documentation binds actual registry, direct-job, secret and CA topology', async () => {
@@ -102,9 +125,14 @@ test('active documentation rejects stale counts, reusable topology and false Edg
     ['walkthrough', 'Only the access token is exclusive to the Edge deployment job', 'Project reference and access token are Edge-only'],
     ['matrix', 'six ordered normal phase labels', 'five ordered phase labels'],
     ['walkthrough', 'exact 27-token phase allowlist', 'exact 21-token phase allowlist'],
-    ['walkthrough', 'requires 41 scenarios, including 27 entry scenarios', 'requires 35 scenarios, including 21 entry scenarios'],
-    ['plan', '41-scenario control inventory, including 27 entry scenarios', '35-scenario control inventory, including 21 entry scenarios'],
-    ['matrix', '41 actual scenarios, including 27 entry scenarios', '35 actual scenarios, including 21 entry scenarios'],
+    ['walkthrough', 'requires 46 scenarios, including 32 entry scenarios', 'requires 35 scenarios, including 21 entry scenarios'],
+    ['plan', '46-scenario control inventory, including 32 entry scenarios', '35-scenario control inventory, including 21 entry scenarios'],
+    ['matrix', 'across eight reports, seventeen sources and nineteen tests', 'across eight reports, sixteen sources and eighteen tests'],
+    ['coverage', 'exactly seventeen governed production JavaScript control sources', 'exactly sixteen governed production JavaScript control sources'],
+    ['coverage', 'exactly nineteen test files', 'exactly eighteen test files'],
+    ['coverage', 'exactly 46 owned scenarios across eight reports, including 32 production-entrypoint scenarios', 'exactly 41 owned scenarios across eight reports, including 27 production-entrypoint scenarios'],
+    ['coverage', 'independently pinned 900,000 ms harness-containment timeout', 'independently pinned 180,000 ms harness-containment timeout'],
+    ['coverage', 'forward-fix the seventeen-source contract or its 900,000 ms whole-child containment', 'forward-fix the sixteen-source contract or its 900,000 ms whole-child containment'],
   ]) {
     const changed = structuredClone(source);
     assert.ok(changed.documents[key].includes(before));
@@ -128,6 +156,8 @@ test('documentation contract detects executable registry or CA topology drift in
     value => { value.diagnosticTopology.entryScenarioCount -= 1; },
     value => { value.diagnosticTopology.reportCount -= 1; },
     value => { value.diagnosticTopology.sourceCount -= 1; },
+    value => { value.diagnosticTopology.testCount -= 1; },
+    value => { value.diagnosticTopology.timeoutMs = 180_000; },
   ]) {
     const changed = structuredClone(source);
     mutate(changed);

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -18,9 +20,87 @@ const playwrightModuleUrl = pathToFileURL(path.join(root, 'node_modules/@playwri
 const playwrightCli = path.join(root, 'node_modules/@playwright/test/cli.js');
 const profileModuleUrl = pathToFileURL(path.join(root, 'scripts/acceptanceExecutionProfile.mjs')).href;
 const previewContractUrl = pathToFileURL(path.join(root, 'scripts/previewBrowserEvidenceContract.mjs')).href;
+const metadataFixtureAuthority = new WeakMap();
+const METADATA_FIXTURE_PREFIX = 'avalaos-playwright-metadata-';
+const METADATA_CACHE_DIRECTORY = 'playwright-transform-cache';
+
+const samePath = (left, right) => process.platform === 'win32'
+  ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
+  : path.resolve(left) === path.resolve(right);
+const inside = (owner, target) => {
+  const relative = path.relative(owner, target);
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+};
+const rejectFixture = code => { throw new Error(`PLAYWRIGHT_METADATA_FIXTURE_REJECTED:${code}`); };
+
+const inspectMetadataFixtureRoot = fixture => {
+  const state = metadataFixtureAuthority.get(fixture);
+  if (!state?.active) rejectFixture('authority');
+  let temporaryRootReal;
+  try {
+    const temporaryStat = lstatSync(state.temporaryRoot);
+    if (!temporaryStat.isDirectory() || temporaryStat.isSymbolicLink()) rejectFixture('root');
+    temporaryRootReal = realpathSync(state.temporaryRoot);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('PLAYWRIGHT_METADATA_FIXTURE_REJECTED:')) throw error;
+    rejectFixture('root');
+  }
+  if (!samePath(temporaryRootReal, state.temporaryRoot) || !inside(state.tempBaseReal, temporaryRootReal)
+    || !path.basename(temporaryRootReal).startsWith(METADATA_FIXTURE_PREFIX)) rejectFixture('root');
+  return { state, temporaryRootReal };
+};
+
+const assertOwnedMetadataCache = (fixture, candidate = undefined) => {
+  const { state, temporaryRootReal } = inspectMetadataFixtureRoot(fixture);
+  const cache = path.resolve(candidate ?? state.cacheRoot);
+  if (!samePath(cache, state.cacheRoot) || !inside(temporaryRootReal, cache)) rejectFixture('cache-path');
+  let cacheReal;
+  try {
+    const cacheStat = lstatSync(cache);
+    if (!cacheStat.isDirectory() || cacheStat.isSymbolicLink()) rejectFixture('cache-link');
+    cacheReal = realpathSync(cache);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('PLAYWRIGHT_METADATA_FIXTURE_REJECTED:')) throw error;
+    rejectFixture('cache-path');
+  }
+  if (!samePath(cacheReal, cache) || !inside(temporaryRootReal, cacheReal)) rejectFixture('cache-path');
+  return cacheReal;
+};
+
+const createMetadataFixture = () => {
+  const tempBaseReal = realpathSync(tmpdir());
+  const temporaryRoot = mkdtempSync(path.join(tempBaseReal, METADATA_FIXTURE_PREFIX));
+  const cacheRoot = path.join(temporaryRoot, METADATA_CACHE_DIRECTORY);
+  const fixture = Object.freeze({ temporaryRoot, cacheRoot });
+  metadataFixtureAuthority.set(fixture, { active: true, tempBaseReal, temporaryRoot, cacheRoot });
+  try {
+    mkdirSync(cacheRoot, { mode: 0o700 });
+    assertOwnedMetadataCache(fixture);
+    return fixture;
+  } catch (error) {
+    try { rmSync(temporaryRoot, { recursive: true, force: true }); } catch { /* Retain the original fixed failure. */ }
+    metadataFixtureAuthority.get(fixture).active = false;
+    throw error;
+  }
+};
+
+const buildMetadataChildEnvironment = (baseEnvironment, fixture) => ({
+  ...baseEnvironment,
+  PWTEST_CACHE_DIR: assertOwnedMetadataCache(fixture),
+});
+
+const cleanupMetadataFixture = fixture => {
+  const { state, temporaryRootReal } = inspectMetadataFixtureRoot(fixture);
+  if (existsSync(state.cacheRoot)) assertOwnedMetadataCache(fixture);
+  try { rmSync(temporaryRootReal, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
+  catch { rejectFixture('cleanup'); }
+  if (existsSync(temporaryRootReal)) rejectFixture('cleanup');
+  state.active = false;
+};
 
 test('installed Playwright preserves only sanitized acceptance metadata under simulated GitHub Actions', () => {
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'avalaos-playwright-metadata-'));
+  const metadataFixture = createMetadataFixture();
+  const temporaryRoot = metadataFixture.temporaryRoot;
   const resolvedTempBase = path.resolve(tmpdir());
   const resolvedTemporaryRoot = path.resolve(temporaryRoot);
   assert.equal(
@@ -122,7 +202,7 @@ export default defineConfig({
   metadata: { authorityMarker: 'synthetic-adverse-control' },
 });
 `);
-    const environment = {
+    const environment = buildMetadataChildEnvironment({
       ...process.env,
       CI: 'true',
       GITHUB_ACTIONS: 'true',
@@ -143,7 +223,7 @@ export default defineConfig({
       EXPECTED_RELEASE_SHA: head,
       HOSTED_PILOT_URL: 'https://deploy-preview-264--avalaos-pilot.netlify.app',
       NETLIFY_DEPLOY_ID: deployId,
-    };
+    }, metadataFixture);
     const spawnPlaywright = targetConfig => spawnSync(process.execPath, [playwrightCli, 'test', `--config=${targetConfig}`, '--workers=1'], {
       cwd: temporaryRoot,
       env: environment,
@@ -200,11 +280,72 @@ export default defineConfig({
       }), { flag: 'wx' });
     }
   } finally {
-    if (
-      resolvedTemporaryRoot.startsWith(`${resolvedTempBase}${path.sep}`)
-      && path.basename(resolvedTemporaryRoot).startsWith('avalaos-playwright-metadata-')
-    ) {
-      rmSync(resolvedTemporaryRoot, { recursive: true, force: true });
-    }
+    cleanupMetadataFixture(metadataFixture);
   }
+});
+
+test('metadata fixture overrides inherited Playwright cache with one exact owned directory', () => {
+  const fixture = createMetadataFixture();
+  try {
+    const environment = buildMetadataChildEnvironment({ PWTEST_CACHE_DIR: path.join(tmpdir(), 'hostile-inherited-cache'), RETAINED: 'yes' }, fixture);
+    assert.equal(environment.PWTEST_CACHE_DIR, fixture.cacheRoot);
+    assert.equal(environment.RETAINED, 'yes');
+    assert.equal(assertOwnedMetadataCache(fixture), fixture.cacheRoot);
+  } finally {
+    cleanupMetadataFixture(fixture);
+  }
+});
+
+test('metadata cache containment rejects path escape and symlink without touching unrelated data', () => {
+  const fixture = createMetadataFixture();
+  const unrelatedRoot = mkdtempSync(path.join(tmpdir(), 'avalaos-playwright-metadata-unrelated-'));
+  const unrelatedMarker = path.join(unrelatedRoot, 'must-remain.txt');
+  writeFileSync(unrelatedMarker, 'unrelated');
+  try {
+    assert.throws(() => assertOwnedMetadataCache(fixture, unrelatedRoot), /PLAYWRIGHT_METADATA_FIXTURE_REJECTED:cache-path/u);
+    rmSync(fixture.cacheRoot, { recursive: true, force: true });
+    symlinkSync(unrelatedRoot, fixture.cacheRoot, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      assert.throws(() => assertOwnedMetadataCache(fixture), /PLAYWRIGHT_METADATA_FIXTURE_REJECTED:cache-link/u);
+      assert.throws(() => cleanupMetadataFixture(fixture), /PLAYWRIGHT_METADATA_FIXTURE_REJECTED:cache-link/u);
+      assert.equal(readFileSync(unrelatedMarker, 'utf8'), 'unrelated');
+    } finally {
+      if (existsSync(fixture.cacheRoot)) unlinkSync(fixture.cacheRoot);
+      mkdirSync(fixture.cacheRoot, { mode: 0o700 });
+    }
+  } finally {
+    cleanupMetadataFixture(fixture);
+    rmSync(unrelatedRoot, { recursive: true, force: true });
+  }
+});
+
+test('metadata fixture cleanup removes only its exact owned root and rejects stale or forged authority', () => {
+  const fixture = createMetadataFixture();
+  const unrelatedRoot = mkdtempSync(path.join(tmpdir(), 'avalaos-playwright-metadata-unrelated-'));
+  const unrelatedMarker = path.join(unrelatedRoot, 'must-remain.txt');
+  writeFileSync(unrelatedMarker, 'unrelated');
+  let removed = false;
+  try {
+    assert.throws(() => cleanupMetadataFixture(Object.freeze({ ...fixture })), /PLAYWRIGHT_METADATA_FIXTURE_REJECTED:authority/u);
+    assert.equal(existsSync(fixture.temporaryRoot), true);
+    cleanupMetadataFixture(fixture);
+    removed = true;
+    assert.equal(existsSync(fixture.temporaryRoot), false);
+    assert.equal(readFileSync(unrelatedMarker, 'utf8'), 'unrelated');
+    assert.throws(() => cleanupMetadataFixture(fixture), /PLAYWRIGHT_METADATA_FIXTURE_REJECTED:authority/u);
+  } finally {
+    if (!removed) cleanupMetadataFixture(fixture);
+    rmSync(unrelatedRoot, { recursive: true, force: true });
+  }
+
+  const failedExecutionFixture = createMetadataFixture();
+  const failedExecutionRoot = failedExecutionFixture.temporaryRoot;
+  assert.throws(() => {
+    try {
+      assert.equal(1, 0, 'synthetic failed CLI status');
+    } finally {
+      cleanupMetadataFixture(failedExecutionFixture);
+    }
+  }, /synthetic failed CLI status/u);
+  assert.equal(existsSync(failedExecutionRoot), false);
 });

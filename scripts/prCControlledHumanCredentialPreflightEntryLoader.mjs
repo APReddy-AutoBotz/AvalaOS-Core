@@ -2,7 +2,11 @@ const PG_FIXTURE_URL = 'pr-c-credential-preflight-fixture:pg';
 const SUPABASE_FIXTURE_URL = 'pr-c-credential-preflight-fixture:supabase';
 
 const pgFixtureSource = String.raw`
-import { appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, readFileSync } from 'node:fs';
+
+const migrationDigest = 'sha256:' + createHash('sha256').update(readFileSync('supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql')).digest('hex');
+const currentMode = () => (process.env.PR_C_PREFLIGHT_FIXTURE_MODE ?? '').startsWith('current-empty-');
 
 const record = value => {
   const target = process.env.PR_C_PREFLIGHT_FIXTURE_TRACE_PATH;
@@ -87,7 +91,7 @@ class Client {
       return { rows: [{
         product_key: 'avalaos-core',
         environment_class: 'hosted_nonproduction_pilot',
-        migration_tip: '20260831062024',
+        migration_tip: currentMode() ? '20260904120000' : '20260831062024',
         production_authorized: false,
         customer_data_authorized: false,
         real_provider_calls_authorized: false,
@@ -111,11 +115,36 @@ class Client {
     }
     if (normalized.includes('from supabase_migrations.schema_migrations')) {
       record('inspect-history-tip');
-      return { rows: [{ version: '20260831062024', name: 'accepted-pr-c-tip' }] };
+      if (!currentMode()) return { rows: [{ version: '20260831062024', name: 'accepted-pr-c-tip', statement_count: 1, installed_migration_digest: 'sha256:2222222222222222222222222222222222222222222222222222222222222222' }] };
+      const mode = process.env.PR_C_PREFLIGHT_FIXTURE_MODE;
+      return { rows: [{
+        version: '20260904120000',
+        name: 'pr_c_controlled_human_exercise_authority',
+        statement_count: mode === 'current-empty-statement-count-failure' ? 2 : 1,
+        installed_migration_digest: mode === 'current-empty-null-installed-digest' ? null
+          : mode === 'current-empty-wrong-installed-digest' ? 'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+          : migrationDigest,
+      }] };
     }
     if (normalized.includes("to_regclass('public.pr_c_controlled_human_exercises')")) {
       record('inspect-schema-ready');
-      return { rows: [{ ready: false }] };
+      return { rows: [{ ready: currentMode() }] };
+    }
+    if (normalized.includes('from public.pr_c_controlled_human_recovery_authorities') && normalized.includes('from public.pr_c_controlled_human_synthetic_generation_receipts')) {
+      record('inspect-bootstrap-mutable-count');
+      return { rows: [{ total: process.env.PR_C_PREFLIGHT_FIXTURE_MODE === 'current-empty-orphan-mutable-row' ? 1 : 0 }] };
+    }
+    if (normalized.includes('public.pr_c_controlled_human_provider_state()')) {
+      record('inspect-provider-state');
+      return { rows: [{ state: { unsafeRows: 0, providerEgress: 0, providerCalls: 0 } }] };
+    }
+    if (normalized.includes('from public.pr_c_controlled_human_exercises order by created_at')) {
+      record('inspect-exercise-history');
+      return { rows: [] };
+    }
+    if (normalized.includes("exercise.lifecycle='deprovisioned'")) {
+      record('inspect-unsafe-deprovisioned');
+      return { rows: [{ total: 0 }] };
     }
     if (normalized.startsWith('select (select count(*) from public.')) {
       record('inspect-provider-count');

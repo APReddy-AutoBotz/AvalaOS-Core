@@ -4,14 +4,14 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { bootstrapCheckoutIdentity, buildControlledHumanBootstrapBindings } from './derivePrCControlledHumanBootstrap.mjs';
+import { BOOTSTRAP_SCHEMA_VERSION, bootstrapCheckoutIdentity, buildControlledHumanBootstrapBindings } from './derivePrCControlledHumanBootstrap.mjs';
 import { canonicalJson, loadFixture, sha256, validateSupabaseTargetTuple } from './prCControlledHumanEnvironment.mjs';
-import { loadMigration, PostgresEnvironmentMigrationAdapter } from './prCControlledHumanEnvironmentMigration.mjs';
+import { loadMigration, MIGRATION_VERSION, PRIOR_MIGRATION_VERSION, PostgresEnvironmentMigrationAdapter } from './prCControlledHumanEnvironmentMigration.mjs';
 import { loadPinnedSupabaseRootCa } from './prCControlledHumanPostgresTls.mjs';
 import { CONTROLLED_HUMAN_PHASE_SECRETS, validateControlledHumanWorkflowSecrets } from './prCControlledHumanWorkflowSecrets.mjs';
 import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 
-export const PREFLIGHT_SCHEMA = 'pr264-controlled-human-credential-preflight-1';
+export const PREFLIGHT_SCHEMA = 'pr264-controlled-human-credential-preflight-2';
 export const PREFLIGHT_JOB = 'controlled_human_credentials_preflight';
 export const PREFLIGHT_LABEL = 'pr264-controlled-human-credentials-preflight';
 export const PREFLIGHT_OUTPUT = 'output/pr-c-controlled-human-credential-preflight';
@@ -58,9 +58,9 @@ const HMAC = /^hmac-sha256:[0-9a-f]{64}$/u;
 const RUN = /^[1-9][0-9]{0,19}$/u;
 const DEPLOY = /^[0-9a-f]{24}$/u;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[.]\d{3}Z$/u;
-const DOMAIN = 'avalaos/pr264/credential-transport/preflight/v1\0';
+const DOMAIN = 'avalaos/pr264/credential-transport/preflight/v2\0';
 const IDENTITY_KEYS = ['repository', 'workflowPath', 'workflowRef', 'jobKey', 'event', 'command', 'nodeMajor', 'exactHead', 'baseSha', 'runId', 'runAttempt', 'ciRunId', 'ciRunAttempt', 'ciArtifactName', 'ciArtifactDigest', 'deployId', 'previewOrigin', 'environmentName', 'environmentClass', 'exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'governedFileCount', 'governedWorkingTreeDigest'];
-const CHECKS = Object.freeze({ requiredNonPatFieldsPresent: true, passwordBundleStructureValid: true, sourceUnchanged: true, pinnedTls: true, exactTargetAndExercise: true, priorTipAndEmptySyntheticState: true, databaseTransactionReadOnly: true, databaseTransactionRolledBack: true, previewIdentityValid: true });
+const CHECKS = Object.freeze({ requiredNonPatFieldsPresent: true, passwordBundleStructureValid: true, sourceUnchanged: true, pinnedTls: true, exactTargetAndExercise: true, validatedMigrationAndEmptySyntheticState: true, databaseTransactionReadOnly: true, databaseTransactionRolledBack: true, previewIdentityValid: true });
 const NOT_RUN = Object.freeze(['deployment', 'human-testing', 'service-credential-authentication', 'temporary-token-authentication', 'real-provider-verification']);
 const ZERO_MUTATIONS = Object.freeze({ migrations: 0, databaseWrites: 0, authMutations: 0, functionDeployments: 0, providerCalls: 0 });
 const fail = code => { throw new Error(`PR264_CREDENTIAL_PREFLIGHT_REJECTED:${code}`); };
@@ -77,6 +77,13 @@ const exactKeys = (value, keys, code) => {
 };
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const trusted = value => typeof value === 'string' && value.toLowerCase() === 'apreddy-autobotz';
+const validateInventoryDisposition = ({ inventoryDisposition, observedMigrationTip, installedMigrationDigest }) => {
+  if (inventoryDisposition === 'prior_empty') {
+    if (observedMigrationTip !== PRIOR_MIGRATION_VERSION || installedMigrationDigest !== null) fail('inventory-disposition');
+  } else if (inventoryDisposition === 'current_empty') {
+    if (observedMigrationTip !== MIGRATION_VERSION || !DIGEST.test(installedMigrationDigest ?? '')) fail('inventory-disposition');
+  } else fail('inventory-disposition');
+};
 
 export function validatePreflightIdentity(identity) {
   exactKeys(identity, IDENTITY_KEYS, 'identity-shape');
@@ -206,12 +213,13 @@ export async function observePreflightPreview(identity, fetchImpl = fetch) {
 }
 
 const validateUnsigned = unsigned => {
-  exactKeys(unsigned, ['schemaVersion', 'status', 'identity', 'bootstrapDigest', 'priorMigrationTip', 'checks', 'zeroMutations', 'notRun', 'observedAt'], 'report-shape');
+  exactKeys(unsigned, ['schemaVersion', 'status', 'identity', 'bootstrapDigest', 'priorMigrationTip', 'inventoryDisposition', 'observedMigrationTip', 'installedMigrationDigest', 'checks', 'zeroMutations', 'notRun', 'observedAt'], 'report-shape');
   validatePreflightIdentity(unsigned.identity);
   if (unsigned.schemaVersion !== PREFLIGHT_SCHEMA || unsigned.status !== 'credential_transport_passed'
-    || !DIGEST.test(unsigned.bootstrapDigest) || unsigned.priorMigrationTip !== '20260831062024'
+    || !DIGEST.test(unsigned.bootstrapDigest) || unsigned.priorMigrationTip !== PRIOR_MIGRATION_VERSION
     || !same(unsigned.checks, CHECKS) || !same(unsigned.zeroMutations, ZERO_MUTATIONS) || !same(unsigned.notRun, NOT_RUN)
     || !TIMESTAMP.test(unsigned.observedAt) || !Number.isFinite(Date.parse(unsigned.observedAt))) fail('report');
+  validateInventoryDisposition(unsigned);
 };
 const signatureFor = (unsigned, key) => {
   if (typeof key !== 'string' || key.trim() !== key || key.length < 32 || key.length > 4096) fail('signing-authority');
@@ -223,13 +231,19 @@ export function createCredentialPreflightReport({ identity, bootstrap, inputChec
   if (bootstrapDigest !== sha256(bootstrapPayload) || bootstrap.exactHead !== identity.exactHead
     || bootstrap.reviewHeadSha !== identity.exactHead || bootstrap.exerciseDigest !== identity.exerciseDigest
     || bootstrap.targetFingerprint !== identity.targetFingerprint || bootstrap.publicTargetDigest !== identity.publicTargetDigest
-    || bootstrap.status !== 'bindings_derived' || bootstrap.productionAuthorized !== false
+    || bootstrap.schemaVersion !== BOOTSTRAP_SCHEMA_VERSION || bootstrap.status !== 'bindings_derived'
+    || bootstrap.priorMigrationTip !== PRIOR_MIGRATION_VERSION || bootstrap.migrationTip !== MIGRATION_VERSION || !DIGEST.test(bootstrap.migrationDigest ?? '')
+    || (bootstrap.inventoryDisposition === 'current_empty' && bootstrap.installedMigrationDigest !== bootstrap.migrationDigest)
+    || bootstrap.productionAuthorized !== false
     || bootstrap.customerDataAuthorized !== false || bootstrap.realProviderCallsAuthorized !== false) fail('bootstrap-binding');
+  validateInventoryDisposition(bootstrap);
   const unsigned = {
     schemaVersion: PREFLIGHT_SCHEMA, status: 'credential_transport_passed', identity,
     bootstrapDigest, priorMigrationTip: bootstrap.priorMigrationTip,
+    inventoryDisposition: bootstrap.inventoryDisposition, observedMigrationTip: bootstrap.observedMigrationTip,
+    installedMigrationDigest: bootstrap.installedMigrationDigest,
     checks: { ...inputChecks, ...databaseChecks, ...previewChecks, sourceUnchanged, pinnedTls,
-      exactTargetAndExercise: true, priorTipAndEmptySyntheticState: true },
+      exactTargetAndExercise: true, validatedMigrationAndEmptySyntheticState: true },
     zeroMutations: ZERO_MUTATIONS, notRun: NOT_RUN, observedAt,
   };
   validateUnsigned(unsigned);
@@ -237,15 +251,18 @@ export function createCredentialPreflightReport({ identity, bootstrap, inputChec
 }
 
 export function verifyCredentialPreflightReport(report, expected, signingKey) {
-  exactKeys(report, ['schemaVersion', 'status', 'identity', 'bootstrapDigest', 'priorMigrationTip', 'checks', 'zeroMutations', 'notRun', 'observedAt', 'signature'], 'signed-report-shape');
+  exactKeys(report, ['schemaVersion', 'status', 'identity', 'bootstrapDigest', 'priorMigrationTip', 'inventoryDisposition', 'observedMigrationTip', 'installedMigrationDigest', 'checks', 'zeroMutations', 'notRun', 'observedAt', 'signature'], 'signed-report-shape');
   const { signature, ...unsigned } = report;
   validateUnsigned(unsigned);
-  exactKeys(expected, ['identity', 'bootstrapDigest', 'runStartedAt', 'runCompletedAt'], 'independent-binding');
+  exactKeys(expected, ['identity', 'bootstrapDigest', 'inventoryDisposition', 'observedMigrationTip', 'installedMigrationDigest', 'runStartedAt', 'runCompletedAt'], 'independent-binding');
   validatePreflightIdentity(expected.identity);
   if (!same(expected.identity, report.identity) || !DIGEST.test(expected.bootstrapDigest) || expected.bootstrapDigest !== report.bootstrapDigest
+    || expected.inventoryDisposition !== report.inventoryDisposition || expected.observedMigrationTip !== report.observedMigrationTip
+    || expected.installedMigrationDigest !== report.installedMigrationDigest
     || !Number.isFinite(Date.parse(expected.runStartedAt)) || !Number.isFinite(Date.parse(expected.runCompletedAt))
     || Date.parse(expected.runStartedAt) > Date.parse(expected.runCompletedAt)
     || Date.parse(report.observedAt) < Date.parse(expected.runStartedAt) || Date.parse(report.observedAt) > Date.parse(expected.runCompletedAt)) fail('independent-binding');
+  validateInventoryDisposition(expected);
   if (!HMAC.test(signature) || !timingSafeEqual(Buffer.from(signature.slice(12), 'hex'), Buffer.from(signatureFor(unsigned, signingKey).slice(12), 'hex'))) fail('signature');
   return Object.freeze({ status: 'verified_credential_transport_only', exactHead: report.identity.exactHead, runId: report.identity.runId, runAttempt: report.identity.runAttempt, reportDigest: sha256(report) });
 }

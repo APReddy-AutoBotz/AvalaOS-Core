@@ -8,7 +8,12 @@ import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA } 
 
 export const CONTROL_SCRIPT_COVERAGE_COMMAND = 'node scripts/runPrCControlledHumanScriptCoverage.mjs';
 export const CONTROL_SCRIPT_COVERAGE_ENTRY = 'scripts/runPrCControlledHumanScriptCoverage.mjs';
+export const CONTROL_SCRIPT_TEST_TIMEOUT_MS = 900_000;
 export const CONTROL_SCRIPT_SOURCES = Object.freeze([
+  'scripts/checkPrCControlledHumanEdgeImports.mjs',
+  'scripts/checkPrCScoringLawDrift.mjs',
+  'scripts/prCControlledHumanEdgeDeploy.mjs',
+  'scripts/derivePrCControlledHumanBootstrap.mjs',
   'scripts/buildPrCControlledHumanPreparation.mjs',
   'scripts/capturePrCControlledHumanCheckpoint.mjs',
   'scripts/prCControlledHumanCredentialPreflight.mjs',
@@ -24,6 +29,9 @@ export const CONTROL_SCRIPT_SOURCES = Object.freeze([
   'scripts/runPrCControlledHumanScriptCoverage.mjs',
 ]);
 export const CONTROL_SCRIPT_TESTS = Object.freeze([
+  'scripts/checkPrCControlledHumanEdgeImports.test.mjs',
+  'scripts/checkPrCScoringLawDrift.test.mjs',
+  'scripts/prCControlledHumanEdgeDeploy.test.mjs',
   'scripts/prCControlledHumanPostgresTls.test.mjs',
   'scripts/prCControlledHumanEnvironment.test.mjs',
   'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
@@ -54,6 +62,11 @@ export const CONTROL_SCRIPT_SCENARIOS = Object.freeze([
   'password-non-string',
   'password-over-128',
   'production-entry-bootstrap-binding-failure',
+  'production-entry-current-empty-happy-path',
+  'production-entry-current-empty-null-installed-digest',
+  'production-entry-current-empty-orphan-mutable-row',
+  'production-entry-current-empty-statement-count-failure',
+  'production-entry-current-empty-wrong-installed-digest',
   'production-entry-database-begin-failure',
   'production-entry-database-close-failure',
   'production-entry-database-configuration-failure',
@@ -103,6 +116,11 @@ export const CONTROL_SCRIPT_SCENARIOS_BY_REPORT = Object.freeze({
   'control-script-coverage-runner-scenarios.json': Object.freeze(['control-script-coverage-runner-self-test']),
   'credential-preflight-entry-scenarios.json': Object.freeze([
     'production-entry-bootstrap-binding-failure',
+    'production-entry-current-empty-happy-path',
+    'production-entry-current-empty-null-installed-digest',
+    'production-entry-current-empty-orphan-mutable-row',
+    'production-entry-current-empty-statement-count-failure',
+    'production-entry-current-empty-wrong-installed-digest',
     'production-entry-database-begin-failure',
     'production-entry-database-close-failure',
     'production-entry-database-configuration-failure',
@@ -182,6 +200,23 @@ export function parseControlScriptTap(tap) {
     fail(`tap-status-${summary.tests}-${summary.pass}-${summary.fail}-${summary.cancelled}-${summary.skipped}-${summary.todo}`);
   }
   return Object.freeze(summary);
+}
+
+const validateControlScriptTestLaunch = child => {
+  if (!child || typeof child !== 'object' || Array.isArray(child)) fail('test-process');
+  if (child.error && child.error.code === 'ETIMEDOUT') fail('test-process-timeout');
+  if (child.error) fail('test-process');
+};
+
+export function validateControlScriptTestChild(child) {
+  validateControlScriptTestLaunch(child);
+  if (child.status !== 0 || child.signal !== null || child.stdout !== '' || child.stderr !== '') fail('test-process');
+  return true;
+}
+
+export function validateControlScriptTestCompletion(child, tap) {
+  validateControlScriptTestChild(child);
+  return parseControlScriptTap(tap);
 }
 
 export function parseControlScriptLcov(lcov, inventory, root = process.cwd()) {
@@ -341,6 +376,26 @@ export const buildControlScriptTestEnvironment = (scenarioDirectory, root, empty
   return result;
 };
 
+export function validateControlScriptTestScheduling(args) {
+  if (!Array.isArray(args) || args.some(arg => typeof arg !== 'string')) fail('test-scheduling');
+  const scheduling = args.filter(arg => arg.startsWith('--test-concurrency'));
+  if (scheduling.length !== 1 || scheduling[0] !== '--test-concurrency=1') fail('test-scheduling');
+  return true;
+}
+
+export function buildControlScriptTestArguments(tapPath, lcovPath) {
+  const args = [
+    '--experimental-test-coverage',
+    '--test-concurrency=1',
+    '--test-reporter=tap', `--test-reporter-destination=${tapPath}`,
+    '--test-reporter=lcov', `--test-reporter-destination=${lcovPath}`,
+    ...CONTROL_SCRIPT_SOURCES.map(source => `--test-coverage-include=${source}`),
+    '--test', ...CONTROL_SCRIPT_TESTS,
+  ];
+  validateControlScriptTestScheduling(args);
+  return args;
+}
+
 export function runControlScriptCoverage(root = process.cwd()) {
   const entryPath = normalize(path.relative(realpathSync(root), realpathSync(path.resolve(process.argv[1] ?? ''))));
   if (process.argv.length !== 2 || entryPath !== CONTROL_SCRIPT_COVERAGE_ENTRY
@@ -368,28 +423,21 @@ export function runControlScriptCoverage(root = process.cwd()) {
   const lcovPath = path.join(outputDirectory, 'node-test.lcov');
   const inventory = buildControlScriptSourceInventory(root);
   const startedInventory = JSON.stringify(inventory);
-  const args = [
-    '--experimental-test-coverage',
-    '--test-reporter=tap', `--test-reporter-destination=${tapPath}`,
-    '--test-reporter=lcov', `--test-reporter-destination=${lcovPath}`,
-    ...CONTROL_SCRIPT_SOURCES.map(source => `--test-coverage-include=${source}`),
-    '--test', ...CONTROL_SCRIPT_TESTS,
-  ];
+  const args = buildControlScriptTestArguments(tapPath, lcovPath);
   try {
     const child = spawnSync(process.execPath, args, {
       cwd: root, env: buildControlScriptTestEnvironment(scenarioDirectory, root, emptyGitConfigPath), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-      timeout: 180_000, windowsHide: true,
+      timeout: CONTROL_SCRIPT_TEST_TIMEOUT_MS, windowsHide: true,
     });
+    validateControlScriptTestLaunch(child);
     const tap = readFileSync(tapPath, 'utf8');
     const lcov = readFileSync(lcovPath, 'utf8');
-    if (child.error && child.error.code === 'ETIMEDOUT') fail('test-process-timeout');
     const failedTestTitles = [...tap.matchAll(/^not ok [0-9]+ - (.+)$/gmu)].map(match => match[1]);
     if (failedTestTitles.length > 0) {
       const safeTitles = failedTestTitles.map(title => /^[\x20-\x7e]{1,200}$/u.test(title) ? title : 'redacted-test-title');
       process.stderr.write(`PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ${JSON.stringify(safeTitles)}\n`);
     }
-    const testSummary = parseControlScriptTap(tap);
-    if (child.status !== 0 || child.signal !== null || child.error || child.stdout !== '' || child.stderr !== '') fail('test-process');
+    const testSummary = validateControlScriptTestCompletion(child, tap);
     const scenario = readControlScriptScenarios(scenarioDirectory);
     const sources = parseControlScriptLcov(lcov, inventory, root);
     if (JSON.stringify(buildControlScriptSourceInventory(root)) !== startedInventory) fail('source-changed');

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { sha256 } from './prCControlledHumanEnvironment.mjs';
-import { PostgresEnvironmentMigrationAdapter, loadMigration } from './prCControlledHumanEnvironmentMigration.mjs';
+import { MIGRATION_VERSION, PRIOR_MIGRATION_VERSION, PostgresEnvironmentMigrationAdapter, loadMigration } from './prCControlledHumanEnvironmentMigration.mjs';
 import { CONTROLLED_HUMAN_PHASE_SECRETS, CONTROLLED_HUMAN_SECRET_SENTINEL, validateControlledHumanWorkflowSecrets } from './prCControlledHumanWorkflowSecrets.mjs';
 import { PR_C_BASE_SHA, PR_C_WORKFLOW_PATH } from './transcriptFlowPrCEvidenceScope.mjs';
 import {
@@ -46,23 +46,70 @@ const event = { action: 'labeled', label: { name: PREFLIGHT_LABEL }, sender: { l
 } };
 const identity = derivePreflightIdentity(env, event, source);
 const fixtureState = { personas: [{ key: 'requester' }, { key: 'reviewer' }] };
-const bootstrapPayload = { status: 'bindings_derived', exactHead: head, reviewHeadSha: head,
-  exerciseDigest: identity.exerciseDigest, targetFingerprint: identity.targetFingerprint, publicTargetDigest,
-  priorMigrationTip: '20260831062024', productionAuthorized: false, customerDataAuthorized: false, realProviderCallsAuthorized: false };
-const bootstrap = { ...bootstrapPayload, bootstrapDigest: sha256(bootstrapPayload) };
-const makeReport = () => createCredentialPreflightReport({ identity, bootstrap,
+const fixtureMigrationDigest = `sha256:${'9'.repeat(64)}`;
+const makeBootstrap = (inventoryDisposition = 'prior_empty', overrides = {}) => {
+  const bootstrapPayload = { schemaVersion: 'pr-c-controlled-human-bootstrap-bindings-2', status: 'bindings_derived', exactHead: head, reviewHeadSha: head,
+    exerciseDigest: identity.exerciseDigest, targetFingerprint: identity.targetFingerprint, publicTargetDigest,
+    priorMigrationTip: PRIOR_MIGRATION_VERSION, migrationTip: MIGRATION_VERSION, migrationDigest: fixtureMigrationDigest,
+    inventoryDisposition, observedMigrationTip: inventoryDisposition === 'current_empty' ? MIGRATION_VERSION : PRIOR_MIGRATION_VERSION,
+    installedMigrationDigest: inventoryDisposition === 'current_empty' ? fixtureMigrationDigest : null,
+    productionAuthorized: false, customerDataAuthorized: false, realProviderCallsAuthorized: false, ...overrides };
+  return { ...bootstrapPayload, bootstrapDigest: sha256(bootstrapPayload) };
+};
+const bootstrap = makeBootstrap();
+const makeReport = (selectedBootstrap = bootstrap) => createCredentialPreflightReport({ identity, bootstrap: selectedBootstrap,
   inputChecks: validateNonPatPreflightInputs(env, fixtureState), databaseChecks: { databaseTransactionReadOnly: true, databaseTransactionRolledBack: true },
   previewChecks: { previewIdentityValid: true }, sourceUnchanged: true, pinnedTls: true,
   observedAt: '2026-09-08T01:00:30.000Z', signingKey: key });
-const expected = { identity, bootstrapDigest: bootstrap.bootstrapDigest, runStartedAt: '2026-09-08T01:00:00.000Z', runCompletedAt: '2026-09-08T01:01:00.000Z' };
+const makeExpected = selectedBootstrap => ({ identity, bootstrapDigest: selectedBootstrap.bootstrapDigest,
+  inventoryDisposition: selectedBootstrap.inventoryDisposition, observedMigrationTip: selectedBootstrap.observedMigrationTip,
+  installedMigrationDigest: selectedBootstrap.installedMigrationDigest,
+  runStartedAt: '2026-09-08T01:00:00.000Z', runCompletedAt: '2026-09-08T01:01:00.000Z' });
+const expected = makeExpected(bootstrap);
 
 test('credential preflight signs only the fixed exact runtime and independent bootstrap envelope', () => {
   const report = makeReport();
   assert.equal(verifyCredentialPreflightReport(report, expected, key).status, 'verified_credential_transport_only');
+  assert.equal(report.schemaVersion, 'pr264-controlled-human-credential-preflight-2');
+  assert.equal(report.inventoryDisposition, 'prior_empty');
+  assert.equal(report.observedMigrationTip, PRIOR_MIGRATION_VERSION);
+  assert.equal(report.installedMigrationDigest, null);
+  assert.equal(report.checks.validatedMigrationAndEmptySyntheticState, true);
+  assert.equal('priorTipAndEmptySyntheticState' in report.checks, false);
   assert.deepEqual(report.zeroMutations, { migrations: 0, databaseWrites: 0, authMutations: 0, functionDeployments: 0, providerCalls: 0 });
   assert.ok(report.notRun.includes('human-testing'));
   assert.ok(report.notRun.includes('service-credential-authentication'));
   for (const name of CONTROLLED_HUMAN_PHASE_SECRETS.preflight) assert.equal(JSON.stringify(report).includes(env[name]), false, name);
+});
+
+test('credential preflight accepts independently bound prior-empty and current-empty states and rejects relabeling or v1 evidence', () => {
+  const currentBootstrap = makeBootstrap('current_empty');
+  const currentReport = makeReport(currentBootstrap);
+  assert.equal(verifyCredentialPreflightReport(currentReport, makeExpected(currentBootstrap), key).status, 'verified_credential_transport_only');
+  assert.equal(currentReport.observedMigrationTip, MIGRATION_VERSION);
+  assert.equal(currentReport.installedMigrationDigest, fixtureMigrationDigest);
+
+  for (const selectedBootstrap of [
+    makeBootstrap('current_empty', { installedMigrationDigest: null }),
+    makeBootstrap('current_empty', { installedMigrationDigest: `sha256:${'8'.repeat(64)}` }),
+    makeBootstrap('current_empty', { observedMigrationTip: PRIOR_MIGRATION_VERSION }),
+    makeBootstrap('prior_empty', { installedMigrationDigest: fixtureMigrationDigest }),
+    makeBootstrap('prior_empty', { observedMigrationTip: MIGRATION_VERSION }),
+    makeBootstrap('prior_empty', { schemaVersion: 'pr-c-controlled-human-bootstrap-bindings-1' }),
+  ]) assert.throws(() => makeReport(selectedBootstrap), /bootstrap-binding|inventory-disposition/u);
+
+  assert.throws(() => verifyCredentialPreflightReport(currentReport, expected, key), /independent-binding/u);
+  const incompleteExpected = { ...makeExpected(currentBootstrap) };
+  delete incompleteExpected.installedMigrationDigest;
+  assert.throws(() => verifyCredentialPreflightReport(currentReport, incompleteExpected, key), /independent-binding/u);
+  const v1 = structuredClone(currentReport);
+  v1.schemaVersion = 'pr264-controlled-human-credential-preflight-1';
+  assert.throws(() => verifyCredentialPreflightReport(v1, makeExpected(currentBootstrap), key), /report/u);
+  const relabeled = structuredClone(currentReport);
+  relabeled.inventoryDisposition = 'prior_empty';
+  relabeled.observedMigrationTip = PRIOR_MIGRATION_VERSION;
+  relabeled.installedMigrationDigest = null;
+  assert.throws(() => verifyCredentialPreflightReport(relabeled, makeExpected(currentBootstrap), key));
 });
 
 test('runtime authority rejects unrelated events, actors, jobs, workflows and stale source before credential use', () => {

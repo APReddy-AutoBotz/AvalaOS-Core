@@ -68,13 +68,19 @@ const requiredScripts = [
   'test:transcript-flow:delivery-monitor-adversarial',
   'test:transcript-flow:delivery-monitor-evidence-contract',
   'test:transcript-flow:delivery-monitor-evidence',
+  'test:pr-c-scoring-law-drift',
   'test:pr-c-controlled-human-source',
   'pr-c-controlled-human:bootstrap-bindings',
   'pr-c-controlled-human:compact-comment',
 ];
 for (const name of requiredScripts) assert.equal(typeof scripts[name], 'string', `missing package script ${name}`);
+assert.equal(scripts['test:pr-c-scoring-law-drift'], 'node scripts/checkPrCScoringLawDrift.mjs', 'scoring-law guard package command must remain exact');
 const sourceCommandSegments = scripts['test:pr-c-controlled-human-source'].split(' && ');
-const sourceNodeTests = sourceCommandSegments[0].split(' ');
+const importPreflightCommand = 'node scripts/checkPrCControlledHumanEdgeImports.mjs';
+assert.equal(sourceCommandSegments[0], importPreflightCommand,
+  'exact local import graph must fail before any retained source or database test');
+assert.equal(sourceCommandSegments.filter(segment => segment === importPreflightCommand).length, 1);
+const sourceNodeTests = sourceCommandSegments[1].split(' ');
 assert.deepEqual(sourceNodeTests.slice(0, 2), ['node', '--test']);
 const requiredControlScriptCoverageCommands = [
   'node --test scripts/runPrCControlledHumanScriptCoverage.test.mjs',
@@ -87,6 +93,8 @@ for (const command of requiredControlScriptCoverageCommands) {
     `the controlled-human source command must execute ${command} exactly once`);
 }
 for (const requiredTest of [
+  'scripts/checkPrCControlledHumanEdgeImports.test.mjs',
+  'scripts/prCControlledHumanEdgeDeploy.test.mjs',
   'scripts/prCControlledHumanPostgresTls.test.mjs',
   'scripts/prCControlledHumanEnvironment.test.mjs',
   'scripts/prCControlledHumanEnvironmentMigration.test.mjs',
@@ -296,6 +304,8 @@ for (const file of [
   'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/fixture-registry.json',
   'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json',
   'scripts/buildTranscriptFlowPrCRegistry.mjs',
+  'scripts/checkPrCScoringLawDrift.mjs',
+  'scripts/checkPrCScoringLawDrift.test.mjs',
   'scripts/transcriptFlowPrCEvidenceScope.mjs',
   'scripts/transcriptFlowPrCExecutionIdentity.mjs',
   'scripts/transcriptFlowPrCExecutionIdentity.test.mjs',

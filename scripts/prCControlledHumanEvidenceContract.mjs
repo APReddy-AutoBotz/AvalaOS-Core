@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { collectEdgeImportGraph, CONTROLLED_HUMAN_EDGE_FUNCTIONS } from './checkPrCControlledHumanEdgeImports.mjs';
 
 export const PREPARATION_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-controlled-human-preparation-3';
 export const EDGE_MANIFEST_SCHEMA_VERSION = 'governed-delivery-monitor-pr-c-edge-deployment-manifest-3';
@@ -95,17 +96,7 @@ export const canonicalJson = value => {
 export const sha256Digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 export const canonicalDigest = value => sha256Digest(canonicalJson(value));
 
-export const REQUIRED_EDGE_FUNCTIONS = Object.freeze([
-  'assess-command',
-  'assess-v2-command',
-  'enterprise-intelligence-command',
-  'enterprise-intelligence-query',
-  'studio-artifact-command',
-  'studio-private-artifact-command',
-  'tenant-context',
-  'tenant-session',
-  'pr-c-controlled-human-synthetic-generation',
-]);
+export const REQUIRED_EDGE_FUNCTIONS = CONTROLLED_HUMAN_EDGE_FUNCTIONS;
 export const CONTROLLED_HUMAN_MIGRATION_PATH = 'supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql';
 export const CONTROLLED_HUMAN_MIGRATION_TIP = '20260904120000';
 export const CONTROLLED_HUMAN_PRIOR_MIGRATION_TIP = '20260831062024';
@@ -329,8 +320,12 @@ const sourceFiles = (directory, prefix) => {
 };
 
 export const buildRequiredEdgeSourceManifest = root => REQUIRED_EDGE_FUNCTIONS.map(name => {
-  const paths = [...sourceFiles(path.join(root, 'supabase/functions/_shared'), 'supabase/functions/_shared'),
-    ...sourceFiles(path.join(root, `supabase/functions/${name}`), `supabase/functions/${name}`)].sort();
+  // Retain the existing shared-directory coverage, but also own every reachable
+  // external service/type dependency used by the actual deployed entry point.
+  const graph = collectEdgeImportGraph(root, `supabase/functions/${name}/index.ts`);
+  const paths = [...new Set([...sourceFiles(path.join(root, 'supabase/functions/_shared'), 'supabase/functions/_shared'),
+    ...sourceFiles(path.join(root, `supabase/functions/${name}`), `supabase/functions/${name}`),
+    ...graph.map(record => record.path)])].sort();
   assert(paths.some(relative => relative === `supabase/functions/${name}/index.ts`), `PR_C_CH_EDGE_ENTRY:${name}`);
   const records = paths.map(relative => ({ path: relative, digest: sha256Digest(readFileSync(path.join(root, relative))) }));
   return { name, sourceDigest: canonicalDigest(records) };
