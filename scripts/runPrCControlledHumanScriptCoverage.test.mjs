@@ -29,6 +29,7 @@ import {
   verifyControlScriptCoverageMeasurement,
   PR_C_GIT_255_FSCK_MSG_IDS,
   classifyCredentialPreflightFsckFailureForTest,
+  classifyCredentialPreflightFsckStdoutForTest,
   isCredentialPreflightFsckFailureCode,
 } from './runPrCControlledHumanScriptCoverage.mjs';
 import {
@@ -344,7 +345,7 @@ not ok 2 - after hook
         : `error: refs/heads/fixture-${index}: ${camel}: fixed detail\n`;
     const category = `MSG_${identifier}`;
     assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), category);
-    const token = `PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:${category}`;
+    const token = `PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:${category}:EMPTY`;
     assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
       { status: 1, stdout: '', stderr, error: null, signal: null })), token);
     assert.equal(isCredentialPreflightFsckFailureCode(token), true);
@@ -361,8 +362,9 @@ not ok 2 - after hook
     ['error: packed-refs line 17: badPackedRefEntry: fixed detail\n', 'MSG_BAD_PACKED_REF_ENTRY'],
     ['error: packed-refs: emptyPackedRefsFile: fixed detail\n', 'MSG_EMPTY_PACKED_REFS_FILE'],
   ]) assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), category);
+  assert.equal(classifyCredentialPreflightFsckFailureForTest(''), 'EMPTY');
   for (const stderr of [
-    '', Buffer.from([0xff]), 'unstructured badTree text\n', `error in tree ${objectId}: notKnown: badTree detail\n`,
+    Buffer.from([0xff]), 'unstructured badTree text\n', `error in tree ${objectId}: notKnown: badTree detail\n`,
     `error: object ${objectId}: notKnown: badTree detail\n`, `error: refs/heads/badTree: fixed detail\n`,
     'error: fixed badTree detail without message id\n', 'fatal: fixed badTree detail\n',
     'error: packed-refs.badTree: fixed detail\n', 'error: packed-refs line 0: badPackedRefEntry: fixed detail\n',
@@ -370,6 +372,40 @@ not ok 2 - after hook
     `warning in tree ${objectId}: badTree: warning only\n`, `${badTree}fatal: fixed failure\n`,
     `error in tree ${objectId}: badTree: fixed\u0000detail\n`, `error: fixed\u0085detail\n`,
   ]) assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), 'UNKNOWN');
+  const described = `${objectId} (HEAD:fixtures/example)`;
+  const broken = `broken link from    blob ${objectId}\n              to    tree ${objectId}\n`;
+  const stdoutFamilies = [
+    ['', 'EMPTY'], [`missing blob ${objectId}\n`, 'MISSING'], [broken, 'BROKEN_LINK'],
+    [`unreachable tree ${objectId}\n`, 'UNREACHABLE'], [`dangling commit ${objectId}\n`, 'DANGLING'],
+    [`root ${objectId}\n`, 'ROOT'], [`tagged commit ${objectId} (release-1) in ${objectId}\n`, 'TAGGED'],
+    [`${broken}missing tag ${objectId}\n`, 'BROKEN_LINK_AND_MISSING'],
+    [`missing blob ${objectId}\ndangling commit ${objectId}\n`, 'MISSING_WITH_INFO'],
+    [`${broken}root ${objectId}\n`, 'BROKEN_LINK_WITH_INFO'],
+    [`${broken}missing blob ${objectId}\nunreachable tree ${objectId}\n`, 'BROKEN_LINK_AND_MISSING_WITH_INFO'],
+    [`dangling commit ${objectId}\nroot ${objectId}\n`, 'MULTIPLE_INFORMATIONAL'],
+  ];
+  for (const [stdout, family] of stdoutFamilies) assert.equal(classifyCredentialPreflightFsckStdoutForTest(stdout),family);
+  for (const stdout of [
+    Buffer.from([0xff]), `broken link from    blob ${objectId}\n`, `              to    tree ${objectId}\n`,
+    `broken link from   blob ${objectId}\n              to    tree ${objectId}\n`,
+    `broken link from    blob ${objectId}\n             to    tree ${objectId}\n`,
+    `missing unknown ${objectId} (unterminated\n`, `missing blob ${objectId}\nprivate-canary\n`,
+    `missing blob ${objectId}\r\n`, `missing blob ${objectId}\n\n`, `missing blob ${objectId}\u0085\n`,
+    `missing blob ${'A'.repeat(40)}\n`, `missing object ${objectId}\n`, `missing blob ${objectId} ()\n`,
+    `missing blob ${described}\n`, `missing blob ${objectId}`, `tagged commit ${objectId} () in ${objectId}\n`,
+    `tagged commit ${objectId} (release label) in ${objectId}\n`, `tagged commit ${objectId} (release{1}) in ${objectId}\n`,
+    'x'.repeat(4 * 1024 * 1024 + 1),
+  ]) assert.equal(classifyCredentialPreflightFsckStdoutForTest(stdout),'UNKNOWN');
+  assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+    { status: 8, stdout: broken, stderr: '', error: null, signal: null })),
+  'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:8:EMPTY:BROKEN_LINK');
+  for (const [stdout,stderr,expected] of [
+    [Buffer.from(''),badTree,'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:8:MSG_BAD_TREE:UNKNOWN'],
+    ['',Buffer.from(''),'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:8:UNKNOWN:EMPTY'],
+    [null,null,'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:8:UNKNOWN:UNKNOWN'],
+    [17,23,'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:8:UNKNOWN:UNKNOWN'],
+  ]) assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+    { status: 8, stdout, stderr, error: null, signal: null })),expected);
   assert.deepEqual(assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
     { status: 0, stdout: '', stderr: '', error: null, signal: null }), { status: 0, stdout: '' });
   assert.equal(assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
@@ -385,9 +421,12 @@ not ok 2 - after hook
   ]) assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs, result)), expected);
   assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(['status', '--short'],
     { status: 1, stdout: '', stderr: badTree, error: null, signal: null })), 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:status:STATUS');
-  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_NOT_IN_GIT_255'), false);
-  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:0:UNKNOWN'), false);
-  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:256:UNKNOWN'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_NOT_IN_GIT_255:EMPTY'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:0:UNKNOWN:EMPTY'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:256:UNKNOWN:EMPTY'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:UNKNOWN:NOT_A_FAMILY'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:UNKNOWN'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:UNKNOWN:EMPTY:INJECTED'), false);
   assert(!failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
     { status: 7, stdout: '', stderr: 'private-canary', error: null, signal: null })).includes('private-canary'));
   const startupHookTap = hookTap.replace('before hook', 'owned startup hook')
@@ -401,7 +440,7 @@ not ok 2 - after hook
     'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
   assert.equal(projectControlScriptTapFailures(gitStartupHookTap, process.cwd(), 1).failures[0].code,
     'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
-  const fsckStartupToken = 'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE';
+  const fsckStartupToken = 'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY';
   const fsckStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', fsckStartupToken);
   assert.equal(projectControlScriptTapFailures(fsckStartupHookTap, process.cwd(), 1).failures[0].code,
     `PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${fsckStartupToken}`);
@@ -460,7 +499,7 @@ not ok 2 - after hook
     const nativeScripts = path.join(nativeRoot, 'scripts'); await mkdir(nativeScripts);
     const nativeTest = path.join(nativeScripts, 'prCControlledHumanCredentialPreflightEntry.test.mjs');
     for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS',
-      'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE'].entries()) {
+      'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY'].entries()) {
       await writeFile(nativeTest, `import test, { before } from 'node:test';\nbefore(() => { throw new Error('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}'); });\ntest('unreached one', () => {});\ntest('unreached two', () => {});\n`, { flag: index === 0 ? 'wx' : 'w' });
       const native = spawnSync(process.execPath, ['--test', '--test-reporter=tap', nativeTest], {
         cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,

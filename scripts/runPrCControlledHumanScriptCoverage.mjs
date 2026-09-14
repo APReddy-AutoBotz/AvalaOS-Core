@@ -204,7 +204,8 @@ const FSCK_MSG_ID_SET = new Set(PR_C_GIT_255_FSCK_MSG_IDS);
 const FSCK_CAMEL_TO_ID = new Map(PR_C_GIT_255_FSCK_MSG_IDS.map(identifier => [
   identifier.toLowerCase().replace(/_([a-z0-9])/gu, (_match, character) => character.toUpperCase()), identifier,
 ]));
-const FSCK_CLOSED_CATEGORY = /^(?:MSG_([A-Z0-9_]+)|MULTIPLE_MSG_IDS|FATAL|ERROR_WITHOUT_MSG_ID|UNKNOWN)$/u;
+const FSCK_CLOSED_CATEGORY = /^(?:EMPTY|MSG_([A-Z0-9_]+)|MULTIPLE_MSG_IDS|FATAL|ERROR_WITHOUT_MSG_ID|UNKNOWN)$/u;
+const FSCK_STDOUT_FAMILY = /^(?:EMPTY|MISSING|BROKEN_LINK|UNREACHABLE|DANGLING|ROOT|TAGGED|BROKEN_LINK_AND_MISSING|MISSING_WITH_INFO|BROKEN_LINK_WITH_INFO|BROKEN_LINK_AND_MISSING_WITH_INFO|MULTIPLE_INFORMATIONAL|UNKNOWN)$/u;
 const KNOWN_FIXTURE_FAILURES = new Set([
   'ALTERNATE_REJECTED','AUTHORITY_REJECTED','BUNDLE_COMPLETENESS_REJECTED','BUNDLE_HEAD_REJECTED','CANDIDATE_IDENTITY_REJECTED',
   'CHANGED_METADATA_REJECTED','CHILD_ENVIRONMENT_REJECTED','CLEANUP_AUTHORITY_REJECTED','CLEANUP_FAILED','CLEANUP_REJECTED',
@@ -223,10 +224,10 @@ const STARTUP_FAILURE_OWNER = 'scripts/prCControlledHumanCredentialPreflightEntr
 
 export const isCredentialPreflightFsckFailureCode = value => {
   if (typeof value !== 'string') return false;
-  const match = /^PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:([1-9][0-9]{0,2}):(.+)$/u.exec(value);
+  const match = /^PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:([1-9][0-9]{0,2}):([^:]+):([^:]+)$/u.exec(value);
   if (!match || Number(match[1]) > 255) return false;
   const category = FSCK_CLOSED_CATEGORY.exec(match[2]);
-  return Boolean(category && (category[1] === undefined || FSCK_MSG_ID_SET.has(category[1])));
+  return Boolean(category && (category[1] === undefined || FSCK_MSG_ID_SET.has(category[1])) && FSCK_STDOUT_FAMILY.test(match[3]));
 };
 
 const knownFixtureFailure = value => {
@@ -255,8 +256,9 @@ const structuredFsckMessage = line => {
 };
 
 export const classifyCredentialPreflightFsckFailureForTest = stderr => {
-  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4 * 1024 * 1024 || stderr.length === 0
+  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4 * 1024 * 1024
     || /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\ufffd]/u.test(stderr)) return 'UNKNOWN';
+  if (stderr.length === 0) return 'EMPTY';
   const normalized = stderr.endsWith('\n') ? stderr.slice(0, -1) : stderr;
   if (normalized.length === 0 || normalized.includes('\r') || normalized.split('\n').some(line => line.length === 0)) return 'UNKNOWN';
   const identifiers = new Set(); let fatal = false; let errorWithoutMessageId = false; let malformed = false;
@@ -283,6 +285,45 @@ export const classifyCredentialPreflightFsckFailureForTest = stderr => {
   if (fatal) return 'FATAL';
   if (errorWithoutMessageId) return 'ERROR_WITHOUT_MSG_ID';
   return 'UNKNOWN';
+};
+
+const FSCK_OBJECT_DESCRIPTION = '[a-f0-9]{40}';
+const FSCK_OBJECT_TYPE = '(?:blob|tree|commit|tag|unknown)';
+const FSCK_PADDED_OBJECT_TYPE = '(?: {3}(?:blob|tree)| commit| {4}tag|unknown)';
+const fsckStdoutLine = new RegExp(`^(missing|unreachable|dangling) (${FSCK_OBJECT_TYPE}) (${FSCK_OBJECT_DESCRIPTION})$`, 'u');
+const fsckRootLine = new RegExp(`^root (${FSCK_OBJECT_DESCRIPTION})$`, 'u');
+const fsckTaggedLine = new RegExp(`^tagged (${FSCK_OBJECT_TYPE}) (${FSCK_OBJECT_DESCRIPTION}) \\([A-Za-z0-9][A-Za-z0-9._/@:+~-]{0,255}\\) in (${FSCK_OBJECT_DESCRIPTION})$`, 'u');
+const fsckBrokenFromLine = new RegExp(`^broken link from (${FSCK_PADDED_OBJECT_TYPE}) (${FSCK_OBJECT_DESCRIPTION})$`, 'u');
+const fsckBrokenToLine = new RegExp(`^ {14}to (${FSCK_PADDED_OBJECT_TYPE}) (${FSCK_OBJECT_DESCRIPTION})$`, 'u');
+
+export const classifyCredentialPreflightFsckStdoutForTest = stdout => {
+  if (typeof stdout !== 'string' || Buffer.byteLength(stdout) > 4 * 1024 * 1024
+    || /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\ufffd]/u.test(stdout)) return 'UNKNOWN';
+  if (stdout.length === 0) return 'EMPTY';
+  if (!stdout.endsWith('\n')) return 'UNKNOWN';
+  const normalized = stdout.slice(0,-1);
+  if (normalized.length === 0 || normalized.includes('\r') || normalized.split('\n').some(line => line.length === 0)) return 'UNKNOWN';
+  const families = new Set(); const lines = normalized.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (fsckBrokenFromLine.test(line)) {
+      if (index + 1 >= lines.length || !fsckBrokenToLine.test(lines[index + 1])) return 'UNKNOWN';
+      families.add('BROKEN_LINK'); index += 1; continue;
+    }
+    if (fsckBrokenToLine.test(line)) return 'UNKNOWN';
+    const object = fsckStdoutLine.exec(line);
+    if (object) { families.add(object[1] === 'missing' ? 'MISSING' : object[1].toUpperCase()); continue; }
+    if (fsckRootLine.test(line)) { families.add('ROOT'); continue; }
+    if (fsckTaggedLine.test(line)) { families.add('TAGGED'); continue; }
+    return 'UNKNOWN';
+  }
+  const missing = families.delete('MISSING'), broken = families.delete('BROKEN_LINK');
+  const informational = families.size;
+  if (missing && broken) return informational ? 'BROKEN_LINK_AND_MISSING_WITH_INFO' : 'BROKEN_LINK_AND_MISSING';
+  if (missing) return informational ? 'MISSING_WITH_INFO' : 'MISSING';
+  if (broken) return informational ? 'BROKEN_LINK_WITH_INFO' : 'BROKEN_LINK';
+  if (informational > 1) return 'MULTIPLE_INFORMATIONAL';
+  return informational === 1 ? [...families][0] : 'UNKNOWN';
 };
 
 export const sanitizeControlScriptStartupFailure = error => {
@@ -338,7 +379,7 @@ const startupHookFailureCode = (block, diagnostic, locations) => {
     || diagnostic.error !== tokens[0]
     || locations.length === 0 || locations.some(location => location.file !== STARTUP_FAILURE_OWNER)) fail('tap-startup-hook');
   const detail = diagnostic.error.slice(STARTUP_FAILURE_PREFIX.length);
-  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?:(?::[a-z-]+:[A-Z_]+)|(?::[1-9][0-9]{0,2}:[A-Z0-9_]+))?/gu)]
+  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?:(?::[a-z-]+:[A-Z_]+)|(?::[1-9][0-9]{0,2}:[A-Z0-9_]+:[A-Z0-9_]+))?/gu)]
     .map(match => match[0]);
   if (detail === 'UNKNOWN') {
     if (fixtureTokens.length !== 0) fail('tap-startup-hook');

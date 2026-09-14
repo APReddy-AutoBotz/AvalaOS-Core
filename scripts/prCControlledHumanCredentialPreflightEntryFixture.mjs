@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 
 import { deriveControlledHumanExerciseBinding, loadFixture, sha256 } from './prCControlledHumanEnvironment.mjs';
 import { PREFLIGHT_OUTPUT } from './prCControlledHumanCredentialPreflight.mjs';
-import { classifyCredentialPreflightFsckFailureForTest, isCredentialPreflightFsckFailureCode } from './runPrCControlledHumanScriptCoverage.mjs';
+import { classifyCredentialPreflightFsckFailureForTest, classifyCredentialPreflightFsckStdoutForTest,
+  isCredentialPreflightFsckFailureCode } from './runPrCControlledHumanScriptCoverage.mjs';
 import { collectChangedPrCFiles } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const BRANCH = 'controller/governed-delivery-monitor-pr-c-20260831';
@@ -54,9 +55,10 @@ const fixedGitFailure = (args, reason) => {
   throw new Error(`PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:${operation}:${reason}`);
 };
 
-const fixedFsckStatusFailure = (status, stderr) => {
+const fixedFsckStatusFailure = (status, stderr, stdout) => {
   const category = classifyCredentialPreflightFsckFailureForTest(stderr);
-  throw new Error(`PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:${status}:${category}`);
+  const stdoutFamily = classifyCredentialPreflightFsckStdoutForTest(stdout);
+  throw new Error(`PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:${status}:${category}:${stdoutFamily}`);
 };
 
 const assertGitArgv = args => {
@@ -77,7 +79,7 @@ const validateGitResult = (args, result, allowedStatuses = [0]) => {
     if (args.length === 3 && args[0] === 'fsck' && args[1] === '--full' && args[2] === '--strict'
       && allowedStatuses.length === 1 && allowedStatuses[0] === 0
       && Number.isInteger(result?.status) && result.status >= 1 && result.status <= 255) {
-      fixedFsckStatusFailure(result.status, stderr);
+      fixedFsckStatusFailure(result.status, result?.stderr, result?.stdout);
     }
     fixedGitFailure(args, 'STATUS');
   }
