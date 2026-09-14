@@ -153,7 +153,7 @@ test('entry fixture preserves an already clean committed source without requirin
         });
       } finally { await unlink(target); }
     };
-    await rejectMetadata('shallow', `${fixture.head}\n`, /SHALLOW_REJECTED/u);
+    await rejectMetadata('shallow', `${fixture.head}\n`, /SHALLOW_STATE_REJECTED:TRUE:NONEMPTY_REGULAR/u);
     await rejectMetadata('info/grafts', `${fixture.head}\n`, /GRAFT_REJECTED/u);
     await rejectMetadata('objects/info/alternates', `${fixture.repositoryRoot}\n`, /ALTERNATE_REJECTED/u);
     await rejectMetadata('objects/info/http-alternates', `${HOSTILE_CANARY}\n`, /ALTERNATE_REJECTED/u);

@@ -206,6 +206,17 @@ const FSCK_CAMEL_TO_ID = new Map(PR_C_GIT_255_FSCK_MSG_IDS.map(identifier => [
 ]));
 const FSCK_CLOSED_CATEGORY = /^(?:EMPTY|MSG_([A-Z0-9_]+)|MULTIPLE_MSG_IDS|FATAL|ERROR_WITHOUT_MSG_ID|UNKNOWN)$/u;
 const FSCK_STDOUT_FAMILY = /^(?:EMPTY|MISSING|BROKEN_LINK|UNREACHABLE|DANGLING|ROOT|TAGGED|BROKEN_LINK_AND_MISSING|MISSING_WITH_INFO|BROKEN_LINK_WITH_INFO|BROKEN_LINK_AND_MISSING_WITH_INFO|MULTIPLE_INFORMATIONAL|UNKNOWN)$/u;
+const SHALLOW_NATIVE_STATES = Object.freeze(['TRUE','FALSE','INVALID']);
+const SHALLOW_PATH_SHAPES = Object.freeze(['ABSENT','EMPTY_REGULAR','NONEMPTY_REGULAR','INVALID_PATH']);
+const SHALLOW_NATIVE_SET = new Set(SHALLOW_NATIVE_STATES);
+const SHALLOW_PATH_SET = new Set(SHALLOW_PATH_SHAPES);
+const SHALLOW_FAILURE_PATTERN = /^PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:(TRUE|FALSE|INVALID):(ABSENT|EMPTY_REGULAR|NONEMPTY_REGULAR|INVALID_PATH)$/u;
+const SHALLOW_DIAGNOSTIC_PREFIX = 'PR_C_SHALLOW_METADATA_DIAGNOSTIC ';
+const COVERAGE_FAILURE_PREFIX = 'PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ';
+export const PR_C_SHALLOW_METADATA_CHECKPOINTS = Object.freeze([
+  'START', ...Array.from({ length: 10 }, (_value, index) => `AFTER_COMMAND_${index + 1}`),
+  'BEFORE_COMMAND_11', 'AFTER_COMMAND_11',
+]);
 const KNOWN_FIXTURE_FAILURES = new Set([
   'ALTERNATE_REJECTED','AUTHORITY_REJECTED','CANDIDATE_IDENTITY_REJECTED',
   'CHANGED_METADATA_REJECTED','CHILD_ENVIRONMENT_REJECTED','CLEANUP_AUTHORITY_REJECTED','CLEANUP_FAILED','CLEANUP_REJECTED',
@@ -214,7 +225,7 @@ const KNOWN_FIXTURE_FAILURES = new Set([
   'INTENDED_DELETION_REJECTED','NODE_MODULES_REJECTED','OBJECT_INVENTORY_AUTHORITY_REJECTED','OBJECT_INVENTORY_REJECTED',
   'OBJECT_LINK_REJECTED','OBJECT_FORMAT_REJECTED','OID_CLOSURE_REJECTED','OID_CLOSURE_MISMATCH_REJECTED',
   'OUTPUT_NOT_IGNORED','OVERLAY_SCOPE_REJECTED','PACK_SET_REJECTED','PATH_ENVIRONMENT_REJECTED','PATH_REJECTED',
-  'PROMISOR_REJECTED','GRAFT_REJECTED','REPLACEMENT_REJECTED','SHALLOW_REJECTED','TARGET_METADATA_REJECTED',
+  'PROMISOR_REJECTED','GRAFT_REJECTED','REPLACEMENT_REJECTED','TARGET_METADATA_REJECTED',
   'REMOTE_REJECTED','REPOSITORY_ESCAPE_REJECTED','SEED_ACTIVE_CLONES_REJECTED','SEED_AUTHORITY_REJECTED',
   'SEED_CLEANUP_AUTHORITY_REJECTED','SEED_CLEANUP_FAILED','SOURCE_DRIFT_REJECTED','SOURCE_HASH_REJECTED','SOURCE_REJECTED',
   'STAGED_SET_REJECTED','STATUS_REJECTED',
@@ -232,8 +243,14 @@ export const isCredentialPreflightFsckFailureCode = value => {
   return Boolean(category && (category[1] === undefined || FSCK_MSG_ID_SET.has(category[1])) && FSCK_STDOUT_FAMILY.test(match[3]));
 };
 
+export const isCredentialPreflightShallowFailureCode = value => {
+  if (typeof value !== 'string') return false;
+  const match = SHALLOW_FAILURE_PATTERN.exec(value);
+  return Boolean(match && !(match[1] === 'FALSE' && match[2] === 'ABSENT'));
+};
+
 const knownFixtureFailure = value => {
-  if (isCredentialPreflightFsckFailureCode(value)) return true;
+  if (isCredentialPreflightFsckFailureCode(value) || isCredentialPreflightShallowFailureCode(value)) return true;
   if (typeof value !== 'string') return false;
   const match = /^PR_C_PREFLIGHT_FIXTURE_([A-Z_]+)(?::([a-z-]+):([A-Z_]+))?$/u.exec(value);
   if (!match) return false;
@@ -334,6 +351,100 @@ export const sanitizeControlScriptStartupFailure = error => {
   return knownFixtureFailure(message) ? message : 'UNKNOWN';
 };
 
+const invalidShallowSample = () => Object.freeze({ native: 'INVALID', shape: 'INVALID_PATH' });
+const sameNativePath = (left, right) => process.platform === 'win32'
+  ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
+  : path.resolve(left) === path.resolve(right);
+const readSamplerGit = (root, environment, args, runtime) => {
+  let result;
+  try {
+    result = runtime.spawnSync('git', args, {
+      cwd: root, env: { ...environment }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true,
+    });
+  } catch { return null; }
+  if (result?.status !== 0 || result.signal !== null || result.error
+    || typeof result.stdout !== 'string' || typeof result.stderr !== 'string' || result.stderr !== ''
+    || Buffer.byteLength(result.stdout) > 4 * 1024 * 1024 || !result.stdout.endsWith('\n')
+    || /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\ufeff\ufffd]/u.test(result.stdout)
+    || result.stdout.slice(0, -1).includes('\n')) return null;
+  return result.stdout.slice(0, -1);
+};
+const lstatSamplerPath = (target, runtime) => {
+  try { return runtime.lstatSync(target, { bigint: true }); }
+  catch (error) { return error?.code === 'ENOENT' ? null : undefined; }
+};
+const stableSamplerStat = (before, after) => before === null && after === null
+  || before !== null && before !== undefined && after !== null && after !== undefined
+    && before.dev === after.dev && before.ino === after.ino && before.mode === after.mode
+    && before.nlink === after.nlink && before.size === after.size
+    && before.mtimeNs === after.mtimeNs && before.ctimeNs === after.ctimeNs;
+
+const sampleCredentialPreflightShallowState = (root, environment, runtime) => {
+  try {
+    if (!environment || typeof environment !== 'object'
+      || ['GIT_DIR','GIT_WORK_TREE','GIT_OBJECT_DIRECTORY','GIT_ALTERNATE_OBJECT_DIRECTORIES'].some(name => name in environment)) {
+      return invalidShallowSample();
+    }
+    const commonValue = readSamplerGit(root, environment, ['rev-parse', '--git-common-dir'], runtime);
+    const shallowValue = readSamplerGit(root, environment, ['rev-parse', '--git-path', 'shallow'], runtime);
+    if (commonValue === null || shallowValue === null || commonValue.length === 0 || shallowValue.length === 0) return invalidShallowSample();
+    const commonPath = path.resolve(root, commonValue);
+    const shallowPath = path.resolve(root, shallowValue);
+    let commonReal;
+    try { commonReal = runtime.realpathSync(commonPath); } catch { return invalidShallowSample(); }
+    const commonBefore = lstatSamplerPath(commonReal, runtime);
+    if (commonBefore === null || commonBefore === undefined || !commonBefore.isDirectory() || commonBefore.isSymbolicLink()
+      || !sameNativePath(shallowPath, path.join(commonReal, 'shallow'))) return invalidShallowSample();
+    const before = lstatSamplerPath(shallowPath, runtime);
+    const nativeValue = readSamplerGit(root, environment, ['rev-parse', '--is-shallow-repository'], runtime);
+    const after = lstatSamplerPath(shallowPath, runtime);
+    const commonAfter = lstatSamplerPath(commonReal, runtime);
+    const native = nativeValue === 'true' ? 'TRUE' : nativeValue === 'false' ? 'FALSE' : 'INVALID';
+    if (!stableSamplerStat(commonBefore, commonAfter) || !stableSamplerStat(before, after)
+      || before === undefined || after === undefined) {
+      return Object.freeze({ native, shape: 'INVALID_PATH' });
+    }
+    if (after === null) return Object.freeze({ native, shape: 'ABSENT' });
+    if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1n) return Object.freeze({ native, shape: 'INVALID_PATH' });
+    return Object.freeze({ native, shape: after.size === 0n ? 'EMPTY_REGULAR' : 'NONEMPTY_REGULAR' });
+  } catch { return invalidShallowSample(); }
+};
+
+const SHALLOW_SAMPLER_RUNTIME = Object.freeze({ spawnSync, lstatSync, realpathSync });
+export const sampleCredentialPreflightShallowStateReadOnly = (root, environment) =>
+  sampleCredentialPreflightShallowState(root, environment, SHALLOW_SAMPLER_RUNTIME);
+export const sampleCredentialPreflightShallowStateForTest = (root, environment, runtime) =>
+  sampleCredentialPreflightShallowState(root, environment, runtime);
+
+export const buildCredentialPreflightShallowSamplerEnvironment = (root, inherited = process.env) => {
+  const infrastructure = ['PATH','Path','PATHEXT','SystemRoot','SYSTEMROOT','COMSPEC','TMP','TEMP','TMPDIR','LANG','LC_ALL'];
+  const result = Object.fromEntries(infrastructure.filter(name => inherited[name] !== undefined).map(name => [name, inherited[name]]));
+  const entries = [
+    ['safe.directory', realpathSync(root)], ['core.fsmonitor', 'false'], ['credential.helper', ''],
+    ['credential.interactive', 'false'], ['protocol.file.allow', 'never'], ['protocol.http.allow', 'never'],
+    ['protocol.https.allow', 'never'], ['protocol.ssh.allow', 'never'], ['protocol.git.allow', 'never'], ['protocol.ext.allow', 'never'],
+  ];
+  Object.assign(result, {
+    GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+    GIT_ALLOW_PROTOCOL: '', GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never',
+    GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', GIT_CONFIG_COUNT: String(entries.length),
+  });
+  Object.assign(result, Object.fromEntries(entries.flatMap(([key, value], index) => [
+    [`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value],
+  ])));
+  return Object.freeze(result);
+};
+
+export const shallowFailureCodeForSample = sample => {
+  if (!sample || JSON.stringify(Object.keys(sample).sort()) !== JSON.stringify(['native','shape'])
+    || !SHALLOW_NATIVE_SET.has(sample.native) || !SHALLOW_PATH_SET.has(sample.shape)) {
+    return 'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:INVALID:INVALID_PATH';
+  }
+  if (sample.native === 'FALSE' && sample.shape === 'ABSENT') return null;
+  return `PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:${sample.native}:${sample.shape}`;
+};
+
 const tapSummary = tap => Object.fromEntries(['tests','pass','fail','cancelled','skipped','todo'].map(name => {
   const matches = [...tap.matchAll(new RegExp(`^# ${name} ([0-9]+)$`, 'gmu'))];
   if (matches.length !== 1) fail(`tap-${name}`);
@@ -381,7 +492,7 @@ const startupHookFailureCode = (block, diagnostic, locations) => {
     || diagnostic.error !== tokens[0]
     || locations.length === 0 || locations.some(location => location.file !== STARTUP_FAILURE_OWNER)) fail('tap-startup-hook');
   const detail = diagnostic.error.slice(STARTUP_FAILURE_PREFIX.length);
-  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?:(?::[a-z-]+:[A-Z_]+)|(?::[1-9][0-9]{0,2}:[A-Z0-9_]+:[A-Z0-9_]+))?/gu)]
+  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?:(?::[a-z-]+:[A-Z_]+)|(?::[1-9][0-9]{0,2}:[A-Z0-9_]+:[A-Z0-9_]+)|(?::(?:TRUE|FALSE|INVALID):(?:ABSENT|EMPTY_REGULAR|NONEMPTY_REGULAR|INVALID_PATH)))?/gu)]
     .map(match => match[0]);
   if (detail === 'UNKNOWN') {
     if (fixtureTokens.length !== 0) fail('tap-startup-hook');
@@ -501,6 +612,57 @@ export function projectControlScriptTapFailures(tap, root = process.cwd(), child
   }
   return validateControlScriptFailureProjection({ classification: 'controlled-human-source-test-failure', summary, failures }, childStatus);
 }
+
+const shallowFailureFromCoverageOutput = (stderr, childStatus) => {
+  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 64 * 1024 * 1024 || stderr.includes('\0')) return null;
+  const rows = stderr.split(/\r?\n/gu).filter(row => row.startsWith(COVERAGE_FAILURE_PREFIX));
+  if (rows.length !== 1) return null;
+  let projection;
+  try {
+    projection = JSON.parse(rows[0].slice(COVERAGE_FAILURE_PREFIX.length));
+    validateControlScriptFailureProjection(projection, childStatus);
+  } catch { return null; }
+  if (projection.failures.length !== 1) return null;
+  const [failure] = projection.failures;
+  if (failure.classification !== 'hook' || typeof failure.code !== 'string'
+    || !failure.code.startsWith(STARTUP_FAILURE_PREFIX) || failure.locations.length === 0
+    || failure.locations.some(location => location.file !== STARTUP_FAILURE_OWNER)) return null;
+  const match = SHALLOW_FAILURE_PATTERN.exec(failure.code.slice(STARTUP_FAILURE_PREFIX.length));
+  if (!match || (match[1] === 'FALSE' && match[2] === 'ABSENT')) return null;
+  return Object.freeze({ native: match[1], shape: match[2] });
+};
+
+export const buildPrCShallowMetadataDiagnosticForTest = ({ checkpoints, commandId, commandOrdinal, commandStatus, stderr }) => {
+  if (commandId !== 'pr-c-controlled-human-source' || commandOrdinal !== 11
+    || !Number.isInteger(commandStatus) || commandStatus < 1 || commandStatus > 255
+    || !Array.isArray(checkpoints) || checkpoints.length !== PR_C_SHALLOW_METADATA_CHECKPOINTS.length) return null;
+  const normalized = [];
+  for (let ordinal = 0; ordinal < checkpoints.length; ordinal += 1) {
+    const checkpoint = checkpoints[ordinal];
+    if (!checkpoint || JSON.stringify(Object.keys(checkpoint).sort()) !== JSON.stringify(['checkpoint','native','ordinal','shape'])
+      || checkpoint.ordinal !== ordinal || checkpoint.checkpoint !== PR_C_SHALLOW_METADATA_CHECKPOINTS[ordinal]
+      || !SHALLOW_NATIVE_SET.has(checkpoint.native) || !SHALLOW_PATH_SET.has(checkpoint.shape)) return null;
+    normalized.push(Object.freeze({ ordinal, checkpoint: checkpoint.checkpoint, native: checkpoint.native, shape: checkpoint.shape }));
+  }
+  const failure = shallowFailureFromCoverageOutput(stderr, commandStatus);
+  if (failure === null) return null;
+  return Object.freeze({ classification: 'pr-c-shallow-metadata-diagnostic-only', failure, checkpoints: Object.freeze(normalized) });
+};
+
+export const formatPrCShallowMetadataDiagnosticForTest = diagnostic => {
+  if (!diagnostic || JSON.stringify(Object.keys(diagnostic).sort()) !== JSON.stringify(['checkpoints','classification','failure'])
+    || diagnostic.classification !== 'pr-c-shallow-metadata-diagnostic-only'
+    || !diagnostic.failure || JSON.stringify(Object.keys(diagnostic.failure).sort()) !== JSON.stringify(['native','shape'])
+    || !SHALLOW_NATIVE_SET.has(diagnostic.failure.native) || !SHALLOW_PATH_SET.has(diagnostic.failure.shape)
+    || diagnostic.failure.native === 'FALSE' && diagnostic.failure.shape === 'ABSENT'
+    || !Array.isArray(diagnostic.checkpoints) || diagnostic.checkpoints.length !== PR_C_SHALLOW_METADATA_CHECKPOINTS.length) return null;
+  for (const [ordinal, checkpoint] of diagnostic.checkpoints.entries()) {
+    if (!checkpoint || JSON.stringify(Object.keys(checkpoint).sort()) !== JSON.stringify(['checkpoint','native','ordinal','shape'])
+      || checkpoint.ordinal !== ordinal || checkpoint.checkpoint !== PR_C_SHALLOW_METADATA_CHECKPOINTS[ordinal]
+      || !SHALLOW_NATIVE_SET.has(checkpoint.native) || !SHALLOW_PATH_SET.has(checkpoint.shape)) return null;
+  }
+  return `${SHALLOW_DIAGNOSTIC_PREFIX}${JSON.stringify(diagnostic)}`;
+};
 
 export function buildControlScriptSourceInventory(root = process.cwd()) {
   return CONTROL_SCRIPT_SOURCES.map(relative => {

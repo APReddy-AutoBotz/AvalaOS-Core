@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { deriveControlledHumanExerciseBinding, loadFixture, sha256 } from './prCControlledHumanEnvironment.mjs';
 import { PREFLIGHT_OUTPUT } from './prCControlledHumanCredentialPreflight.mjs';
 import { classifyCredentialPreflightFsckFailureForTest, classifyCredentialPreflightFsckStdoutForTest,
-  isCredentialPreflightFsckFailureCode } from './runPrCControlledHumanScriptCoverage.mjs';
+  isCredentialPreflightFsckFailureCode, isCredentialPreflightShallowFailureCode, sampleCredentialPreflightShallowStateReadOnly,
+  shallowFailureCodeForSample } from './runPrCControlledHumanScriptCoverage.mjs';
 import { collectChangedPrCFiles } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const BRANCH = 'controller/governed-delivery-monitor-pr-c-20260831';
@@ -224,7 +225,7 @@ const assertOwnedTemporaryRoot = async temporaryRoot => {
 
 const fixedFailureCode = error => {
   const message = error instanceof Error ? error.message : '';
-  if (isCredentialPreflightFsckFailureCode(message)) return message;
+  if (isCredentialPreflightFsckFailureCode(message) || isCredentialPreflightShallowFailureCode(message)) return message;
   const match = /^(PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?::[a-z-]+:[A-Z_]+)?)$/u.exec(message);
   return match?.[1] ?? 'PR_C_PREFLIGHT_FIXTURE_CONSTRUCTION_REJECTED';
 };
@@ -410,11 +411,9 @@ const assertSourceObjectMetadata = async (sourceRoot, objectRoot, constructionEn
   if (git(sourceRoot, ['rev-parse', '--show-object-format'], constructionEnvironment).stdout !== 'sha1') {
     throw new Error('PR_C_PREFLIGHT_FIXTURE_OBJECT_FORMAT_REJECTED');
   }
-  if (git(sourceRoot, ['rev-parse', '--is-shallow-repository'], constructionEnvironment).stdout !== 'false') {
-    throw new Error('PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED');
-  }
+  const shallowSample = sampleCredentialPreflightShallowStateReadOnly(sourceRoot, constructionEnvironment);
+  if (shallowSample.native !== 'FALSE' || shallowSample.shape !== 'ABSENT') throw new Error(shallowFailureCodeForSample(shallowSample));
   const gitPath = relative => path.resolve(sourceRoot, git(sourceRoot, ['rev-parse', '--git-path', relative], constructionEnvironment).stdout);
-  if (await metadataExists(gitPath('shallow'))) throw new Error('PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED');
   if (await metadataExists(gitPath('info/grafts'))) throw new Error('PR_C_PREFLIGHT_FIXTURE_GRAFT_REJECTED');
   if (await metadataExists(path.join(objectRoot, 'info', 'alternates'))
     || await metadataExists(path.join(objectRoot, 'info', 'http-alternates'))) {

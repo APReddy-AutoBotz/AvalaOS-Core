@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstatSync, realpathSync } from 'node:fs';
+import { link, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -16,12 +17,19 @@ import {
   CONTROL_SCRIPT_TESTS,
   buildControlScriptTestEnvironment,
   buildControlScriptTestArguments,
+  buildCredentialPreflightShallowSamplerEnvironment,
+  buildPrCShallowMetadataDiagnosticForTest,
   createExclusiveControlScriptOutputDirectory,
+  formatPrCShallowMetadataDiagnosticForTest,
   parseControlScriptLcov,
   parseControlScriptTap,
   projectControlScriptTapFailures,
+  PR_C_SHALLOW_METADATA_CHECKPOINTS,
   readControlScriptScenarios,
   sanitizeControlScriptStartupFailure,
+  sampleCredentialPreflightShallowStateForTest,
+  sampleCredentialPreflightShallowStateReadOnly,
+  shallowFailureCodeForSample,
   validateControlScriptFailureProjection,
   validateControlScriptTestCompletion,
   validateControlScriptTestScheduling,
@@ -324,11 +332,12 @@ not ok 2 - after hook
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED')),
     'PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED');
   for (const obsolete of ['PR_C_PREFLIGHT_FIXTURE_BUNDLE_COMPLETENESS_REJECTED',
-    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS']) {
+    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS',
+    'PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED','PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:FALSE:ABSENT']) {
     assert.equal(sanitizeControlScriptStartupFailure(new Error(obsolete)), 'UNKNOWN');
   }
   for (const code of ['OBJECT_FORMAT_REJECTED','OID_CLOSURE_REJECTED','OID_CLOSURE_MISMATCH_REJECTED','PACK_SET_REJECTED',
-    'PROMISOR_REJECTED','GRAFT_REJECTED','REPLACEMENT_REJECTED','SHALLOW_REJECTED','TARGET_METADATA_REJECTED']) {
+    'PROMISOR_REJECTED','GRAFT_REJECTED','REPLACEMENT_REJECTED','TARGET_METADATA_REJECTED']) {
     const token = `PR_C_PREFLIGHT_FIXTURE_${code}`;
     assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), token);
   }
@@ -341,6 +350,16 @@ not ok 2 - after hook
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:RAW')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GRAFT_REJECTED:init:STATUS')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED:bundle:STATUS')), 'UNKNOWN');
+  for (const native of ['TRUE','FALSE','INVALID']) for (const shape of ['ABSENT','EMPTY_REGULAR','NONEMPTY_REGULAR','INVALID_PATH']) {
+    const token = `PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:${native}:${shape}`;
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), native === 'FALSE' && shape === 'ABSENT' ? 'UNKNOWN' : token);
+  }
+  for (const token of ['PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:true:ABSENT',
+    'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:TRUE:FILE',
+    'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:TRUE:NONEMPTY_REGULAR:INJECTED',
+    `PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:TRUE:${'a'.repeat(40)}`]) {
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), 'UNKNOWN');
+  }
   assert.equal(sanitizeControlScriptStartupFailure(new Error('raw startup detail')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(Object.create(Error.prototype,
     { message: { get() { throw new Error('raw getter detail'); } } })), 'UNKNOWN');
@@ -456,7 +475,8 @@ not ok 2 - after hook
   assert.equal(projectControlScriptTapFailures(gitStartupHookTap, process.cwd(), 1).failures[0].code,
     'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS');
   for (const obsolete of ['PR_C_PREFLIGHT_FIXTURE_BUNDLE_COMPLETENESS_REJECTED',
-    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS']) {
+    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS',
+    'PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED','PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:FALSE:ABSENT']) {
     assert.throws(() => projectControlScriptTapFailures(
       startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', obsolete), process.cwd(), 1), /tap-startup-hook/u);
   }
@@ -468,6 +488,43 @@ not ok 2 - after hook
   const fsckStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', fsckStartupToken);
   assert.equal(projectControlScriptTapFailures(fsckStartupHookTap, process.cwd(), 1).failures[0].code,
     `PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${fsckStartupToken}`);
+  const shallowStartupToken = 'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:TRUE:NONEMPTY_REGULAR';
+  const shallowStartupProjection = projectControlScriptTapFailures(
+    startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', shallowStartupToken), process.cwd(), 1);
+  const checkpoints = PR_C_SHALLOW_METADATA_CHECKPOINTS.map((checkpoint, ordinal) => ({
+    ordinal, checkpoint, native: ordinal === 12 ? 'TRUE' : 'FALSE', shape: ordinal === 12 ? 'NONEMPTY_REGULAR' : 'ABSENT',
+  }));
+  const shallowStderr = `PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ${JSON.stringify(shallowStartupProjection)}\n`;
+  const shallowDiagnosticInput = { checkpoints, commandId: 'pr-c-controlled-human-source', commandOrdinal: 11,
+    commandStatus: 1, stderr: shallowStderr };
+  const shallowDiagnostic = buildPrCShallowMetadataDiagnosticForTest(shallowDiagnosticInput);
+  assert.deepEqual(shallowDiagnostic.failure, { native: 'TRUE', shape: 'NONEMPTY_REGULAR' });
+  assert.deepEqual(shallowDiagnostic.checkpoints, checkpoints);
+  assert.match(formatPrCShallowMetadataDiagnosticForTest(shallowDiagnostic), /^PR_C_SHALLOW_METADATA_DIAGNOSTIC /u);
+  for (const malformed of [
+    { ...shallowDiagnostic, failure: { native: 'FALSE', shape: 'ABSENT' } },
+    { ...shallowDiagnostic, failure: { native: 'TRUE', shape: 'NONEMPTY_REGULAR', path: 'PR264_SHALLOW_OBSERVATION_CANARY' } },
+    { ...shallowDiagnostic, checkpoints: checkpoints.map((item, index) => index === 8 ? { ...item, ordinal: 7 } : item) },
+    { ...shallowDiagnostic, retainedPath: 'PR264_SHALLOW_OBSERVATION_CANARY' },
+  ]) assert.equal(formatPrCShallowMetadataDiagnosticForTest(malformed), null);
+  assert.equal(shallowFailureCodeForSample({ native: 'TRUE', shape: 'NONEMPTY_REGULAR' }), shallowStartupToken);
+  assert.equal(shallowFailureCodeForSample({ native: 'FALSE', shape: 'ABSENT' }), null);
+  assert.equal(shallowFailureCodeForSample({ native: 'true', shape: 'PR264_SHALLOW_OBSERVATION_CANARY' }),
+    'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:INVALID:INVALID_PATH');
+  const unrelatedProjection = { ...shallowStartupProjection, failures: [{ ...shallowStartupProjection.failures[0], code: 'hook-failure' }] };
+  for (const rejected of [
+    { ...shallowDiagnosticInput, commandStatus: 0 },
+    { ...shallowDiagnosticInput, commandOrdinal: 10 },
+    { ...shallowDiagnosticInput, commandId: 'pr-c-evidence-contract' },
+    { ...shallowDiagnosticInput, checkpoints: checkpoints.slice(1) },
+    { ...shallowDiagnosticInput, checkpoints: checkpoints.map((item, index) => index === 2 ? { ...item, ordinal: 1 } : item) },
+    { ...shallowDiagnosticInput, checkpoints: checkpoints.map((item, index) => index === 3 ? { ...item, checkpoint: 'AFTER_COMMAND_2' } : item) },
+    { ...shallowDiagnosticInput, checkpoints: checkpoints.map((item, index) => index === 4 ? { ...item, native: 'MAYBE' } : item) },
+    { ...shallowDiagnosticInput, stderr: `PR_C_SHALLOW_METADATA_DIAGNOSTIC ${JSON.stringify({ checkpoints })}\n` },
+    { ...shallowDiagnosticInput, stderr: `PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ${JSON.stringify(unrelatedProjection)}\n` },
+    { ...shallowDiagnosticInput, stderr: `${shallowStderr}${shallowStderr}` },
+    { ...shallowDiagnosticInput, stderr: shallowStderr.replace(shallowStartupToken, 'PR264_SHALLOW_OBSERVATION_CANARY') },
+  ]) assert.equal(buildPrCShallowMetadataDiagnosticForTest(rejected), null);
   const unknownStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', 'UNKNOWN');
   assert.equal(projectControlScriptTapFailures(unknownStartupHookTap, process.cwd(), 1).failures[0].code, 'hook-failure');
   const startupWithWrapperTap = startupHookTap.replace('# tests 1\n# pass 0\n# fail 1', `not ok 2 - ${exactLocation}
@@ -511,8 +568,108 @@ not ok 2 - after hook
     code: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', locations: [] }] }, 1),
   /tap-failure-item/u);
 
+  let invalidEnvironmentCalls = 0;
+  const rejectInvalidEnvironmentCall = () => { invalidEnvironmentCalls += 1; throw new Error('INVALID_ENVIRONMENT_EXECUTED'); };
+  assert.deepEqual(sampleCredentialPreflightShallowStateForTest(process.cwd(), null, {
+    spawnSync: rejectInvalidEnvironmentCall, lstatSync: rejectInvalidEnvironmentCall, realpathSync: rejectInvalidEnvironmentCall,
+  }), { native: 'INVALID', shape: 'INVALID_PATH' });
+  assert.equal(invalidEnvironmentCalls, 0);
+
   const nativeRoot = await mkdtemp(path.join(os.tmpdir(), 'pr-c-control-script-native-before-'));
   try {
+    const sampleRoot = path.join(nativeRoot, 'shallow-sample');
+    const initialized = spawnSync('git', ['init', '--quiet', sampleRoot], {
+      cwd: nativeRoot, env: { ...process.env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000,
+      maxBuffer: 1024 * 1024, windowsHide: true,
+    });
+    assert.equal(initialized.status, 0); assert.equal(initialized.signal, null);
+    const samplerEnvironment = buildCredentialPreflightShallowSamplerEnvironment(sampleRoot);
+    const shallowPath = path.join(sampleRoot, '.git', 'shallow');
+    assert.deepEqual(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment),
+      { native: 'FALSE', shape: 'ABSENT' });
+    await writeFile(shallowPath, '');
+    assert.deepEqual(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment),
+      { native: 'TRUE', shape: 'EMPTY_REGULAR' });
+    await writeFile(shallowPath, `${'a'.repeat(40)}\n`);
+    assert.deepEqual(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment),
+      { native: 'TRUE', shape: 'NONEMPTY_REGULAR' });
+    await rm(shallowPath);
+    await mkdir(shallowPath);
+    assert.equal(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment).shape, 'INVALID_PATH');
+    await rm(shallowPath, { recursive: true });
+    const shallowOwner = path.join(sampleRoot, '.git', 'shallow-owner');
+    await writeFile(shallowOwner, `${'b'.repeat(40)}\n`);
+    await symlink(shallowOwner, shallowPath, 'file');
+    assert.equal(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment).shape, 'INVALID_PATH');
+    await rm(shallowPath);
+    await link(shallowOwner, shallowPath);
+    assert.equal(sampleCredentialPreflightShallowStateReadOnly(sampleRoot, samplerEnvironment).shape, 'INVALID_PATH');
+    await rm(shallowPath); await rm(shallowOwner);
+    const nativeRuntime = { spawnSync, lstatSync, realpathSync };
+    const called = [];
+    const substituted = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+      ...nativeRuntime,
+      spawnSync(command, args, options) {
+        called.push([command, ...args]);
+        if (args[1] === '--git-path') return { status: 0, signal: null, error: null,
+          stdout: `${path.join(nativeRoot, 'foreign', 'shallow')}\n`, stderr: '' };
+        return spawnSync(command, args, options);
+      },
+    });
+    assert.deepEqual(substituted, { native: 'INVALID', shape: 'INVALID_PATH' });
+    assert.deepEqual(called, [['git','rev-parse','--git-common-dir'], ['git','rev-parse','--git-path','shallow']]);
+    for (const malformed of ['\t\n', '\ufeff.git\n', '.git\ufffd\n', '.git\nextra\n']) {
+      const malformedPath = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+        ...nativeRuntime,
+        spawnSync(command, args, options) {
+          if (args[1] === '--git-common-dir') return { status: 0, signal: null, error: null, stdout: malformed, stderr: '' };
+          return spawnSync(command, args, options);
+        },
+      });
+      assert.deepEqual(malformedPath, { native: 'INVALID', shape: 'INVALID_PATH' });
+    }
+    const commonAlias = path.join(nativeRoot, 'common-alias');
+    await symlink(path.join(sampleRoot, '.git'), commonAlias, process.platform === 'win32' ? 'junction' : 'dir');
+    const aliasSample = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+      ...nativeRuntime,
+      spawnSync(command, args, options) {
+        if (args[1] === '--git-common-dir') return { status: 0, signal: null, error: null, stdout: `${commonAlias}\n`, stderr: '' };
+        if (args[1] === '--git-path') return { status: 0, signal: null, error: null, stdout: `${path.join(commonAlias, 'shallow')}\n`, stderr: '' };
+        return spawnSync(command, args, options);
+      },
+    });
+    assert.deepEqual(aliasSample, { native: 'INVALID', shape: 'INVALID_PATH' });
+    await rm(commonAlias);
+    const failedNative = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+      ...nativeRuntime,
+      spawnSync(command, args, options) {
+        if (args[1] === '--is-shallow-repository') return { status: 1, signal: null, error: null, stdout: '', stderr: '' };
+        return spawnSync(command, args, options);
+      },
+    });
+    assert.deepEqual(failedNative, { native: 'INVALID', shape: 'ABSENT' });
+    await writeFile(shallowPath, `${'c'.repeat(40)}\n`);
+    let shallowStats = 0;
+    const raced = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+      ...nativeRuntime,
+      lstatSync(target, options) {
+        const stat = lstatSync(target, options);
+        if (path.resolve(target) !== path.resolve(shallowPath) || ++shallowStats === 1) return stat;
+        return { ...stat, size: stat.size + 1n, isFile: () => true, isSymbolicLink: () => false, isDirectory: () => false };
+      },
+    });
+    assert.deepEqual(raced, { native: 'TRUE', shape: 'INVALID_PATH' });
+    let commonStats = 0;
+    const commonRaced = sampleCredentialPreflightShallowStateForTest(sampleRoot, samplerEnvironment, {
+      ...nativeRuntime,
+      lstatSync(target, options) {
+        const stat = lstatSync(target, options);
+        if (path.resolve(target) !== path.resolve(sampleRoot, '.git') || ++commonStats === 1) return stat;
+        return { ...stat, ino: stat.ino + 1n, isFile: () => false, isSymbolicLink: () => false, isDirectory: () => true };
+      },
+    });
+    assert.deepEqual(commonRaced, { native: 'TRUE', shape: 'INVALID_PATH' });
+    await rm(shallowPath);
     const runnerImport = spawnSync(process.execPath, ['--input-type=module', '--eval',
       `await import(${JSON.stringify(new URL('./runPrCControlledHumanScriptCoverage.mjs', import.meta.url).href)})`], {
       cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,
@@ -523,7 +680,8 @@ not ok 2 - after hook
     const nativeScripts = path.join(nativeRoot, 'scripts'); await mkdir(nativeScripts);
     const nativeTest = path.join(nativeScripts, 'prCControlledHumanCredentialPreflightEntry.test.mjs');
     for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS',
-      'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY'].entries()) {
+      'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY',
+      'PR_C_PREFLIGHT_FIXTURE_SHALLOW_STATE_REJECTED:TRUE:NONEMPTY_REGULAR'].entries()) {
       await writeFile(nativeTest, `import test, { before } from 'node:test';\nbefore(() => { throw new Error('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}'); });\ntest('unreached one', () => {});\ntest('unreached two', () => {});\n`, { flag: index === 0 ? 'wx' : 'w' });
       const native = spawnSync(process.execPath, ['--test', '--test-reporter=tap', nativeTest], {
         cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,
@@ -590,8 +748,22 @@ test('measured child containment is pinned to 900 seconds and every incomplete o
 
   const runnerSource = await readFile(new URL('./runPrCControlledHumanScriptCoverage.mjs', import.meta.url), 'utf8');
   assert.match(runnerSource, /timeout:\s*CONTROL_SCRIPT_TEST_TIMEOUT_MS/u);
-  assert.equal([...runnerSource.matchAll(/\btimeout:\s*/gu)].length, 1);
+  assert.equal([...runnerSource.matchAll(/\btimeout:\s*/gu)].length, 2);
+  assert.match(runnerSource, /timeout:\s*30_000/u);
   assert.doesNotMatch(runnerSource, /180_000/u);
+  const evidenceRunnerSource = await readFile(new URL('./runTranscriptFlowPrCEvidence.mjs', import.meta.url), 'utf8');
+  const beforeSample = evidenceRunnerSource.indexOf("if (commandOrdinal === 11) recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[11]);");
+  const commandTimer = evidenceRunnerSource.indexOf('const startedAt = new Date().toISOString();');
+  const recordFinalized = evidenceRunnerSource.indexOf('commandRecords.push(record);');
+  const afterSample = evidenceRunnerSource.indexOf('if (commandOrdinal <= 10) recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[commandOrdinal]);');
+  const failureBranch = evidenceRunnerSource.indexOf('if (status !== 0 || markers.length !== expectedCount)');
+  assert(beforeSample >= 0 && beforeSample < commandTimer);
+  assert(recordFinalized >= 0 && recordFinalized < afterSample && afterSample < failureBranch);
+  assert.doesNotMatch(evidenceRunnerSource.slice(evidenceRunnerSource.indexOf('const record = {'), recordFinalized),
+    /shallowCheckpoints|SHALLOW_METADATA/u);
+  assert.match(evidenceRunnerSource, /try \{ shallowSamplerEnvironment = buildCredentialPreflightShallowSamplerEnvironment\(root\); \}\s*catch \{ shallowSamplerEnvironment = null; \}/u);
+  assert.match(evidenceRunnerSource, /try \{ sample = sampleCredentialPreflightShallowStateReadOnly\(root, shallowSamplerEnvironment\); \} catch \{\}/u);
+  assert.match(evidenceRunnerSource, /if \(commandOrdinal === 11 && status !== 0\) \{\s*try \{/u);
 });
 
 test('scenario report reader binds every scenario to its exact producer and rejects incomplete or substituted proof', async () => {

@@ -26,6 +26,9 @@ import {
 } from './transcriptFlowPrCExecutionIdentity.mjs';
 import { calculatePrCWorkingTreeDigest, collectChangedPrCFiles, PR_C_BASE_SHA } from './transcriptFlowPrCEvidenceScope.mjs';
 import { runPrCEvidenceCommand } from './prCEvidenceCommandRunner.mjs';
+import { buildCredentialPreflightShallowSamplerEnvironment, buildPrCShallowMetadataDiagnosticForTest,
+  formatPrCShallowMetadataDiagnosticForTest, PR_C_SHALLOW_METADATA_CHECKPOINTS,
+  sampleCredentialPreflightShallowStateReadOnly } from './runPrCControlledHumanScriptCoverage.mjs';
 
 const root = process.cwd();
 const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -72,8 +75,20 @@ const expectedByKey = new Map(registry.assertions.map(assertion => [expectedKey(
 const seen = new Map();
 const commandRecords = [];
 let failed = false;
+let shallowSamplerEnvironment;
+try { shallowSamplerEnvironment = buildCredentialPreflightShallowSamplerEnvironment(root); }
+catch { shallowSamplerEnvironment = null; }
+const shallowCheckpoints = [];
+const recordShallowCheckpoint = checkpoint => {
+  let sample = Object.freeze({ native: 'INVALID', shape: 'INVALID_PATH' });
+  try { sample = sampleCredentialPreflightShallowStateReadOnly(root, shallowSamplerEnvironment); } catch {}
+  shallowCheckpoints.push(Object.freeze({ ordinal: shallowCheckpoints.length, checkpoint, ...sample }));
+};
+recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[0]);
 
-for (const command of registry.commands) {
+for (const [commandIndex, command] of registry.commands.entries()) {
+  const commandOrdinal = commandIndex + 1;
+  if (commandOrdinal === 11) recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[11]);
   const startedAt = new Date().toISOString();
   const started = performance.now();
   process.stdout.write(`\n[PR C evidence] ${command.id}: ${command.command}\n`);
@@ -109,7 +124,18 @@ for (const command of registry.commands) {
   record.commandRecordDigest = prCCommandRecordDigest(record);
   validatePrCSanitized(record);
   commandRecords.push(record);
+  if (commandOrdinal <= 10) recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[commandOrdinal]);
+  if (commandOrdinal === 11) recordShallowCheckpoint(PR_C_SHALLOW_METADATA_CHECKPOINTS[12]);
   if (status !== 0 || markers.length !== expectedCount) {
+    if (commandOrdinal === 11 && status !== 0) {
+      try {
+        const diagnostic = buildPrCShallowMetadataDiagnosticForTest({
+          checkpoints: shallowCheckpoints, commandId: command.id, commandOrdinal, commandStatus: status, stderr,
+        });
+        const line = formatPrCShallowMetadataDiagnosticForTest(diagnostic);
+        if (line !== null) process.stderr.write(`${line}\n`);
+      } catch {}
+    }
     failed = true;
     break;
   }
