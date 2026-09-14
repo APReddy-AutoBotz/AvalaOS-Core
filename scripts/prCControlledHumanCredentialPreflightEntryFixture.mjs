@@ -19,7 +19,8 @@ const GIT_TIMEOUT_MS = 30_000;
 const GIT_OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const GIT_ARG_LIMIT = 256;
 const GIT_ARG_BYTES_LIMIT = 64 * 1024;
-const BUNDLE_HEADER_LIMIT_BYTES = 64 * 1024;
+const OID_LINE_LIMIT = 100_000;
+const PACK_FILE_LIMIT_BYTES = 512 * 1024 * 1024;
 const seedAuthority = new WeakMap();
 const fixtureAuthority = new WeakMap();
 const objectInventoryAuthority = new WeakMap();
@@ -105,6 +106,25 @@ const git = (cwd, args, env, { allowedStatuses = [0] } = {}) => {
   return validateGitResult(args, result, allowedStatuses);
 };
 
+const constructionGit = (cwd, args, env, input = undefined) => {
+  assertGitArgv(args);
+  if (input !== undefined && (typeof input !== 'string' || Buffer.byteLength(input) > GIT_OUTPUT_LIMIT_BYTES)) {
+    fixedGitFailure(args, 'INPUT_LIMIT');
+  }
+  const result = spawnSync('git', args, {
+    cwd,
+    env: { ...env },
+    encoding: 'utf8',
+    input,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer: GIT_OUTPUT_LIMIT_BYTES,
+    windowsHide: true,
+  });
+  validateGitResult(args, result);
+  return Object.freeze({ stdout: result.stdout, stderr: result.stderr });
+};
+
 const pathPlatform = platform => platform === 'win32' ? path.win32 : path.posix;
 const canonicalPath = (value, platform) => {
   const implementation = pathPlatform(platform);
@@ -166,12 +186,15 @@ const fixtureGitEnvironment = (emptyGitConfigPath, emptyHooksPath, safeDirectori
     ['commit.gpgsign', 'false'], ['core.hooksPath', emptyHooksPath], ['credential.helper', ''],
     ['credential.interactive', 'false'], ['protocol.file.allow', 'always'], ['protocol.http.allow', 'never'],
     ['protocol.https.allow', 'never'], ['protocol.ssh.allow', 'never'], ['protocol.git.allow', 'never'],
-    ['protocol.ext.allow', 'never'], ...safeDirectories.map(directory => ['safe.directory', path.resolve(directory)]),
+    ['protocol.ext.allow', 'never'], ['core.commitGraph', 'false'], ['core.fsmonitor', 'false'], ['pack.writeReverseIndex', 'false'],
+    ['gc.auto', '0'], ['maintenance.auto', 'false'], ['fetch.writeCommitGraph', 'false'],
+    ...safeDirectories.map(directory => ['safe.directory', path.resolve(directory)]),
   ];
   return Object.freeze({
     ...infrastructureEnvironment(excludedRoots),
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyGitConfigPath,
     GIT_ALLOW_PROTOCOL: 'file', GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never',
+    GIT_TEMPLATE_DIR: emptyHooksPath, GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
     GIT_CONFIG_COUNT: String(entries.length),
     ...Object.fromEntries(entries.flatMap(([key, value], index) => [
       [`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value],
@@ -341,7 +364,7 @@ const localCloneSourceIdentity = async (sourceRoot, constructionEnvironment) => 
   }
   const alternates = path.join(objectReal, 'info', 'alternates');
   if (await lstat(alternates).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))) {
-    throw new Error('PR_C_PREFLIGHT_FIXTURE_CLONE_SOURCE_REJECTED');
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_ALTERNATE_REJECTED');
   }
   return Object.freeze({
     head: git(sourceRoot, ['rev-parse', '--verify', 'HEAD'], constructionEnvironment).stdout,
@@ -350,37 +373,144 @@ const localCloneSourceIdentity = async (sourceRoot, constructionEnvironment) => 
   });
 };
 
-const assertCompleteHeadBundle = async (sourceRoot, bundlePath, expectedHead, constructionEnvironment) => {
-  git(sourceRoot, ['bundle', 'verify', bundlePath], constructionEnvironment);
-  const listedHeads = splitLines(git(sourceRoot, ['bundle', 'list-heads', bundlePath], constructionEnvironment).stdout);
-  if (JSON.stringify(listedHeads) !== JSON.stringify([`${expectedHead} HEAD`])) {
-    throw new Error('PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED');
+export const parseCredentialPreflightOidClosureForTest = value => {
+  if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value) > GIT_OUTPUT_LIMIT_BYTES
+    || !value.endsWith('\n') || value.includes('\r') || value.includes('\0')) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
   }
-  const handle = await open(bundlePath, 'r');
-  try {
-    const bytes = Buffer.alloc(BUNDLE_HEADER_LIMIT_BYTES);
-    const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
-    const header = bytes.subarray(0, bytesRead).toString('utf8').split('\n\n', 1)[0];
-    const lines = header.split('\n').map(line => line.replace(/\r$/u, ''));
-    if (!/^# v[23] git bundle$/u.test(lines[0] ?? '') || lines.some(line => line.startsWith('-'))
-      || !lines.includes(`${expectedHead} HEAD`)) throw new Error('PR_C_PREFLIGHT_FIXTURE_BUNDLE_COMPLETENESS_REJECTED');
-  } finally {
-    await handle.close();
+  const lines = value.slice(0, -1).split('\n');
+  if (lines.length === 0 || lines.length > OID_LINE_LIMIT
+    || lines.some(line => !/^[0-9a-f]{40}$/u.test(line) || line === '0'.repeat(40))) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
+  }
+  const canonical = [...new Set(lines)].sort();
+  if (canonical.length !== lines.length) throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
+  return Object.freeze(canonical);
+};
+
+export const assertCredentialPreflightOidClosureClaimsForTest = (expected, actual) => {
+  if (!Array.isArray(expected) || !Array.isArray(actual) || JSON.stringify(expected) !== JSON.stringify(actual)) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_MISMATCH_REJECTED');
+  }
+  return true;
+};
+
+export const assertCredentialPreflightPackFilesForTest = (names, packHash) => {
+  const expected = [`pack-${packHash}.idx`, `pack-${packHash}.pack`].sort();
+  if (!/^[0-9a-f]{40}$/u.test(packHash) || packHash === '0'.repeat(40) || !Array.isArray(names)
+    || names.some(name => typeof name !== 'string') || JSON.stringify([...names].sort()) !== JSON.stringify(expected)) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+  }
+  return true;
+};
+
+const metadataExists = target => lstat(target).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error));
+
+const assertSourceObjectMetadata = async (sourceRoot, objectRoot, constructionEnvironment) => {
+  if (git(sourceRoot, ['rev-parse', '--show-object-format'], constructionEnvironment).stdout !== 'sha1') {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_OBJECT_FORMAT_REJECTED');
+  }
+  if (git(sourceRoot, ['rev-parse', '--is-shallow-repository'], constructionEnvironment).stdout !== 'false') {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED');
+  }
+  const gitPath = relative => path.resolve(sourceRoot, git(sourceRoot, ['rev-parse', '--git-path', relative], constructionEnvironment).stdout);
+  if (await metadataExists(gitPath('shallow'))) throw new Error('PR_C_PREFLIGHT_FIXTURE_SHALLOW_REJECTED');
+  if (await metadataExists(gitPath('info/grafts'))) throw new Error('PR_C_PREFLIGHT_FIXTURE_GRAFT_REJECTED');
+  if (await metadataExists(path.join(objectRoot, 'info', 'alternates'))
+    || await metadataExists(path.join(objectRoot, 'info', 'http-alternates'))) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_ALTERNATE_REJECTED');
+  }
+  if (git(sourceRoot, ['for-each-ref', '--count=1', '--format=x', 'refs/replace'], constructionEnvironment).stdout !== '') {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_REPLACEMENT_REJECTED');
+  }
+  const partial = git(sourceRoot, ['config', '--local', '--name-only', '--get-regexp', '^(extensions\\.partialclone|remote\\..*\\.(promisor|partialclonefilter))$'],
+    constructionEnvironment, { allowedStatuses: [0, 1] });
+  if (partial.status === 0 || partial.stdout !== '') throw new Error('PR_C_PREFLIGHT_FIXTURE_PROMISOR_REJECTED');
+  const packRoot = path.join(objectRoot, 'pack');
+  const packNames = await readdir(packRoot).catch(error => error.code === 'ENOENT' ? [] : Promise.reject(error));
+  if (packNames.some(name => name.endsWith('.promisor'))) throw new Error('PR_C_PREFLIGHT_FIXTURE_PROMISOR_REJECTED');
+};
+
+const exactHeadClosure = (repositoryRoot, head, environment) => {
+  const result = constructionGit(repositoryRoot, ['rev-list', '--objects', '--no-object-names', '--missing=error', head], environment);
+  if (result.stderr !== '') throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
+  const closure = parseCredentialPreflightOidClosureForTest(result.stdout);
+  if (!closure.includes(head)) throw new Error('PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
+  return closure;
+};
+
+const assertTargetMetadataAbsent = async (repositoryRoot, environment) => {
+  if (git(repositoryRoot, ['remote'], environment).stdout !== ''
+    || git(repositoryRoot, ['for-each-ref', '--count=1', '--format=x'], environment).stdout !== '') {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_TARGET_METADATA_REJECTED');
+  }
+  for (const relative of ['FETCH_HEAD', 'shallow', 'info/grafts', 'objects/info/alternates', 'objects/info/http-alternates']) {
+    if (await metadataExists(path.join(repositoryRoot, '.git', ...relative.split('/')))) {
+      throw new Error('PR_C_PREFLIGHT_FIXTURE_TARGET_METADATA_REJECTED');
+    }
   }
 };
 
-const cloneSelfContained = async (sourceRoot, repositoryRoot, constructionEnvironment, { bundlePath = null } = {}) => {
+const materializeExactHeadClosure = async (sourceRoot, repositoryRoot, constructionEnvironment) => {
   const before = await localCloneSourceIdentity(sourceRoot, constructionEnvironment);
-  if (bundlePath === null) {
-    git(path.dirname(repositoryRoot), ['clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout', sourceRoot, repositoryRoot], constructionEnvironment);
-  } else {
-    const resolvedBundle = path.resolve(bundlePath);
-    assertInside(path.dirname(repositoryRoot), resolvedBundle);
-    git(sourceRoot, ['bundle', 'create', resolvedBundle, 'HEAD'], constructionEnvironment);
-    await assertCompleteHeadBundle(sourceRoot, resolvedBundle, before.head, constructionEnvironment);
-    git(path.dirname(repositoryRoot), ['clone', '--quiet', '--no-checkout', resolvedBundle, repositoryRoot], constructionEnvironment);
-    await rm(resolvedBundle, { force: true });
+  if (!/^[0-9a-f]{40}$/u.test(before.head)) throw new Error('PR_C_PREFLIGHT_FIXTURE_OBJECT_FORMAT_REJECTED');
+  const objectPathValue = git(sourceRoot, ['rev-parse', '--git-path', 'objects'], constructionEnvironment).stdout;
+  const objectRoot = path.resolve(sourceRoot, objectPathValue);
+  const objectStat = await lstat(objectRoot, { bigint: true });
+  const objectReal = await realpath(objectRoot);
+  if (!objectStat.isDirectory() || objectStat.isSymbolicLink() || !samePath(objectRoot, objectReal)) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_CLONE_SOURCE_REJECTED');
   }
+  await assertSourceObjectMetadata(sourceRoot, objectReal, constructionEnvironment);
+  git(path.dirname(repositoryRoot), ['init', '--quiet', repositoryRoot], constructionEnvironment);
+  await assertTargetMetadataAbsent(repositoryRoot, constructionEnvironment);
+  const sourceObjectEnvironment = Object.freeze({
+    ...constructionEnvironment,
+    GIT_OBJECT_DIRECTORY: objectReal,
+    GIT_NO_REPLACE_OBJECTS: '1',
+    GIT_NO_LAZY_FETCH: '1',
+  });
+  const closure = exactHeadClosure(repositoryRoot, before.head, sourceObjectEnvironment);
+  const packRoot = path.join(repositoryRoot, '.git', 'objects', 'pack');
+  await mkdir(packRoot, { recursive: true });
+  const packRootStat = await lstat(packRoot);
+  const packRootReal = await realpath(packRoot);
+  if (!packRootStat.isDirectory() || packRootStat.isSymbolicLink() || !samePath(packRoot, packRootReal)) {
+    throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+  }
+  if ((await readdir(packRoot)).length !== 0) throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+  const packBase = path.join(packRoot, 'pack');
+  const packed = constructionGit(repositoryRoot, ['pack-objects', '--no-reuse-object', '--window=0', packBase],
+    sourceObjectEnvironment, `${closure.join('\n')}\n`);
+  if (packed.stderr !== '' || !/^[0-9a-f]{40}\n$/u.test(packed.stdout)) throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+  const packHash = packed.stdout.slice(0, -1);
+  const packNames = await readdir(packRoot);
+  assertCredentialPreflightPackFilesForTest(packNames, packHash);
+  let packBytes = 0n;
+  for (const name of packNames) {
+    const stat = await lstat(path.join(packRoot, name), { bigint: true });
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n || stat.size <= 0n || stat.size > BigInt(PACK_FILE_LIMIT_BYTES)) {
+      throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+    }
+    packBytes += stat.size;
+  }
+  if (packBytes > BigInt(PACK_FILE_LIMIT_BYTES)) throw new Error('PR_C_PREFLIGHT_FIXTURE_PACK_SET_REJECTED');
+  git(repositoryRoot, ['update-ref', '--no-deref', 'HEAD', before.head], constructionEnvironment);
+  git(repositoryRoot, ['config', 'core.autocrlf', 'false'], constructionEnvironment);
+  git(repositoryRoot, ['config', 'core.eol', 'lf'], constructionEnvironment);
+  git(repositoryRoot, ['checkout', '--quiet', '--detach', before.head], constructionEnvironment);
+  await assertTargetMetadataAbsent(repositoryRoot, constructionEnvironment);
+  const targetClosure = exactHeadClosure(repositoryRoot, before.head, constructionEnvironment);
+  assertCredentialPreflightOidClosureClaimsForTest(closure, targetClosure);
+  await assertTargetMetadataAbsent(repositoryRoot, constructionEnvironment);
+  await assertSourceObjectMetadata(sourceRoot, objectReal, constructionEnvironment);
+  const after = await localCloneSourceIdentity(sourceRoot, constructionEnvironment);
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('PR_C_PREFLIGHT_FIXTURE_CLONE_SOURCE_DRIFT_REJECTED');
+};
+
+const cloneSelfContained = async (sourceRoot, repositoryRoot, constructionEnvironment) => {
+  const before = await localCloneSourceIdentity(sourceRoot, constructionEnvironment);
+  git(path.dirname(repositoryRoot), ['clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout', sourceRoot, repositoryRoot], constructionEnvironment);
   const after = await localCloneSourceIdentity(sourceRoot, constructionEnvironment);
   if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('PR_C_PREFLIGHT_FIXTURE_CLONE_SOURCE_DRIFT_REJECTED');
   git(repositoryRoot, ['config', 'core.autocrlf', 'false'], constructionEnvironment);
@@ -570,7 +700,7 @@ export async function createCredentialPreflightEntrySeed(sourceRoot = process.cw
     const constructionEnvironment = fixtureGitEnvironment(control.emptyGitConfigPath, control.emptyHooksPath, [sourceReal, repositoryRoot], [sourceReal]);
     const snapshot = await sourceSnapshot(sourceReal, constructionEnvironment);
     const sourceHeadFiles = splitLines(git(sourceReal, ['ls-tree', '-r', '--name-only', 'HEAD'], constructionEnvironment).stdout).map(normalize).sort();
-    await cloneSelfContained(sourceReal, repositoryRoot, constructionEnvironment, { bundlePath: path.join(control.controlRoot, 'source-head.bundle') });
+    await materializeExactHeadClosure(sourceReal, repositoryRoot, constructionEnvironment);
     const changed = await copyCandidateWorktree(sourceReal, repositoryRoot, snapshot.governed, constructionEnvironment);
     commitCandidate(repositoryRoot, changed, {}, constructionEnvironment);
     const candidateHead = git(repositoryRoot, ['rev-parse', '--verify', 'HEAD'], constructionEnvironment).stdout;
@@ -617,7 +747,7 @@ const createCommittedSourceFixture = async sourceRoot => {
     const constructionEnvironment = fixtureGitEnvironment(control.emptyGitConfigPath, control.emptyHooksPath, [sourceReal, repositoryRoot], [sourceReal]);
     const sourceHead = git(sourceReal, ['rev-parse', '--verify', 'HEAD'], constructionEnvironment).stdout;
     const sourceHeadFiles = splitLines(git(sourceReal, ['ls-tree', '-r', '--name-only', 'HEAD'], constructionEnvironment).stdout).map(normalize).sort();
-    await cloneSelfContained(sourceReal, repositoryRoot, constructionEnvironment, { bundlePath: path.join(control.controlRoot, 'source-head.bundle') });
+    await materializeExactHeadClosure(sourceReal, repositoryRoot, constructionEnvironment);
     const childEnvironment = fixtureGitEnvironment(control.emptyGitConfigPath, control.emptyHooksPath, [repositoryRoot], [sourceReal]);
     const inventoryOwner = Object.freeze({ kind: 'pr-c-credential-preflight-committed-inventory', temporaryRoot });
     const objectInventory = await assertSelfContainedRepository(repositoryRoot, childEnvironment, { fullIntegrity: true, owner: inventoryOwner });

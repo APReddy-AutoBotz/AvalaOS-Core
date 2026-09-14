@@ -19,10 +19,13 @@ import {
   assertCredentialPreflightEnvironmentReferencesForTest,
   assertCredentialPreflightObjectInventoryAuthorityForTest,
   assertCredentialPreflightObjectInventoryClaimsForTest,
+  assertCredentialPreflightOidClosureClaimsForTest,
+  assertCredentialPreflightPackFilesForTest,
   createCredentialPreflightEntryFixture,
   createCredentialPreflightEntrySeed,
   getCredentialPreflightFixtureDiagnostics,
   PR_C_INTENDED_REMOVED_WORKFLOWS,
+  parseCredentialPreflightOidClosureForTest,
   readCredentialPreflightEntryArtifact,
   removeCredentialPreflightEntryFixture,
   removeCredentialPreflightEntrySeed,
@@ -114,6 +117,22 @@ const assertSeedAndPrivateClone = async (seed, sourceRoot, sourceGitEnvironment,
 };
 
 test('entry fixture preserves an already clean committed source without requiring an empty commit', async () => {
+  const firstOid = 'a'.repeat(40);
+  const secondOid = 'b'.repeat(40);
+  assert.deepEqual(parseCredentialPreflightOidClosureForTest(`${secondOid}\n${firstOid}\n`), [firstOid, secondOid]);
+  for (const malformed of ['', firstOid, `${firstOid}\r\n`, `${firstOid} path\n`, `${firstOid.toUpperCase()}\n`,
+    `${firstOid}\n${firstOid}\n`, `${'0'.repeat(40)}\n`, `${HOSTILE_CANARY}\n`]) {
+    assert.throws(() => parseCredentialPreflightOidClosureForTest(malformed), /OID_CLOSURE_REJECTED/u);
+  }
+  assert.equal(assertCredentialPreflightOidClosureClaimsForTest([firstOid], [firstOid]), true);
+  assert.throws(() => assertCredentialPreflightOidClosureClaimsForTest([firstOid], [secondOid]), /OID_CLOSURE_MISMATCH_REJECTED/u);
+  assert.equal(assertCredentialPreflightPackFilesForTest([`pack-${firstOid}.pack`, `pack-${firstOid}.idx`], firstOid), true);
+  for (const names of [[`pack-${firstOid}.pack`], [`pack-${firstOid}.pack`, `pack-${firstOid}.idx`, 'pack-hostile.rev'],
+    [`pack-${firstOid}.pack`, `pack-${secondOid}.idx`], [HOSTILE_CANARY]]) {
+    assert.throws(() => assertCredentialPreflightPackFilesForTest(names, firstOid), /PACK_SET_REJECTED/u);
+  }
+  assert.throws(() => assertCredentialPreflightPackFilesForTest([`pack-${'0'.repeat(40)}.pack`, `pack-${'0'.repeat(40)}.idx`],
+    '0'.repeat(40)), /PACK_SET_REJECTED/u);
   const fixture = await createCredentialPreflightEntryFixture(process.cwd(), { committedSourceOnly: true });
   let cleanSeed;
   try {
@@ -122,6 +141,42 @@ test('entry fixture preserves an already clean committed source without requirin
     assert.deepEqual(fixture.changed, []);
     for (const relative of PR_C_INTENDED_REMOVED_WORKFLOWS) {
       assert.equal(await exists(path.join(fixture.repositoryRoot, relative)), headFiles.has(relative), relative);
+    }
+    const rejectMetadata = async (relative, bytes, expected) => {
+      const target = path.join(fixture.repositoryRoot, '.git', ...relative.split('/'));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, bytes, { flag: 'wx' });
+      try {
+        await assert.rejects(createCredentialPreflightEntryFixture(fixture.repositoryRoot, { committedSourceOnly: true }), error => {
+          assert.doesNotMatch(error.message, new RegExp(HOSTILE_CANARY, 'u'));
+          return expected.test(error.message);
+        });
+      } finally { await unlink(target); }
+    };
+    await rejectMetadata('shallow', `${fixture.head}\n`, /SHALLOW_REJECTED/u);
+    await rejectMetadata('info/grafts', `${fixture.head}\n`, /GRAFT_REJECTED/u);
+    await rejectMetadata('objects/info/alternates', `${fixture.repositoryRoot}\n`, /ALTERNATE_REJECTED/u);
+    await rejectMetadata('objects/info/http-alternates', `${HOSTILE_CANARY}\n`, /ALTERNATE_REJECTED/u);
+    await rejectMetadata(`refs/replace/${fixture.head}`, `${fixture.head}\n`, /REPLACEMENT_REJECTED/u);
+    await rejectMetadata('objects/pack/canary.promisor', HOSTILE_CANARY, /PROMISOR_REJECTED/u);
+    const configPath = path.join(fixture.repositoryRoot, '.git', 'config');
+    const configBytes = await readFile(configPath);
+    for (const configEntry of [
+      '\n[remote "canary"]\n\tpromisor = true\n',
+      '\n[remote "canary"]\n\tpartialCloneFilter = blob:none\n',
+      '\n[extensions]\n\tpartialClone = canary\n',
+    ]) {
+      try {
+        const baseConfig = configBytes.toString('utf8');
+        const configured = configEntry.includes('[extensions]')
+          ? `${baseConfig.replace('repositoryformatversion = 0', 'repositoryformatversion = 1')}${configEntry}`
+          : `${baseConfig}${configEntry}`;
+        await writeFile(configPath, configured);
+        await assert.rejects(createCredentialPreflightEntryFixture(fixture.repositoryRoot, { committedSourceOnly: true }), error => {
+          assert.doesNotMatch(error.message, new RegExp(HOSTILE_CANARY, 'u'));
+          return /PROMISOR_REJECTED/u.test(error.message);
+        });
+      } finally { await writeFile(configPath, configBytes); }
     }
     cleanSeed = await createCredentialPreflightEntrySeed(fixture.repositoryRoot);
     await assertSeedAndPrivateClone(cleanSeed, fixture.repositoryRoot, fixture.gitEnvironment, []);

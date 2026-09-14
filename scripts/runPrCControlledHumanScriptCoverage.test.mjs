@@ -323,8 +323,23 @@ not ok 2 - after hook
   assert.notEqual(projectControlScriptTapFailures(failureTypeUnderStack, process.cwd(), 1).failures[0].classification, 'hook');
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED')),
     'PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED');
-  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS')),
-    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+  for (const obsolete of ['PR_C_PREFLIGHT_FIXTURE_BUNDLE_COMPLETENESS_REJECTED',
+    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS']) {
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(obsolete)), 'UNKNOWN');
+  }
+  for (const code of ['OBJECT_FORMAT_REJECTED','OID_CLOSURE_REJECTED','OID_CLOSURE_MISMATCH_REJECTED','PACK_SET_REJECTED',
+    'PROMISOR_REJECTED','GRAFT_REJECTED','REPLACEMENT_REJECTED','SHALLOW_REJECTED','TARGET_METADATA_REJECTED']) {
+    const token = `PR_C_PREFLIGHT_FIXTURE_${code}`;
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), token);
+  }
+  for (const operation of ['init','rev-list','pack-objects','for-each-ref']) {
+    const token = `PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:${operation}:STATUS`;
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), token);
+  }
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:INPUT_LIMIT')),
+    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:INPUT_LIMIT');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:RAW')), 'UNKNOWN');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GRAFT_REJECTED:init:STATUS')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED:bundle:STATUS')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(new Error('raw startup detail')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(Object.create(Error.prototype,
@@ -437,9 +452,18 @@ not ok 2 - after hook
       locations: [{ file: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs', line: 30, column: 1 }] },
   ]);
   const gitStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED',
-    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS');
   assert.equal(projectControlScriptTapFailures(gitStartupHookTap, process.cwd(), 1).failures[0].code,
-    'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+    'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS');
+  for (const obsolete of ['PR_C_PREFLIGHT_FIXTURE_BUNDLE_COMPLETENESS_REJECTED',
+    'PR_C_PREFLIGHT_FIXTURE_BUNDLE_HEAD_REJECTED','PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS']) {
+    assert.throws(() => projectControlScriptTapFailures(
+      startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', obsolete), process.cwd(), 1), /tap-startup-hook/u);
+  }
+  const constructionStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED',
+    'PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
+  assert.equal(projectControlScriptTapFailures(constructionStartupHookTap, process.cwd(), 1).failures[0].code,
+    'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_OID_CLOSURE_REJECTED');
   const fsckStartupToken = 'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY';
   const fsckStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', fsckStartupToken);
   assert.equal(projectControlScriptTapFailures(fsckStartupHookTap, process.cwd(), 1).failures[0].code,
@@ -498,7 +522,7 @@ not ok 2 - after hook
     assert.equal(runnerImport.stdout, ''); assert.equal(runnerImport.stderr, '');
     const nativeScripts = path.join(nativeRoot, 'scripts'); await mkdir(nativeScripts);
     const nativeTest = path.join(nativeScripts, 'prCControlledHumanCredentialPreflightEntry.test.mjs');
-    for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS',
+    for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS',
       'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE:EMPTY'].entries()) {
       await writeFile(nativeTest, `import test, { before } from 'node:test';\nbefore(() => { throw new Error('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}'); });\ntest('unreached one', () => {});\ntest('unreached two', () => {});\n`, { flag: index === 0 ? 'wx' : 'w' });
       const native = spawnSync(process.execPath, ['--test', '--test-reporter=tap', nativeTest], {
