@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: 'tests/trust-assurance/browser',
   testMatch: 'trustAssurance.spec.ts',
   globalSetup: './tests/trust-assurance/browser/trustAssuranceBuiltPreviewPreflight.ts',

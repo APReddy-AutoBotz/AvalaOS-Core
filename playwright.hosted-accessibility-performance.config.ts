@@ -6,6 +6,7 @@ if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; accessibility/perfor
 const hostedOrigin = await validateResolvedHostedUrl(rawUrl);
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'hostedAccessibilityPerformance.spec.ts',
   forbidOnly: true,

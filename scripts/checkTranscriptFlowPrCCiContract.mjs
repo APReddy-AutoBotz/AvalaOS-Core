@@ -1,7 +1,116 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import ts from 'typescript';
 
 const read = file => readFileSync(file, 'utf8');
+export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
+  'playwright.config.ts',
+  'playwright.controlled-preview-boundary.config.ts',
+  'playwright.controller-navigation-history.config.ts',
+  'playwright.delivery-monitor-pr-c.config.ts',
+  'playwright.enterprise-intelligence.config.ts',
+  'playwright.exhaustive-acceptance.config.ts',
+  'playwright.full-platform.config.ts',
+  'playwright.hosted-accessibility-performance.config.ts',
+  'playwright.hosted-pilot.config.ts',
+  'playwright.local-navigation-regression.config.ts',
+  'playwright.local-sandbox-regression.config.ts',
+  'playwright.pilot-operations.config.ts',
+  'playwright.pr1d.config.ts',
+  'playwright.pr1e.config.ts',
+  'playwright.pr1f.config.ts',
+  'playwright.pr1g.config.ts',
+  'playwright.studio-artifacts.config.ts',
+  'playwright.studio-pr-b.config.ts',
+  'playwright.studio-private-artifacts.config.ts',
+  'playwright.transcript-flow-pr-a.config.ts',
+  'playwright.trust-assurance.config.ts',
+]);
+const rejectPlaywrightCapture = code => { throw new Error(`PR_C_PLAYWRIGHT_GIT_CAPTURE_REJECTED:${code}`); };
+export const assertPlaywrightGitCaptureDisabledForTest = (source, file = 'playwright.test.config.ts') => {
+  if (typeof source !== 'string' || source.length === 0 || Buffer.byteLength(source) > 1024 * 1024) rejectPlaywrightCapture('SOURCE');
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  if (parsed.parseDiagnostics.length !== 0) rejectPlaywrightCapture('SYNTAX');
+  const imports = parsed.statements.filter(statement => ts.isImportDeclaration(statement)
+    && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === '@playwright/test')
+    .flatMap(statement => statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
+      ? statement.importClause.namedBindings.elements.filter(element => element.propertyName === undefined && element.name.text === 'defineConfig') : []);
+  if (imports.length !== 1) rejectPlaywrightCapture('DEFINE_CONFIG_IMPORT');
+  const exports = parsed.statements.filter(statement => ts.isExportAssignment(statement) && !statement.isExportEquals);
+  if (exports.length !== 1 || !ts.isCallExpression(exports[0].expression)
+    || !ts.isIdentifier(exports[0].expression.expression) || exports[0].expression.expression.text !== 'defineConfig'
+    || exports[0].expression.arguments.length !== 1 || !ts.isObjectLiteralExpression(exports[0].expression.arguments[0])) {
+    rejectPlaywrightCapture('DEFAULT_EXPORT');
+  }
+  const config = exports[0].expression.arguments[0];
+  if (config.properties.some(property => ts.isSpreadAssignment(property))) rejectPlaywrightCapture('ROOT_SPREAD');
+  if (config.properties.some(property => property.name && ts.isComputedPropertyName(property.name))) {
+    rejectPlaywrightCapture('ROOT_COMPUTED');
+  }
+  const captureProperties = config.properties.filter(property => property.name
+    && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === 'captureGitInfo');
+  if (captureProperties.length !== 1 || !ts.isPropertyAssignment(captureProperties[0])
+    || !ts.isObjectLiteralExpression(captureProperties[0].initializer)) rejectPlaywrightCapture('CAPTURE_PROPERTY');
+  const capture = captureProperties[0].initializer;
+  if (capture.properties.length !== 2 || capture.properties.some(property => !ts.isPropertyAssignment(property)
+    || !property.name || !ts.isIdentifier(property.name) || !['commit','diff'].includes(property.name.text)
+    || property.initializer.kind !== ts.SyntaxKind.FalseKeyword)
+    || new Set(capture.properties.map(property => property.name.text)).size !== 2) rejectPlaywrightCapture('CAPTURE_VALUE');
+  return true;
+};
+
+export const isPlaywrightRootConfigFileNameForTest = name => typeof name === 'string'
+  && /^playwright(?:\.[^/\\]+)?\.config\.(?:[cm]?[jt]s)$/u.test(name);
+export const assertPlaywrightConfigInventoryForTest = names => {
+  const discovered = names.filter(isPlaywrightRootConfigFileNameForTest).sort();
+  assert.deepEqual(discovered, [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort(),
+    'the exact root Playwright config inventory must remain pinned');
+  return discovered;
+};
+const rootEntries = readdirSync('.', { withFileTypes: true });
+assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
+  'root Playwright configs must be regular files, not links or directories');
+const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
+assert.equal(actualPlaywrightConfigs.length, 21);
+assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
+  [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
+for (const extension of ['ts','js','mts','mjs','cts','cjs']) {
+  for (const name of [`playwright.config.${extension}`, `playwright.unpinned.config.${extension}`]) {
+    assert.equal(isPlaywrightRootConfigFileNameForTest(name), true);
+  }
+  assert.throws(() => assertPlaywrightConfigInventoryForTest([
+    ...PR_C_PLAYWRIGHT_CONFIG_FILES, `playwright.unpinned.config.${extension}`,
+  ]), /the exact root Playwright config inventory must remain pinned/u);
+}
+for (const name of ['playwright.config.json','playwright.config.ts.bak','nested/playwright.config.ts',
+  'nested\\playwright.config.ts','playwright.config.jsx', '', null]) {
+  assert.equal(isPlaywrightRootConfigFileNameForTest(name), false);
+}
+assert.throws(() => assertPlaywrightConfigInventoryForTest(PR_C_PLAYWRIGHT_CONFIG_FILES.slice(1)),
+  /the exact root Playwright config inventory must remain pinned/u);
+assert.throws(() => assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'playwright.config.ts']),
+  /the exact root Playwright config inventory must remain pinned/u);
+for (const file of PR_C_PLAYWRIGHT_CONFIG_FILES) assert.equal(assertPlaywrightGitCaptureDisabledForTest(read(file), file), true);
+
+const validPlaywrightCapture = "import { defineConfig } from '@playwright/test'; export default defineConfig({ captureGitInfo: { commit: false, diff: false }, testDir: '.' });";
+assert.equal(assertPlaywrightGitCaptureDisabledForTest(validPlaywrightCapture), true);
+for (const hostile of [
+  "import { defineConfig } from '@playwright/test'; export default defineConfig({ testDir: '.' }); // captureGitInfo: { commit: false, diff: false }",
+  validPlaywrightCapture.replace('commit: false, ', ''),
+  validPlaywrightCapture.replace('commit: false', 'commit: true'),
+  validPlaywrightCapture.replace('diff: false', "diff: 'false'"),
+  validPlaywrightCapture.replace('diff: false', 'diff: disabled'),
+  validPlaywrightCapture.replace('captureGitInfo:', "['captureGitInfo']:"),
+  validPlaywrightCapture.replace('testDir:', "['captureGitInfo']: { commit: true, diff: true }, testDir:"),
+  validPlaywrightCapture.replace('testDir:', "'captureGitInfo': { commit: true, diff: true }, testDir:"),
+  validPlaywrightCapture.replace('captureGitInfo:', '...base, captureGitInfo:'),
+  validPlaywrightCapture.replace('testDir:', 'captureGitInfo: { commit: false, diff: false }, testDir:'),
+  validPlaywrightCapture.replace("defineConfig({ captureGitInfo", "(condition ? defineConfig : alternate)({ captureGitInfo"),
+  validPlaywrightCapture.replace("export default defineConfig", "const configured = defineConfig; export default configured"),
+  validPlaywrightCapture.replace("import { defineConfig }", "import { defineConfig as configure }"),
+  `${validPlaywrightCapture} export default defineConfig({ captureGitInfo: { commit: false, diff: false } });`,
+]) assert.throws(() => assertPlaywrightGitCaptureDisabledForTest(hostile), /PR_C_PLAYWRIGHT_GIT_CAPTURE_REJECTED:/u);
+
 const workflow = read('.github/workflows/transcript-flow-pr-c.yml');
 const pkg = JSON.parse(read('package.json'));
 const scripts = pkg.scripts || {};

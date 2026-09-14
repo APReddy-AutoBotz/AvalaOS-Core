@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'transcriptFlowPrA.spec.ts',
   forbidOnly: true,

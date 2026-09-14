@@ -5,6 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
 const externalServer = process.env.STUDIO_PR_B_EXTERNAL_SERVER === 'true';
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser/studioPrB',
   testMatch: 'studioPrB.spec.ts',
   globalTeardown: externalServer ? undefined : './tests/browser/studioPrB/globalTeardown.mjs',
