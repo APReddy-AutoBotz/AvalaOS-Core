@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -20,6 +21,7 @@ import {
   parseControlScriptTap,
   projectControlScriptTapFailures,
   readControlScriptScenarios,
+  sanitizeControlScriptStartupFailure,
   validateControlScriptFailureProjection,
   validateControlScriptTestCompletion,
   validateControlScriptTestScheduling,
@@ -197,7 +199,7 @@ test('TAP verifier rejects green exits with skipped missing or incomplete test r
   ]) assert.throws(() => parseControlScriptTap(changed));
 });
 
-test('failure projection retains only fixed classifications and exact source-owned coordinates', () => {
+test('failure projection retains only fixed classifications and exact source-owned coordinates', async () => {
   const exactLocation = path.join(process.cwd(), 'scripts', 'prCControlledHumanCredentialPreflightEntry.test.mjs');
   const failedTap = `TAP version 13
 not ok 1 - hostile title must not be retained
@@ -236,6 +238,14 @@ not ok 2 - ${exactLocation}
   const titleInjection = failedTap.replace('hostile title must not be retained', 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED')
     .replace("  error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'\n", '');
   assert.equal(projectControlScriptTapFailures(titleInjection, process.cwd(), 1).failures[0].code, 'assertion-failure');
+  const fixtureUnderStack = failedTap.replace("  error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'\n", '')
+    .replace('  stack: |-\n', "  stack: |-\n    error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'\n");
+  assert.equal(projectControlScriptTapFailures(fixtureUnderStack, process.cwd(), 1).failures[0].code, 'assertion-failure');
+  assert.equal(projectControlScriptTapFailures(fixtureUnderStack.replace('    error:', '    code:'), process.cwd(), 1).failures[0].code,
+    'assertion-failure');
+  assert.equal(projectControlScriptTapFailures(failedTap.replace("  error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'",
+    "  code: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'"), process.cwd(), 1).failures[0].code,
+  'fixture-identity-claims-rejected');
   const fileWrapperTap = `TAP version 13
 not ok 1 - ${exactLocation}
   ---
@@ -301,6 +311,97 @@ not ok 2 - after hook
 # todo 0
 `;
   assert.deepEqual(projectControlScriptTapFailures(hookTap, process.cwd(), 1).failures.map(item => item.classification), ['hook', 'hook']);
+  const failureTypeUnderStack = hookTap.replace("  failureType: 'hookFailed'\n  stack: |-",
+    "  stack: |-\n    failureType: 'hookFailed'");
+  assert.notEqual(projectControlScriptTapFailures(failureTypeUnderStack, process.cwd(), 1).failures[0].classification, 'hook');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED')),
+    'PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS')),
+    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED:bundle:STATUS')), 'UNKNOWN');
+  assert.equal(sanitizeControlScriptStartupFailure(new Error('raw startup detail')), 'UNKNOWN');
+  assert.equal(sanitizeControlScriptStartupFailure(Object.create(Error.prototype,
+    { message: { get() { throw new Error('raw getter detail'); } } })), 'UNKNOWN');
+  const startupHookTap = hookTap.replace('before hook', 'owned startup hook')
+    .replace(`  stack: |-\n    at ${exactLocation}:30:1`, `  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'\n  stack: |-\n    at ${exactLocation}:30:1`)
+    .replace(/not ok 2 - after hook[\s\S]*?# todo 0\n/u, '# tests 1\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n');
+  assert.deepEqual(projectControlScriptTapFailures(startupHookTap, process.cwd(), 1).failures, [
+    { classification: 'hook', code: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED',
+      locations: [{ file: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs', line: 30, column: 1 }] },
+  ]);
+  const gitStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED',
+    'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+  assert.equal(projectControlScriptTapFailures(gitStartupHookTap, process.cwd(), 1).failures[0].code,
+    'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+  const unknownStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', 'UNKNOWN');
+  assert.equal(projectControlScriptTapFailures(unknownStartupHookTap, process.cwd(), 1).failures[0].code, 'hook-failure');
+  const startupWithWrapperTap = startupHookTap.replace('# tests 1\n# pass 0\n# fail 1', `not ok 2 - ${exactLocation}
+  ---
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  ...
+# tests 2
+# pass 0
+# fail 2`);
+  assert.deepEqual(projectControlScriptTapFailures(startupWithWrapperTap, process.cwd(), 1).failures.map(item => item.classification),
+    ['hook', 'file-wrapper']);
+  assert.equal(projectControlScriptTapFailures(startupWithWrapperTap, process.cwd(), 1).failures[1].code, 'file-wrapper-failure');
+  const duplicatedStartupTap = startupWithWrapperTap.replace("failureType: 'subtestsFailed'", "failureType: 'hookFailed'")
+    .replace("  error: '1 subtest failed'", `  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'
+  stack: |-
+    at ${exactLocation}:30:1`);
+  assert.equal(projectControlScriptTapFailures(duplicatedStartupTap, process.cwd(), 1).failures.length, 1);
+  assert.throws(() => projectControlScriptTapFailures(duplicatedStartupTap.replace('not ok 2 -', 'not ok 1 -'), process.cwd(), 1),
+    /tap-startup-hook/u);
+  assert.throws(() => projectControlScriptTapFailures(duplicatedStartupTap.replace(
+    "PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'\n  stack: |-\n    at", "PR_C_CONTROL_SCRIPT_STARTUP_FAILED:UNKNOWN'\n  stack: |-\n    at"),
+  process.cwd(), 1), /tap-startup-hook/u);
+  for (const hostile of [
+    startupHookTap.replace('owned startup hook', 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:UNKNOWN'),
+    startupHookTap.replace("  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'\n", '')
+      .replace('  stack: |-\n', "  stack: |-\n    error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'\n"),
+    startupHookTap.replace("  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'",
+      "   error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'"),
+    startupHookTap.replace("'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'",
+      "'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED\""),
+    startupHookTap.replace("  stack: |-", "  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:UNKNOWN'\n  stack: |-"),
+    startupHookTap.replace('  ...', "  ...\n  ---\n  code: 'ERR_TEST_FAILURE'\n  ..."),
+    startupHookTap.replace('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED',
+      'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:'),
+    startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', 'PR_C_PREFLIGHT_FIXTURE_NOT_ALLOWLISTED'),
+    startupHookTap.replace("failureType: 'hookFailed'", "failureType: 'testCodeFailure'"),
+    startupHookTap.replace(exactLocation, path.join(process.cwd(), 'scripts', 'runPrCControlledHumanScriptCoverage.test.mjs')),
+  ]) assert.throws(() => projectControlScriptTapFailures(hostile, process.cwd(), 1), /tap-(?:startup-hook|failure-diagnostic)/u);
+  assert.throws(() => validateControlScriptFailureProjection({ ...projection, failures: [{ classification: 'hook',
+    code: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', locations: [] }] }, 1),
+  /tap-failure-item/u);
+
+  const nativeRoot = await mkdtemp(path.join(os.tmpdir(), 'pr-c-control-script-native-before-'));
+  try {
+    const nativeScripts = path.join(nativeRoot, 'scripts'); await mkdir(nativeScripts);
+    const nativeTest = path.join(nativeScripts, 'prCControlledHumanCredentialPreflightEntry.test.mjs');
+    for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS'].entries()) {
+      await writeFile(nativeTest, `import test, { before } from 'node:test';\nbefore(() => { throw new Error('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}'); });\ntest('unreached one', () => {});\ntest('unreached two', () => {});\n`, { flag: index === 0 ? 'wx' : 'w' });
+      const native = spawnSync(process.execPath, ['--test', '--test-reporter=tap', nativeTest], {
+        cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,
+        windowsHide: true,
+      });
+      assert(Number.isInteger(native.status) && native.status > 0); assert.equal(native.signal, null); assert.equal(native.stderr, '');
+      const nativeProjection = projectControlScriptTapFailures(native.stdout, nativeRoot, native.status);
+      assert.deepEqual(nativeProjection.summary, { tests: 2, pass: 0, fail: 2, cancelled: 0, skipped: 0, todo: 0 });
+      assert.equal(nativeProjection.failures.length, 1);
+      assert(nativeProjection.failures.every(item => item.classification === 'hook'
+        && item.code === (detail === 'UNKNOWN' ? 'hook-failure' : `PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}`)
+        && item.locations.length > 0
+        && item.locations.every(location => location.file === 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs')));
+    }
+  } finally {
+    const resolved = await realpath(nativeRoot), temporary = await realpath(os.tmpdir());
+    assert.equal(resolved, path.resolve(nativeRoot)); assert.equal(path.dirname(resolved), temporary);
+    assert(/^pr-c-control-script-native-before-.+$/u.test(path.basename(resolved)));
+    const nativeStat = await lstat(resolved); assert(nativeStat.isDirectory() && !nativeStat.isSymbolicLink());
+    await rm(resolved, { recursive: true, force: true });
+  }
   assert.throws(() => validateControlScriptFailureProjection({ ...projection, failures: [
     { classification: 'module', code: 'module-failure', locations: [] },
   ] }, 1), /tap-failure-item/u);

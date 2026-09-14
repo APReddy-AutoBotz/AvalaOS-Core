@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { appendFile, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test, { after } from 'node:test';
+import test, { after, before } from 'node:test';
 
 import { bootstrapCheckoutIdentity } from './derivePrCControlledHumanBootstrap.mjs';
 import { PREFLIGHT_COMMAND, PREFLIGHT_FAILURE_PHASES, PREFLIGHT_OUTPUT, derivePreflightIdentity, validateNonPatPreflightInputs } from './prCControlledHumanCredentialPreflight.mjs';
@@ -31,10 +31,21 @@ import {
   verifyCredentialPreflightEntryFixture,
   verifyCredentialPreflightEntrySeed,
 } from './prCControlledHumanCredentialPreflightEntryFixture.mjs';
+import { sanitizeControlScriptStartupFailure } from './runPrCControlledHumanScriptCoverage.mjs';
 
 const scenarios = [];
-const candidateSeed = await createCredentialPreflightEntrySeed(process.cwd());
+let candidateSeed;
+let candidateSeedCreated = false;
+before(async () => {
+  try {
+    candidateSeed = await createCredentialPreflightEntrySeed(process.cwd());
+    candidateSeedCreated = true;
+  } catch (error) {
+    throw new Error(`PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${sanitizeControlScriptStartupFailure(error)}`);
+  }
+});
 after(async () => {
+  if (!candidateSeedCreated) return;
   await removeCredentialPreflightEntrySeed(candidateSeed);
   const diagnostics = getCredentialPreflightFixtureDiagnostics();
   assert.equal(diagnostics.actualFullIntegrityChecks, 9);

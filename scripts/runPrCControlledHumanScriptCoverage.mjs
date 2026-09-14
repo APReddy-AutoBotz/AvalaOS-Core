@@ -192,6 +192,22 @@ const KNOWN_FIXTURE_FAILURES = new Set([
 ]);
 const GIT_FAILURE_OPERATIONS = new Set(['add','bundle','checkout','clone','commit','commit-tree','config','diff','fsck','ls-files','ls-tree','merge-base','remote','rev-parse','status','update-ref','write-tree']);
 const GIT_FAILURE_REASONS = new Set(['ARGV','OUTPUT_LIMIT','TIMEOUT','EXECUTION','SIGNAL','STATUS']);
+const STARTUP_FAILURE_PREFIX = 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:';
+const STARTUP_FAILURE_OWNER = 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs';
+
+const knownFixtureFailure = value => {
+  if (typeof value !== 'string') return false;
+  const match = /^PR_C_PREFLIGHT_FIXTURE_([A-Z_]+)(?::([a-z-]+):([A-Z_]+))?$/u.exec(value);
+  if (!match) return false;
+  return KNOWN_FIXTURE_FAILURES.has(match[1]) ? match[2] === undefined && match[3] === undefined
+    : match[1] === 'GIT_REJECTED' && GIT_FAILURE_OPERATIONS.has(match[2]) && GIT_FAILURE_REASONS.has(match[3]);
+};
+
+export const sanitizeControlScriptStartupFailure = error => {
+  let message = '';
+  try { message = error instanceof Error ? error.message : ''; } catch { return 'UNKNOWN'; }
+  return knownFixtureFailure(message) ? message : 'UNKNOWN';
+};
 
 const tapSummary = tap => Object.fromEntries(['tests','pass','fail','cancelled','skipped','todo'].map(name => {
   const matches = [...tap.matchAll(new RegExp(`^# ${name} ([0-9]+)$`, 'gmu'))];
@@ -201,18 +217,52 @@ const tapSummary = tap => Object.fromEntries(['tests','pass','fail','cancelled',
   return [name, value];
 }));
 
-const fixtureFailureCode = block => {
-  const tokens = [...block.matchAll(/^\s+(?:error|code):\s*['"]?PR_C_PREFLIGHT_FIXTURE_([A-Z_]+)(?::([a-z-]+):([A-Z_]+))?['"]?\s*$/gmu)]
-    .map(match => ({ suffix: match[1], operation: match[2], reason: match[3] }));
-  let code = null;
-  for (const token of tokens) {
-    const known = KNOWN_FIXTURE_FAILURES.has(token.suffix)
-      || token.suffix === 'GIT_REJECTED' && GIT_FAILURE_OPERATIONS.has(token.operation) && GIT_FAILURE_REASONS.has(token.reason);
-    if (!known) fail('tap-failure-code');
-    if (token.suffix === 'IDENTITY_CLAIMS_REJECTED') code = 'fixture-identity-claims-rejected';
-    else code ??= 'fixture-rejection';
+const owningDiagnosticFields = (rows, indentation) => {
+  const prefix = ' '.repeat(indentation + 2);
+  const openings = [], closings = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index] === `${prefix}---`) openings.push(index);
+    if (rows[index] === `${prefix}...`) closings.push(index);
   }
-  return code;
+  if (openings.length === 0 && closings.length === 0) return Object.freeze({});
+  if (openings.length !== 1 || closings.length !== 1 || openings[0] >= closings[0]) fail('tap-failure-diagnostic');
+  const fields = {};
+  for (const row of rows.slice(openings[0] + 1, closings[0])) {
+    const match = new RegExp(`^${prefix}(failureType|error|code): (.*)$`, 'u').exec(row);
+    if (!match) continue;
+    if (Object.hasOwn(fields, match[1])) fail('tap-failure-diagnostic');
+    const value = match[2]; const quote = value[0];
+    fields[match[1]] = (quote === "'" || quote === '"') && value.length >= 2 && value.at(-1) === quote
+      ? value.slice(1, -1) : null;
+  }
+  return Object.freeze(fields);
+};
+
+const fixtureFailureCode = diagnostic => {
+  const tokens = ['error','code'].filter(name => typeof diagnostic[name] === 'string'
+    && diagnostic[name].startsWith('PR_C_PREFLIGHT_FIXTURE_')).map(name => diagnostic[name]);
+  if (tokens.length > 1) fail('tap-failure-code');
+  if (tokens.length === 0) return null;
+  if (!knownFixtureFailure(tokens[0])) fail('tap-failure-code');
+  return tokens[0] === 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'
+    ? 'fixture-identity-claims-rejected' : 'fixture-rejection';
+};
+
+const startupHookFailureCode = (block, diagnostic, locations) => {
+  const markerCount = block.split(STARTUP_FAILURE_PREFIX).length - 1;
+  const tokens = [...block.matchAll(/PR_C_CONTROL_SCRIPT_STARTUP_FAILED:[^\s'"]+/gu)].map(match => match[0]);
+  if (markerCount === 0) return null;
+  if (diagnostic.failureType !== 'hookFailed' || markerCount !== 1 || tokens.length !== 1
+    || diagnostic.error !== tokens[0]
+    || locations.length === 0 || locations.some(location => location.file !== STARTUP_FAILURE_OWNER)) fail('tap-startup-hook');
+  const detail = diagnostic.error.slice(STARTUP_FAILURE_PREFIX.length);
+  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?::[a-z-]+:[A-Z_]+)?/gu)].map(match => match[0]);
+  if (detail === 'UNKNOWN') {
+    if (fixtureTokens.length !== 0) fail('tap-startup-hook');
+    return 'hook-failure';
+  }
+  if (!knownFixtureFailure(detail) || fixtureTokens.length !== 1 || fixtureTokens[0] !== detail) fail('tap-startup-hook');
+  return `${STARTUP_FAILURE_PREFIX}${detail}`;
 };
 
 const normalizeKnownTestPath = (candidateValue, root, code) => {
@@ -259,16 +309,23 @@ export function validateControlScriptFailureProjection(projection, childStatus) 
     || projection.summary.fail + projection.summary.cancelled < 1 || !Array.isArray(projection.failures)
     || projection.failures.length < 1 || projection.failures.length > TAP_FAILURE_COUNT_LIMIT) fail('tap-failure-summary');
   const seen = new Set();
+  let startupFailureCount = 0;
   for (const item of projection.failures) {
     exactKeys(item, ['classification','code','locations'], 'tap-failure-item');
+    const knownStartupCode = typeof item.code === 'string' && item.code.startsWith(STARTUP_FAILURE_PREFIX)
+      && knownFixtureFailure(item.code.slice(STARTUP_FAILURE_PREFIX.length));
     if (!['test','hook','file-wrapper','unclassified'].includes(item.classification)
-      || !['assertion-failure','fixture-rejection','fixture-identity-claims-rejected','hook-failure','file-wrapper-failure'].includes(item.code)
+      || !(['assertion-failure','fixture-rejection','fixture-identity-claims-rejected','hook-failure','file-wrapper-failure'].includes(item.code)
+        || item.classification === 'hook' && knownStartupCode)
       || !Array.isArray(item.locations) || item.locations.length > 8) fail('tap-failure-item');
     for (const location of item.locations) {
       exactKeys(location, ['file','line','column'], 'tap-failure-location');
       if (!CONTROL_SCRIPT_TESTS.includes(location.file) || !Number.isSafeInteger(location.line) || location.line < 1 || location.line > 100_000
         || !Number.isSafeInteger(location.column) || location.column < 1 || location.column > 10_000) fail('tap-failure-location');
     }
+    if (knownStartupCode && (item.locations.length === 0
+      || item.locations.some(location => location.file !== STARTUP_FAILURE_OWNER))) fail('tap-failure-item');
+    if (knownStartupCode && ++startupFailureCount > 1) fail('tap-failure-duplicate');
     const locationIdentities = item.locations.map(location => `${location.file}:${location.line}:${location.column}`);
     if (new Set(locationIdentities).size !== locationIdentities.length) fail('tap-failure-duplicate');
     const identity = JSON.stringify(item); if (seen.has(identity)) fail('tap-failure-duplicate'); seen.add(identity);
@@ -279,20 +336,41 @@ export function validateControlScriptFailureProjection(projection, childStatus) 
 export function projectControlScriptTapFailures(tap, root = process.cwd(), childStatus) {
   if (typeof tap !== 'string' || Buffer.byteLength(tap) > TAP_FAILURE_LIMIT_BYTES || tap.includes('\0')) fail('tap-failure-input');
   const summary = tapSummary(tap); const lines = tap.split(/\r?\n/gu); const failures = [];
+  let startupFailure = null;
+  const startupOrdinals = new Set();
   for (let index = 0; index < lines.length; index += 1) {
-    const match = /^(\s*)not ok [0-9]+ - (.*)$/u.exec(lines[index]); if (!match) continue;
-    if (!/^[\x20-\x7e]{1,200}$/u.test(match[2])) fail('tap-failure-title');
+    const match = /^(\s*)not ok ([0-9]+) - (.*)$/u.exec(lines[index]); if (!match) continue;
+    const ordinal = Number(match[2]);
+    if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > 10_000) fail('tap-failure-ordinal');
+    if (!/^[\x20-\x7e]{1,200}$/u.test(match[3])) fail('tap-failure-title');
     const indentation = match[1].length; const rows = [lines[index]];
     for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
       const boundary = /^(\s*)(?:not )?ok [0-9]+ - /u.exec(lines[cursor]);
       if (boundary && boundary[1].length <= indentation) break;
       rows.push(lines[cursor]);
     }
-    const block = rows.join('\n'); const locations = failureLocations(block, root); const fixtureCode = fixtureFailureCode(block);
-    const hook = /failureType:\s*['"]hookFailed['"]/u.test(block);
-    const fileWrapper = !hook && fileWrapperFailureTitle(match[2], root);
+    const block = rows.join('\n'); const locations = failureLocations(block, root);
+    const diagnostic = owningDiagnosticFields(rows, indentation);
+    const hook = diagnostic.failureType === 'hookFailed';
+    const startupCode = startupHookFailureCode(block, diagnostic, locations);
+    if (startupCode !== null) {
+      if (startupOrdinals.has(ordinal)) fail('tap-startup-hook');
+      startupOrdinals.add(ordinal);
+      if (startupFailure !== null) {
+        if (startupFailure.code !== startupCode) fail('tap-startup-hook');
+        const identities = new Set(locations.map(location => JSON.stringify(location)));
+        const sharedLocations = startupFailure.locations.filter(location => identities.has(JSON.stringify(location)));
+        if (sharedLocations.length === 0) fail('tap-startup-hook');
+        startupFailure.locations = sharedLocations;
+        failures[startupFailure.index] = { ...failures[startupFailure.index], locations: sharedLocations };
+        continue;
+      }
+      startupFailure = { code: startupCode, locations, index: failures.length };
+    }
+    const fixtureCode = startupCode === null ? fixtureFailureCode(diagnostic) : null;
+    const fileWrapper = !hook && fileWrapperFailureTitle(match[3], root);
     failures.push({ classification: hook ? 'hook' : fileWrapper ? 'file-wrapper' : locations.length > 0 ? 'test' : 'unclassified',
-      code: fixtureCode ?? (hook ? 'hook-failure' : fileWrapper ? 'file-wrapper-failure' : 'assertion-failure'), locations });
+      code: startupCode ?? fixtureCode ?? (hook ? 'hook-failure' : fileWrapper ? 'file-wrapper-failure' : 'assertion-failure'), locations });
     if (failures.length > TAP_FAILURE_COUNT_LIMIT) fail('tap-failure-count');
   }
   return validateControlScriptFailureProjection({ classification: 'controlled-human-source-test-failure', summary, failures }, childStatus);
