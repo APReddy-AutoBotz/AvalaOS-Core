@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
-  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
+  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -42,6 +43,15 @@ const inside = (owner, target) => {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 };
 const rejectFixture = code => { throw new Error(`PLAYWRIGHT_METADATA_FIXTURE_REJECTED:${code}`); };
+const captureParentCoverageEnvironment = () => Object.freeze({
+  present: Object.hasOwn(process.env, 'NODE_V8_COVERAGE'),
+  value: process.env.NODE_V8_COVERAGE,
+});
+const assertParentCoverageEnvironmentUnchanged = before => {
+  const after = captureParentCoverageEnvironment();
+  assert(after.present === before.present && after.value === before.value,
+    'PLAYWRIGHT_METADATA_PARENT_COVERAGE_ENVIRONMENT_CHANGED');
+};
 
 const inspectMetadataFixtureRoot = fixture => {
   const state = metadataFixtureAuthority.get(fixture);
@@ -75,6 +85,20 @@ const assertOwnedMetadataCache = (fixture, candidate = undefined) => {
   }
   if (!samePath(cacheReal, cache) || !inside(temporaryRootReal, cacheReal)) rejectFixture('cache-path');
   return cacheReal;
+};
+
+const assertNoChildV8CoverageArtifacts = fixture => {
+  const { temporaryRootReal } = inspectMetadataFixtureRoot(fixture);
+  const pending = [temporaryRootReal];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(entryPath);
+      else if (entry.isFile()) assert(!/^coverage-\d+-\d+-\d+\.json$/u.test(entry.name),
+        'PLAYWRIGHT_METADATA_CHILD_COVERAGE_ARTIFACT_RETAINED');
+    }
+  }
 };
 
 const createMetadataFixture = () => {
@@ -121,6 +145,7 @@ const buildOwnedMetadataGitEnvironment = (fixture, repositoryRoot) => {
     ...Object.fromEntries(entries.flatMap(([key, value], index) => [
       [`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value],
     ])),
+    NODE_V8_COVERAGE: '',
   });
   metadataGitEnvironmentAuthority.add(environment);
   return environment;
@@ -133,6 +158,7 @@ const buildMetadataChildEnvironment = (baseEnvironment, fixture, gitEnvironment 
     ...Object.fromEntries(names.filter(name => baseEnvironment[name] !== undefined).map(name => [name, baseEnvironment[name]])),
     ...(gitEnvironment ?? {}),
     PWTEST_CACHE_DIR: assertOwnedMetadataCache(fixture),
+    NODE_V8_COVERAGE: '',
   });
 };
 
@@ -146,6 +172,7 @@ const cleanupMetadataFixture = fixture => {
 };
 
 test('installed Playwright Git capture is disabled only by the complete literal policy while sanitized metadata is preserved', () => {
+  const parentCoverageEnvironment = captureParentCoverageEnvironment();
   const metadataFixture = createMetadataFixture();
   const temporaryRoot = metadataFixture.temporaryRoot;
   const exactCommand = ['node', 'node_modules/@playwright/test/cli.js', 'test', '--config=<temp-metadata-smoke>', '--workers=1'];
@@ -166,6 +193,10 @@ test('installed Playwright Git capture is disabled only by the complete literal 
       const caseRoot = path.join(temporaryRoot, definition.name);
       mkdirSync(caseRoot, { mode: 0o700 });
       const gitEnvironment = buildOwnedMetadataGitEnvironment(metadataFixture, caseRoot);
+      assert.equal(Object.isFrozen(gitEnvironment), true);
+      assert.equal(Object.hasOwn(gitEnvironment, 'NODE_V8_COVERAGE'), true);
+      assert.equal(gitEnvironment.NODE_V8_COVERAGE, '');
+      assertParentCoverageEnvironmentUnchanged(parentCoverageEnvironment);
       const runGit = args => {
         const result = spawnSync('git', args, {
           cwd: caseRoot, env: gitEnvironment, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
@@ -221,16 +252,22 @@ export default defineConfig({ ${definition.capture}
 
       const infrastructureOnly = Object.fromEntries(METADATA_INFRASTRUCTURE_ENVIRONMENT
         .filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]]));
+      const hostileChildCoverageRoot = path.join(caseRoot, 'hostile-child-v8-coverage');
       const syntheticEnvironment = definition.ci ? {
-        ...process.env, CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: repository, GITHUB_WORKFLOW_REF: workflowRef,
+        ...process.env, NODE_V8_COVERAGE: hostileChildCoverageRoot,
+        CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: repository, GITHUB_WORKFLOW_REF: workflowRef,
         GITHUB_EVENT_NAME: 'pull_request', GITHUB_RUN_ID: '34040328938', GITHUB_RUN_ATTEMPT: '1',
         GITHUB_SHA: definition.governedMetadata ? workflowSha : runGit(['rev-parse', 'HEAD']), GITHUB_EVENT_PATH: eventPath,
         GITHUB_BASE_REF: 'main', GITHUB_HEAD_REF: branch, GITHUB_REF: 'refs/pull/264/merge', GITHUB_REF_NAME: '264/merge',
         GITHUB_ACTOR: 'synthetic-ci-actor', ACCEPTANCE_EXECUTION_KIND: 'hosted_preview', ACCEPTANCE_RELEASE_SHA: head,
         EXPECTED_RELEASE_SHA: head, HOSTED_PILOT_URL: 'https://deploy-preview-264--avalaos-pilot.netlify.app', NETLIFY_DEPLOY_ID: deployId,
-      } : infrastructureOnly;
+      } : { ...infrastructureOnly, NODE_V8_COVERAGE: hostileChildCoverageRoot };
       const childEnvironment = buildMetadataChildEnvironment(syntheticEnvironment, metadataFixture, gitEnvironment);
+      assert.equal(Object.isFrozen(childEnvironment), true);
+      assert.equal(Object.hasOwn(childEnvironment, 'NODE_V8_COVERAGE'), true);
+      assert.equal(childEnvironment.NODE_V8_COVERAGE, '');
       assert.equal(Object.hasOwn(childEnvironment, 'NODE_OPTIONS'), false);
+      assertParentCoverageEnvironmentUnchanged(parentCoverageEnvironment);
 
       const inspectRepository = () => {
         const commonValue = runGit(['rev-parse', '--git-common-dir']);
@@ -257,6 +294,9 @@ export default defineConfig({ ${definition.capture}
       });
       assert(execution.status === 0 && execution.signal === null && !execution.error,
         `PLAYWRIGHT_METADATA_POLICY_CASE_FAILED:${definition.name}`);
+      assert.equal(existsSync(hostileChildCoverageRoot), false);
+      assertNoChildV8CoverageArtifacts(metadataFixture);
+      assertParentCoverageEnvironmentUnchanged(parentCoverageEnvironment);
       const after = inspectRepository();
       assert(before.head === after.head && before.tree === after.tree && before.refs === after.refs
         && before.index.equals(after.index) && before.tracked.equals(after.tracked)
@@ -298,13 +338,21 @@ export default defineConfig({ ${definition.capture}
 });
 
 test('metadata fixture overrides inherited Playwright cache with one exact owned directory', () => {
+  const parentCoverageEnvironment = captureParentCoverageEnvironment();
   const fixture = createMetadataFixture();
   try {
     const environment = buildMetadataChildEnvironment({ PWTEST_CACHE_DIR: path.join(tmpdir(), 'hostile-inherited-cache'),
-      RETAINED: 'yes', NODE_OPTIONS: '--import=hostile', GIT_DIR: path.join(tmpdir(), 'hostile-git') }, fixture);
+      RETAINED: 'yes', NODE_OPTIONS: '--import=hostile', NODE_V8_COVERAGE: path.join(fixture.temporaryRoot, 'hostile-coverage'),
+      GIT_DIR: path.join(tmpdir(), 'hostile-git') }, fixture);
+    assert.equal(Object.isFrozen(environment), true);
     assert.equal(environment.PWTEST_CACHE_DIR, fixture.cacheRoot);
+    assert.equal(Object.hasOwn(environment, 'NODE_V8_COVERAGE'), true);
+    assert.equal(environment.NODE_V8_COVERAGE, '');
     for (const name of ['RETAINED','NODE_OPTIONS','GIT_DIR']) assert.equal(Object.hasOwn(environment, name), false);
     assert.equal(assertOwnedMetadataCache(fixture), fixture.cacheRoot);
+    assert.equal(existsSync(path.join(fixture.temporaryRoot, 'hostile-coverage')), false);
+    assertNoChildV8CoverageArtifacts(fixture);
+    assertParentCoverageEnvironmentUnchanged(parentCoverageEnvironment);
   } finally {
     cleanupMetadataFixture(fixture);
   }
