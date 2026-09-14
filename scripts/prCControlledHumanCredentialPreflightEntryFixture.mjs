@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 
 import { deriveControlledHumanExerciseBinding, loadFixture, sha256 } from './prCControlledHumanEnvironment.mjs';
 import { PREFLIGHT_OUTPUT } from './prCControlledHumanCredentialPreflight.mjs';
+import { classifyCredentialPreflightFsckFailureForTest, isCredentialPreflightFsckFailureCode } from './runPrCControlledHumanScriptCoverage.mjs';
 import { collectChangedPrCFiles } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const BRANCH = 'controller/governed-delivery-monitor-pr-c-20260831';
@@ -53,6 +54,11 @@ const fixedGitFailure = (args, reason) => {
   throw new Error(`PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:${operation}:${reason}`);
 };
 
+const fixedFsckStatusFailure = (status, stderr) => {
+  const category = classifyCredentialPreflightFsckFailureForTest(stderr);
+  throw new Error(`PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:${status}:${category}`);
+};
+
 const assertGitArgv = args => {
   if (!Array.isArray(args) || args.length === 0 || args.length > GIT_ARG_LIMIT
     || args.some(value => typeof value !== 'string' || value.length === 0 || value.includes('\0'))
@@ -67,13 +73,20 @@ const validateGitResult = (args, result, allowedStatuses = [0]) => {
   if (result?.error?.code === 'ENOBUFS') fixedGitFailure(args, 'OUTPUT_LIMIT');
   if (result?.error) fixedGitFailure(args, 'EXECUTION');
   if (result?.signal) fixedGitFailure(args, 'SIGNAL');
-  if (!allowedStatuses.includes(result?.status)) fixedGitFailure(args, 'STATUS');
+  if (!allowedStatuses.includes(result?.status)) {
+    if (args.length === 3 && args[0] === 'fsck' && args[1] === '--full' && args[2] === '--strict'
+      && allowedStatuses.length === 1 && allowedStatuses[0] === 0
+      && Number.isInteger(result?.status) && result.status >= 1 && result.status <= 255) {
+      fixedFsckStatusFailure(result.status, stderr);
+    }
+    fixedGitFailure(args, 'STATUS');
+  }
   return { status: result.status, stdout: stdout.trim() };
 };
 
-export const assertCredentialPreflightFixtureGitResultForTest = (args, result) => {
+export const assertCredentialPreflightFixtureGitResultForTest = (args, result, allowedStatuses = [0]) => {
   assertGitArgv(args);
-  return validateGitResult(args, result);
+  return validateGitResult(args, result, allowedStatuses);
 };
 
 const git = (cwd, args, env, { allowedStatuses = [0] } = {}) => {
@@ -186,6 +199,7 @@ const assertOwnedTemporaryRoot = async temporaryRoot => {
 
 const fixedFailureCode = error => {
   const message = error instanceof Error ? error.message : '';
+  if (isCredentialPreflightFsckFailureCode(message)) return message;
   const match = /^(PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?::[a-z-]+:[A-Z_]+)?)$/u.exec(message);
   return match?.[1] ?? 'PR_C_PREFLIGHT_FIXTURE_CONSTRUCTION_REJECTED';
 };

@@ -27,7 +27,13 @@ import {
   validateControlScriptTestScheduling,
   validateExclusiveControlScriptAttempt,
   verifyControlScriptCoverageMeasurement,
+  PR_C_GIT_255_FSCK_MSG_IDS,
+  classifyCredentialPreflightFsckFailureForTest,
+  isCredentialPreflightFsckFailureCode,
 } from './runPrCControlledHumanScriptCoverage.mjs';
+import {
+  assertCredentialPreflightFixtureGitResultForTest,
+} from './prCControlledHumanCredentialPreflightEntryFixture.mjs';
 import { PR_C_BASE_SHA } from './transcriptFlowPrCEvidenceScope.mjs';
 
 const inventory = CONTROL_SCRIPT_SOURCES.map((source, index) => ({ path: source, sha256: `sha256:${String(index).padStart(64, '0')}` }));
@@ -322,6 +328,68 @@ not ok 2 - after hook
   assert.equal(sanitizeControlScriptStartupFailure(new Error('raw startup detail')), 'UNKNOWN');
   assert.equal(sanitizeControlScriptStartupFailure(Object.create(Error.prototype,
     { message: { get() { throw new Error('raw getter detail'); } } })), 'UNKNOWN');
+  assert.equal(PR_C_GIT_255_FSCK_MSG_IDS.length, 76);
+  assert.equal(new Set(PR_C_GIT_255_FSCK_MSG_IDS).size, 76);
+  const objectId = 'a'.repeat(40);
+  const fsckArgs = ['fsck', '--full', '--strict'];
+  const failureMessage = callback => {
+    try { callback(); assert.fail('expected failure'); } catch (error) { return error.message; }
+  };
+  for (const [index, identifier] of PR_C_GIT_255_FSCK_MSG_IDS.entries()) {
+    const camel = identifier.toLowerCase().replace(/_([a-z0-9])/gu, (_match, character) => character.toUpperCase());
+    const stderr = index % 3 === 0
+      ? `error in tree ${objectId}: ${camel}: fixed detail\n`
+      : index % 3 === 1
+        ? `error: object ${objectId}: ${camel}: fixed detail\n`
+        : `error: refs/heads/fixture-${index}: ${camel}: fixed detail\n`;
+    const category = `MSG_${identifier}`;
+    assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), category);
+    const token = `PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:${category}`;
+    assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+      { status: 1, stdout: '', stderr, error: null, signal: null })), token);
+    assert.equal(isCredentialPreflightFsckFailureCode(token), true);
+    assert.equal(sanitizeControlScriptStartupFailure(new Error(token)), token);
+  }
+  const badTree = `error in tree ${objectId}: badTree: fixed detail\n`;
+  assert.equal(classifyCredentialPreflightFsckFailureForTest(`${badTree}error: object ${objectId}: badType: fixed detail\n`),
+    'MULTIPLE_MSG_IDS');
+  assert.equal(classifyCredentialPreflightFsckFailureForTest(`${badTree}${badTree}`), 'MSG_BAD_TREE');
+  assert.equal(classifyCredentialPreflightFsckFailureForTest('fatal: fixed failure\n'), 'FATAL');
+  assert.equal(classifyCredentialPreflightFsckFailureForTest('error: fixed failure without message id\n'), 'ERROR_WITHOUT_MSG_ID');
+  for (const [stderr, category] of [
+    ['error: packed-refs.header: badPackedRefHeader: fixed detail\n', 'MSG_BAD_PACKED_REF_HEADER'],
+    ['error: packed-refs line 17: badPackedRefEntry: fixed detail\n', 'MSG_BAD_PACKED_REF_ENTRY'],
+    ['error: packed-refs: emptyPackedRefsFile: fixed detail\n', 'MSG_EMPTY_PACKED_REFS_FILE'],
+  ]) assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), category);
+  for (const stderr of [
+    '', Buffer.from([0xff]), 'unstructured badTree text\n', `error in tree ${objectId}: notKnown: badTree detail\n`,
+    `error: object ${objectId}: notKnown: badTree detail\n`, `error: refs/heads/badTree: fixed detail\n`,
+    'error: fixed badTree detail without message id\n', 'fatal: fixed badTree detail\n',
+    'error: packed-refs.badTree: fixed detail\n', 'error: packed-refs line 0: badPackedRefEntry: fixed detail\n',
+    'error: packed-refs line 17: notKnown: badPackedRefEntry detail\n',
+    `warning in tree ${objectId}: badTree: warning only\n`, `${badTree}fatal: fixed failure\n`,
+    `error in tree ${objectId}: badTree: fixed\u0000detail\n`, `error: fixed\u0085detail\n`,
+  ]) assert.equal(classifyCredentialPreflightFsckFailureForTest(stderr), 'UNKNOWN');
+  assert.deepEqual(assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+    { status: 0, stdout: '', stderr: '', error: null, signal: null }), { status: 0, stdout: '' });
+  assert.equal(assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+    { status: 1, stdout: '', stderr: badTree, error: null, signal: null }, [0, 1]).status, 1);
+  for (const [result, expected] of [
+    [{ status: 1, stdout: '', stderr: badTree, error: { code: 'ETIMEDOUT' }, signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:TIMEOUT'],
+    [{ status: 1, stdout: '', stderr: badTree, error: new Error('canary'), signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:EXECUTION'],
+    [{ status: 1, stdout: '', stderr: badTree, error: null, signal: 'SIGTERM' }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:SIGNAL'],
+    [{ status: 1, stdout: 'x'.repeat(4 * 1024 * 1024 + 1), stderr: badTree, error: null, signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:OUTPUT_LIMIT'],
+    [{ status: 1.5, stdout: '', stderr: badTree, error: null, signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:STATUS'],
+    [{ status: '1', stdout: '', stderr: badTree, error: null, signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:STATUS'],
+    [{ status: 256, stdout: '', stderr: badTree, error: null, signal: null }, 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:fsck:STATUS'],
+  ]) assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs, result)), expected);
+  assert.equal(failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(['status', '--short'],
+    { status: 1, stdout: '', stderr: badTree, error: null, signal: null })), 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:status:STATUS');
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_NOT_IN_GIT_255'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:0:UNKNOWN'), false);
+  assert.equal(isCredentialPreflightFsckFailureCode('PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:256:UNKNOWN'), false);
+  assert(!failureMessage(() => assertCredentialPreflightFixtureGitResultForTest(fsckArgs,
+    { status: 7, stdout: '', stderr: 'private-canary', error: null, signal: null })).includes('private-canary'));
   const startupHookTap = hookTap.replace('before hook', 'owned startup hook')
     .replace(`  stack: |-\n    at ${exactLocation}:30:1`, `  error: 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED'\n  stack: |-\n    at ${exactLocation}:30:1`)
     .replace(/not ok 2 - after hook[\s\S]*?# todo 0\n/u, '# tests 1\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n');
@@ -333,6 +401,10 @@ not ok 2 - after hook
     'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
   assert.equal(projectControlScriptTapFailures(gitStartupHookTap, process.cwd(), 1).failures[0].code,
     'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS');
+  const fsckStartupToken = 'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE';
+  const fsckStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', fsckStartupToken);
+  assert.equal(projectControlScriptTapFailures(fsckStartupHookTap, process.cwd(), 1).failures[0].code,
+    `PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${fsckStartupToken}`);
   const unknownStartupHookTap = startupHookTap.replace('PR_C_PREFLIGHT_FIXTURE_SOURCE_REJECTED', 'UNKNOWN');
   assert.equal(projectControlScriptTapFailures(unknownStartupHookTap, process.cwd(), 1).failures[0].code, 'hook-failure');
   const startupWithWrapperTap = startupHookTap.replace('# tests 1\n# pass 0\n# fail 1', `not ok 2 - ${exactLocation}
@@ -378,9 +450,17 @@ not ok 2 - after hook
 
   const nativeRoot = await mkdtemp(path.join(os.tmpdir(), 'pr-c-control-script-native-before-'));
   try {
+    const runnerImport = spawnSync(process.execPath, ['--input-type=module', '--eval',
+      `await import(${JSON.stringify(new URL('./runPrCControlledHumanScriptCoverage.mjs', import.meta.url).href)})`], {
+      cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    });
+    assert.equal(runnerImport.status, 0); assert.equal(runnerImport.signal, null);
+    assert.equal(runnerImport.stdout, ''); assert.equal(runnerImport.stderr, '');
     const nativeScripts = path.join(nativeRoot, 'scripts'); await mkdir(nativeScripts);
     const nativeTest = path.join(nativeScripts, 'prCControlledHumanCredentialPreflightEntry.test.mjs');
-    for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS'].entries()) {
+    for (const [index, detail] of ['UNKNOWN', 'PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:bundle:STATUS',
+      'PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:1:MSG_BAD_TREE'].entries()) {
       await writeFile(nativeTest, `import test, { before } from 'node:test';\nbefore(() => { throw new Error('PR_C_CONTROL_SCRIPT_STARTUP_FAILED:${detail}'); });\ntest('unreached one', () => {});\ntest('unreached two', () => {});\n`, { flag: index === 0 ? 'wx' : 'w' });
       const native = spawnSync(process.execPath, ['--test', '--test-reporter=tap', nativeTest], {
         cwd: nativeRoot, env: {}, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000, maxBuffer: 1024 * 1024,

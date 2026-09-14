@@ -179,6 +179,32 @@ const exactKeys = (value, expected, code) => {
 const metric = (hit, found) => ({ hit, found, percent: found === 0 ? 0 : Number(((hit / found) * 100).toFixed(2)) });
 const TAP_FAILURE_LIMIT_BYTES = 8 * 1024 * 1024;
 const TAP_FAILURE_COUNT_LIMIT = 64;
+// Pinned diagnostic grammar: Git v2.55.0 fsck.h FOREACH_FSCK_MSG_ID,
+// fsck.c message-prefix construction, and builtin/fsck.c stderr wrappers.
+// https://github.com/git/git/blob/v2.55.0/fsck.h
+// https://github.com/git/git/blob/v2.55.0/fsck.c
+// https://github.com/git/git/blob/v2.55.0/builtin/fsck.c
+// https://github.com/git/git/blob/v2.55.0/refs/packed-backend.c
+export const PR_C_GIT_255_FSCK_MSG_IDS = Object.freeze([
+  'NUL_IN_HEADER','UNTERMINATED_HEADER',
+  'BAD_HEADER_CONTINUATION','BAD_DATE','BAD_DATE_OVERFLOW','BAD_EMAIL','BAD_GPGSIG','BAD_HEAD_TARGET','BAD_NAME','BAD_OBJECT_SHA1',
+  'BAD_PACKED_REF_ENTRY','BAD_PACKED_REF_HEADER','BAD_PARENT_SHA1','BAD_REFERENT_NAME','BAD_REF_CONTENT','BAD_REF_FILETYPE',
+  'BAD_REF_NAME','BAD_REF_OID','BAD_TIMEZONE','BAD_TREE','BAD_TREE_SHA1','BAD_TYPE','DUPLICATE_ENTRIES','GITATTRIBUTES_BLOB',
+  'GITATTRIBUTES_LARGE','GITATTRIBUTES_LINE_LENGTH','GITATTRIBUTES_MISSING','GITMODULES_BLOB','GITMODULES_LARGE',
+  'GITMODULES_MISSING','GITMODULES_NAME','GITMODULES_PATH','GITMODULES_SYMLINK','GITMODULES_UPDATE','GITMODULES_URL',
+  'MISSING_AUTHOR','MISSING_COMMITTER','MISSING_EMAIL','MISSING_NAME_BEFORE_EMAIL','MISSING_OBJECT','MISSING_SPACE_BEFORE_DATE',
+  'MISSING_SPACE_BEFORE_EMAIL','MISSING_TAG','MISSING_TAG_ENTRY','MISSING_TREE','MISSING_TYPE','MISSING_TYPE_ENTRY',
+  'MULTIPLE_AUTHORS','PACKED_REF_ENTRY_NOT_TERMINATED','PACKED_REF_UNSORTED','TREE_NOT_SORTED','UNKNOWN_TYPE','ZERO_PADDED_DATE',
+  'BAD_REFTABLE_TABLE_NAME','EMPTY_NAME','FULL_PATHNAME','HAS_DOT','HAS_DOTDOT','HAS_DOTGIT','LARGE_PATHNAME','NULL_SHA1',
+  'NUL_IN_COMMIT','ZERO_PADDED_FILEMODE','BAD_FILEMODE','BAD_TAG_NAME','EMPTY_PACKED_REFS_FILE','GITATTRIBUTES_SYMLINK',
+  'GITIGNORE_SYMLINK','GITMODULES_PARSE','MAILMAP_SYMLINK','MISSING_TAGGER_ENTRY','REF_MISSING_NEWLINE','SYMLINK_REF',
+  'SYMREF_TARGET_IS_NOT_A_REF','TRAILING_REF_CONTENT','EXTRA_HEADER_ENTRY',
+]);
+const FSCK_MSG_ID_SET = new Set(PR_C_GIT_255_FSCK_MSG_IDS);
+const FSCK_CAMEL_TO_ID = new Map(PR_C_GIT_255_FSCK_MSG_IDS.map(identifier => [
+  identifier.toLowerCase().replace(/_([a-z0-9])/gu, (_match, character) => character.toUpperCase()), identifier,
+]));
+const FSCK_CLOSED_CATEGORY = /^(?:MSG_([A-Z0-9_]+)|MULTIPLE_MSG_IDS|FATAL|ERROR_WITHOUT_MSG_ID|UNKNOWN)$/u;
 const KNOWN_FIXTURE_FAILURES = new Set([
   'ALTERNATE_REJECTED','AUTHORITY_REJECTED','BUNDLE_COMPLETENESS_REJECTED','BUNDLE_HEAD_REJECTED','CANDIDATE_IDENTITY_REJECTED',
   'CHANGED_METADATA_REJECTED','CHILD_ENVIRONMENT_REJECTED','CLEANUP_AUTHORITY_REJECTED','CLEANUP_FAILED','CLEANUP_REJECTED',
@@ -195,12 +221,68 @@ const GIT_FAILURE_REASONS = new Set(['ARGV','OUTPUT_LIMIT','TIMEOUT','EXECUTION'
 const STARTUP_FAILURE_PREFIX = 'PR_C_CONTROL_SCRIPT_STARTUP_FAILED:';
 const STARTUP_FAILURE_OWNER = 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs';
 
+export const isCredentialPreflightFsckFailureCode = value => {
+  if (typeof value !== 'string') return false;
+  const match = /^PR_C_PREFLIGHT_FIXTURE_FSCK_STATUS:([1-9][0-9]{0,2}):(.+)$/u.exec(value);
+  if (!match || Number(match[1]) > 255) return false;
+  const category = FSCK_CLOSED_CATEGORY.exec(match[2]);
+  return Boolean(category && (category[1] === undefined || FSCK_MSG_ID_SET.has(category[1])));
+};
+
 const knownFixtureFailure = value => {
+  if (isCredentialPreflightFsckFailureCode(value)) return true;
   if (typeof value !== 'string') return false;
   const match = /^PR_C_PREFLIGHT_FIXTURE_([A-Z_]+)(?::([a-z-]+):([A-Z_]+))?$/u.exec(value);
   if (!match) return false;
   return KNOWN_FIXTURE_FAILURES.has(match[1]) ? match[2] === undefined && match[3] === undefined
     : match[1] === 'GIT_REJECTED' && GIT_FAILURE_OPERATIONS.has(match[2]) && GIT_FAILURE_REASONS.has(match[3]);
+};
+
+const structuredFsckMessage = line => {
+  const object = /^(error|warning) in (?:blob|tree|commit|tag) [a-f0-9]{40}: ([a-z][A-Za-z0-9]*): [\x20-\x7e]+$/u.exec(line)
+    ?? /^(error|warning): object [a-f0-9]{40}: ([a-z][A-Za-z0-9]*): [\x20-\x7e]+$/u.exec(line);
+  if (object) return { severity: object[1], identifier: FSCK_CAMEL_TO_ID.get(object[2]) ?? null };
+  const reference = /^(error|warning): (HEAD|refs\/[A-Za-z0-9._/-]{1,1000}): ([a-z][A-Za-z0-9]*): [\x20-\x7e]+$/u.exec(line);
+  if (reference) {
+    if (reference[2].startsWith('refs/') && (reference[2].includes('//')
+      || reference[2].split('/').some(part => part === '..'))) return { malformed: true };
+    return { severity: reference[1], identifier: FSCK_CAMEL_TO_ID.get(reference[3]) ?? null };
+  }
+  const packedReference = /^(error|warning): packed-refs(?:\.header| line [1-9][0-9]{0,19})?: ([a-z][A-Za-z0-9]*): [\x20-\x7e]+$/u.exec(line);
+  return packedReference
+    ? { severity: packedReference[1], identifier: FSCK_CAMEL_TO_ID.get(packedReference[2]) ?? null }
+    : null;
+};
+
+export const classifyCredentialPreflightFsckFailureForTest = stderr => {
+  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4 * 1024 * 1024 || stderr.length === 0
+    || /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\ufffd]/u.test(stderr)) return 'UNKNOWN';
+  const normalized = stderr.endsWith('\n') ? stderr.slice(0, -1) : stderr;
+  if (normalized.length === 0 || normalized.includes('\r') || normalized.split('\n').some(line => line.length === 0)) return 'UNKNOWN';
+  const identifiers = new Set(); let fatal = false; let errorWithoutMessageId = false; let malformed = false;
+  for (const line of normalized.split('\n')) {
+    const structured = structuredFsckMessage(line);
+    if (structured) {
+      if (structured.malformed || structured.identifier === null) malformed = true;
+      else if (structured.severity === 'error') identifiers.add(structured.identifier);
+      continue;
+    }
+    if (/^fatal: [\x20-\x7e]+$/u.test(line)) {
+      if (line.split(/[^A-Za-z0-9]+/u).some(token => FSCK_CAMEL_TO_ID.has(token))) malformed = true;
+      else fatal = true;
+    }
+    else if (/^error(?::| in )/u.test(line)) {
+      if (line.split(/[^A-Za-z0-9]+/u).some(token => FSCK_CAMEL_TO_ID.has(token))) malformed = true;
+      else errorWithoutMessageId = true;
+    }
+    else if (!/^warning(?::| in )[\x20-\x7e]+$/u.test(line)) malformed = true;
+  }
+  if (malformed || (identifiers.size > 0 && (fatal || errorWithoutMessageId)) || fatal && errorWithoutMessageId) return 'UNKNOWN';
+  if (identifiers.size > 1) return 'MULTIPLE_MSG_IDS';
+  if (identifiers.size === 1) return `MSG_${[...identifiers][0]}`;
+  if (fatal) return 'FATAL';
+  if (errorWithoutMessageId) return 'ERROR_WITHOUT_MSG_ID';
+  return 'UNKNOWN';
 };
 
 export const sanitizeControlScriptStartupFailure = error => {
@@ -256,7 +338,8 @@ const startupHookFailureCode = (block, diagnostic, locations) => {
     || diagnostic.error !== tokens[0]
     || locations.length === 0 || locations.some(location => location.file !== STARTUP_FAILURE_OWNER)) fail('tap-startup-hook');
   const detail = diagnostic.error.slice(STARTUP_FAILURE_PREFIX.length);
-  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?::[a-z-]+:[A-Z_]+)?/gu)].map(match => match[0]);
+  const fixtureTokens = [...block.matchAll(/PR_C_PREFLIGHT_FIXTURE_[A-Z_]+(?:(?::[a-z-]+:[A-Z_]+)|(?::[1-9][0-9]{0,2}:[A-Z0-9_]+))?/gu)]
+    .map(match => match[0]);
   if (detail === 'UNKNOWN') {
     if (fixtureTokens.length !== 0) fail('tap-startup-hook');
     return 'hook-failure';
