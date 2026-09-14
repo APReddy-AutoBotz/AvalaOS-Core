@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFile, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,8 +37,8 @@ const candidateSeed = await createCredentialPreflightEntrySeed(process.cwd());
 after(async () => {
   await removeCredentialPreflightEntrySeed(candidateSeed);
   const diagnostics = getCredentialPreflightFixtureDiagnostics();
-  assert.equal(diagnostics.actualFullIntegrityChecks, 4);
-  assert.equal(diagnostics.actualObjectInventoryVerifications, 79);
+  assert.equal(diagnostics.actualFullIntegrityChecks, 9);
+  assert.equal(diagnostics.actualObjectInventoryVerifications, 95);
 });
 const HOSTILE_CANARY = 'PR264_HOSTILE_SEMANTIC_INPUT_CANARY_MUST_NOT_APPEAR';
 const exists = target => readFile(target).then(() => true, error => {
@@ -59,9 +61,50 @@ const assertSanitizedFailure = (result, phase, context = phase) => {
 const assertNoArtifact = async fixture => {
   await assert.rejects(readdir(path.join(fixture.repositoryRoot, PREFLIGHT_OUTPUT)), error => error.code === 'ENOENT');
 };
+const sha256 = value => createHash('sha256').update(value).digest('hex');
+const gitText = (root, args, environment) => execFileSync('git', args, {
+  cwd: root, env: { ...environment },
+  encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
+}).trim();
+const expectedSeedGovernedInventory = async sourceRoot => {
+  const files = [...new Set([...collectChangedPrCFiles(sourceRoot), ...PR_C_INTENDED_REMOVED_WORKFLOWS])].sort();
+  const entries = {};
+  for (const relative of files) {
+    const target = path.join(sourceRoot, relative);
+    entries[relative] = await readFile(target).then(value => sha256(value), error => error.code === 'ENOENT' ? null : Promise.reject(error));
+  }
+  return { files, digest: `sha256:${sha256(JSON.stringify(entries))}` };
+};
+const assertSeedAndPrivateClone = async (seed, sourceRoot, sourceGitEnvironment, expectedChanged) => {
+  const expected = await expectedSeedGovernedInventory(sourceRoot);
+  const sourceHead = gitText(sourceRoot, ['rev-parse', 'HEAD'], sourceGitEnvironment);
+  const sourceTree = gitText(sourceRoot, ['rev-parse', 'HEAD^{tree}'], sourceGitEnvironment);
+  assert.equal(seed.sourceHead, sourceHead);
+  assert.deepEqual([...seed.governedFiles], expected.files);
+  assert.equal(seed.governedDigest, expected.digest);
+  assert.deepEqual([...seed.changed], expectedChanged);
+  assert.deepEqual([...seed.deletions], []);
+  if (expectedChanged.length === 0) {
+    assert.equal(seed.candidateHead, sourceHead);
+    assert.equal(seed.candidateTree, sourceTree);
+  } else {
+    assert.notEqual(seed.candidateHead, sourceHead);
+    assert.notEqual(seed.candidateTree, sourceTree);
+  }
+  await verifyCredentialPreflightEntrySeed(seed);
+  const clone = await createCredentialPreflightEntryFixture(seed, { purpose: 'adversarial' });
+  try {
+    assert.equal(clone.head, seed.candidateHead);
+    assert.equal(clone.candidateTree, seed.candidateTree);
+    assert.deepEqual([...clone.changed], expectedChanged);
+    assert.equal(clone.governedDigest, expected.digest);
+    await verifyCredentialPreflightEntryFixture(clone);
+  } finally { await removeCredentialPreflightEntryFixture(clone); }
+};
 
 test('entry fixture preserves an already clean committed source without requiring an empty commit', async () => {
   const fixture = await createCredentialPreflightEntryFixture(process.cwd(), { committedSourceOnly: true });
+  let cleanSeed;
   try {
     const headFiles = new Set(fixture.sourceHeadFiles);
     assert.equal(fixture.head, fixture.sourceHead);
@@ -69,8 +112,25 @@ test('entry fixture preserves an already clean committed source without requirin
     for (const relative of PR_C_INTENDED_REMOVED_WORKFLOWS) {
       assert.equal(await exists(path.join(fixture.repositoryRoot, relative)), headFiles.has(relative), relative);
     }
+    cleanSeed = await createCredentialPreflightEntrySeed(fixture.repositoryRoot);
+    await assertSeedAndPrivateClone(cleanSeed, fixture.repositoryRoot, fixture.gitEnvironment, []);
+    await removeCredentialPreflightEntrySeed(cleanSeed); cleanSeed = null;
   } finally {
+    if (cleanSeed) await removeCredentialPreflightEntrySeed(cleanSeed);
     await removeCredentialPreflightEntryFixture(fixture);
+  }
+
+  const dirtySource = await createCredentialPreflightEntryFixture(process.cwd(), { committedSourceOnly: true });
+  let dirtySeed;
+  try {
+    await appendFile(path.join(dirtySource.repositoryRoot, 'package.json'), '\n');
+    assert.equal(gitText(dirtySource.repositoryRoot, ['diff', '--name-only', 'HEAD', '--'], dirtySource.gitEnvironment), 'package.json');
+    dirtySeed = await createCredentialPreflightEntrySeed(dirtySource.repositoryRoot);
+    await assertSeedAndPrivateClone(dirtySeed, dirtySource.repositoryRoot, dirtySource.gitEnvironment, ['package.json']);
+    await removeCredentialPreflightEntrySeed(dirtySeed); dirtySeed = null;
+  } finally {
+    if (dirtySeed) await removeCredentialPreflightEntrySeed(dirtySeed);
+    await removeCredentialPreflightEntryFixture(dirtySource);
   }
 });
 
@@ -468,11 +528,13 @@ test('single seed and a private adversarial clone reject tampering, shared objec
   const seedHeadPath = path.join(candidateSeed.repositoryRoot, '.git', 'HEAD');
   const originalSeedHead = await readFile(seedHeadPath);
   try {
-    await writeFile(seedHeadPath, `${candidateSeed.sourceHead}\n`);
+    assert.notEqual(candidateSeed.candidateHead, PR_C_BASE_SHA);
+    await writeFile(seedHeadPath, `${PR_C_BASE_SHA}\n`);
     await assert.rejects(verifyCredentialPreflightEntrySeed(candidateSeed));
   } finally {
     await writeFile(seedHeadPath, originalSeedHead);
   }
+  await verifyCredentialPreflightEntrySeed(candidateSeed);
   const seedCandidatePath = path.join(candidateSeed.repositoryRoot, 'package.json');
   const originalCandidateBytes = await readFile(seedCandidatePath);
   try {
@@ -625,15 +687,15 @@ test('production entry scenarios publish an exact measured-run contract', async 
   ]);
   assert.equal(scenarios.length, 32);
   const diagnostics = getCredentialPreflightFixtureDiagnostics();
-  assert.equal(diagnostics.actualOverlayBuilds, 1);
+  assert.equal(diagnostics.actualOverlayBuilds, 3);
   assert.equal(diagnostics.actualCampaignClones, 32);
-  assert.equal(diagnostics.actualCommittedSourceFixtures, 1);
-  assert.equal(diagnostics.actualAdversarialClones, 2);
+  assert.equal(diagnostics.actualCommittedSourceFixtures, 2);
+  assert.equal(diagnostics.actualAdversarialClones, 4);
   assert.equal(diagnostics.actualEntryRuns, 32);
-  assert.equal(diagnostics.actualFullIntegrityChecks, 3);
-  assert.equal(diagnostics.actualObjectInventoryVerifications, 77);
-  assert.equal(diagnostics.seedElapsedMs.length, 1);
-  assert.equal(diagnostics.cloneElapsedMs.length, 34);
+  assert.equal(diagnostics.actualFullIntegrityChecks, 8);
+  assert.equal(diagnostics.actualObjectInventoryVerifications, 93);
+  assert.equal(diagnostics.seedElapsedMs.length, 3);
+  assert.equal(diagnostics.cloneElapsedMs.length, 36);
   assert.equal(diagnostics.entryElapsedMs.length, 32);
   assert.ok([...diagnostics.seedElapsedMs, ...diagnostics.cloneElapsedMs, ...diagnostics.entryElapsedMs]
     .every(value => Number.isSafeInteger(value) && value >= 0));

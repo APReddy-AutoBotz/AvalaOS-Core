@@ -18,7 +18,9 @@ import {
   createExclusiveControlScriptOutputDirectory,
   parseControlScriptLcov,
   parseControlScriptTap,
+  projectControlScriptTapFailures,
   readControlScriptScenarios,
+  validateControlScriptFailureProjection,
   validateControlScriptTestCompletion,
   validateControlScriptTestScheduling,
   validateExclusiveControlScriptAttempt,
@@ -193,6 +195,131 @@ test('TAP verifier rejects green exits with skipped missing or incomplete test r
     tap.replace('# todo 0\n', ''),
     `${tap}# tests 7\n`,
   ]) assert.throws(() => parseControlScriptTap(changed));
+});
+
+test('failure projection retains only fixed classifications and exact source-owned coordinates', () => {
+  const exactLocation = path.join(process.cwd(), 'scripts', 'prCControlledHumanCredentialPreflightEntry.test.mjs');
+  const failedTap = `TAP version 13
+not ok 1 - hostile title must not be retained
+  ---
+  failureType: 'testCodeFailure'
+  error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'
+  stack: |-
+    TestContext.<anonymous> (${exactLocation}:472:16)
+  ...
+not ok 2 - ${exactLocation}
+  ---
+  failureType: 'hookFailed'
+  stack: |-
+    at ${exactLocation}:39:3
+  ...
+1..2
+# tests 2
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+  const projection = projectControlScriptTapFailures(failedTap, process.cwd(), 1);
+  assert.deepEqual(projection, {
+    classification: 'controlled-human-source-test-failure',
+    summary: { tests: 2, pass: 0, fail: 2, cancelled: 0, skipped: 0, todo: 0 },
+    failures: [
+      { classification: 'test', code: 'fixture-identity-claims-rejected',
+        locations: [{ file: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs', line: 472, column: 16 }] },
+      { classification: 'hook', code: 'hook-failure',
+        locations: [{ file: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs', line: 39, column: 3 }] },
+    ],
+  });
+  assert.equal(JSON.stringify(projection).includes('hostile title'), false);
+  const titleInjection = failedTap.replace('hostile title must not be retained', 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED')
+    .replace("  error: 'PR_C_PREFLIGHT_FIXTURE_IDENTITY_CLAIMS_REJECTED'\n", '');
+  assert.equal(projectControlScriptTapFailures(titleInjection, process.cwd(), 1).failures[0].code, 'assertion-failure');
+  const fileWrapperTap = `TAP version 13
+not ok 1 - ${exactLocation}
+  ---
+  failureType: 'testCodeFailure'
+  error: 'test failed'
+  ...
+1..1
+# tests 1
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+  assert.deepEqual(projectControlScriptTapFailures(fileWrapperTap, process.cwd(), 1).failures, [
+    { classification: 'file-wrapper', code: 'file-wrapper-failure', locations: [] },
+  ]);
+  assert.throws(() => projectControlScriptTapFailures(fileWrapperTap.replace(exactLocation, path.join(os.tmpdir(), 'foreign', 'scripts', 'prCControlledHumanCredentialPreflightEntry.test.mjs')), process.cwd(), 1), /tap-failure-file-wrapper/u);
+  const nestedWrapperTap = `TAP version 13
+    not ok 1 - nested assertion
+      ---
+      failureType: 'testCodeFailure'
+      stack: |-
+        at ${exactLocation}:472:16
+      ...
+not ok 1 - ${exactLocation}
+  ---
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  ...
+1..1
+# tests 1
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+  assert.deepEqual(projectControlScriptTapFailures(nestedWrapperTap, process.cwd(), 1).failures, [
+    { classification: 'test', code: 'assertion-failure',
+      locations: [{ file: 'scripts/prCControlledHumanCredentialPreflightEntry.test.mjs', line: 472, column: 16 }] },
+    { classification: 'file-wrapper', code: 'file-wrapper-failure', locations: [] },
+  ]);
+  const hookTap = `TAP version 13
+not ok 1 - before hook
+  ---
+  failureType: 'hookFailed'
+  stack: |-
+    at ${exactLocation}:30:1
+  ...
+not ok 2 - after hook
+  ---
+  failureType: 'hookFailed'
+  stack: |-
+    at ${exactLocation}:31:1
+  ...
+1..2
+# tests 2
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+  assert.deepEqual(projectControlScriptTapFailures(hookTap, process.cwd(), 1).failures.map(item => item.classification), ['hook', 'hook']);
+  assert.throws(() => validateControlScriptFailureProjection({ ...projection, failures: [
+    { classification: 'module', code: 'module-failure', locations: [] },
+  ] }, 1), /tap-failure-item/u);
+  assert.throws(() => projectControlScriptTapFailures(failedTap.replace(exactLocation, path.join(os.tmpdir(), 'foreign', 'scripts', 'prCControlledHumanCredentialPreflightEntry.test.mjs')), process.cwd(), 1), /tap-failure-location/u);
+  assert.throws(() => projectControlScriptTapFailures(failedTap.replace('IDENTITY_CLAIMS_REJECTED', 'HOSTILE_UNKNOWN_PAYLOAD'), process.cwd(), 1), /tap-failure-code/u);
+  assert.throws(() => projectControlScriptTapFailures(`${failedTap}${'x'.repeat(8 * 1024 * 1024)}`, process.cwd(), 1), /tap-failure-input/u);
+  for (const status of [0, -1, '1', undefined, null]) assert.throws(() => validateControlScriptFailureProjection(projection, status), /tap-failure-child/u);
+  for (const summary of [
+    { ...projection.summary, fail: '2' }, { ...projection.summary, fail: -1 }, { ...projection.summary, tests: 3 },
+  ]) assert.throws(() => validateControlScriptFailureProjection({ ...projection, summary }, 1), /tap-failure-summary/u);
+  assert.throws(() => validateControlScriptFailureProjection({ ...projection, failures: [projection.failures[0], projection.failures[0]] }, 1), /tap-failure-duplicate/u);
+  assert.throws(() => validateControlScriptFailureProjection({ ...projection, failures: [{ ...projection.failures[0], locations: [
+    projection.failures[0].locations[0], projection.failures[0].locations[0],
+  ] }] }, 1), /tap-failure-duplicate/u);
+  assert.throws(() => projectControlScriptTapFailures(failedTap.replace('hostile title must not be retained', `hostile\u001btitle`), process.cwd(), 1), /tap-failure-title/u);
+  assert.throws(() => projectControlScriptTapFailures(failedTap.replace('hostile title must not be retained', 'x'.repeat(201)), process.cwd(), 1), /tap-failure-title/u);
+  const repeatedLocation = Array.from({ length: 9 }, () => `    at ${exactLocation}:472:16`).join('\n');
+  assert.throws(() => projectControlScriptTapFailures(failedTap.replace(`    TestContext.<anonymous> (${exactLocation}:472:16)`, repeatedLocation), process.cwd(), 1), /tap-failure-(?:location|duplicate)/u);
+  assert.throws(() => validateControlScriptFailureProjection({ ...projection, rawError: 'forbidden' }, 1), /tap-failure-projection/u);
 });
 
 test('measured child containment is pinned to 900 seconds and every incomplete outcome fails closed', async () => {

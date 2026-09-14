@@ -177,6 +177,126 @@ const exactKeys = (value, expected, code) => {
     || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...expected].sort())) fail(code);
 };
 const metric = (hit, found) => ({ hit, found, percent: found === 0 ? 0 : Number(((hit / found) * 100).toFixed(2)) });
+const TAP_FAILURE_LIMIT_BYTES = 8 * 1024 * 1024;
+const TAP_FAILURE_COUNT_LIMIT = 64;
+const KNOWN_FIXTURE_FAILURES = new Set([
+  'ALTERNATE_REJECTED','AUTHORITY_REJECTED','BUNDLE_COMPLETENESS_REJECTED','BUNDLE_HEAD_REJECTED','CANDIDATE_IDENTITY_REJECTED',
+  'CHANGED_METADATA_REJECTED','CHILD_ENVIRONMENT_REJECTED','CLEANUP_AUTHORITY_REJECTED','CLEANUP_FAILED','CLEANUP_REJECTED',
+  'CLONE_SOURCE_DRIFT_REJECTED','CLONE_SOURCE_REJECTED','COMMIT_REJECTED','CONSTRUCTION_REJECTED','CONTAMINATION_REJECTED',
+  'ENVIRONMENT_OVERRIDE_REJECTED','GOVERNED_INVENTORY_REJECTED','HARDLINK_REJECTED','IDENTITY_CLAIMS_REJECTED',
+  'INTENDED_DELETION_REJECTED','NODE_MODULES_REJECTED','OBJECT_INVENTORY_AUTHORITY_REJECTED','OBJECT_INVENTORY_REJECTED',
+  'OBJECT_LINK_REJECTED','OUTPUT_NOT_IGNORED','OVERLAY_SCOPE_REJECTED','PATH_ENVIRONMENT_REJECTED','PATH_REJECTED',
+  'REMOTE_REJECTED','REPOSITORY_ESCAPE_REJECTED','SEED_ACTIVE_CLONES_REJECTED','SEED_AUTHORITY_REJECTED',
+  'SEED_CLEANUP_AUTHORITY_REJECTED','SEED_CLEANUP_FAILED','SOURCE_DRIFT_REJECTED','SOURCE_HASH_REJECTED','SOURCE_REJECTED',
+  'STAGED_SET_REJECTED','STATUS_REJECTED',
+]);
+const GIT_FAILURE_OPERATIONS = new Set(['add','bundle','checkout','clone','commit','commit-tree','config','diff','fsck','ls-files','ls-tree','merge-base','remote','rev-parse','status','update-ref','write-tree']);
+const GIT_FAILURE_REASONS = new Set(['ARGV','OUTPUT_LIMIT','TIMEOUT','EXECUTION','SIGNAL','STATUS']);
+
+const tapSummary = tap => Object.fromEntries(['tests','pass','fail','cancelled','skipped','todo'].map(name => {
+  const matches = [...tap.matchAll(new RegExp(`^# ${name} ([0-9]+)$`, 'gmu'))];
+  if (matches.length !== 1) fail(`tap-${name}`);
+  const value = Number(matches[0][1]);
+  if (!Number.isSafeInteger(value) || value < 0 || value > 10_000) fail('tap-value');
+  return [name, value];
+}));
+
+const fixtureFailureCode = block => {
+  const tokens = [...block.matchAll(/^\s+(?:error|code):\s*['"]?PR_C_PREFLIGHT_FIXTURE_([A-Z_]+)(?::([a-z-]+):([A-Z_]+))?['"]?\s*$/gmu)]
+    .map(match => ({ suffix: match[1], operation: match[2], reason: match[3] }));
+  let code = null;
+  for (const token of tokens) {
+    const known = KNOWN_FIXTURE_FAILURES.has(token.suffix)
+      || token.suffix === 'GIT_REJECTED' && GIT_FAILURE_OPERATIONS.has(token.operation) && GIT_FAILURE_REASONS.has(token.reason);
+    if (!known) fail('tap-failure-code');
+    if (token.suffix === 'IDENTITY_CLAIMS_REJECTED') code = 'fixture-identity-claims-rejected';
+    else code ??= 'fixture-rejection';
+  }
+  return code;
+};
+
+const normalizeKnownTestPath = (candidateValue, root, code) => {
+  let candidate = candidateValue;
+  if (candidate.startsWith('file:///')) {
+    try { candidate = fileURLToPath(candidate); } catch { fail(code); }
+  }
+  candidate = candidate.replaceAll('\\', '/');
+  const absolute = path.isAbsolute(candidate) || /^[A-Za-z]:\//u.test(candidate) ? path.resolve(candidate) : path.resolve(root, candidate);
+  const relative = normalize(path.relative(path.resolve(root), absolute));
+  if (!CONTROL_SCRIPT_TESTS.includes(relative)) fail(code);
+  return relative;
+};
+
+const failureLocations = (block, root) => {
+  const values = [];
+  const candidatePattern = /((?:file:\/\/\/)?[^\s'"()]+\.test\.mjs):([0-9]{1,6}):([0-9]{1,4})/gu;
+  for (const match of block.matchAll(candidatePattern)) {
+    const relative = normalizeKnownTestPath(match[1], root, 'tap-failure-location');
+    const line = Number(match[2]), column = Number(match[3]);
+    if (!Number.isSafeInteger(line) || line < 1 || line > 100_000 || !Number.isSafeInteger(column) || column < 1 || column > 10_000) fail('tap-failure-location');
+    values.push({ file: relative, line, column });
+    if (values.length > 8) fail('tap-failure-location');
+  }
+  const identities = values.map(value => `${value.file}:${value.line}:${value.column}`);
+  if (new Set(identities).size !== identities.length) fail('tap-failure-duplicate');
+  return values;
+};
+
+const fileWrapperFailureTitle = (title, root) => {
+  if (!title.replaceAll('\\', '/').includes('.test.mjs')) return false;
+  normalizeKnownTestPath(title, root, 'tap-failure-file-wrapper');
+  return true;
+};
+
+export function validateControlScriptFailureProjection(projection, childStatus) {
+  exactKeys(projection, ['classification','summary','failures'], 'tap-failure-projection');
+  if (projection.classification !== 'controlled-human-source-test-failure'
+    || !Number.isInteger(childStatus) || childStatus < 1 || childStatus > 255) fail('tap-failure-child');
+  exactKeys(projection.summary, ['tests','pass','fail','cancelled','skipped','todo'], 'tap-failure-summary');
+  if (Object.values(projection.summary).some(value => !Number.isSafeInteger(value) || value < 0 || value > 10_000)
+    || projection.summary.tests !== projection.summary.pass + projection.summary.fail + projection.summary.cancelled
+      + projection.summary.skipped + projection.summary.todo
+    || projection.summary.fail + projection.summary.cancelled < 1 || !Array.isArray(projection.failures)
+    || projection.failures.length < 1 || projection.failures.length > TAP_FAILURE_COUNT_LIMIT) fail('tap-failure-summary');
+  const seen = new Set();
+  for (const item of projection.failures) {
+    exactKeys(item, ['classification','code','locations'], 'tap-failure-item');
+    if (!['test','hook','file-wrapper','unclassified'].includes(item.classification)
+      || !['assertion-failure','fixture-rejection','fixture-identity-claims-rejected','hook-failure','file-wrapper-failure'].includes(item.code)
+      || !Array.isArray(item.locations) || item.locations.length > 8) fail('tap-failure-item');
+    for (const location of item.locations) {
+      exactKeys(location, ['file','line','column'], 'tap-failure-location');
+      if (!CONTROL_SCRIPT_TESTS.includes(location.file) || !Number.isSafeInteger(location.line) || location.line < 1 || location.line > 100_000
+        || !Number.isSafeInteger(location.column) || location.column < 1 || location.column > 10_000) fail('tap-failure-location');
+    }
+    const locationIdentities = item.locations.map(location => `${location.file}:${location.line}:${location.column}`);
+    if (new Set(locationIdentities).size !== locationIdentities.length) fail('tap-failure-duplicate');
+    const identity = JSON.stringify(item); if (seen.has(identity)) fail('tap-failure-duplicate'); seen.add(identity);
+  }
+  return projection;
+}
+
+export function projectControlScriptTapFailures(tap, root = process.cwd(), childStatus) {
+  if (typeof tap !== 'string' || Buffer.byteLength(tap) > TAP_FAILURE_LIMIT_BYTES || tap.includes('\0')) fail('tap-failure-input');
+  const summary = tapSummary(tap); const lines = tap.split(/\r?\n/gu); const failures = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*)not ok [0-9]+ - (.*)$/u.exec(lines[index]); if (!match) continue;
+    if (!/^[\x20-\x7e]{1,200}$/u.test(match[2])) fail('tap-failure-title');
+    const indentation = match[1].length; const rows = [lines[index]];
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const boundary = /^(\s*)(?:not )?ok [0-9]+ - /u.exec(lines[cursor]);
+      if (boundary && boundary[1].length <= indentation) break;
+      rows.push(lines[cursor]);
+    }
+    const block = rows.join('\n'); const locations = failureLocations(block, root); const fixtureCode = fixtureFailureCode(block);
+    const hook = /failureType:\s*['"]hookFailed['"]/u.test(block);
+    const fileWrapper = !hook && fileWrapperFailureTitle(match[2], root);
+    failures.push({ classification: hook ? 'hook' : fileWrapper ? 'file-wrapper' : locations.length > 0 ? 'test' : 'unclassified',
+      code: fixtureCode ?? (hook ? 'hook-failure' : fileWrapper ? 'file-wrapper-failure' : 'assertion-failure'), locations });
+    if (failures.length > TAP_FAILURE_COUNT_LIMIT) fail('tap-failure-count');
+  }
+  return validateControlScriptFailureProjection({ classification: 'controlled-human-source-test-failure', summary, failures }, childStatus);
+}
 
 export function buildControlScriptSourceInventory(root = process.cwd()) {
   return CONTROL_SCRIPT_SOURCES.map(relative => {
@@ -432,10 +552,9 @@ export function runControlScriptCoverage(root = process.cwd()) {
     validateControlScriptTestLaunch(child);
     const tap = readFileSync(tapPath, 'utf8');
     const lcov = readFileSync(lcovPath, 'utf8');
-    const failedTestTitles = [...tap.matchAll(/^not ok [0-9]+ - (.+)$/gmu)].map(match => match[1]);
-    if (failedTestTitles.length > 0) {
-      const safeTitles = failedTestTitles.map(title => /^[\x20-\x7e]{1,200}$/u.test(title) ? title : 'redacted-test-title');
-      process.stderr.write(`PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ${JSON.stringify(safeTitles)}\n`);
+    if (child.status !== 0 || /^not ok [0-9]+ - /mu.test(tap)) {
+      const projection = projectControlScriptTapFailures(tap, root, child.status);
+      process.stderr.write(`PR_C_CONTROL_SCRIPT_COVERAGE_TEST_FAILURES ${JSON.stringify(projection)}\n`);
     }
     const testSummary = validateControlScriptTestCompletion(child, tap);
     const scenario = readControlScriptScenarios(scenarioDirectory);
