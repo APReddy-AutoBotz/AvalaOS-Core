@@ -70,7 +70,7 @@
     "tests/browser/enterpriseIntelligence.spec.ts": "sha256:b5c27bb51d9eb0d529e1427d108bddf4853ee810634a28473ff9d95cb353bb3a",
     "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:1552305f7cd2032f6fa6203f4fc66223a8001a783268dba9fb88307ba797086d",
     "tests/browser/transcriptFlowPrA.spec.ts": "sha256:26e43ebf1350aa86942ac034496afc9064105ea6f1406311f347d6e4294bcd5b",
-    "App.tsx": "sha256:67dd504f7b70248b1a64c1ade7daa95d7bdd90a34d5131fd3150aeb5f934f96f",
+    "App.tsx": "sha256:930b8611d23b29974e67cc016f793e6f5faf2ed392a5a8d10808da1c579edf0c",
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
     "index.css": "sha256:d82ba8a2a96554812648c6479d08a645ea3448be6ec9f76b435208e5c2102c66",
     "scripts/testPilotOperationsPostgres.mjs": "sha256:bac650ec023c34ecccbe467bf09ea9c6ab1f1f4958167f5ba4eab634afb38925",

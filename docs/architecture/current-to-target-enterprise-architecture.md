@@ -37,6 +37,18 @@ calling the throwing authority accessor during App presentation. A conservative
 server presentation value never supplies capabilities or permits data access;
 auth, projection and mutation callers retain canonical fail-closed authority.
 
+Navigation contracts distinguish Admin Workbench / Users / Roles from the Assess
+Enterprise Intelligence surface. Local Admin presentation must not imply server
+Intelligence authority. Discovery contracts likewise distinguish a newly created
+Not Started process from a saved incomplete legacy Draft, which has no deterministic
+score or generated decision pack. Corrective fixtures must exercise those actual
+transitions rather than change product permissions or scoring to fit old labels.
+Navigation receives undefined capabilities only when canonical runtime data access
+is local; every server mode retains the current bound capability array, including
+an empty denial. Click, hydration, committed-state reconciliation and browser
+history use the same value. The Admin action invokes one guarded organization /
+Workspace transition, never a client role promotion or new server capability.
+
 ## Governed multi-source transcript PR A accepted architecture
 
 PR #255, accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merge `11e670003a73b0ab5a28650b70afac4b267760f4`, introduces a server-authoritative chain: immutable source versions -> independently versioned ordered Assess source sets -> locked exact input-bundle versions -> extraction jobs and per-source bindings -> strictly staged grounded candidates -> the real preview-batch identity -> human review/conflict resolution -> one atomic Assess draft version. Every command and projection carries the exact historical selector it acts on; a root's current version is never substituted for the selected source-set, bundle, job, binding, candidate, preview, or draft lineage. Candidate Review and counts are therefore scoped through the exact extraction binding rather than through a reusable source ID.

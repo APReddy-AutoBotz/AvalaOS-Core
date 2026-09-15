@@ -203,6 +203,26 @@ const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
   };
 });
 
+const readDurableAdminNavigation = async (page: Page) => page.evaluate(() => {
+  const url = new URL(window.location.href);
+  const persistedScope = JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null');
+  return {
+    urlSearch: url.search,
+    persistedView: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
+    persistedScopeType: persistedScope?.type ?? null,
+    persistedScopeId: persistedScope?.id ?? null,
+    persistedScopeName: persistedScope?.name ?? null,
+  };
+});
+
+const canonicalAdminNavigation = {
+  urlSearch: '?view=workspace&scope=organization',
+  persistedView: 'workspace',
+  persistedScopeType: 'organization',
+  persistedScopeId: null,
+  persistedScopeName: null,
+};
+
 const canonicalDeliveryPackNavigation = {
   urlView: 'delivery_pack',
   urlScope: 'project',
@@ -642,6 +662,30 @@ const assertEnterpriseIntelligenceSandboxBoundary = async (page: Page) => {
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toHaveCount(0);
 };
 
+const assertCommittedAdminNavigation = async (page: Page) => {
+  await openProductNavigation(page);
+  const admin = page.getByRole('button', { name: 'Admin', exact: true });
+  await expect(admin).toBeVisible({ timeout: 15_000 });
+  await admin.click();
+  await expect(page.getByRole('heading', { name: 'Admin Workbench', exact: true })).toBeVisible({ timeout: 15_000 });
+  await openProductNavigation(page);
+  await expect(admin).toHaveAttribute('aria-current', 'page');
+  await closeProductNavigation(page);
+  await expect.poll(() => readDurableAdminNavigation(page), { message: 'Admin must commit workspace/organization in URL and storage without stale selectors.' }).toEqual(canonicalAdminNavigation);
+};
+
+const assertAdminWorkbenchAndDeniedIntelligence = async (page: Page) => {
+  await assertCommittedAdminNavigation(page);
+  await page.getByRole('button', { name: 'Users / Roles Users', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Users / Roles', exact: true })).toBeVisible();
+  await closeProductNavigation(page);
+  await selectMyWorkScope(page);
+  await clickProductNav(page, 'Assess');
+  await expect(page.getByTestId('process-catalog-view')).toBeVisible({ timeout: 15_000 });
+  await clickProductNav(page, 'Enterprise Intelligence');
+  await assertEnterpriseIntelligenceSandboxBoundary(page);
+};
+
 const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
   if (label === 'Process Analyst' || label === 'AP Process Owner') {
     await clickProductNav(page, 'Assess');
@@ -655,11 +699,7 @@ const exerciseRepresentativePersonaPath = async (page: Page, label: string) => {
     await clickProductNav(page, 'Monitor');
     await expect(page.getByTestId('monitor-overview')).toBeVisible({ timeout: 15_000 });
   } else if (label === 'Platform Admin') {
-    await openProductNavigation(page);
-    const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
-    await expect(admin).toBeVisible({ timeout: 15_000 });
-    await admin.click();
-    await assertEnterpriseIntelligenceSandboxBoundary(page);
+    await assertAdminWorkbenchAndDeniedIntelligence(page);
   } else {
     throw new Error(`No representative feature path is bound to persona ${label}`);
   }
@@ -804,7 +844,28 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Process Name *').fill(name);
       await page.getByRole('button', { name: 'Create Process' }).click();
       const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toContainText('Draft');
+      await expect(row).toContainText('Not Started');
+      await row.getByRole('button', { name, exact: true }).click();
+      await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+      await expect(page.getByText('In discovery', { exact: true })).toBeVisible();
+      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
+      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Start Assessment', exact: true }).click();
+      await expect(page.getByTestId('enterprise-assess')).toBeVisible();
+      await expect(page.getByText('Assess · Legacy V1', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Decision Intake', exact: true })).toBeVisible();
+      await page.getByPlaceholder('Example: invoice exceptions wait for AP manager review; vendor master mismatches require manual email follow-up.').fill('Synthetic bottleneck discovered during intake.');
+      await page.getByRole('button', { name: 'Save Draft *', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save Draft', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
+      await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
+      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Back to Catalog', exact: true }).click();
+      await expect(page.getByRole('row').filter({ hasText: name })).toContainText('Draft');
+      await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name, exact: true }).click();
+      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
+      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
       return;
     }
     case 'delivery-pack':
@@ -833,30 +894,70 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await expect(page.getByText('Blocked work')).toBeVisible();
       await expect(page.getByText('Delivery blockers')).toBeVisible();
       return;
-    case 'admin-navigation':
+    case 'admin-navigation': {
+      const observer = observeAuthorityRequests(page);
       await enterPersona(page, 'Platform Admin');
+      await closeProductNavigation(page);
+      await selectMyWorkScope(page);
+      await clickProductNav(page, 'Studio');
+      await assertCommittedAdminNavigation(page);
+      await assertCommittedAdminNavigation(page);
+      await selectProjectScope(page, 'AP Invoice Exception Workflow');
+      await clickProductNav(page, 'Delivery');
+      await assertCommittedAdminNavigation(page);
+      const reloadResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(reloadResponse);
+      await expect(page.getByRole('heading', { name: 'Admin Workbench', exact: true })).toBeVisible();
+      await expect.poll(() => readDurableAdminNavigation(page)).toEqual(canonicalAdminNavigation);
+      const signInResponse = await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(signInResponse);
+      await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toBeVisible();
+      const backResponse = await page.goBack({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(backResponse);
+      await expect(page.getByRole('heading', { name: 'Admin Workbench', exact: true })).toBeVisible();
+      await expect.poll(() => readDurableAdminNavigation(page)).toEqual(canonicalAdminNavigation);
+      const forwardResponse = await page.goForward({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(forwardResponse);
+      await expect(page.getByRole('heading', { name: 'Sign in to an organization.' })).toBeVisible();
+      const restoredResponse = await page.goBack({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(restoredResponse);
+      await expect(page.getByRole('heading', { name: 'Admin Workbench', exact: true })).toBeVisible();
+      await expect.poll(() => readDurableAdminNavigation(page)).toEqual(canonicalAdminNavigation);
+      await page.getByRole('button', { name: 'Users / Roles Users', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Users / Roles', exact: true })).toBeVisible();
+      await signOutToSandbox(page);
+
+      await enterPersona(page, 'Process Analyst');
+      await page.evaluate(() => {
+        localStorage.setItem('avalaos-core-v1-view', JSON.stringify('workspace'));
+        localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'organization' }));
+      });
+      const forgedResponse = await page.goto('/sandbox?view=workspace&scope=organization', { waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(forgedResponse);
+      await expect(page.getByRole('heading', { name: 'Admin Workbench', exact: true })).toHaveCount(0);
+      await expect(page).not.toHaveURL(/view=workspace&scope=organization/u);
       await openProductNavigation(page);
-      {
-        const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
-        await expect(admin).toBeVisible();
-        await admin.click();
-        await assertEnterpriseIntelligenceSandboxBoundary(page);
-      }
+      await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0);
+      await signOutToSandbox(page);
+      const signedOutReload = await page.reload({ waitUntil: 'domcontentloaded' });
+      assertHostedResponseIdentity(signedOutReload);
+      await expect(page.getByRole('group', { name: 'Choose a sandbox persona' })).toBeVisible();
+      await expect(page.getByTestId('desktop-current-user')).toHaveCount(0);
+      await observer.stopAfterQuiescence({ quietPeriodMs: POST_SIGN_OUT_QUIET_PERIOD_MS, timeoutMs: POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS });
+      observer.assertSafe();
       return;
+    }
     case 'non-admin-denial':
       await enterPersona(page, 'Process Analyst');
       await openProductNavigation(page);
-      await expect(page.getByRole('button', { name: 'Admin / Intelligence' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0);
+      await clickProductNav(page, 'Assess');
+      await clickProductNav(page, 'Enterprise Intelligence');
+      await assertEnterpriseIntelligenceSandboxBoundary(page);
       return;
     case 'admin-capability-view':
       await enterPersona(page, 'Platform Admin');
-      await openProductNavigation(page);
-      {
-        const admin = page.getByRole('button', { name: 'Admin / Intelligence' });
-        await expect(admin).toBeVisible();
-        await admin.click();
-        await assertEnterpriseIntelligenceSandboxBoundary(page);
-      }
+      await assertAdminWorkbenchAndDeniedIntelligence(page);
       return;
     case 'reload-reconstruction': {
       await enterPersona(page, 'Delivery Lead');
@@ -947,6 +1048,7 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
     test.skip(!binding.projects.includes(testInfo.project.name), `Not required in ${testInfo.project.name}`);
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');
     if (binding.scenario && SEVEN_PERSONA_SCENARIOS.has(binding.scenario)) testInfo.setTimeout(180_000);
+    if (binding.scenario === 'admin-navigation') testInfo.setTimeout(180_000);
     await runScenario(binding.scenario!, page, testInfo);
   });
 }

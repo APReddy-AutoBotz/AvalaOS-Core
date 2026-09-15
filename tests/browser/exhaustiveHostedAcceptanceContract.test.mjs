@@ -9,6 +9,7 @@ const localNavigationConfig = fs.readFileSync(new URL('../../playwright.local-na
 const executionBindings = JSON.parse(fs.readFileSync(new URL('../acceptance/execution-bindings.json', import.meta.url), 'utf8'));
 const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+const sidebarSource = fs.readFileSync(new URL('../../components/shared/Sidebar.tsx', import.meta.url), 'utf8');
 const customDashboardSource = fs.readFileSync(new URL('../../components/shared/CustomDashboardView.tsx', import.meta.url), 'utf8');
 const adminWorkbenchSource = fs.readFileSync(new URL('../../components/admin/AdminWorkbench.tsx', import.meta.url), 'utf8');
 const taskCardSource = fs.readFileSync(new URL('../../components/delivery/TaskCard.tsx', import.meta.url), 'utf8');
@@ -16,7 +17,6 @@ const taskListSource = fs.readFileSync(new URL('../../components/delivery/TaskLi
 const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
 const processCatalogSource = fs.readFileSync(new URL('../../components/assess/ProcessCatalogView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
-const sidebarSource = fs.readFileSync(new URL('../../components/shared/Sidebar.tsx', import.meta.url), 'utf8');
 
 const fieldAssociations = [
   ['process-name', 'input'],
@@ -94,10 +94,8 @@ assert.equal(
   false,
   'hosted sandbox acceptance must not accept an authorized Enterprise Intelligence workspace',
 );
-assert.ok(
-  hostedSpec.match(/await assertEnterpriseIntelligenceSandboxBoundary\(page\);/gu)?.length >= 3,
-  'every hosted Platform Admin path must assert the same fail-closed sandbox boundary',
-);
+assert.ok(hostedSpec.includes('const assertAdminWorkbenchAndDeniedIntelligence = async (page: Page) => {'),
+  'every hosted Platform Admin path must use an inspectable shared Admin journey');
 assert.ok(
   hostedSpec.match(/getByRole\('heading', \{ name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true \}\)/gu)?.length >= 3,
   'Delivery Pack acceptance must target the actual project-qualified semantic heading',
@@ -160,7 +158,9 @@ assert.match(hostedSpec, /return HOSTED_NETWORK_ORIGIN_CLASS;/u, 'same-origin vi
 assert.match(hostedSpec, /const originClass = `external-origin-\$\{externalOriginClasses\.size \+ 1\}`;/u, 'unexpected external origins must receive opaque per-observer labels');
 assert.match(hostedSpec, /externalOriginClasses\.set\(url\.origin, originClass\);/u, 'origin-to-label mapping must stay inside ephemeral classifier state');
 assert.doesNotMatch(hostedSpec, /return url\.origin;/u, 'literal origins must never be returned into retained diagnostic evidence');
-assert.doesNotMatch(hostedSpec, /\.(?:search|hash|username|password)\b/u, 'diagnostics must not retain query, fragment, or userinfo fields');
+const diagnosticClassifierBody = hostedSpec.match(/const createDiagnosticOriginClassifier = \(\) => \{([\s\S]*?)\n\};/u)?.[1] ?? '';
+assert.ok(diagnosticClassifierBody, 'diagnostic origin classifier must remain source-inspectable');
+assert.doesNotMatch(diagnosticClassifierBody, /\.(?:search|hash|username|password)\b/u, 'diagnostics must not retain query, fragment, or userinfo fields');
 
 const sampleBody = hostedSpec.match(/sample: \(request, category\) => \(\{([\s\S]*?)\}\),/u);
 assert.ok(sampleBody, 'violation sample construction must remain structurally inspectable');
@@ -190,7 +190,88 @@ for (const persona of ['Process Analyst', 'AP Process Owner', 'Delivery Lead', '
 assert.match(hostedSpec, /Process Analyst'[\s\S]*AP Process Owner'[\s\S]*clickProductNav\(page, 'Assess'\)[\s\S]*process-catalog-view/u, 'Assess personas must settle the Process Catalog');
 assert.match(hostedSpec, /Delivery Lead'[\s\S]*Control Reviewer'[\s\S]*Automation Contributor'[\s\S]*clickProductNav\(page, 'Delivery'\)[\s\S]*Delivery work board/u, 'Delivery personas must settle the Delivery board');
 assert.match(hostedSpec, /Buyer Viewer'[\s\S]*closeProductNavigation\(page\)[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Monitor'\)[\s\S]*monitor-overview/u, 'Buyer Viewer must close mobile navigation, restore the required My Work scope, and settle Monitor');
-assert.match(hostedSpec, /Platform Admin'[\s\S]*Admin \/ Intelligence[\s\S]*assertEnterpriseIntelligenceSandboxBoundary\(page\)/u, 'Platform Admin must settle the fail-closed Admin / Intelligence sandbox boundary');
+const adminJourney = hostedSpec.match(/const assertAdminWorkbenchAndDeniedIntelligence = async \(page: Page\) => \{([\s\S]*?)\n\};/u)?.[1] ?? '';
+const committedAdminBody = hostedSpec.match(/const assertCommittedAdminNavigation = async \(page: Page\) => \{([\s\S]*?)\n\};/u)?.[1] ?? '';
+const committedAdminProof = /name: 'Admin', exact: true[\s\S]*admin\.click\(\)[\s\S]*Admin Workbench[\s\S]*toHaveAttribute\('aria-current', 'page'\)[\s\S]*readDurableAdminNavigation\(page\)[\s\S]*toEqual\(canonicalAdminNavigation\)/u;
+assert.match(committedAdminBody, committedAdminProof, 'Admin click must commit a real active Workbench plus the exact durable URL/storage tuple');
+const durableAdminBody = hostedSpec.match(/const readDurableAdminNavigation = async \(page: Page\) => page\.evaluate\(\(\) => \{([\s\S]*?)\n\}\);/u)?.[1] ?? '';
+assert.match(durableAdminBody, /urlSearch: url\.search[\s\S]*persistedView:[\s\S]*persistedScopeType:[\s\S]*persistedScopeId:[\s\S]*persistedScopeName:/u, 'Admin durability must read URL plus persisted tuple rather than the manifest');
+assert.match(hostedSpec, /const canonicalAdminNavigation = \{\s*urlSearch: '\?view=workspace&scope=organization',\s*persistedView: 'workspace',\s*persistedScopeType: 'organization',\s*persistedScopeId: null,\s*persistedScopeName: null,/u, 'Admin canonical tuple must reject stale project and generation selectors');
+const governedAdminPath = /assertCommittedAdminNavigation\(page\)[\s\S]*Users \/ Roles Users[\s\S]*Users \/ Roles[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Assess'\)[\s\S]*clickProductNav\(page, 'Enterprise Intelligence'\)[\s\S]*assertEnterpriseIntelligenceSandboxBoundary\(page\)/u;
+assert.match(adminJourney, governedAdminPath, 'Platform Admin must enter the actual Admin Workbench and Users / Roles before testing the separate denied Assess Intelligence route');
+for (const missing of ['assertCommittedAdminNavigation(page)', 'Users / Roles Users', "clickProductNav(page, 'Assess')", "clickProductNav(page, 'Enterprise Intelligence')", 'assertEnterpriseIntelligenceSandboxBoundary(page)']) {
+  assert.doesNotMatch(adminJourney.replaceAll(missing, ''), governedAdminPath, `Admin path proof must reject a missing ${missing}`);
+}
+for (const missing of ['admin.click()', 'Admin Workbench', "toHaveAttribute('aria-current', 'page')", 'readDurableAdminNavigation(page)', 'toEqual(canonicalAdminNavigation)']) {
+  assert.doesNotMatch(committedAdminBody.replaceAll(missing, ''), committedAdminProof, `committed Admin proof must reject missing ${missing}`);
+}
+const localOnlyMemo = /dataAccess === 'local' \? undefined : bindAuthoritativePresentationCapabilities\(/u;
+const serverEmptyDenial = /dataAccess === 'server' && \(authoritativeViewCapabilities \?\? \[\]\)\.some\(/u;
+const atomicAdminCallback = /const handleAdminNavigate = \(\) => \{\s*if \(!hasAdminAccess \|\| guardLoading\) return;\s*setGovernViewOpen\(false\);\s*organizationScopeTransition\.current = false;\s*applyGuardedView\(View\.WORKSPACE, \{ type: ScopeType\.ORGANIZATION \}\);/u;
+assert.match(appSource, localOnlyMemo, 'local synthetic presentation may use role only when the runtime is explicitly local');
+assert.match(appSource, serverEmptyDenial, 'a server session with an empty bound capability array must still deny Admin');
+assert.match(appSource, atomicAdminCallback, 'Admin navigation must apply the workspace/organization tuple atomically');
+for (const [proof, missing] of [
+  [localOnlyMemo, "dataAccess === 'local' ? undefined : "],
+  [serverEmptyDenial, 'authoritativeViewCapabilities ?? []'],
+  [atomicAdminCallback, 'if (!hasAdminAccess || guardLoading) return;'],
+  [atomicAdminCallback, 'applyGuardedView(View.WORKSPACE, { type: ScopeType.ORGANIZATION });'],
+]) {
+  assert.doesNotMatch(appSource.replaceAll(missing, ''), proof, `Admin source proof must reject missing ${missing}`);
+}
+assert.match(sidebarSource, /canAccessAdmin && <button[^\n]*onClick=\{\(\) => \{ onAdminNavigate\(\); onMobileClose\?\.\(\); \}\}[^\n]*aria-current=\{currentView === View\.WORKSPACE && currentScope\.type === ScopeType\.ORGANIZATION \? 'page'/u, 'Sidebar Admin must delegate to guarded atomic App callback and expose current page state');
+assert.doesNotMatch(hostedSpec, /Admin \/ Intelligence/u, 'fixtures must not revive the removed combined Admin navigation label');
+for (const scenarioName of ['admin-capability-view']) {
+  const start = hostedSpec.indexOf(`case '${scenarioName}':`);
+  const end = hostedSpec.indexOf('\n    case ', start + 1);
+  assert.ok(start >= 0 && end > start, `${scenarioName} must have an exact source boundary`);
+  assert.match(hostedSpec.slice(start, end), /assertAdminWorkbenchAndDeniedIntelligence\(page\)/u, `${scenarioName} must execute the shared complete Admin path`);
+}
+const adminNavigationStart = hostedSpec.indexOf("case 'admin-navigation': {");
+const adminNavigationEnd = hostedSpec.indexOf("\n    case 'non-admin-denial':", adminNavigationStart);
+const adminNavigationScenario = hostedSpec.slice(adminNavigationStart, adminNavigationEnd);
+assert.match(adminNavigationScenario, /observeAuthorityRequests\(page\)[\s\S]*Platform Admin[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Studio'\)[\s\S]*assertCommittedAdminNavigation\(page\)[\s\S]*selectProjectScope\(page, 'AP Invoice Exception Workflow'\)[\s\S]*clickProductNav\(page, 'Delivery'\)[\s\S]*assertCommittedAdminNavigation\(page\)[\s\S]*page\.reload[\s\S]*readDurableAdminNavigation\(page\)[\s\S]*page\.goBack[\s\S]*page\.goForward[\s\S]*Users \/ Roles Users[\s\S]*signOutToSandbox\(page\)[\s\S]*Process Analyst[\s\S]*localStorage\.setItem\('avalaos-core-v1-view'[\s\S]*localStorage\.setItem\('avalaos-core-v1-scope'[\s\S]*\/sandbox\?view=workspace&scope=organization[\s\S]*Admin Workbench[\s\S]*toHaveCount\(0\)[\s\S]*signOutToSandbox\(page\)[\s\S]*stopAfterQuiescence[\s\S]*assertSafe/u, 'ADMIN-001 must exercise committed Admin routes, forged non-Admin durability and an entry-through-signout observer');
+assert.ok((adminNavigationScenario.match(/assertCommittedAdminNavigation\(page\)/gu) ?? []).length >= 3, 'ADMIN-001 must commit from Studio/My Work, already-organization and project Delivery');
+for (const missing of ['page.goBack', 'page.goForward', "name: 'Users / Roles Users'", "localStorage.setItem('avalaos-core-v1-view'", "localStorage.setItem('avalaos-core-v1-scope'", 'observer.stopAfterQuiescence', 'observer.assertSafe']) {
+  const mutant = adminNavigationScenario.replaceAll(missing, '');
+  assert.equal(mutant.includes(missing), false, `ADMIN-001 adversarial mutant must remove ${missing}`);
+  assert.doesNotMatch(mutant, /observeAuthorityRequests\(page\)[\s\S]*page\.goBack[\s\S]*page\.goForward[\s\S]*Users \/ Roles Users[\s\S]*localStorage\.setItem\('avalaos-core-v1-view'[\s\S]*localStorage\.setItem\('avalaos-core-v1-scope'[\s\S]*observer\.stopAfterQuiescence[\s\S]*observer\.assertSafe/u, `ADMIN-001 proof must reject missing ${missing}`);
+}
+const incompleteStart = hostedSpec.indexOf("case 'incomplete-assessment':");
+const incompleteEnd = hostedSpec.indexOf("\n    case 'delivery-pack':", incompleteStart);
+assert.ok(incompleteStart >= 0 && incompleteEnd > incompleteStart, 'ASSESS-004 must have an exact scenario boundary');
+const incompleteJourney = hostedSpec.slice(incompleteStart, incompleteEnd);
+const discoverySteps = [
+  "toContainText('Not Started')",
+  "row.getByRole('button', { name, exact: true }).click()",
+  "getByText('In discovery'",
+  "getByText('Pending score'",
+  "getByText('Decision pack not generated yet'",
+  "name: 'Start Assessment'",
+  "getByTestId('enterprise-assess')",
+  "getByText('Assess · Legacy V1'",
+  "name: 'Decision Intake'",
+  "getByPlaceholder('Example: invoice exceptions wait for AP manager review",
+  "name: 'Save Draft *'",
+  "name: 'Back to Process'",
+  "name: 'Back to Catalog'",
+  "toContainText('Draft')",
+  "getByRole('row').filter({ hasText: name }).getByRole('button', { name, exact: true }).click()",
+];
+const orderedDiscovery = source => {
+  let cursor = 0;
+  for (const step of discoverySteps) {
+    const at = source.indexOf(step, cursor);
+    if (at < 0) return false;
+    cursor = at + step.length;
+  }
+  return true;
+};
+assert.equal(orderedDiscovery(incompleteJourney), true, 'ASSESS-004 must actually enter, edit, save, leave and reopen Legacy V1 without a score or pack');
+for (const missing of discoverySteps) {
+  assert.equal(orderedDiscovery(incompleteJourney.replaceAll(missing, '')), false, `ASSESS-004 must reject a missing ${missing}`);
+}
+assert.doesNotMatch(incompleteJourney, /Calculate deterministic score.*\.click\(/u, 'discovery must not calculate a score');
 assert.match(appSource, /<main id="app-main" tabIndex=\{0\}/u, 'the post-entry skip-link target and primary scroll region must accept sequential keyboard focus');
 assert.match(hostedSpec, /isFirstSequentialTabStop[\s\S]*skip link must remain the first sequential keyboard target[\s\S]*skipLink\.focus\(\)[\s\S]*page\.keyboard\.press\('Enter'\)/u, 'every persona must prove first-tab-stop ordering and real keyboard skip-link activation');
 const screenAnimationSource = indexCss.slice(indexCss.indexOf('@keyframes kp-screen-in'), indexCss.indexOf('@keyframes kp-linear-sheen'));

@@ -222,7 +222,7 @@ test('external hosted resource allowlists are derived from exact index declarati
   assert.match(spec, /prefix: source\.endsWith\('\/'\)/u);
   assert.match(spec, /isDeclaredAiStudioScript\(url\)/u);
 });
-test('mobile-safe Admin scenarios prove the fail-closed Enterprise Intelligence sandbox boundary directly', async () => {
+test('mobile-safe Admin scenarios enter Workbench and Users / Roles before the separate denied Assess Intelligence route', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   const adminNavigationStart = spec.indexOf("case 'admin-navigation':");
   const adminNavigationEnd = spec.indexOf("case 'non-admin-denial':");
@@ -233,12 +233,17 @@ test('mobile-safe Admin scenarios prove the fail-closed Enterprise Intelligence 
   assert.match(spec, /Enterprise Intelligence unavailable/u);
   assert.match(spec, /Enterprise Intelligence requires a server-authorized workspace\. The local synthetic sandbox sends no provider or persistence requests\./u);
   assert.match(spec, /getByTestId\('enterprise-intelligence-workspace'\)\)\.toHaveCount\(0\)/u);
-  for (const scenario of [spec.slice(adminNavigationStart, adminNavigationEnd), spec.slice(adminCapabilityStart, adminCapabilityEnd)]) {
-    assert.match(scenario, /await admin\.click\(\);/u);
+  const adminJourney = spec.match(/const assertAdminWorkbenchAndDeniedIntelligence = async \(page: Page\) => \{([\s\S]*?)\n\};/u)?.[1] ?? '';
+  assert.match(adminJourney, /assertCommittedAdminNavigation\(page\)[\s\S]*Users \/ Roles Users[\s\S]*selectMyWorkScope\(page\)[\s\S]*clickProductNav\(page, 'Assess'\)[\s\S]*clickProductNav\(page, 'Enterprise Intelligence'\)[\s\S]*assertEnterpriseIntelligenceSandboxBoundary\(page\)/u);
+  const adminNavigation = spec.slice(adminNavigationStart, adminNavigationEnd);
+  assert.match(adminNavigation, /assertCommittedAdminNavigation\(page\)[\s\S]*page\.reload[\s\S]*page\.goBack[\s\S]*page\.goForward[\s\S]*Process Analyst[\s\S]*\/sandbox\?view=workspace&scope=organization[\s\S]*observer\.stopAfterQuiescence/u);
+  const adminCapability = spec.slice(adminCapabilityStart, adminCapabilityEnd);
+  assert.match(adminCapability, /await assertAdminWorkbenchAndDeniedIntelligence\(page\);/u);
+  for (const scenario of [adminNavigation, adminCapability]) {
     assert.doesNotMatch(scenario, /getByTestId\('enterprise-intelligence-view'\)/u);
     assert.doesNotMatch(scenario, /getByRole\('heading', \{ name: 'Enterprise Intelligence', exact: true \}\)/u);
-    assert.match(scenario, /await assertEnterpriseIntelligenceSandboxBoundary\(page\);/u);
   }
+  assert.doesNotMatch(spec, /Admin \/ Intelligence/u);
 });
 test('delivery pack scenarios enter the canonical project scope and open project subnavigation in order', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');

@@ -6,8 +6,17 @@ Creation-access continuation: the separately approved exploratory draft at
 `3352f5ffeb08d493ec6202ce65dae28608e07502` passed actual Admin provisioning,
 author login, process/V2 creation, save, fresh-session reopen and signout, with
 independently cross-bound SQL evidence. Its creation-access CI passed. Retained
-PR C fresh-tip and blocked-route render defects are being corrected in the same
-PR; new-head CI and the three-distinct-human gate remain pending. This is not
+PR C fresh-tip and blocked-route render defects passed their corrective gates at
+`c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`; its full creation-access CI passed.
+Retained Sandbox fixtures still used obsolete Admin navigation and confused a new
+process with a saved incomplete assessment. Corrected fixtures exposed and now
+cover the actual local Admin reconciliation defect: local undefined capabilities
+must remain distinct from server empty-array denial. The bounded App/Sidebar
+repair passed 86 browser checks, including 38 Sandbox cases (30 unchanged explicit
+server skips), two navigation-history cases, 16 full-platform fixture cases,
+22 account-management cases and eight blocked-binding cases. All 20 selected
+canonical non-PostgreSQL commands and final independent reviews passed.
+New-head CI and the three-distinct-human gate remain pending in the same PR. This is not
 whole-platform, production or merge acceptance. The existing PR264 backend is
 unchanged; see `docs/quality/creation-access-remediation-evidence.md`.
 

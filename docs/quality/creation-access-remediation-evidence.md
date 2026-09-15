@@ -438,3 +438,127 @@ profile/evidence contracts **77/77**, and real loopback route-failure checks
 launch was denied before those route checks; the permitted isolated rerun passed.
 These are local checks. Exact committed-head CI will execute the complete current
 source again and remains required before PR acceptance.
+
+## Exact c038bbd CI and retained Sandbox fixture diagnosis
+
+Commit `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c` was pushed to the existing Draft
+PR #264. Creation-access run `35019735662`, attempt 1, job `104552148602` passed
+all 28 canonical commands. Independent artifact readback verified all six groups,
+the exact committed head, complete source inventory, canonical commands and argv,
+zero exit codes, stable-source flags and every log SHA256 against fingerprint
+`953fa38adc71384ff9b459045646680d514499e23dc44833c49ce1826a3be0d6`.
+The downloaded artifact is retained under
+`output/creation-access/ci-c038bbd-creation-run35019735662-attempt1/`.
+
+Fifteen workflows passed, two failed and hosted-live acceptance was skipped.
+The previously failing hosted blocked-route assertions passed on the exact new
+preview. Preview run `35019735541` and PR C run `35019735530`, both attempt 1,
+failed the same local Sandbox step: 10 failed, 28 passed, 30 existing explicit
+server-scenario skips. Each project failed SANDBOX-003/004, ASSESS-004, ADMIN-001
+and SAFETY-007. Eight failures expected the removed `Admin / Intelligence`
+navigation label. Two expected Draft from a newly created Not Started process.
+The preview's missing navigation upload was secondary: that later suite never
+executed after the failed Sandbox command. These failures are not retried or
+relabelled as success. The preview failure artifact is retained under
+`output/creation-access/ci-c038bbd-preview-sandbox-run35019735541-attempt1/`.
+
+Independent architecture, quality and security findings agreed on fixture drift.
+The correction must prove actual Admin Workbench / Users / Roles access and the
+separate Assess -> Enterprise Intelligence unavailable boundary. It must also
+exercise an actual saved incomplete legacy assessment, with Draft after reopen,
+no deterministic score and no decision pack. Merely changing Draft to Not Started
+would not satisfy the original discovery branch. Product/scoring code, all seven
+personas, observer coverage through signout, denied-route semantics and existing
+server-only skips remain unchanged. Corrective browser and contract execution is
+planned, not yet passed in this record; the immutable 3352f5ff exploratory proof
+and the distinct three-human gate are not promoted by this work.
+
+### Local execution exposed the actual Sandbox Admin reconciliation defect
+
+The corrected-fixture diagnostic run is retained at
+`output/playwright/pr264-synthetic-regression/c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c/sandbox/64b782a66e8049a26c67f9b684361873/`.
+It finished **30 passed, eight failed, 30 unchanged explicit skips**. The real
+incomplete-assessment transition passed on Desktop and Pixel. All eight remaining
+failures occurred after the actual Admin click: reconciliation returned to
+Studio / My Work instead of Admin Workbench. Initial stale-scope suspicion was
+not the confirmed cause: App supplied defined empty capabilities in local mode;
+the persistence resolver correctly interpreted those as server-only denial.
+
+A second read-only review wave completed before the bounded App/Sidebar fix.
+Canonical local data access alone now supplies undefined presentation capabilities;
+all server modes retain bound capabilities, including empty denial. All navigation
+reconciliation paths share this memo. One guarded Admin callback replaces the
+two-callback Sidebar click. Existing server-role forgery negatives remain, with
+additional navigation-resolver checks for empty/unrelated/revoked capabilities.
+Browser proof must cover the committed tuple, scope changes, reload/history and
+non-Admin denial. No runtime scores, server authority, schema or hosted deployment
+changed. The general organization-scope rendering path was separately noted as a
+suspected defect requiring deeper validation; no data-exposure or mutation bypass
+was established by the bounded review. It is not a security certification.
+
+### Executed local Admin navigation correction
+
+The frozen runtime/test/execution source fingerprint is
+`7b9a4bf074611e5a162a5b9cae7730cefe03d2a8202a514cfef60f57fd4d52f8`.
+These are working-tree candidate results based on `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`,
+not results for that unchanged committed head. All five browser invocations used
+isolated environments, one worker and separate retained output directories:
+
+| Local suite | Executed result | Retained report |
+| --- | --- | --- |
+| Sandbox/Desktop + Pixel | 38 passed; 30 unchanged explicit server-scenario `not_run`; zero failures/retries | `output/playwright/pr264-synthetic-regression/c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c/sandbox/2ccc26ef9bd530956e0f5496c67a1656/playwright-results.json` |
+| Navigation history/Desktop + Pixel | 2/2 passed | `output/playwright/pr264-synthetic-regression/c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c/navigation/e816438a6225e31deae275aa1207ba0a/playwright-results.json` |
+| Full-platform local fixture | 16/16 passed; all seven personas plus route boundary on both devices | `output/playwright/pr264-admin-navigation-1ee8fa1b-776f-4cdf-970f-27a834ad3591/playwright-results.json` |
+| Synthetic Admin account harness | 22/22 passed | `output/playwright/creation-access/d0561c3639b129135014c6ae/results.json` |
+| Real-App blocked controlled binding | 8/8 passed; runner contracts 4/4 | `output/playwright/local-controlled-boundary/b7def086-6b9f-45a7-a8cf-168dd54952bf/results.json` |
+
+The 86 executed passes do not include the 30 skips. The full-platform campaign is
+deterministic fixture-only proof, not connected full-platform or human acceptance.
+ADMIN-001 proves one actual Admin click from Studio/My Work, project/Delivery and
+already-organization scope, exact committed URL/storage without stale selectors,
+active navigation, reload/Back/Forward, Users / Roles, and forged non-Admin
+URL/storage rejection. Observation remains active through the final signout and
+quiescence. Full-platform Workbench, Users and denied Intelligence surfaces retain
+their existing accessibility, overflow and navigation-budget assertions.
+ASSESS-004 now saves and reopens an actual incomplete V1 Draft, without a score
+or decision pack. Its earlier failed diagnostic attempt remains retained.
+
+Authority (5/5) and regression (6/6) canonical groups passed at the same
+fingerprint; independent readback checked every command result and log digest:
+`validation-authority-d5817dc0-8d31-46f3-ae39-4d1368b0b41d` and
+`validation-regression-d726a633-180d-4080-bf56-b64068c342fe` under
+`output/creation-access/`. Preview/profile contracts passed 77/77, hosted evidence
+contracts 21/21 and PR C evidence contracts 54/54. Full-platform transport/storage
+contracts and late post-signout HTTP/WebSocket observation passed. Catalog,
+independent oracle and adversarial provenance checks retained 108 source-backed
+branches and ten explicit composite cases; no catalog branch was promoted to
+hosted PASS. A bare scoring-law check rejected its ambient environment; the
+canonical sanitized invocation passed without changing scoring or its guard.
+
+Final independent read-only architecture, security and quality reviewers found
+no confirmed blocker in the frozen correction. The React review retained a
+canonical local/server dependency in the capability memo and a guarded event
+callback instead of effect-based navigation repair. Server empty/stale authority,
+runtime modes and server mutation controls are not weakened. Static/build and
+coverage completion are recorded separately below before commit. New-head CI
+must execute the committed correction; the prior hosted exploratory proof remains
+bound only to `3352f5ffeb08d493ec6202ce65dae28608e07502`. The original backend,
+provider-free boundary and separate three-human/merge gate remain unchanged.
+
+Static/build (8/8) and critical-source coverage (1/1) subsequently passed at that
+same fingerprint, bringing the selected canonical groups to **20/20 commands**.
+Manifests are `validation-static-3ebdab7c-a259-42ce-af2d-c0fca69dc5a8` and
+`validation-coverage-7d30f412-6565-4205-89d5-3f494eb27531` under
+`output/creation-access/`. Both typechecks, workflow YAML, deterministic scoring,
+the frozen scoring-law check and build passed. AI-boundary and secret-hygiene
+scans found zero forbidden hits and zero tracked env files. Coverage executed
+42/42 cases over the unchanged 11 critical TypeScript sources at 96.44% lines,
+82.05% branches and 87.88% functions; React and SQL are outside that V8 gate.
+
+No schema, SQL or command implementation changed in this UI/navigation delta.
+The separately retained c038bbd PostgreSQL/28-command CI proof is not relabelled;
+the new committed-head pipelines must repeat the full relevant database and
+retained suites. Final documentation reconciliation refreshes only source hashes,
+not assertion ownership, scoring, thresholds or coverage labels. Patch-integrity
+and final current-source provenance checks are required before staging the
+intended corrective files; protected local state stays outside the commit.

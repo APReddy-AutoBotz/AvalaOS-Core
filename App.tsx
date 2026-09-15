@@ -223,7 +223,9 @@ function App() {
     localRuntime: localRuntimeEnabled,
   }), [currentOrganization, currentUser, currentWorkspace, guardLoading, localRuntimeEnabled, sessionState, tenantContext]);
   const authoritativeViewCapabilities = useMemo(() => (
-    bindAuthoritativePresentationCapabilities({
+    // Undefined selects local synthetic presentation only. A server session must
+    // retain its bound array, including [] as an explicit denial after revocation.
+    dataAccess === 'local' ? undefined : bindAuthoritativePresentationCapabilities({
       userId: currentUser?.id,
       organizationId: currentOrganization?.id,
       workspaceId: currentWorkspace?.id,
@@ -231,6 +233,7 @@ function App() {
       tenantContext,
     })
   ), [
+    dataAccess,
     currentOrganization?.id,
     currentUser?.id,
     currentWorkspace?.id,
@@ -240,7 +243,7 @@ function App() {
   const governContextKey = useRef<string | null>(null);
   const hasAdminAccess = Boolean(currentUser && (dataAccess === 'local'
     ? currentUser.orgRole === 'Admin' || currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission))
-    : dataAccess === 'server' && authoritativeViewCapabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))));
+    : dataAccess === 'server' && (authoritativeViewCapabilities ?? []).some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))));
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
@@ -376,6 +379,13 @@ function App() {
     const requestedScope: Scope = organizationScopeTransition.current ? { type: ScopeType.ORGANIZATION } : currentScope;
     organizationScopeTransition.current = false;
     applyGuardedView(view, requestedScope);
+  };
+
+  const handleAdminNavigate = () => {
+    if (!hasAdminAccess || guardLoading) return;
+    setGovernViewOpen(false);
+    organizationScopeTransition.current = false;
+    applyGuardedView(View.WORKSPACE, { type: ScopeType.ORGANIZATION });
   };
 
   const handleDashboardStatClick = (filter: Filters) => {
@@ -1517,7 +1527,7 @@ function App() {
         currentScope={currentScope}
         currentView={currentView}
         onViewChange={handleViewChange}
-        onScopeChange={handleScopeChange}
+        onAdminNavigate={handleAdminNavigate}
         collapsed={isSidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(collapsed => !collapsed)}
         canAccessAdmin={hasAdminAccess}

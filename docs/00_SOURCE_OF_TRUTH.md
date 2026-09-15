@@ -23,6 +23,24 @@ The same head's creation-access CI passed; retained PR C and preview checks expo
 two further source defects now locally corrected with 28/28 commands and 156/156
 browser checks passed. New-source CI/preview remains a
 separate gate; the completed hosted proof must not be relabelled to a later head.
+Commit `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c` subsequently passed its full
+28-command creation-access CI and the hosted blocked-route boundary. Its retained
+PR C/preview pipelines both stopped on the same ten local Sandbox fixture failures:
+obsolete combined Admin navigation and an incomplete-discovery scenario that
+expected Draft before starting an assessment. The corrective scope is the actual
+Admin Workbench plus separate Enterprise Intelligence denial, and a real saved
+incomplete V1 draft with no score or decision pack. Corrected fixtures then exposed
+a local Sandbox navigation defect: a defined empty server-capabilities projection
+discarded the synthetic Admin destination during reconciliation. The repair keeps
+local presentation distinct from server denial and uses one guarded Admin
+navigation transition. It grants no new product permissions or scoring changes;
+the corrected Sandbox regression passed 38 Desktop/Pixel cases with 30 unchanged
+explicit server-scenario `not_run` cases. Navigation history passed on both devices.
+The wider fixture/account/blocked-binding runs bring this corrective pass to
+86 browser passes. All 20 selected canonical authority, regression, static/build
+and coverage commands passed at one frozen source fingerprint; final independent
+reviews found no confirmed blocker. New-head CI verification remains a separate
+gate and will repeat the full creation-access and retained PostgreSQL suites.
 Production, customer data, real providers, AvalaOS.com and merge remain
 outside this approval. The original three-human acceptance gate is unchanged.
 The exploratory target must retain zero provider configurations and real keys;

@@ -179,3 +179,43 @@ Refresh the fresh assertion context only from its executed marker. Rerun the
 canonical local matrix, evidence contracts and exact-head CI before acceptance.
 Rollback keeps authority denial and disables exploratory mutations if needed;
 never weaken the route/attestation gate or destructively reset retained data.
+
+### Retained Sandbox fixture corrective boundary
+
+Exact head `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c` passed all 28 creation-access
+CI commands. PR C run `35019735530` and preview run `35019735541`, both attempt 1,
+independently reproduced ten local Sandbox failures: eight obsolete combined
+Admin locators and two expectations of Draft immediately after process creation.
+All three read-only reviews completed before corrective writes. Preserve product
+authority, scoring, migration history, Test IDs and all seven persona journeys.
+Update the tests to visit Admin Workbench / Users / Roles separately from Assess
+-> Enterprise Intelligence's unavailable Sandbox boundary. For incomplete
+discovery, create a Not Started process, start its legacy assessment, save an
+incomplete draft, reopen it and prove Draft with no score or decision pack.
+Correct the parallel full-platform fixture and bind source-contract adversarial
+tests to these semantic steps. No extra skips or weaker network observer are
+permitted. Run Desktop/Pixel Sandbox, navigation and full-platform fixture suites,
+affected evidence/provenance contracts, typecheck and patch checks. Retain the
+failed attempts unchanged; new-head CI remains required. Rollback reverts these
+fixture/contract changes together, leaving fail-closed product behavior intact.
+
+The corrected fixture subsequently exposed a real local navigation defect:
+defined empty server capabilities rejected the synthetic Admin destination after
+click. A second read-only architecture/security/quality wave completed before
+fixing App's local-only undefined/server-defined capability distinction and one
+guarded Admin callback. Verify actual committed URL/persistence, reload/history,
+multiple initial scopes and non-Admin rejection; preserve server empty/stale
+capability denial. This implementation and its browser/contract tests belong to
+the same corrective boundary. Rollback reverts the App/Sidebar navigation delta
+with its tests without granting local role authority to server sessions.
+
+The corrected candidate passed all 86 affected Desktop/Pixel browser checks,
+20 selected canonical authority/regression/static/coverage commands, catalog and
+adversarial evidence contracts, and final independent read-only reviews.
+The 30 pre-existing server-only Sandbox skips remain `not_run`. No database or
+command implementation changed in this navigation delta; the exact-head CI must
+repeat the full 28-command creation-access pipeline and retained PostgreSQL/PR C
+pipeline after push. Commit one coherent corrective slice on the existing branch,
+verify its exact-head CI/preview artifacts, retain the independently tested
+exploratory draft at its own immutable head, and stop before Ready/merge or any
+claim that synthetic accounts replace the three required humans.

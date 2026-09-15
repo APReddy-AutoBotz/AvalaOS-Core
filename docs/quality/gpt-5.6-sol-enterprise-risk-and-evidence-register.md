@@ -23,7 +23,20 @@ bindings; provider configurations and observed provider traffic remained zero.
 Creation-access CI passed on that head. Retained PR C and preview CI found two
 confirmed source defects: a stale fresh-chain expected migration tip and a thrown
 authority exception before blocked-route presentation. Corrections and their own
-exact-source gates remain necessary. Neither exploratory proof nor synthetic
+exact-source gates subsequently passed at `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`.
+Its full creation-access workflow passed; PR C and preview workflows both stopped
+on ten retained Sandbox fixture failures from obsolete Admin navigation and an
+incorrect Draft expectation before assessment entry. Corrective tests must retain
+separate Admin/Intelligence authority and exercise a real saved incomplete draft
+with no score or decision pack. The corrected fixture exposed and the bounded
+App/Sidebar repair addresses local empty-capability reconciliation rejecting
+Admin. Only canonical local runtime supplies undefined presentation capabilities;
+server arrays, including empty/revoked denial, remain authoritative. Desktop/Pixel
+Sandbox passed 38 cases with 30 unchanged explicit server skips; the complete
+corrective browser pass includes 86 executed checks across five suites.
+All 20 selected canonical authority/regression/static/coverage commands and
+final independent reviews passed. New-head CI remains pending.
+Neither exploratory proof nor synthetic
 accounts replace the independent three-human gate, which remains pending.
 The empty-target setup initially blocked email login through the CLI's provider
 flag; enabling that provider while preserving global signup denial corrected it.

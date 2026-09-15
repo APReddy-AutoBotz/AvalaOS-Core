@@ -380,6 +380,32 @@ assert.equal(adminWorkspaceNavigation.view, View.WORKSPACE);
 assert.deepEqual(adminWorkspaceNavigation.scope, { type: ScopeType.ORGANIZATION });
 assert.equal(adminWorkspaceNavigation.access.reason, 'admin_decision_pending');
 
+// Reload/popstate and committed-state reconciliation share this resolver. The
+// same legacy Admin identity must lose the destination when server capability
+// proof is absent, unrelated, or revoked; local undefined is not server [].
+for (const capabilities of [[], ['assess.read']]) {
+  const revokedAdminNavigation = resolveProductNavigationState({
+    ...navigationContext,
+    user: platformAdmin,
+    view: View.WORKSPACE,
+    scope: { type: ScopeType.ORGANIZATION },
+    authoritativeCapabilities: capabilities,
+  });
+  assert.notEqual(revokedAdminNavigation.scope.type, ScopeType.ORGANIZATION);
+  assert.notEqual(revokedAdminNavigation.view, View.WORKSPACE);
+}
+for (const capability of ['org.admin', 'security.manage', 'byok.manage']) {
+  const boundAdminNavigation = resolveProductNavigationState({
+    ...navigationContext,
+    user: makeUser([], 'Contributor'),
+    view: View.WORKSPACE,
+    scope: { type: ScopeType.ORGANIZATION },
+    authoritativeCapabilities: [capability],
+  });
+  assert.equal(boundAdminNavigation.view, View.WORKSPACE);
+  assert.deepEqual(boundAdminNavigation.scope, { type: ScopeType.ORGANIZATION });
+}
+
 const validProcessNavigation = resolveProductNavigationState({
   ...navigationContext,
   user: processAnalyst,

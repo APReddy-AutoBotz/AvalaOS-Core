@@ -11,8 +11,15 @@ exploratory target/cost/bootstrap. Its 75-migration chain and actual joined Admi
 provisioning/author/process/V2 save-and-reopen/signout journey passed on immutable
 draft head `3352f5ffeb08d493ec6202ce65dae28608e07502`, with independently cross-bound
 SQL readback and zero provider traffic. Creation-access CI on that head passed.
-Next repair the retained fresh-tip assertion and blocked-route render exception,
-then rerun their local and exact-head gates. Keep the usable exploratory draft
+The fresh-tip and blocked-route corrections passed their focused gates at
+`c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`; all 28 creation-access CI commands passed.
+Corrected Sandbox fixtures now exercise actual separate Admin and Intelligence
+navigation and a real saved incomplete assessment. They exposed a local App
+capability-reconciliation defect; its local-only correction and guarded Admin
+transition passed 86 browser checks, preserving 30 explicit server-only skips.
+All 20 selected canonical authority/regression/static/coverage commands and final
+read-only reviews passed. Next verify the committed correction through the full
+exact-head CI and preview pipelines. Keep the usable exploratory draft
 pinned to its tested source until any replacement independently passes.
 Do not alter the existing
 PR264 twelve-persona backend, interpret exploratory accounts as three independent
