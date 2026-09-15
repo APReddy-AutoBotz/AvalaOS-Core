@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   classifyPublicRoute,
+  hasAtomicPaletteTransition,
   parseAuthorityOrigins,
   parseFullPlatformBaseUrl,
   parseFullPlatformExecutionMode,
@@ -60,13 +61,39 @@ assert.equal(classifyPublicRoute('/sandbox/unexpected-deep-link'), 'sandbox');
 assert.equal(classifyPublicRoute('/sign-in'), 'server-sign-in');
 assert.equal(classifyPublicRoute('/admin'), 'outside-sandbox');
 
+assert.equal(hasAtomicPaletteTransition({property:'none',duration:'0.15s',delay:'0s'}), true);
+assert.equal(hasAtomicPaletteTransition({property:'all',duration:'0s',delay:'0s'}), true);
+assert.equal(hasAtomicPaletteTransition({property:'color, background-color',duration:'0s, 0ms',delay:'0s'}), true);
+for (const style of [
+  {property:'all',duration:'0.15s',delay:'0s'},
+  {property:'color, background-color',duration:'0s, 150ms',delay:'0s'},
+  {property:'color',duration:'0s',delay:'0.1s'},
+  {property:'color',duration:'0s',delay:'-0.1s'},
+  {property:'all',duration:'',delay:'0s'},
+  {property:'',duration:'0s',delay:'0s'},
+]) assert.equal(hasAtomicPaletteTransition(style), false, 'active or unproven palette timing must fail closed');
+
 const campaignSource = readFileSync('tests/browser/fullPlatformCampaign.spec.ts', 'utf8');
+const adminNavSource = readFileSync('components/admin/AdminSectionNav.tsx', 'utf8');
+const assertAtomicAdminPalette = (source: string) => {
+  assert.match(source, /className=\{`rounded-xl px-3 py-3 text-left transition-none /u,
+    'Admin section foreground/background must switch atomically, including unselection');
+  assert.doesNotMatch(source, /transition-(?:colors|all|\[)|\btransitionProperty\s*:/u,
+    'Admin section color interpolation can create a low-contrast intermediate frame');
+};
+assertAtomicAdminPalette(adminNavSource);
+for (const transition of ['transition-colors', 'transition-all', 'transition-[color,background-color]', '']) {
+  assert.throws(() => assertAtomicAdminPalette(adminNavSource.replace('transition-none', transition)),
+    /Admin section/u, `must reject an unproven palette transition: ${transition || 'missing'}`);
+}
 assert.match(campaignSource, /const closeNavigation = async\(page:Page\) => \{[\s\S]*Close primary navigation[\s\S]*await close\.click\(\)/u);
 assert.match(campaignSource, /const selectScope = async\(page:Page, label:string\) => \{\s*await closeNavigation\(page\);[\s\S]*Switch workspace context/u);
 assert.match(campaignSource, /await button\.click\(\);[\s\S]*toHaveAttribute\('aria-current','page'\);[\s\S]*await closeNavigation\(page\);\s*await assertSurface/u);
 const adminJourney = campaignSource.match(/const visitActualAdminWorkbench = async\(page:Page,visited:Set<string>\) => \{([\s\S]*?)\n\};/u)?.[1] ?? '';
 const adminProof = /name:'Admin',exact:true[\s\S]*adminStarted=Date\.now\(\)[\s\S]*admin\.click\(\)[\s\S]*Admin Workbench[\s\S]*assertSurface\(page,adminStarted\)[\s\S]*Users \/ Roles Users[\s\S]*usersStarted=Date\.now\(\)[\s\S]*users\.click\(\)[\s\S]*Users \/ Roles[\s\S]*assertSurface\(page,usersStarted\)/u;
 assert.match(adminJourney, adminProof, 'campaign Admin path must visit the current Workbench and Users / Roles');
+assert.match(adminJourney, /getComputedStyle\(element\)[\s\S]*transitionProperty[\s\S]*transitionDuration[\s\S]*transitionDelay[\s\S]*toBeGreaterThan\(0\)[\s\S]*!hasAtomicPaletteTransition\(style\)[\s\S]*toEqual\(\[\]\)[\s\S]*await assertAtomicSectionPalette\(\);[\s\S]*users\.click\(\)[\s\S]*await assertAtomicSectionPalette\(\);[\s\S]*assertSurface\(page,usersStarted\)/u,
+  'actual Admin palette properties must be checked before and after selection without weakening Axe');
 for (const missing of ["name:'Admin',exact:true", 'admin.click()', 'Admin Workbench', 'Users / Roles', 'users.click()', 'assertSurface(page,adminStarted)', 'assertSurface(page,usersStarted)']) {
   assert.doesNotMatch(adminJourney.replaceAll(missing, ''), adminProof, `campaign must reject missing ${missing}`);
 }

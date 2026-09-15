@@ -562,3 +562,79 @@ retained suites. Final documentation reconciliation refreshes only source hashes
 not assertion ownership, scoring, thresholds or coverage labels. Patch-integrity
 and final current-source provenance checks are required before staging the
 intended corrective files; protected local state stays outside the commit.
+
+### Exact-head CI exposed an Admin palette transition defect
+
+Head `75f2c497f3ff6c33bb3e9f9623cb455b6ccb4512` passed the creation-access
+28-command pipeline and Preview QA attempt 2 (12 hosted fail-closed cases,
+38 local Sandbox passes / 30 explicit skips, two navigation passes). Preview
+attempt 1 remains a retained failed fetch-timeout attempt, not a proven transient.
+These results do not promote the independently pinned exploratory deployment.
+
+Canonical PR C run `35025714235`, attempt 1, is **failed**: 69 commands passed,
+command 70 (`platform-browser`) failed, and the remaining ten did not execute.
+All 218 owned markers were present, but they cannot override the failed command
+or manifest. Its archive SHA-256 is
+`16581ec2593e94a37f4ffa2a8529bc3507434266d1c737cac6724432637571e5`, independently
+verified and retained under
+`output/creation-access/ci-75f2c49-pr-c-failed-run35025714235-attempt1/`.
+The full-platform campaign passed 14 cases and failed both Platform Admin cases
+(Desktop and Pixel) on serious contrast violations in Users / Roles. The
+downloadable running log was delayed; the final log confirms progression beyond
+Studio adversarial, not a stuck static scanner. A separate local mock-only
+Studio-adversarial diagnostic also exited zero; it does not repair the failed run.
+
+Independent architecture, security and quality reviewers confirmed a source
+accessibility defect: `AdminSectionNav` interpolated foreground/background colors
+when changing selection. The observed intermediate ratios were 3.36 and 3.61,
+below the existing 4.5 threshold, despite accessible settled colors. The bounded
+fix uses `transition-none`, preserving colors, hover/focus, roles, capabilities and
+`aria-current`. A regression contract first failed against the old source and
+passes against the correction, rejecting four missing/unsafe transition mutants.
+The browser also inspects the actual selected/unselected buttons and labels.
+No sleep, retry, Axe exclusion, threshold relaxation or test skip was added.
+
+Correction browser and final-source validation are planned until recorded below.
+No schema, scoring, server command, hosted configuration, provider or human gate
+changes are included. The UI acceptance document now points to the previously
+executed 3352f5ff hosted journey instead of retaining its earlier `not run` label.
+
+The first correction browser attempt,
+`output/playwright/pr264-admin-palette-1789509830767/playwright-results.json`,
+is retained **14 passed / two failed**. The new computed-style guard incorrectly
+required `transition-property: none` on child labels: CSS also reports `all` with
+zero timing when no transition runs. The corrected guard now checks property,
+duration and delay; its unit cases reject non-zero/mixed/negative-delay or missing
+timing, while accepting zero-duration/zero-delay defaults. The instantaneous
+product palette and original Axe assertion are unchanged by that test correction.
+
+The final palette correction passed **16/16 full-platform Desktop/Pixel cases**,
+with zero failures, retries or skips, under
+`output/playwright/pr264-admin-palette-final-1789510319380/playwright-results.json`
+(SHA-256 `bee04ae361422cc453d292a948c942e6b93599856cbc20e786e994da35f4ea0a`).
+Both Admin cases passed the actual computed timing checks and immediate full-page
+contrast checks. All seven personas, signout/quiescence observation, overflow,
+navigation budgets and accepted-versus-denied route assertions remain intact.
+The owned browser server exited cleanly with runner exit zero.
+
+The final runtime/test/execution fingerprint is
+`3284ec9507fb0c24da9ba5f1f818f0d61d02814004cd639c272ba6f312cc4e70`
+over 1,033 files. **20/20 selected canonical local commands** passed, with source,
+canonical command, argv, result and log-digest readback checked independently:
+
+- `validation-authority-64a4390b-b76b-48f4-af93-92ef88fa6c96` (5/5).
+- `validation-regression-5914b9de-8252-4b1c-8224-25aa942ac905` (6/6).
+- `validation-coverage-7615dc1e-1ebe-42da-a6bb-576fba71661f` (1/1; 42/42 cases;
+  96.44% lines / 82.05% branches / 87.88% functions over 11 critical TS sources).
+- `validation-static-a292b67a-669b-4dbe-88f4-48ed07da55e9` (8/8: both typechecks,
+  YAML, AI boundary, secret hygiene, scoring, frozen scoring law and build).
+
+Those manifests are under `output/creation-access/`. The full-platform source,
+storage and late-network observer contracts, PR C evidence adversarial suite
+(54/54), catalog/oracle/provenance adversarial checks and hosted-pilot contracts
+(132/132) also passed. AI/secret scans found zero forbidden hits and zero tracked
+environment files. Independent final architecture, security and quality reviewers
+found no confirmed blocker. These are local correction results; the next committed
+head must repeat exact-head CI and preview checks. Earlier failed manifests,
+the 3352f5ff exploratory deployment, the unchanged original backend and the
+three-distinct-human/final-merge boundaries remain separate and unchanged.

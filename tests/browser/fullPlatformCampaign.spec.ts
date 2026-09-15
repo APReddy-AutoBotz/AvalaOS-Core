@@ -16,6 +16,7 @@ import {
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
 import {
   classifyPublicRoute,
+  hasAtomicPaletteTransition,
   parseAuthorityOrigins,
   parseFullPlatformBaseUrl,
   parseFullPlatformExecutionMode,
@@ -225,9 +226,21 @@ const visitActualAdminWorkbench = async(page:Page,visited:Set<string>) => {
   await closeNavigation(page);
   await assertSurface(page,adminStarted);
   const users=page.getByRole('button',{name:'Users / Roles Users',exact:true});
+  const assertAtomicSectionPalette=async() => {
+    const transitions=await page.locator('nav').filter({has:users}).locator('button, button span')
+      .evaluateAll(elements=>elements.map(element=>{
+        const style=getComputedStyle(element);
+        return {property:style.transitionProperty,duration:style.transitionDuration,delay:style.transitionDelay};
+      }));
+    expect(transitions.length,'the actual Admin section buttons and labels must be inspected').toBeGreaterThan(0);
+    expect(transitions.filter(style=>!hasAtomicPaletteTransition(style)),'selected and unselected Admin palettes must never interpolate through low-contrast colors').toEqual([]);
+  };
+  await assertAtomicSectionPalette();
   const usersStarted=Date.now();
   await users.click();
   await expect(page.getByRole('heading',{name:'Users / Roles',exact:true})).toBeVisible();
+  await expect(users).toHaveAttribute('aria-current','page');
+  await assertAtomicSectionPalette();
   await assertSurface(page,usersStarted);
   visited.add('Admin');
   visited.add('Users / Roles');
