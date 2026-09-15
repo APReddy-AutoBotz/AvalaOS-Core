@@ -149,6 +149,25 @@ assert.equal(organizationWorkspaceResolution.view, View.WORKSPACE);
 assert.deepEqual(organizationWorkspaceResolution.scope, { type: ScopeType.ORGANIZATION });
 assert.equal(organizationWorkspaceResolution.scopeChanged, true);
 
+for (const capability of ['org.admin', 'security.manage', 'byok.manage']) {
+  const serverAdmin = resolvePersistedViewScopeState({
+    view: View.WORKSPACE, scope: { type: ScopeType.ORGANIZATION },
+    user: makeUser([], 'Contributor'), authLoading: false, organization,
+    authoritativeCapabilities: [capability],
+  });
+  assert.equal(serverAdmin.view, View.WORKSPACE);
+  assert.equal(serverAdmin.fallbackApplied, false, 'current server Admin capability survives navigation reconciliation');
+}
+for (const capabilities of [[], ['assess.read']]) {
+  const forgedLegacyAdmin = resolvePersistedViewScopeState({
+    view: View.WORKSPACE, scope: { type: ScopeType.ORGANIZATION },
+    user: makeUser(['org.admin'], 'Admin'), authLoading: false, organization,
+    authoritativeCapabilities: capabilities,
+  });
+  assert.equal(forgedLegacyAdmin.fallbackApplied, true, 'server projection supersedes role labels and client permissions');
+  assert.notEqual(forgedLegacyAdmin.view, View.WORKSPACE);
+}
+
 const inputScope = { type: ScopeType.PROJECT, id: 'project-2', name: 'Procurement', stale: true };
 const inputSnapshot = { ...inputScope };
 const normalizedInputScope = normalizePersistedScope(inputScope);

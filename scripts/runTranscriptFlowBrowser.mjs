@@ -29,6 +29,17 @@ const syntheticRegressionCommon = {
 };
 
 export const browserModeByFlag = new Map([
+  ['--synthetic-admin', {
+    label: 'Isolated synthetic Admin creation access',
+    port: '4179',
+    config: 'playwright.synthetic-admin.config.ts',
+    readinessPath: '/tests/browser/syntheticAdminHarness.html',
+    serverCommand: 'preview',
+    build: true,
+    runtimeMode: 'local_demo',
+    environment: { SYNTHETIC_ADMIN_BROWSER_TEST_BUILD: 'true' },
+    playwrightEnvironment: { CREATION_ACCESS_BROWSER_RUN_ID: randomBytes(12).toString('hex') },
+  }],
   ['--preview-sandbox-regression', {
     ...syntheticRegressionCommon,
     label: 'PR #264 exact-head synthetic Sandbox regression',

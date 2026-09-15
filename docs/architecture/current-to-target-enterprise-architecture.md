@@ -1,5 +1,35 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Creation-access and isolated synthetic administration
+
+The active focused repair is routed through
+`docs/planning/creation-access-synthetic-admin-remediation.md`. Hosted identities
+remain identity-only; server capabilities are bound separately to the current
+actor, organization, workspace and authorization version. The process-create UI
+requires both `assess.read` and `assess.process.create`, while the service-only
+command independently reauthorizes and atomically commits a process, receipt and
+audit. A separate committed read is required before browser success. Main Studio
+and Delivery creation navigation opens existing canonical workspaces, never a
+legacy writer unlocked through permission-name translation.
+
+Exploratory account management requires a private, default-off, explicitly pinned
+synthetic target with no fixed PR264 exercise history. One explicit operator can
+assign bounded non-Admin author/reviewer/approver/viewer presets. Auth creation and
+SQL activation are separate fenced phases: ambiguous external results reconcile
+the exact reserved Auth UUID without a second create. Application revocation and
+authorization-version invalidation precede separately tracked Auth banning.
+Lost-response ban reconciliation uses exact-identity, current-authority claims
+with fenced leases and at most three attempts; uncertainty and confirmation are
+correlated, duplicate-safe audited transitions. The fixed non-Admin presets grant
+only their canonical author/reviewer/approver/viewer workflow capabilities. The
+initial operator is bootstrapped through a private service-only transaction, never
+email matching, user metadata, self-signup or an Admin UI self-grant. AP separately
+approved the new synthetic target and bootstrap. Actual initial-operator Auth,
+tenant-session authority, empty Admin roster and signout are now verified there;
+this is not the joined browser creation journey or exact-head preview acceptance.
+Only tenant-session, synthetic-admin, process-command and assess-v2-command are
+deployed there; no provider gateway or fixed-exercise endpoint is repurposed.
+
 ## Governed multi-source transcript PR A accepted architecture
 
 PR #255, accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merge `11e670003a73b0ab5a28650b70afac4b267760f4`, introduces a server-authoritative chain: immutable source versions -> independently versioned ordered Assess source sets -> locked exact input-bundle versions -> extraction jobs and per-source bindings -> strictly staged grounded candidates -> the real preview-batch identity -> human review/conflict resolution -> one atomic Assess draft version. Every command and projection carries the exact historical selector it acts on; a root's current version is never substituted for the selected source-set, bundle, job, binding, candidate, preview, or draft lineage. Candidate Review and counts are therefore scoped through the exact extraction binding rather than through a reusable source ID.

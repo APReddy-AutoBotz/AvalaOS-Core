@@ -13,6 +13,7 @@ import BuyerAcceptancePackPanel from '../admin/BuyerAcceptancePackPanel';
 import BuyerAcceptanceReviewGatePanel from '../admin/BuyerAcceptanceReviewGatePanel';
 import BuyerAcceptanceAdminWalkthroughPanel from '../admin/BuyerAcceptanceAdminWalkthroughPanel';
 import TrustCenterPanel from '../admin/TrustCenterPanel';
+import SyntheticUserManagement from '../admin/SyntheticUserManagement';
 
 interface OrganizationSetupViewProps {
     currentUser: User;
@@ -574,6 +575,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
             }
             usersRoles={
                 <div className="space-y-6">
+            {tenantContext ? <SyntheticUserManagement tenantContext={tenantContext} sessionState={sessionState} /> : <>
             {/* Role Management Stub */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Organization Members & Roles</h2>
@@ -608,6 +610,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
                     </table>
                 </div>
             </section>
+            </>}
                 </div>
             }
             auditSecurity={

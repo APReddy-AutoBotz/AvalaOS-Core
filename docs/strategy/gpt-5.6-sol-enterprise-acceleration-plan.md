@@ -1,5 +1,19 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current focused continuation
+
+AP's 2026-09-15 creation-access approval is implemented and locally verified under
+`docs/planning/creation-access-synthetic-admin-remediation.md` in the existing
+substantial branch; results are in `docs/quality/creation-access-remediation-evidence.md`.
+The process command, canonical creation routing, permission-aware UI and bounded
+synthetic Admin slice have passed local gates. AP subsequently approved the separate
+exploratory target/cost/bootstrap; 74 migrations and the initial operator's actual
+Auth/session/empty-roster/signout checks passed. Next complete exact-head CI and
+the separate draft preview's joined browser journey before user-facing activation.
+Do not alter the existing
+PR264 twelve-persona backend, interpret exploratory accounts as three independent
+human testers, or promote old exact-head evidence to the changed source.
+
 ## Governed multi-source transcript sequence
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted boundary covers the default-off Source Library, independently versioned Assess source sets and locked bundles, transcript-assisted Assess review/apply, the unified provider registry and atomic budget authority, Desktop/Pixel browser evidence, all 15 applicable workflows, Netlify preview, and fresh independent review. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.

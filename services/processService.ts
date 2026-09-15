@@ -4,17 +4,30 @@ import { useOrganizationContext } from '../components/auth/OrganizationProvider'
 import { ALL_TEMPLATE_PACKS } from '../constants/starterPacks';
 import { assessAdapter } from './adapters/assessAdapter';
 import { useAuth } from '../components/auth/AuthProvider';
-import { clientRequestContextIsLoading, clientRequestContextKey, createContextRequestGate } from './contextRequestGate';
+import { createContextRequestGate } from './contextRequestGate';
+import { getRuntimeDataAccess, isLocalRuntimeEnabled } from './supabaseClient';
+import { createProcessViaCommand } from './processCreationClient';
+import { ProcessCreateError, PROCESS_CREATE_CAPABILITY, type ProcessCreateInput } from './processCreationContract';
+import { announceProcessCreation, creationCompletionMatchesAuthority, processReadAuthorityKey, processScopeKey, subscribeProcessCreation, visibleProcessesForAuthority } from './processCreationServiceFence';
+
+// Uncertain requests retain their original fields/key per actor/workspace, even
+// if a different workspace is visited before exact replay can be reconciled.
+const pendingProcessCreations = new Map<string,{ inputKey: string; anchor: { requestId: string; idempotencyKey: string; processId: string } }>();
 
 export function useProcessService() {
-    const { currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
+    const { currentOrganization, currentWorkspace, tenantContext, sessionState } = useOrganizationContext();
     const { user } = useAuth();
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
     const [settledContextKey, setSettledContextKey] = useState<string | null>(null);
     const requestGate = useRef(createContextRequestGate()).current;
 
-    const requestContext = currentOrganization && currentWorkspace && ['ready', 'read_only'].includes(sessionState)
+    const authorizedKey = processReadAuthorityKey({
+        actorId: user?.id, organizationId: currentOrganization?.id, workspaceId: currentWorkspace?.id,
+        sessionState, tenantContext, localAuthority: isLocalRuntimeEnabled(),
+    });
+    const scopeKey = processScopeKey(user?.id,currentOrganization?.id,currentWorkspace?.id);
+    const requestContext = authorizedKey && currentOrganization && currentWorkspace
         ? {
             actorId: user?.id,
             organizationId: currentOrganization.id,
@@ -24,10 +37,13 @@ export function useProcessService() {
     // Effects start after render. Treat a newly authorized or changed context as
     // loading immediately so route hydration cannot validate an entity against
     // the previous context's empty process collection before the fetch begins.
-    const contextLoading = clientRequestContextIsLoading(requestContext, settledContextKey, loading);
+    const contextLoading = Boolean(authorizedKey && (loading || settledContextKey !== authorizedKey));
+    const visibleProcesses = visibleProcessesForAuthority(processes,settledContextKey,authorizedKey);
+    const latestAuthorityKey = useRef(authorizedKey);
+    latestAuthorityKey.current = authorizedKey;
 
     const fetchProcesses = useCallback(async () => {
-        if (!requestContext) {
+        if (!requestContext || !authorizedKey) {
             requestGate.invalidate();
             setProcesses([]);
             setLoading(false);
@@ -39,65 +55,73 @@ export function useProcessService() {
         setLoading(true);
         try {
             const data = await assessAdapter.getProcesses(currentOrganization.id, currentWorkspace.id);
-            if (requestGate.accepts(ticket, requestContext)) setProcesses(data);
+            if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) setProcesses(data);
         } catch (err) {
             console.error('Failed to fetch processes:', err);
         } finally {
-            if (requestGate.accepts(ticket, requestContext)) {
-                setSettledContextKey(clientRequestContextKey(requestContext));
+            if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) {
+                setSettledContextKey(authorizedKey);
                 setLoading(false);
             }
         }
-    }, [currentOrganization, currentWorkspace, requestGate, sessionState, user?.id]);
+    }, [currentOrganization, currentWorkspace, requestGate, sessionState, user?.id, authorizedKey]);
 
     useEffect(() => {
         fetchProcesses();
     }, [fetchProcesses]);
 
-    const checkCreationLimit = useCallback(() => {
-        if (!currentOrganization) return { allowed: false, error: 'Organization context not found.' };
-        
-        // This logic should ideally be moved to the backend or provider
-        const maxProcesses = currentOrganization.subscriptionTier === 'Free_Trial' ? 10 : 1000;
-        if (processes.length >= maxProcesses) {
-            return {
-                allowed: false,
-                error: `Limit Reached. You can only create up to ${maxProcesses} processes.`
-            };
-        }
-        return { allowed: true };
-    }, [currentOrganization, processes.length]);
+    useEffect(() => subscribeProcessCreation(eventScope => {
+        if (scopeKey && eventScope === scopeKey) void fetchProcesses();
+    }), [scopeKey,fetchProcesses]);
 
     const createProcess = useCallback(async (data: Partial<AssessProcess>) => {
-        if (!currentOrganization || !user) throw new Error('Auth required');
-        
-        const limitCheck = checkCreationLimit();
-        if (!limitCheck.allowed) throw new Error(limitCheck.error);
-
-        const newProcessData: Omit<AssessProcess, 'id' | 'createdAt' | 'updatedAt'> = {
-            orgId: currentOrganization.id,
-            workspaceId: currentWorkspace?.id,
-            name: data.name || 'Untitled Process',
-            description: data.description || '',
-            ownerId: data.ownerId || user.id,
-            department: data.department || '',
-            criticality: data.criticality || 'Medium',
-            status: 'Draft',
-            templateId: data.templateId
+        if (!currentOrganization || !currentWorkspace || !user || !requestContext) throw new ProcessCreateError('AUTHENTICATION_REQUIRED');
+        const creationFence = authorizedKey;
+        if (!scopeKey || !creationFence) throw new ProcessCreateError('AUTHORITY_STALE');
+        const input: ProcessCreateInput = {
+            name: data.name ?? '', description: data.description ?? '', department: data.department ?? '',
+            criticality: data.criticality ?? 'Medium', templateId: data.templateId,
         };
+        if (getRuntimeDataAccess() === 'local') {
+            const saved = await assessAdapter.createProcess({
+                orgId: currentOrganization.id, workspaceId: currentWorkspace.id, ownerId: user.id,
+                ...input, status: 'Not Started',
+            });
+            if (!creationCompletionMatchesAuthority(creationFence,latestAuthorityKey.current)) throw new ProcessCreateError('AUTHORITY_STALE');
+            announceProcessCreation(scopeKey);
+            return saved;
+        }
+        if (sessionState !== 'ready' || !tenantContext || tenantContext.userId !== user.id ||
+            tenantContext.organizationId !== currentOrganization.id || tenantContext.workspaceId !== currentWorkspace.id ||
+            !tenantContext.capabilities.includes(PROCESS_CREATE_CAPABILITY) || !tenantContext.capabilities.includes('assess.read')) {
+            throw new ProcessCreateError('PERMISSION_DENIED');
+        }
+        const inputKey = JSON.stringify(input);
+        const pending = pendingProcessCreations.get(scopeKey);
+        if (pending && pending.inputKey !== inputKey) {
+            throw new ProcessCreateError('COMMAND_UNAVAILABLE');
+        }
+        const savedAnchor = pending?.inputKey === inputKey ? pending.anchor : undefined;
+        const anchor = savedAnchor ?? { requestId: crypto.randomUUID(), idempotencyKey: `process.create.${crypto.randomUUID()}`, processId: crypto.randomUUID() };
+        pendingProcessCreations.set(scopeKey,{ inputKey, anchor });
+        try {
+            const { process } = await createProcessViaCommand(tenantContext, input, undefined, anchor);
+            if (!creationCompletionMatchesAuthority(creationFence,latestAuthorityKey.current)) throw new ProcessCreateError('AUTHORITY_STALE');
+            if (pendingProcessCreations.get(scopeKey)?.anchor.requestId === anchor.requestId) pendingProcessCreations.delete(scopeKey);
+            announceProcessCreation(scopeKey);
+            return process;
+        } catch (error) {
+            if (!(error instanceof ProcessCreateError && ['COMMAND_UNAVAILABLE','AUTHORITY_STALE','PERMISSION_DENIED'].includes(error.code)) &&
+                pendingProcessCreations.get(scopeKey)?.anchor.requestId === anchor.requestId) pendingProcessCreations.delete(scopeKey);
+            throw error;
+        }
+    }, [currentOrganization, currentWorkspace, requestContext, sessionState, tenantContext, user, authorizedKey, scopeKey]);
 
-        const saved = await assessAdapter.createProcess(newProcessData);
-        setProcesses(prev => [...prev, saved]);
-        return saved;
-    }, [checkCreationLimit, currentOrganization, currentWorkspace?.id, user]);
-
-    const createProcessFromTemplate = useCallback(async (orgId: string, templateId: string, ownerId: string) => {
+    const createProcessFromTemplate = useCallback(async (templateId: string) => {
         const template = ALL_TEMPLATE_PACKS.flatMap(pack => pack.templates).find(item => item.id === templateId);
         if (!template) throw new Error('Template not found');
 
         return createProcess({
-            orgId,
-            ownerId,
             name: template.name,
             description: template.description,
             department: template.defaultFields.department || '',
@@ -107,8 +131,9 @@ export function useProcessService() {
     }, [createProcess]);
 
     const getProcessById = useCallback((processId: string, orgId: string) => {
-        return processes.find(process => process.id === processId && process.orgId === orgId) || null;
-    }, [processes]);
+        return visibleProcesses.find(process => process.id === processId && process.orgId === orgId &&
+            (process.workspaceId === currentWorkspace?.id || (isLocalRuntimeEnabled() && !process.workspaceId))) || null;
+    }, [visibleProcesses,currentWorkspace?.id]);
 
     const updateProcess = useCallback(async (processId: string, updates: Partial<AssessProcess>) => {
         // Implement via adapter if needed, for now local update + sync
@@ -116,7 +141,7 @@ export function useProcessService() {
     }, []);
 
     return {
-        processes,
+        processes: visibleProcesses,
         loading: contextLoading,
         createProcess,
         createProcessFromTemplate,

@@ -316,6 +316,32 @@ test('full-platform fixture mode owns an isolated local preview lifecycle before
   assert.equal(server.wasKilled, true);
 });
 
+test('synthetic Admin uses an owned local server and a fresh password-safe report directory', async () => {
+  const mode = browserModeByFlag.get('--synthetic-admin');
+  assert.equal(mode.runtimeMode, 'local_demo');
+  assert.equal(mode.port, '4179');
+  assert.match(mode.playwrightEnvironment.CREATION_ACCESS_BROWSER_RUN_ID, /^[a-f0-9]{24}$/);
+  const calls = [];
+  const server = new FakeChild();
+  const spawnImpl = (_command, args, options) => {
+    calls.push({ args, options });
+    if (args.includes('preview')) {
+      queueMicrotask(() => server.stdout.write('Local: http://127.0.0.1:4179/\n'));
+      return server;
+    }
+    const child = new FakeChild();
+    queueMicrotask(() => { child.exitCode = 0; child.emit('close', 0, null); });
+    return child;
+  };
+  assert.equal(await runBrowserHarness({ mode, spawnImpl, fetchImpl: async () => ({ ok: true, status: 200, statusText: 'OK' }),
+    portPreflightImpl: async () => {}, readinessTimeoutMs: 100, readinessPollIntervalMs: 1 }), 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].options.env.SYNTHETIC_ADMIN_BROWSER_TEST_BUILD, 'true');
+  assert.ok(calls[2].args.includes('--config=playwright.synthetic-admin.config.ts'));
+  assert.equal(calls[2].options.env.CREATION_ACCESS_BROWSER_RUN_ID, mode.playwrightEnvironment.CREATION_ACCESS_BROWSER_RUN_ID);
+  assert.equal(server.wasKilled, true);
+});
+
 const syntheticHead = 'a'.repeat(40);
 const navigationInvocation = '1'.repeat(32);
 const staleNavigationInvocation = '2'.repeat(32);

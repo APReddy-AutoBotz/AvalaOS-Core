@@ -51,6 +51,7 @@ Read only this sequence unless the active task requires more:
 | Accepted Studio private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
 | PR #217 post-merge projection, command-translation, crash-recovery, due-work, and hold/deletion serialization correction | `docs/architecture/pr217-post-merge-runtime-contract-forward-fix.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
+| Active creation access, isolated synthetic Admin, verification and rollout boundary | `docs/planning/creation-access-synthetic-admin-remediation.md` |
 
 The Enterprise Intelligence implementation plan and acceptance gates are maintained in `docs/planning/enterprise-intelligence-byok-ingestion-delivery-assemble-plan.md`. It is an active execution plan, not a substitute for the authority documents above.
 

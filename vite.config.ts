@@ -8,7 +8,9 @@ type AvalaViteConfigOptions = Readonly<{ syntheticBrowserTestBuild?: boolean }>;
 // never enable the loopback adapter from environment state. The repository's
 // exact local browser runner selects the separate internal config explicitly.
 export const createAvalaViteConfig = ({ syntheticBrowserTestBuild = false }: AvalaViteConfigOptions = {}) => defineConfig(() => {
-    const browserTestInput = process.env.DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD === 'true'
+    const browserTestInput = syntheticBrowserTestBuild && process.env.SYNTHETIC_ADMIN_BROWSER_TEST_BUILD === 'true'
+      ? { input: { main: path.resolve(__dirname, 'index.html'), syntheticAdminHarness: path.resolve(__dirname, 'tests/browser/syntheticAdminHarness.html') } }
+      : process.env.DELIVERY_MONITOR_PR_C_BROWSER_TEST_BUILD === 'true'
       ? { input: {
           main: path.resolve(__dirname, 'index.html'),
           deliveryMonitorPrCHarness: path.resolve(__dirname, 'tests/browser/deliveryMonitorPrC/harness.html'),

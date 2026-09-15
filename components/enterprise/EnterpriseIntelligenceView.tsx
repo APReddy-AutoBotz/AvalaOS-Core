@@ -42,13 +42,15 @@ const label = (value: string) => <span className="text-xs font-black uppercase t
 const Badge = ({ children }: { children: React.ReactNode }) => <span className="rounded-full border border-[var(--av-color-border-strong)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]">{children}</span>;
 
 type EnterpriseIntelligenceViewProps = {
+  key?: React.Key;
   organization: Organization | null;
   workspace: EnterpriseWorkspace | null;
   currentUser: User | null;
+  initialTab?: 'controls' | 'delivery';
 };
 
-export default function EnterpriseIntelligenceView({ organization, workspace, currentUser }: EnterpriseIntelligenceViewProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('controls');
+export default function EnterpriseIntelligenceView({ organization, workspace, currentUser, initialTab = 'controls' }: EnterpriseIntelligenceViewProps) {
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const organizationId = organization?.id || '';
   const workspaceId = workspace?.id || '';
   const actorId = currentUser?.id || '';

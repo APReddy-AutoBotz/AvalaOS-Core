@@ -18,7 +18,8 @@ import { useProcessService } from './services/processService';
 
 import { clearLegacyBrowserProviderKey, StorageKeys, usePersistentState } from './services/storage';
 import { useHandoffLedger } from './services/handoffLedgerService';
-import { getControlledHumanBrowserBinding, isLocalRuntimeEnabled } from './services/supabaseClient';
+import { getControlledHumanBrowserBinding, getRuntimeDataAccess, isLocalRuntimeEnabled } from './services/supabaseClient';
+import { resolveGovernedCreationSurface } from './services/governedCreationNavigation';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
 import {
@@ -70,6 +71,7 @@ const ProjectSelectorModal = React.lazy(() => import('./components/delivery/Proj
 const DocsForgeView = React.lazy(() => import('./components/docs/DocsForgeView'));
 const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateManagerView'));
 const DocsView = React.lazy(() => import('./components/docs/DocsView'));
+const GovernedStudioRoute = React.lazy(() => import('./components/docs/GovernedStudioRoute'));
 const CustomDashboardView = React.lazy(() => import('./components/shared/CustomDashboardView'));
 const PortfolioView = React.lazy(() => import('./components/shared/PortfolioView'));
 const OrganizationSetupView = React.lazy(() => import('./components/auth/OrganizationSetupView'));
@@ -93,6 +95,7 @@ const ViewLoadingFallback = () => (
 
 function App() {
   const localRuntimeEnabled = isLocalRuntimeEnabled();
+  const dataAccess = getRuntimeDataAccess();
   const controlledHumanBrowserBinding = getControlledHumanBrowserBinding();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -170,11 +173,6 @@ function App() {
   // Assess Detail State
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const enabledModules = currentOrganization?.enabledModules;
-  const hasAdminAccess = Boolean(currentUser && (
-    currentUser.orgRole === 'Admin' ||
-    currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission)) ||
-    tenantContext?.capabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))
-  ));
   const explicitNavigationIntent = useMemo(
     () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
     [],
@@ -236,6 +234,9 @@ function App() {
     tenantContext,
   ]);
   const governContextKey = useRef<string | null>(null);
+  const hasAdminAccess = Boolean(currentUser && (dataAccess === 'local'
+    ? currentUser.orgRole === 'Admin' || currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission))
+    : dataAccess === 'server' && authoritativeViewCapabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))));
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
@@ -406,7 +407,9 @@ function App() {
     documentGenerationId: context.documentGenerationId,
     hasDocumentContext: context.hasDocumentContext,
     targetUserId: context.targetUserId,
-  }), [currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+    dataAccess,
+    serverContext: { workspaceId: currentWorkspace?.id, sessionState, tenantContext },
+  }), [currentOrganization, currentScope, currentUser, currentWorkspace?.id, dataAccess, enabledModules, guardLoading, sessionState, tenantContext]);
 
   const ensureProductAction = useCallback((
     action: ProductAction,
@@ -1197,6 +1200,16 @@ function App() {
     if (currentScope.type === ScopeType.ORGANIZATION) {
       return <OrganizationSetupView currentUser={currentUser} allUsers={users} />;
     }
+
+    const governedCreationSurface = resolveGovernedCreationSurface(dataAccess, currentView);
+    if (governedCreationSurface === 'studio') return <GovernedStudioRoute />;
+    if (governedCreationSurface === 'delivery') return <EnterpriseIntelligenceView
+      key={`delivery:${currentUser.id}:${currentOrganization?.id}:${currentWorkspace?.id}:${tenantContext?.authorizationVersion}`}
+      organization={currentOrganization}
+      workspace={currentWorkspace}
+      currentUser={currentUser}
+      initialTab="delivery"
+    />;
 
     switch (currentView) {
       case View.DASHBOARD:

@@ -1,5 +1,52 @@
 # Verification Command Matrix
 
+## Creation access and isolated synthetic Admin — active repair
+
+The approved 2026-09-15 repair is governed by
+`docs/planning/creation-access-synthetic-admin-remediation.md`. It does not change
+the old twelve-persona backend or reuse its signed hosted/human proof. The new
+default-off migrations follow the frozen controlled-human migration in source;
+the retained controlled-human deploy/bootstrap tools remain pinned to their old
+target/tip and must not be used to activate the new exploratory target.
+
+`node scripts/runCreationAccessValidation.mjs <group>` runs independently pinned
+command contents (including nested npm scripts and rejection of pre/post hooks)
+and records source-file digests, actual command/exit, bounded sanitized logs,
+start/end times and a unique invocation under `output/creation-access/`. A source
+change, failed command, truncated log or incomplete group cannot pass. These are
+**command-execution records, not per-Test-ID or hosted acceptance evidence**.
+The child environment admits infrastructure paths only, never inherited provider,
+database or CI credentials. Console output is sanitized before emission as well
+as retention. The runtime/test fingerprint deliberately excludes documentation and
+the generated PR C source-provenance index; after final documentation updates the
+separate current-source PR C provenance/evidence contract must still pass. Neither
+exclusion turns an old result into exact committed-head acceptance.
+
+| Group | Required checks |
+| --- | --- |
+| `authority` | Product action policy, process/Admin contracts and clients, process command, Admin endpoint/Auth adapter, service response fence, operator bootstrap mocks. |
+| `regression` | View/navigation guards, persisted Admin routing from current server capabilities (including empty-projection denial), canonical tenant authority, Admin workbench, Portfolio domain/client/DB/component tests and retained coverage. |
+| `coverage` | Explicit creation-access critical-source inventory and measured V8 coverage; missing source rows fail. UI/hosted proof is separate. |
+| `postgres` | Disposable PostgreSQL 16: all 74 migrations, process/Admin authority/ACL/RLS/replay/audit/race tests and populated upgrade; exact owned-container cleanup. |
+| `browser` | Complete desktop/Pixel Admin, Assess, Portfolio, Studio, Enterprise and Delivery/Monitor fixture suites, including actual-App Admin navigation and reload. No real keys or customer backend. |
+| `static` | Typechecks, workflow YAML, AI boundary, secret hygiene, frozen scoring regression/integrity and build. |
+
+Also run `node --test scripts/runCreationAccessValidation.test.mjs
+scripts/checkCreationAccessCommittedPatch.test.mjs scripts/runTranscriptFlowBrowser.test.mjs`, the retained catalog/provenance
+adversarial contracts, `node scripts/checkTranscriptFlowPrCCiContract.mjs`, and
+`git diff --check`. The CI inventory now explicitly pins 22 Playwright configs,
+including the isolated password-safe Admin config; unknown configs still fail.
+The migration successor inventory permits exactly the two approved default-off
+creation-access migrations, never an arbitrary newer migration. Exact-head CI,
+joined hosted browser creation and final human acceptance remain separate gates.
+AP-approved target provisioning and initial-operator actual Auth/session/empty
+roster/signout have now executed; see the active repair evidence for their narrow
+scope and sanitized records. They are not browser or whole-platform PASS.
+The new CI also validates full checkout history and compares the validated
+base/head merge-base patch with `checkCreationAccessCommittedPatch.mjs`; a bare
+clean-worktree diff is not committed-patch proof. Its local adversary commits a
+whitespace defect in a disposable repository and proves that distinction.
+
 Record the exact exit code and material result for every executed command. Unavailable or unauthorized checks are `blocked` or `not run`, never passed.
 
 For SANDBOX-009 and SAFETY-007 full-page Axe observations, nonempty execution coverage is the sum of passed, violating and incomplete contrast nodes. All-incomplete and mixed-incomplete observations stay `unresolved_manual`; they do not prove contrast PASS. The shared classifier, synthetic report verifier and hosted report importer must execute adversaries against missing/duplicate/late/unretained summaries, substituted execution bindings, empty or inapplicable-only scans, violations and false resolved classifications. Require all seven persona summaries per device before accepting a successful attempt. This does not relax SANDBOX-009's separate strict Home target requirement of exactly one passed node with zero violations and zero incompletes.

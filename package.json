@@ -4,6 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:creation-access:unit": "npm run test:product-action-policy && node scripts/runTypeScriptTest.mjs types.ts services/processCreationContract.ts services/processCreationContract.test.ts && node scripts/runPr1fTypeScriptTest.mjs types.ts services/processCreationContract.ts services/processCreationClient.ts services/processCreationClient.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts services/processCreationContract.ts supabase/functions/_shared/processCreationCommand.ts supabase/functions/_shared/processCreationCommand.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/syntheticAdminContract.ts services/syntheticAdminContract.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/syntheticAdminEndpoint.ts supabase/functions/_shared/syntheticAdminEndpoint.test.ts && node scripts/runPr1fTypeScriptTest.mjs services/syntheticAdminContract.ts services/syntheticAdminClient.ts services/syntheticAdminClient.test.ts && node --test scripts/bootstrapSyntheticAdmin.test.mjs",
+    "test:creation-access:postgres": "node scripts/runCreationAccessPostgres.mjs",
+    "test:creation-access:modal-scope": "node scripts/runPr1fTypeScriptTest.mjs types.ts components/assess/processCreationModalScope.ts components/assess/processCreationModalScope.test.ts",
+    "test:creation-access:browser": "node scripts/runTranscriptFlowBrowser.mjs --synthetic-admin",
+    "test:creation-access:service-fence": "node scripts/runTypeScriptTest.mjs types.ts services/processCreationServiceFence.ts services/processCreationServiceFence.test.ts",
+    "test:creation-access:auth-adapter": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/syntheticAdminAuth.ts supabase/functions/_shared/syntheticAdminAuth.test.ts",
+    "test:creation-access:coverage": "node --test scripts/runCreationAccessCoverage.test.mjs && node scripts/runCreationAccessCoverage.mjs",
     "test:full-platform:campaign": "node scripts/validateFullPlatformTesting.mjs && node --test scripts/validateFullPlatformTesting.test.mjs",
     "test:full-platform:provider-mocked": "node scripts/fullPlatformProviderHarness.test.mjs",
     "test:full-platform:browser-contracts": "node scripts/runPr1fTypeScriptTest.mjs services/storageAuthority.ts services/storageAuthority.test.ts && node scripts/runPr1fTypeScriptTest.mjs tests/browser/fullPlatformContract.ts tests/browser/fullPlatformContract.test.ts && npm run test:acceptance:network-observer",

@@ -1,5 +1,33 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active creation-access remediation
+
+Confirmed source defects addressed by the local repair: hosted creation presentation depended on absent legacy
+identity permissions; process creation used a browser insert denied by the canonical
+schema; main Studio/Delivery links opened legacy editors; portfolio reads were
+attempted without their distinct read capability; Admin Users was only a stub.
+The focused approved repair and exact verification requirements are in
+`docs/planning/creation-access-synthetic-admin-remediation.md`.
+
+Local verification and bounded independent reviews passed as recorded in
+`docs/quality/creation-access-remediation-evidence.md`. Executed negative tests cover
+stale/foreign workspace authority, legacy Admin-label bypass, cross-system Auth
+response loss, duplicate provisioning, arbitrary role grants, role revocation with
+an old JWT, secret persistence, stale UI completions and fixed-fixture contamination.
+The current PR264 backend must not receive extra accounts. AP separately approved
+the exploratory target at quoted $0/month and pausing MockMate with data preserved.
+New-target migration/bootstrap and initial-operator Auth/session/roster/signout
+checks passed. Joined browser creation, same-head CI/preview and the independent
+three-human gate remain pending; the narrower checks cannot replace those results.
+The empty-target setup initially blocked email login through the CLI's provider
+flag; enabling that provider while preserving global signup denial corrected it.
+Hosted advisor warnings about executable security-definer functions require
+function-specific classification; zero ERROR notices is not a security-clean claim.
+The exploratory target must have no provider configurations or real keys. Its
+Admin no-provider marker does not enforce Studio gateway egress; any later
+generation must use a separately verified server-enforced synthetic path or stay
+`not run`. The role grant alone is not generation readiness.
+
 ## Governed multi-source transcript PR A accepted risk boundary
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`; all 15 applicable workflows, Netlify preview, and a fresh independent review passed. The table below records the accepted source/CI boundary. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.

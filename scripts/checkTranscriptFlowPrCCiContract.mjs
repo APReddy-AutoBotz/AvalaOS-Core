@@ -23,6 +23,7 @@ export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
   'playwright.studio-artifacts.config.ts',
   'playwright.studio-pr-b.config.ts',
   'playwright.studio-private-artifacts.config.ts',
+  'playwright.synthetic-admin.config.ts',
   'playwright.transcript-flow-pr-a.config.ts',
   'playwright.trust-assurance.config.ts',
 ]);
@@ -71,7 +72,7 @@ const rootEntries = readdirSync('.', { withFileTypes: true });
 assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
   'root Playwright configs must be regular files, not links or directories');
 const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
-assert.equal(actualPlaywrightConfigs.length, 21);
+assert.equal(actualPlaywrightConfigs.length, 22);
 assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
   [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
 for (const extension of ['ts','js','mts','mjs','cts','cjs']) {
@@ -474,6 +475,19 @@ assert.equal(migrations.length, 1, 'PR C requires exactly one Delivery/Monitor i
 assert.equal(controlledHumanMigrations.length, 1, 'PR C requires exactly one controlled-human exercise authority migration');
 const migrationNames = readdirSync('supabase/migrations').filter(name => name.endsWith('.sql')).sort();
 assert.ok(migrationNames.indexOf(migrations[0]) < migrationNames.indexOf(controlledHumanMigrations[0]), 'controlled-human authority must follow the Delivery/Monitor implementation migration');
-assert.equal(migrationNames.at(-1), controlledHumanMigrations[0], 'controlled-human authority must be the canonical migration tip');
+// The old controlled-human backend remains pinned to its frozen tip. These two
+// approved default-off successors belong ONLY to the separate creation-access
+// target; do not relabel or redeploy the retained human preparation evidence.
+const creationAccessSuccessors = [
+  '20260915142940_creation_access_process_authority.sql',
+  '20260915142942_synthetic_admin_account_authority.sql',
+];
+const assertCreationSuccessors = names => assert.deepEqual(names, creationAccessSuccessors,
+  'only the approved isolated creation-access migrations may follow the frozen controlled-human tip');
+assertCreationSuccessors(migrationNames.slice(migrationNames.indexOf(controlledHumanMigrations[0]) + 1));
+for (const hostile of [[], creationAccessSuccessors.slice(0, 1), [...creationAccessSuccessors].reverse(),
+  [...creationAccessSuccessors, creationAccessSuccessors[1]], [...creationAccessSuccessors, '20990101000000_unapproved.sql']]) {
+  assert.throws(() => assertCreationSuccessors(hostile));
+}
 
 console.log(`PR C CI contract passed: ${JSON.stringify({ workflow: '.github/workflows/transcript-flow-pr-c.yml', scripts: requiredScripts.length, migration: migrations[0], controlledHumanMigration: controlledHumanMigrations[0] })}`);

@@ -1,5 +1,26 @@
 # AvalaOS Core Source Of Truth
 
+## Creation-access repair — current local work
+
+On 2026-09-15 AP approved the focused creation-access and synthetic Admin repair
+in `docs/planning/creation-access-synthetic-admin-remediation.md`. It adds a
+server-authorized process-create command, correct governed Studio/Delivery entry
+routes, capability-aware portfolio presentation, clearer V1/V2 choices, and bounded
+Admin-managed synthetic accounts. Local implementation, verification and bounded
+independent reviews are complete at the working-tree boundary recorded in
+`docs/quality/creation-access-remediation-evidence.md`; this is not a hosted fix
+or a new acceptance PASS. The existing twelve-persona
+PR264 backend and immutable evidence are not changed. AP subsequently approved the
+separate exploratory target at the quoted $0/month and pausing MockMate with data
+preserved. That new target now has all 74 migrations, one independently verified
+initial Admin, four fixed role presets, zero provider configurations, and four
+non-provider Edge functions. Actual Admin Auth/session/empty-roster/signout checks
+passed; joined browser creation and exact new-head CI/preview remain unproven.
+Production, customer data, real providers, AvalaOS.com and merge remain
+outside this approval. The original three-human acceptance gate is unchanged.
+The exploratory target must retain zero provider configurations and real keys;
+new role capabilities do not prove configured or provider-free generation.
+
 ## Governed multi-source transcript PR A accepted source/CI boundary
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted record includes all 15 applicable workflows, the Netlify preview, and a fresh independent review. PR A adds default-off immutable Source Library sets and input bundles; exact source-set-version, bundle-version, extraction-job, binding, candidate, preview-batch, and Assess-draft lineage; selective staleness of only unconsumed dependants; transcript-assisted review/conflict/batch-apply authority; first-class Groq through the shared server gateway; atomic fenced provider budgets; durable cleanup recovery; responsive Candidate Review UI; and assertion-owned process-lifecycle evidence. Source-only query authority is limited to source/source-set/input-bundle projections; every Assess-owned collection and mixed Assess staleness selector requires `assess.v2.read`. Historical consumed ancestry remains readable, the initial default-off path preserves the legacy single-source review projection, and existing Assess scoring law is unchanged. The accepted evidence boundary is 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, and Pixel 7. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain `not_run` or unproven.
