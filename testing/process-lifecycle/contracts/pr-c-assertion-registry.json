@@ -453,7 +453,7 @@
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
-      "sha256": "220ace64d997023d2c86c7644397fc1b6929a6bbf633c5be612500ea8466fa13"
+      "sha256": "c2939e56d1ba3df1d05f55b6abcd3bb16dc6259f68cf7ac9f48bf280632eb99f"
     },
     "domain": {
       "path": "services/deliveryMonitor/contracts.test.ts",
@@ -2062,7 +2062,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260904120000",
+        "migrationTip": "20260916003000",
         "sourcePackage": {
           "modes": [
             "studio_handoff",

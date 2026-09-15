@@ -5,7 +5,7 @@ export const groups = Object.freeze(Object.fromEntries(Object.entries({
   authority: ['test:creation-access:unit', 'test:creation-access:service-fence', 'test:creation-access:auth-adapter', 'test:creation-access:modal-scope', 'test:creation-access:retained-contracts'],
   regression: ['test:view-access-guard', 'test:product-navigation-controller', 'test:view-state-persistence', 'test:tenant-authority', 'test:admin-workbench', 'test:pr1g-coverage'],
   static: ['typecheck', 'typecheck:edge', 'test:workflow-yaml', 'test:ai-boundary-static', 'test:secret-hygiene', 'test:scoring', 'test:pr-c-scoring-law-drift', 'build'],
-  browser: ['test:creation-access:browser', 'test:browser:pr1d', 'test:browser:pr1g', 'test:browser:studio-artifacts', 'test:browser:enterprise-intelligence', 'test:transcript-flow:delivery-monitor-browser'],
+  browser: ['test:creation-access:browser', 'test:pr-c-local-controlled-boundary', 'test:browser:pr1d', 'test:browser:pr1g', 'test:browser:studio-artifacts', 'test:browser:enterprise-intelligence', 'test:transcript-flow:delivery-monitor-browser'],
   coverage: ['test:creation-access:coverage'], postgres: ['test:creation-access:postgres'],
 }).map(([name, commands]) => [name, Object.freeze(commands)])));
 
@@ -30,6 +30,7 @@ export const reviewedScripts = Object.freeze({
   'test:pr-c-scoring-law-drift': 'node scripts/checkPrCScoringLawDrift.mjs',
   build: 'vite build',
   'test:creation-access:browser': 'node scripts/runTranscriptFlowBrowser.mjs --synthetic-admin',
+  'test:pr-c-local-controlled-boundary': 'node --test scripts/runLocalControlledBoundaryBrowser.test.mjs && node scripts/runLocalControlledBoundaryBrowser.mjs',
   'test:browser:pr1d': 'node scripts/runTranscriptFlowBrowser.mjs --pr1d',
   'test:browser:pr1g': 'node scripts/runTranscriptFlowBrowser.mjs --pr1g',
   'test:browser:studio-artifacts': 'node scripts/runTranscriptFlowBrowser.mjs --studio-artifacts',

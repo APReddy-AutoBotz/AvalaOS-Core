@@ -87,6 +87,7 @@ test('isolated CI owns all required groups, full commit history and exact commit
     ['node scripts/runCreationAccessValidation.mjs authority', 'echo PASS'],
     ['- run: node scripts/runCreationAccessValidation.mjs postgres', '- if: false\n        run: node scripts/runCreationAccessValidation.mjs postgres'],
     ['contents: read', 'contents: write'],
+    ['            output/playwright/local-controlled-boundary/\n', ''],
     ["node-version: '22'", "node-version: '22'\n        env:\n          EXTERNAL_SECRET: ${{ secrets.PRIVATE }}"],
   ]) {
     assert(workflow.includes(before));

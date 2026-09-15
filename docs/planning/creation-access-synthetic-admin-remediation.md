@@ -1,8 +1,9 @@
 # Creation access and synthetic Admin remediation
 
-Status: local implementation and verification complete; separately approved
-exploratory backend/bootstrap and initial Admin Auth checks executed; joined
-browser and exact-head hosted acceptance pending. Baseline: PR #264 branch
+Status: local implementation and verification complete; actual joined exploratory
+browser and independent SQL readback passed on head `3352f5ff`; the two retained CI
+source defects are locally corrected, with 28/28 commands and 156/156 browser
+checks passed. New exact-head CI remains pending. Baseline: PR #264 branch
 `controller/governed-delivery-monitor-pr-c-20260831`, head
 `a8548ba74651ff997f970947a86b5156a1463b13`.
 Final local evidence and bounded review disposition:
@@ -158,3 +159,23 @@ Existing PR264 evidence remains immutable, bound to its old head;
 new changes require their own exact-head CI/preview evidence. Final merge still
 requires AP confirmation after the applicable human gate. No production readiness
 or universal-creation PASS is inferred.
+
+### Joined exploratory proof and retained CI correction
+
+The subsequent immutable draft at `3352f5ffeb08d493ec6202ce65dae28608e07502`
+passed the joined journey and independent database readback after its own
+creation-access CI, full asset binding and 75-migration forward verification.
+The existing twelve-persona backend remains untouched. Credentials are displayed
+only by a locally run interactive viewer, pinned to that tested draft; later
+repository commits do not imply that draft contains the newer source.
+
+Read-only quality/security review identified two retained CI defects: App's
+presentation accessor throws before blocked routes can render; the full-chain
+PR C PostgreSQL test still expects the frozen old marker. The corrective slice
+preserves service authorization, public CTA navigation, the partial upgrade tip
+and the old human backend. Add full-App Desktop/Pixel blocked-route/no-egress
+regressions and run the retained PR C suite inside the disposable PG16 runner.
+Refresh the fresh assertion context only from its executed marker. Rerun the
+canonical local matrix, evidence contracts and exact-head CI before acceptance.
+Rollback keeps authority denial and disables exploratory mutations if needed;
+never weaken the route/attestation gate or destructively reset retained data.

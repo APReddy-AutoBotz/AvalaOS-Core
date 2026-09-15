@@ -24,11 +24,18 @@ correlated, duplicate-safe audited transitions. The fixed non-Admin presets gran
 only their canonical author/reviewer/approver/viewer workflow capabilities. The
 initial operator is bootstrapped through a private service-only transaction, never
 email matching, user metadata, self-signup or an Admin UI self-grant. AP separately
-approved the new synthetic target and bootstrap. Actual initial-operator Auth,
-tenant-session authority, empty Admin roster and signout are now verified there;
-this is not the joined browser creation journey or exact-head preview acceptance.
+approved the new synthetic target and bootstrap. The joined Admin provisioning,
+fresh author login, process/V2 create/save/reopen and signout journey is verified
+on the isolated immutable draft at head `3352f5ffeb08d493ec6202ce65dae28608e07502`.
+Independent SQL readback binds the actual scope, requests, keys, saved versions
+and audit events. This does not verify downstream modules or the three-human gate.
 Only tenant-session, synthetic-admin, process-command and assess-v2-command are
 deployed there; no provider gateway or fixed-exercise endpoint is repurposed.
+
+Blocked controlled-human routes must render denial/public navigation without
+calling the throwing authority accessor during App presentation. A conservative
+server presentation value never supplies capabilities or permits data access;
+auth, projection and mutation callers retain canonical fail-closed authority.
 
 ## Governed multi-source transcript PR A accepted architecture
 

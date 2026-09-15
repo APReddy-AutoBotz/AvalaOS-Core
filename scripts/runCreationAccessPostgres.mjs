@@ -131,6 +131,9 @@ try {
   // ledger on both fresh and accepted-baseline upgrades, including stale/ahead
   // marker denial. Running only the new feature RPCs misses this dependency.
   await child('scripts/testPilotOperationsPostgres.mjs', { PILOT_OPERATIONS_DATABASE_URL: url.toString() });
+  // Retained PR C assertions apply the complete chain too. Running them here
+  // catches stale fresh-tip assumptions before the exact-head CI evidence run.
+  await child('scripts/testTranscriptFlowPrCPostgres.mjs', { TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL: url.toString() });
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';

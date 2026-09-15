@@ -2,6 +2,15 @@
 
 This ledger records the current canonical milestone status. Evidence links are historical records unless the Decision column says they are active blockers.
 
+Creation-access continuation: the separately approved exploratory draft at
+`3352f5ffeb08d493ec6202ce65dae28608e07502` passed actual Admin provisioning,
+author login, process/V2 creation, save, fresh-session reopen and signout, with
+independently cross-bound SQL evidence. Its creation-access CI passed. Retained
+PR C fresh-tip and blocked-route render defects are being corrected in the same
+PR; new-head CI and the three-distinct-human gate remain pending. This is not
+whole-platform, production or merge acceptance. The existing PR264 backend is
+unchanged; see `docs/quality/creation-access-remediation-evidence.md`.
+
 ## Active Enterprise Workstream 1
 
 PR #205 and PR 1A are accepted; PR 1B is accepted on `main` at `de87c86`. PR #208 / PR 1C, PR #209 / PR 1D, PR #211 / PR 1E, PR #212 / PR 1F, PR #214/#215 / PR 1G, PR #216 / Studio governed artifact generation, PR #217 plus corrective PR #218 / Studio private-artifact authority, PR #255 / governed transcript PR A, and PR #263 / governed multi-source Studio PR B are merged on `main`. PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is contained in post-PR-B baseline `5433cad41721355e3ec5a29bc2f87772540c77b5`.

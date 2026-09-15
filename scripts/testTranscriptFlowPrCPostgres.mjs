@@ -3,6 +3,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createApprovedStudioFixture} from './studioPrivateArtifactPostgresFixture.mjs';
+import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -13,6 +14,7 @@ if(!adminUrl){
 const {Client}=pg;
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
+const expectedFreshTip=approvedFullChainTip(migrations);
 const featureIndex=migrations.indexOf(migrationName);assert.ok(featureIndex>0);
 const baseline=migrations.slice(0,featureIndex);const suffix=`${process.pid}_${Date.now()}`;
 const names=Object.fromEntries(['fresh','upgrade','populated','dirty'].map(label=>[label,`delivery_monitor_pr_c_${label}_${suffix}`]));
@@ -33,7 +35,7 @@ try{
  for(const [role,attributes] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']])if(!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount){await admin.query(`CREATE ROLE ${role} ${attributes}`);roles.push(role)}
 
  const fresh=await createDatabase(admin,names.fresh);await apply(fresh,migrations);
- const tip=(await fresh.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip;assert.equal(tip,'20260904120000');
+ const tip=(await fresh.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip;assert.equal(tip,expectedFreshTip);
  const flags=(await fresh.query(`SELECT column_name,column_default,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='enterprise_transcript_workspace_flags' AND column_name=ANY($1::text[]) ORDER BY column_name`,[['direct_delivery_planning_enabled','delivery_item_review_enabled','monitor_approved_baseline_enabled']])).rows;
  assert.equal(flags.length,3);assert.ok(flags.every(flag=>flag.column_default==='false'&&flag.is_nullable==='NO'));
  emit('DELIVERY-TR-006','FRESH-PG16-DEFAULT-OFF','fresh-pg16',{migration:migrationName,migrationTip:tip,sourcePackage:{modes:['studio_handoff','manual']},package:null,item:null,acceptedSet:null,baseline:null,classification:'not_assessed',flags:flags.map(flag=>flag.column_name)});

@@ -50,5 +50,6 @@ jobs:
           path: |
             output/creation-access/
             output/playwright/creation-access/
+            output/playwright/local-controlled-boundary/
           if-no-files-found: error
           retention-days: 14

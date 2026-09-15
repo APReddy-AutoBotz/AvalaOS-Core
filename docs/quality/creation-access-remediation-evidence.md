@@ -319,3 +319,122 @@ browser, three-human acceptance, whole-platform or production proof. The existin
 controlled-human backend and its evidence remain untouched. The new forward
 migration still requires independent hosted verification on the approved separate
 exploratory target; no already-applied migration is edited or replayed.
+
+## Subsequent executed exploratory proof — exact head 3352f5ff
+
+The preceding records retain their original boundaries. Subsequently, commit
+`3352f5ffeb08d493ec6202ce65dae28608e07502` passed creation-access workflow
+`35012042565`, attempt 1, job `104526137204`. The approved separate synthetic target
+received only the new forward migration after an exact one-migration dry run;
+independent SQL readback confirmed all 75 migrations, the final marker and false
+production/customer/provider authorization flags. The old PR264 target was not
+changed. No production site or custom domain was published.
+
+The isolated draft's complete 56 public build assets were independently bound to
+that head, source fingerprint `6aaa866e7f2fd63c8f52737941812bed1e6996b521c8b7402fd9e5af9c533687`,
+the exact successful CI attempt and the draft's unpublished deployment metadata.
+The real browser then executed Admin login, bounded author reservation/activation,
+Admin signout, fresh author login, process creation, V2 creation, draft save,
+fresh-context saved-draft reopening and final signout. Thirteen facts passed;
+observed requests were 71 site and 60 backend, with zero violations. Twenty known
+external static resource requests were blocked, never treated as provider access.
+
+Independent SQL readback matched two Auth users, one active author, one process,
+one V2 case, two versions, one authored primitive at the current saved head, three
+successful command receipts, six successful audit actions and zero provider
+configurations. The verifier compared actual tenant/workspace/login digests,
+request/idempotency digests and process/case/version ownership against the observed
+browser ledger. Six synthetic verifier tests additionally rejected wrong scope,
+stale source, missing/fake receipts/audits, provider configuration and stale saves.
+
+- Browser: `output/creation-access/exploratory-browser-0e76bc3f-a1cc-4399-8c6f-b208b3ee27be.json`
+- SQL: `output/creation-access/exploratory-database-readback-3352f5ff.json`
+- Cross-check: `output/creation-access/exploratory-database-verification-b7123534-653e-4a2c-a29f-292d76d83aab.json`
+- SQL proof SHA256: `359dcbb35f65901ac9816eb9ab7c8bdd760a5b070e5ba2325158537d8c3a3fa7`
+- Browser report SHA256: `ea3f93393b56b8f126ecf7e10eb19d388f789bea8a0ca7a0c73608c79bebe327`
+
+Earlier CLI draft-upload timeouts/argument rejection, a pre-execution module-cycle
+failure, and the first browser static-resource guard rejection remain failed or
+not-run attempts. The latter stopped after Admin login; independent SQL proved
+zero account/process/case mutations before a fresh attempt. Its unused encrypted
+author fixture and ledger were quarantined, not deleted or promoted. The corrected
+observer still rejects unknown/provider requests and remains active through signout.
+Credentials remain local encrypted artifacts; the manual viewer requires a real
+interactive terminal and explicitly identifies the tested immutable build.
+
+This proves the narrow exploratory Admin/author/Assess journey only. Studio,
+Delivery, provider execution, whole-platform hosted acceptance and the distinct
+three-human controlled exercise remain unproven on this target. Fifteen applicable
+workflows passed on this head, two failed, and hosted-live acceptance was skipped.
+The failures exposed an App presentation exception on intentionally blocked routes
+and a retained fresh-chain PostgreSQL assertion expecting the old migration tip.
+The newer corrections require their own verification; the 3352f5ff hosted proof
+is immutable and must not be relabelled to them. No merge or readiness is claimed.
+
+## Blocked-route and fresh-chain corrective verification
+
+Read-only quality/security findings completed before implementation. The full-chain
+assertion now derives its expected marker only after strict approved-tail validation;
+the old controlled-human and partial-upgrade tips remain unchanged. The retained
+PR C PostgreSQL suite also runs inside the bounded creation-access PG16 container.
+Its first corrected run passed all feature, retained Pilot Operations and PR C
+fresh/upgrade/populated/dirty-history checks; the emitted fresh marker was actually
+`20260916003000` before the registry expectation was updated. All owned databases
+and the memory-backed container were removed. Result:
+`output/creation-access/postgres-53a62941-580b-4959-9933-3c62a11d73af/result.json`.
+This focused run does not substitute for the final stable-source matrix or CI.
+
+The final corrective local matrix subsequently passed **28/28 commands**, all
+bound to `cea443771d67540f39c6bd60b611ee4af742d4e5842c0a02ea50ab8455ca0997`.
+Independent readback reconstructed the entire current source inventory and checked
+each canonical script/dependency/argv, successful exit, stable-source flag and log
+SHA256 against it. Browser totals are **156/156**: Admin 22, controlled-route 8,
+Assess 52, Portfolio 6, Studio 14, Enterprise 20 and Delivery/Monitor 34.
+Critical-source coverage remains 42/42 tests at 96.44% lines, 82.05% branches and
+87.88% functions. PostgreSQL includes all 172 counted feature assertions plus
+retained Pilot Operations and PR C suites. Typecheck, Edge typecheck, workflow YAML,
+AI boundary, secret hygiene, frozen scoring regression/drift and build passed.
+
+| Group | Passed commands | Manifest |
+| --- | --- | --- |
+| Authority | 5/5 | [Manifest](../../output/creation-access/validation-authority-47d730b7-23fd-41dd-a728-3c04f14590c0/manifest.json) |
+| Regression | 6/6 | [Manifest](../../output/creation-access/validation-regression-de2554bc-301b-4e7d-bbe3-c498db8b51b1/manifest.json) |
+| Coverage | 1/1 | [Manifest](../../output/creation-access/validation-coverage-04e55025-e1af-4989-aaca-9d87a5403e80/manifest.json) |
+| PostgreSQL | 1/1 | [Manifest](../../output/creation-access/validation-postgres-55e94c93-4d2b-4c5d-8c9d-c3d546e68b10/manifest.json) |
+| Browser | 7/7 | [Manifest](../../output/creation-access/validation-browser-fd83a09f-49d2-4b31-b2fb-e78bdc7b9fff/manifest.json) |
+| Static/build | 8/8 | [Manifest](../../output/creation-access/validation-static-3e1e1d11-85d7-4dd3-8f9c-88c32ed59352/manifest.json) |
+
+The first new local route test attempt passed 7/8 and exceeded its 45-second cold
+Vite timeout on the remaining desktop case. That fixed-path JSON was overwritten
+by its rerun; only the tool/session output retains the failure. Subsequent runs
+use unique invocation paths and a 90-second test containment limit, not a product
+performance claim. Hardened reruns and the final matrix passed 8/8; signal/timeout
+and unconfirmed child cleanup cannot report success. The spec runs the real App,
+asserts the blocked banner/disabled sign-in/no workspace, and denies backend and
+external network requests with repository env loading disabled.
+
+Final independent quality/security reviewers found no confirmed blocker in this
+delta. An already-restored-user denial case and unexpected post-readiness Vite
+exit were noted as optional coverage refinements, not weakened authority gates.
+Catalog/provenance adversarial checks still validate 108 source-backed branches
+and ten explicit composite cases; this is source ownership, not 108 hosted passes.
+The source hash changed for App only; ownership and coverage labels were not
+promoted. No original evidence was relabelled. New committed-head CI/preview and
+the three-human gate remain separate pending boundaries at this local handoff.
+
+Final evidence-contract reconciliation found that the newly added browser config
+was absent from PR C's exact root-config inventory. The only post-matrix
+runtime/test source change is `scripts/checkTranscriptFlowPrCCiContract.mjs`:
+register that exact file and advance the inventory count from 22 to 23. A fresh
+independent per-file comparison confirmed every other matrix source byte is
+unchanged. Current fingerprint:
+`953fa38adc71384ff9b459045646680d514499e23dc44833c49ce1826a3be0d6`.
+The prior 28-command artifacts retain their original fingerprint, not this one.
+The inventory still rejects unknown/missing/duplicate configs and requires literal
+disabled Git capture in all 23 configs; independent quality review found no
+weakening. Focused follow-up passed PR C evidence contracts **54/54**, preview
+profile/evidence contracts **77/77**, and real loopback route-failure checks
+**14/14** across Desktop/Pixel, with zero external requests. A restricted browser
+launch was denied before those route checks; the permitted isolated rerun passed.
+These are local checks. Exact committed-head CI will execute the complete current
+source again and remains required before PR acceptance.

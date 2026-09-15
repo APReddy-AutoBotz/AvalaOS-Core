@@ -12,10 +12,17 @@ independent reviews completed before commit `03592bba35fd79c65155c04c48b6d52e4dc
 or a new acceptance PASS. The existing twelve-persona
 PR264 backend and immutable evidence are not changed. AP subsequently approved the
 separate exploratory target at the quoted $0/month and pausing MockMate with data
-preserved. That new target now has all 74 migrations, one independently verified
+preserved. That new target now has all 75 migrations, one independently verified
 initial Admin, four fixed role presets, zero provider configurations, and four
-non-provider Edge functions. Actual Admin Auth/session/empty-roster/signout checks
-passed; joined browser creation and exact new-head CI/preview remain unproven.
+non-provider Edge functions. On exact head `3352f5ffeb08d493ec6202ce65dae28608e07502`,
+the isolated immutable draft passed the actual Admin provisioning -> author login
+-> process/V2 creation -> draft save -> fresh-session reopen -> signout journey.
+Independent SQL readback matched tenant, request/idempotency, saved lineage and
+audit bindings. This is narrow exploratory proof, not whole-platform acceptance.
+The same head's creation-access CI passed; retained PR C and preview checks exposed
+two further source defects now locally corrected with 28/28 commands and 156/156
+browser checks passed. New-source CI/preview remains a
+separate gate; the completed hosted proof must not be relabelled to a later head.
 Production, customer data, real providers, AvalaOS.com and merge remain
 outside this approval. The original three-human acceptance gate is unchanged.
 The exploratory target must retain zero provider configurations and real keys;
@@ -26,9 +33,11 @@ required the old tip to be globally last; operational identity lagged the new
 ledger tip; and a UI contract assumed `id` was the first input attribute. The
 2026-09-16 corrective continuation adds strict shared successor validation,
 attribute-order-independent label checks, and forward migration `20260916003000`.
-Already-applied migrations remain immutable. This forward correction and its
-expanded local/CI gates are not hosted proof until independently verified and
-applied only to the separately approved exploratory target.
+Already-applied migrations remain immutable. This forward correction was applied
+and independently verified only on the separately approved exploratory target.
+The remaining corrections concern the retained fresh-chain test's stale expected
+tip and an App render-time authority exception hiding the blocked-route UI.
+Command authority stays fail-closed; frozen human-backend identity is unchanged.
 
 ## Governed multi-source transcript PR A accepted source/CI boundary
 

@@ -95,8 +95,12 @@ const ViewLoadingFallback = () => (
 
 function App() {
   const localRuntimeEnabled = isLocalRuntimeEnabled();
-  const dataAccess = getRuntimeDataAccess();
   const controlledHumanBrowserBinding = getControlledHumanBrowserBinding();
+  // A rejected controlled browser binding must remain a presentation-only
+  // boundary. Service authority still resolves through getRuntimeDataAccess.
+  const dataAccess = controlledHumanBrowserBinding.status === 'blocked'
+    ? 'server'
+    : getRuntimeDataAccess();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
@@ -1473,15 +1477,8 @@ function App() {
     }
   };
 
-  if (authLoading || orgLoading) {
-    return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-abz-ink-950 text-slate-500 font-medium">Loading workspace...</div>;
-  }
-
-  if (!currentUser) {
-    return <PublicWebsite />;
-  }
-
   if (controlledHumanBrowserBinding.status === 'blocked') {
+    if (!currentUser) return <PublicWebsite />;
     return <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <ControlledHumanNonProductionBanner />
       <main className="grid min-h-[calc(100vh-2.75rem)] place-items-center p-6">
@@ -1493,6 +1490,14 @@ function App() {
         </section>
       </main>
     </div>;
+  }
+
+  if (authLoading || orgLoading) {
+    return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-abz-ink-950 text-slate-500 font-medium">Loading workspace...</div>;
+  }
+
+  if (!currentUser) {
+    return <PublicWebsite />;
   }
 
   if (!localRuntimeEnabled && !['ready', 'read_only'].includes(sessionState)) {

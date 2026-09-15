@@ -41,7 +41,7 @@ export function checkCreationAccessCiContract(source) {
   assert.equal(artifact.if, 'always()');
   assert.equal(artifact.with['if-no-files-found'], 'error');
   assert.equal(artifact.with['retention-days'], 14);
-  assert.equal(artifact.with.path.trim(), 'output/creation-access/\noutput/playwright/creation-access/');
+  assert.equal(artifact.with.path.trim(), 'output/creation-access/\noutput/playwright/creation-access/\noutput/playwright/local-controlled-boundary/');
   assert(!/secrets\.|pull_request_target|supabase (?:link|db push|functions deploy)|netlify deploy/.test(source), 'CI_HOSTED_AUTHORITY_REJECTED');
   return true;
 }

@@ -15,3 +15,11 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
     'Only the exact approved creation-access successors may follow the PR C controlled-human frozen tip');
 };
+
+// Full fresh-chain runners must validate the approved tail before deriving its
+// marker. This does not advance the separately frozen controlled-human target
+// or a partial PR C-only upgrade to a migration it has not applied.
+export const approvedFullChainTip = migrationNames => {
+  assertPrCMigrationTail(migrationNames);
+  return PR_C_APPROVED_SUCCESSOR_TAIL.at(-1).slice(0, 14);
+};

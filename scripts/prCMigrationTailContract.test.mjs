@@ -5,6 +5,7 @@ import {
   PR_C_APPROVED_SUCCESSOR_TAIL,
   PR_C_CONTROLLED_HUMAN_FROZEN_TIP,
   assertPrCMigrationTail,
+  approvedFullChainTip,
 } from './prCMigrationTailContract.mjs';
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
@@ -25,6 +26,21 @@ test('only the exact approved creation-access successor tail is accepted', () =>
   assert.throws(() => assertPrCMigrationTail([frozenPrefix[0], ...PR_C_APPROVED_SUCCESSOR_TAIL]));
   assert.throws(() => assertPrCMigrationTail([...frozenPrefix, PR_C_CONTROLLED_HUMAN_FROZEN_TIP,
     ...PR_C_APPROVED_SUCCESSOR_TAIL]));
+});
+
+test('fresh-chain identity derives only from the validated approved successor tail', () => {
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916003000');
+  for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
+    [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
+    [...PR_C_APPROVED_SUCCESSOR_TAIL, '20990101000000_unapproved.sql']]) {
+    assert.throws(() => approvedFullChainTip([...frozenPrefix, ...tail]));
+  }
+  const runner = readFileSync('scripts/testTranscriptFlowPrCPostgres.mjs', 'utf8');
+  assert.match(runner, /approvedFullChainTip\(migrations\)/u);
+  assert.match(runner, /assert\.equal\(tip,expectedFreshTip\)/u);
+  assert.match(runner, /upgrade\.query\([^\n]+migration_tip[^\n]+,'20260831062024'\)/u);
+  assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
+    /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
 });
 
 test('forward identity convergence requires exact frozen marker, predecessors, and non-production flags', () => {

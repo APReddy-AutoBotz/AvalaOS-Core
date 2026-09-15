@@ -7,9 +7,13 @@ AP's 2026-09-15 creation-access approval is implemented and locally verified und
 substantial branch; results are in `docs/quality/creation-access-remediation-evidence.md`.
 The process command, canonical creation routing, permission-aware UI and bounded
 synthetic Admin slice have passed local gates. AP subsequently approved the separate
-exploratory target/cost/bootstrap; 74 migrations and the initial operator's actual
-Auth/session/empty-roster/signout checks passed. Next complete exact-head CI and
-the separate draft preview's joined browser journey before user-facing activation.
+exploratory target/cost/bootstrap. Its 75-migration chain and actual joined Admin
+provisioning/author/process/V2 save-and-reopen/signout journey passed on immutable
+draft head `3352f5ffeb08d493ec6202ce65dae28608e07502`, with independently cross-bound
+SQL readback and zero provider traffic. Creation-access CI on that head passed.
+Next repair the retained fresh-tip assertion and blocked-route render exception,
+then rerun their local and exact-head gates. Keep the usable exploratory draft
+pinned to its tested source until any replacement independently passes.
 Do not alter the existing
 PR264 twelve-persona backend, interpret exploratory accounts as three independent
 human testers, or promote old exact-head evidence to the changed source.

@@ -16,9 +16,15 @@ response loss, duplicate provisioning, arbitrary role grants, role revocation wi
 an old JWT, secret persistence, stale UI completions and fixed-fixture contamination.
 The current PR264 backend must not receive extra accounts. AP separately approved
 the exploratory target at quoted $0/month and pausing MockMate with data preserved.
-New-target migration/bootstrap and initial-operator Auth/session/roster/signout
-checks passed. Joined browser creation, same-head CI/preview and the independent
-three-human gate remain pending; the narrower checks cannot replace those results.
+New-target migration/bootstrap and the joined Admin/author/process/V2 save/reopen
+browser journey passed at `3352f5ffeb08d493ec6202ce65dae28608e07502`. Independent SQL
+readback matched actual request, idempotency, tenant, saved-lineage and audit
+bindings; provider configurations and observed provider traffic remained zero.
+Creation-access CI passed on that head. Retained PR C and preview CI found two
+confirmed source defects: a stale fresh-chain expected migration tip and a thrown
+authority exception before blocked-route presentation. Corrections and their own
+exact-source gates remain necessary. Neither exploratory proof nor synthetic
+accounts replace the independent three-human gate, which remains pending.
 The empty-target setup initially blocked email login through the CLI's provider
 flag; enabling that provider while preserving global signup denial corrected it.
 Hosted advisor warnings about executable security-definer functions require

@@ -9,6 +9,7 @@
     "test:creation-access:retained-contracts": "node --test scripts/prCMigrationTailContract.test.mjs tests/browser/exhaustiveHostedAcceptanceContract.test.mjs && node scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
     "test:creation-access:modal-scope": "node scripts/runPr1fTypeScriptTest.mjs types.ts components/assess/processCreationModalScope.ts components/assess/processCreationModalScope.test.ts",
     "test:creation-access:browser": "node scripts/runTranscriptFlowBrowser.mjs --synthetic-admin",
+    "test:pr-c-local-controlled-boundary": "node --test scripts/runLocalControlledBoundaryBrowser.test.mjs && node scripts/runLocalControlledBoundaryBrowser.mjs",
     "test:creation-access:service-fence": "node scripts/runTypeScriptTest.mjs types.ts services/processCreationServiceFence.ts services/processCreationServiceFence.test.ts",
     "test:creation-access:auth-adapter": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/syntheticAdminAuth.ts supabase/functions/_shared/syntheticAdminAuth.test.ts",
     "test:creation-access:coverage": "node --test scripts/runCreationAccessCoverage.test.mjs && node scripts/runCreationAccessCoverage.mjs",
