@@ -1,12 +1,77 @@
 # AvalaOS Core Source Of Truth
 
+## Creation-access repair — current implementation and CI correction
+
+On 2026-09-15 AP approved the focused creation-access and synthetic Admin repair
+in `docs/planning/creation-access-synthetic-admin-remediation.md`. It adds a
+server-authorized process-create command, correct governed Studio/Delivery entry
+routes, capability-aware portfolio presentation, clearer V1/V2 choices, and bounded
+Admin-managed synthetic accounts. Local implementation, verification and bounded
+independent reviews completed before commit `03592bba35fd79c65155c04c48b6d52e4dc86298`, pushed to the existing PR #264 branch. Evidence is recorded in
+`docs/quality/creation-access-remediation-evidence.md`; this is not a hosted fix
+or a new acceptance PASS. The existing twelve-persona
+PR264 backend and immutable evidence are not changed. AP subsequently approved the
+separate exploratory target at the quoted $0/month and pausing MockMate with data
+preserved. That new target now has all 75 migrations, one independently verified
+initial Admin, four fixed role presets, zero provider configurations, and four
+non-provider Edge functions. On exact head `3352f5ffeb08d493ec6202ce65dae28608e07502`,
+the isolated immutable draft passed the actual Admin provisioning -> author login
+-> process/V2 creation -> draft save -> fresh-session reopen -> signout journey.
+Independent SQL readback matched tenant, request/idempotency, saved lineage and
+audit bindings. This is narrow exploratory proof, not whole-platform acceptance.
+The same head's creation-access CI passed; retained PR C and preview checks exposed
+two further source defects now locally corrected with 28/28 commands and 156/156
+browser checks passed. New-source CI/preview remains a
+separate gate; the completed hosted proof must not be relabelled to a later head.
+Commit `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c` subsequently passed its full
+28-command creation-access CI and the hosted blocked-route boundary. Its retained
+PR C/preview pipelines both stopped on the same ten local Sandbox fixture failures:
+obsolete combined Admin navigation and an incomplete-discovery scenario that
+expected Draft before starting an assessment. The corrective scope is the actual
+Admin Workbench plus separate Enterprise Intelligence denial, and a real saved
+incomplete V1 draft with no score or decision pack. Corrected fixtures then exposed
+a local Sandbox navigation defect: a defined empty server-capabilities projection
+discarded the synthetic Admin destination during reconciliation. The repair keeps
+local presentation distinct from server denial and uses one guarded Admin
+navigation transition. It grants no new product permissions or scoring changes;
+the corrected Sandbox regression passed 38 Desktop/Pixel cases with 30 unchanged
+explicit server-scenario `not_run` cases. Navigation history passed on both devices.
+The wider fixture/account/blocked-binding runs bring this corrective pass to
+86 browser passes. All 20 selected canonical authority, regression, static/build
+and coverage commands passed at one frozen source fingerprint; final independent
+reviews found no confirmed blocker. New-head CI verification remains a separate
+gate and will repeat the full creation-access and retained PostgreSQL suites.
+Production, customer data, real providers, AvalaOS.com and merge remain
+outside this approval. The original three-human acceptance gate is unchanged.
+The exploratory target must retain zero provider configurations and real keys;
+new role capabilities do not prove configured or provider-free generation.
+
+Exact-head CI exposed three retained-check defects: the migration contract still
+required the old tip to be globally last; operational identity lagged the new
+ledger tip; and a UI contract assumed `id` was the first input attribute. The
+2026-09-16 corrective continuation adds strict shared successor validation,
+attribute-order-independent label checks, and forward migration `20260916003000`.
+Already-applied migrations remain immutable. This forward correction was applied
+and independently verified only on the separately approved exploratory target.
+The remaining corrections concern the retained fresh-chain test's stale expected
+tip and an App render-time authority exception hiding the blocked-route UI.
+Command authority stays fail-closed; frozen human-backend identity is unchanged.
+
 ## Governed multi-source transcript PR A accepted source/CI boundary
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted record includes all 15 applicable workflows, the Netlify preview, and a fresh independent review. PR A adds default-off immutable Source Library sets and input bundles; exact source-set-version, bundle-version, extraction-job, binding, candidate, preview-batch, and Assess-draft lineage; selective staleness of only unconsumed dependants; transcript-assisted review/conflict/batch-apply authority; first-class Groq through the shared server gateway; atomic fenced provider budgets; durable cleanup recovery; responsive Candidate Review UI; and assertion-owned process-lifecycle evidence. Source-only query authority is limited to source/source-set/input-bundle projections; every Assess-owned collection and mixed Assess staleness selector requires `assess.v2.read`. Historical consumed ancestry remains readable, the initial default-off path preserves the legacy single-source review projection, and existing Assess scoring law is unchanged. The accepted evidence boundary is 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, and Pixel 7. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain `not_run` or unproven.
 
-## Governed multi-source transcript PR B active implementation boundary
+## Governed multi-source transcript PR B accepted source boundary
 
-PR B is explicitly authorized on branch `controller/governed-multisource-studio-pr-b-20260828` from accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. It is limited to independent Studio source packages, direct/Assess-derived/hybrid source modes, optional target-accepted Assess-to-Studio handoffs, governed tenant templates, business-friendly structured artifact editing, source coverage/provenance, unified server-side provider generation, and the directly required migration, security, browser, evidence, and rollback controls. Focused local final-source mocked-provider, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, accessibility, performance, migration, coverage, type/static, and assertion-contract checks pass. The final local registry capture binds 61 exact commands, 322 passed assertions, 193 fixtures, 11 owners, and 15 explicit `not_run` boundaries; all 88 canonicalized source files were rehashed and the evidence contract passed 23/23. Executed remediation covers exact manual 0/0 and hybrid workspace/artifact parity, runtime-control removal and restoration of projection mutation actions, reservation-aware timeout reconciliation without a second provider or budget authority, failure finalization restricted to no reservation or exact released-before-effect/no-transfer-pending compatibility, and deterministic owned-server teardown for retained PR 1E/1F/1G browser gates. One server-owned source-package-currentness predicate covers Assess, Studio-bundle, hybrid-both-halves, and manual-brief integrity; generation request, claim, final provider reservation, finalization, and both safe projections use that same decision under exact upstream locks. Stale inputs cannot acquire new provider authority, while an already-effected result whose source advances is retained as `stale_completed` without moving current or approved heads. Exact-head retained-matrix CI, preview, fresh post-correction security/quality review, and repository acceptance remain pending; no final review disposition is claimed. PR C Delivery/Monitor generalization, real providers, live infrastructure, deployment, pilot, production, security certification, and compliance certification remain outside this PR or `not_run`. Focused local proof is not a readiness claim.
+PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged into `main` as parent of `5433cad41721355e3ec5a29bc2f87772540c77b5`. PR B establishes independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess-to-Studio handoffs, governed tenant templates, business-friendly structured artifact editing, source coverage/provenance, and unified server-side provider generation. Its immutable historical registry remains the authority for its 61 exact commands, 322 passed assertions, 193 fixtures, 11 owners, and 15 explicit `not_run` boundaries. Those `not_run` Delivery and Monitor results are not rewritten or promoted by PR C. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
+
+## Governed Delivery and Monitor PR C active implementation boundary
+
+PR C is explicitly authorized on branch `controller/governed-delivery-monitor-pr-c-20260831` from post-PR-B `main` at `5433cad41721355e3ec5a29bc2f87772540c77b5`. It is one additive vertical slice: generalized and manual Delivery source packages; explicit target-accepted Studio-to-Delivery handoffs; immutable Delivery item aggregates, versions, decisions, review, and approval; and one exact approved-package/accepted-item-set baseline projected read-only into both Enterprise Intelligence and the primary Monitor surface. New behavior remains default off behind `module_handoffs_enabled`, `direct_delivery_planning_enabled`, `delivery_item_review_enabled`, and `monitor_approved_baseline_enabled`. Legacy IDs, hashes, approvals, source classifications, and read-only projections must remain compatible; rollback disables new mutations while retaining committed history for additive forward repair.
+
+PR #264 is a corrective continuation of this same substantial boundary, not a new branch or PR. The current candidate implements four source corrections together: a production blocked-package revision path that binds a complete current descendant manifest while authoring only explicitly selected material changes and then requires fresh review/approval; synchronous clearing and async fencing of every Enterprise Intelligence secret, file, selector, draft, preview, pending action, and error across organization/workspace/actor changes; fail-closed per-record evidence identity derived from the actual workflow/local execution context; and reconciliation of this active authority set plus the external PR description. Successive fresh reviews additionally require and the current source implements five fail-closed hardenings: governed evidence rejects base-tracked deletions and renames instead of omitting them from provenance; currently authorized exact committed receipt replay remains recoverable after mutable feature or read-only controls change while new effects remain gated; outer, requested, and nested Delivery/Monitor projection scopes must match under UUID semantics; a blocked-recovery result must contain unique new item-version identities that reuse no predecessor item-version identity from the complete descendant set; and every production Delivery/Monitor client adapter isolates the organization/workspace transport envelope from the strict action selector while preserving rejection of any other unrecognized claim. Tracked files define the stable contract and canonical artifact pointer only; they do not embed a mutable final-run hash that would invalidate their own provenance. Exact candidate/run/attempt/artifact/preview results belong in the immutable CI artifact and PR #264 description after the source is committed. Merge remains NO-GO until the full current-source matrix, fresh final read-only reviews, exact committed-head GitHub Actions, and same-head Netlify preview all pass. `PERF-003` and `PERF-004` remain `not_run` because no AP-approved numeric budgets exist.
+
+On 2026-09-04 the AP narrowly authorized preparation and execution of PR #264 controlled-human testing only on its exact Netlify Deploy Preview and one dedicated synthetic `hosted_nonproduction_pilot` backend. The preview must fail closed unless its exact head, deployment, exercise, backend fingerprint, and controlled-human migration tip `20260904120000` are server-attested before authentication; browser state and response headers are not authority. The permanent Netlify production-context gate remains limited to the pre-existing exact authorized stable non-production pilot tuple and does not enable controlled-human mode. AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, broad reset, merge, promotion, and readiness or certification claims remain prohibited. `CONTROLLED-HUMAN` remains `not_run` until three distinct humans complete every signed checkpoint on the exact head, bounded deprovision succeeds, and all exact-head checks pass; only then may the AP be asked for final merge confirmation.
 
 ## Workstream 6 pilot operations candidate
 

@@ -69,17 +69,6 @@ const fromProcessRow = (row: AssessProcessRow): AssessProcess => ({
   updatedAt: row.updated_at || new Date().toISOString(),
 });
 
-const toProcessInsertRow = (process: Omit<AssessProcess, 'id' | 'createdAt' | 'updatedAt'>) => ({
-  org_id: process.orgId,
-  name: process.name,
-  description: process.description,
-  owner_id: process.ownerId,
-  department: process.department,
-  criticality: process.criticality,
-  status: process.status,
-  template_id: process.templateId,
-});
-
 const fromAssessmentRow = (row: AssessmentRow): Assessment => {
   const aggregate = row.responses && 'responses' in row.responses
     ? row.responses as unknown as {
@@ -321,14 +310,7 @@ export const assessAdapter = {
       return saved;
     }
 
-    const { data, error } = await supabase
-      .from('assess_processes')
-      .insert([toProcessInsertRow(process)])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return fromProcessRow(data);
+    throw new Error('Hosted process creation requires the governed process command.');
   },
 
   async getAssessment(processId: string, orgId: string, workspaceId?: string) {

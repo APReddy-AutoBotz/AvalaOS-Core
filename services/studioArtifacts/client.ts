@@ -1,5 +1,5 @@
 import type { TenantContextProjection } from '../../types';
-import { supabase } from '../supabaseClient';
+import { beginControlledHumanCommand, completeControlledHumanCommand, prepareControlledHumanOfflineLineage, supabase } from '../supabaseClient';
 import {
   STUDIO_ARTIFACT_LIFECYCLES,
   STUDIO_ARTIFACT_TYPES,
@@ -62,6 +62,13 @@ export const STUDIO_WORKSPACE_COMMAND_TYPES: readonly StudioGovernedCommandType[
   'studio.handoff.withdraw', 'studio.handoff.consume', 'studio.generation.request',
 ] as const;
 export type StudioWorkspaceCommandType = StudioGovernedCommandType;
+export interface StudioControlledHumanCommandContext {
+  /**
+   * Control-plane-only source version for an Assess -> Studio request anchor.
+   * This value is never copied into the production command envelope or payload.
+   */
+  handoffSourceVersion?: number;
+}
 export interface StudioWorkspaceCommandEnvelope {
   contractVersion: typeof STUDIO_ARTIFACT_CONTRACT_VERSION;
   requestId: string;
@@ -326,8 +333,16 @@ export const readStudioHandoffs=async(context:TenantContextProjection,transport=
 export const readStudioArtifact=async(context:TenantContextProjection,handoffId:string,type:StudioArtifactType,transport=studioArtifactDefaultTransport)=>decodeStudioArtifactProjection(await transport.readProjection(context,handoffId,type),context);
 export const readStudioEligibleReviewers=async(context:TenantContextProjection,artifactId:string,versionId:string,transport=studioArtifactDefaultTransport)=>decodeStudioEligibleReviewers(await transport.readEligibleReviewers(context,artifactId,versionId));
 export const executeStudioArtifactCommand=async(context:TenantContextProjection,commandType:StudioCommandType,projection:StudioArtifactProjectionDto|null,payload:Record<string,unknown>,idempotencyKey:string,transport=studioArtifactDefaultTransport):Promise<StudioCommandResponse>=>{
-  const envelope:StudioCommandEnvelope<Record<string,unknown>>={requestId:crypto.randomUUID(),idempotencyKey,commandType,organizationId:context.organizationId,workspaceId:context.workspaceId,authorizationVersion:context.authorizationVersion,expectedAggregateVersion:projection?.aggregateVersion??0,expectedArtifactVersion:commandType==='studio.artifact.generation.request'?null:projection?.currentVersion.version??null,payload};
-  try{return decodeStudioCommandResponse(await transport.invoke(envelope));}catch(error){if(error instanceof StudioArtifactBoundaryError)throw error;throw decodeStudioSafeError(error);}
+  const artifactId=projection?.id??(typeof payload.artifactId==='string'?payload.artifactId:'');const expectedAggregateVersion=projection?.aggregateVersion??0;
+  const canonicalJson=(value:unknown):string=>Array.isArray(value)?`[${value.map(canonicalJson).join(',')}]`:value&&typeof value==='object'?`{${Object.keys(value as Record<string,unknown>).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson((value as Record<string,unknown>)[key])}`).join(',')}}`:JSON.stringify(value);
+  const digest=async(value:unknown)=>`sha256:${Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalJson(value))))).map(byte=>byte.toString(16).padStart(2,'0')).join('')}`;
+  const selectors=commandType==='studio.artifact.review.resolve'||commandType==='studio.artifact.approval.resolve'?{
+    artifactId,artifactVersionId:payload.artifactVersionId,outcome:payload.outcome,
+    rationaleDigest:await digest(payload.rationale),conditionsDigest:await digest(payload.conditions??[]),
+  }:{artifactVersionId:typeof payload.artifactVersionId==='string'?payload.artifactVersionId:null};
+  const anchor=await beginControlledHumanCommand({action:commandType,targetFamily:'studio_artifact',targetId:artifactId,expectedVersion:expectedAggregateVersion,selectorBindings:selectors});
+  const envelope:StudioCommandEnvelope<Record<string,unknown>>={requestId:anchor?.requestId??crypto.randomUUID(),idempotencyKey:anchor?.businessIdempotencyKey??idempotencyKey,commandType,organizationId:context.organizationId,workspaceId:context.workspaceId,authorizationVersion:context.authorizationVersion,expectedAggregateVersion,expectedArtifactVersion:commandType==='studio.artifact.generation.request'?null:projection?.currentVersion.version??null,payload};
+  try{const result=decodeStudioCommandResponse(await transport.invoke(envelope));if(anchor)await completeControlledHumanCommand(anchor);return result;}catch(error){if(error instanceof StudioArtifactBoundaryError)throw error;throw decodeStudioSafeError(error);}
 };
 
 export const readStudioWorkspace = async (context: TenantContextProjection, page = 1, transport: StudioArtifactTransport = studioArtifactDefaultTransport): Promise<StudioWorkspaceProjection | null> => {
@@ -363,6 +378,23 @@ export const readStudioArtifactSummaries = async (
   return decodeStudioArtifactSummaryPage(await transport.readArtifactSummaries(context,offset,limit),context);
 };
 
+export const controlledHumanStudioTarget = (
+  context: TenantContextProjection,
+  commandType: StudioWorkspaceCommandType,
+  expectedVersion: number,
+  payload: Record<string, unknown>,
+  controlledHuman?: StudioControlledHumanCommandContext,
+) => {
+  const inputBundle=payload.studioInputBundle&&typeof payload.studioInputBundle==='object'&&!Array.isArray(payload.studioInputBundle)
+    ? payload.studioInputBundle as Record<string,unknown>:null;
+  if(commandType==='studio.source-package.create') return payload.sourceMode==='direct_transcript_bundle'
+    ? {family:'input_bundle',id:typeof inputBundle?.id==='string'?inputBundle.id:'',version:Number(inputBundle?.version??-1)}
+    : {family:'workspace',id:context.workspaceId,version:context.authorizationVersion};
+  if(commandType==='studio.handoff.request') return {family:'assess_studio_handoff',id:typeof payload.upstreamHandoffId==='string'?payload.upstreamHandoffId:'',version:Number(controlledHuman?.handoffSourceVersion??expectedVersion)};
+  if(commandType.startsWith('studio.handoff.')) return {family:'module_handoff',id:typeof payload.handoffId==='string'?payload.handoffId:'',version:expectedVersion};
+  return {family:'studio_artifact',id:typeof payload.artifactId==='string'?payload.artifactId:'',version:expectedVersion};
+};
+
 export const executeStudioWorkspaceCommand = async (
   context: TenantContextProjection,
   commandType: StudioWorkspaceCommandType,
@@ -370,9 +402,50 @@ export const executeStudioWorkspaceCommand = async (
   payload: Record<string, unknown>,
   idempotencyKey: string,
   transport: StudioArtifactTransport = studioArtifactDefaultTransport,
+  controlledHuman?: StudioControlledHumanCommandContext,
 ): Promise<StudioCommandResponse> => {
-  if (!transport.invokeWorkspace || !STUDIO_WORKSPACE_COMMAND_TYPES.includes(commandType) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new StudioArtifactBoundaryError('COMMAND_UNAVAILABLE');
+  if (!transport.invokeWorkspace || !STUDIO_WORKSPACE_COMMAND_TYPES.includes(commandType) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0
+    || (controlledHuman?.handoffSourceVersion!==undefined && (commandType!=='studio.handoff.request'||!Number.isSafeInteger(controlledHuman.handoffSourceVersion)||controlledHuman.handoffSourceVersion<1))) throw new StudioArtifactBoundaryError('COMMAND_UNAVAILABLE');
   const createLike = ['studio.source-package.create','studio.handoff.request','studio.template.create','studio.generation.request'].includes(commandType);
-  const envelope: StudioWorkspaceCommandEnvelope = { contractVersion: STUDIO_ARTIFACT_CONTRACT_VERSION, requestId: crypto.randomUUID(), idempotencyKey, commandType, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion, expectedAggregateVersion: expectedVersion, expectedArtifactVersion: createLike ? null : expectedVersion, payload };
-  try { return decodeStudioCommandResponse(await transport.invokeWorkspace(envelope)); } catch (error) { if (error instanceof StudioArtifactBoundaryError) throw error; throw decodeStudioSafeError(error); }
+  const inputBundle=payload.studioInputBundle&&typeof payload.studioInputBundle==='object'&&!Array.isArray(payload.studioInputBundle)
+    ? payload.studioInputBundle as Record<string,unknown>:null;
+  const target=controlledHumanStudioTarget(context,commandType,expectedVersion,payload,controlledHuman);
+  const canonicalJson=(value:unknown):string=>Array.isArray(value)?`[${value.map(canonicalJson).join(',')}]`
+    :value&&typeof value==='object'?`{${Object.keys(value as Record<string,unknown>).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson((value as Record<string,unknown>)[key])}`).join(',')}}`
+    :JSON.stringify(value);
+  const digest=async(value:unknown)=>`sha256:${Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalJson(value))))).map(byte=>byte.toString(16).padStart(2,'0')).join('')}`;
+  const textDigest=async(value:unknown)=>{
+    if(typeof value!=='string')throw new StudioArtifactBoundaryError('COMMAND_UNAVAILABLE');
+    return `sha256:${Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))).map(byte=>byte.toString(16).padStart(2,'0')).join('')}`;
+  };
+  let selectorBindings:Record<string,unknown>|null=null;
+  if(commandType==='studio.source-package.create')selectorBindings=payload.sourceMode==='manual_brief'
+    ? {sourceMode:payload.sourceMode,artifactType:payload.artifactType,manualBriefDigest:await textDigest(payload.manualBrief)}
+    : {sourceMode:payload.sourceMode,artifactType:payload.artifactType,studioInputBundleId:inputBundle?.id,studioInputBundleVersionId:inputBundle?.versionId,studioInputBundleVersion:inputBundle?.version};
+  else if(commandType==='studio.handoff.request'){
+    const targetBundle=payload.targetInputBundle&&typeof payload.targetInputBundle==='object'&&!Array.isArray(payload.targetInputBundle)
+      ? payload.targetInputBundle as Record<string,unknown>:null;
+    selectorBindings={upstreamHandoffId:payload.upstreamHandoffId,artifactType:payload.artifactType,
+      targetInputBundleId:targetBundle?.id??null,targetInputBundleVersionId:targetBundle?.versionId??null,targetInputBundleVersion:targetBundle?.version??null};
+  } else if(commandType==='studio.handoff.review.resolve'||commandType==='studio.handoff.approval.resolve')selectorBindings={
+    handoffId:payload.handoffId,handoffVersion:payload.handoffVersion,outcome:payload.outcome,
+    rationaleDigest:await digest(payload.rationale),conditionsDigest:await digest(payload.conditions??[]),
+  };
+  else if(commandType==='studio.handoff.consume')selectorBindings={handoffId:payload.handoffId,handoffVersion:payload.handoffVersion};
+  else if(commandType==='studio.generation.request')selectorBindings={
+    artifactId:payload.artifactId,sourcePackageId:payload.sourcePackageId,sourcePackageVersion:payload.sourcePackageVersion,
+    templateKind:(payload.template as Record<string,unknown>)?.kind,templateId:(payload.template as Record<string,unknown>)?.templateId,
+    templateVersionId:(payload.template as Record<string,unknown>)?.templateVersionId,templateVersion:(payload.template as Record<string,unknown>)?.version,
+    templateHash:(payload.template as Record<string,unknown>)?.templateHash,expectedCurrentVersionId:payload.expectedCurrentVersionId,
+    expectedApprovedVersionId:payload.expectedApprovedVersionId,
+  };
+  // Commands outside the controlled-human catalog retain their normal
+  // production path. The exercise hook is additive and must never narrow the
+  // established Studio command surface when the controlled runtime is off.
+  if(commandType==='studio.source-package.create'&&payload.sourceMode==='direct_transcript_bundle')
+    await prepareControlledHumanOfflineLineage(String(inputBundle?.id??''),Number(inputBundle?.version??-1));
+  const controlledAction=commandType.startsWith('studio.handoff.')?commandType.replace(/^studio\./u,''):commandType;
+  const anchor=selectorBindings?await beginControlledHumanCommand({action:controlledAction,targetFamily:target.family,targetId:target.id,expectedVersion:target.version,selectorBindings}):null;
+  const envelope: StudioWorkspaceCommandEnvelope = { contractVersion: STUDIO_ARTIFACT_CONTRACT_VERSION, requestId: anchor?.requestId??crypto.randomUUID(), idempotencyKey:anchor?.businessIdempotencyKey??idempotencyKey, commandType, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion, expectedAggregateVersion: expectedVersion, expectedArtifactVersion: createLike ? null : expectedVersion, payload };
+  try { const result=decodeStudioCommandResponse(await transport.invokeWorkspace(envelope));if(anchor)await completeControlledHumanCommand(anchor);return result; } catch (error) { if (error instanceof StudioArtifactBoundaryError) throw error; throw decodeStudioSafeError(error); }
 };

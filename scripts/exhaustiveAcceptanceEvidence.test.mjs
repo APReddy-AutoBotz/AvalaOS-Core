@@ -1,13 +1,40 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
 import {
   evaluateHostedTest,
   evaluateCompositeTest,
   evaluateRetainedTest,
+  flattenPlaywright,
+  validateHostedPlaywrightReport,
   validateOracleManifest,
   validateRetainedManifest,
   validateRetainedProducerResults,
   validateServerManifest,
 } from './exhaustiveAcceptanceEvidence.mjs';
+import {
+  EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW,
+  resolveHostedAcceptanceWorkflowPath,
+} from './hostedAcceptanceReportProvenance.mjs';
+
+const workflowEnvironment = workflowPath => ({
+  GITHUB_ACTIONS: 'true',
+  GITHUB_REPOSITORY: 'owner/repository',
+  GITHUB_WORKFLOW_REF: `owner/repository/${workflowPath}@refs/heads/main`,
+});
+const hostedWorkflowAllowlist = [EXHAUSTIVE_ACCEPTANCE_WORKFLOW, PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW];
+for (const workflowPath of hostedWorkflowAllowlist) {
+  assert.equal(resolveHostedAcceptanceWorkflowPath({
+    environment: workflowEnvironment(workflowPath),
+    allowedWorkflowPaths: hostedWorkflowAllowlist,
+  }), workflowPath);
+}
+assert.throws(() => resolveHostedAcceptanceWorkflowPath({
+  environment: workflowEnvironment('.github/workflows/substituted.yml'),
+  allowedWorkflowPaths: hostedWorkflowAllowlist,
+}), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u);
 
 const scope = { evidenceScope: 'executed-fixture', fixtureId: 'fixture-1', organizationId: '10000000-0000-4000-8000-000000000001', workspaceId: '20000000-0000-4000-8000-000000000001' };
 const provenance = {
@@ -160,34 +187,265 @@ assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, statu
 assert.ok(validateOracleManifest({ ...oracle, results: [...oracle.results, oracle.results[0]] }, oracleExpected).some(item => item.startsWith('duplicate-or-missing-oracle:')));
 assert.ok(validateOracleManifest({ ...oracle, results: [] }, oracleExpected).some(item => item.startsWith('oracle-result-missing:')), 'missing exact oracle result must fail closed');
 
-const passedExecution = {
-  title: '[SANDBOX-001] Sandbox: access',
-  project: 'desktop-chromium',
-  results: [{ status: 'passed', attachments: [] }],
+const hostedMetadata = {
+  schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
+  evidenceKind: 'hosted-preview-acceptance',
+  executionKind: 'hosted_preview',
+  exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  exactHead: 'a'.repeat(40),
+  targetOrigin: 'https://avalaos-pilot.netlify.app',
+  deployId: 'b'.repeat(24),
+  workflowRuntime: {
+    authority: 'github-actions',
+    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
+    workflowRef: 'owner/repository/.github/workflows/exhaustive-acceptance.yml@refs/heads/main',
+    repository: 'owner/repository',
+    eventName: 'workflow_dispatch',
+    runId: '123456',
+    runAttempt: '2',
+    workflowSha: 'c'.repeat(40),
+    releaseSha: 'a'.repeat(40),
+  },
 };
+const hostedTest = (projectName = 'desktop-chromium') => ({
+  projectName,
+  status: 'expected',
+  expectedStatus: 'passed',
+  annotations: [],
+  results: [{ status: 'passed', retry: 0, attachments: [] }],
+});
+const fullHostedReport = {
+  config: { metadata: { ...hostedMetadata, actualWorkers: 1 }, workers: 1 },
+  errors: [],
+  suites: [{
+    title: 'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    specs: [{ title: '[SANDBOX-001] Sandbox: access', tests: [hostedTest()] }],
+    suites: [],
+  }],
+  stats: { expected: 1, unexpected: 0, skipped: 0 },
+};
+const [passedExecution] = flattenPlaywright(fullHostedReport);
+const validHostedValidation = validateHostedPlaywrightReport({ report: fullHostedReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(validHostedValidation.errors, []);
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [passedExecution],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: validHostedValidation,
 }).status, 'PASS');
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [],
   requiredProjects: ['desktop-chromium'],
-}).status, 'BLOCKED');
+}).status, 'BLOCKED', 'a raw hosted-labelled execution without a validator-owned binding must remain blocked');
+
+const duplicateReport = {
+  ...fullHostedReport,
+  suites: [{ specs: [{ title: passedExecution.title, tests: [hostedTest(), hostedTest()] }] }],
+};
+const duplicateValidation = validateHostedPlaywrightReport({ report: duplicateReport, expectedMetadata: hostedMetadata });
+assert.ok(duplicateValidation.errors.some(value => value.startsWith('hosted-report-duplicate:')));
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [passedExecution, passedExecution],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: duplicateValidation,
 }).status, 'BLOCKED');
+
+const failedReport = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'unexpected', results: [{ status: 'failed', retry: 0, error: { message: 'deterministic failure' }, attachments: [] }] }],
+  }] }],
+};
+const failedValidation = validateHostedPlaywrightReport({ report: failedReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(failedValidation.errors, []);
 assert.equal(evaluateHostedTest({
   title: passedExecution.title,
-  executions: [{ ...passedExecution, results: [{ status: 'failed', error: { message: 'deterministic failure' }, attachments: [] }] }],
   requiredProjects: ['desktop-chromium'],
+  reportValidation: failedValidation,
 }).status, 'FAIL');
+failedReport.suites[0].specs[0].tests[0].status = 'expected';
+failedReport.suites[0].specs[0].tests[0].results[0].status = 'passed';
+delete failedReport.suites[0].specs[0].tests[0].results[0].error;
+assert.equal(evaluateHostedTest({
+  title: passedExecution.title,
+  requiredProjects: ['desktop-chromium'],
+  reportValidation: failedValidation,
+}).status, 'FAIL', 'mutating the caller report after validation cannot promote the detached validated result');
+
+const mutateMetadata = change => ({
+  ...fullHostedReport,
+  config: { ...fullHostedReport.config, metadata: { ...fullHostedReport.config.metadata, ...change } },
+});
+for (const [label, report] of [
+  ['wrong kind', mutateMetadata({ executionKind: 'local_source_fixture' })],
+  ['wrong head', mutateMetadata({ exactHead: 'd'.repeat(40) })],
+  ['wrong deploy', mutateMetadata({ deployId: 'e'.repeat(24) })],
+  ['wrong command', mutateMetadata({ exactCommand: ['npx', 'playwright', 'test', '--config=substituted.ts', '--workers=1'] })],
+  ['wrong run', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runId: '654321' } })],
+  ['wrong attempt', mutateMetadata({ workflowRuntime: { ...hostedMetadata.workflowRuntime, runAttempt: '1' } })],
+  ['duplicate metadata shape', mutateMetadata({ substitutedAuthority: true })],
+  ['nonempty CI metadata', mutateMetadata({ ci: { branch: 'refs/heads/private' } })],
+  ['git commit enrichment', mutateMetadata({ gitCommit: { id: 'd'.repeat(40) } })],
+  ['git diff enrichment', mutateMetadata({ gitDiff: 'private patch content' })],
+]) {
+  assert.ok(validateHostedPlaywrightReport({ report, expectedMetadata: hostedMetadata }).errors.length > 0, `${label} must fail closed`);
+}
+assert.ok(validateHostedPlaywrightReport({ report: null, expectedMetadata: hostedMetadata }).errors.includes('hosted-report-missing-or-invalid'));
+assert.ok(validateHostedPlaywrightReport({
+  report: { ...fullHostedReport, config: {} },
+  expectedMetadata: hostedMetadata,
+}).errors.includes('hosted-report-metadata-missing'));
+assert.ok(validateHostedPlaywrightReport({
+  report: { ...fullHostedReport, errors: [{ message: 'suite-level failure' }] },
+  expectedMetadata: hostedMetadata,
+}).errors.includes('hosted-report-errors'));
+const skippedUnderGreen = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'skipped', results: [{ status: 'skipped', retry: 0, attachments: [] }] }],
+  }] }],
+  stats: { expected: 1, unexpected: 0, skipped: 0 },
+};
+assert.ok(validateHostedPlaywrightReport({ report: skippedUnderGreen, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-skipped:')), 'an unknown skipped assertion cannot hide under a green suite summary');
+const canonicalSkip = {
+  ...skippedUnderGreen,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{
+      ...hostedTest(),
+      status: 'skipped',
+      expectedStatus: 'skipped',
+      annotations: [{ type: 'skip', description: 'Independently catalog-bound hosted scenario is not executable.' }],
+      results: [{ status: 'skipped', retry: 0, attachments: [] }],
+    }],
+  }] }],
+};
+const canonicalSkipKey = `${passedExecution.title}\0desktop-chromium`;
+assert.deepEqual(validateHostedPlaywrightReport({
+  report: canonicalSkip,
+  expectedMetadata: hostedMetadata,
+  allowedSkippedExecutions: new Map([[canonicalSkipKey, 'Independently catalog-bound hosted scenario is not executable.']]),
+}).errors, [], 'an exact independently bound catalog-unbound skip remains valid report inventory');
+assert.ok(validateHostedPlaywrightReport({
+  report: canonicalSkip,
+  expectedMetadata: hostedMetadata,
+  allowedSkippedExecutions: new Map([[canonicalSkipKey, 'Substituted reason']]),
+}).errors.some(value => value.startsWith('hosted-report-skipped:')), 'the skip reason must match the independently bound catalog reason');
+const retryUnderGreen = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), results: [{ status: 'failed', retry: 0 }, { status: 'passed', retry: 1 }] }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: retryUnderGreen, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-attempt-count:')), 'a passing retry cannot replace an exact first-attempt result');
+const unexpectedExpectedStatus = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), expectedStatus: 'failed' }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: unexpectedExpectedStatus, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-expected-status:')), 'non-default expected status cannot manufacture a hosted pass');
+const aggregateGreenStatusMismatch = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), status: 'unexpected' }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: aggregateGreenStatusMismatch, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-status:')), 'a passed attempt must retain Playwright expected status');
+const passedWithError = {
+  ...fullHostedReport,
+  suites: [{ specs: [{
+    title: passedExecution.title,
+    tests: [{ ...hostedTest(), results: [{ status: 'passed', retry: 0, error: { message: 'hidden failure' }, attachments: [] }] }],
+  }] }],
+};
+assert.ok(validateHostedPlaywrightReport({ report: passedWithError, expectedMetadata: hostedMetadata })
+  .errors.some(value => value.startsWith('hosted-report-passed-errors:')), 'a passed attempt carrying an error cannot earn hosted credit');
 
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'PASS' }]).status, 'PASS');
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'BLOCKED' }]).status, 'BLOCKED');
 assert.equal(evaluateCompositeTest([{ name: 'hosted', status: 'PASS' }, { name: 'server', status: 'FAIL' }]).status, 'FAIL');
 
+const contrastPersonas = ['Process Analyst', 'AP Process Owner', 'Delivery Lead', 'Control Reviewer', 'Automation Contributor', 'Buyer Viewer', 'Platform Admin'];
+const contrastTitle = '[SAFETY-007] Cross-cutting: serious critical a11y';
+const contrastStart = '2026-09-08T12:00:00.000Z';
+const contrastObserved = '2026-09-08T12:00:01.000Z';
+const contrastNode = () => ({ any: [{ id: 'color-contrast' }], all: [], none: [] });
+const contrastResults = unresolved => ({
+  passes: unresolved ? [] : [{ id: 'color-contrast', nodes: [contrastNode()] }],
+  violations: [],
+  incomplete: unresolved ? [{ id: 'color-contrast', nodes: [contrastNode(), contrastNode()] }] : [],
+});
+const makeContrastReport = (metadata = hostedMetadata) => ({
+  config: { metadata: { ...metadata, actualWorkers: 1 }, workers: 1 },
+  errors: [],
+  suites: [{ specs: [{ title: contrastTitle, tests: [{
+    ...hostedTest('pixel-7-chromium'),
+    results: [{ status: 'passed', retry: 0, startTime: contrastStart, duration: 10_000, attachments: contrastPersonas.map(persona => {
+      const value = createFullPageContrastAttachment({
+        results: contrastResults(persona === 'Platform Admin'), metadata, persona, profile: 'representative-surface',
+        project: 'pixel-7-chromium', test: contrastTitle, observedAt: contrastObserved,
+      });
+      return { name: value.name, contentType: value.contentType, body: Buffer.from(value.body).toString('base64') };
+    }) }],
+  }] }] }],
+});
+const contrastReport = makeContrastReport();
+const validContrast = validateHostedPlaywrightReport({ report: contrastReport, expectedMetadata: hostedMetadata });
+assert.deepEqual(validContrast.errors, []);
+const unresolvedHosted = evaluateHostedTest({ title: contrastTitle, requiredProjects: ['pixel-7-chromium'], reportValidation: validContrast });
+assert.equal(unresolvedHosted.status, 'PASS', 'nonempty all-unresolved contrast is not a determinate serious/critical violation');
+assert.match(unresolvedHosted.reason, /1 persona contrast summaries remain unresolved_manual/u, 'the retained hosted result must disclose unresolved contrast instead of silently claiming full contrast PASS');
+assert.match(unresolvedHosted.reason, /not complete contrast or WCAG proof/u);
+const contrastAttempt = report => report.suites[0].specs[0].tests[0].results[0];
+const mutateContrastBody = (report, mutate) => {
+  const attachment = contrastAttempt(report).attachments.at(-1);
+  const value = JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8'));
+  mutate(value);
+  attachment.body = Buffer.from(JSON.stringify(value)).toString('base64');
+};
+for (const [name, mutate] of [
+  ['missing', report => contrastAttempt(report).attachments.pop()],
+  ['duplicate', report => contrastAttempt(report).attachments.push(structuredClone(contrastAttempt(report).attachments[0]))],
+  ['unretained', report => { const attachment = contrastAttempt(report).attachments.at(-1); delete attachment.body; attachment.path = 'not-retained.json'; }],
+  ['malformed', report => { contrastAttempt(report).attachments.at(-1).body = 'not canonical base64'; }],
+  ['late', report => mutateContrastBody(report, value => { value.observedAt = '2026-09-08T12:00:11.000Z'; })],
+  ['foreign persona', report => mutateContrastBody(report, value => { value.persona = 'Other Persona'; })],
+  ['foreign project', report => mutateContrastBody(report, value => { value.project = 'desktop-chromium'; })],
+  ['forged resolved', report => mutateContrastBody(report, value => { value.classification = 'resolved'; })],
+  ['raw diagnostic', report => mutateContrastBody(report, value => { value.html = '<p>unretained content</p>'; })],
+]) {
+  const altered = structuredClone(contrastReport);
+  mutate(altered);
+  const validation = validateHostedPlaywrightReport({ report: altered, expectedMetadata: hostedMetadata });
+  assert.ok(validation.errors.some(value => value.startsWith('hosted-report-contrast-summary:')), `${name} summary must invalidate a green hosted suite`);
+  assert.equal(evaluateHostedTest({ title: contrastTitle, requiredProjects: ['pixel-7-chromium'], reportValidation: validation }).status, 'BLOCKED');
+}
+const freshAttemptMetadata = structuredClone(hostedMetadata);
+freshAttemptMetadata.workflowRuntime.runAttempt = '3';
+const replayedContrast = structuredClone(contrastReport);
+replayedContrast.config.metadata = { ...freshAttemptMetadata, actualWorkers: 1 };
+assert.ok(validateHostedPlaywrightReport({ report: replayedContrast, expectedMetadata: freshAttemptMetadata }).errors
+  .some(value => value.startsWith('hosted-report-contrast-summary:')), 'old contrast summaries cannot enter a fresh otherwise-valid workflow attempt');
+
 console.log('Exhaustive acceptance evidence adversarial tests passed.');
+
+const controlScriptScenarioDirectory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
+if (controlScriptScenarioDirectory) {
+  writeFileSync(path.join(controlScriptScenarioDirectory, 'exhaustive-acceptance-evidence-scenarios.json'), JSON.stringify({
+    contractVersion: 'pr-c-control-script-scenarios-1',
+    producer: 'scripts/exhaustiveAcceptanceEvidence.test.mjs',
+    scenarios: [{ name: 'exhaustive-acceptance-evidence-direct-import', status: 'passed' }],
+  }), { flag: 'wx' });
+}

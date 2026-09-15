@@ -6,11 +6,13 @@ import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 import { buildDecisionVersionV2 } from '../../services/assessV2/decisionVersion';
 import { AP_INVOICE_EXCEPTION_V2_FIXTURE } from '../../services/assessV2/fixture';
 import { parseAssessV2DraftPayload } from '../../supabase/functions/_shared/assessV2Command';
+import { PROCESS_CREATE_CAPABILITY, parseProcessCreateEnvelope } from '../../services/processCreationContract';
 import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, type AssessmentCaseV2, createUnknownAgentNecessityFacts } from '../../services/assessV2/types';
 
 const USER='11111111-1111-4111-8111-111111111111';
 const ORG='22222222-2222-4222-8222-222222222222';
 const WS='33333333-3333-4333-8333-333333333333';
+const SECONDARY_WS='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROCESS='44444444-4444-4444-8444-444444444444';
 const ASSESSMENT='55555555-5555-4555-8555-555555555555';
 const HANDOFF='66666666-6666-4666-8666-666666666666';
@@ -35,6 +37,9 @@ type FixtureOptions = {
   initialStatus?: 'Draft' | 'Ready for Review' | 'Changes Requested' | 'Approved' | 'Handed Off to Docs';
   initialScoreVersion?: string | null;
   trustedApproval?: boolean;
+  holdFirstProcessResponse?: boolean;
+  failProcessCommand?: BoundaryCode;
+  includeSecondaryWorkspace?: boolean;
 };
 
 type AssessmentRow = {
@@ -63,6 +68,14 @@ const jsonHeaders = {
 const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}) => {
   const capabilities = options.capabilities ?? ALL_CAPABILITIES;
   const committedCommands: Array<Record<string, any>> = [];
+  const processCommandRequests: Array<Record<string, any>> = [];
+  const processReceipts = new Map<string,{ signature: string; response: unknown }>();
+  const processRows: Array<Record<string,any>> = [{
+    id:PROCESS,org_id:ORG,workspace_id:WS,name:'Invoice exception handling',
+    description:'Resolve invoice exceptions before payment release.',owner_id:USER,
+    department:'Finance',criticality:'High',status:'Not Started',template_id:null,
+    created_at:'2026-07-13T00:00:00.000Z',updated_at:'2026-07-13T00:00:00.000Z',
+  }];
   const receipts = new Map<string,{ signature: string; response: unknown }>();
   let failV2Command = options.failV2Command;
   let trustedApproval = options.trustedApproval ?? false;
@@ -123,6 +136,14 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     }
   },{ user });
 
+  let primaryAuthorizationVersion = 9;
+  let firstProcessHeld = false;
+  let releaseFirstProcessResponse: (() => void) | null = null;
+  let firstProcessReceived: (() => void) | null = null;
+  const firstProcessReceivedPromise = new Promise<void>(resolve => { firstProcessReceived = resolve; });
+  const firstProcessReleasePromise = new Promise<void>(resolve => { releaseFirstProcessResponse = resolve; });
+  const processReadbacks: string[] = [];
+
   const fail = async (route: any, code: string, status = 409) => route.fulfill({
     status,
     headers:jsonHeaders,
@@ -146,10 +167,59 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
       }) });
     }
     if (url.pathname === '/functions/v1/tenant-session') {
-      return route.fulfill({ status:200,headers:jsonHeaders,body:JSON.stringify({ contexts:[{
+      const contexts = [{
         userId:USER,organizationId:ORG,organizationName:'Avala Enterprise',
-        workspaceId:WS,workspaceName:'Governed Assess',authorizationVersion:9,capabilities,
-      }] }) });
+        workspaceId:WS,workspaceName:'Governed Assess',authorizationVersion:primaryAuthorizationVersion,capabilities,
+      }];
+      if (options.includeSecondaryWorkspace) contexts.push({
+        userId:USER,organizationId:ORG,organizationName:'Avala Enterprise',
+        workspaceId:SECONDARY_WS,workspaceName:'Other synthetic Assess',authorizationVersion:11,capabilities,
+      });
+      return route.fulfill({ status:200,headers:jsonHeaders,body:JSON.stringify({ contexts }) });
+    }
+    if (url.pathname === '/functions/v1/process-command') {
+      const body = request.postDataJSON() as Record<string,any>;
+      processCommandRequests.push(body);
+      if (!capabilities.includes(PROCESS_CREATE_CAPABILITY) || !capabilities.includes('assess.read')) return fail(route,'PERMISSION_DENIED',403);
+      if (options.failProcessCommand) return fail(route,options.failProcessCommand,options.failProcessCommand === 'PERMISSION_DENIED' ? 403 : 409);
+      let envelope;
+      try { envelope = parseProcessCreateEnvelope(body); } catch { return fail(route,'INVALID_COMMAND',400); }
+      const expectedAuthorizationVersion = envelope.workspaceId === WS ? primaryAuthorizationVersion : envelope.workspaceId === SECONDARY_WS && options.includeSecondaryWorkspace ? 11 : null;
+      if (envelope.organizationId !== ORG || envelope.authorizationVersion !== expectedAuthorizationVersion) return fail(route,'AUTHORITY_STALE',409);
+      const signature = JSON.stringify({ organizationId:body.organizationId,workspaceId:body.workspaceId,expectedVersion:body.expectedVersion,payload:body.payload });
+      const receiptKey = `${USER}:${body.idempotencyKey}`;
+      const replay = processReceipts.get(receiptKey);
+      if (replay) {
+        if (replay.signature !== signature) return fail(route,'IDEMPOTENCY_CONFLICT',409);
+        return route.fulfill({ status:200,headers:jsonHeaders,body:JSON.stringify(replay.response) });
+      }
+      if (processRows.some(row => row.id === envelope.payload.processId)) return fail(route,'IDEMPOTENCY_CONFLICT',409);
+      const now = '2026-07-13T00:03:00.000Z';
+      const receiptId = crypto.randomUUID();
+      const row = {
+        id:envelope.payload.processId,org_id:ORG,workspace_id:envelope.workspaceId,owner_id:USER,
+        name:envelope.payload.name.trim(),description:envelope.payload.description,
+        department:envelope.payload.department,criticality:envelope.payload.criticality,
+        status:'Not Started',template_id:envelope.payload.templateId ?? null,
+        created_at:now,updated_at:now,creation_receipt_id:receiptId,
+        creation_request_id:envelope.requestId,creation_idempotency_key:envelope.idempotencyKey,
+      };
+      processRows.push(row);
+      const response = { ok:true,outcome:'committed',resource:{
+        id:row.id,orgId:ORG,workspaceId:envelope.workspaceId,ownerId:USER,name:row.name,
+        description:row.description,department:row.department,criticality:row.criticality,
+        status:row.status,templateId:row.template_id,version:1,receiptId,
+        requestId:row.creation_request_id,idempotencyKey:row.creation_idempotency_key,
+        createdAt:now,updatedAt:now,
+      } };
+      processReceipts.set(receiptKey,{ signature,response });
+      committedCommands.push(body);
+      if (options.holdFirstProcessResponse && !firstProcessHeld) {
+        firstProcessHeld = true;
+        firstProcessReceived?.();
+        await firstProcessReleasePromise;
+      }
+      return route.fulfill({ status:200,headers:jsonHeaders,body:JSON.stringify(response) });
     }
     if (url.pathname === '/functions/v1/assess-v2-command') {
       const body = request.postDataJSON() as Record<string,any>;
@@ -296,17 +366,20 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
     }
 
     if (url.pathname === '/rest/v1/assess_processes') {
-      return route.fulfill({ status:200,headers:{...jsonHeaders,'content-range':'0-0/1'},body:JSON.stringify([{
-        id:PROCESS,org_id:ORG,workspace_id:WS,name:'Invoice exception handling',
-        description:'Resolve invoice exceptions before payment release.',owner_id:USER,
-        department:'Finance',criticality:'High',status:'Not Started',
-        created_at:'2026-07-13T00:00:00.000Z',updated_at:'2026-07-13T00:00:00.000Z',
-      }]) });
+      const id = url.searchParams.get('id');
+      if (id) processReadbacks.push(id);
+      const scoped = processRows.filter(row => (!id || id === `eq.${row.id}`) &&
+        (!url.searchParams.has('org_id') || url.searchParams.get('org_id') === `eq.${row.org_id}`) &&
+        (!url.searchParams.has('workspace_id') || url.searchParams.get('workspace_id') === `eq.${row.workspace_id}`));
+      const single = request.headers()['accept']?.includes('application/vnd.pgrst.object+json');
+      return route.fulfill({ status:200,headers:{...jsonHeaders,'content-range':scoped.length?`0-${scoped.length-1}/${scoped.length}`:'*/0'},body:JSON.stringify(single ? (scoped[0] ?? null) : scoped) });
     }
     if (url.pathname === '/rest/v1/assessments') {
+      const processId = url.searchParams.get('process_id');
+      const scoped = assessment && (!processId || processId === `eq.${assessment.process_id}`) ? assessment : null;
       return route.fulfill({
-        status:200,headers:{...jsonHeaders,'content-range':assessment ? '0-0/1' : '*/0'},
-        body:JSON.stringify(assessment),
+        status:200,headers:{...jsonHeaders,'content-range':scoped ? '0-0/1' : '*/0'},
+        body:JSON.stringify(scoped),
       });
     }
     if (url.pathname === '/rest/v1/assessment_studio_handoffs') {
@@ -320,6 +393,12 @@ const installEnterpriseFixture = async (page: Page, options: FixtureOptions = {}
 
   return {
     committedCommands,
+    processCommandRequests,
+    processRows,
+    processReadbacks,
+    waitForFirstProcessCommand: () => firstProcessReceivedPromise,
+    releaseFirstProcessResponse: () => releaseFirstProcessResponse?.(),
+    setPrimaryAuthorizationVersion: (version: number) => { primaryAuthorizationVersion = version; },
     get assessment(){ return assessment; },
     get v2Case(){ return v2Case; },
     get v2Decision(){ return v2Decision; },
@@ -369,6 +448,181 @@ test.beforeEach(async ({ page }) => {
   page.on('dialog',dialog => dialog.dismiss());
 });
 
+const assertProcessModalAccess = async (page: Page) => {
+  const violations = await new AxeBuilder({page}).include('[role="dialog"]').analyze();
+  expect(violations.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+};
+
+test('new process form traps keyboard focus and closes with Escape on Desktop and Pixel', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page,{capabilities:[...ALL_CAPABILITIES,PROCESS_CREATE_CAPABILITY]});
+  await page.goto('/'); await expectProcessCatalog(page);
+  const trigger=page.getByRole('button',{name:'New process'});
+  await trigger.focus(); await page.keyboard.press('Enter');
+  const dialog=page.getByRole('dialog',{name:'New Assess process'});
+  await expect(dialog.getByRole('textbox',{name:'Process Name *'})).toBeFocused();
+  await dialog.getByRole('button',{name:'Create process'}).focus();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button',{name:'Close process form'})).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button',{name:'Create process'})).toBeFocused();
+  await assertProcessModalAccess(page);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(fixture.processCommandRequests).toHaveLength(0);
+});
+
+test('pending process creation keeps focus on a live status and cannot be dismissed or duplicated', async ({ page }) => {
+  test.setTimeout(90_000);
+  const fixture=await installEnterpriseFixture(page,{capabilities:[...ALL_CAPABILITIES,PROCESS_CREATE_CAPABILITY],holdFirstProcessResponse:true});
+  await page.goto('/'); await expectProcessCatalog(page);
+  await page.getByRole('button',{name:'New process'}).click();
+  const dialog=page.getByRole('dialog',{name:'New Assess process'});
+  await dialog.getByRole('textbox',{name:'Process Name *'}).fill('Keyboard pending process');
+  await dialog.getByRole('button',{name:'Create process'}).click();
+  await fixture.waitForFirstProcessCommand();
+  const status=dialog.getByRole('status').filter({hasText:'Verifying process creation'});
+  await expect(status).toBeFocused();
+  await expect(dialog).toHaveAttribute('aria-busy','true');
+  await expect(dialog.getByRole('button',{name:'Close process form'})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'Verifying creation…'})).toBeDisabled();
+  await page.keyboard.press('Tab'); await expect(status).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(status).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(dialog).toBeVisible();
+  await assertProcessModalAccess(page);
+  fixture.releaseFirstProcessResponse();
+  await expect(dialog).toHaveCount(0);
+  expect(fixture.processCommandRequests).toHaveLength(1);
+});
+
+test('server process denial alerts and focuses the recoverable form without false success', async ({ page }) => {
+  const fixture=await installEnterpriseFixture(page,{capabilities:[...ALL_CAPABILITIES,PROCESS_CREATE_CAPABILITY],failProcessCommand:'PERMISSION_DENIED'});
+  await page.goto('/'); await expectProcessCatalog(page);
+  await page.getByRole('button',{name:'New process'}).click();
+  const dialog=page.getByRole('dialog',{name:'New Assess process'});
+  const name=dialog.getByRole('textbox',{name:'Process Name *'});
+  await name.fill('Denied server process');
+  await dialog.getByRole('button',{name:'Create process'}).click();
+  const alert=dialog.getByRole('alert');
+  await expect(alert).toContainText('workspace role does not allow process creation');
+  await expect(alert).toBeFocused();
+  await expect(dialog).toHaveAttribute('aria-busy','false');
+  await expect(name).toHaveValue('Denied server process');
+  await assertProcessModalAccess(page);
+  await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
+  expect(fixture.processCommandRequests).toHaveLength(1);
+  expect(fixture.processRows).toHaveLength(1);
+});
+
+test('authorized process creation opens a real V1 draft and reopens its saved server projection', async ({ page }) => {
+  test.setTimeout(90_000);
+  const fixture = await installEnterpriseFixture(page, { capabilities:[...ALL_CAPABILITIES, PROCESS_CREATE_CAPABILITY] });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  const newProcess = page.getByRole('button',{name:'New process'});
+  await expect(newProcess).toBeEnabled();
+  await newProcess.click();
+  const dialog = page.getByRole('dialog',{name:'New Assess process'});
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('textbox',{name:'Process Name *'}).fill('Synthetic payment approval');
+  await dialog.getByRole('textbox',{name:'Description'}).fill('A controlled synthetic creation journey.');
+  await dialog.getByRole('textbox',{name:'Department'}).fill('Finance');
+  await dialog.getByRole('button',{name:'Create process'}).click();
+  await expect(dialog).toHaveCount(0);
+  const createdRow = page.getByRole('row').filter({hasText:'Synthetic payment approval'});
+  await expect(createdRow).toBeVisible();
+  expect(fixture.processCommandRequests).toHaveLength(1);
+  const committed = fixture.processCommandRequests[0];
+  expect(committed.commandType).toBe('process.create');
+  expect(committed.organizationId).toBe(ORG);
+  expect(committed.workspaceId).toBe(WS);
+  expect(fixture.processRows.find(row => row.id === committed.payload.processId)?.creation_receipt_id).toMatch(/^[0-9a-f-]{36}$/i);
+  await createdRow.getByRole('button',{name:'View'}).click();
+  await expect(page.getByRole('heading',{name:'Synthetic payment approval'}).first()).toBeVisible();
+  await page.getByRole('button',{name:'Start Assessment'}).click();
+  await expect(page.getByTestId('enterprise-assess')).toBeVisible();
+  const standardization = page.getByText('Process Standardization',{exact:true}).locator('..');
+  await standardization.getByRole('button',{name:/^4\b/}).click();
+  await page.getByRole('button',{name:/^Save Draft/}).click();
+  await expect.poll(() => fixture.assessment?.responses && (fixture.assessment.responses as Record<string,any>).processStructure?.standardization).toBe(4);
+  expect(fixture.assessment?.process_id).toBe(committed.payload.processId);
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment.response.upsert')).toHaveLength(1);
+  const savedVersion = fixture.assessment?.version;
+  await page.reload();
+  await expect(page.getByTestId('enterprise-assess')).toBeVisible();
+  await expect(standardization.getByRole('button',{name:/^4\b/})).toHaveClass(/border-\[#ffbc03\]/);
+  expect(fixture.assessment?.version).toBe(savedVersion);
+  expect(fixture.processCommandRequests).toHaveLength(1);
+});
+
+test('a same-role actor without process-create capability cannot send a creation command', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { capabilities:ALL_CAPABILITIES });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  const create = page.getByRole('button',{name:'New process'});
+  await expect(create).toBeDisabled();
+  await create.evaluate(element => (element as HTMLButtonElement).click());
+  await expect(page.getByRole('dialog',{name:'New Assess process'})).toHaveCount(0);
+  expect(fixture.processCommandRequests).toHaveLength(0);
+  expect(fixture.processRows).toHaveLength(1);
+});
+
+test('late process-create response cannot close a new-epoch form or carry its draft into another workspace', async ({ page }) => {
+  test.setTimeout(90_000);
+  const fixture = await installEnterpriseFixture(page, {
+    capabilities:[...ALL_CAPABILITIES,PROCESS_CREATE_CAPABILITY],
+    holdFirstProcessResponse:true,includeSecondaryWorkspace:true,
+  });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  await page.getByRole('button',{name:'New process'}).click();
+  const oldDialog = page.getByRole('dialog',{name:'New Assess process'});
+  await oldDialog.getByRole('textbox',{name:'Process Name *'}).fill('Old epoch committed process');
+  await oldDialog.getByRole('button',{name:'Create process'}).click();
+  await fixture.waitForFirstProcessCommand();
+  const oldCommand = fixture.processCommandRequests[0];
+  expect(oldCommand.authorizationVersion).toBe(9);
+  expect(oldCommand.workspaceId).toBe(WS);
+
+  fixture.setPrimaryAuthorizationVersion(10);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(oldDialog).toHaveCount(0);
+  await expectProcessCatalog(page);
+  await page.getByRole('button',{name:'New process'}).click();
+  const freshDialog = page.getByRole('dialog',{name:'New Assess process'});
+  const freshName = freshDialog.getByRole('textbox',{name:'Process Name *'});
+  await expect(freshName).toHaveValue('');
+  await freshName.fill('Fresh epoch draft stays open');
+
+  fixture.releaseFirstProcessResponse();
+  await expect.poll(() => fixture.processReadbacks.includes(`eq.${oldCommand.payload.processId}`)).toBe(true);
+  await expect(freshDialog).toBeVisible();
+  await expect(freshName).toHaveValue('Fresh epoch draft stays open');
+  await expect(freshDialog.getByRole('alert')).toHaveCount(0);
+  expect(fixture.processCommandRequests).toHaveLength(1);
+
+  await page.getByRole('combobox',{name:'Workspace'}).selectOption(SECONDARY_WS,{force:true});
+  await expect(page.getByRole('combobox',{name:'Workspace'})).toHaveValue(SECONDARY_WS);
+  await expect(freshDialog).toHaveCount(0);
+  await expectProcessCatalog(page);
+  await page.getByRole('button',{name:'New process'}).click();
+  const otherDialog = page.getByRole('dialog',{name:'New Assess process'});
+  const otherName = otherDialog.getByRole('textbox',{name:'Process Name *'});
+  await expect(otherName).toHaveValue('');
+  await expect(otherDialog.getByRole('alert')).toHaveCount(0);
+  await otherName.fill('Other workspace synthetic process');
+  await otherDialog.getByRole('button',{name:'Create process'}).click();
+  await expect(otherDialog).toHaveCount(0);
+  await expect(page.getByRole('row').filter({hasText:'Other workspace synthetic process'})).toBeVisible();
+  await expect(page.getByRole('row').filter({hasText:'Old epoch committed process'})).toHaveCount(0);
+  expect(fixture.processCommandRequests).toHaveLength(2);
+  expect(fixture.processCommandRequests[1].authorizationVersion).toBe(11);
+  expect(fixture.processCommandRequests[1].workspaceId).toBe(SECONDARY_WS);
+  expect(fixture.processRows.filter(row => row.id === oldCommand.payload.processId)).toHaveLength(1);
+  expect(fixture.processRows.filter(row => row.id === fixture.processCommandRequests[1].payload.processId)).toHaveLength(1);
+});
+
 
 
 test('V1 requested changes expose an accessible control that reopens the draft and clears the prior score', async ({ page }) => {
@@ -408,7 +662,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await page.getByLabel('V2 case description').fill('Controlled exception assessment with explicit evidence gaps.');
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Capture invoice request');
@@ -496,7 +750,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
 });
 
 
@@ -506,7 +760,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
 test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked submitted evidence', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Approved' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Clone V1 as suggestions'}).click();
+  await page.getByRole('button',{name:'Start from approved V1 assessment'}).click();
   const expectedClone = cloneV1AssessmentToV2({
     ...structuredClone(CANONICAL_AP_ASSESSMENT), id:ASSESSMENT, processId:PROCESS, orgId:ORG, workspaceId:WS,
     status:'Approved', scoreVersion:ASSESS_V1_SCORE_VERSION,
@@ -552,14 +806,14 @@ for (const source of [
   test(`V1 clone stays locally unavailable for ${source.label} without clearing tenant context`, async ({ page }) => {
     const fixture = await installEnterpriseFixture(page, source);
     await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-    const cloneButton = page.getByRole('button',{name:'Clone V1 as suggestions'});
+    const cloneButton = page.getByRole('button',{name:'Start from approved V1 assessment'});
     await expect(cloneButton).toBeDisabled();
     await expect(page.getByTestId('assess-v2-clone-unavailable')).toContainText(
       `Clone requires an Approved or Handed Off to Docs assessment finalized with ${ASSESS_V1_SCORE_VERSION}.`,
     );
-    await expect(page.getByRole('button',{name:'Create V2 case'})).toBeEnabled();
+    await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeEnabled();
     await cloneButton.evaluate(element => (element as HTMLButtonElement).click());
-    await expect(page.getByRole('button',{name:'Create V2 case'})).toBeEnabled();
+    await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeEnabled();
     expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.clone_from_v1')).toHaveLength(0);
   });
 }
@@ -567,7 +821,7 @@ for (const source of [
 test('displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 primitive.rulesStable').selectOption('true');
   await page.getByText('3. Applications and interactions').evaluate(element => (element as HTMLElement).click());
@@ -585,7 +839,7 @@ test('displayed primitive and lifecycle controls allow a scaffolded V2 case to f
 test('Retrieve and Execute primitives expose and persist interface dependency knowledge', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 type').selectOption('Retrieve');
   await page.getByLabel('Primitive 2 type').selectOption('Execute');
@@ -608,7 +862,7 @@ test('Retrieve and Execute primitives expose and persist interface dependency kn
 test('persisted V2 draft is resumed after remount without duplicate creation', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Persisted restore primitive');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
@@ -617,14 +871,14 @@ test('persisted V2 draft is resumed after remount without duplicate creation', a
   await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Persisted restore primitive');
   await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toHaveLength(1);
 });
 
 test('read-only V2 sessions retain discovery across remount while mutations remain unavailable', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Read-only discovery primitive');
   await page.getByRole('button',{name:'Save V2 draft'}).click();
@@ -640,8 +894,8 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
   await expect(page.getByRole('button',{name:'Save V2 draft'})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Reload current draft'})).toBeEnabled();
   await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Clone V1 as suggestions'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Start from approved V1 assessment'})).toHaveCount(0);
   expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
 
   await fixture.seedReviewerReadyV2Decision();
@@ -650,8 +904,8 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Clone V1 as suggestions'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Start from approved V1 assessment'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Save V2 draft'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toHaveCount(0);
   expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
@@ -660,7 +914,7 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
 test('incomplete V2 authoring cannot finalize or send a finalization command', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await expect(page.getByText('Before finalization, add: at least two process primitives', { exact: false })).toBeVisible();
   await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toEqual([]);
@@ -669,7 +923,7 @@ test('incomplete V2 authoring cannot finalize or send a finalization command', a
 test('V2 mutation capability denial is visible and no command is sent', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { capabilities:['assess.read', ASSESS_V2_CAPABILITIES.read] });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeDisabled();
   await expect(page.getByRole('status').filter({ hasText: 'Create a V2 case' })).toContainText('Create a V2 case');
   expect(fixture.committedCommands.filter(item => String(item.commandType).startsWith('assessment_v2.'))).toEqual([]);
 });
@@ -677,7 +931,7 @@ test('V2 mutation capability denial is visible and no command is sent', async ({
 test('stale V2 authority surfaces an error without false success', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.create',code:'AUTHORITY_STALE'} });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await expect(page.getByRole('heading',{name:'Access context changed'})).toBeVisible();
   await expect(page.getByText(/Your access changed/)).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);
@@ -686,10 +940,10 @@ test('stale V2 authority surfaces an error without false success', async ({ page
 test('V2 version conflict prevents save success and returns to a safe reload state', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.draft.upsert',code:'VERSION_CONFLICT'} });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click(); await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click(); await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByRole('button',{name:'Save V2 draft'}).click();
   await expect(page.getByText(/changed on the server/i)).toBeVisible();
-  await expect(page.getByRole('button',{name:'Create V2 case'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add minimum working structure'})).toBeVisible();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert')).toEqual([]);
@@ -698,8 +952,50 @@ test('V2 version conflict prevents save success and returns to a safe reload sta
 test('offline V2 create reports failure and never claims success', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { v2Offline:true });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Create V2 case'}).click();
+  await page.getByRole('button',{name:'New assessment (V2)'}).click();
   await expect(page.getByRole('heading',{name:'Workspace unavailable'})).toBeVisible();
   await expect(page.getByText('The command could not be completed. No success was recorded.')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);
+});
+
+test('actual App Admin navigation reaches Users and Roles without an Intelligence detour', async ({ page }) => {
+  await installEnterpriseFixture(page,{capabilities:[...ALL_CAPABILITIES,'org.admin','admin.synthetic.users.manage']});
+  const rosterRequests: Record<string,unknown>[] = [];
+  await page.route(`${API}/functions/v1/synthetic-admin`, async route => {
+    if (route.request().method()==='OPTIONS') return route.fulfill({status:204,headers:jsonHeaders});
+    const body=route.request().postDataJSON();
+    rosterRequests.push(body);
+    expect(body).toEqual({operation:'list',organizationId:ORG,workspaceId:WS,expectedAuthorizationVersion:9,payload:{limit:20}});
+    await route.fulfill({status:200,headers:jsonHeaders,body:JSON.stringify({status:'listed',roster:[],nextCursor:null})});
+  });
+  await page.goto('/'); await expectProcessCatalog(page);
+  const menu=page.getByRole('button',{name:'Open navigation',exact:true});
+  if(await menu.isVisible()) await menu.click();
+  await page.getByRole('button',{name:/^Admin(?: \/ Intelligence)?$/}).click();
+  await expect(page.getByRole('heading',{name:'Admin Workbench',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Users \/ Roles/}).click();
+  await expect(page.getByRole('heading',{name:'Synthetic test accounts',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Reserve account',exact:true})).toBeVisible();
+  await expect.poll(()=>rosterRequests.length).toBeGreaterThan(0);
+  await expect(page.getByRole('heading',{name:'Enterprise Intelligence',exact:true})).toHaveCount(0);
+  const firstReads=rosterRequests.length;
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Admin Workbench',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Users \/ Roles/}).click();
+  await expect(page.getByRole('button',{name:'Reserve account',exact:true})).toBeVisible();
+  await expect.poll(()=>rosterRequests.length).toBeGreaterThan(firstReads);
+  const accessibility=await new AxeBuilder({page}).include('[data-testid="synthetic-user-management"]').analyze();
+  expect(accessibility.violations.filter(item=>item.impact==='serious'||item.impact==='critical')).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('actual App hides Admin navigation without current server Admin capabilities', async ({ page }) => {
+  await installEnterpriseFixture(page);
+  let adminRequests=0;
+  page.on('request',request=>{if(request.url().includes('/functions/v1/synthetic-admin')) adminRequests++;});
+  await page.goto('/'); await expectProcessCatalog(page);
+  const menu=page.getByRole('button',{name:'Open navigation',exact:true});
+  if(await menu.isVisible()) await menu.click();
+  await expect(page.getByRole('button',{name:/^Admin(?: \/ Intelligence)?$/})).toHaveCount(0);
+  expect(adminRequests).toBe(0);
 });

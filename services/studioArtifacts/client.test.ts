@@ -1,10 +1,12 @@
 import { strict as assert } from 'node:assert';
 import type { TenantContextProjection } from '../../types';
-import { decodeStudioArtifactProjection, decodeStudioArtifactSummaryPage, decodeStudioArtifactWorkspaceProjection, decodeStudioCommandResponse, decodeStudioEligibleReviewers, decodeStudioHandoffs, decodeStudioSafeError, decodeStudioSourcePackageIdentity, executeStudioArtifactCommand, executeStudioWorkspaceCommand, readStudioArtifact, readStudioArtifactSummaries, readStudioArtifactV2, readStudioArtifactWorkspace, readStudioEligibleReviewers, readStudioHandoffs, readStudioSourcePackageIdentity, readStudioWorkspace, StudioArtifactBoundaryError, studioArtifactDefaultTransport, type StudioArtifactTransport } from './client';
+import { controlledHumanStudioTarget, decodeStudioArtifactProjection, decodeStudioArtifactSummaryPage, decodeStudioArtifactWorkspaceProjection, decodeStudioCommandResponse, decodeStudioEligibleReviewers, decodeStudioHandoffs, decodeStudioSafeError, decodeStudioSourcePackageIdentity, executeStudioArtifactCommand, executeStudioWorkspaceCommand, readStudioArtifact, readStudioArtifactSummaries, readStudioArtifactV2, readStudioArtifactWorkspace, readStudioEligibleReviewers, readStudioHandoffs, readStudioSourcePackageIdentity, readStudioWorkspace, StudioArtifactBoundaryError, studioArtifactDefaultTransport, type StudioArtifactTransport } from './client';
 import { decodeStudioPrivateArtifactProjection } from './privateArtifactClient';
 
 const U=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','44444444-4444-4444-8444-444444444444','55555555-5555-4555-8555-555555555555','66666666-6666-4666-8666-666666666666','77777777-7777-4777-8777-777777777777','88888888-8888-4888-8888-888888888888','99999999-9999-4999-8999-999999999999'] as const;
 const context={userId:U[8],organizationId:U[0],organizationName:'Avala',workspaceId:U[1],workspaceName:'Studio',authorizationVersion:4,capabilities:[]} satisfies TenantContextProjection;
+assert.deepEqual(controlledHumanStudioTarget(context,'studio.handoff.request',0,{upstreamHandoffId:U[7]},{handoffSourceVersion:7}),{family:'assess_studio_handoff',id:U[7],version:7});
+assert.notDeepEqual(controlledHumanStudioTarget(context,'studio.handoff.request',0,{upstreamHandoffId:U[7]},{handoffSourceVersion:7}),controlledHumanStudioTarget(context,'studio.handoff.request',0,{upstreamHandoffId:U[8]},{handoffSourceVersion:7}));
 const version={id:U[7],version:1,parentVersionId:null,lifecycle:'draft',templateVersion:'brd-v1',contentSchemaVersion:'studio-v1',projectionVersion:'json-v1',content:{title:'Governed'},contentHash:'a'.repeat(64),authorId:U[8],createdAt:'2026-07-27T00:00:00.000Z'};
 const projection={id:U[6],artifactType:'brd',aggregateVersion:1,lifecycle:'draft',ancestry:{organizationId:U[0],workspaceId:U[1],caseId:U[2],sourceCaseVersionId:U[3],sourceCaseVersion:2,decisionId:U[4],decisionVersion:'decision-v3',reviewResolutionId:U[5],governResolutionId:U[6],studioHandoffId:U[7],sourcePackageHash:'b'.repeat(64),sourceSchemaVersion:'assess-v2',ruleSetVersion:'rules-v1',reviewSchemaVersion:'review-v1',reviewSequence:1},currentVersion:version,currentApprovedVersion:null,versions:[version],review:null,approval:null,readOnly:false};
 
@@ -121,8 +123,36 @@ void(async()=>{let envelope:any;
   assert.equal((await readStudioArtifactV2(context,U[6],workspaceTransport)).contractVersion,'studio-artifact-2');
   assert.equal((await readStudioSourcePackageIdentity(context,U[6],workspaceTransport)).sourcePackageId,U[5]);
   assert.equal((await readStudioArtifactWorkspace(context,U[6],0,1,workspaceTransport)).selectedSources.limit,1);
+  const controlledCalls:any[]=[];const controlledCompletions:any[]=[];const digest=`sha256:${'a'.repeat(64)}`;
+  (globalThis as any).__controlledHumanBegin=async(input:any)=>{controlledCalls.push(input);return{requestId:U[0],safeAnchor:{contractVersion:'pr-c-controlled-human-step-anchor-1',stepId:`step-${controlledCalls.length}`,action:input.action,targetFamily:input.targetFamily,targetDigest:digest,expectedVersion:input.expectedVersion,transitionKind:input.action==='handoff.consume'?'create_zero':input.action==='handoff.request'||input.action==='studio.source-package.create'?'create_one':'increment_one',selectorDigest:digest,intentDigest:digest,requestDigest:digest,challengeToken:digest,anchoredAt:'2026-09-04T00:00:00.000Z'}}};
+  (globalThis as any).__controlledHumanComplete=async(anchor:any)=>{controlledCompletions.push(anchor);return null};
+  for(const [commandType,expectedVersion,payload,controlledHuman] of [
+    ['studio.handoff.request',0,{upstreamHandoffId:U[2],artifactType:'brd'},{handoffSourceVersion:7}],
+    ['studio.handoff.review.resolve',1,{handoffId:U[3],outcome:'approve',rationale:'review'},undefined],
+    ['studio.handoff.approval.resolve',2,{handoffId:U[3],outcome:'approve',rationale:'approval'},undefined],
+    ['studio.handoff.consume',3,{handoffId:U[3]},undefined],
+  ] as const)await executeStudioWorkspaceCommand(context,commandType,expectedVersion,payload,`controlled-${commandType}`,workspaceTransport,controlledHuman);
+  assert.deepEqual(controlledCalls.map(call=>call.action),['handoff.request','handoff.review.resolve','handoff.approval.resolve','handoff.consume']);
+  assert.equal(controlledCalls[0].targetId,U[2]);assert.equal(controlledCalls[0].expectedVersion,7);assert.equal(controlledCalls[1].targetId,U[3]);assert.equal(controlledCompletions.length,4);assert.equal(controlledCompletions[3].safeAnchor.transitionKind,'create_zero');
+  assert.equal(envelope.commandType,'studio.handoff.consume');
+  assert.equal(controlledCalls[0].selectorBindings.upstreamHandoffId,U[2]);
+  assert.equal(Object.hasOwn(envelope.payload,'handoffSourceVersion'),false);
+  const requestEnvelopes:any[]=[];const requestTransport:StudioArtifactTransport={...workspaceTransport,invokeWorkspace:async(value)=>{requestEnvelopes.push(value);return response;}};
+  await executeStudioWorkspaceCommand(context,'studio.handoff.request',0,{upstreamHandoffId:U[2],artifactType:'brd'},'controlled-source-v7',requestTransport,{handoffSourceVersion:7});
+  assert.equal(requestEnvelopes[0].expectedAggregateVersion,0);assert.equal(requestEnvelopes[0].expectedArtifactVersion,null);assert.deepEqual(requestEnvelopes[0].payload,{upstreamHandoffId:U[2],artifactType:'brd'});
+  assert.equal(controlledCalls.at(-1).expectedVersion,7);
+  await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.handoff.request',0,{upstreamHandoffId:U[2],artifactType:'brd'},'bad-source-v0',workspaceTransport,{handoffSourceVersion:0}),StudioArtifactBoundaryError);
+  await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.handoff.review.resolve',1,{handoffId:U[3],outcome:'approve',rationale:'review'},'wrong-control-axis',workspaceTransport,{handoffSourceVersion:7}),StudioArtifactBoundaryError);
+  const offlineLineageCalls:any[]=[];(globalThis as any).__controlledHumanOfflineLineage=async(...args:any[])=>{offlineLineageCalls.push(args)};
   await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundle:{id:U[4],versionId:U[5],version:1},manualBrief:null},'workspace-command-key',workspaceTransport);
+  assert.deepEqual(offlineLineageCalls,[[U[4],1]]);delete (globalThis as any).__controlledHumanOfflineLineage;
+  assert.equal(controlledCalls.at(-1).action,'studio.source-package.create');assert.equal(controlledCalls.at(-1).targetFamily,'input_bundle');assert.equal(controlledCompletions.length,6);
   assert.equal(envelope.commandType,'studio.source-package.create');assert.equal(envelope.expectedAggregateVersion,0);assert.equal(envelope.expectedArtifactVersion,null);
+  await executeStudioArtifactCommand(context,'studio.artifact.review.resolve',projection as any,{artifactVersionId:U[7],outcome:'approve',rationale:'controlled review',conditions:[]},'controlled-artifact-review',transport);
+  assert.equal(controlledCalls.at(-1).action,'studio.artifact.review.resolve');assert.equal(controlledCompletions.length,7);
+  await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{sourceMode:'manual_brief',artifactType:'brd',manualBrief:'Controlled brief'},'controlled-manual-brief',workspaceTransport);
+  assert.equal(controlledCalls.at(-1).action,'studio.source-package.create');assert.equal(controlledCompletions.length,8);
+  delete (globalThis as any).__controlledHumanBegin;delete (globalThis as any).__controlledHumanComplete;
   await executeStudioWorkspaceCommand(context,'studio.template.revise',2,{templateVersionId:U[4]},'workspace-revise-key',workspaceTransport);assert.equal(envelope.expectedArtifactVersion,2);
   for(const badVersion of [-1,1.5])await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.source-package.create',badVersion,{},'bad-version',workspaceTransport),StudioArtifactBoundaryError);
   await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{},'missing-invoke',{...transport,invokeWorkspace:undefined}),StudioArtifactBoundaryError);

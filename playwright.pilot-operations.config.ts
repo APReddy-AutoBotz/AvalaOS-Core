@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir:'tests/browser', testMatch:'pilotOperations.spec.ts', forbidOnly:true, fullyParallel:false, workers:1, reporter:'list', outputDir:'.agent/pilot-operations-playwright',
   use:{baseURL:'http://127.0.0.1:4427',trace:'retain-on-failure',screenshot:'only-on-failure',video:'off'},
   projects:[{name:'Desktop Chrome',use:{...devices['Desktop Chrome']}},{name:'Pixel 7',use:{...devices['Pixel 7']}}],

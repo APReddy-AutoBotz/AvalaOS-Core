@@ -1,13 +1,17 @@
 import React from 'react';
 import { useOrganizationContext } from './OrganizationProvider';
 import { EnterpriseSessionStatePanel } from './EnterpriseSessionStatePanel';
+import ControlledHumanNonProductionBanner from './ControlledHumanNonProductionBanner';
 
 
 export const EnterpriseSessionStateView: React.FC = () => {
   const { sessionState, sessionMessage, refreshOrgs } = useOrganizationContext();
-  return <main className="grid min-h-screen place-items-center bg-slate-50 p-6 dark:bg-slate-950" aria-live="polite">
-    <EnterpriseSessionStatePanel state={sessionState} message={sessionMessage} onRefresh={() => refreshOrgs()} />
-  </main>;
+  return <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <ControlledHumanNonProductionBanner />
+    <main className="grid min-h-[calc(100vh-2.75rem)] place-items-center p-6" aria-live="polite">
+      <EnterpriseSessionStatePanel state={sessionState} message={sessionMessage} onRefresh={() => refreshOrgs()} />
+    </main>
+  </div>;
 };
 
 export const EnterpriseSessionToolbar: React.FC = () => {

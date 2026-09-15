@@ -1,4 +1,4 @@
-import {
+import type {
     AssessmentResponses,
     AssessmentScoreResult,
     BusinessValueSummary,
@@ -14,7 +14,7 @@ import {
     PriorityTier,
     RiskTier,
     TechnologyFitScores,
-} from '../types';
+} from '../types.ts';
 
 export const CURRENT_SCORE_VERSION = 'assess-core-2026-05';
 const ENGINE_VERSION = 'assess-core-2026-05';
