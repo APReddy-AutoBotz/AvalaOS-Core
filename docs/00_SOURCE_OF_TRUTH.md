@@ -1,13 +1,13 @@
 # AvalaOS Core Source Of Truth
 
-## Creation-access repair — current local work
+## Creation-access repair — current implementation and CI correction
 
 On 2026-09-15 AP approved the focused creation-access and synthetic Admin repair
 in `docs/planning/creation-access-synthetic-admin-remediation.md`. It adds a
 server-authorized process-create command, correct governed Studio/Delivery entry
 routes, capability-aware portfolio presentation, clearer V1/V2 choices, and bounded
 Admin-managed synthetic accounts. Local implementation, verification and bounded
-independent reviews are complete at the working-tree boundary recorded in
+independent reviews completed before commit `03592bba35fd79c65155c04c48b6d52e4dc86298`, pushed to the existing PR #264 branch. Evidence is recorded in
 `docs/quality/creation-access-remediation-evidence.md`; this is not a hosted fix
 or a new acceptance PASS. The existing twelve-persona
 PR264 backend and immutable evidence are not changed. AP subsequently approved the
@@ -20,6 +20,15 @@ Production, customer data, real providers, AvalaOS.com and merge remain
 outside this approval. The original three-human acceptance gate is unchanged.
 The exploratory target must retain zero provider configurations and real keys;
 new role capabilities do not prove configured or provider-free generation.
+
+Exact-head CI exposed three retained-check defects: the migration contract still
+required the old tip to be globally last; operational identity lagged the new
+ledger tip; and a UI contract assumed `id` was the first input attribute. The
+2026-09-16 corrective continuation adds strict shared successor validation,
+attribute-order-independent label checks, and forward migration `20260916003000`.
+Already-applied migrations remain immutable. This forward correction and its
+expanded local/CI gates are not hosted proof until independently verified and
+applied only to the separately approved exploratory target.
 
 ## Governed multi-source transcript PR A accepted source/CI boundary
 

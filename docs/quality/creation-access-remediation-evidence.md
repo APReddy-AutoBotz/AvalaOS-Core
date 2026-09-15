@@ -253,3 +253,69 @@ the real hosted joined browser journey are still separate gates.
 | PostgreSQL | 1/1 | [Manifest](../../output/creation-access/validation-postgres-7d9e2361-5daf-4d4b-9aa4-ee2b5bc7d211/manifest.json) |
 | Browser | 6/6 | [Manifest](../../output/creation-access/validation-browser-f8c74237-3647-4ac2-a5b9-0b7a9bf7c4b9/manifest.json) |
 | Static/build | 8/8 | [Manifest](../../output/creation-access/validation-static-11e4cd8f-8379-4d21-b989-baac96608953/manifest.json) |
+
+## Exact committed-head CI corrective continuation — 2026-09-16
+
+Commit `03592bba35fd79c65155c04c48b6d52e4dc86298` was pushed on the existing
+PR #264 branch after explicit staged-file inspection (92 intended files). Protected
+unrelated local state and the stash were not changed. The working-tree local results
+above remain bound to their original fingerprint; they are not relabelled as the
+corrective continuation's exact source proof.
+
+Four CI workflows exposed three confirmed source defects. PR C's migration contract
+still required the frozen human tip to be globally last. Pilot Operations rejected
+the new ledger tip because the identity marker was stale. Exhaustive acceptance and
+preview contracts assumed `id` was the first input attribute, despite a valid label
+association. Artifact failures in these runs were downstream, not independent causes.
+
+Correction uses one shared exact successor allowlist, label/field matching that
+preserves missing/mismatched/data-id negatives, and a new strict forward identity
+migration. No already-applied SQL is rewritten. Feature-owned validation expands
+to 27 commands and includes retained Pilot Operations in the disposable PostgreSQL
+runner. New-source local results and exact-head CI must be recorded separately.
+
+The final source security review covered 70 intended source files with no introduced
+finding; 74 unrelated generated files were explicitly excluded. The scan tool's
+sealed coverage artifact retained an earlier deferred discovery marker, so that
+artifact is partial and is not represented as complete security certification.
+Independent reviewer findings are retained separately. The private browser harness
+has 12 passing mocked tests but has not executed the joined hosted journey.
+
+The first isolated Netlify draft upload timed out. Read-only reconciliation returned
+zero deploys; a later preflight also timed out before a second claim. Both outcomes
+remain unsuccessful. No app was published, no user browser seed was created, and no
+old PR #264 or production backend was changed.
+
+## Complete retained-CI corrective local rerun
+
+All **27/27 canonical commands** passed at runtime/test/execution fingerprint
+`6aaa866e7f2fd63c8f52737941812bed1e6996b521c8b7402fd9e5af9c533687`.
+Independent readback verified all 27 log digests, canonical command bindings,
+successful exit codes and stable-source flags. Browser results are **148/148**;
+critical-source coverage is **42/42** tests with 96.44% lines, 82.05% branches and
+87.88% functions. PostgreSQL executed **172 counted feature assertions** (54 process,
+109 synthetic Admin, three upgrade and six forward-migration rejection/no-effect
+assertions), plus the retained Pilot Operations fresh/upgrade suite. The complete
+75-migration chain passed locally; the owned disposable container was removed.
+
+| Group | Passed commands | Manifest |
+| --- | --- | --- |
+| Authority | 5/5 | [Manifest](../../output/creation-access/validation-authority-1286ab82-5840-4057-9ceb-d2533248c673/manifest.json) |
+| Regression | 6/6 | [Manifest](../../output/creation-access/validation-regression-f0c12478-3135-429d-9e07-01e3c0c51ec4/manifest.json) |
+| Coverage | 1/1 | [Manifest](../../output/creation-access/validation-coverage-7cbc3e3b-a5ec-497b-a3a9-5da8f33eb4d9/manifest.json) |
+| PostgreSQL | 1/1 | [Manifest](../../output/creation-access/validation-postgres-506c2ce8-48e9-4c40-91ab-68692b2cbb18/manifest.json) |
+| Browser | 6/6 | [Manifest](../../output/creation-access/validation-browser-85fec8c8-31ef-4b3f-8400-aad62386545a/manifest.json) |
+| Static/build | 8/8 | [Manifest](../../output/creation-access/validation-static-8e9c8208-59e4-4f49-ab6a-279b7b1c4a4d/manifest.json) |
+
+Additional evidence/scope/browser-runner adversarial tests passed **75/75**.
+Private deployment-gate and browser-harness mocks passed **20/20**, including
+exact current workflow attempt, skipped-step rejection, full immutable asset
+binding and order-independent unique saved-primitive readback. These mocked
+tests do not establish hosted execution. Final independent corrective quality
+and security reviews found no remaining source blocker within this delta.
+
+This is local source-bound evidence, not exact committed-head CI, joined hosted
+browser, three-human acceptance, whole-platform or production proof. The existing
+controlled-human backend and its evidence remain untouched. The new forward
+migration still requires independent hosted verification on the approved separate
+exploratory target; no already-applied migration is edited or replayed.

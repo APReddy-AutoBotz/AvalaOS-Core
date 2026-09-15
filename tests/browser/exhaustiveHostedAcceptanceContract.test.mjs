@@ -25,6 +25,10 @@ const fieldAssociations = [
   ['process-criticality', 'select'],
 ];
 
+const hasAssociatedRenderedControl = (source, id, control) =>
+  new RegExp(`<label\\b[^>]*\\s+htmlFor="${id}"(?=[\\s>])`, 'u').test(source)
+  && new RegExp(`<${control}\\b[^>]*\\s+id="${id}"(?=[\\s/>])`, 'u').test(source);
+
 const executableProjectCases = executionBindings.hostedTests
   .filter(binding => binding.scenario)
   .reduce((count, binding) => count + binding.projects.length, 0);
@@ -52,8 +56,17 @@ for (const [config, expectedPath] of [
 }
 
 for (const [id, control] of fieldAssociations) {
-  assert.match(processModal, new RegExp(`<label\\s+htmlFor="${id}"`, 'u'), `${id} must have an associated visible label`);
-  assert.match(processModal, new RegExp(`<${control}\\s+id="${id}"`, 'u'), `${id} label must target its rendered control`);
+  assert.equal(hasAssociatedRenderedControl(processModal, id, control), true,
+    `${id} label must target its rendered control regardless of attribute order`);
+  const reordered = `<label className="visible" htmlFor="${id}">Field</label><${control} ref={firstField} id="${id}" />`;
+  assert.equal(hasAssociatedRenderedControl(reordered, id, control), true,
+    `${id} must tolerate an attribute preceding the exact control id`);
+  assert.equal(hasAssociatedRenderedControl(reordered.replace(` id="${id}"`, ''), id, control), false,
+    `${id} must reject a missing rendered control id`);
+  assert.equal(hasAssociatedRenderedControl(reordered.replace(` id="${id}"`, ' id="wrong-id"'), id, control), false,
+    `${id} must reject a mismatched rendered control id`);
+  assert.equal(hasAssociatedRenderedControl(reordered.replace(` id="${id}"`, ` data-id="${id}"`), id, control), false,
+    `${id} must not mistake data-id for a rendered control id`);
 }
 
 assert.match(

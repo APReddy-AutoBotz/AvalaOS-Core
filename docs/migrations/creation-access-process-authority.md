@@ -26,6 +26,16 @@ Existing processes have nullable creation lineage columns and remain readable un
 
 Apply the full retained migration chain in a disposable database before any hosted rollout. Keep all workspace creation controls disabled until the new server command, client, role grant, and scoped projection are verified together on the dedicated synthetic environment. Rollback is a read-only operation: set the exact synthetic workspace control to `enabled=false, read_only=true`, revoke the process-create role capability if needed, and leave committed processes, receipts, and audits intact. Do not reverse the additive migration or erase history. Forward fixes may amend the command without changing V1 scores.
 
+The already-applied `20260915142940` and `20260915142942` files are immutable.
+Their required forward successor `20260916003000_creation_access_migration_identity_convergence.sql`
+repairs the retained operational identity marker, whose exact-ledger gate correctly
+rejected the incomplete intermediate chain. It requires one exact frozen marker,
+both predecessor tables and unchanged non-production flags, then advances the
+marker and CHECK constraint atomically. Deploy the complete approved tail as one
+maintenance window; an intermediate tip is not operational readiness. Never apply
+this tail to the old controlled-human backend. Rollback remains read-only/default-off
+with preserved ledger, marker, accounts and history, followed by an additive fix.
+
 ## Acceptance and verification
 
 Focused contract/API tests exercise exact payload ownership, permission denial before atomic command, foreign workspace, stale epoch, fake template, substituted owner/receipt/request/key, wrong committed projection, unknown transport recovery, and no optimistic success. Disposable PostgreSQL tests must apply the migration chain and run allowed/denied actor and two-workspace cases, replay/conflict/quota/read-only/rollback checks, and verify exactly one process, receipt, and audit per accepted request. Browser checks must exercise creation, save and reopen of an existing V1 assessment, template creation, denied roles, and accessible busy/error behavior. Record exact commands and sanitized outcomes in this implementation PR; do not promote any hosted or controlled-human acceptance claim from local tests alone.

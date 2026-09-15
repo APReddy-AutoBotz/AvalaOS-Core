@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import ts from 'typescript';
+import { assertPrCMigrationTail, PR_C_APPROVED_SUCCESSOR_TAIL } from './prCMigrationTailContract.mjs';
 
 const read = file => readFileSync(file, 'utf8');
 export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
@@ -475,16 +476,14 @@ assert.equal(migrations.length, 1, 'PR C requires exactly one Delivery/Monitor i
 assert.equal(controlledHumanMigrations.length, 1, 'PR C requires exactly one controlled-human exercise authority migration');
 const migrationNames = readdirSync('supabase/migrations').filter(name => name.endsWith('.sql')).sort();
 assert.ok(migrationNames.indexOf(migrations[0]) < migrationNames.indexOf(controlledHumanMigrations[0]), 'controlled-human authority must follow the Delivery/Monitor implementation migration');
-// The old controlled-human backend remains pinned to its frozen tip. These two
+// The old controlled-human backend remains pinned to its frozen tip. These three
 // approved default-off successors belong ONLY to the separate creation-access
 // target; do not relabel or redeploy the retained human preparation evidence.
-const creationAccessSuccessors = [
-  '20260915142940_creation_access_process_authority.sql',
-  '20260915142942_synthetic_admin_account_authority.sql',
-];
+const creationAccessSuccessors = PR_C_APPROVED_SUCCESSOR_TAIL;
 const assertCreationSuccessors = names => assert.deepEqual(names, creationAccessSuccessors,
   'only the approved isolated creation-access migrations may follow the frozen controlled-human tip');
 assertCreationSuccessors(migrationNames.slice(migrationNames.indexOf(controlledHumanMigrations[0]) + 1));
+assertPrCMigrationTail(migrationNames);
 for (const hostile of [[], creationAccessSuccessors.slice(0, 1), [...creationAccessSuccessors].reverse(),
   [...creationAccessSuccessors, creationAccessSuccessors[1]], [...creationAccessSuccessors, '20990101000000_unapproved.sql']]) {
   assert.throws(() => assertCreationSuccessors(hostile));

@@ -24,10 +24,10 @@ exclusion turns an old result into exact committed-head acceptance.
 
 | Group | Required checks |
 | --- | --- |
-| `authority` | Product action policy, process/Admin contracts and clients, process command, Admin endpoint/Auth adapter, service response fence, operator bootstrap mocks. |
+| `authority` | Product action policy, process/Admin contracts and clients, process command, Admin endpoint/Auth adapter, service response fence, operator bootstrap mocks, exact migration-tail and retained UI label/field adversaries. |
 | `regression` | View/navigation guards, persisted Admin routing from current server capabilities (including empty-projection denial), canonical tenant authority, Admin workbench, Portfolio domain/client/DB/component tests and retained coverage. |
 | `coverage` | Explicit creation-access critical-source inventory and measured V8 coverage; missing source rows fail. UI/hosted proof is separate. |
-| `postgres` | Disposable PostgreSQL 16: all 74 migrations, process/Admin authority/ACL/RLS/replay/audit/race tests and populated upgrade; exact owned-container cleanup. |
+| `postgres` | Disposable PostgreSQL 16: all 75 migrations, process/Admin authority/ACL/RLS/replay/audit/race tests and populated upgrade; retained Pilot Operations fresh/upgrade, exact ledger identity and stale/ahead-marker rejection; exact owned-container cleanup. |
 | `browser` | Complete desktop/Pixel Admin, Assess, Portfolio, Studio, Enterprise and Delivery/Monitor fixture suites, including actual-App Admin navigation and reload. No real keys or customer backend. |
 | `static` | Typechecks, workflow YAML, AI boundary, secret hygiene, frozen scoring regression/integrity and build. |
 
@@ -37,7 +37,9 @@ adversarial contracts, `node scripts/checkTranscriptFlowPrCCiContract.mjs`, and
 `git diff --check`. The CI inventory now explicitly pins 22 Playwright configs,
 including the isolated password-safe Admin config; unknown configs still fail.
 The migration successor inventory permits exactly the two approved default-off
-creation-access migrations, never an arbitrary newer migration. Exact-head CI,
+creation-access migrations and their `20260916003000` forward identity correction,
+never an arbitrary newer migration. The expanded canonical inventory is 27 commands.
+Exact-head CI,
 joined hosted browser creation and final human acceptance remain separate gates.
 AP-approved target provisioning and initial-operator actual Auth/session/empty
 roster/signout have now executed; see the active repair evidence for their narrow

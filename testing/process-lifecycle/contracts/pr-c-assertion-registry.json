@@ -449,7 +449,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "67882ee9ce75e2727acb743e9d758d584a86343c609586b13fc6b3e193aff8cc"
+      "sha256": "d66b334d80e23da643d60bc5b408afb73c3be4c1a976f9eed247240dea202aad"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",

@@ -2,7 +2,7 @@
 // Changing an execution requires an explicit source diff here AND in package.json.
 // This binds command execution only; green exit is not exact assertion evidence.
 export const groups = Object.freeze(Object.fromEntries(Object.entries({
-  authority: ['test:creation-access:unit', 'test:creation-access:service-fence', 'test:creation-access:auth-adapter', 'test:creation-access:modal-scope'],
+  authority: ['test:creation-access:unit', 'test:creation-access:service-fence', 'test:creation-access:auth-adapter', 'test:creation-access:modal-scope', 'test:creation-access:retained-contracts'],
   regression: ['test:view-access-guard', 'test:product-navigation-controller', 'test:view-state-persistence', 'test:tenant-authority', 'test:admin-workbench', 'test:pr1g-coverage'],
   static: ['typecheck', 'typecheck:edge', 'test:workflow-yaml', 'test:ai-boundary-static', 'test:secret-hygiene', 'test:scoring', 'test:pr-c-scoring-law-drift', 'build'],
   browser: ['test:creation-access:browser', 'test:browser:pr1d', 'test:browser:pr1g', 'test:browser:studio-artifacts', 'test:browser:enterprise-intelligence', 'test:transcript-flow:delivery-monitor-browser'],
@@ -10,6 +10,7 @@ export const groups = Object.freeze(Object.fromEntries(Object.entries({
 }).map(([name, commands]) => [name, Object.freeze(commands)])));
 
 export const reviewedScripts = Object.freeze({
+  'test:creation-access:retained-contracts': 'node --test scripts/prCMigrationTailContract.test.mjs tests/browser/exhaustiveHostedAcceptanceContract.test.mjs && node scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs',
   'test:creation-access:unit': 'npm run test:product-action-policy && node scripts/runTypeScriptTest.mjs types.ts services/processCreationContract.ts services/processCreationContract.test.ts && node scripts/runPr1fTypeScriptTest.mjs types.ts services/processCreationContract.ts services/processCreationClient.ts services/processCreationClient.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts services/processCreationContract.ts supabase/functions/_shared/processCreationCommand.ts supabase/functions/_shared/processCreationCommand.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/syntheticAdminContract.ts services/syntheticAdminContract.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/syntheticAdminEndpoint.ts supabase/functions/_shared/syntheticAdminEndpoint.test.ts && node scripts/runPr1fTypeScriptTest.mjs services/syntheticAdminContract.ts services/syntheticAdminClient.ts services/syntheticAdminClient.test.ts && node --test scripts/bootstrapSyntheticAdmin.test.mjs',
   'test:product-action-policy': 'node scripts/runTypeScriptTest.mjs types.ts services/productActionPolicy.ts services/productActionPolicy.test.ts',
   'test:creation-access:service-fence': 'node scripts/runTypeScriptTest.mjs types.ts services/processCreationServiceFence.ts services/processCreationServiceFence.test.ts',

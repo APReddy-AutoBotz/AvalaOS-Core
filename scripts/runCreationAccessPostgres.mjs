@@ -102,12 +102,35 @@ try {
     VALUES($1,$2,$3,$4,'Retained process','Unchanged','Synthetic','Medium','Not Started')`, [ids[3], ids[1], ids[2], ids[0]]);
   const retained = async () => (await upgrade.db.query('SELECT id,org_id,workspace_id,owner_id,name,description,department,criticality,status FROM assess_processes WHERE id=$1', [ids[3]])).rows[0];
   const before = await retained();
-  await apply(upgrade.db, migrations.slice(split));
+  const forwardName = '20260916003000_creation_access_migration_identity_convergence.sql';
+  assert.equal(migrations.at(-1), forwardName);
+  const forwardSql = await readFile(join('supabase/migrations', forwardName), 'utf8');
+  const rejectIdentityPrecondition = async mutation => {
+    await upgrade.db.query('BEGIN');
+    try {
+      if (mutation) await mutation();
+      await assert.rejects(upgrade.db.query(forwardSql), /CREATION_ACCESS_IDENTITY_PRECONDITION_FAILED/);
+    } finally { await upgrade.db.query('ROLLBACK'); }
+    assert.equal((await upgrade.db.query('SELECT migration_tip FROM hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip, '20260904120000');
+  };
+  await rejectIdentityPrecondition(); // The old frozen target has no predecessor tables.
+  await apply(upgrade.db, migrations.slice(split, -1));
+  await rejectIdentityPrecondition(() => upgrade.db.query('DELETE FROM hosted_pilot_environment_identity'));
+  await rejectIdentityPrecondition(async () => {
+    await upgrade.db.query('ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check');
+    await upgrade.db.query("UPDATE hosted_pilot_environment_identity SET migration_tip='99999999999999'");
+  });
+  report.scenarios.push({ scenario: 'forward-identity-preconditions-rollback-without-marker-change', status: 'passed', assertions: 6 });
+  await apply(upgrade.db, [forwardName]);
   assert.deepEqual(await retained(), before);
   assert.equal((await upgrade.db.query('SELECT count(*)::int AS n FROM synthetic_admin_targets')).rows[0].n, 0);
   assert.equal((await upgrade.db.query('SELECT count(*)::int AS n FROM process_creation_workspace_controls')).rows[0].n, 0);
   report.scenarios.push({ scenario: 'populated-upgrade-preserves-process-and-default-off-targets', status: 'passed', assertions: 3 });
   console.log('Populated upgrade: 3 assertions passed; retained process unchanged and new controls remain unconfigured.');
+  // The retained operational identity must follow the same final migration
+  // ledger on both fresh and accepted-baseline upgrades, including stale/ahead
+  // marker denial. Running only the new feature RPCs misses this dependency.
+  await child('scripts/testPilotOperationsPostgres.mjs', { PILOT_OPERATIONS_DATABASE_URL: url.toString() });
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';
