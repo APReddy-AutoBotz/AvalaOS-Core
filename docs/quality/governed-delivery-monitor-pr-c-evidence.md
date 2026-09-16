@@ -39,7 +39,7 @@ Evidence rollback is fail closed: discard the unaccepted bundle and rerun the ca
 - The v2 registry and evidence records bind the actual execution identity and canonical command/source/fixture/persona/runtime context per record. The adversarial contract must reject missing/wrong run IDs, stale attempts, wrong workflow/base/head/path, manifest-only substitution, command-result substitution, copied assertion or `not_run` records, base-tracked deletions/renames, and local-to-hosted promotion.
 - Stable tracked documents contain only this contract and the canonical pointer to PR #264. After commit, the actual GitHub run ID/attempt/jobs/artifact/digest and exact Netlify Deploy Preview/commit are recorded in the external PR description so the tracked source digest does not invalidate itself.
 
-No current candidate result is claimed in this tracked section. The active finalization registry defines 80 exact commands, 218 assertion records, and nine explicit `not_run` records; those are definitions awaiting a fresh current-source run, not executed evidence. The immutable generated bundle and PR #264 evidence block become authoritative only after the source freezes and all required checks pass.
+No current candidate result is claimed in this tracked section. The active finalization registry defines 81 exact commands, 221 assertion records, and nine explicit `not_run` records; those are definitions awaiting a fresh current-source run, not executed evidence. The immutable generated bundle and PR #264 evidence block become authoritative only after the source freezes and all required checks pass.
 
 ## Controlled-human preparation authority and current proof state
 

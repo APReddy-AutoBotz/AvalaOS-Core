@@ -31,6 +31,41 @@ Earlier full native/local results remain bound to their own
 source/head. No exploratory activation until the new gates pass. Rollback is to
 hold release/read-only operation, not weaken evidence validation or reset data.
 
+The next exact-head run (`35156634294`, attempt 1, head
+`6b1834fbb47c110a0218dad4c0c1ae6f47209639`) passed this migration binding and
+stopped at command 11: the active controlled-human contract still declared 80
+commands/218 assertions. The reviewer closed before the controller resumed writes.
+Reconcile active definitions and scoring-guard ordinal references to 81/221 and
+derive their checks from the canonical registry, including negative mutations.
+Preserve all historical counts and the explicitly superseded local-results table;
+its old planned 74-command row is historical context, not current authority.
+Rerun the complete controlled-human source gate with disposable PostgreSQL and
+compare actual PostgREST assertion markers against the current registry before
+the next push. No product code, scoring, migration, account or hosted state changes
+are part of this evidence-contract continuation.
+
+Executed local continuation: documentation positive/negative tests pass; the full
+source command passes 148/148 tests including actual PostgreSQL, then 13/13
+synthetic-generation and 11/11 runner self-tests. Its measured coverage child
+fails during temporary Git pack construction. An isolated coverage rerun reports
+235 tests: 218 passed, 17 failed through the shared startup hook, none skipped.
+The fixed diagnostic is `PR_C_PREFLIGHT_FIXTURE_GIT_REJECTED:pack-objects:STATUS`;
+bounded inspection identifies a write/rename failure in the fixture-owned pack
+path, not the source object directory. The local complete-source command therefore
+remains failed; do not combine partial suites into a full pass. The prior fixture
+attempt with a missing synthetic database password is also retained. Both owned
+PostgreSQL containers were removed and no hosted state changed.
+
+Actual PostgREST separately passes all 23 child assertions; its three emitted
+markers match the canonical registry, six no-write phases pass, and owned cleanup
+is verified. Retained local results are under
+`output/assess-import/pr-c-source-closure/` and
+`output/assess-import/projection-postgrest/be89c67c-a397-4c40-bfe9-1d5f184d440e/`.
+The documentation-only correction may proceed to exact-head CI, which must execute
+the entire canonical 81-command pipeline including measured coverage successfully
+before release. No fixture-check weakening or repository-object mutation is part
+of this correction.
+
 ## Approval, baseline and execution boundary
 
 AP approved native document upload, AI-assisted mapping into Assess, and editable human review in this task. This extends the earlier text-only input scope to bounded CSV and XLSX supporting documents. Continue in the existing PR #264 worktree on `controller/governed-delivery-monitor-pr-c-20260831`, baseline `6eee4ee60360db31d0b4280cfecb9bd33a2320bf`. Do not change the working branch to main, split a process-only PR, merge, or treat earlier PR C test results as proof of this enhancement.

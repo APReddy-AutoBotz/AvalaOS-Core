@@ -21,6 +21,9 @@ const DOCUMENTS = {
   plan: 'docs/planning/governed-multisource-transcript-module-handoff-plan.md',
   walkthrough: 'docs/quality/governed-delivery-monitor-pr-c-controlled-human-walkthrough.md',
   coverage: 'testing/process-lifecycle/contracts/pr-c-control-script-coverage.md',
+  architecture: 'docs/architecture/current-to-target-enterprise-architecture.md',
+  risk: 'docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md',
+  ledger: 'docs/task-ledger.md',
 };
 const CA = 'node scripts/prCControlledHumanPostgresTls.mjs verify-ca';
 const countCa = workflow => Object.values(workflow.jobs).flatMap(job => job.steps ?? []).filter(step => step.run === CA).length;
@@ -54,6 +57,20 @@ function validate({ documents, primary, recovery, registry, diagnosticTopology }
   const definitions = paragraph(documents.evidence, 'No current candidate result is claimed');
   assert.match(definitions, new RegExp(`defines ${registry.commands.length} exact commands, ${registry.assertions.length} assertion records, and nine explicit`, 'u'));
   assert.equal(registry.notRun.length, 9);
+  const ordinal = registry.commands.findIndex(command => command.id === 'scoring-drift') + 1;
+  assert.equal(ordinal, registry.commands.length, 'scoring law remains the final canonical command');
+  assert.equal(registry.commands[ordinal - 1].command, 'node scripts/checkPrCScoringLawDrift.mjs');
+  for (const [key, prefix, phrase] of [
+    ['walkthrough', 'The expanded control-script gate', `exact command ${ordinal}`],
+    ['walkthrough', 'SANDBOX-009 ownership', `full ${registry.commands.length}-command canonical matrix`],
+    ['plan', 'PR C execution boundary:', `Canonical command ${ordinal}`],
+    ['matrix', '| `node scripts/checkPrCScoringLawDrift.mjs`', `standalone command ${ordinal}`],
+    ['matrix', '| `node scripts/checkPrCScoringLawDrift.mjs`', `synthesize command ${ordinal}.`],
+    ['coverage', '- Command ', `Command ${ordinal} is`],
+    ['architecture', 'Scoring authority remains', `Canonical command ${ordinal}`],
+    ['risk', '| A green canonical matrix omits', `command ${ordinal} binds`],
+    ['ledger', '| Governed Delivery and Monitor PR C', `refreshed ${registry.commands.length}-command platform matrix`],
+  ]) assert.ok(paragraph(documents[key], prefix).includes(phrase), `active registry binding: ${key}: ${phrase}`);
   const phases = paragraph(documents.evidence, '- six ordered normal trusted PR phase labels');
   assert.match(phases, /protected direct jobs in the primary workflow/u);
   assert.match(phases, /credential preflight, Edge, preparation, quiesce, checkpoints, and final verification/u);
@@ -117,7 +134,17 @@ test('active controlled-human documentation binds actual registry, direct-job, s
 test('active documentation rejects stale counts, reusable topology and false Edge-only project authority', async () => {
   const source = await snapshot();
   for (const [key, before, after] of [
-    ['evidence', 'defines 80 exact commands', 'defines 74 exact commands'],
+    ['evidence', `defines ${source.registry.commands.length} exact commands`, 'defines 74 exact commands'],
+    ['evidence', `${source.registry.assertions.length} assertion records`, '218 assertion records'],
+    ['walkthrough', `exact command ${source.registry.commands.length}`, 'exact command 80'],
+    ['walkthrough', `full ${source.registry.commands.length}-command canonical matrix`, 'full 80-command canonical matrix'],
+    ['plan', `Canonical command ${source.registry.commands.length}`, 'Canonical command 80'],
+    ['matrix', `standalone command ${source.registry.commands.length}`, 'standalone command 80'],
+    ['matrix', `synthesize command ${source.registry.commands.length}.`, 'synthesize command 80.'],
+    ['coverage', `Command ${source.registry.commands.length} is`, 'Command 80 is'],
+    ['architecture', `Canonical command ${source.registry.commands.length}`, 'Canonical command 80'],
+    ['risk', `command ${source.registry.commands.length} binds`, 'command 80 binds'],
+    ['ledger', `refreshed ${source.registry.commands.length}-command platform matrix`, 'refreshed 74-command platform matrix'],
     ['evidence', 'protected direct jobs in the primary workflow', 'protected reusable phase workflows'],
     ['evidence', 'five protected prior-run bindings', 'four protected prior-run bindings'],
     ['evidence', 'All fourteen direct PostgreSQL steps', 'All eleven direct PostgreSQL steps'],
