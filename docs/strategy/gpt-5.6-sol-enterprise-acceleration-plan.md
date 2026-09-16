@@ -2,6 +2,19 @@
 
 ## Native Assess supporting-document implementation
 
+The current exploratory release hold is the PostgREST transaction/actual-actor
+correction in `docs/quality/assess-projection-transaction-correction-evidence.md`.
+Head `484ce7a7bc897180043a395254991b57a05bdbc5` passed all 18 applicable workflows,
+but actual upload remained blocked before any new effects. The same substantial
+PR now adds an atomic two-RPC volatility migration, actual HTTP regression and
+corrected operator identity/receipt proof. The canonical gates expand to 23 native
+commands and 81 PR C commands; current-source results are recorded separately.
+Do not repeat resets or promote prior green suites to hosted upload readiness.
+Final corrected local source passed 23/23 native commands and 32/32 Desktop/Pixel
+scenarios with retained authority/recovery and evidence-adversary gates. Next:
+one coherent same-branch commit, exact-head CI including all 81 PR C commands,
+then only the separately approved exploratory migration/draft/browser proof.
+
 Release continuation: corrected head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable exact-head workflows; the separate hosted-live workflow remained intentionally skipped. The approved exploratory target received the 77-migration chain, source-verified functions and an immutable draft, preserving its six accounts and zero provider configurations. Actual browser testing then exposed a confirmed query/schema defect: relationship reviews selected `created_by` instead of canonical `reviewer_id`, stopping the projection before upload. The failed attempt and bounded production-query/schema-regression correction are recorded in `docs/quality/assess-document-mapping-projection-correction-evidence.md`. Upload/analysis readiness is not claimed; corrected-source local, CI and exploratory retry gates remain mandatory. The frozen controlled-human backend remains untouched.
 
 The approved 2026-09-16 continuation is `docs/planning/assess-supporting-document-mapping.md`: bounded document/CSV/XLSX intake, typed governed AI mapping, native Assess review/edit/conflict UI and exact-version atomic apply. The local implementation and 22-command feature gate are complete; exact results and remaining external proof boundaries are in `docs/quality/assess-supporting-document-mapping-evidence.md`. Keep implementation, forward migration, tests, evidence and rollback in the existing substantial PR boundary. All read-only architecture/security/quality findings were synthesized before each corrective write phase; the controller retains integration and acceptance authority. AP subsequently approved commit/push, exact-head CI and separate exploratory synthetic preview activation; those gates require their own exact-source evidence. Source defaults remain off. No source/test result is a hosted, real-provider, human-acceptance or production claim.

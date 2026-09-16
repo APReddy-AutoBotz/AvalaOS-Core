@@ -60,6 +60,7 @@ const PR_C_FOCUSED_COMMANDS = [
   { id: 'pr-c-preview-sandbox-regression', command: 'node scripts/runTranscriptFlowBrowser.mjs --preview-sandbox-regression', environment: 'controlled-browser-two-profile' },
   { id: 'pr-c-preview-navigation-regression', command: 'node scripts/runTranscriptFlowBrowser.mjs --preview-navigation-regression', environment: 'controlled-browser-two-profile' },
   { id: 'pilot-trust-browser', command: 'npm run test:browser:trust-assurance', environment: 'controlled-browser-two-profile' },
+  { id: 'pr-c-projection-postgrest', command: 'npm run test:transcript-flow:projection-postgrest', environment: 'controlled-postgrest-14.10-postgresql-16' },
   { id: 'historical-evidence-drift', command: `git diff --exit-code ${PR_C_BASE_SHA} -- testing/process-lifecycle/contracts/pr-a-assertion-registry.json testing/process-lifecycle/contracts/pr-b-assertion-registry.json docs/quality/governed-multisource-transcript-pr-a-evidence.md docs/quality/governed-multisource-studio-pr-b-evidence.md`, environment: 'controlled-git' },
 ];
 

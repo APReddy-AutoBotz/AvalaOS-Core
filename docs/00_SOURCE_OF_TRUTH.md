@@ -2,6 +2,22 @@
 
 ## Approved native Assess supporting-document continuation
 
+Current exploratory release hold (2026-09-17): head `484ce7a7bc897180043a395254991b57a05bdbc5`
+passed all 18 applicable workflows and its approved synthetic draft/backend were
+content-verified. Hosted upload remains unproven: a STABLE Delivery projection
+RPC takes authorization row locks and fails in PostgREST's read-only transaction
+(405 / SQLSTATE `25006`). The bounded correction covers both Delivery/Monitor RPC
+volatility, actual PostgREST regressions and a separate ignored-harness
+actor-binding defect. The active supporting-document plan owns this continuation.
+Six accounts and the manual case are preserved; zero uploads/provider effects
+were created. Previous local/CI success is not hosted upload or AI proof.
+The bounded correction now passes all 23 native local commands, 32 Desktop/Pixel
+scenarios, actual PostgREST before/after proof, 16 real migration rejection cases
+and six recovery assertions. Exact results and retained failed attempts are in
+`docs/quality/assess-projection-transaction-correction-evidence.md`. The complete
+81-command PR C execution is required in new exact-head CI; local registry
+validation is not that execution. Exploratory activation remains gated.
+
 Release continuation: corrected head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable exact-head workflows; the separate hosted-live workflow remained intentionally skipped. The approved exploratory target received the 77-migration chain, source-verified functions and an immutable draft, preserving its six accounts and zero provider configurations. Actual browser testing then exposed a confirmed query/schema defect: relationship reviews selected `created_by` instead of canonical `reviewer_id`, stopping the projection before upload. The failed attempt and bounded production-query/schema-regression correction are recorded in `docs/quality/assess-document-mapping-projection-correction-evidence.md`. Upload/analysis readiness is not claimed; corrected-source local, CI and exploratory retry gates remain mandatory. The frozen controlled-human backend remains untouched.
 
 Current release hold: projection correction `e3ca6930eca8b79f9f03d5178753331eac8d9124` passed all 18 applicable workflows. Before deployment, source/installed-schema inspection and real PostgreSQL testing confirmed two XLSX omissions: the source-version ingestion trigger and the native Assess document-evidence classifier. The active plan owns one additive atomic correction for both functions and the synthetic identity marker, with real receipt-backed ingestion, applied spreadsheet evidence and upgrade regressions. Earlier mocked/CSV-fixture results do not prove these boundaries. Current-source local validation passed 22/22 commands and 32/32 Desktop/Pixel scenarios; independent source/evidence reviews found no remaining implementation blocker. Results and retained failed attempts are in `docs/quality/assess-document-xlsx-ingestion-correction-evidence.md`. Fresh exact-head CI and resumed exploratory proof remain required. No exploratory upload/provider effects were created; preserve the six accounts, saved manual case and frozen human backend.

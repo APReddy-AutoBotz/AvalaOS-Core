@@ -102,6 +102,11 @@
       "environment": "controlled-browser-two-profile"
     },
     {
+      "id": "pr-c-projection-postgrest",
+      "command": "npm run test:transcript-flow:projection-postgrest",
+      "environment": "controlled-postgrest-14.10-postgresql-16"
+    },
+    {
       "id": "historical-evidence-drift",
       "command": "git diff --exit-code 5433cad41721355e3ec5a29bc2f87772540c77b5 -- testing/process-lifecycle/contracts/pr-a-assertion-registry.json testing/process-lifecycle/contracts/pr-b-assertion-registry.json docs/quality/governed-multisource-transcript-pr-a-evidence.md docs/quality/governed-multisource-studio-pr-b-evidence.md",
       "environment": "controlled-git"
@@ -455,6 +460,10 @@
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
       "sha256": "c2939e56d1ba3df1d05f55b6abcd3bb16dc6259f68cf7ac9f48bf280632eb99f"
     },
+    "postgrest": {
+      "path": "scripts/testProjectionRpcPostgrest.mjs",
+      "sha256": "4936c2f1b444a1d96938313bd47b2e0c461b70dcf7013f09ce16b0e6bcc2fb13"
+    },
     "domain": {
       "path": "services/deliveryMonitor/contracts.test.ts",
       "sha256": "39bacef583c91b5222b8bf960b477eb9a78417f6494c72bee2e5981d4fd61200"
@@ -493,6 +502,81 @@
     }
   },
   "assertions": [
+    {
+      "commandId": "pr-c-projection-postgrest",
+      "owner": "postgrest",
+      "testId": "DELIVERY-TR-006",
+      "assertionId": "POSTGREST-DELIVERY-LOCKED-PROJECTION",
+      "fixture": "projection-rpc-postgrest-v1",
+      "testName": "DELIVERY-TR-006 — POSTGREST DELIVERY LOCKED PROJECTION",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000008-0000-4000-8000-000000000008",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.approve",
+            "delivery.package.approve",
+            "monitor.baseline.create",
+            "monitor.read",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "transport": "postgrest-14.10",
+        "migration": "20260916203406_projection_rpc_volatility_authority.sql"
+      }
+    },
+    {
+      "commandId": "pr-c-projection-postgrest",
+      "owner": "postgrest",
+      "testId": "MONITOR-TR-004",
+      "assertionId": "POSTGREST-MONITOR-LOCKED-PROJECTION",
+      "fixture": "projection-rpc-postgrest-v1",
+      "testName": "MONITOR-TR-004 — POSTGREST MONITOR LOCKED PROJECTION",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000008-0000-4000-8000-000000000008",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.approve",
+            "delivery.package.approve",
+            "monitor.baseline.create",
+            "monitor.read",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "transport": "postgrest-14.10",
+        "migration": "20260916203406_projection_rpc_volatility_authority.sql"
+      }
+    },
+    {
+      "commandId": "pr-c-projection-postgrest",
+      "owner": "postgrest",
+      "testId": "AUTH-002",
+      "assertionId": "POSTGREST-PROJECTION-AUTHORITY-NEGATIVES",
+      "fixture": "projection-rpc-postgrest-v1",
+      "testName": "AUTH-002 — POSTGREST PROJECTION AUTHORITY NEGATIVES",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000008-0000-4000-8000-000000000008",
+          "state": "active",
+          "capabilities": [
+            "delivery.handoff.approve",
+            "delivery.package.approve",
+            "monitor.baseline.create",
+            "monitor.read",
+            "project.read"
+          ]
+        },
+        "organizationId": "00000001-0000-4000-8000-000000000001",
+        "workspaceId": "00000002-0000-4000-8000-000000000002",
+        "transport": "postgrest-14.10",
+        "migration": "20260916203406_projection_rpc_volatility_authority.sql"
+      }
+    },
     {
       "commandId": "pr-c-domain",
       "owner": "domain",

@@ -1,6 +1,6 @@
 # Assess supporting-document mapping
 
-Status: implemented locally; final 22-command feature gate passed. Exact retained-browser results, provenance reconciliation and external proof boundaries are recorded in the linked evidence report. No hosted activation or real-provider proof.
+Status: native mapping and the subsequent projection-transaction correction passed the final 23-command local gate and 32 Desktop/Pixel scenarios. Exact retained-browser results, provenance reconciliation and external proof boundaries are recorded in the linked evidence reports. New exact-head CI, hosted upload and real-provider proof remain pending.
 
 ## Approval, baseline and execution boundary
 
@@ -79,6 +79,105 @@ Retained relevant gates: transcript/domain/API/provider mocks, Assess V2/scoring
 Evidence records canonical commands, actual assertion outputs, source digest, fixture identity and runtime; green suite exit does not fabricate assertion PASS. Do not overwrite historical evidence or include secrets/raw document/provider content, signed URLs or live object identifiers. Test runners must use unique owned output directories and never erase protected pre-existing `.agent/` state.
 
 ## Rollout, rollback and remaining unknowns
+
+### PostgREST transaction and operator-identity corrective continuation
+
+Head `484ce7a7bc897180043a395254991b57a05bdbc5` passed all 18 applicable
+workflows. The approved exploratory backend received migration 78, exact query
+source and a content-verified draft. The browser reopened the saved manual case
+but failed before upload. Actual read-only reproduction found all 32 table reads
+successful and the Delivery projection RPC failing with HTTP 405 / SQLSTATE
+`25006`: it is `STABLE` but takes canonical authorization locks. PostgREST runs
+POST to STABLE functions in a read-only transaction. Monitor has the same source
+mismatch and requires independent runtime proof.
+
+The ignored operator harness also inferred actor identity from a login reservation
+UUID rather than the actual authenticated subject. Preserve this failed
+zero-upload attempt and the prior three committed effects without rewriting old
+proof. Six accounts and their exact authorization state remain unchanged; no
+source, provider-usage or mapping-run rows were created.
+
+Read-only architecture and quality reviews closed before Wave 2. The controller
+completed the bounded security synthesis; an additional security-reviewer spawn
+hit the configured thread limit. One direct implementation worker owns the
+CLI-generated successor, exact migration-tail/static contracts and populated
+upgrade tests. The controller owns actual PostgREST tests, canonical CI/evidence,
+documentation/provenance and ignored operator-harness correction. No reviewer
+runs during this fixed workspace-write phase; descendants remain prohibited.
+
+One atomic successor changes exactly the two public projection RPC attributes
+from STABLE to VOLATILE, preserving bodies, OIDs, ownership, ACLs, security-definer
+state, search path and all other metadata. Validate exact predecessor
+`20260916181916`, frozen bodies, unsafe-flag/history absence and locked identity;
+advance the marker/check last. No authorization-lock removal, grant, product
+mutation, scoring change, client fallback or frozen-human-backend alteration.
+Rollback disables effects/read-only/manual fallback with additive repair, never
+destructive reversal or account reset.
+
+Acceptance requires a canonical actual-PostgREST command in both Native Assess
+(23 commands) and PR C (81 commands), with assertion-owned fixture/source proof.
+Use pinned cached PostgreSQL 16/PostgREST 14.10, tmpfs data, owned isolated network
+and loopback ports. Observe each old-tip failure; after migration/cache reload
+prove authenticated/service POST success, volatile GET/HEAD and anon denial,
+wrong scope/revocation/stale authority/actor-spoof negatives, exact unchanged
+business/receipt/effect/audit digests, authority-lock serialization and owned
+cleanup. Fresh/populated upgrades and migration precondition/metadata adversaries
+must accompany the full retained local matrix. Green exit alone is not proof.
+
+Before resumed hosted mutations, bind the actual Auth subject to the synthetic
+account's auth_user_id and fresh tenant-session identity. Independently reconcile
+the three old receipts by exact request, command, idempotency, actual actor, scope,
+response hash, audit and persisted resource in a corrective addendum retaining
+all original digests. Reject reservation-as-actor, wrong/missing/changed subject,
+stale authority, substituted/duplicate/missing receipts or responses and wrong
+scope. The subsequent five commands require eight independently bound receipts,
+unchanged account-authority hashes and network observation through both signouts.
+
+The first complete correction snapshot passed all 23 native commands and 32
+Desktop/Pixel cases. Both independent final read-only reviewers then closed with
+four bounded verification findings: the static contract accepted an additional
+function alteration; the no-write digest omitted core authority/process tables;
+the browser observer supplied a literal zero pending-response count; and the
+new migration lacked its own real-database missing/duplicate/stale identity and
+unsafe-flag negatives. These are corrective test/evidence changes, not additional
+product scope. Earlier passing evidence remains retained, not relabelled.
+
+The controller resumed the fixed workspace-write phase only after both reviewers
+closed. One direct implementation worker owns the database negative controls and
+complete per-phase no-write digest. The controller owns exact alteration-count
+adversaries, actual response-completion validation, integration and this record.
+No reviewer runs during writes. Rerun the full stable-source local matrix before
+commit, and run the complete canonical 81-command PR C pipeline on the exact
+committed head before any exploratory activation. A registry validation alone is
+not execution of those 81 commands. Preserve the explicit provider-disabled and
+three-human acceptance boundaries.
+
+Executed corrective source
+`a94e530883d44cba66862e1e729e42e3f6a036938d08de78091b51ef6dcf9a3d`
+passes all 23 native commands, 32 Desktop/Pixel scenarios, 23 actual REST child
+assertions over six no-write phases/169 governed tables, six recovery assertions,
+and 48 evidence-adversary tests. The fresh/populated upgrade passes 16 rejection
+cases with full rollback-state preservation. Final review additionally required
+observed fixture authorization versions and an exact approved/current deployment
+plan comparison; the controller implemented and tested both after reviewers
+closed. Exact manifests and retained unsuccessful attempts are recorded in
+`docs/quality/assess-projection-transaction-correction-evidence.md`. The broad
+81-command registry will execute in exact-head CI, not be inferred from these
+focused local results. No additional product scope or provider authority is added.
+Final source reconciliation refreshes only the assertion registry's PostgREST
+owner hash, producing fingerprint
+`52a3a068304eeb302273ff49a07ef6f5afbd6663ac1810545867cc47e83c5dba`.
+An exact reconstruction proves this one-field delta; commands/assertions/tests
+are unchanged. Keep the original local manifests bound to their executed source,
+validate current provenance separately, and require full exact-head CI for the
+reconciled committed tree before exploratory activation.
+
+After final local review, commit/push the same PR, verify new exact-head CI,
+apply only the successor on the approved exploratory target, inspect installed
+metadata and retry on a new exact-head draft. No new provider route/key, merge or
+production action is authorized. Exact results are retained in
+`docs/quality/assess-projection-transaction-correction-evidence.md`; unfinished
+checks remain planned verification.
 
 ### Exact-head CI integration correction
 

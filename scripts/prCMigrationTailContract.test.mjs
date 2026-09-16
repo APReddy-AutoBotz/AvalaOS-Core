@@ -16,6 +16,11 @@ import {
   buildFrozenEnterpriseSourceVersionAdversaries,
   buildFrozenAssessClassifierAdversaries,
 } from './assessDocumentXlsxIngestionMigrationContract.mjs';
+import {
+  PROJECTION_RPC_VOLATILITY_MIGRATION_PATH,
+  assertProjectionRpcVolatilityMigration,
+  buildProjectionRpcVolatilityAdversaries,
+} from './projectionRpcVolatilityMigrationContract.mjs';
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
 
@@ -39,7 +44,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916181916');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916203406');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -52,6 +57,20 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(runner, /upgrade\.query\([^\n]+migration_tip[^\n]+,'20260831062024'\)/u);
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
+});
+
+test('projection RPC volatility successor is exact and adversarially bound', () => {
+  const sql = readFileSync(PROJECTION_RPC_VOLATILITY_MIGRATION_PATH, 'utf8');
+  assert.deepEqual(assertProjectionRpcVolatilityMigration(sql), {
+    predecessorTip: '20260916181916',
+    currentTip: '20260916203406',
+    functionCount: 2,
+  });
+  const adversaries = buildProjectionRpcVolatilityAdversaries(sql);
+  assert.equal(adversaries.length, 20);
+  for (const adversary of adversaries) {
+    assert.throws(() => assertProjectionRpcVolatilityMigration(adversary.sql), undefined, adversary.name);
+  }
 });
 
 test('XLSX ingestion successor preserves exact function and environment authority', () => {

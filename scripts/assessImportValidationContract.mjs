@@ -36,14 +36,15 @@ const compile = 'node scripts/runEnterpriseIntelligenceTest.mjs';
 const edge = `${compile} supabase/functions/deno.d.ts`;
 export const assessImportScripts = Object.freeze({
   'test:assess-import:authority': 'node scripts/checkEnterpriseIntelligenceBoundaries.mjs && node --test scripts/enterpriseIntelligenceIdempotencyBoundary.test.mjs && node scripts/checkEnterpriseIntelligenceCiContract.mjs',
-  'test:assess-import:harness': 'node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs scripts/pr1dBrowserFixtureContract.test.mjs scripts/enterpriseProjectionSchemaContract.test.mjs scripts/assessDocumentPostgresTestGuards.test.mjs',
+  'test:assess-import:harness': 'node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs scripts/pr1dBrowserFixtureContract.test.mjs scripts/enterpriseProjectionSchemaContract.test.mjs scripts/assessDocumentPostgresTestGuards.test.mjs scripts/projectionRpcPostgrestContract.test.mjs',
   'test:assess-import:parser': `${compile} supabase/functions/_shared/assessDocumentSpreadsheet.ts tests/fixtures/assessImportSpreadsheets.ts supabase/functions/_shared/assessDocumentSpreadsheet.test.ts`,
   'test:assess-import:parser-coverage': `${compile} --coverage=supabase/functions/_shared/assessDocumentSpreadsheet.ts supabase/functions/_shared/assessDocumentSpreadsheet.ts tests/fixtures/assessImportSpreadsheets.ts supabase/functions/_shared/assessDocumentSpreadsheet.test.ts`,
   'test:assess-import:domain': `${compile} services/assessImport/contracts.ts services/assessImport/contracts.test.ts && ${compile} services/assessImport/mapping.ts services/assessImport/mapping.test.ts && ${compile} services/assessImport/targetRegistry.ts services/assessImport/targetRegistry.test.ts`,
   'test:assess-import:api': `${edge} supabase/functions/_shared/assessDocumentMapping.ts supabase/functions/_shared/assessDocumentMapping.test.ts && ${edge} supabase/functions/_shared/enterpriseIntelligenceCommand.ts supabase/functions/_shared/enterpriseIntelligenceMappingCommand.test.ts`,
-  'test:assess-import:migrations': 'node --test scripts/testAssessSupportingDocumentMappingMigration.mjs scripts/prCMigrationTailContract.test.mjs',
+  'test:assess-import:migrations': 'node --test scripts/testAssessSupportingDocumentMappingMigration.mjs scripts/prCMigrationTailContract.test.mjs scripts/projectionRpcVolatilityMigrationContract.test.mjs',
   'test:assess-import:postgres': 'node scripts/testAssessSupportingDocumentMappingPostgres.mjs',
   'test:assess-import:retained-postgres': 'node scripts/testTranscriptFlowPostgres.mjs',
+  'test:assess-import:projection-postgrest': 'node --test scripts/testProjectionRpcPostgrest.mjs',
   'test:assess-import:mapping-coverage': `${compile} --coverage=services/assessImport/contracts.ts services/assessImport/contracts.ts services/assessImport/contracts.test.ts && ${compile} --coverage=services/assessImport/mapping.ts services/assessImport/mapping.ts services/assessImport/mapping.test.ts && ${compile} --coverage=services/assessImport/targetRegistry.ts services/assessImport/targetRegistry.ts services/assessImport/targetRegistry.test.ts && ${compile} --coverage=supabase/functions/_shared/assessDocumentMapping.ts supabase/functions/deno.d.ts supabase/functions/_shared/assessDocumentMapping.ts supabase/functions/_shared/assessDocumentMapping.test.ts`,
   'test:assess-import:browser': 'node scripts/runTranscriptFlowBrowser.mjs --assess-import',
   'test:assess-import:ui': 'node --test components/assess-v2/AssessSupportingDocumentIntake.test.ts components/assess-v2/assessDocumentUploadQueue.test.ts components/enterprise/AssessTranscriptCandidateReview.test.ts components/assess-v2/AssessV2Workspace.test.ts',
@@ -70,7 +71,7 @@ export const assessImportScripts = Object.freeze({
 });
 export const assessImportGroups = Object.freeze({
   feature: Object.freeze(['test:assess-import:harness', 'test:assess-import:authority', 'test:assess-import:parser', 'test:assess-import:domain', 'test:assess-import:api', 'test:assess-import:client', 'test:assess-import:ui', 'test:assess-import:migrations', 'test:assess-import:parser-coverage', 'test:assess-import:mapping-coverage']),
-  postgres: Object.freeze(['test:assess-import:postgres', 'test:assess-import:retained-postgres']),
+  postgres: Object.freeze(['test:assess-import:postgres', 'test:assess-import:retained-postgres', 'test:assess-import:projection-postgrest']),
   regression: Object.freeze(['test:assess-import:regression']),
   browser: Object.freeze(['test:assess-import:browser']),
   static: Object.freeze(['typecheck', 'typecheck:edge', 'test:workflow-yaml', 'test:ai-boundary-static', 'test:secret-hygiene', 'test:scoring', 'test:pr-c-scoring-law-drift', 'build']),

@@ -123,14 +123,14 @@ test('PR C evidence commands stream live output while retaining exact bounded by
   });
 });
 
-test('command 80 is the standalone scoring-law source guard and cannot be replaced by the former raw diff', () => {
+test('the 81-command registry retains the standalone scoring-law source guard and cannot substitute the former raw diff', () => {
   const expected = expectedPrCCommandRegistry(process.cwd());
-  assert.equal(expected.length, 80);
+  assert.equal(expected.length, 81);
   assert.deepEqual(expected.at(-1), {
     id: 'scoring-drift', command: 'node scripts/checkPrCScoringLawDrift.mjs', environment: 'controlled-git',
   });
   assert.deepEqual(canonicalRegistry.commands, expected);
-  assert.equal(canonicalRegistry.assertions.length, 218);
+  assert.equal(canonicalRegistry.assertions.length, 221);
   assert.equal(canonicalRegistry.assertions.some(assertion => assertion.commandId === 'scoring-drift'), false);
   const substituted = structuredClone(canonicalRegistry);
   substituted.commands.at(-1).command = `git diff --exit-code ${PR_C_BASE_SHA} -- ${['services/scoringEngine.ts', 'services/scoringEngine.test.ts', 'scripts/runScoringRegression.mjs'].join(' ')}`;

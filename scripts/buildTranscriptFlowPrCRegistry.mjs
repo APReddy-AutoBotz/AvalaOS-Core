@@ -34,11 +34,13 @@ const selectedCommandIds = [
   'pr-c-performance',
   'pr-c-coverage',
   'pr-c-evidence-contract',
+  'pr-c-projection-postgrest',
 ];
 
 const ownerPaths = {
   'migration-static': 'scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs',
   postgres: 'scripts/testTranscriptFlowPrCPostgres.mjs',
+  postgrest: 'scripts/testProjectionRpcPostgrest.mjs',
   domain: 'services/deliveryMonitor/contracts.test.ts',
   'pagination-domain': 'services/deliveryMonitor/pagination.test.ts',
   client: 'services/deliveryMonitor/commands.test.ts',

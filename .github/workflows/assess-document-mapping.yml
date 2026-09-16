@@ -39,6 +39,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Cache exact disposable projection RPC test images
+        run: |
+          docker pull postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+          docker pull public.ecr.aws/supabase/postgrest@sha256:bca3f86f69d8ef7aa1e5ee65e66ce9a20c6c147be637517a7be8399e102901d1
       - name: Exact harness and authority contracts, typed mapping, hostile files, API mocks and coverage
         run: node scripts/runAssessImportValidation.mjs feature
       - name: Disposable PostgreSQL 16 application and tenant boundaries
