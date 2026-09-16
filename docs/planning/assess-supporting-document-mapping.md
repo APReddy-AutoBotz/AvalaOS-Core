@@ -92,6 +92,38 @@ The identity correction must lock exactly one known synthetic predecessor marker
 
 Required verification: focused contract mutations, full creation-access fresh/populated-upgrade PostgreSQL with retained Pilot Operations and PR C, mapping/transcript PostgreSQL, recovery/response-loss checks, all 22 current-source mapping commands, retained PR 1D lint/browser, provenance, typechecks, build, static AI/security boundaries, secret hygiene and patch integrity. The corrected committed head then needs fresh applicable CI before any exploratory activation. Keep the current usable preview pinned while these gates run. Rollback remains feature-disabled/read-only with additive forward repair, not a destructive down-migration.
 
+### Exploratory projection corrective checkpoint
+
+Head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable CI workflows
+before approved exploratory activation. Actual Author testing saved a manual
+case but failed before upload: the relationship-review query selected a nonexistent
+`created_by` column instead of canonical `reviewer_id`. The original failed
+attempt and exact CI/artifact boundary are retained in
+`docs/quality/assess-document-mapping-projection-correction-evidence.md`.
+
+Both read-only architecture and quality reviewers closed before this write phase.
+The controller owns the one-column production correction, full-path query-unit
+regression, canonical harness wiring, active documentation, provenance and release
+verification. One direct implementation worker owns the AST schema contract,
+its adversarial unit tests and its retained PostgreSQL harness integration.
+No schema/grant/scoring changes, descendants, account resets, provider calls or
+frozen human-backend changes are authorized. Preserve the saved synthetic case.
+
+Acceptance requires all 51 production selections to match the applied schema;
+restoring `created_by` must fail independently against PostgreSQL. The full
+22-command local matrix, recovery, evidence/provenance checks and fresh exact-head
+CI precede replacement exploratory source deployment and the resumed real browser
+journey. Compare actual command receipts and committed source/set/bundle rows,
+observe the network through signout, and independently reopen on Pixel. Keep the
+old failed attempt; do not label provider-disabled upload proof as AI success.
+
+Final local source `67aaf71183553f1b3ae224d80135bba22c69c747d5aee35cb4f62743f3cf6ccd`
+passed all 22 canonical commands, 32 Desktop/Pixel cases and six recovery checks.
+The independent schema-guard closure review reproduced the newly rejected
+substitution adversaries. Exact results and the retained intermediate failed
+browser/build-overlap attempt are in the corrective evidence report above.
+Commit/push, fresh exact-head CI and exploratory resumption remain the next gates.
+
 ### Subsequent release approval
 
 After local completion AP approved commit/push on the existing PR #264 branch, exact-head CI verification and activation in the separately approved exploratory synthetic preview. This narrow approval supersedes the implementation-only hosted-action prohibition above, but not the production, AvalaOS.com, real-provider, customer-data, merge or frozen controlled-human-backend boundaries. Keep the existing usable draft pinned until a replacement is independently verified. Confirm the exact exploratory project, installed predecessor migration and function source before any mutation; preserve existing synthetic accounts and data. Apply only the reviewed forward migration and required Edge dependencies, verify installed schema/authorization and use an immutable preview bound to the committed source. Upload/manual and missing-provider fail-closed checks may run with synthetic documents; do not invent AI success, enable real keys/routes or bypass provider authority to make analysis appear ready. If a live AI path is required, stop for separate capped-budget approval. Preserve sanitized exact-head/run/attempt/deploy evidence without rewriting the completed local report or historical human evidence. Rollback disables new effects and preserves immutable history; no destructive reset or new branch/PR is authorized.

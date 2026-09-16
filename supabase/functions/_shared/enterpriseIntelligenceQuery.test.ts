@@ -432,7 +432,7 @@ sourceReadOnlyRows.transcriptApplyPreviewBatches = [{
 }];
 sourceReadOnlyRows.transcriptCandidateRelationships = [{
   id: HIDDEN_CANARY_IDS.relationship, candidate_id: HIDDEN_CANARY_IDS.candidate, candidate_version: 1,
-  relationship: 'supporting', rationale: 'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY', created_by: REVIEWER,
+  relationship: 'supporting', rationale: 'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY', reviewer_id: REVIEWER,
   created_at: '2026-08-04T08:07:00.000Z',
 }];
 sourceReadOnlyRows.transcriptConflicts = [{
@@ -606,6 +606,38 @@ assert.deepEqual({
   sourceVersions: [], sourceSets: [], inputBundles: [], journeys: [], assessCandidates: [], assessConflicts: [],
   assessApplyPreviews: [], assessRuns: [],
 }, 'mutation capabilities never imply source or Assess collection read authority');
+
+// Check the actual production path, not just a table name or empty mock result.
+// The retained PostgreSQL gate independently validates all selected columns.
+const relationshipReviewColumns = 'id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+const relationshipReviewRow = {
+  id: HIDDEN_CANARY_IDS.relationship, candidate_id: CANDIDATE, candidate_version: 1,
+  relationship: 'supporting', rationale: 'Reviewed synthetic evidence', reviewer_id: REVIEWER,
+  created_at: '2026-08-04T08:07:00.000Z',
+};
+const relationshipReviewRequests: string[] = [];
+const relationshipReviewDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  if (path.startsWith('enterprise_evidence_candidate_relationship_reviews?')) {
+    relationshipReviewRequests.push(path);
+    assert.equal(path, `enterprise_evidence_candidate_relationship_reviews?select=${relationshipReviewColumns}&org_id=eq.${ORG}&workspace_id=eq.${WORKSPACE}&order=created_at.desc,id.desc&limit=1000`,
+      'production relationship query selects the canonical reviewer column within the exact tenant/workspace');
+    return [relationshipReviewRow] as T;
+  }
+  return [] as T;
+});
+const relationshipReviewRows = await relationshipReviewDatabase.loadProjectionRows({
+  ...authority(), capabilities: ['assess.v2.read'],
+});
+assert.equal(relationshipReviewRequests.length, 1, 'canonical Assess authority loads the relationship table exactly once');
+assert.deepEqual(relationshipReviewRows.transcriptCandidateRelationships, [relationshipReviewRow]);
+const reviewedCandidateRows = structuredClone(transcriptOnlyRows);
+reviewedCandidateRows.transcriptCandidateRelationships = relationshipReviewRows.transcriptCandidateRelationships;
+const reviewedCandidateProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, reviewedCandidateRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(reviewedCandidateProjection.availability, 'ready');
+assert.equal(reviewedCandidateProjection.transcriptFlow.assessCandidates[0].relationship, 'supporting',
+  'successfully loaded relationship review reaches the authorized candidate projection');
 
 const transcriptTablesRequestedFor = async (capabilities: string[]) => {
   const requested: string[] = [];

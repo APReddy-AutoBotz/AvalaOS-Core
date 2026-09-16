@@ -4,6 +4,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
+import {assertEnterpriseProjectionSchema,assertEnterpriseProjectionDatabaseColumns,extractEnterpriseProjectionSchemaContract} from './enterpriseProjectionSchemaContract.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -82,6 +83,18 @@ try{
   `);
   for(const name of migrations)await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
   assert.ok(Number((await database.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000);
+
+  const enterpriseProjectionSource=await readFile('supabase/functions/_shared/enterpriseIntelligenceQuery.ts','utf8');
+  const projectionSchemaContract=await assertEnterpriseProjectionSchema(database,enterpriseProjectionSource);
+  assert.equal(projectionSchemaContract.siteCount,51);
+  const relationshipSelection='enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+  assert.equal(enterpriseProjectionSource.split(relationshipSelection).length-1,1,
+    'Relationship review projection must have one exact reviewer-backed selector');
+  const substitutedProjectionSource=enterpriseProjectionSource.replace(relationshipSelection,
+    relationshipSelection.replace('reviewer_id','created_by'));
+  await assert.rejects(assertEnterpriseProjectionDatabaseColumns(database,extractEnterpriseProjectionSchemaContract(substitutedProjectionSource)),
+    /ENTERPRISE_PROJECTION_SCHEMA_MISSING_COLUMN:enterprise_evidence_candidate_relationship_reviews\.created_by/);
+  console.log('PASS production Enterprise projection selectors match the migrated PostgreSQL schema and reject the reviewer owner substitution');
 
   const fixture=await createEnterpriseIntelligenceFixture(database);
   await database.query(

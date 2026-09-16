@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test:assess-import:harness": "node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs scripts/pr1dBrowserFixtureContract.test.mjs",
+    "test:assess-import:harness": "node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs scripts/pr1dBrowserFixtureContract.test.mjs scripts/enterpriseProjectionSchemaContract.test.mjs",
     "test:assess-import:authority": "node scripts/checkEnterpriseIntelligenceBoundaries.mjs && node --test scripts/enterpriseIntelligenceIdempotencyBoundary.test.mjs && node scripts/checkEnterpriseIntelligenceCiContract.mjs",
     "test:assess-import:browser": "node scripts/runTranscriptFlowBrowser.mjs --assess-import",
     "test:assess-import:ui": "node --test components/assess-v2/AssessSupportingDocumentIntake.test.ts components/assess-v2/assessDocumentUploadQueue.test.ts components/enterprise/AssessTranscriptCandidateReview.test.ts components/assess-v2/AssessV2Workspace.test.ts",
