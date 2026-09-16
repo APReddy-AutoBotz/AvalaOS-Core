@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalFileSha256, PR_C_BASE_SHA, PR_C_WORKFLOW_PATH, validatePrCProvenance } from './transcriptFlowPrCEvidenceScope.mjs';
+import { approvedFullChainTip } from './prCMigrationTailContract.mjs';
 import {
   PR_C_EXECUTION_CLASSIFICATIONS,
   PR_C_GITHUB_CLASSIFICATION,
@@ -384,6 +385,20 @@ export const validatePrCRegistryStructure = (root, registry, provenance, { verif
   unique(registry.commands.map(command => command.id), 'PR_C_COMMAND_ID_DUPLICATE');
   unique(registry.commands.map(command => command.command), 'PR_C_COMMAND_STRING_DUPLICATE');
   const commands = new Map(registry.commands.map(command => [command.id, command]));
+  // Bind the current fresh-chain assertion to independent migration authority,
+  // not another manifest field or a green PostgreSQL suite exit. Focused unit
+  // contracts have no PostgreSQL command; canonical command validation above
+  // prevents removing it from the real registry to bypass this check.
+  if (commands.has('pr-c-postgres')) {
+    const fresh = registry.assertions.filter(assertion => assertion.assertionId === 'FRESH-PG16-DEFAULT-OFF');
+    assert(fresh.length === 1, 'PR_C_FRESH_CHAIN_MARKER_COUNT');
+    const marker = fresh[0];
+    assert(marker.commandId === 'pr-c-postgres' && marker.owner === 'postgres'
+      && marker.testId === 'DELIVERY-TR-006' && marker.fixture === 'fresh-pg16', 'PR_C_FRESH_CHAIN_MARKER_BINDING');
+    const tip = approvedFullChainTip(readdirSync(path.join(root, 'supabase/migrations'))
+      .filter(name => name.endsWith('.sql')).sort());
+    assert(marker.expectedRuntimeContext?.migrationTip === tip, 'PR_C_FRESH_CHAIN_MIGRATION_TIP');
+  }
   for (const command of registry.commands) {
     assert(typeof command.command === 'string' && command.command.length > 0, 'PR_C_COMMAND_INVALID');
     assert(typeof command.environment === 'string' && command.environment.length > 0, 'PR_C_COMMAND_ENVIRONMENT');

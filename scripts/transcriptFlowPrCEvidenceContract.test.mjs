@@ -75,6 +75,33 @@ const makeContract = () => ({
 
 const validates = value => validatePrCRegistryStructure(process.cwd(), value.registry, value.provenance, { verifyDigests: false });
 
+test('the canonical fresh PostgreSQL marker binds the independently approved full migration tail', () => {
+  const provenance = makeContract().provenance;
+  const result = validates({ registry: structuredClone(canonicalRegistry), provenance });
+  assert.equal(result.assertionCount, 221);
+});
+
+for (const [name, mutate, reason] of [
+  ['stale tip', marker => { marker.expectedRuntimeContext.migrationTip = '20260916181916'; }, 'MIGRATION_TIP'],
+  ['missing tip', marker => { delete marker.expectedRuntimeContext.migrationTip; }, 'MIGRATION_TIP'],
+  ['unapproved future tip', marker => { marker.expectedRuntimeContext.migrationTip = '20990101000000'; }, 'MIGRATION_TIP'],
+  ['substituted command', marker => { marker.commandId = 'pr-c-domain'; }, 'MARKER_BINDING'],
+  ['substituted owner', marker => { marker.owner = 'domain'; }, 'MARKER_BINDING'],
+  ['substituted Test ID', marker => { marker.testId = 'AUTH-002'; }, 'MARKER_BINDING'],
+  ['substituted fixture', marker => { marker.fixture = 'projection-rpc-postgrest-v1'; }, 'MARKER_BINDING'],
+  ['missing marker', (marker, registry) => { registry.assertions = registry.assertions.filter(value => value !== marker); }, 'MARKER_COUNT'],
+  ['duplicate marker', (marker, registry) => { registry.assertions.push({ ...structuredClone(marker), fixture: 'substituted' }); }, 'MARKER_COUNT'],
+]) {
+  test(`fresh PostgreSQL binding rejects ${name} before execution`, () => {
+    const registry = structuredClone(canonicalRegistry);
+    const marker = registry.assertions.find(value => value.assertionId === 'FRESH-PG16-DEFAULT-OFF');
+    assert.ok(marker);
+    mutate(marker, registry);
+    assert.throws(() => validates({ registry, provenance: makeContract().provenance }),
+      new RegExp(`PR_C_FRESH_CHAIN_${reason}`, 'u'));
+  });
+}
+
 class FakeCommandChild extends EventEmitter {
   constructor() {
     super();

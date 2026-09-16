@@ -1,6 +1,35 @@
 # Assess supporting-document mapping
 
-Status: native mapping and the subsequent projection-transaction correction passed the final 23-command local gate and 32 Desktop/Pixel scenarios. Exact retained-browser results, provenance reconciliation and external proof boundaries are recorded in the linked evidence reports. New exact-head CI, hosted upload and real-provider proof remain pending.
+Status: native mapping and the subsequent projection-transaction correction passed the final 23-command local gate and 32 Desktop/Pixel scenarios. Head `aba2a8e2011df5e9375cb909f19aecf35b10d950` passed 17 applicable workflows, including the exact-head 23-command native gate; PR C correctly rejected a stale registry migration-tip expectation. The bounded evidence-contract correction below requires fresh exact-head CI. Hosted upload and real-provider proof remain pending.
+
+### Exact-head CI migration-binding correction (2026-09-17)
+
+PR C run `35155097345`, attempt 1, executed the fresh PostgreSQL assertion
+`pr-c-postgres | postgres | DELIVERY-TR-006 | FRESH-PG16-DEFAULT-OFF | fresh-pg16`
+with actual runtime migration tip `20260916203406`, then rejected the registry's
+stale `20260916181916` expectation. Preserve that failed run: suite success does
+not override the exact marker mismatch. The other 17 applicable workflows passed;
+Hosted Pilot Live Acceptance remained intentionally skipped.
+
+The read-only reviewer closed before the controller resumed the fixed
+workspace-write phase. The correction changes this one runtime expectation based
+on its actual emitted marker and independently validates the exact marker tuple
+against `approvedFullChainTip` over the repository migration inventory. Regressions
+cover stale, missing and unapproved future tips; missing/duplicate markers; and
+substituted command, owner, Test ID and fixture. Canonical command equality prevents
+removing the PostgreSQL command to bypass the check. Historical PR A/B registries,
+the frozen human-backend tip, runtime product code and migration bytes are unchanged.
+
+Executed verification: the complete PR C evidence-contract command passed its
+migration/CI contracts, 64 tests and 81-command/221-assertion registry validation;
+all six migration-tail tests passed. Independent comparison of the retained actual
+CI marker matches the corrected expectation and still rejects its stale predecessor.
+This reconciliation is not new-head PostgreSQL execution. Current provenance and
+patch integrity passed. Planned verification: all 18 applicable workflows and the
+complete 81-command PR C pipeline on the new committed head.
+Earlier full native/local results remain bound to their own
+source/head. No exploratory activation until the new gates pass. Rollback is to
+hold release/read-only operation, not weaken evidence validation or reset data.
 
 ## Approval, baseline and execution boundary
 
