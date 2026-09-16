@@ -478,8 +478,8 @@ assert.equal(migrations.length, 1, 'PR C requires exactly one Delivery/Monitor i
 assert.equal(controlledHumanMigrations.length, 1, 'PR C requires exactly one controlled-human exercise authority migration');
 const migrationNames = readdirSync('supabase/migrations').filter(name => name.endsWith('.sql')).sort();
 assert.ok(migrationNames.indexOf(migrations[0]) < migrationNames.indexOf(controlledHumanMigrations[0]), 'controlled-human authority must follow the Delivery/Monitor implementation migration');
-// The old controlled-human backend remains pinned to its frozen tip. These three
-// approved default-off successors belong ONLY to the separate creation-access
+// The old controlled-human backend remains pinned to its frozen tip. The exact
+// approved default-off successor tail belongs ONLY to the separate full-chain
 // target; do not relabel or redeploy the retained human preparation evidence.
 const creationAccessSuccessors = PR_C_APPROVED_SUCCESSOR_TAIL;
 const assertCreationSuccessors = names => assert.deepEqual(names, creationAccessSuccessors,

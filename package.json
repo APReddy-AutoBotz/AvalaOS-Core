@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test:assess-import:harness": "node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs",
+    "test:assess-import:harness": "node --test scripts/rewriteTestModuleSpecifiers.test.mjs scripts/assessImportValidationContract.test.mjs scripts/runTranscriptFlowBrowser.test.mjs scripts/pr1dBrowserFixtureContract.test.mjs",
     "test:assess-import:authority": "node scripts/checkEnterpriseIntelligenceBoundaries.mjs && node --test scripts/enterpriseIntelligenceIdempotencyBoundary.test.mjs && node scripts/checkEnterpriseIntelligenceCiContract.mjs",
     "test:assess-import:browser": "node scripts/runTranscriptFlowBrowser.mjs --assess-import",
     "test:assess-import:ui": "node --test components/assess-v2/AssessSupportingDocumentIntake.test.ts components/assess-v2/assessDocumentUploadQueue.test.ts components/enterprise/AssessTranscriptCandidateReview.test.ts components/assess-v2/AssessV2Workspace.test.ts",
@@ -129,7 +129,7 @@
     "test:browser:pr1c": "playwright test pr1c.spec.ts",
     "test:browser": "playwright test",
     "test:browser:install": "playwright install chromium",
-    "lint:pr1d": "node scripts/checkPr1dSourceBoundaries.mjs && node scripts/checkPr1dMigrationContract.mjs && node scripts/checkAssessV2EdgeImports.mjs && node scripts/checkPr1dCi.mjs",
+    "lint:pr1d": "node scripts/checkPr1dSourceBoundaries.mjs && node --test scripts/pr1dBrowserFixtureContract.test.mjs && node scripts/checkPr1dMigrationContract.mjs && node scripts/checkAssessV2EdgeImports.mjs && node scripts/checkPr1dCi.mjs",
     "test:assess-v1-compatibility": "node scripts/runTypeScriptTest.mjs types.ts services/scoringEngine.ts services/assessV1Compatibility.ts services/assessV1Compatibility.test.ts",
     "test:assess-v2-rule-registry": "node scripts/runTypeScriptTest.mjs types.ts services/assessV2/types.ts services/assessV2/canonical.ts services/assessV2/registry.ts services/assessV2/evaluator.ts services/assessV2/decisionVersion.ts services/assessV2/fixture.ts services/assessV2/index.ts services/assessV2/assessV2.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/assessV2/types.ts services/assessV2/canonical.ts services/assessV2/canonical.test.ts",
     "test:assess-v2-command": "node scripts/runEdgeTypeScriptTest.mjs services/assessV2/types.ts services/assessV2/canonical.ts services/assessV2/registry.ts services/assessV2/evaluator.ts services/assessV2/decisionVersion.ts services/assessV2/fixture.ts services/assessV2/index.ts supabase/functions/_shared/tenantAuthority.ts supabase/functions/_shared/tenantAuthorityDb.ts supabase/functions/_shared/supabase.ts supabase/functions/_shared/assessV2Command.ts supabase/functions/_shared/assessV2Handlers.ts supabase/functions/_shared/assessV2Router.ts supabase/functions/_shared/assessV2Db.ts supabase/functions/_shared/assessV2Command.test.ts",

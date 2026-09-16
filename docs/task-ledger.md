@@ -2,6 +2,15 @@
 
 This ledger records the current canonical milestone status. Evidence links are historical records unless the Decision column says they are active blockers.
 
+Native Assess supporting-document mapping is implemented in the existing PR #264.
+Its first pushed head passed the feature gate but exposed retained identity and
+fixture-ownership integration defects. The bounded correction passed fresh/upgrade
+PostgreSQL, mapping/transcript persistence, recovery and final read-only reviews;
+the remaining current-source gates and exact-head release verification are active.
+See `docs/quality/assess-document-mapping-release-evidence.md`. Exploratory preview
+activation is authorized only after these gates; frozen human evidence, real
+providers, production and merge remain outside this continuation.
+
 Creation-access continuation: the separately approved exploratory draft at
 `3352f5ffeb08d493ec6202ce65dae28608e07502` passed actual Admin provisioning,
 author login, process/V2 creation, save, fresh-session reopen and signout, with

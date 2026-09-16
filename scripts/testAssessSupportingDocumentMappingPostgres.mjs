@@ -7,6 +7,7 @@ import {basename,dirname,join,resolve} from 'node:path';
 import pg from 'pg';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
 import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.mjs';
+import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 
 const adminUrl=validateAssessImportDatabaseUrl(process.env.ASSESS_DOCUMENT_MAPPING_POSTGRES_ADMIN_URL);
 
@@ -15,8 +16,11 @@ assert.ok(['127.0.0.1','localhost','::1'].includes(parsedAdmin.hostname),'Only a
 assert.equal(parsedAdmin.pathname,'/postgres','The PostgreSQL harness requires the disposable postgres admin database.');
 const {Client}=pg;
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
+const expectedFullChainTip=approvedFullChainTip(migrations);
 const feature='20260916083814_assess_supporting_document_mapping.sql';
-assert.equal(migrations.at(-1),feature,'Assess mapping must be the exact ordered migration tip.');
+const finalIdentity='20260916151050_assess_document_mapping_identity_convergence.sql';
+assert.equal(migrations.at(-1),finalIdentity,'Assess mapping must end at the exact approved identity-convergence tip.');
+assert.equal(migrations.indexOf(finalIdentity),migrations.indexOf(feature)+1,'Identity convergence must immediately follow the frozen mapping migration.');
 const databaseName=`assess_map_${process.pid}_${Date.now()}`;
 assert.match(databaseName,/^[a-z0-9_]+$/);
 const clients=[];
@@ -60,6 +64,11 @@ try{
     await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
   }
   assert.ok(fixture);
+  assert.equal((await database.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton IS TRUE')).rows[0].migration_tip,expectedFullChainTip);
+  assert.equal((await database.query(`SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
+    WHERE conrelid='public.hosted_pilot_environment_identity'::regclass
+      AND conname='hosted_pilot_environment_identity_migration_tip_check'`)).rows[0].expression,
+    `(migration_tip = '${expectedFullChainTip}'::text)`);
   const upgradedFlag=(await database.query('SELECT assess_document_mapping_enabled FROM public.enterprise_transcript_workspace_flags WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace])).rows[0];
   assert.equal(upgradedFlag.assess_document_mapping_enabled,false);
   pass('MAP-PG-001-populated-default-off','pre-existing workspace remains disabled after forward migration');

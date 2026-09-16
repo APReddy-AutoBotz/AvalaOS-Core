@@ -4,6 +4,12 @@ Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 No gate passes without evidence, verification, and AP acceptance where required. Historical evidence proves a gate state at the time it was written; current gate status is maintained here and in `docs/task-ledger.md`.
 
+Native Assess document mapping: source/local implementation is complete; release
+integration remains an active gate in `docs/quality/assess-document-mapping-release-evidence.md`.
+The first feature CI pass does not close retained workflow failures, current-head
+preview verification, real-provider proof or controlled-human acceptance. No merge
+or production readiness is claimed by this enhancement.
+
 ## Active Enterprise Blocking Gates
 
 | Order | Gate | Current status | Pass evidence |

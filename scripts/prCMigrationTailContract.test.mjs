@@ -16,8 +16,9 @@ test('only the exact approved creation-access successor tail is accepted', () =>
     [],
     PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 1),
     PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
+    ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
-    [PR_C_APPROVED_SUCCESSOR_TAIL[1], PR_C_APPROVED_SUCCESSOR_TAIL[0], PR_C_APPROVED_SUCCESSOR_TAIL[2]],
+    [PR_C_APPROVED_SUCCESSOR_TAIL[1], PR_C_APPROVED_SUCCESSOR_TAIL[0], ...PR_C_APPROVED_SUCCESSOR_TAIL.slice(2)],
     [...PR_C_APPROVED_SUCCESSOR_TAIL, PR_C_APPROVED_SUCCESSOR_TAIL[2]],
     [...PR_C_APPROVED_SUCCESSOR_TAIL, '20990101000000_unapproved.sql'],
   ]) {
@@ -29,8 +30,9 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916083814');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916151050');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
+    ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
     [...PR_C_APPROVED_SUCCESSOR_TAIL, '20990101000000_unapproved.sql']]) {
     assert.throws(() => approvedFullChainTip([...frozenPrefix, ...tail]));
@@ -55,4 +57,55 @@ test('forward identity convergence requires exact frozen marker, predecessors, a
   assert.match(sql, /SET migration_tip = '20260916003000'/u);
   assert.match(sql, /CHECK \(migration_tip = ''20260916003000''\)/u);
   assert.doesNotMatch(sql.replace(/^--.*$/gmu, ''), /(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu);
+});
+
+test('mapping identity convergence is exact, atomic, and rejects adversarial contract mutations', () => {
+  const path = 'supabase/migrations/20260916151050_assess_document_mapping_identity_convergence.sql';
+  const sql = readFileSync(path, 'utf8');
+  const required = [
+    'LOCK TABLE public.hosted_pilot_environment_identity IN SHARE ROW EXCLUSIVE MODE',
+    'public.pr_c_controlled_human_recovery_authorities IN SHARE MODE',
+    'singleton_count <> 1',
+    'FOR UPDATE',
+    "marker.product_key <> 'avalaos-core'",
+    "marker.environment_class <> 'hosted_nonproduction_pilot'",
+    "marker.schema_contract <> 'hosted-pilot-2026-08'",
+    'marker.production_authorized',
+    'marker.customer_data_authorized',
+    'marker.real_provider_calls_authorized',
+    "attribute_row.attname = 'assess_document_mapping_enabled'",
+    "marker.migration_tip <> '20260916003000'",
+    "old_constraint_expression IS DISTINCT FROM '(migration_tip = ''20260916003000''::text)'",
+    "SET migration_tip = '20260916151050'",
+    "CHECK (migration_tip = '20260916151050')",
+    'GET DIAGNOSTICS changed_count = ROW_COUNT',
+    'changed_count <> 1',
+    'exercise_count <> 0 OR recovery_count <> 0',
+    "to_regprocedure('public.enterprise_commit_assess_document_mapping_preview_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,uuid,uuid,uuid,bigint,uuid,uuid,bigint)')",
+  ];
+  for (const marker of required) assert.ok(sql.includes(marker), `missing identity contract: ${marker}`);
+  for (const relation of [
+    'catalogs','targets','runs','run_sources','proposals','reviews','preview_batches','preview_items',
+    'conflicts','conflict_resolutions','preview_manifests','applications',
+  ]) assert.ok(sql.includes(`public.enterprise_assess_document_mapping_${relation}`));
+  for (const flag of ['production_authorized','customer_data_authorized','real_provider_calls_authorized']) {
+    assert.ok(sql.includes(`marker.${flag}`));
+    assert.ok(sql.includes(`NOT ${flag}`));
+  }
+  assert.doesNotMatch(sql.replace(/^--.*$/gmu, ''), /(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu);
+
+  const validates = candidate => required.every(marker => candidate.includes(marker))
+    && ['catalogs','targets','runs','run_sources','proposals','reviews','preview_batches','preview_items',
+      'conflicts','conflict_resolutions','preview_manifests','applications']
+      .every(relation => candidate.includes(`public.enterprise_assess_document_mapping_${relation}`));
+  assert.equal(validates(sql), true);
+  for (const hostile of [
+    ...required.map(marker => sql.replace(marker, 'removed_precondition')),
+    sql.replace("marker.migration_tip <> '20260916003000'", "marker.migration_tip <> '20260904120000'"),
+    sql.replace("SET migration_tip = '20260916151050'", "SET migration_tip = '20260916003000'"),
+    sql.replace("CHECK (migration_tip = '20260916151050')", "CHECK (migration_tip = '20260916003000')"),
+    sql.replace('changed_count <> 1', 'changed_count < 1'),
+    sql.replace('exercise_count <> 0 OR recovery_count <> 0', 'exercise_count <> 0'),
+    sql.replace('public.enterprise_assess_document_mapping_applications', 'public.removed_mapping_authority'),
+  ]) assert.equal(validates(hostile), false);
 });

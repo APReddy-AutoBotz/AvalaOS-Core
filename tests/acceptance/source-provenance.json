@@ -7,7 +7,7 @@
     "components/enterprise/AssessTranscriptCandidateReview.tsx": "sha256:d8f20fedb16ee3d9d600fde6b3c2ddd779f7d23899d8bb6d54dbd1cf4b39b6d4",
     "components/enterprise/EnterpriseIntelligenceView.tsx": "sha256:132f10c6e47ec2357a479e7011e9ef0aa2f28701fa3e183cc5a368ffe37f5f84",
     "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
-    "package.json": "sha256:aa8c667619d8fbcdeff79e754ea022e97472b2798b0eb4f241561ac9f5f740ad",
+    "package.json": "sha256:bbef20868233db16373be38185b49a10959d318dbdaca59d7bd6feec31830c87",
     "vite.config.ts": "sha256:3692e5623118c7ac6af652c0c5a5730124212fe25e97759425229a29c14f2fef",
     "playwright.config.ts": "sha256:50987b86f28316d46530c6a32dc95008f8894b2975aa50bac4669fe237a831ad",
     "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
