@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {test} from 'node:test';
+import {
+  XLSX_INGESTION_MIGRATION_PATH,
+  XLSX_INGESTION_FROZEN_AUTHORITY_PATH,
+  XLSX_INGESTION_FROZEN_CLASSIFIER_PATH,
+  assertAssessDocumentXlsxIngestionMigration,
+  buildAssessDocumentXlsxIngestionAdversaries,
+  buildFrozenEnterpriseSourceVersionAdversaries,
+  buildFrozenAssessClassifierAdversaries,
+} from './assessDocumentXlsxIngestionMigrationContract.mjs';
 
 const path='supabase/migrations/20260916083814_assess_supporting_document_mapping.sql';
 const sql=await readFile(path,'utf8');
-const check=(name,test)=>{assert.ok(test,name);console.log(`ASSESS_DOCUMENT_MAPPING_ASSERTION ${JSON.stringify({testId:name,result:'passed',source:path})}`)};
+const xlsxSql=await readFile(XLSX_INGESTION_MIGRATION_PATH,'utf8');
+const frozenAuthoritySql=await readFile(XLSX_INGESTION_FROZEN_AUTHORITY_PATH,'utf8');
+const frozenClassifierSql=await readFile(XLSX_INGESTION_FROZEN_CLASSIFIER_PATH,'utf8');
+const check=(name,test,source=path)=>{assert.ok(test,name);console.log(`ASSESS_DOCUMENT_MAPPING_ASSERTION ${JSON.stringify({testId:name,result:'passed',source})}`)};
 
 check('MAP-MIG-001-default-off',/assess_document_mapping_enabled boolean NOT NULL DEFAULT false/.test(sql));
 check('MAP-MIG-002-xlsx-bounded',sql.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')&&sql.includes("'xlsx'"));
@@ -34,4 +47,28 @@ check('MAP-MIG-026-exact-latest-manifest-commit',sql.includes('ORDER BY manifest
 check('MAP-MIG-027-canonical-fact-aliases',sql.includes('enterprise_assess_document_normalize_primitive_facts')&&sql.includes('ENTERPRISE_ASSESS_DOCUMENT_MAPPING_FACT_ALIAS_CONFLICT')&&sql.includes("fact:=jsonb_set(fact,'{fieldId}',to_jsonb(canonical),true)"));
 check('MAP-MIG-028-stage-completeness',sql.includes("'targetCount','sourceCount'")&&sql.includes("(p_result->>'targetCount')::integer IS DISTINCT FROM")&&sql.includes("(p_result->>'sourceCount')::integer IS DISTINCT FROM"));
 
-console.log('Assess supporting-document mapping migration contract: 28/28 passed.');
+const xlsxContract=assertAssessDocumentXlsxIngestionMigration(xlsxSql,frozenAuthoritySql,frozenClassifierSql);
+check('MAP-MIG-029-xlsx-trigger-registration',xlsxSql.includes("WHEN 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' THEN 'xlsx'"),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-030-xlsx-retains-parser-version',xlsxSql.includes("NEW.parser_version := COALESCE(NULLIF(btrim(NEW.parser_version), ''), 'enterprise-parser-1')")&&!xlsxSql.includes('spreadsheet-grid-v1'),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-031-xlsx-exact-predecessor',xlsxContract.predecessorTip==='20260916151050'&&xlsxContract.currentTip==='20260916181916',XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-032-xlsx-trigger-identity',xlsxSql.includes('trigger_row.tgtype = 7')&&xlsxSql.includes('trigger_row.tgfoid = source_function_oid'),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-033-xlsx-function-identity',xlsxSql.includes('replacement_function_oid IS DISTINCT FROM source_function_oid')&&xlsxSql.includes('replacement_function_acl IS DISTINCT FROM old_function_acl'),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-034-xlsx-history-gate',xlsxSql.includes('exercise_count <> 0 OR recovery_count <> 0'),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-035-xlsx-schema-contracts',xlsxSql.includes("constraint_row.conname = 'enterprise_evidence_sources_mime_type_check'")&&xlsxSql.includes("constraint_row.conname = 'enterprise_evidence_source_versions_parser_kind_check'"),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-036-xlsx-retained-formats',xlsxContract.retainedParserCaseCount===9,XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-037-xlsx-assess-document-classification',xlsxSql.includes("CREATE OR REPLACE FUNCTION public.enterprise_assess_v2_source_type(")&&xlsxSql.includes("RETURN 'document'"),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-038-xlsx-classifier-authority-preserved',xlsxSql.includes("(to_jsonb(classifier_after)-'prosrc') IS DISTINCT FROM (to_jsonb(classifier_before)-'prosrc')")&&xlsxSql.includes('LANGUAGE plpgsql IMMUTABLE STRICT SET search_path = pg_catalog'),XLSX_INGESTION_MIGRATION_PATH);
+
+test('XLSX ingestion migration rejects authority and provenance substitutions',()=>{
+  for(const adversary of buildAssessDocumentXlsxIngestionAdversaries(xlsxSql)){
+    assert.throws(()=>assertAssessDocumentXlsxIngestionMigration(adversary.sql,frozenAuthoritySql,frozenClassifierSql),undefined,adversary.name);
+  }
+  for(const adversary of buildFrozenEnterpriseSourceVersionAdversaries(frozenAuthoritySql)){
+    assert.throws(()=>assertAssessDocumentXlsxIngestionMigration(xlsxSql,adversary.sql,frozenClassifierSql),undefined,adversary.name);
+  }
+  for(const adversary of buildFrozenAssessClassifierAdversaries(frozenClassifierSql)){
+    assert.throws(()=>assertAssessDocumentXlsxIngestionMigration(xlsxSql,frozenAuthoritySql,adversary.sql),undefined,adversary.name);
+  }
+});
+
+console.log('Assess supporting-document mapping migration contract: 38/38 passed.');

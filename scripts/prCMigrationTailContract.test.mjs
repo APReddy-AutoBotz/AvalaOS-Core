@@ -7,6 +7,15 @@ import {
   assertPrCMigrationTail,
   approvedFullChainTip,
 } from './prCMigrationTailContract.mjs';
+import {
+  XLSX_INGESTION_MIGRATION_PATH,
+  XLSX_INGESTION_FROZEN_AUTHORITY_PATH,
+  XLSX_INGESTION_FROZEN_CLASSIFIER_PATH,
+  assertAssessDocumentXlsxIngestionMigration,
+  buildAssessDocumentXlsxIngestionAdversaries,
+  buildFrozenEnterpriseSourceVersionAdversaries,
+  buildFrozenAssessClassifierAdversaries,
+} from './assessDocumentXlsxIngestionMigrationContract.mjs';
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
 
@@ -30,7 +39,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916151050');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260916181916');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -43,6 +52,26 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(runner, /upgrade\.query\([^\n]+migration_tip[^\n]+,'20260831062024'\)/u);
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
+});
+
+test('XLSX ingestion successor preserves exact function and environment authority', () => {
+  const sql = readFileSync(XLSX_INGESTION_MIGRATION_PATH, 'utf8');
+  const frozenAuthoritySql = readFileSync(XLSX_INGESTION_FROZEN_AUTHORITY_PATH, 'utf8');
+  const frozenClassifierSql = readFileSync(XLSX_INGESTION_FROZEN_CLASSIFIER_PATH, 'utf8');
+  assert.deepEqual(assertAssessDocumentXlsxIngestionMigration(sql, frozenAuthoritySql, frozenClassifierSql), {
+    predecessorTip: '20260916151050',
+    currentTip: '20260916181916',
+    retainedParserCaseCount: 9,
+  });
+  for (const adversary of buildAssessDocumentXlsxIngestionAdversaries(sql)) {
+    assert.throws(() => assertAssessDocumentXlsxIngestionMigration(adversary.sql, frozenAuthoritySql, frozenClassifierSql), undefined, adversary.name);
+  }
+  for (const adversary of buildFrozenEnterpriseSourceVersionAdversaries(frozenAuthoritySql)) {
+    assert.throws(() => assertAssessDocumentXlsxIngestionMigration(sql, adversary.sql, frozenClassifierSql), undefined, adversary.name);
+  }
+  for (const adversary of buildFrozenAssessClassifierAdversaries(frozenClassifierSql)) {
+    assert.throws(() => assertAssessDocumentXlsxIngestionMigration(sql, frozenAuthoritySql, adversary.sql), undefined, adversary.name);
+  }
 });
 
 test('forward identity convergence requires exact frozen marker, predecessors, and non-production flags', () => {

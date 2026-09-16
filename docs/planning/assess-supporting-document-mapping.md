@@ -124,6 +124,74 @@ substitution adversaries. Exact results and the retained intermediate failed
 browser/build-overlap attempt are in the corrective evidence report above.
 Commit/push, fresh exact-head CI and exploratory resumption remain the next gates.
 
+### XLSX ingestion corrective checkpoint
+
+The projection correction was committed and pushed as
+`e3ca6930eca8b79f9f03d5178753331eac8d9124`. Its native mapping CI passed, but
+the controller's final release inspection found a second **confirmed source
+defect** before any replacement deployment or upload: the source-version
+database trigger does not register the XLSX MIME type. The table constraints,
+UI and Edge parser accept XLSX; actual receipt-backed source creation still
+rejects it before extraction. Read-only inspection confirmed that installed
+behavior, with zero exploratory sources and zero provider-usage rows.
+
+Both read-only architecture and quality reviewers closed before implementation.
+The controller synthesized their findings: the existing mapping PostgreSQL
+fixture relabelled CSV metadata, and browser transport mocks bypassed real
+source creation. Neither is proof of the missing ingestion boundary.
+
+Wave 2 has two direct, non-recursive implementation workers with exclusive
+ownership: one owns the CLI-generated
+`20260916181916_assess_document_xlsx_ingestion_authority.sql`, static adversarial
+contracts and the exact migration tail; the other owns real receipt-backed
+PostgreSQL source creation and fresh/populated upgrade tests. The controller
+owns integration, active documentation, evidence/provenance and release gates.
+The fixed workspace-write profile is used only for this approved correction;
+no read-only reviewer remains active during writes.
+
+The forward migration must preserve all existing formats, source scope/storage
+rules, invoker security, privileges, scoring and feature defaults. It validates
+the exact predecessor marker/constraint, trigger/function and XLSX schema,
+locks the synthetic identity and both controlled-human history inventories,
+rejects unsafe identity/history, and atomically advances only the parser
+registration, native document classification and marker/check. It must preserve both an enabled exploratory
+workspace and a default-disabled fresh workspace.
+
+Acceptance requires a real old-tip XLSX rejection with no database effects,
+then actual receipt-backed XLSX create/extract/complete/replay at the new tip;
+the mapping source set must use that persisted XLSX version, and an actually
+applied non-conflicting proposal must bind its cell value and persisted evidence.
+Unsupported MIME,
+wrong scope/storage binding, forged parser metadata, stale receipt and migration
+precondition mutations are negative controls. Fresh and populated upgrades,
+retained formats, Pilot Operations/PR C, all 22 current-source commands and exact
+head CI must pass before applying the correction to the exploratory target.
+Serialize static build and browser validation to avoid shared-output interference.
+Prior attempts remain historical, not relabelled current-source proof.
+
+The real-database continuation exposed a further XLSX omission in
+`enterprise_assess_v2_source_type`: creation succeeded after the trigger
+correction, but native Apply rejected its document evidence. A closed read-only
+downstream review found no other MIME-specific gate on this path. The controller
+extends the same unapplied migration with exactly this classifier correction,
+preserving its complete metadata, invoker/STRICT/IMMUTABLE semantics and all
+retained formats. No third function or grant is allowed. Both old bodies are
+hash-bound before either replacement, and identity advances only after both
+postconditions pass. Direct classifier and evidence-builder checks accompany
+full XLSX application, fresh-session native parsing and no-extra-effect replay.
+
+The earlier negative-test helper could catch its own assertion failure. It is
+replaced by `assert.rejects`, with independent tests for matching failure,
+unexpected success and wrong failure. A version-only foreign-scope input is
+canonically normalized by the existing source RPC; actual rejection tests now
+substitute source and version scope together, and normalization has a separate
+positive countercontrol. Neither fixture expectation changes product authority.
+
+Rollback is feature disablement/read-only operation with retained source and
+receipt history; never edit applied migration bytes or reset accounts/data.
+The frozen human backend, real providers, production and merge remain outside
+this correction. Hosted upload proof remains pending.
+
 ### Subsequent release approval
 
 After local completion AP approved commit/push on the existing PR #264 branch, exact-head CI verification and activation in the separately approved exploratory synthetic preview. This narrow approval supersedes the implementation-only hosted-action prohibition above, but not the production, AvalaOS.com, real-provider, customer-data, merge or frozen controlled-human-backend boundaries. Keep the existing usable draft pinned until a replacement is independently verified. Confirm the exact exploratory project, installed predecessor migration and function source before any mutation; preserve existing synthetic accounts and data. Apply only the reviewed forward migration and required Edge dependencies, verify installed schema/authorization and use an immutable preview bound to the committed source. Upload/manual and missing-provider fail-closed checks may run with synthetic documents; do not invent AI success, enable real keys/routes or bypass provider authority to make analysis appear ready. If a live AI path is required, stop for separate capped-budget approval. Preserve sanitized exact-head/run/attempt/deploy evidence without rewriting the completed local report or historical human evidence. Rollback disables new effects and preserves immutable history; no destructive reset or new branch/PR is authorized.
