@@ -186,6 +186,18 @@ const raw = (): EnterpriseIntelligenceRawProjection => ({
   transcriptExtractionBindings: [],
   transcriptJobs: [],
   transcriptStalenessEvents: [],
+  mappingCatalogs: [],
+  mappingTargets: [],
+  mappingRuns: [],
+  mappingRunSources: [],
+  mappingProposals: [],
+  mappingReviews: [],
+  mappingPreviewBatches: [],
+  mappingPreviewManifests: [],
+  mappingPreviewItems: [],
+  mappingConflicts: [],
+  mappingConflictResolutions: [],
+  mappingApplications: [],
 });
 
 const projection = buildEnterpriseIntelligenceProjection(authority(), raw(), new Date('2026-08-04T09:00:00.000Z'));
@@ -198,6 +210,73 @@ assert.equal(projection.evidenceCandidates[0].provenanceState, 'anchored');
 assert.equal(projection.assessDrafts[0].versionLabel, 'Draft version 2');
 assert.equal(projection.applications[0].approvedAssessmentLabel, 'Approved assessment v3');
 assert.equal(projection.studioDocuments[0].approvedVersionLabel, 'Approved version 4');
+
+const mappingRaw = raw();
+const mappingCatalog = '19000000-0000-4000-8000-000000000001';
+const mappingSelector = '19000000-0000-4000-8000-000000000002';
+const mappingRun = '19000000-0000-4000-8000-000000000003';
+const mappingBundle = '19000000-0000-4000-8000-000000000004';
+const mappingBundleVersion = '19000000-0000-4000-8000-000000000005';
+const mappingJob = '19000000-0000-4000-8000-000000000006';
+mappingRaw.transcriptFlags = [{ assess_document_mapping_enabled: true }];
+mappingRaw.mappingCatalogs = [{ id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2, assess_schema_version: 'assess-v2-schema-2026-07', catalog_version: 1, catalog_hash: 'f'.repeat(64), status: 'current', created_at: '2026-08-04T08:00:00.000Z' }];
+mappingRaw.mappingTargets = [{ selector_id: mappingSelector, catalog_id: mappingCatalog, target_kind: 'case_field', operation: 'set_field', entity_id: null, field_id: 'case.description', label: 'Description', context_label: 'Synthetic case', value_type: 'text', allowed_values: null, current_value: 'Manual', current_value_hash: 'e'.repeat(64), manual: true, ordinal: 1 }];
+mappingRaw.mappingRuns = [{ id: mappingRun, catalog_id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'committed',
+  safe_result: { proposalCount: 0, targetCount: 1, sourceCount: 1, warnings: ['SOURCE_PARSER_WARNING:HIDDEN_SHEETS_EXCLUDED'], analyzedSources: [{ sourceId: SOURCE, sourceVersionId: SOURCE_VERSION, parserVersion: 'spreadsheet-grid-v1', extractedByteCount: 42, sheetCount: 1, cellCount: 2, warnings: ['HIDDEN_SHEETS_EXCLUDED'] }] }, created_at: '2026-08-04T08:00:00.000Z' }];
+mappingRaw.mappingRunSources = [{ run_id: mappingRun, extraction_binding_id: '19000000-0000-4000-8000-000000000007', extraction_job_id: mappingJob, source_id: SOURCE, source_version_id: SOURCE_VERSION, parser_version: 'spreadsheet-grid-v1', normalized_hash: 'd'.repeat(64), extracted_byte_count: 42, ordinal: 1 }];
+const mappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, mappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(mappingProjection.features.enabled, true);
+assert.equal(mappingProjection.catalogs[0].targets[0].fieldId, 'case.description');
+assert.equal(mappingProjection.runs[0].projectionComplete, true);
+assert.deepEqual(mappingProjection.runs[0].analyzedSources?.[0].warnings, ['HIDDEN_SHEETS_EXCLUDED']);
+const mappingProposal = '19000000-0000-4000-8000-000000000008';
+const mappingPreview = '19000000-0000-4000-8000-000000000009';
+const mappingItemBindingHash = '9'.repeat(64);
+const completeMappingRaw = structuredClone(mappingRaw);
+completeMappingRaw.mappingRuns[0].safe_result = { ...(completeMappingRaw.mappingRuns[0].safe_result as Record<string, unknown>), proposalCount: 1 };
+completeMappingRaw.mappingProposals = [{ id: mappingProposal, run_id: mappingRun, catalog_id: mappingCatalog, target_selector_id: mappingSelector,
+  proposal_version: 1, proposed_value: 'Mapped', confidence: 0.9, rationale: 'Synthetic source statement', source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  extraction_binding_id: '19000000-0000-4000-8000-000000000007', extraction_job_id: mappingJob, parser_version: 'spreadsheet-grid-v1',
+  source_locator: 'sheet:"Sheet1";cell:A1', anchor_hash: '8'.repeat(64), safe_excerpt: 'Mapped', relationship: 'neutral', status: 'suggested', created_at: '2026-08-04T08:01:00.000Z' }];
+completeMappingRaw.mappingReviews = [{ proposal_id: mappingProposal, version: 1, status: 'accepted', reviewed_value: 'Mapped', reviewer_id: USER, created_at: '2026-08-04T08:02:00.000Z' }];
+completeMappingRaw.mappingPreviewBatches = [{ id: mappingPreview, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64), assess_case_id: ASSESS_DRAFT,
+  expected_case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'previewed', expires_at: '2099-08-05T08:00:00.000Z', created_at: '2026-08-04T08:03:00.000Z' }];
+completeMappingRaw.mappingPreviewItems = [{ preview_batch_id: mappingPreview, proposal_id: mappingProposal, target_selector_id: mappingSelector,
+  proposal_version: 1, reviewed_value: 'Mapped', binding_hash: mappingItemBindingHash, ordinal: 1 }];
+completeMappingRaw.mappingPreviewManifests = [{ preview_batch_id: mappingPreview, manifest_version: 1, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64),
+  assess_case_id: ASSESS_DRAFT, case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion,
+  target_count: 1, source_count: 1, item_count: 1, reviewed_count: 1, conflict_count: 0, unresolved_conflict_count: 0,
+  item_set_hash: '7'.repeat(64), conflict_set_hash: '6'.repeat(64), resolution_set_hash: '5'.repeat(64), displayed_set_hash: '4'.repeat(64),
+  item_bindings: [{ ordinal: 1, proposalId: mappingProposal, proposalVersion: 1, targetSelectorId: mappingSelector, reviewedValue: 'Mapped', bindingHash: mappingItemBindingHash }],
+  conflict_bindings: [], resolution_bindings: [] }];
+const completeMappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, completeMappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(completeMappingProjection.runs[0].projectionComplete, true);
+assert.equal(completeMappingProjection.previews[0].projectionComplete, true);
+assert.equal(completeMappingProjection.previews[0].status, 'ready');
+const omittedMappingItemRaw = structuredClone(completeMappingRaw); omittedMappingItemRaw.mappingPreviewItems = [];
+const omittedMappingItemProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, omittedMappingItemRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(omittedMappingItemProjection.previews[0].projectionComplete, false);
+assert.equal(omittedMappingItemProjection.previews[0].status, 'blocked');
+const substitutedMappingItemRaw = structuredClone(completeMappingRaw); substitutedMappingItemRaw.mappingPreviewItems[0].reviewed_value = 'Substituted';
+const substitutedMappingItemProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, substitutedMappingItemRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(substitutedMappingItemProjection.previews[0].projectionComplete, false);
+assert.equal(substitutedMappingItemProjection.previews[0].status, 'blocked');
+const failedMappingRaw = { ...mappingRaw, mappingRuns: [{ ...mappingRaw.mappingRuns[0], status: 'failed',
+  failure_code: 'SECRET_UNAVAILABLE', safe_result: { failureCode: 'SECRET_UNAVAILABLE' }, updated_at: '2026-08-04T08:30:00.000Z' }] };
+const failedMappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, failedMappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(failedMappingProjection.runs[0].state, 'failed');
+assert.equal(failedMappingProjection.runs[0].failureCode, 'PROVIDER_UNAVAILABLE');
+assert.equal(failedMappingProjection.runs[0].updatedAt, '2026-08-04T08:30:00.000Z');
 assert.equal(projection.deliveryPackages[0].lineageState, 'complete');
 assert.equal(projection.monitorBaselines[0].liveTelemetryConnected, false);
 assert.equal(projection.modernizationDecisions[0].assembleEligible, true);
@@ -595,6 +674,30 @@ assert.deepEqual(
   [],
   'mutation-only service-role path requests no transcript read collection',
 );
+
+const scopedMappingPaths: string[] = [];
+const scopedMappingDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  if (path.startsWith('enterprise_assess_document_mapping_')) scopedMappingPaths.push(path);
+  if (path.startsWith('enterprise_assess_document_mapping_catalogs?')) return [{ id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2,
+    assess_schema_version: 'assess-v2-schema-2026-07', catalog_version: 1, catalog_hash: 'f'.repeat(64), status: 'current', created_at: '2026-08-04T08:00:00.000Z' }] as T;
+  if (path.startsWith('enterprise_assess_document_mapping_runs?')) return [{ id: mappingRun, catalog_id: mappingCatalog, assess_case_id: ASSESS_DRAFT,
+    case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'committed', safe_result: {}, created_at: '2026-08-04T08:00:00.000Z' }] as T;
+  if (path.startsWith('enterprise_assess_document_mapping_preview_batches?')) return [{ id: mappingPreview, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64),
+    assess_case_id: ASSESS_DRAFT, expected_case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion,
+    status: 'previewed', expires_at: '2099-08-05T08:00:00.000Z', created_at: '2026-08-04T08:03:00.000Z' }] as T;
+  return [] as T;
+});
+await scopedMappingDatabase.loadProjectionRows({ ...authority(), capabilities: ['assess.v2.read', 'transcript.sources.read'] }, {
+  assessDocumentMappingScope: { caseId: ASSESS_DRAFT, caseVersion: 2, inputBundleId: mappingBundle, inputBundleVersionId: mappingBundleVersion },
+});
+const mappingPath = (table: string) => scopedMappingPaths.find(path => path.startsWith(`${table}?`)) || '';
+assert.match(mappingPath('enterprise_assess_document_mapping_catalogs'), new RegExp(`assess_case_id=eq\\.${ASSESS_DRAFT}.*case_version=eq\\.2.*status=eq\\.current.*limit=1`));
+assert.match(mappingPath('enterprise_assess_document_mapping_targets'), new RegExp(`catalog_id=eq\\.${mappingCatalog}.*limit=2000`));
+assert.match(mappingPath('enterprise_assess_document_mapping_runs'), new RegExp(`assess_case_id=eq\\.${ASSESS_DRAFT}.*case_version=eq\\.2.*catalog_id=eq\\.${mappingCatalog}.*input_bundle_id=eq\\.${mappingBundle}.*input_bundle_version_id=eq\\.${mappingBundleVersion}.*limit=1`));
+assert.match(mappingPath('enterprise_assess_document_mapping_preview_batches'), new RegExp(`preview_batches\\?.*assess_case_id=eq\\.${ASSESS_DRAFT}.*expected_case_version=eq\\.2.*catalog_id=eq\\.${mappingCatalog}.*input_bundle_id=eq\\.${mappingBundle}.*input_bundle_version_id=eq\\.${mappingBundleVersion}.*limit=1`));
+assert.ok(scopedMappingPaths.every(path => path.includes(`catalog_id=eq.${mappingCatalog}`) || path.includes(`run_id=eq.${mappingRun}`)
+  || path.includes(`preview_batch_id=eq.${mappingPreview}`) || path.startsWith('enterprise_assess_document_mapping_catalogs?')),
+'case/head/bundle scoped child queries stay usable after unrelated workspace history exceeds the former global limits');
 
 const deliveryProjectionQueries: Array<Record<string, unknown>> = [];
 const boundedDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(

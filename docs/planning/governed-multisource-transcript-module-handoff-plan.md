@@ -1,5 +1,7 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
+Current scope extension: on 2026-09-16 AP explicitly approved the native Assess supporting-document implementation in `docs/planning/assess-supporting-document-mapping.md`, including bounded CSV/XLSX. The text-only limit below describes the original PR A/B/C workstream and does not prohibit this separately approved extension. Earlier acceptance/evidence is preserved, not retroactively extended to the new formats or typed mapping. Assess and Studio remain independent source consumers; no automatic handoff or approval is added.
+
 Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized PR C corrective continuation and remains merge NO-GO pending full exact-head verification
 
 Plan date: 2026-08-25

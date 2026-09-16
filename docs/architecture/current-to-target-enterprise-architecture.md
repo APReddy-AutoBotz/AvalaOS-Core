@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Native Assess supporting-document mapping boundary
+
+The active approved extension is specified in `docs/planning/assess-supporting-document-mapping.md`. Native Assess intake reuses private immutable sources, module-specific source sets/bundles, server provider routing/budgets and explicit review; it does not grant the browser AI or database authority. A versioned typed target catalog and full canonical Assess adapter replace unsafe free-text/label-only structural application. Server-generated spreadsheet coordinates, fresh canonical capability conjunctions, exact case/source/proposal versions, manual conflicts and one atomic immutable draft application are enforced. Complete versioned preview manifests bind the displayed final conflict values, and exact-scope projections and source-root locks prevent partial/stale applicability. Local implementation, the 22-command feature gate and bounded corrective reviews are recorded in `docs/quality/assess-supporting-document-mapping-evidence.md`. The feature remains default-off in source. AP-approved release verification may activate only the separate exploratory synthetic preview after exact-head checks, preserving the frozen human backend and zero real-provider configurations. Hosted success and readiness must not be inferred from local proof.
+
 ## Creation-access and isolated synthetic administration
 
 The active focused repair is routed through

@@ -18,6 +18,12 @@ import {
   type EnterpriseIntelligenceProjection,
 } from './enterpriseIntelligence';
 import type { TranscriptAssessApplicationIntent } from './transcriptFlow/contracts';
+import {
+  ASSESS_DOCUMENT_MAPPING_MAX_PROPOSALS,
+  isAssessMappingJsonValue,
+  type AssessMappingJsonValue,
+  type AssessMappingPreviewManifest,
+} from './assessImport/contracts';
 import { validateTranscriptSourceSetSelection } from './transcriptFlow/sourceSets';
 import {
   buildDeliveryMonitorSelectorPayload,
@@ -140,6 +146,9 @@ const errorMessages: Record<string, string> = {
   TRANSCRIPT_SOURCE_SET_DUPLICATE_VERSION: 'The same exact source version cannot appear twice in one source set.',
   TRANSCRIPT_ASSESS_MATERIAL_CONFLICT_UNRESOLVED: 'Resolve every material conflict before applying or finalizing this Assess draft.',
   TRANSCRIPT_ASSESS_TARGET_STALE: 'The Assess draft or preview changed. Reload and preview the exact changes again.',
+  ASSESS_DOCUMENT_MAPPING_DISABLED: 'Supporting-document mapping is disabled for this workspace.',
+  SOURCE_TOO_LARGE: 'The selected documents exceed the bounded AI analysis size. No provider call was made.',
+  ASSESS_DOCUMENT_MAPPING_STALE: 'The Assess draft, source bundle, or mapping catalog changed. Reload before continuing.',
   ENTERPRISE_PROJECTION_UNAVAILABLE: 'The Enterprise Intelligence projection is unavailable. Existing records were not replaced with local data.',
   HANDOFF_NOT_ELIGIBLE: 'The selected Studio version is not eligible for a Delivery handoff.',
   HANDOFF_STALE: 'The handoff changed or its source is no longer current. Reload before continuing.',
@@ -161,6 +170,20 @@ const requireUuidSelector = (value: string) => {
 };
 
 const sameUuidSelector = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+
+const requireAssessMappingPreviewManifest = (manifest: AssessMappingPreviewManifest): AssessMappingPreviewManifest => {
+  const keys = ['previewBatchId', 'manifestVersion', 'catalogId', 'catalogHash', 'caseId', 'caseVersion', 'inputBundleId', 'inputBundleVersionId',
+    'targetCount', 'sourceCount', 'itemCount', 'reviewedCount', 'conflictCount', 'unresolvedConflictCount', 'itemSetHash', 'conflictSetHash', 'resolutionSetHash', 'displayedSetHash'] as const;
+  if (!manifest || typeof manifest !== 'object' || Object.keys(manifest).some(key => !keys.includes(key as typeof keys[number]))
+    || Object.keys(manifest).length !== keys.length || !Number.isSafeInteger(manifest.caseVersion) || manifest.caseVersion < 1
+    || !Number.isSafeInteger(manifest.manifestVersion) || manifest.manifestVersion < 1
+    || [manifest.targetCount, manifest.sourceCount, manifest.itemCount, manifest.reviewedCount, manifest.conflictCount, manifest.unresolvedConflictCount].some(value => !Number.isSafeInteger(value) || value < 0)
+    || ![manifest.catalogHash, manifest.itemSetHash, manifest.conflictSetHash, manifest.resolutionSetHash, manifest.displayedSetHash].every(value => /^[0-9a-f]{64}$/.test(value))) {
+    throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+  }
+  return { ...manifest, previewBatchId: requireUuidSelector(manifest.previewBatchId), catalogId: requireUuidSelector(manifest.catalogId),
+    caseId: requireUuidSelector(manifest.caseId), inputBundleId: requireUuidSelector(manifest.inputBundleId), inputBundleVersionId: requireUuidSelector(manifest.inputBundleVersionId) };
+};
 
 const canonicalControlledHumanJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(canonicalControlledHumanJson).join(',')}]`;
@@ -499,12 +522,21 @@ export type EnterpriseIntelligenceProjectionRequest = {
   expectedAuthorizationVersion?: number;
   deliveryItemPage?: DeliveryItemPageRequest;
   deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
+  assessDocumentMappingScope?: { caseId: string; caseVersion: number; inputBundleId?: string; inputBundleVersionId?: string };
 };
 
 const loadProjection = async (input: EnterpriseIntelligenceProjectionRequest): Promise<EnterpriseIntelligenceProjection> => {
   if (!commandEnabled()) throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
   const requestedOrganizationId = requireUuidSelector(input.organizationId);
   const requestedWorkspaceId = requireUuidSelector(input.workspaceId);
+  if (input.assessDocumentMappingScope) {
+    const scope = input.assessDocumentMappingScope;
+    if (!Number.isSafeInteger(scope.caseVersion) || scope.caseVersion < 1 || (scope.inputBundleId === undefined) !== (scope.inputBundleVersionId === undefined)) {
+      throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    }
+    requireUuidSelector(scope.caseId);
+    if (scope.inputBundleId && scope.inputBundleVersionId) { requireUuidSelector(scope.inputBundleId); requireUuidSelector(scope.inputBundleVersionId); }
+  }
   const armedProjection = isControlledHumanRuntimeEnabled() ? getControlledHumanEvidenceState().armedStep : null;
   if (armedProjection?.observationKind === 'negative_attempt' && armedProjection.action === 'delivery.workspace.projection') {
     const anchor = await beginControlledHumanCommand({ action: armedProjection.action, targetFamily: 'workspace', targetId: requestedWorkspaceId,
@@ -908,6 +940,95 @@ export const enterpriseIntelligenceClient = {
   handoffStudioDocument(input: { organizationId: string; workspaceId: string; studioDocumentId: string; studioVersion?: number; studioContentHash?: string }) {
     void input;
     throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  },
+
+  analyzeAssessDocuments(input: {
+    organizationId: string; workspaceId: string; caseId: string; expectedCaseVersion: number;
+    inputBundleId: string; inputBundleVersionId: string; expectedInputBundleVersion: number;
+    providerConfigId?: string;
+    selections: Array<{ sourceSetId: string; sourceSetVersionId: string; expectedSourceSetVersion: number; sourceId: string; sourceVersionId: string }>;
+  }) {
+    if (!Number.isSafeInteger(input.expectedCaseVersion) || input.expectedCaseVersion < 1
+      || !Number.isSafeInteger(input.expectedInputBundleVersion) || input.expectedInputBundleVersion < 1
+      || input.selections.length < 1 || input.selections.length > 20
+      || new Set(input.selections.map(item => item.sourceVersionId.toLowerCase())).size !== input.selections.length) {
+      throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    }
+    return invokeCommand({
+      commandType: 'assess.document-map.analyze', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: {
+        caseId: requireUuidSelector(input.caseId), expectedCaseVersion: input.expectedCaseVersion,
+        inputBundleId: requireUuidSelector(input.inputBundleId), inputBundleVersionId: requireUuidSelector(input.inputBundleVersionId),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        ...(input.providerConfigId ? { providerConfigId: requireUuidSelector(input.providerConfigId) } : {}),
+        selections: input.selections.map(item => {
+          if (!Number.isSafeInteger(item.expectedSourceSetVersion) || item.expectedSourceSetVersion < 1) throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+          return { sourceSetId: requireUuidSelector(item.sourceSetId), sourceSetVersionId: requireUuidSelector(item.sourceSetVersionId), expectedSourceSetVersion: item.expectedSourceSetVersion, sourceId: requireUuidSelector(item.sourceId), sourceVersionId: requireUuidSelector(item.sourceVersionId) };
+        }),
+      },
+    });
+  },
+
+  reviewAssessDocumentProposal(input: {
+    organizationId: string; workspaceId: string; proposalId: string; proposalVersion: number;
+    catalogId: string; targetSelectorId: string; caseId: string; expectedCaseVersion: number;
+    status: 'accepted' | 'rejected' | 'edited'; editedValue?: AssessMappingJsonValue; reason?: string;
+  }) {
+    if (!Number.isSafeInteger(input.proposalVersion) || input.proposalVersion < 1
+      || !Number.isSafeInteger(input.expectedCaseVersion) || input.expectedCaseVersion < 1
+      || (input.status === 'edited' && !isAssessMappingJsonValue(input.editedValue))
+      || (input.status !== 'edited' && input.editedValue !== undefined)
+      || (input.reason !== undefined && input.reason.trim().length > 2_000)) throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    return invokeCommand({
+      commandType: 'assess.document-map.proposal.review', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: { proposalId: requireUuidSelector(input.proposalId), proposalVersion: input.proposalVersion, catalogId: requireUuidSelector(input.catalogId), targetSelectorId: requireUuidSelector(input.targetSelectorId), caseId: requireUuidSelector(input.caseId), expectedCaseVersion: input.expectedCaseVersion, status: input.status, ...(input.editedValue !== undefined ? { editedValue: input.editedValue } : {}), ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) },
+    });
+  },
+
+  previewAssessDocumentMapping(input: {
+    organizationId: string; workspaceId: string; catalogId: string; catalogHash: string;
+    caseId: string; expectedCaseVersion: number; inputBundleId: string; inputBundleVersionId: string;
+    selections: Array<{ proposalId: string; proposalVersion: number; targetSelectorId: string; effectiveValue: AssessMappingJsonValue }>;
+  }) {
+    if (!/^[0-9a-f]{64}$/.test(input.catalogHash) || !Number.isSafeInteger(input.expectedCaseVersion) || input.expectedCaseVersion < 1
+      || input.selections.length < 1 || input.selections.length > ASSESS_DOCUMENT_MAPPING_MAX_PROPOSALS
+      || new Set(input.selections.map(item => item.proposalId.toLowerCase())).size !== input.selections.length
+      || input.selections.some(item => !Number.isSafeInteger(item.proposalVersion) || item.proposalVersion < 1 || !isAssessMappingJsonValue(item.effectiveValue))) {
+      throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    }
+    return invokeCommand({
+      commandType: 'assess.document-map.preview', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: { catalogId: requireUuidSelector(input.catalogId), catalogHash: input.catalogHash, caseId: requireUuidSelector(input.caseId), expectedCaseVersion: input.expectedCaseVersion, inputBundleId: requireUuidSelector(input.inputBundleId), inputBundleVersionId: requireUuidSelector(input.inputBundleVersionId), selections: input.selections.map(item => ({ ...item, proposalId: requireUuidSelector(item.proposalId), targetSelectorId: requireUuidSelector(item.targetSelectorId) })) },
+    });
+  },
+
+  resolveAssessDocumentMappingConflict(input: {
+    organizationId: string; workspaceId: string; conflictId: string; resolutionVersion: number;
+    resolution: 'choose_candidate' | 'retain_manual' | 'authored_resolution'; proposalId?: string;
+    authoredValue?: AssessMappingJsonValue; rationale: string;
+  }) {
+    if (!Number.isSafeInteger(input.resolutionVersion) || input.resolutionVersion < 0 || input.rationale.trim().length < 4 || input.rationale.trim().length > 2_000
+      || (input.resolution === 'choose_candidate' && (!input.proposalId || input.authoredValue !== undefined))
+      || (input.resolution === 'authored_resolution' && (!isAssessMappingJsonValue(input.authoredValue) || input.proposalId !== undefined))
+      || (input.resolution === 'retain_manual' && (input.proposalId !== undefined || input.authoredValue !== undefined))) throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    return invokeCommand({ commandType: 'assess.document-map.conflict.resolve', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: { conflictId: requireUuidSelector(input.conflictId), resolutionVersion: input.resolutionVersion, resolution: input.resolution, ...(input.proposalId ? { proposalId: requireUuidSelector(input.proposalId) } : {}), ...(input.authoredValue !== undefined ? { authoredValue: input.authoredValue } : {}), rationale: input.rationale.trim() } });
+  },
+
+  commitAssessDocumentMapping(input: {
+    organizationId: string; workspaceId: string; previewBatchId: string; catalogId: string; catalogHash: string;
+    caseId: string; expectedCaseVersion: number; inputBundleId: string; inputBundleVersionId: string;
+    previewManifest: AssessMappingPreviewManifest;
+  }) {
+    if (!/^[0-9a-f]{64}$/.test(input.catalogHash) || !Number.isSafeInteger(input.expectedCaseVersion) || input.expectedCaseVersion < 1) throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    const previewManifest = requireAssessMappingPreviewManifest(input.previewManifest);
+    if (!sameUuidSelector(previewManifest.previewBatchId, input.previewBatchId) || !sameUuidSelector(previewManifest.catalogId, input.catalogId)
+      || previewManifest.catalogHash !== input.catalogHash || !sameUuidSelector(previewManifest.caseId, input.caseId)
+      || previewManifest.caseVersion !== input.expectedCaseVersion || !sameUuidSelector(previewManifest.inputBundleId, input.inputBundleId)
+      || !sameUuidSelector(previewManifest.inputBundleVersionId, input.inputBundleVersionId)) throw new EnterpriseIntelligenceClientError('ASSESS_DOCUMENT_MAPPING_STALE');
+    return invokeCommand({ commandType: 'assess.document-map.commit', organizationId: input.organizationId, workspaceId: input.workspaceId,
+      payload: { previewBatchId: requireUuidSelector(input.previewBatchId), catalogId: requireUuidSelector(input.catalogId), catalogHash: input.catalogHash, caseId: requireUuidSelector(input.caseId), expectedCaseVersion: input.expectedCaseVersion, inputBundleId: requireUuidSelector(input.inputBundleId), inputBundleVersionId: requireUuidSelector(input.inputBundleVersionId), previewManifest },
+      outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'] });
   },
 
   requestDeliveryHandoff(input: DeliveryCommandInput<'delivery.handoff.request'>) {

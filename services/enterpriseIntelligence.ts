@@ -12,6 +12,11 @@ import {
   type TranscriptFlowProjection,
 } from './transcriptFlow/contracts.ts';
 import {
+  decodeAssessDocumentMappingProjection,
+  emptyAssessDocumentMappingProjection,
+  type AssessDocumentMappingProjection,
+} from './assessImport/contracts.ts';
+import {
   decodeDeliveryWorkspaceProjection,
   decodeMonitorApprovedBaselinesProjection,
   type DeliveryWorkspaceProjection,
@@ -54,6 +59,7 @@ export const SUPPORTED_EVIDENCE_MIME_TYPES = [
   'text/meeting-notes',
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ] as const;
 
 export type SupportedEvidenceMimeType = typeof SUPPORTED_EVIDENCE_MIME_TYPES[number];
@@ -272,6 +278,7 @@ export interface EnterpriseIntelligenceProjection {
   approvalResources: EnterpriseApprovalResourceProjection[];
   commandActivity: EnterpriseCommandActivityProjection[];
   transcriptFlow: TranscriptFlowProjection;
+  documentMapping: AssessDocumentMappingProjection;
   assessPromotion: {
     state: 'contract_pending' | 'ready' | 'conflict' | 'promoted';
     acceptedCandidateCount: number;
@@ -285,7 +292,7 @@ export interface EnterpriseIntelligenceProjection {
 export type EvidenceFileSupport = {
   supported: boolean;
   mimeType?: SupportedEvidenceMimeType;
-  state: 'native_text' | 'text_pdf_requires_text_layer' | 'docx_text' | 'unsupported';
+  state: 'native_text' | 'text_pdf_requires_text_layer' | 'docx_text' | 'spreadsheet_grid' | 'unsupported';
   message: string;
 };
 
@@ -602,7 +609,7 @@ const projectionKeys = [
   'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
   'deliveryWorkspace', 'monitorApprovedBaselines',
   'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
-  'transcriptFlow', 'assessPromotion',
+  'transcriptFlow', 'documentMapping', 'assessPromotion',
 ] as const;
 const prohibitedProjectionKey = /(?:^|_)(?:apiKey|authorization|bearerToken|contentHash|extractedTextHash|idempotencyKey|objectKey|providerKey|rawKey|secret|secretReference|storageBucket|storagePath|versionId)$/i;
 
@@ -633,10 +640,14 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
     || !['ready', 'empty', 'blocked', 'stale', 'unavailable'].includes(String(row.availability))
     || !['providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts', 'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines', 'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity'].every(key => Array.isArray(row[key]))
     || !row.transcriptFlow || typeof row.transcriptFlow !== 'object' || Array.isArray(row.transcriptFlow)
+    || (row.documentMapping !== undefined && (!row.documentMapping || typeof row.documentMapping !== 'object' || Array.isArray(row.documentMapping)))
     || !row.assessPromotion || typeof row.assessPromotion !== 'object' || Array.isArray(row.assessPromotion)
   ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
   rejectSensitiveProjectionFields(row);
   decodeTranscriptFlowProjection(row.transcriptFlow);
+  const documentMapping = row.documentMapping === undefined
+    ? emptyAssessDocumentMappingProjection()
+    : decodeAssessDocumentMappingProjection(row.documentMapping);
   const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : decodeDeliveryWorkspaceProjection(row.deliveryWorkspace);
   const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : decodeMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
   const organizationId = row.organizationId as string;
@@ -650,6 +661,7 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   ))) throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
   return {
     ...structuredClone(row),
+    documentMapping,
     ...(deliveryWorkspace ? { deliveryWorkspace } : {}),
     ...(monitorApprovedBaselines ? { monitorApprovedBaselines } : {}),
   } as unknown as EnterpriseIntelligenceProjection;
@@ -669,15 +681,19 @@ export const classifyEvidenceFile = (name: string, browserMimeType: string, size
     '.srt': 'application/x-subrip',
     '.pdf': 'application/pdf',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   };
   const mimeType = byExtension[extension]
     || (isSupportedEvidenceMimeType(browserMimeType) ? browserMimeType : undefined);
-  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, CSV, VTT/SRT, a text PDF, or DOCX.' };
+  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, CSV, XLSX, VTT/SRT, a text PDF, or DOCX.' };
   if (mimeType === 'application/pdf') {
     return { supported: true, mimeType, state: 'text_pdf_requires_text_layer', message: 'Text PDFs are supported. Scanned PDFs need OCR, which is not available in this vertical.' };
   }
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     return { supported: true, mimeType, state: 'docx_text', message: 'DOCX text is extracted server-side; embedded images and OCR are not processed.' };
+  }
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'text/csv') {
+    return { supported: true, mimeType, state: 'spreadsheet_grid', message: 'Spreadsheet values are parsed server-side with bounded sheet, row and cell provenance. Formulas are never evaluated.' };
   }
   return { supported: true, mimeType, state: 'native_text', message: 'This text-oriented format is supported for bounded server extraction.' };
 };

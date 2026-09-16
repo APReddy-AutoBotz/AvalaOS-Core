@@ -6,7 +6,9 @@ const PROTECTED_AST_FINGERPRINTS = Object.freeze({
   createEnterpriseActionIdempotencyKey: '255a3ecd055f9d1bd0a0f6a1bd38693aeada246ebc39dc40b94bf30467e62982',
   invokeCommand: '64cc3fe5ff618ca0f6924525b02ca76f0e084ecff9c94a9016a7dde725aeedd5',
   invokeProviderLifecycle: '6074bbf27ffc6f98284dd51876da54d0a18e743e2d4105873002156f962c5cb1',
-  loadProjection: '684d980760bb9bf344770c40d98f4bd8f668db93b3c9546b98ee74b01e2ee3b0',
+  // Reviewed scoped Assess input validation; query sink, tenant binding and
+  // response validation remain inside the complete protected function.
+  loadProjection: 'e70aed759122eef306b7e5e5f0a36514b558b5239350a8a23be53260c80a2fd0',
   supabaseClientImport: 'eefc62e932c8859b98d8b89f9ea0d53fd2077e3bdfcaa686eb8a0c7a955b20b9',
 });
 

@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Approved native Assess supporting-document continuation
+
+AP approved document upload inside the current Assess workspace, governed AI-assisted field mapping and editable human review on 2026-09-16. The implementation contract is `docs/planning/assess-supporting-document-mapping.md`. This explicitly extends the earlier text-transcript-only scope to bounded CSV/XLSX supporting documents while preserving independent Assess/Studio source sets, explicit application and optional handoffs. The implementation and its 22-command local feature gate are complete in the existing PR #264 worktree; exact current results, corrective attempts and retained-browser boundaries are recorded in `docs/quality/assess-supporting-document-mapping-evidence.md`. Previous PR C/creation-access results are not proof of this new slice. AP subsequently approved commit/push, exact-head CI and activation only in the separately approved exploratory synthetic preview. These release gates remain planned verification until their exact results are recorded; the frozen controlled-human backend stays untouched. The feature remains default-off in source. Real-provider calls, merge and production are not authorized.
+
+Native import targets V2 authoring. V1 scoring and all deterministic V2 evaluation/approval authority remain unchanged. Unsupported/ambiguous facts remain unknown or evidence-only, manual values do not silently lose to AI, and only a typed, reviewed, exact-version server transaction may create a new immutable draft. The historical free-text/label-only apply adapter is not accepted as native Assess field-mapping proof.
+
 ## Creation-access repair — current implementation and CI correction
 
 On 2026-09-15 AP approved the focused creation-access and synthetic Admin repair

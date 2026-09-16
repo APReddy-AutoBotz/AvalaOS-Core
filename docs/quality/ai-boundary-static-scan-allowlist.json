@@ -370,13 +370,13 @@
     },
     {
       "pattern": "localStorage",
-      "path": "tests/browser/pr1d.spec.ts",
+      "path": "tests/browser/pr1dNetworkFixture.ts",
       "lines": [
-        123,
+        122,
+        130,
         131,
-        132,
-        134,
-        135
+        133,
+        134
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App network-fixture session/view setup confined to browser tests; do not treat it as runtime authority."

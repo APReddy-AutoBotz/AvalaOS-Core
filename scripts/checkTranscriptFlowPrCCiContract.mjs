@@ -6,6 +6,7 @@ import { assertPrCMigrationTail, PR_C_APPROVED_SUCCESSOR_TAIL } from './prCMigra
 const read = file => readFileSync(file, 'utf8');
 export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
   'playwright.config.ts',
+  'playwright.assess-import.config.ts',
   'playwright.controlled-preview-boundary.config.ts',
   'playwright.controller-navigation-history.config.ts',
   'playwright.delivery-monitor-pr-c.config.ts',
@@ -74,7 +75,7 @@ const rootEntries = readdirSync('.', { withFileTypes: true });
 assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
   'root Playwright configs must be regular files, not links or directories');
 const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
-assert.equal(actualPlaywrightConfigs.length, 23);
+assert.equal(actualPlaywrightConfigs.length, 24);
 assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
   [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
 for (const extension of ['ts','js','mts','mjs','cts','cjs']) {

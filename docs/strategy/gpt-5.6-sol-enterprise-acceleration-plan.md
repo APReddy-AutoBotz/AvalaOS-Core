@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Native Assess supporting-document implementation
+
+The approved 2026-09-16 continuation is `docs/planning/assess-supporting-document-mapping.md`: bounded document/CSV/XLSX intake, typed governed AI mapping, native Assess review/edit/conflict UI and exact-version atomic apply. The local implementation and 22-command feature gate are complete; exact results and remaining external proof boundaries are in `docs/quality/assess-supporting-document-mapping-evidence.md`. Keep implementation, forward migration, tests, evidence and rollback in the existing substantial PR boundary. All read-only architecture/security/quality findings were synthesized before each corrective write phase; the controller retains integration and acceptance authority. AP subsequently approved commit/push, exact-head CI and separate exploratory synthetic preview activation; those gates require their own exact-source evidence. Source defaults remain off. No source/test result is a hosted, real-provider, human-acceptance or production claim.
+
 ## Current focused continuation
 
 AP's 2026-09-15 creation-access approval is implemented and locally verified under

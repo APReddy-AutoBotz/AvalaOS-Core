@@ -5,6 +5,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260915142940_creation_access_process_authority.sql',
   '20260915142942_synthetic_admin_account_authority.sql',
   '20260916003000_creation_access_migration_identity_convergence.sql',
+  '20260916083814_assess_supporting_document_mapping.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -13,7 +14,7 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access and document-mapping successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners must validate the approved tail before deriving its

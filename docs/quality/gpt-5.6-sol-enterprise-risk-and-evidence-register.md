@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active native Assess document-mapping verification
+
+AP authorized the coherent slice in `docs/planning/assess-supporting-document-mapping.md` on 2026-09-16. Confirmed source defects in legacy evidence-only targets, label-only structural objects, scalar CaseFact replacement, repeated-text anchors and provider-size handling are addressed by the local typed-mapping implementation. Corrective reviews also drove exact staged recovery, source freshness, complete versioned previews, canonical fact aliases, visible final conflict values and exhaustive new-command lifecycle tests. The final 22-command feature gate passed; current executed results, retained browser checks and failed-attempt history are in `docs/quality/assess-supporting-document-mapping-evidence.md`. Independent bounded reviews found no remaining blocker in their inspected corrections. The completed formal security scan remains a historical pre-correction report, not a rewritten clean post-fix scan. None of the previous PR C assertions is reused to close this slice.
+
+Current proof boundaries: synthetic local tests only; real provider calls, deployed availability, controlled-human acceptance, merge and production remain unproven. Default-off rollback must preserve immutable sources, mappings, previews, receipts and drafts. No silent manual overwrite, missing-field fabrication, AI score/approval authority, destructive migration or legacy unsafe-apply bypass is permitted.
+
 ## Active creation-access remediation
 
 Confirmed source defects addressed by the local repair: hosted creation presentation depended on absent legacy

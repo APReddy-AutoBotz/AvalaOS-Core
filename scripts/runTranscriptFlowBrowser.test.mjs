@@ -246,6 +246,17 @@ test('Enterprise mode builds its dedicated harness then previews before propagat
   assert.equal(server.wasKilled, true);
 });
 
+test('native Assess import owns a distinct local App preview and unique evidence attempt', () => {
+  const mode = browserModeByFlag.get('--assess-import');
+  assert.equal(mode.port, '4189');
+  assert.equal(mode.config, 'playwright.assess-import.config.ts');
+  assert.equal(mode.readinessPath, '/');
+  assert.equal(mode.serverCommand, 'preview');
+  assert.equal(mode.build, true);
+  assert.match(mode.playwrightEnvironment.ASSESS_IMPORT_BROWSER_RUN_ID, /^[0-9a-f]{24}$/u);
+  assert.equal(mode.localAcceptance, undefined, 'new feature tests must not claim retained hosted acceptance');
+});
+
 test('full-platform fixture mode owns an isolated local preview lifecycle before campaign preflight', async () => {
   const mode = browserModeByFlag.get('--full-platform');
   assert.deepEqual(mode, {

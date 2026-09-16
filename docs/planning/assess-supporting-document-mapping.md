@@ -1,0 +1,93 @@
+# Assess supporting-document mapping
+
+Status: implemented locally; final 22-command feature gate passed. Exact retained-browser results, provenance reconciliation and external proof boundaries are recorded in the linked evidence report. No hosted activation or real-provider proof.
+
+## Approval, baseline and execution boundary
+
+AP approved native document upload, AI-assisted mapping into Assess, and editable human review in this task. This extends the earlier text-only input scope to bounded CSV and XLSX supporting documents. Continue in the existing PR #264 worktree on `controller/governed-delivery-monitor-pr-c-20260831`, baseline `6eee4ee60360db31d0b4280cfecb9bd33a2320bf`. Do not change the working branch to main, split a process-only PR, merge, or treat earlier PR C test results as proof of this enhancement.
+
+The controller completed read-only architecture, quality and security reviews before this write phase. All three reviewers are closed. The fixed workspace-write environment is now used only for the approved implementation. The controller alone delegates, with at most three direct implementation workers and no descendants.
+
+Protect the stash, unrelated `docs/marketing/`, `tools/`, pre-existing `.agent/` outputs and the unrelated recovery-script working-tree change. Inspect exact status/staging before any commit. No production, AvalaOS.com, customer data, real provider keys/calls or hosted infrastructure changes are authorized by this implementation plan.
+
+## Outcome and scope
+
+Inside the current process's Assess V2 workspace, a user can upload one or more supported documents, explicitly select their source set, run governed AI analysis, inspect grounded typed field suggestions, edit/accept/reject them, preview manual/cross-source conflicts, and explicitly apply a reviewed batch. Reload must show the committed immutable Assess draft. A user can continue manual authoring without importing anything. Assess and Studio retain independent source sets; no implicit downstream handoff or approval is introduced.
+
+Supported inputs: TXT, Markdown, text transcripts, CSV, DOCX main-document text, limited text-layer PDF, and bounded non-macro XLSX. Image-only PDF/OCR, audio/video, old DOC/XLS, encrypted/macro/external-data workbooks and automatic formula calculation are excluded. Unsupported or incomplete facts remain unknown or evidence-only, with visible explanations; do not manufacture defaults that imply factual knowledge.
+
+The memory-only browser queue permits at most 20 pending documents and 12,000,000 bytes in aggregate. Excess selections are rejected before reading file bytes, with a visible explanation and no silent truncation. Store/remove pending sources before adding another batch. The server independently enforces each source limit and the smaller complete AI analysis input limit.
+
+Native import targets V2 authoring, not V1 scoring. The existing deterministic field registry, evaluator, formulas, versions, weights, thresholds, hard stops, recommendation and approval authority do not change. AI cannot write computed evaluations, gate results, control requirements, modernization dispositions, scores, verified evidence or approval state.
+
+The catalog addresses one saved draft at a time. After reviewing and applying a newly suggested process step or application, the user can analyze the retained sources again to propose facts or relationships for those newly created entities. The system must not invent cross-batch identities or silently infer missing risk flags. Image-only PDFs require OCR outside this bounded implementation; spreadsheet formulas are not evaluated and cached formula results are not imported as facts.
+
+## Frozen integration decisions
+
+1. Reuse private source/version storage, explicit source-set versions, locked input bundles, governed provider routing/budgets, grounded candidates, human review, receipts and atomic transactions. Do not create browser AI authority or a parallel ungoverned upload path.
+2. Add a versioned `assess-supporting-document-map-v1` contract. Server-issued finite target descriptors bind exact organization/workspace, case/version, schema, target kind/field/context and current value. Provider output is advisory and cannot supply SQL/JSON paths, arbitrary IDs, capabilities, evidence approval or derived decisions.
+3. Allow typed case fields, existing primitive/agent/interaction/asset facts and authoring fields, and bounded structural constructors only where the complete resulting object satisfies the canonical Assess draft parser. Server generates identities, unknown defaults and evidence links. Incomplete structural proposals become evidence-only; no `{id,label}` children or scalar replacement of full CaseFact records.
+4. The exact evidence-only target is `evidence`. Correct the existing `evidence.unresolved` mismatch. Legacy structural/fact apply must not remain a bypass around the new typed boundary; reject unsafe legacy operations or forward them through equivalent strict validation without rewriting historical migrations.
+5. Mapping review/edit and preview bind source set/bundle/source version, extraction job/candidate version, target schema/catalog, draft version and reviewer. Commit revalidates all bindings and fresh canonical capabilities under a case lock, including Assess read/draft-write in addition to source/apply permissions.
+6. Manual values are retained by default. Different proposed values, stale manual values and conflicting sources require explicit resolution and rationale. Preview/edit/cancel does not mutate Assess. One explicit apply creates one complete immutable version or none; identical retries are idempotent. Reload failure or response loss is uncertain, never optimistic success.
+7. Mount a scoped `AssessSupportingDocumentIntake` in `AssessV2Workspace`. Scope includes actor, organization, workspace, authorization version, process, case and head. Unsaved local changes block preview/apply. Scope changes clear upload bytes, pending mapping, errors and late async results. Show readable field labels/types, sources and changed/current values, not free-text internal paths.
+8. XLSX/CSV parsing is server-side and deterministic. Preserve unambiguous sheet/row/cell coordinates in canonical text and source anchors. Reject macro/external-link/embedded/encrypted/DTD/ZIP ambiguity and bound input/expansion/count/depth/strings. No formula evaluation or use of formula cached values as facts. Hidden sheets are excluded with explicit disclosure. CSV formula-looking strings remain inert text. Repeated values cannot be grounded by first-match guessing.
+9. No silent truncation to the provider input cap. Oversized analysis is explicitly blocked before provider effect unless an independently tested coverage-preserving chunk contract is implemented. Upload success is not analysis success.
+10. Feature controls default off. Additive migrations only, generated with the CLI. Preserve all historical migration/evidence bytes and the frozen controlled-human backend boundary. Any environment identity convergence requires exact predecessor/preconditions and does not authorize hosted application.
+
+## Work ownership
+
+- Controller: parser/CSV/XLSX and hostile fixtures, isolated test runner, plan/canonical documentation, package/CI wiring, integration and full verification.
+- Contract/API worker: typed mapping contract and registry, client, source/AI command/query integration, grounded proposal review/preview/apply adapters and focused tests. No parser, UI, migrations, package or CI edits.
+- Database worker: generated forward migration(s), strict database binding and immutable application, RLS/grants/rollback, migration and PostgreSQL test harness. No contract/API/UI/package edits.
+- UI worker: native Assess upload/review/conflict UI, scope/async safety, friendly legacy review correction, actual-route Desktop/Pixel/browser/accessibility tests. No contract/API/migration/package edits.
+
+Workers coordinate through controller-owned interface decisions and do not revert others' work. Shared contract must be published before consumers implement its details.
+
+## Verification and acceptance
+
+### Review checkpoint and corrective continuation (2026-09-16)
+
+The first frozen implementation snapshot (`4dc59dfe30fe15aec3bc7b660026d91e237daa90420f8b834bb59c6e0ca6270c`) passed its 20 canonical commands, including 18 Desktop/Pixel scenarios. These are intermediate executed results, not acceptance of the later corrective source. The initial browser launch failed with host `EPERM` before scenario execution; that attempt remains retained alongside the successful permitted rerun.
+
+Independent final architecture, quality and security reviews then closed. The controller reproduced staged-retry failure and post-analysis source staleness against the original migration in a disposable PostgreSQL 16 database. The bounded security review found two low-severity human-review integrity defects (partial projection and stale source applicability); the same review identified recovery and canonical-fact correctness defects, not scoring or authorization bypasses. No hosted or real-provider test was performed.
+
+The approved implementation therefore remains open for one coherent corrective pass:
+
+- Bind a complete displayed preview to its exact server-held item/conflict set; incomplete projections cannot be ready or silently apply omitted changes.
+- Recheck exact source/bundle currentness at every unconsumed review/apply boundary; retain successful committed replay history.
+- Recover an exact claimed/staged analysis under the current receipt fence without a second provider effect.
+- Canonicalize supported legacy primitive-fact aliases without losing provenance or changing scoring rules; reject ambiguous duplicate aliases.
+- Select the newest exact-case/bundle/catalog UI state, align safe legacy case fields with database keys, and test populated editing/conflicts for accessibility, keyboard use and mobile overflow.
+- Prove wrong-workspace rejection and evaluate the exact persisted mapped draft, including fail-closed incomplete facts; correct platform-independent test cleanup.
+- Preserve fixture bytes by restricting test-compiler module rewrites to actual import/export syntax. A new canonical harness gate brought the corrective command inventory to 21. Final integration also adds the retained Enterprise authority/AST-mutation gate, bringing the final inventory to 22; its protected query fingerprint is reconciled only for the reviewed additional scope validation, not weakened or removed.
+
+Root-owned CSV/XLSX parsing now also accepts canonical package-absolute internal worksheet relationships, as shown in the Microsoft format reference, while keeping ZIP member paths, traversal, external URLs and active content rejected. Final stable-source verification must rerun after all corrective workers close; earlier evidence is not reused as proof of these changes.
+
+### Second bounded corrective checkpoint
+
+All 22 canonical commands passed at source digest `46993a6bc485a1b1c2238aa5b6ea9fc985c20dbc35fdae6009c078d0aff3d73d`, including the expanded 28-scenario Desktop/Pixel suite. Independent read-only reviewers then identified two remaining acceptance blockers: the resolved conflict UI did not display the exact final value, and the retained command-lifecycle test inventory omitted the five new mapping commands. Those results are therefore intermediate, not final acceptance. Both reviewers closed before the controller resumed writes.
+
+The bounded correction now displays persisted authored/selected conflict values before Apply, exercises those paths in populated Desktop/Pixel scenarios, and extends revoked/error/reconciliation/replay coverage to all five commands using valid bound fixtures and canonical inventory exhaustiveness. Independent review accepted both corrections. Integration then fixed a disposable compiler-output discovery race and an outdated positive legacy evidence-only fixture, preserving runtime rejection of missing/old-prefixed destinations. Both bounded corrections have adversarial regression checks and independent review. Final effective source digest is `ebf0db64b06a328569044a396594c80a2429e3740a5faedaacb836c6f30028e1`; its complete 22-command matrix passed. Retained attempts, exact manifests, screenshots and external boundaries are recorded in [the local evidence report](../quality/assess-supporting-document-mapping-evidence.md). No hosted activation or real-provider testing follows from these local results.
+
+Feature-owned commands are bound independently in `scripts/assessImportValidationContract.mjs`; exact executed results are retained in the evidence report. Required coverage includes parser limits/OOXML ambiguity/CSV quoting/cell provenance, all mapping target types and unknown-key negatives, real command/provider gateway with mocks, wrong tenant/workspace and revoked role, stale source/case/catalog, prompt injection, repeated citation values, duplicate target conflicts, preservation of manual/provenance fields, response loss/idempotent retry, canonical Assess parse/reload/evaluation and fresh/populated database upgrade.
+
+Browser proof must exercise the actual process Assess route in Desktop and Pixel, upload multiple synthetic inputs including XLSX, review/edit/reject a suggestion, retain a manual conflict, explicitly apply, reload and observe the native field. Include keyboard, accessible labels/live errors, no serious/critical accessibility findings, no mobile overflow, unsaved-state and scope races. Browser transport mocks are disclosed and do not replace real disposable PostgreSQL proof.
+
+Retained relevant gates: transcript/domain/API/provider mocks, Assess V2/scoring regression, migration contracts, typecheck, Edge typecheck, workflow YAML, AI boundary/static security, secret hygiene, dependency audit, build and `git diff --check`. New critical parser/mapping modules must be covered by feature-owned tests; numeric performance budgets are not invented.
+
+Evidence records canonical commands, actual assertion outputs, source digest, fixture identity and runtime; green suite exit does not fabricate assertion PASS. Do not overwrite historical evidence or include secrets/raw document/provider content, signed URLs or live object identifiers. Test runners must use unique owned output directories and never erase protected pre-existing `.agent/` state.
+
+## Rollout, rollback and remaining unknowns
+
+### Subsequent release approval
+
+After local completion AP approved commit/push on the existing PR #264 branch, exact-head CI verification and activation in the separately approved exploratory synthetic preview. This narrow approval supersedes the implementation-only hosted-action prohibition above, but not the production, AvalaOS.com, real-provider, customer-data, merge or frozen controlled-human-backend boundaries. Keep the existing usable draft pinned until a replacement is independently verified. Confirm the exact exploratory project, installed predecessor migration and function source before any mutation; preserve existing synthetic accounts and data. Apply only the reviewed forward migration and required Edge dependencies, verify installed schema/authorization and use an immutable preview bound to the committed source. Upload/manual and missing-provider fail-closed checks may run with synthetic documents; do not invent AI success, enable real keys/routes or bypass provider authority to make analysis appear ready. If a live AI path is required, stop for separate capped-budget approval. Preserve sanitized exact-head/run/attempt/deploy evidence without rewriting the completed local report or historical human evidence. Rollback disables new effects and preserves immutable history; no destructive reset or new branch/PR is authorized.
+
+The staged patch check found one extra blank line at EOF in the new retained `tests/browser/pr1dNetworkFixture.ts`. Only that trailing blank line was removed, with source identity checked against the completed local snapshot after accounting for this exact whitespace difference. The historical local digest/results remain unchanged, not relabelled. Release metadata and source-provenance digests are refreshed; the committed source still requires the full exact-head CI gate before hosted activation.
+
+Rollback: disable the new native mapping feature and new effects; preserve sources, candidate/edit records, previews, receipts, lineage and immutable drafts. Continue existing manual Assess authoring where independently enabled. Repair schema with additive forward migrations, never destructive down-migrations or restored legacy unsafe apply.
+
+At initial review Docker's Linux engine pipe was unavailable. Local PostgreSQL 16 verification subsequently used only controller-owned loopback disposable containers, not unrelated Kootha containers. Full ordered migrations, all ten mapping scenarios and exact persisted native parser/evaluator checks passed on the final source. Disposable cleanup is recorded in the evidence report. Local disks have limited free capacity; no broad cleanup/prune/move is authorized here. The existing exploratory preview does not deploy this new implementation. Live AI verification, preview activation, human acceptance, merge and production remain separate gates; real provider calls remain prohibited under the current synthetic-only boundary.
+
+Reference formats: [Microsoft SpreadsheetML structure](https://learn.microsoft.com/en-us/office/open-xml/spreadsheet/structure-of-a-spreadsheetml-document). Migration tooling: [Supabase migrations](https://supabase.com/docs/guides/deployment/database-migrations). These are implementation references, not readiness evidence.

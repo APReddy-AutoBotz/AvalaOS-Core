@@ -23,6 +23,7 @@ import {
   resolveEnterpriseCommandResourceId,
   shouldPreserveClaimedEnterpriseReceipt,
   type Authority,
+  type EnterpriseCommandType,
   type TranscriptCommandRequestBindingDependencies,
 } from './enterpriseIntelligenceCommand';
 import { inspectBinaryArtifact, StorageArtifactError, uploadBinaryArtifact } from './storage';
@@ -134,6 +135,16 @@ test('uses one exhaustive command-to-current-capability mapping for replay autho
       [capability],
     );
   }
+  const assessMappingExpected = {
+    'assess.document-map.analyze': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'evidence.write'],
+    'assess.document-map.proposal.review': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'evidence.review'],
+    'assess.document-map.preview': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
+    'assess.document-map.conflict.resolve': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
+    'assess.document-map.commit': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
+  } as const;
+  for (const [commandType, capabilities] of Object.entries(assessMappingExpected)) {
+    assert.deepEqual(requiredCapabilitiesForEnterpriseCommand(commandType as keyof typeof assessMappingExpected), capabilities);
+  }
 });
 
 test('derives Studio and Assess source authority from the strict owner module', () => {
@@ -171,6 +182,7 @@ const replayAuthority: Authority = {
     'evidence.write', 'evidence.review', 'assessment.edit', 'portfolio.manage',
     'approvals.review', 'docs.approve', 'monitor.manage', 'assemble.manage',
     'transcript.sources.manage', 'transcript.assess.apply', 'transcript.journeys.manage',
+    'assess.v2.read', 'assess.v2.draft.write',
   ]),
   organizationPermissions: new Set(),
   workspacePermissions: new Set(),
@@ -429,17 +441,39 @@ test('enforces source-owner capability separation and builds the Studio v2 bundl
   console.log('ok - legacy one-click Studio Delivery command fails closed before source inspection or Delivery effect');
 }
 
+type AssessDocumentMappingCommand = Extract<EnterpriseCommandType, `assess.document-map.${string}`>;
+
+const canonicalAssessDocumentMappingCommands: Record<AssessDocumentMappingCommand, true> = {
+  'assess.document-map.analyze': true,
+  'assess.document-map.proposal.review': true,
+  'assess.document-map.preview': true,
+  'assess.document-map.conflict.resolve': true,
+  'assess.document-map.commit': true,
+};
+
+const assessDocumentMappingReplayCommands = [
+  'assess.document-map.analyze', 'assess.document-map.proposal.review',
+  'assess.document-map.preview', 'assess.document-map.conflict.resolve', 'assess.document-map.commit',
+] as const satisfies readonly AssessDocumentMappingCommand[];
+
 const replayCommands = [
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review',
   'evidence.assess.promote', 'transcript.source-set.create-version', 'transcript.input-bundle.lock',
   'transcript.assess.extract', 'transcript.assess.candidate.review', 'transcript.assess.apply.preview',
   'transcript.assess.apply.commit', 'transcript.assess.conflict.resolve', 'transcript.journey.set-state',
+  ...assessDocumentMappingReplayCommands,
   'modernization.evaluate', 'approval.review.record',
   'approval.record', 'studio.delivery.handoff',
   'assemble.blueprint.create',
 ] as const;
 
 type ReplayCommand = typeof replayCommands[number];
+
+assert.deepEqual(
+  [...replayCommands.filter(command => command.startsWith('assess.document-map.'))].sort(),
+  Object.keys(canonicalAssessDocumentMappingCommands).sort(),
+  'every Assess document-mapping command must participate in the shared lifecycle replay matrix',
+);
 
 type AssertionRuntimeLineage = {
   sourceVersionSelectors: string[];
@@ -1356,8 +1390,81 @@ const replayTranscriptCaseByCommand: Partial<Record<ReplayCommand, typeof select
   'transcript.assess.conflict.resolve': 'conflict',
 };
 
+const assessMappingReplayFixture = {
+  caseId: selectorFixtures.assessDraftIds[0],
+  catalogId: '65000000-0000-4000-8000-0000000000b1',
+  targetSelectorId: '65000000-0000-4000-8000-0000000000b2',
+  proposalId: '65000000-0000-4000-8000-0000000000b3',
+  previewBatchId: '65000000-0000-4000-8000-0000000000b4',
+  conflictId: '65000000-0000-4000-8000-0000000000b5',
+  catalogHash: '9'.repeat(64),
+  itemSetHash: 'a'.repeat(64),
+  conflictSetHash: 'b'.repeat(64),
+  resolutionSetHash: 'c'.repeat(64),
+  displayedSetHash: 'd'.repeat(64),
+} as const;
+
+const assessMappingReplayManifest = {
+  previewBatchId: assessMappingReplayFixture.previewBatchId,
+  manifestVersion: 2,
+  catalogId: assessMappingReplayFixture.catalogId,
+  catalogHash: assessMappingReplayFixture.catalogHash,
+  caseId: assessMappingReplayFixture.caseId,
+  caseVersion: 1,
+  inputBundleId: selectorFixtures.inputBundleIds[0],
+  inputBundleVersionId: selectorFixtures.inputBundleVersionSelectors[0],
+  targetCount: 1,
+  sourceCount: 1,
+  itemCount: 1,
+  reviewedCount: 1,
+  conflictCount: 1,
+  unresolvedConflictCount: 0,
+  itemSetHash: assessMappingReplayFixture.itemSetHash,
+  conflictSetHash: assessMappingReplayFixture.conflictSetHash,
+  resolutionSetHash: assessMappingReplayFixture.resolutionSetHash,
+  displayedSetHash: assessMappingReplayFixture.displayedSetHash,
+};
+
 const replayPayloadFor = (commandType: ReplayCommand) => {
   if (commandType.startsWith('approval.')) return { resourceType: 'evidence_candidate' };
+  if (commandType === 'assess.document-map.analyze') return {
+    caseId: assessMappingReplayFixture.caseId,
+    expectedCaseVersion: 1,
+    inputBundleId: selectorFixtures.inputBundleIds[0],
+    inputBundleVersionId: selectorFixtures.inputBundleVersionSelectors[0],
+    expectedInputBundleVersion: 1,
+    selections: [{
+      sourceSetId: selectorFixtures.sourceSetIds[0],
+      sourceSetVersionId: selectorFixtures.sourceSetVersionSelectors[0],
+      expectedSourceSetVersion: 1,
+      sourceId: '65000000-0000-4000-8000-0000000000a4',
+      sourceVersionId: selectorFixtures.sourceVersionSelectors[0],
+    }],
+  };
+  if (commandType === 'assess.document-map.proposal.review') return {
+    proposalId: assessMappingReplayFixture.proposalId, proposalVersion: 1,
+    catalogId: assessMappingReplayFixture.catalogId, targetSelectorId: assessMappingReplayFixture.targetSelectorId,
+    caseId: assessMappingReplayFixture.caseId, expectedCaseVersion: 1,
+    status: 'accepted', reason: 'Synthetic replay acceptance.',
+  };
+  if (commandType === 'assess.document-map.preview') return {
+    catalogId: assessMappingReplayFixture.catalogId, catalogHash: assessMappingReplayFixture.catalogHash,
+    caseId: assessMappingReplayFixture.caseId, expectedCaseVersion: 1,
+    inputBundleId: selectorFixtures.inputBundleIds[0], inputBundleVersionId: selectorFixtures.inputBundleVersionSelectors[0],
+    selections: [{ proposalId: assessMappingReplayFixture.proposalId, proposalVersion: 1,
+      targetSelectorId: assessMappingReplayFixture.targetSelectorId, effectiveValue: 'Synthetic reviewed value' }],
+  };
+  if (commandType === 'assess.document-map.conflict.resolve') return {
+    conflictId: assessMappingReplayFixture.conflictId, resolutionVersion: 1,
+    resolution: 'retain_manual', rationale: 'Synthetic replay retains the reviewed manual value.',
+  };
+  if (commandType === 'assess.document-map.commit') return {
+    previewBatchId: assessMappingReplayFixture.previewBatchId,
+    catalogId: assessMappingReplayFixture.catalogId, catalogHash: assessMappingReplayFixture.catalogHash,
+    caseId: assessMappingReplayFixture.caseId, expectedCaseVersion: 1,
+    inputBundleId: selectorFixtures.inputBundleIds[0], inputBundleVersionId: selectorFixtures.inputBundleVersionSelectors[0],
+    previewManifest: assessMappingReplayManifest,
+  };
   const transcriptCase = replayTranscriptCaseByCommand[commandType];
   return transcriptCase ? selectorPayload(transcriptCase, 0) : {};
 };
@@ -1401,7 +1508,8 @@ const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestB
         source_version_id: selectorFixtures.sourceVersionSelectors[0] } as T;
     }
     if (table === 'assess_v2_cases') {
-      return { id, version: 1, head_version_id: '65000000-0000-4000-8000-0000000000a3' } as T;
+      return { id, version: 1, head_version_id: '65000000-0000-4000-8000-0000000000a3',
+        schema_version: 'assess-v2-schema-2026-07', status: 'draft' } as T;
     }
     if (table === 'enterprise_assess_apply_preview_batches') {
       return { assess_case_id: selectorFixtures.assessDraftIds[0], expected_case_version: 1,
@@ -1513,6 +1621,11 @@ const enterpriseResultFor = (commandType: ReplayCommand, resourceId: string) => 
                       : commandType === 'transcript.assess.apply.commit' ? 'assessDraftId'
                         : commandType === 'transcript.assess.conflict.resolve' ? 'conflictId'
                           : commandType === 'transcript.journey.set-state' ? 'journeyId'
+                            : commandType === 'assess.document-map.analyze' ? 'runId'
+                              : commandType === 'assess.document-map.proposal.review' ? 'proposalId'
+                                : commandType === 'assess.document-map.preview' ? 'previewBatchId'
+                                  : commandType === 'assess.document-map.conflict.resolve' ? 'conflictId'
+                                    : commandType === 'assess.document-map.commit' ? 'caseId'
             : commandType === 'modernization.evaluate' ? 'decisionId'
             : commandType === 'studio.delivery.handoff' ? 'workPackageId'
               : commandType === 'assemble.blueprint.create'

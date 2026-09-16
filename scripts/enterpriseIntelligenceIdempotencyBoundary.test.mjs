@@ -18,6 +18,17 @@ test('accepts fresh UUID action keys while allowing controlled-human evidence di
   assert.doesNotThrow(() => assertEnterpriseClientIdempotencyBoundary(source));
 });
 
+test('scoped Assess query validation remains protected against removed checks and scope substitution', () => {
+  for (const [before, after] of [
+    ['!Number.isSafeInteger(scope.caseVersion)', 'false'],
+    ['scope.caseVersion < 1', 'false'],
+    ['(scope.inputBundleId === undefined) !== (scope.inputBundleVersionId === undefined)', 'false'],
+    ['    requireUuidSelector(scope.caseId);', '    void scope.caseId;'],
+    ['    if (scope.inputBundleId && scope.inputBundleVersionId) { requireUuidSelector(scope.inputBundleId); requireUuidSelector(scope.inputBundleVersionId); }', '    void scope.inputBundleId;'],
+    ['body: { ...input, organizationId: requestedOrganizationId, workspaceId: requestedWorkspaceId },', 'body: { ...input, organizationId: requestedOrganizationId, workspaceId: input.assessDocumentMappingScope.caseId },'],
+  ]) rejects(replaceOnce(source, before, after));
+});
+
 test('rejects deterministic action-key generators and weakened cryptographic UUID sources', () => {
   rejects(replaceOnce(
     source,

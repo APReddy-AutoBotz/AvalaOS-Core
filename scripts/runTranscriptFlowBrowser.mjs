@@ -29,6 +29,15 @@ const syntheticRegressionCommon = {
 };
 
 export const browserModeByFlag = new Map([
+  ['--assess-import', {
+    label: 'Assess supporting-document mapping',
+    port: '4189',
+    config: 'playwright.assess-import.config.ts',
+    readinessPath: '/',
+    serverCommand: 'preview',
+    build: true,
+    playwrightEnvironment: { ASSESS_IMPORT_BROWSER_RUN_ID: randomBytes(12).toString('hex') },
+  }],
   ['--synthetic-admin', {
     label: 'Isolated synthetic Admin creation access',
     port: '4179',

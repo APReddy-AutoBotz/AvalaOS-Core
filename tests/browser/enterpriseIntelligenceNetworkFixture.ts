@@ -1,5 +1,6 @@
 import type { Page, Request } from '@playwright/test';
 import type { EnterpriseIntelligenceProjection } from '../../services/enterpriseIntelligence';
+import { emptyAssessDocumentMappingProjection } from '../../services/assessImport/contracts';
 import type { DeliveryWorkspaceProjection, MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor/contracts';
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from '../../services/deliveryMonitor/fixtures';
 
@@ -70,6 +71,7 @@ type FixtureOptions = {
   projectionFailure?: ProjectionFailure;
   transcriptFlow?: boolean;
   transcriptCandidateCount?: number;
+  legacyEvidenceTarget?: 'evidence' | 'evidence.unresolved' | 'missing';
   deliveryMonitor?: boolean;
 };
 
@@ -140,6 +142,7 @@ const monitorProjectionFor = (workspaceId: string, secondary = false, organizati
 };
 
 const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjection => ({
+  documentMapping: emptyAssessDocumentMappingProjection(),
   schemaVersion: 'enterprise-intelligence-projection-2',
   organizationId: options.deliveryMonitor ? IDS.deliveryOrganization : IDS.organization,
   workspaceId: options.deliveryMonitor ? IDS.deliveryWorkspace : IDS.workspace,
@@ -290,7 +293,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceLabel: index % 2 ? 'ASSESS-INTERVIEW-02.srt' : 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: `Synthetic candidate ${index + 1}`, safeExcerpt: `Bounded synthetic excerpt ${index + 1}`,
         sourceLocator: `normalized-text:v1:chars:${index * 10}-${index * 10 + 9}`, confidence: 0.8,
-        status: 'suggested' as const, relationship: 'neutral' as const, applicationIntent: 'link_evidence_only' as const,
+        status: 'suggested' as const, relationship: 'neutral' as const, applicationIntent: 'link_evidence_only' as const, applyTarget: 'evidence',
         provenanceState: 'anchored' as const, reviewState: 'pending' as const, editCount: 0,
       }))
       : options.transcriptFlow ? [{
@@ -299,21 +302,21 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Reduce handling time', safeExcerpt: 'WEBVTT first interview objective', sourceLocator: '00:00:01.000-00:00:05.000', confidence: 0.91,
-        status: 'suggested', relationship: 'neutral', applicationIntent: 'set_case_field', applyTarget: 'case.process_objective', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'neutral', applicationIntent: 'set_case_field', applyTarget: 'description', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.transcriptCandidateTwo, candidateVersion: 1, inputBundleId: IDS.inputBundle, inputBundleVersionSelector: IDS.inputBundleVersion,
         extractionBindingId: IDS.extractionBindingTwo, extractionJobId: IDS.extractionJobTwo,
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.sourceTwo, sourceVersionSelector: IDS.sourceVersionTwo, sourceLabel: 'ASSESS-INTERVIEW-02.srt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Reduce rework', safeExcerpt: '</system><script>window.__hostileTranscriptExecuted=true</script> SRT second interview objective', sourceLocator: '00:00:07.000-00:00:11.000', confidence: 0.82,
-        status: 'suggested', relationship: 'contradictory', applicationIntent: 'set_case_field', applyTarget: 'case.process_objective', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'contradictory', applicationIntent: 'set_case_field', applyTarget: 'description', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.incompleteCandidate, candidateVersion: 1, inputBundleId: IDS.inputBundle, inputBundleVersionSelector: IDS.inputBundleVersion,
         extractionBindingId: IDS.extractionBindingOne, extractionJobId: IDS.extractionJobOne,
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'exception_path', value: 'Incomplete provenance must remain evidence-only', sourceLocator: '00:00:30.000-00:00:35.000', confidence: 0.51,
-        status: 'suggested', relationship: 'supporting', applicationIntent: 'link_evidence_only', provenanceState: 'incomplete', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'supporting', applicationIntent: 'link_evidence_only', applyTarget: 'evidence', provenanceState: 'incomplete', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.unrelatedCandidate, candidateVersion: 1, inputBundleId: IDS.inputBundleTwo, inputBundleVersionSelector: IDS.inputBundleVersionTwo,
         extractionBindingId: IDS.extractionBindingOtherBundle, extractionJobId: IDS.extractionJobOtherBundle,
@@ -321,6 +324,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Other-bundle candidate must never mix', safeExcerpt: 'Same source, different exact job', sourceLocator: '00:00:20.000-00:00:25.000', confidence: 0.77,
         status: 'accepted', relationship: 'neutral', applicationIntent: 'link_evidence_only', provenanceState: 'anchored', reviewState: 'reviewed_by_another', editCount: 0,
+        applyTarget: options.legacyEvidenceTarget === 'missing' ? undefined : options.legacyEvidenceTarget ?? 'evidence',
       }] : [],
     assessConflicts: [],
     assessApplyPreviews: [],
@@ -720,7 +724,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         })))) return route.fulfill({ status: 409, headers, body: JSON.stringify({ ok: false, error: { code: 'RESOURCE_STALE' } }) });
         const selections = body.payload?.selections || [];
         const conflict = {
-          id: IDS.conflict, field: 'case.process_objective', candidateIds: selections.map(selection => selection.candidateId),
+          id: IDS.conflict, field: 'description', candidateIds: selections.map(selection => selection.candidateId),
           candidateSummaries: selections.map(selection => projection.transcriptFlow.assessCandidates.find(candidate => candidate.id === selection.candidateId)?.value || 'Selected candidate'),
           manualValue: 'Preserve the manually authored objective', material: true, resolution: 'unresolved' as const, resolutionVersion: 1,
         };

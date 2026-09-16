@@ -76,6 +76,7 @@ test('exact bundle review preserves historical source-set lineage across current
   await selectByText(draft, 'Draft version 1');
   await expect(review.getByText('Other-bundle candidate must never mix', { exact: true })).toBeVisible();
   await review.getByRole('checkbox', { name: 'Include in preview', exact: true }).check();
+  await expect(review.getByText('Linked evidence only', { exact: true })).toBeVisible();
   await expect(review.getByText('Selected for preview: 1/100', { exact: true })).toBeVisible();
   await selectByText(bundle, 'Primary claims bundle');
   await expect(review.getByText('Selected for preview: 0/100', { exact: true })).toBeVisible();
@@ -110,7 +111,9 @@ test('exact bundle review preserves historical source-set lineage across current
   await page.keyboard.press('Enter');
   const editedValue = firstCandidate.getByLabel('Edited value');
   await expect(editedValue).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('Reduce handling time with reviewer-confirmed wording');
+  await expect(editedValue).toHaveValue('Reduce handling time with reviewer-confirmed wording');
   await page.keyboard.press('Tab');
   await expect(firstCandidate.getByLabel('Required rationale')).toBeFocused();
   await page.keyboard.type('Clarifies the exact human-reviewed outcome.');
@@ -125,7 +128,7 @@ test('exact bundle review preserves historical source-set lineage across current
   await firstCandidate.getByRole('checkbox', { name: 'Include in preview', exact: true }).check();
   await secondCandidate.getByRole('checkbox', { name: 'Include in preview', exact: true }).check();
   await review.getByRole('button', { name: 'Preview exact Assess changes', exact: true }).click();
-  await expect(review.getByText(/Conflict: case\.process_objective/)).toBeVisible();
+  await expect(review.getByText(/Conflict: Case description/)).toBeVisible();
   await expect(review.getByRole('button', { name: 'Apply batch as one Assess draft version', exact: true })).toBeDisabled();
   await review.getByLabel('Resolution rationale').fill('The existing manual objective remains authoritative for this draft.');
   await review.getByRole('button', { name: 'Retain manual value', exact: true }).click();
@@ -157,6 +160,25 @@ test('exact bundle review preserves historical source-set lineage across current
   await assertAccessibleAndContained(page);
   evidence(fixture, testInfo, ['ASSESS-TR-001', 'ASSESS-TR-002', 'ASSESS-TR-003', 'ASSESS-TR-004', 'ASSESS-TR-006', 'ASSESS-TR-007', 'IDEMP-002-A', 'A11Y-001', 'A11Y-002', 'A11Y-003', 'A11Y-004'], 'exact-lineage-conflict-replay');
 });
+
+for (const legacyEvidenceTarget of ['missing', 'evidence.unresolved'] as const) {
+  test(`legacy evidence candidate with ${legacyEvidenceTarget} destination remains read-only`, async ({ page }) => {
+    const fixture = await installEnterpriseIntelligenceFixture(page, { transcriptFlow: true, legacyEvidenceTarget });
+    await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+    await tab(page, 'Candidate Review').click();
+    const review = activeSection(page);
+    await selectByText(review.getByLabel('Locked input bundle'), 'Overlapping reference bundle');
+    await selectByText(review.getByLabel('Editable Assess draft'), 'Draft version 1');
+    const candidate = review.locator('article').filter({ hasText: 'Other-bundle candidate must never mix' });
+    await expect(candidate).toContainText('accepted');
+    await expect(candidate).toContainText('cannot be selected');
+    await expect(candidate.getByRole('checkbox', { name: 'Include in preview' })).toHaveCount(0);
+    await expect(review.getByRole('button', { name: 'Preview exact Assess changes', exact: true })).toBeDisabled();
+    await expect(review.getByRole('button', { name: 'Apply batch as one Assess draft version', exact: true })).toHaveCount(0);
+    expect(fixture.operations.filter(operation => operation.startsWith('transcript.'))).toEqual([]);
+    expect(fixture.unexpectedRequests).toEqual([]);
+  });
+}
 
 test('current-root substitution in projected binding lineage is rejected before mutation', async ({ page }, testInfo) => {
   const fixture = await installEnterpriseIntelligenceFixture(page, { transcriptFlow: true });
