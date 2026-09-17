@@ -1,5 +1,20 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+AP subsequently approved the local AI correction's same-branch commit/push,
+exact-head CI and separate USD 0/month Mumbai synthetic AI project. Follow
+`docs/planning/assess-studio-ai-output-correction.md` for isolation, aggregate
+USD 10 spending and rollback gates. Existing provider-free targets stay unchanged;
+merge, document approval/handoff and production remain outside scope.
+
+## Local synthetic AI-output continuation
+
+The approved 2026-09-17 correction is owned by
+`docs/planning/assess-studio-ai-output-correction.md`. Correct prompt/output
+contracts and local budget accounting together, retain failed attempts, and test
+production component functions before claiming AI usefulness. No hosted activation
+or readiness promotion follows from local component success.
+
+
 ## Native Assess supporting-document implementation
 
 The current exploratory release hold is the PostgREST transaction/actual-actor

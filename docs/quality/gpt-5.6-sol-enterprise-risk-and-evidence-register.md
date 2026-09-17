@@ -1,5 +1,33 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+AP subsequently approved same-branch AI-correction release and a separate
+USD 0/month synthetic AI project. Its target isolation, server-only secrets,
+aggregate USD 10 budget and hosted field-by-field behavior remain planned
+verification. This supersedes the earlier local-only release restriction, not
+the existing provider-free backend restrictions or historical proof boundaries.
+
+## Active synthetic AI-output correction
+
+Executed component evidence on 2026-09-17: corrected Assess mapping passes; PDD
+has exact sections/titles, coverage and canonical citations but altered AP analyst
+to API analyst in a retained live attempt. Structure is not semantic grounding.
+Earlier output also weakened a prohibition and invented compliance wording.
+Encoding causation remains suspected. The reviewed Studio-only JSON-string frame
+keeps all decoded text untrusted and passed bounded security verification. Its one
+live PDD attempt failed required-section completeness (four instead of five).
+Subsequent OpenAI schema enforcement and tested scope-equivalence oracles produced
+passing PDD, BRD and FRD component fixtures. Schema overhead is included in the
+pre-effect reservation; exact IDs/order/titles/anchors and semantic fixture checks
+remain independently enforced after the response. The conservative campaign charge
+is USD 0.86932; further paid calls stopped. General semantic fidelity and hosted
+integration remain unproven despite these successful fixtures.
+Do not weaken provenance validation or infer hosted success. Earlier uncertain
+spend remains conservatively charged; later usage is recorded before business
+validation. The current plan is `docs/planning/assess-studio-ai-output-correction.md`.
+The provider-free target marker's lifecycle enforcement gap remains deferred;
+this continuation does not enable real providers on either hosted target.
+
+
 ## Active native Assess document-mapping verification
 
 Current confirmed source defect: STABLE projection RPCs take canonical row locks,

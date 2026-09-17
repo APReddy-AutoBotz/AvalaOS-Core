@@ -80,7 +80,7 @@ const notRun = [
   },
   {
     testId: 'REAL-PROVIDER-VERIFICATION', owner: 'boundary', testName: 'Real AI provider verification', command: null,
-    reason: 'Real provider execution was not separately authorized or safely budgeted; deterministic provider mocks retain the boundary without exposing credentials.',
+    reason: 'This canonical PR C workflow is credential-free and executes deterministic provider mocks; separately authorized budgeted synthetic AI testing requires its own evidence and is not executed by this workflow.',
     applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {

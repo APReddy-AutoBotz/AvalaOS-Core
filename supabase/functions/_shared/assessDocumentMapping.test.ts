@@ -19,6 +19,16 @@ const source = async (overrides: Partial<AssessMappingDecodedSource> = {}): Prom
     normalizedHash: await sha256Hex(text), extractedByteCount: new TextEncoder().encode(text).byteLength, sheetCount: 0, cellCount: 0, warnings: [], text, ...overrides };
 };
 
+test('prompt requests grounded mappings while retaining legitimate empty output', async () => {
+  const instruction = buildAssessDocumentMappingTaskInstruction([target]);
+  for (const required of ['empty array only when', 'case.description', '0 to 1', 'neutral, supporting, or contradictory', 'verbatim', 'valueType']) assert.ok(instruction.includes(required));
+  assert.ok(!instruction.includes(target.selectorId)); assert.ok(!instruction.includes(target.contextLabel));
+  const grounded = await source({ text: 'Review invoice exceptions against purchase orders.' });
+  const decoded = await decodeGroundedAssessMappingProposalResult({ value: { proposals: [{ targetSelectorId: target.selectorId, sourceVersionId: grounded.sourceVersionId, proposedValue: grounded.text, confidence: 0.9, rationale: 'Explicit description', safeExcerpt: grounded.text, locator: 'text', relationship: 'supporting' }] }, targets: [target], sources: [grounded], createProposalId: () => id(80) });
+  assert.equal(decoded.proposals.length, 1); assert.equal(decoded.warnings.length, 0);
+  assert.deepEqual(await decodeGroundedAssessMappingProposalResult({ value: { proposals: [] }, targets: [target], sources: [grounded], createProposalId: () => id(81) }), { proposals: [], warnings: [] });
+});
+
 test('catalog uses server selectors and excludes user labels from trusted instructions', async () => {
   let selector = 100;
   const catalog = await buildAssessMappingCatalog({ catalogId: id(2), caseId: draft.caseId, caseVersion: 1, assessSchemaVersion: 'assess-v2-schema-2026-07', draft,

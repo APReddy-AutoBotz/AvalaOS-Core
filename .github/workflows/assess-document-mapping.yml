@@ -38,6 +38,10 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Local campaign budget adversarial tests (no credentials or provider calls)
+        run: npm run test:synthetic-ai-budget
+      - name: Studio template and citation-reference contract regressions (mocked providers)
+        run: npm run test:studio-output-contract
       - run: npx playwright install --with-deps chromium
       - name: Cache exact disposable projection RPC test images
         run: |

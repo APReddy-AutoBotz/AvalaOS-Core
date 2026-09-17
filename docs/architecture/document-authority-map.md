@@ -1,5 +1,8 @@
 # AvalaOS Core Document Authority Map
 
+The local AI-output correction and subsequent isolated synthetic AI release are
+governed by `docs/planning/assess-studio-ai-output-correction.md`.
+
 ## Studio governed-artifact authority
 
 The canonical Studio governed-artifact data, command, lifecycle, source-package, template, Assess-to-Studio handoff, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. The accepted private-rendition, storage, brokered-download, retention, legal-hold, deletion, reconciliation, and rollback authority remains routed separately to `docs/architecture/studio-private-artifact-authority.md`. The active governed multi-source transcript implementation boundary and its PR A/PR B/PR C sequence are defined by `docs/planning/governed-multisource-transcript-module-handoff-plan.md`.

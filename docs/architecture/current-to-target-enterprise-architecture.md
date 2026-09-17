@@ -1,5 +1,31 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+The subsequently approved separate synthetic AI environment must establish its
+own server-bound target, private secret and durable aggregate spend authority
+before activation. The local ledger cannot replace hosted controls. Commit/push
+and exact-head CI are authorized; hosted behavior remains unproven. Existing
+provider-free backends remain unchanged. The AI-output correction plan owns this
+bounded rollout, not a production or document-approval authority extension.
+
+## Local synthetic AI-output correction boundary
+
+The 2026-09-17 correction uses production prompt/adapter/validator functions with
+synthetic authority and actual Studio material-loader fixtures, not live database
+authorization. Exact template sections and canonical source citations remain
+mandatory. A durable local spending ledger is not a hosted authorization control.
+See `docs/planning/assess-studio-ai-output-correction.md`; existing provider-free
+environments remain unchanged.
+
+Only canonical `studio.document.generate` selects a private readable JSON-string
+frame; all other capabilities retain exact BASE64URL framing. Raw UTF-8 is bounded
+at 120 KB, serialized JSON at 160 KB, line separators are escaped, and the same
+builder owns estimation. No caller flag or server-authorization change exists.
+Readable framing alone failed live completeness. OpenAI Studio now additionally
+receives a bounded strict response schema; its serialized overhead is reserved
+before effect. Other provider request bodies remain unchanged. Final PDD/BRD/FRD
+fixtures pass, but neither framing nor schema is semantic-grounding or hosted proof.
+
+
 ## Native Assess supporting-document mapping boundary
 
 Current correction: both public Delivery/Monitor projections must be VOLATILE

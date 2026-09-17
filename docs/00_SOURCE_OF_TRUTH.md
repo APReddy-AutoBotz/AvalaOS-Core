@@ -1,5 +1,32 @@
 # AvalaOS Core Source Of Truth
 
+## Subsequent isolated AI release approval (2026-09-17)
+
+AP approved same-branch commit/push, exact-head CI and a separate AI-enabled
+synthetic environment, confirming `avalaos-ai-synthetic` in Mumbai at USD 0/month.
+This supersedes the initial local-only release prohibitions below, not their
+evidence boundaries. The aggregate OpenAI cap remains USD 10 including prior
+charges. Both existing provider-free backends remain unchanged. Server-only keys,
+target binding and durable aggregate budget controls must pass before activation.
+Merge, document approval/handoff, production, AvalaOS.com and customer data remain
+unauthorized. See `docs/planning/assess-studio-ai-output-correction.md`.
+
+## Approved local AI-output correction (2026-09-17)
+
+AP authorized the local synthetic Assess/Studio correction governed by
+`docs/planning/assess-studio-ai-output-correction.md`, using the saved OpenAI key
+in memory within the existing aggregate USD 10 cap. No hosted provider activation,
+deployment, approval/handoff, push or merge is authorized by this continuation.
+Assess mapping and the final PDD, BRD and FRD real-provider component fixtures pass.
+The correction combines template/canonical-citation validation, opaque citation
+references, Studio-only readable untrusted framing and OpenAI schema-enforced
+section counts with schema overhead reserved before effect. Earlier failures,
+including actor corruption, weakened prohibitions and omitted sections, remain
+retained. Encoding causation is not proven. These fixture passes are not general
+semantic correctness, hosted end-to-end proof or document approval. Current
+conservative campaign charge is USD 0.86932 of USD 10; further paid calls stopped.
+
+
 ## Approved native Assess supporting-document continuation
 
 Current exploratory release hold (2026-09-17): head `484ce7a7bc897180043a395254991b57a05bdbc5`

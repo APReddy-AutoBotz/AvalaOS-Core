@@ -1,5 +1,5 @@
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
-import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioGenerationClaim } from './studioArtifactGeneration.ts';
+import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioGenerationClaim, type StudioGenerationDependencies } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 
@@ -20,9 +20,27 @@ const valid = {
   coverage: { selectedSourceVersionIds: [ids[0]], coveredSourceVersionIds: [ids[0]], complete: true },
 };
 const canonicalAnchors = [valid.sections[0].sourceAnchors[0]];
+const tenantTemplatePayload = {
+  sectionDefinitions: [
+    { id: 'scope', title: 'Scope', required: true, fieldKind: 'narrative' },
+    { id: 'risks', title: 'Risks', required: true, fieldKind: 'risks' },
+  ],
+  fieldSchema: {},
+};
 
 mark(validateStudioDraft(valid, [ids[0]], canonicalAnchors) === valid, 'STUDIO-TR-008', 'generation.section-provenance-complete', 'source-backed-and-template-required-sections');
+mark(validateStudioDraft(valid, [ids[0]], canonicalAnchors, tenantTemplatePayload) === valid,
+  'STUDIO-TR-008', 'generation.exact-tenant-template-sections-complete', 'tenant-template-exact-sections');
 mark(Boolean(validateStudioDraft({ title: 'Legacy', summary: 'Readable', sections: [{ title: 'Scope', content: 'Accepted history' }] })), 'STUDIO-TR-005', 'generation.legacy-studio-artifact-1-readable', 'accepted-assess-derived-artifact');
+let legacyProviderOutputRejected = false;
+try {
+  validateStudioDraft(
+    { title: 'Legacy', summary: 'Readable', sections: [{ title: 'Scope', content: 'Accepted history' }] },
+    [ids[0]], canonicalAnchors, tenantTemplatePayload,
+  );
+} catch { legacyProviderOutputRejected = true; }
+mark(legacyProviderOutputRejected, 'STUDIO-TR-008',
+  'generation.legacy-reader-retained-but-new-provider-output-requires-v2', 'legacy-provider-output-template-boundary');
 for (const [assertionId, invalid] of [
   ['generation.unknown-top-key', { ...valid, provider: 'client-selected' }],
   ['generation.unselected-source-anchor', { ...valid, sections: [{ ...valid.sections[0], sourceAnchors: [{ ...valid.sections[0].sourceAnchors[0], sourceVersionId: ids[1] }] }], }],
@@ -77,6 +95,49 @@ mark(structuredInvalidCount === structuredInvalidMatrix.length,
   'STUDIO-TR-008', 'generation.structured-and-legacy-invalid-branch-matrix',
   'invalid-structured-document-matrix');
 
+const templateDriftMatrix = [
+  { ...valid, sections: [valid.sections[0]] },
+  { ...valid, sections: [...valid.sections, { ...valid.sections[1], id: 'extra', title: 'Extra' }] },
+  { ...valid, sections: [{ ...valid.sections[0], id: 'renamed' }, valid.sections[1]] },
+  { ...valid, sections: [{ ...valid.sections[0], title: 'Renamed scope' }, valid.sections[1]] },
+  { ...valid, sections: [valid.sections[1], valid.sections[0]] },
+  { ...valid, sections: [{ ...valid.sections[0], body: '   ' }, valid.sections[1]] },
+  { ...valid, sections: [valid.sections[0], { ...valid.sections[1], body: '  BOUNDED   source-backed content. ' }] },
+];
+let templateDriftRejections = 0;
+for (const candidate of templateDriftMatrix) {
+  try { validateStudioDraft(candidate, [ids[0]], canonicalAnchors, tenantTemplatePayload); }
+  catch { templateDriftRejections += 1; }
+}
+mark(templateDriftRejections === templateDriftMatrix.length,
+  'STUDIO-TR-008', 'generation.template-omission-extra-rename-order-blank-and-duplicate-body-rejected',
+  'tenant-template-adversarial-output-matrix');
+
+const systemPddTemplate = {
+  artifactType: 'pdd', sections: ['summary', 'process', 'roles', 'controls', 'exceptions'],
+};
+const pddSections = ['summary', 'process', 'roles', 'controls', 'exceptions'].map((id, index) => ({
+  id,
+  title: `${id[0].toUpperCase()}${id.slice(1)}`,
+  body: `Distinct ${id} content ${index + 1}.`,
+  sourceAnchors: index === 0 ? canonicalAnchors : [],
+  labels: index === 0 ? [] : ['template_required'],
+}));
+const validPdd = { ...valid, sections: pddSections };
+mark(validateStudioDraft(validPdd, [ids[0]], canonicalAnchors, systemPddTemplate) === validPdd,
+  'STUDIO-TR-008', 'generation.production-system-pdd-template-validates', 'system-pdd-distinct-complete-output');
+let retainedFailureRejected = false;
+try {
+  validateStudioDraft({
+    ...validPdd,
+    sections: pddSections.map(section => ({ ...section, body: 'Repeated generic transcript summary.' })),
+    coverage: [{ sourceVersionId: ids[0] }],
+  }, [ids[0]], canonicalAnchors, systemPddTemplate);
+} catch { retainedFailureRejected = true; }
+mark(retainedFailureRejected, 'STUDIO-TR-008',
+  'generation.retained-real-pdd-array-coverage-and-duplicate-bodies-rejected',
+  'retained-openai-pdd-failure-shape');
+
 const decision = {
   status: 'allowed', provider: 'openai', routeId: ids[1], providerConfigId: ids[2], keyRefId: ids[3],
   keyRefResolverType: 'server_reference', operation: 'studio.document.generate', capability: 'studio.document.generate',
@@ -91,7 +152,7 @@ const claim: StudioGenerationClaim = {
   sourcePackage: { selectedFacts: [{ sourceVersionId: ids[0], value: 'Synthetic requirement.' }] },
   sourcePackageHash: hash('b'), selectedSourceVersionIds: [ids[0]], sourceAnchors: canonicalAnchors, sourcePackageHead: 4,
   templateId: ids[13], templateVersionId: ids[2], templateVersion: 3,
-  templatePayload: { sections: [{ id: 'scope', required: true }] }, templateHash: hash('c'), templateHead: 3,
+  templatePayload: tenantTemplatePayload, templateHash: hash('c'), templateHead: 3,
   expectedArtifactHead: 0, manualBrief: null,
   providerPlan: { provider: 'openai', routeId: ids[1], providerConfigId: ids[2], model: 'governed-model', resolverDecision: decision },
   maximumOutputTokens: 2_000, timeoutMs: 30_000,
@@ -174,16 +235,21 @@ void (async () => {
     receiptId: ids[9], attemptId: ids[7], reservationId: ids[3], executionFence: 2, contenders: 2, providerEffects: 1,
   }));
 
-  const events: string[] = []; let providerEffects = 0;
+  const events: string[] = []; let providerEffects = 0; let providerInputAnchorsBound = false;
   const deps = {
-    runProvider: async () => { providerEffects += 1; events.push('provider'); return providerResult; },
+    runProvider: async (providerInput: Parameters<StudioGenerationDependencies['runProvider']>[0]) => {
+      providerInputAnchorsBound = JSON.stringify(providerInput.canonicalSourceAnchors) === JSON.stringify(canonicalAnchors);
+      providerEffects += 1; events.push('provider'); return providerResult;
+    },
     stage: async () => { events.push('stage'); },
     finalize: async () => { events.push('finalize'); return { state: 'completed' as const, resource: { artifactId: ids[8], version: 1 } }; },
     fail: async (_attemptId: string, code: string) => { events.push(`fail:${code}`); },
     runBudgeted: executedBudget,
   };
   const success = await executeClaimedStudioGeneration(claim, deps);
-  mark(success.state === 'completed' && providerEffects === 1 && events.join(',') === 'provider,stage,finalize', 'IDEMP-001', 'generation.one-provider-effect-staged-before-finalize', 'provider-success-single-effect');
+  mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound
+    && events.join(',') === 'provider,stage,finalize',
+  'IDEMP-001', 'generation.one-provider-effect-staged-before-finalize', 'provider-success-single-effect');
 
   events.length = 0; providerEffects = 0;
   const replay = await executeClaimedStudioGeneration(claim, { ...deps, runBudgeted: replayBudget });
