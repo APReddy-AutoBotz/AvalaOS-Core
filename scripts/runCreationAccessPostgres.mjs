@@ -61,8 +61,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260916203406');
-  assert.equal(migrations.length, 79);
+  assert.equal(approvedFullChainTip(migrations), '20260917173445');
+  assert.equal(migrations.length, 80);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -72,13 +72,23 @@ try {
   assert.ok(creationStart > 0);
   assert.deepEqual([oldConvergenceIndex, mappingIndex, mappingConvergenceIndex, xlsxCorrectionIndex, projectionVolatilityIndex],
     [creationStart + 2, creationStart + 3, creationStart + 4, creationStart + 5, creationStart + 6]);
-  assert.equal(projectionVolatilityIndex, migrations.length - 1);
+  const campaignAuthorityIndex = migrations.indexOf('20260917173445_synthetic_ai_campaign_authority.sql');
+  assert.equal(campaignAuthorityIndex, projectionVolatilityIndex + 1);
+  assert.equal(campaignAuthorityIndex, migrations.length - 1);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
       await db.query('BEGIN');
       try { await db.query(sql); await db.query('COMMIT'); }
-      catch (error) { await db.query('ROLLBACK'); console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}`); throw error; }
+      catch (error) {
+        await db.query('ROLLBACK');
+        // Retain only fixed domain codes; never expose SQL diagnostics, rows,
+        // connection strings, function arguments or raw exception objects.
+        const domainCode = /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message ?? '') ? error.message : 'UNCLASSIFIED';
+        report.migrationFailure = { path: file, sqlstate: error.code ?? 'unknown', domainCode };
+        console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}; domain ${domainCode}`);
+        throw error;
+      }
       if (!report.migrations.some(row => row.path === file)) report.migrations.push({ path: file, sha256: createHash('sha256').update(sql).digest('hex') });
     }
   };
@@ -95,18 +105,18 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async db => {
+  const assertFinalIdentity = async (db, expectedTip = '20260917173445') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {
       product_key: 'avalaos-core', environment_class: 'hosted_nonproduction_pilot', schema_contract: 'hosted-pilot-2026-08',
-      migration_tip: '20260916203406', production_authorized: false, customer_data_authorized: false,
+      migration_tip: expectedTip, production_authorized: false, customer_data_authorized: false,
       real_provider_calls_authorized: false,
     });
     assert.equal((await db.query(`SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
       WHERE conrelid='hosted_pilot_environment_identity'::regclass
         AND conname='hosted_pilot_environment_identity_migration_tip_check'`)).rows[0].expression,
-      "(migration_tip = '20260916203406'::text)");
+      `(migration_tip = '${expectedTip}'::text)`);
   };
   const processDb = await createDb('process');
   await apply(processDb.db, migrations);
@@ -117,6 +127,13 @@ try {
   await apply(adminDb.db, migrations);
   await assertFinalIdentity(adminDb.db);
   await child('scripts/testSyntheticAdminPostgres.mjs', { SYNTHETIC_ADMIN_DISPOSABLE_DATABASE_URL: adminDb.dbUrl.toString() });
+
+  // Separate fresh synthetic DB: campaign bootstrap must prove an empty provider
+  // surface, not depend on preceding suites' fixture mutations.
+  const campaignDb = await createDb('ai_campaign');
+  await apply(campaignDb.db, migrations);
+  await assertFinalIdentity(campaignDb.db);
+  await child('scripts/testSyntheticAiCampaignPostgres.mjs', { SYNTHETIC_AI_CAMPAIGN_DISPOSABLE_DATABASE_URL: campaignDb.dbUrl.toString() });
 
   const upgrade = await createDb('upgrade');
   await apply(upgrade.db, migrations.slice(0, creationStart));
@@ -521,11 +538,17 @@ try {
     assert.deepEqual(projectionAfter[name].metadata,projectionBefore[name].metadata,
       `${name} must preserve whole pg_proc metadata except volatility`);
   }
-  await assertFinalIdentity(upgrade.db);
+  await assertFinalIdentity(upgrade.db, '20260916203406');
   assert.equal((await upgrade.db.query('SELECT count(*)::int AS n FROM synthetic_admin_targets')).rows[0].n, 0);
   assert.equal((await upgrade.db.query('SELECT count(*)::int AS n FROM process_creation_workspace_controls')).rows[0].n, 0);
   report.scenarios.push({ scenario: 'populated-78-to-79-upgrade-preserves-process-flags-source-classifier-projection-metadata-and-default-off-targets', status: 'passed', assertions: 17 });
   console.log('Populated 78-to-79 upgrade: retained process, enabled mapping flag, text source, classifier authority, projection RPC metadata, exact final identity, and unconfigured creation targets are preserved.');
+  await apply(upgrade.db, [migrations[campaignAuthorityIndex]]);
+  await assertFinalIdentity(upgrade.db);
+  assert.deepEqual(await retained(), before);
+  assert.deepEqual(await retainedXlsxUpgradeState(), retainedBeforeXlsx);
+  assert.deepEqual(await projectionAuthority(upgrade.db), projectionAfter);
+  report.scenarios.push({ scenario: 'campaign-authority-successor-preserves-retained-process-source-and-projections', status: 'passed' });
   // The retained operational identity must follow the same final migration
   // ledger on both fresh and accepted-baseline upgrades, including stale/ahead
   // marker denial. Running only the new feature RPCs misses this dependency.

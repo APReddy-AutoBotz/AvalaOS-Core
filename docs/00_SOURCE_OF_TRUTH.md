@@ -1,5 +1,19 @@
 # AvalaOS Core Source Of Truth
 
+## Approved hosted AI safeguards implementation
+
+AP approved local implementation of separate synthetic AI target authority and
+server-enforced aggregate spending controls. Initial read-only design reviews are closed.
+Existing provider-free flags remain false; the new authority is additive and
+disabled unless explicitly provisioned for the separately approved target.
+The immutable USD 10 campaign includes USD 0.86932 conservatively carried forward and reserves
+USD 0.4714592 conservatively per additional effect, with no refunds or reset.
+Nineteen additional effects fit; the twentieth must reject. Paid local execution
+is stopped. Hosted activation and full UI acceptance remain not run pending new
+gates. See the active AI-output correction plan for scope and rollback and
+[active safeguards evidence](quality/synthetic-ai-campaign-safeguards-evidence.md)
+for executed local results and remaining review boundaries.
+
 ## Subsequent isolated AI release approval (2026-09-17)
 
 AP approved same-branch commit/push, exact-head CI and a separate AI-enabled

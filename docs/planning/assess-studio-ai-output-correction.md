@@ -1,5 +1,58 @@
 # Assess and Studio AI output correction
 
+## Approved hosted campaign safeguards continuation
+
+AP approved implementing target authority and aggregate-budget safeguards. The
+read-only architecture and security reviews are closed; the root owns quality
+synthesis and integration. Implementation remains local until the new gates pass.
+Preserve all existing provider-free authority rows and false flags. A separate,
+initially empty database authority governs only the separately approved AI target.
+The separately approved exploratory pause does not authorize deleting its data.
+The frozen controlled-human backend remains untouched.
+
+Immutable USD nanos: cap 10,000,000,000; prior charge 869,320,000; debit 471,459,200
+per attempted provider effect, including validation. The debit covers pinned-model
+full input context (1,047,576 tokens at 400 nanos) and maximum output (32,768 at
+1,600 nanos). Nineteen attempts fit at aggregate 9,827,044,800; attempt twenty
+must reject at 10,298,504,000. This is authorization, not invoice proof. No refund,
+reset, deletion, daily rollover or usage-based reduction. Local paid execution
+stays stopped after carry transfer; preserve its original ledger and limits.
+
+Only first-party OpenAI, model `gpt-4.1-mini-2025-04-14`, is allowed. Bind exact
+server target, organization/workspace, fresh actor authority, configuration,
+route where applicable, private key reference, endpoint, model, operation and
+durable attempt identity. Allow only provider validation, Assess extraction and
+Studio generation. Legacy arbitrary-key callbacks and environment flags cannot
+supply authority. Missing RPC, malformed response, wrong scope or stale authority
+blocks before secret access. Reserve a one-use permit before secret resolution;
+consume it before network egress, including lifecycle validation/rotation paths.
+Existing token budgets remain additional controls.
+
+Integration finding: the retained token-reservation capability mapping expects
+`evidence.write` / `docs.approve`, while the intended author has
+`assess.v2.draft.write` / `studio.artifacts.generate`. Do not grant authors review
+or approval authority to make generation pass. The forward correction must select
+the authoring capabilities only for the exact active campaign binding, preserving
+ordinary mapping. Token reservation alone never grants provider egress: the
+independently atomic currency permit remains mandatory before secret/network.
+Failure between the two reservations is conservative, not permission to refund
+or bypass either control. Verify the real chained path with the intended role.
+
+One implementation worker owns the CLI-created forward migration, permit module,
+runtime integration and focused tests. The root owns active docs, migration-tail
+and full-chain integration, and broader verification. No nested delegation.
+Verify real disposable PostgreSQL fresh/upgrade and fail-closed reapply rejection
+(exact predecessor rejection, transaction rollback, unchanged data and authority metadata), concurrent final-slot
+reservation, replay/substitution/double consumption, immutable carry/debits,
+wrong target/tenant/workspace/model/endpoint/key/route, expiry, missing RPC and
+transport ambiguity. Spies must show zero secret access/fetch on denied calls.
+Post-reservation failures retain the debit. Retain gateway/lifecycle/token-budget
+regressions, typechecks, static security, secret hygiene and canonical provenance.
+Hosted installation and paid browser tests stay not run until these gates and new
+exact-head CI pass. Rollback disables only the new campaign/routes and retains
+all attempts and evidence. These approved schema/runtime changes supersede the
+earlier local-only no-schema scope below, not its historical evidence boundaries.
+
 ## Subsequent release approval and execution gates
 
 AP approved same-branch commit/push, exact-head CI and a separate AI-enabled

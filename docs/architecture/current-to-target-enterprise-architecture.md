@@ -1,5 +1,18 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+Approved implementation design: an additive, initially empty campaign authority
+must not convert existing provider-free markers to provider authorization.
+Exact database-owned target/scope/configuration/key/model/operation bindings and
+fresh authorization precede secret access. A durable one-use permit is charged
+before secret resolution and consumed before provider egress, including lifecycle
+validation. Generic callbacks and missing authority cannot bypass the gate.
+Immutable integer-nano currency debits supplement, not replace, token budgets.
+The prior charge is carried forward with no refund/reset/day rollover. These
+controls passed local validation and independent review; they are not deployed or
+hosted proof. The gateway snapshots and hashes the exact immutable transport, and
+validation binds its non-secret identity before permit consumption. See the active
+synthetic AI safeguards evidence for executed results and remaining hosted gates.
+
 The subsequently approved separate synthetic AI environment must establish its
 own server-bound target, private secret and durable aggregate spend authority
 before activation. The local ledger cannot replace hosted controls. Commit/push

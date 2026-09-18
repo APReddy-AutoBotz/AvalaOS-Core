@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { approvedFullChainTip } from './prCMigrationTailContract.mjs';
 import {
   expectedPrCCommandRegistry,
   PR_C_FIXTURE_PATH,
@@ -197,6 +198,18 @@ const seen = new Set();
 const assertions = refreshBindingsOnly
   ? JSON.parse(readFileSync(path.join(root, PR_C_REGISTRY_PATH), 'utf8')).assertions
   : [];
+
+if (refreshBindingsOnly) {
+  // This registry declares expected assertion context, not an executed PASS.
+  // A successor changes the fresh-chain expectation; derive it from the
+  // independently allowlisted migration inventory, never caller/manifest input.
+  const fresh = assertions.filter(value => value.assertionId === 'FRESH-PG16-DEFAULT-OFF');
+  assert(fresh.length === 1 && fresh[0].commandId === 'pr-c-postgres'
+    && fresh[0].owner === 'postgres' && fresh[0].testId === 'DELIVERY-TR-006'
+    && fresh[0].fixture === 'fresh-pg16', 'PR_C_BUILD_FRESH_CHAIN_BINDING');
+  fresh[0].expectedRuntimeContext.migrationTip = approvedFullChainTip(
+    readdirSync(path.join(root, 'supabase/migrations')).filter(file => file.endsWith('.sql')).sort());
+}
 
 for (const commandId of refreshBindingsOnly ? [] : selectedCommandIds) {
   const command = commandsById.get(commandId);

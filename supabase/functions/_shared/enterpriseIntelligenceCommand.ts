@@ -1625,6 +1625,10 @@ const commandEvidenceExtract = async (
       capability: 'assess.evidence.extract',
       taskInstruction,
       untrustedSource: text,
+      providerEffect: {
+        authorizationVersion: authority.authorizationVersion, receiptId: receipt.id, effectId: jobId,
+        executionToken: receipt.execution_token!, executionFence: receipt.execution_fence!,
+      },
       authorization: {
         organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId,
         providerConfigId: routePlan.providerConfigId, capability: 'assess.evidence.extract', routeEnabled: true,
@@ -2955,6 +2959,8 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
     estimatedInputTokens: estimateMaximumProviderInputTokens({ capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed }), maximumOutputTokens: 4_096,
   }, () => runGovernedProviderRequest({ provider: route.config.provider, endpoint: route.config.endpoint_url || undefined, deployment: route.config.deployment_name || undefined,
     model: route.model, capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed,
+    providerEffect: { authorizationVersion: authority.authorizationVersion, receiptId: receipt.id, effectId: runId,
+      executionToken: receipt.execution_token!, executionFence: receipt.execution_fence! },
     authorization: { organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId, providerConfigId: route.config.id,
       capability: 'assess.evidence.extract', routeEnabled: true, resolverDecision: route.decision } }), {
     classifyFailure: classifyEnterpriseProviderFailureForBudget,

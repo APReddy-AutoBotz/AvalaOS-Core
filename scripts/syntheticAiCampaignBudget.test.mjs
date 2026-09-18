@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { campaignFetch, costNanos, initializeCampaign, inspectCampaign, POLICY, validateCampaignRequest } from './syntheticAiCampaignBudget.mjs';
+import { campaignFetch, costNanos, initializeCampaign, inspectCampaign, POLICY, validateCampaignRequest, sealCampaignForHostedTransfer } from './syntheticAiCampaignBudget.mjs';
 const directory = () => { const dir = mkdtempSync(join(tmpdir(), 'avala-ai-budget-')); initializeCampaign(dir); return dir; };
 const options = (extra = {}) => ({ method: 'POST', redirect: 'error', body: JSON.stringify({ model: POLICY.model, max_tokens: 1000, temperature: 0, tools: [], messages: [{ role: 'system', content: 'Trusted test contract.' }, { role: 'user', content: 'Synthetic only.' }], ...extra }) });
 const reply = (extra = {}) => new Response(JSON.stringify({ model: POLICY.model, usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }, choices: [{ message: { content: '{"invalid":"business output"}' } }], ...extra }), { status: 200 });
@@ -61,4 +61,46 @@ test('finite call limit cannot reset with a new operation name', async () => {
   for (let i = 0; i < POLICY.maxCalls; i++) await campaignFetch(dir, `assess-limit-${i}`, POLICY.endpoint, options(), transport);
   await assert.rejects(campaignFetch(dir, 'studio-over', POLICY.endpoint, options(), transport)); assert.equal(effects, POLICY.maxCalls);
   assert.ok(inspectCampaign(dir).entries.reduce((n, e) => n + e.chargedNanos, POLICY.carryNanos) < POLICY.capNanos);
+});
+
+const hostedTarget = `sha256:${'a'.repeat(64)}`;
+const transferReady = async () => {
+  const dir = directory();
+  // Exactly 23,259,200 nanos, plus the retained 846,060,800 carry.
+  await campaignFetch(dir, 'assess-transfer', POLICY.endpoint, options(), async () => reply({
+    usage: { prompt_tokens: 57948, completion_tokens: 50, total_tokens: 57998 },
+  }));
+  return dir;
+};
+
+test('hosted transfer binds exact carry and target, preserves ledger, and closes local paid execution', async () => {
+  const dir = await transferReady(), before = readFileSync(join(dir, 'ledger.json'));
+  const seal = sealCampaignForHostedTransfer(dir, hostedTarget, 869320000);
+  assert.equal(seal.carryNanos, 869320000); assert.match(seal.sealDigest, /^sha256:[a-f0-9]{64}$/);
+  assert.deepEqual(sealCampaignForHostedTransfer(dir, hostedTarget, 869320000), seal);
+  assert.deepEqual(readFileSync(join(dir, 'ledger.json')), before);
+  assert.throws(() => sealCampaignForHostedTransfer(dir, `sha256:${'b'.repeat(64)}`, 869320000));
+  let effects = 0;
+  await assert.rejects(campaignFetch(dir, 'studio-after-transfer', POLICY.endpoint, options(), async () => { effects++; return reply(); }), /TRANSFERRED/);
+  assert.equal(effects, 0); assert.deepEqual(readFileSync(join(dir, 'ledger.json')), before);
+});
+
+test('transfer rejects incorrect carry, target, unresolved effect and concurrent paid execution', async () => {
+  const dir = directory();
+  assert.throws(() => sealCampaignForHostedTransfer(dir, hostedTarget, 869320000));
+  assert.throws(() => sealCampaignForHostedTransfer(dir, hostedTarget, POLICY.carryNanos));
+  assert.throws(() => sealCampaignForHostedTransfer(dir, 'unbound', 869320000));
+  let release; const pending = new Promise(resolve => { release = resolve; });
+  const effect = campaignFetch(dir, 'assess-in-flight', POLICY.endpoint, options(), async () => { await pending; throw new Error('timeout'); });
+  assert.throws(() => sealCampaignForHostedTransfer(dir, hostedTarget, 869320000), /LOCKED/);
+  release(); await assert.rejects(effect);
+  assert.throws(() => sealCampaignForHostedTransfer(dir, hostedTarget, 869320000));
+});
+
+test('partial or forged transfer seals fail closed without provider effects', async () => {
+  const dir = await transferReady(); writeFileSync(join(dir, 'hosted-transfer.json'), '{');
+  assert.throws(() => sealCampaignForHostedTransfer(dir, hostedTarget, 869320000));
+  let effects = 0;
+  await assert.rejects(campaignFetch(dir, 'studio-forged-seal', POLICY.endpoint, options(), async () => { effects++; return reply(); }), /TRANSFERRED/);
+  assert.equal(effects, 0);
 });

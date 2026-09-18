@@ -1,5 +1,17 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+Active approved safeguards: confirmed source defects are the absence of one
+aggregate currency cap across existing token budgets and separate lifecycle
+secret/validation paths that bypass a generation-only guard. The local correction
+adds exact target-bound one-use permits and immutable debits including prior
+USD 0.86932. Executed local verification covers final-slot concurrency, replay,
+substitution, wrong scope, missing authority, provider-free target denial and
+zero secret/network effects on rejected requests. Independent final review found
+and verified corrections to two trusted-wrapper transport-binding defects;
+no direct external exploit path was established. No hosted activation is proven.
+The previously deferred lifecycle enforcement gap below is now in this bounded
+implementation scope; existing provider-free backend data and flags stay intact.
+
 AP subsequently approved same-branch AI-correction release and a separate
 USD 0/month synthetic AI project. Its target isolation, server-only secrets,
 aggregate USD 10 budget and hosted field-by-field behavior remain planned

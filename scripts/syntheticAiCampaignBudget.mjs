@@ -69,6 +69,35 @@ export const initializeCampaign = directory => {
 };
 export const inspectCampaign = directory => load(join(safeDirectory(directory), 'ledger.json'));
 
+// A one-way handover, not a fresh allowance. The original ledger is never edited.
+// Creation uses the same lock as paid execution, so an in-flight effect cannot
+// race the carry snapshot. A partial/invalid seal still blocks paid execution.
+export const sealCampaignForHostedTransfer = (directory, targetFingerprint, expectedCarryNanos) => {
+  if (!/^sha256:[a-f0-9]{64}$/.test(targetFingerprint)
+    || expectedCarryNanos !== 869_320_000) fail();
+  const safe = safeDirectory(directory);
+  const lock = join(safe, 'ledger.lock');
+  let fd;
+  try { fd = openSync(lock, 'wx', 0o600); }
+  catch { throw new Error('SYNTHETIC_AI_CAMPAIGN_LOCKED'); }
+  try {
+    const ledger = load(join(safe, 'ledger.json'));
+    if (charge(ledger) !== expectedCarryNanos
+      || ledger.entries.some(entry => entry.state !== 'settled')) fail();
+    const filename = join(safe, 'hosted-transfer.json');
+    const seal = { schema: 1, campaign: POLICY.campaign, targetFingerprint,
+      capNanos: POLICY.capNanos, carryNanos: expectedCarryNanos,
+      ledgerSha256: hash(readFileSync(join(safe, 'ledger.json'))),
+      localPaidExecution: 'permanently_closed' };
+    const serialized = JSON.stringify(seal, null, 2);
+    if (existsSync(filename)) {
+      if (lstatSync(filename).isSymbolicLink() || lstatSync(filename).size > 4096
+        || readFileSync(filename, 'utf8') !== serialized) fail();
+    } else durable(filename, seal, true);
+    return { ...seal, sealDigest: `sha256:${hash(serialized)}` };
+  } finally { closeSync(fd); unlinkSync(lock); }
+};
+
 export function validateCampaignRequest(url, init) {
   if (String(url) !== POLICY.endpoint || init?.method !== 'POST' || init.redirect !== 'error'
     || typeof init.body !== 'string' || Buffer.byteLength(init.body) > 120_000) fail();
@@ -91,6 +120,8 @@ export async function campaignFetch(directory, id, url, init, fetchImpl = fetch)
   let persistenceFailed = false;
   const save = ledger => { try { durable(filename, ledger); } catch { persistenceFailed = true; fail(); } };
   try {
+    if (existsSync(join(safe, 'hosted-transfer.json')))
+      throw new Error('SYNTHETIC_AI_CAMPAIGN_TRANSFERRED');
     const ledger = load(filename); const requestHash = hash(`${POLICY.endpoint}\n${init.body}`);
     const prior = ledger.entries.find(entry => entry.id === id);
     if (prior) throw new Error(prior.requestHash === requestHash ? 'SYNTHETIC_AI_REPLAY_NO_EFFECT' : 'SYNTHETIC_AI_REPLAY_CONFLICT');

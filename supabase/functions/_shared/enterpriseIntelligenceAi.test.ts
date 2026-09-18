@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { ENTERPRISE_AI_CAPABILITIES } from '../../../services/enterpriseIntelligence';
 import {
   EnterpriseAiGatewayError, buildGovernedPrompt, canonicalizeProviderEndpoint, frameUntrustedSource,
+  createProviderValidationIdentity, hashProviderValidationIdentity,
   estimateMaximumProviderInputTokens, isSafeEnterpriseSecretReference, parseJsonObjectResponse,
-  parseProviderResponse, runGovernedProviderRequest,
+  parseProviderResponse, runGovernedProviderRequest, validateProviderConnection,
   type EnterpriseProviderRequest, type UnifiedEnterpriseAiProvider,
 } from './enterpriseIntelligenceAi';
 
@@ -19,6 +20,25 @@ const runtimeFixture = {
 const CONFIG = '44444444-4444-4444-8444-444444444444';
 const KEY = '55555555-5555-4555-8555-555555555555';
 const ROUTE = '66666666-6666-4666-8666-666666666666';
+const providerEffect = { authorizationVersion: 1,
+  receiptId: '77777777-7777-4777-8777-777777777777',
+  effectId: '88888888-8888-4888-8888-888888888888',
+  executionToken: '99999999-9999-4999-8999-999999999999', executionFence: 1 };
+// Adapter tests explicitly mock ordinary database authority. They do not prove
+// hosted campaign permission or spending enforcement.
+const pendingPermits = new Set<object>();
+const mockEffectAuthority = {
+  reserveEffect: async (binding: import('./syntheticAiCampaign').SyntheticAiEffectInput) => {
+    assert.equal(binding.receiptId, providerEffect.receiptId);
+    assert.equal(binding.effectId, providerEffect.effectId);
+    assert.equal(binding.actorId, runtimeFixture.actorId);
+    const permit = { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding };
+    pendingPermits.add(permit); return permit;
+  },
+  consumeEffect: async (permit: import('./syntheticAiCampaign').SyntheticAiEffectPermit) => {
+    assert.equal(pendingPermits.delete(permit), true, 'Mock permits must be consumed exactly once');
+  },
+};
 
 const authorization = (provider: UnifiedEnterpriseAiProvider, model = 'governed-model') => ({
   organizationId: runtimeFixture.organizationId, workspaceId: runtimeFixture.workspaceId,
@@ -133,7 +153,7 @@ await test('all non-Studio capability prompts and estimates retain exact BASE64U
 });
 
 await test('capability, model, organization and workspace substitution deny before any secret or provider effect', async () => {
-  const original: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability: runtimeFixture.capability, taskInstruction: 'Draft.', untrustedSource: 'AP analyst', authorization: authorization('openai') };
+  const original: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability: runtimeFixture.capability, taskInstruction: 'Draft.', untrustedSource: 'AP analyst', authorization: authorization('openai'), providerEffect };
   const changed: EnterpriseProviderRequest[] = [
     { ...original, capability: 'studio.document.generate' }, { ...original, model: 'other' },
     { ...original, authorization: { ...original.authorization, organizationId: 'foreign' } },
@@ -214,10 +234,11 @@ await test('PROVIDER-001..006 adapters use exact paths, no redirects, header-onl
       const request: EnterpriseProviderRequest = {
         provider, endpoint, deployment: provider === 'azure_openai' ? 'deployment-one' : undefined,
         model: 'governed-model', capability: authority.capability, taskInstruction: 'Extract candidates.',
-        untrustedSource: 'selected evidence', authorization: authority,
+        untrustedSource: 'selected evidence', authorization: authority, providerEffect,
       };
       executed.push(request.authorization as ExecutedAuthorization);
       const result = await runGovernedProviderRequest(request, {
+        ...mockEffectAuthority,
         secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret-marker' },
         lookupKeyRef: async () => ({ id: KEY, org_id: request.authorization.organizationId, provider, resolver_type: 'server_reference', secret_ref: secretRef(provider), status: 'active' }),
         fetchImpl, now: (() => { let value = 10; return () => value += 5; })(),
@@ -236,9 +257,10 @@ await test('Studio OpenAI strict schema is sent exactly and fully included in pr
   const base = authorization('openai'); const capability = 'studio.document.generate' as const;
   const authority = { ...base, capability, resolverDecision: { ...base.resolverDecision, operation: capability, capability } };
   const schema = { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false };
-  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability, authorization: authority, taskInstruction: 'Draft only.', untrustedSource: 'Synthetic facts.', responseSchema: schema };
+  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability, authorization: authority, providerEffect, taskInstruction: 'Draft only.', untrustedSource: 'Synthetic facts.', responseSchema: schema };
   let captured: Record<string, any> = {};
   await runGovernedProviderRequest(request, {
+    ...mockEffectAuthority,
     secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret-marker' },
     lookupKeyRef: async () => ({ id: KEY, org_id: authority.organizationId, provider: 'openai', resolver_type: 'server_reference', secret_ref: secretRef('openai'), status: 'active' }),
     fetchImpl: async (_url, init) => { captured = JSON.parse(String(init?.body)); return new Response(JSON.stringify(bodies.openai)); },
@@ -254,6 +276,163 @@ await test('Studio OpenAI strict schema is sent exactly and fully included in pr
   assert.equal(effects, 0);
 });
 
+await test('one immutable transport artifact survives reserve, secret, consume, and nested-schema mutation attempts', async () => {
+  const base = authorization('openai'); const capability = 'studio.document.generate' as const;
+  const authority = { ...base, capability, resolverDecision: { ...base.resolverDecision, operation: capability, capability } };
+  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability,
+    authorization: authority, providerEffect: { ...providerEffect }, taskInstruction: 'Draft only.',
+    untrustedSource: 'Synthetic facts.', responseSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false } };
+  let reserved: import('./syntheticAiCampaign').SyntheticAiEffectInput | undefined;
+  let fetched: Record<string, any> | undefined;
+  await runGovernedProviderRequest(request, {
+    reserveEffect: async binding => {
+      reserved = binding;
+      request.model = 'reserve-mutant'; request.endpoint = 'https://reserve-mutant.example';
+      request.deployment = 'reserve-mutant'; request.maxOutputTokens = 99;
+      request.authorization.providerConfigId = 'reserve-mutant';
+      request.authorization.resolverDecision.keyRefId = 'reserve-mutant';
+      (request.responseSchema!.properties as Record<string, any>).title.type = 'number';
+      return { mode: 'ordinary', ownsProviderEffect: true, replayed: false, binding };
+    },
+    lookupKeyRef: async decision => {
+      assert.equal(decision.providerConfigId, CONFIG); assert.equal(decision.keyRefId, KEY);
+      request.provider = 'groq'; request.taskInstruction = 'secret-mutant';
+      return { id: KEY, org_id: authority.organizationId, provider: 'openai', resolver_type: 'server_reference', secret_ref: secretRef('openai'), status: 'active' };
+    },
+    secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret-marker' },
+    consumeEffect: async permit => {
+      assert.equal(permit.binding, reserved); request.untrustedSource = 'consume-mutant';
+      request.authorization.resolverDecision.routeId = 'consume-mutant';
+    },
+    fetchImpl: async (url, init) => {
+      fetched = { url: String(url), body: JSON.parse(String(init?.body)) };
+      return new Response(JSON.stringify(bodies.openai));
+    },
+  });
+  assert.equal(reserved?.provider, 'openai'); assert.equal(reserved?.model, 'governed-model');
+  assert.equal(reserved?.providerConfigId, CONFIG); assert.equal(reserved?.keyRefId, KEY); assert.equal(reserved?.routeId, ROUTE);
+  assert.equal(fetched?.url, 'https://api.openai.com/v1/chat/completions');
+  assert.equal(fetched?.body.max_tokens, 2_000);
+  assert.deepEqual(fetched?.body.response_format.json_schema.schema.properties.title, { type: 'string' });
+  assert.match(fetched?.body.messages[1].content, /Synthetic facts/); assert.doesNotMatch(fetched?.body.messages[1].content, /mutant/);
+});
+
+await test('reserve denial or non-owning replay has zero secret reads and zero fetches', async () => {
+  const authority = authorization('openai');
+  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability: authority.capability,
+    authorization: authority, providerEffect, taskInstruction: 'Extract.', untrustedSource: 'source' };
+  for (const reserveEffect of [
+    async () => { throw new Error('denied'); },
+    async (binding: import('./syntheticAiCampaign').SyntheticAiEffectInput) => ({ mode: 'ordinary' as const, ownsProviderEffect: false, replayed: true, binding }),
+  ]) {
+    let secrets = 0; let fetches = 0;
+    await assert.rejects(runGovernedProviderRequest(request, {
+      reserveEffect,
+      lookupKeyRef: async () => { secrets += 1; return null; },
+      secretBackend: { kind: 'vault', writable: true, resolve: async () => { secrets += 1; return 'unexpected'; } },
+      fetchImpl: async () => { fetches += 1; return new Response(); },
+    }));
+    assert.equal(secrets, 0); assert.equal(fetches, 0);
+  }
+});
+
+await test('consume denial and ambiguous consume replay never produce provider traffic or a second secret read', async () => {
+  const authority = authorization('openai');
+  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability: authority.capability,
+    authorization: authority, providerEffect, taskInstruction: 'Extract.', untrustedSource: 'source' };
+  let reserveCalls = 0; let secretReads = 0; let fetches = 0;
+  const deps = {
+    reserveEffect: async (binding: import('./syntheticAiCampaign').SyntheticAiEffectInput) => {
+      reserveCalls += 1;
+      return reserveCalls === 1
+        ? { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding }
+        : { mode: 'ordinary' as const, ownsProviderEffect: false, replayed: true, binding };
+    },
+    lookupKeyRef: async () => { secretReads += 1; return { id: KEY, org_id: authority.organizationId, provider: 'openai' as const, resolver_type: 'server_reference' as const, secret_ref: secretRef('openai'), status: 'active' }; },
+    secretBackend: { kind: 'vault' as const, writable: true, resolve: async () => { secretReads += 1; return 'server-only-secret-marker'; } },
+    consumeEffect: async () => { throw new Error('ambiguous transport'); },
+    fetchImpl: async () => { fetches += 1; return new Response(JSON.stringify(bodies.openai)); },
+  };
+  await assert.rejects(runGovernedProviderRequest(request, deps));
+  assert.equal(secretReads, 2); assert.equal(fetches, 0);
+  await assert.rejects(runGovernedProviderRequest(request, deps), /CAPABILITY_UNAVAILABLE/);
+  assert.equal(secretReads, 2); assert.equal(fetches, 0); assert.equal(reserveCalls, 2);
+});
+
+await test('ambiguous provider transport after consume replays without a second secret read or provider effect', async () => {
+  const authority = authorization('openai');
+  const request: EnterpriseProviderRequest = { provider: 'openai', model: 'governed-model', capability: authority.capability,
+    authorization: authority, providerEffect, taskInstruction: 'Extract.', untrustedSource: 'source' };
+  let reserveCalls = 0; let secretReads = 0; let consumes = 0; let fetches = 0;
+  const deps = {
+    reserveEffect: async (binding: import('./syntheticAiCampaign').SyntheticAiEffectInput) => {
+      reserveCalls += 1;
+      return reserveCalls === 1
+        ? { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding }
+        : { mode: 'ordinary' as const, ownsProviderEffect: false, replayed: true, binding };
+    },
+    lookupKeyRef: async () => { secretReads += 1; return { id: KEY, org_id: authority.organizationId, provider: 'openai' as const, resolver_type: 'server_reference' as const, secret_ref: secretRef('openai'), status: 'active' }; },
+    secretBackend: { kind: 'vault' as const, writable: true, resolve: async () => { secretReads += 1; return 'server-only-secret-marker'; } },
+    consumeEffect: async () => { consumes += 1; },
+    fetchImpl: async () => { fetches += 1; throw new Error('ambiguous provider transport'); },
+  };
+  await assert.rejects(runGovernedProviderRequest(request, deps), /PROVIDER_REQUEST_FAILED/);
+  assert.deepEqual({ reserveCalls, secretReads, consumes, fetches }, { reserveCalls: 1, secretReads: 2, consumes: 1, fetches: 1 });
+  await assert.rejects(runGovernedProviderRequest(request, deps), /CAPABILITY_UNAVAILABLE/);
+  assert.deepEqual({ reserveCalls, secretReads, consumes, fetches }, { reserveCalls: 2, secretReads: 2, consumes: 1, fetches: 1 });
+});
+
+await test('provider validation rejects every non-secret identity substitution before consume or fetch', async () => {
+  const identity = createProviderValidationIdentity({ provider: 'openai', model: 'governed-model',
+    providerConfigId: CONFIG, authorizationKeyRefId: KEY, validationKeyRefId: KEY });
+  const binding: import('./syntheticAiCampaign').SyntheticAiEffectInput = {
+    actorId: runtimeFixture.actorId, organizationId: runtimeFixture.organizationId, workspaceId: runtimeFixture.workspaceId,
+    authorizationVersion: 1, receiptId: providerEffect.receiptId, effectId: providerEffect.effectId,
+    executionToken: providerEffect.executionToken, executionFence: 1, providerConfigId: CONFIG, keyRefId: KEY,
+    provider: 'openai', endpoint: identity.endpoint, model: identity.model, operation: 'provider.validate',
+    requestHash: await hashProviderValidationIdentity(identity), maximumOutputTokens: 32_768,
+  };
+  const permit = { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding };
+  const valid = { provider: 'openai' as const, model: 'governed-model', apiKey: 'server-only-secret-marker',
+    providerConfigId: CONFIG, authorizationKeyRefId: KEY, validationKeyRefId: KEY, effectPermit: permit };
+  const OTHER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const cases = [
+    { ...valid, effectPermit: { ...permit, binding: { ...binding, operation: 'assess.evidence.extract' as const, routeId: ROUTE } } },
+    { ...valid, provider: 'groq' as const, endpoint: 'https://api.groq.com' },
+    { ...valid, endpoint: 'https://not-openai.example.com' }, { ...valid, model: 'other-model' },
+    { ...valid, deployment: 'other-deployment' }, { ...valid, providerConfigId: OTHER },
+    { ...valid, authorizationKeyRefId: OTHER }, { ...valid, validationKeyRefId: OTHER },
+  ];
+  for (const changed of cases) {
+    let consumes = 0; let fetches = 0;
+    await assert.rejects(validateProviderConnection(changed, {
+      consumeEffect: async () => { consumes += 1; }, fetchImpl: async () => { fetches += 1; return new Response(); },
+    }));
+    assert.equal(consumes, 0); assert.equal(fetches, 0);
+  }
+});
+
+await test('provider validation snapshots transport before consume can mutate caller input', async () => {
+  const identity = createProviderValidationIdentity({ provider: 'openai', model: 'governed-model',
+    providerConfigId: CONFIG, authorizationKeyRefId: KEY, validationKeyRefId: KEY });
+  const binding: import('./syntheticAiCampaign').SyntheticAiEffectInput = {
+    actorId: runtimeFixture.actorId, organizationId: runtimeFixture.organizationId, workspaceId: runtimeFixture.workspaceId,
+    authorizationVersion: 1, receiptId: providerEffect.receiptId, effectId: providerEffect.effectId,
+    executionToken: providerEffect.executionToken, executionFence: 1, providerConfigId: CONFIG, keyRefId: KEY,
+    provider: 'openai', endpoint: identity.endpoint, model: identity.model, operation: 'provider.validate',
+    requestHash: await hashProviderValidationIdentity(identity), maximumOutputTokens: 32_768,
+  };
+  const input = { provider: 'openai' as const, model: 'governed-model', apiKey: 'server-only-secret-marker',
+    providerConfigId: CONFIG, authorizationKeyRefId: KEY, validationKeyRefId: KEY,
+    effectPermit: { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding } };
+  let fetched = '';
+  await validateProviderConnection(input, {
+    consumeEffect: async () => { input.model = 'mutant'; input.providerConfigId = 'mutant'; input.apiKey = 'mutant'; },
+    fetchImpl: async (url, init) => { fetched = `${String(url)} ${String((init?.headers as Record<string,string>).Authorization)}`; return new Response('', { status: 200 }); },
+  });
+  assert.equal(fetched, 'https://api.openai.com/v1/models Bearer server-only-secret-marker');
+});
+
 await test('PROVIDER-007 429/5xx/malformed response and network failure are classified without payload leakage', async () => {
   const executed: ExecutedAuthorization[] = [];
   for (const [response, code] of [
@@ -262,7 +441,8 @@ await test('PROVIDER-007 429/5xx/malformed response and network failure are clas
     [new Response('{', { status: 200 }), 'PROVIDER_RESPONSE_INVALID'],
   ] as const) {
     const authority = authorization('openai'); executed.push(authority);
-    const error = await runGovernedProviderRequest({ provider: 'openai', model: 'governed-model', capability: authority.capability, taskInstruction: 'Extract.', untrustedSource: 'source', authorization: authority }, {
+    const error = await runGovernedProviderRequest({ provider: 'openai', model: 'governed-model', capability: authority.capability, taskInstruction: 'Extract.', untrustedSource: 'source', authorization: authority, providerEffect }, {
+      ...mockEffectAuthority,
       secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret-marker' },
       lookupKeyRef: async () => ({ id: KEY, org_id: authority.organizationId, provider: 'openai', resolver_type: 'server_reference', secret_ref: secretRef('openai'), status: 'active' }),
       fetchImpl: async () => response,
@@ -275,7 +455,8 @@ await test('PROVIDER-007 429/5xx/malformed response and network failure are clas
 
 await test('PROVIDER-007 timeout aborts without exposing request or response material', async () => {
   const authority = authorization('openai');
-  const error = await runGovernedProviderRequest({ provider: 'openai', model: 'governed-model', capability: authority.capability, taskInstruction: 'Extract.', untrustedSource: 'source', timeoutMs: 100, authorization: authority }, {
+  const error = await runGovernedProviderRequest({ provider: 'openai', model: 'governed-model', capability: authority.capability, taskInstruction: 'Extract.', untrustedSource: 'source', timeoutMs: 100, authorization: authority, providerEffect }, {
+    ...mockEffectAuthority,
     secretBackend: { kind: 'vault', writable: true, resolve: async () => 'server-only-secret-marker' },
     lookupKeyRef: async () => ({ id: KEY, org_id: authority.organizationId, provider: 'openai', resolver_type: 'server_reference', secret_ref: secretRef('openai'), status: 'active' }),
     fetchImpl: async (_input, init) => new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })),

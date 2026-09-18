@@ -40,6 +40,8 @@ jobs:
       - run: npm ci
       - name: Local campaign budget adversarial tests (no credentials or provider calls)
         run: npm run test:synthetic-ai-budget
+      - name: Server campaign permit adversarial tests (mocked RPC and provider only)
+        run: node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/deno.d.ts supabase/functions/_shared/syntheticAiCampaign.ts supabase/functions/_shared/syntheticAiCampaign.test.ts
       - name: Studio template and citation-reference contract regressions (mocked providers)
         run: npm run test:studio-output-contract
       - run: npx playwright install --with-deps chromium

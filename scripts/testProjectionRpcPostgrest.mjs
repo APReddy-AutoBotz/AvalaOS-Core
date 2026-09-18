@@ -73,8 +73,13 @@ test('actual PostgREST transaction mode preserves governed projection and author
     CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,raw_app_meta_data jsonb NOT NULL DEFAULT '{}',banned_until timestamptz,email_confirmed_at timestamptz);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $uid$ SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.sub',true),''),NULLIF(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid $uid$;
     GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
-  const migrations=(await readdir(join(root,'supabase/migrations'))).filter(n=>n.endsWith('.sql')).sort();assert.equal(approvedFullChainTip(migrations),'20260916203406');assert.equal(migrations.at(-1),PROJECTION_RPC_CORRECTION);
-  for(const name of migrations.slice(0,-1)){await db.query('BEGIN');try{await db.query(await readFile(join(root,'supabase/migrations',name),'utf8'));await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}}
+  const migrations=(await readdir(join(root,'supabase/migrations'))).filter(n=>n.endsWith('.sql')).sort();
+  approvedFullChainTip(migrations); // Validate every successor, even though this regression exercises a frozen upgrade.
+  const correctionIndex=migrations.indexOf(PROJECTION_RPC_CORRECTION);
+  assert.ok(correctionIndex>0);assert.equal(migrations.lastIndexOf(PROJECTION_RPC_CORRECTION),correctionIndex);
+  // Reproduce the historical STABLE failure at its exact predecessor. Later
+  // approved migrations are covered by the independent full-chain runner.
+  for(const name of migrations.slice(0,correctionIndex)){await db.query('BEGIN');try{await db.query(await readFile(join(root,'supabase/migrations',name),'utf8'));await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}}
   await db.query('INSERT INTO auth.users(id) VALUES($1),($2)',[actor,foreignActor]);
   await db.query("INSERT INTO profiles(id,email) VALUES($1,'rpc-author@fixture.invalid'),($2,'rpc-foreign@fixture.invalid')",[actor,foreignActor]);
   await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'RPC synthetic','rpc-synthetic'),($2,'RPC foreign','rpc-foreign')",[scope.organizationId,foreignOrg]);

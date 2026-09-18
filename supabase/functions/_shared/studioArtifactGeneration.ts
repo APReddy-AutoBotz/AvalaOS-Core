@@ -263,6 +263,10 @@ export const executeClaimedStudioGeneration = async (
       selectedSourceVersionIds: claim.selectedSourceVersionIds,
       canonicalSourceAnchors: claim.sourceAnchors,
       manualBrief: claim.manualBrief, maximumOutputTokens: claim.maximumOutputTokens,
+      providerEffect: {
+        authorizationVersion: claim.authorizationVersion, receiptId: claim.receiptId, effectId: claim.attemptId,
+        executionToken: claim.executionToken, executionFence: claim.executionFence,
+      },
       timeoutMs: claim.timeoutMs, signal: deps.signal,
     }), {
       signal: deps.signal,

@@ -40,6 +40,10 @@ export type StudioProviderGatewayInput = Readonly<{
   manualBrief: string | null;
   maximumOutputTokens: number;
   timeoutMs: number;
+  providerEffect: {
+    authorizationVersion: number; receiptId: string; effectId: string;
+    executionToken: string; executionFence: number;
+  };
   signal?: AbortSignal;
 }>;
 
@@ -317,6 +321,7 @@ export const callStudioArtifactProvider = async (
     ...(input.plan.provider === 'openai' ? { responseSchema: buildStudioResponseSchema(template) } : {}),
     maxOutputTokens: input.maximumOutputTokens,
     timeoutMs: input.timeoutMs,
+    providerEffect: input.providerEffect,
     authorization: {
       organizationId: input.organizationId,
       workspaceId: input.workspaceId,
