@@ -4,6 +4,16 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { rewriteTestModuleSpecifiers } from './rewriteTestModuleSpecifiers.mjs';
 
+test('resolver integration uses isolated explicit-root compilation across shared and service dependencies', () => {
+  const scripts = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts;
+  assert.equal(scripts['test:provider-resolver-integration'],
+    'node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/deno.d.ts supabase/functions/_shared/providerResolverIntegration.test.ts');
+  const runner = readFileSync(new URL('./runEnterpriseIntelligenceTest.mjs', import.meta.url), 'utf8');
+  assert.match(runner, /rootDir: process\.cwd\(\)/);
+  assert.match(runner, /fs\.mkdtempSync/);
+  assert.doesNotMatch(scripts['test:provider-resolver-integration'], /\.agent\/|rmSync|providerResolverIntegration\.test\.js/);
+});
+
 test('only actual extensionless module syntax is rewritten', () => {
   const source = `import value from './module'; export { x } from "../shared"; import('./lazy');`;
   assert.equal(rewriteTestModuleSpecifiers(source), `import value from "./module.js"; export { x } from "../shared.js"; import("./lazy.js");`);

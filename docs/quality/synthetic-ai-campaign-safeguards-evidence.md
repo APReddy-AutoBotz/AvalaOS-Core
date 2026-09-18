@@ -125,7 +125,30 @@ New exact-head CI remains required before activation. Hosted installation, accou
 provider-secret installation and paid browser scenarios are not run. No document
 approval, handoff, merge, customer-data or production action is authorized here.
 
-## Rollback
+## Exact-head CI harness correction
+
+Commit `cef699075e1795426dc101fa5973b69b69e1daf5` was pushed to the existing
+PR branch. Its CI exposed two confirmed test-harness defects: the legacy resolver
+alias assumed a flat TypeScript output directory after its transitive dependency
+root changed (Enterprise run `35303339910`, also Studio/Core/Pilot Acceptance),
+and the separate Assess PostgreSQL harness still required the projection migration
+to be terminal (Native Assess run `35303340078`). These failed runs are retained.
+
+The resolver alias now uses the existing isolated explicit-root runner, with a
+regression preventing destructive fixed `.agent` output and flat-path assumptions.
+The mapping harness requires the independently approved complete successor chain
+and keeps its historical adjacency, final marker and constraint checks. No runtime
+or SQL safeguard changed. Independent quality review found no test weakening.
+
+Executed corrective checks: resolver integration passed; module/harness tests 5/5;
+migration-tail contracts 6/6; canonical `runAssessImportValidation.mjs postgres`
+passed all 3 commands, including mapping, retained transcript and historical
+PostgREST. Run `6ad1b387-25f6-4e4a-90e5-9dacfe5f6d33` binds source digest
+`05b37549afb56769c1b09b8a851ed5fc21126082cff98040b135fc2f3f8e3181`.
+Only the verified, uniquely labelled memory-backed container was removed.
+Fresh CI on the follow-up head is still required before hosted activation.
+
+## Rollback controls
 
 Before activation, leave the new campaign authority absent/disabled. After an
 approved activation, disable the new campaign and routes without deleting charged

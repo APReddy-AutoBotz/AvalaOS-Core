@@ -57,6 +57,10 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(runner, /upgrade\.query\([^\n]+migration_tip[^\n]+,'20260831062024'\)/u);
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
+  const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
+  assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20260917173445'/u);
+  assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
 });
 
 test('projection RPC volatility successor is exact and adversarially bound', () => {

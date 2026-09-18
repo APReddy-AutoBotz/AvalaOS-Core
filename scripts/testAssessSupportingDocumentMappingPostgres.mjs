@@ -22,7 +22,7 @@ const expectedFullChainTip=approvedFullChainTip(migrations);
 const feature='20260916083814_assess_supporting_document_mapping.sql';
 const mappingIdentity='20260916151050_assess_document_mapping_identity_convergence.sql';
 const xlsxCorrection='20260916181916_assess_document_xlsx_ingestion_authority.sql';
-assert.equal(migrations.at(-1),PROJECTION_RPC_CORRECTION,'Assess mapping must end at the exact approved projection-transaction correction tip.');
+assert.equal(expectedFullChainTip,'20260917173445','Assess mapping must validate the exact approved campaign-authority successor chain.');
 assert.equal(migrations.indexOf(PROJECTION_RPC_CORRECTION),migrations.indexOf(xlsxCorrection)+1,'Projection correction must immediately follow XLSX ingestion authority.');
 assert.equal(migrations.indexOf(mappingIdentity),migrations.indexOf(feature)+1,'Identity convergence must immediately follow the frozen mapping migration.');
 assert.equal(migrations.indexOf(xlsxCorrection),migrations.indexOf(mappingIdentity)+1,'XLSX ingestion authority must immediately follow the known mapping-identity predecessor.');
