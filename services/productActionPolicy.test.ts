@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Organization, Scope, ScopeType, User } from '../types';
+import { EnterpriseSessionState, Organization, Scope, ScopeType, TenantContextProjection, User, View } from '../types';
 import { resolveProductActionPolicy } from './productActionPolicy';
+import { resolveGovernedCreationSurface } from './governedCreationNavigation';
 
 const organization: Organization = {
   id: 'org-1',
@@ -32,6 +33,66 @@ const user = (overrides: Partial<User>): User => ({
 });
 
 describe('productActionPolicy', () => {
+  const tenantContext: TenantContextProjection = {
+    userId: 'user-1', organizationId: 'org-1', organizationName: 'Synthetic',
+    workspaceId: 'workspace-1', workspaceName: 'Exploration', authorizationVersion: 3,
+    capabilities: ['assess.read', 'assess.process.create'],
+  };
+  const serverInput = () => ({
+    user: user({}), organization, scope: myWorkScope, action: 'process.create',
+    dataAccess: 'server' as const,
+    serverContext: { workspaceId: 'workspace-1', sessionState: 'ready' as EnterpriseSessionState, tenantContext },
+  });
+  it('allows a hosted author without legacy permissions through the bound process command only', () => {
+    const decision = resolveProductActionPolicy(serverInput());
+    assert.equal(decision.allowed, true);
+    assert.deepEqual(decision.requiredPermissions, ['assess.read', 'assess.process.create']);
+  });
+  it('rejects wrong actor, organization, workspace and unusable authorization versions', () => {
+    for (const patch of [
+      { userId: 'foreign' }, { organizationId: 'foreign' }, { workspaceId: 'foreign' },
+      { authorizationVersion: 0 }, { authorizationVersion: NaN }, { authorizationVersion: 1.5 },
+    ]) {
+      const input = serverInput();
+      input.serverContext.tenantContext = { ...tenantContext, ...patch };
+      assert.equal(resolveProductActionPolicy(input).reason, 'server_context_unavailable');
+    }
+  });
+  it('blocks read-only/loading/revoked context, even when legacy identity claims Admin', () => {
+    for (const sessionState of ['loading', 'read_only', 'revoked'] as EnterpriseSessionState[]) {
+      const input = serverInput();
+      input.user = user({ orgRole: 'Admin', permissions: ['process.create'] });
+      input.serverContext.sessionState = sessionState;
+      assert.equal(resolveProductActionPolicy(input).allowed, false);
+    }
+    assert.equal(resolveProductActionPolicy({ ...serverInput(), serverContext: undefined }).allowed, false);
+    assert.equal(resolveProductActionPolicy({ ...serverInput(), dataAccess: 'disabled' }).allowed, false);
+  });
+  it('requires BOTH current read and process-create capabilities and never grants via Admin labels', () => {
+    for (const capabilities of [[], ['assess.read'], ['assess.process.create'], ['org.admin'], ['process.create']]) {
+      const input = serverInput();
+      input.user = user({ orgRole: 'Admin', permissions: ['process.create'] });
+      input.serverContext.tenantContext = { ...tenantContext, capabilities };
+      assert.equal(resolveProductActionPolicy(input).allowed, false);
+    }
+  });
+  it('does not unlock legacy Studio/Delivery writers with canonical capabilities', () => {
+    for (const action of ['docs.generate', 'docs.refine', 'project.task.create', 'delivery.import', 'automation.create']) {
+      const input = serverInput();
+      input.user = user({ orgRole: 'Admin', permissions: ['docs.generate', 'task.create'] });
+      input.serverContext.tenantContext = { ...tenantContext, capabilities: ['studio.artifacts.generate', 'delivery.package.manage'] };
+      assert.equal(resolveProductActionPolicy({ ...input, action, scope: projectScope }).reason, 'governed_workflow_required');
+    }
+  });
+  it('routes hosted creation entries to canonical workspaces without changing demo routes', () => {
+    for (const view of [View.DOCS_FORGE, View.DOCS, View.WORKSPACE, View.TEMPLATE_STUDIO]) {
+      assert.equal(resolveGovernedCreationSurface('server', view), 'studio');
+      assert.equal(resolveGovernedCreationSurface('local', view), null);
+      assert.equal(resolveGovernedCreationSurface('disabled', view), null);
+    }
+    for (const view of [View.BOARDS, View.LIST, View.DELIVERY_PACK]) assert.equal(resolveGovernedCreationSurface('server', view), 'delivery');
+    assert.equal(resolveGovernedCreationSurface('server', View.PROCESS_CATALOG), null);
+  });
   it('fails closed for unknown actions, unauthenticated users, and missing org context', () => {
     assert.equal(resolveProductActionPolicy({
       user: user({}),

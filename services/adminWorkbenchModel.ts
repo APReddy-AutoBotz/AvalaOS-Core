@@ -93,7 +93,7 @@ export const ADMIN_WORKBENCH_SECTIONS: readonly AdminSectionDefinition[] = [
     key: 'users_roles',
     label: 'Users / Roles',
     shortLabel: 'Users',
-    description: 'Review current organization members and role labels without adding role-management behavior.',
+    description: 'Review role access and, only in an explicitly configured isolated synthetic workspace, manage bounded test accounts.',
   },
   {
     key: 'audit_security',

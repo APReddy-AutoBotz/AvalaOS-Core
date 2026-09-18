@@ -16,6 +16,7 @@ import {
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
 import {
   classifyPublicRoute,
+  hasAtomicPaletteTransition,
   parseAuthorityOrigins,
   parseFullPlatformBaseUrl,
   parseFullPlatformExecutionMode,
@@ -215,6 +216,54 @@ const visitGroup = async(page:Page,root:string,children:string[],visited:Set<str
   for(const child of children)await visitIfAuthorized(page,child,visited);
 };
 
+const visitActualAdminWorkbench = async(page:Page,visited:Set<string>) => {
+  await openNavigation(page);
+  const admin=page.getByRole('button',{name:'Admin',exact:true});
+  await expect(admin).toBeVisible();
+  const adminStarted=Date.now();
+  await admin.click();
+  await expect(page.getByRole('heading',{name:'Admin Workbench',exact:true})).toBeVisible();
+  await closeNavigation(page);
+  await assertSurface(page,adminStarted);
+  const users=page.getByRole('button',{name:'Users / Roles Users',exact:true});
+  const assertAtomicSectionPalette=async() => {
+    const transitions=await page.locator('nav').filter({has:users}).locator('button, button span')
+      .evaluateAll(elements=>elements.map(element=>{
+        const style=getComputedStyle(element);
+        return {property:style.transitionProperty,duration:style.transitionDuration,delay:style.transitionDelay};
+      }));
+    expect(transitions.length,'the actual Admin section buttons and labels must be inspected').toBeGreaterThan(0);
+    expect(transitions.filter(style=>!hasAtomicPaletteTransition(style)),'selected and unselected Admin palettes must never interpolate through low-contrast colors').toEqual([]);
+  };
+  await assertAtomicSectionPalette();
+  const usersStarted=Date.now();
+  await users.click();
+  await expect(page.getByRole('heading',{name:'Users / Roles',exact:true})).toBeVisible();
+  await expect(users).toHaveAttribute('aria-current','page');
+  await assertAtomicSectionPalette();
+  await assertSurface(page,usersStarted);
+  visited.add('Admin');
+  visited.add('Users / Roles');
+};
+
+const assertDeniedAssessIntelligence = async(page:Page) => {
+  await selectScope(page,'My Work');
+  await openNavigation(page);
+  await page.getByRole('button',{name:'Assess',exact:true}).click();
+  await expect(page.getByTestId('process-catalog-view')).toBeVisible();
+  await openNavigation(page);
+  const intelligence=page.getByRole('button',{name:'Enterprise Intelligence',exact:true});
+  await expect(intelligence).toBeVisible();
+  await expect(intelligence).toBeEnabled();
+  const started=Date.now();
+  await intelligence.click();
+  await expect(page.getByRole('heading',{name:'Enterprise Intelligence unavailable',exact:true})).toBeVisible();
+  await expect(page.getByText('Enterprise Intelligence requires a server-authorized workspace. The local synthetic sandbox sends no provider or persistence requests.',{exact:true})).toBeVisible();
+  await expect(page.getByTestId('enterprise-intelligence-workspace')).toHaveCount(0);
+  await closeNavigation(page);
+  await assertSurface(page,started);
+};
+
 const assertActivePersona = async(page:Page,userName:string) => {
   await openNavigation(page);
   const mobileIdentity=page.getByTestId('mobile-current-user');
@@ -273,8 +322,8 @@ for(const [label,userName] of personas){
       await enterPersona(page,label,userName);
       const visited=new Set<string>();
       await openNavigation(page);
-      if(label==='Platform Admin')await expect(page.getByRole('button',{name:'Admin / Intelligence'})).toBeVisible();
-      else await expect(page.getByRole('button',{name:'Admin / Intelligence'})).toHaveCount(0);
+      if(label==='Platform Admin')await expect(page.getByRole('button',{name:'Admin',exact:true})).toBeVisible();
+      else await expect(page.getByRole('button',{name:'Admin',exact:true})).toHaveCount(0);
       const closeNavigation=page.getByRole('button',{name:'Close primary navigation'});
       if(await closeNavigation.isVisible().catch(()=>false))await closeNavigation.click();
       await selectScope(page,'My Work');
@@ -285,7 +334,8 @@ for(const [label,userName] of personas){
       await selectScope(page,'AP Invoice Exception Workflow');
       await visitGroup(page,'Studio',studioSubnav,visited);
       await visitGroup(page,'Delivery',deliverySubnav,visited);
-      await visitIfAuthorized(page,'Admin / Intelligence',visited);
+      if(label==='Platform Admin')await visitActualAdminWorkbench(page,visited);
+      if(label==='Platform Admin')await assertDeniedAssessIntelligence(page);
       expect(visited.size,`${label} must expose at least one authorized product surface`).toBeGreaterThan(0);
       await signOutAndAssertFailClosed(page);
       await observer.stopAfterQuiescence({quietPeriodMs:POST_SIGN_OUT_QUIET_MS,timeoutMs:POST_SIGN_OUT_TIMEOUT_MS});
@@ -309,8 +359,10 @@ test('accepted sandbox descendants are distinct from a genuinely denied non-admi
     await enterPersona(page,'Process Analyst','Maya Patel');
     await page.goto('/sandbox?view=enterprise_intelligence&scope=organization',{waitUntil:'domcontentloaded'});
     await expect(page.getByRole('heading',{name:'Enterprise Intelligence',exact:true})).toHaveCount(0);
+    await expect(page.getByTestId('enterprise-intelligence-workspace')).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'Admin Workbench',exact:true})).toHaveCount(0);
     await openNavigation(page);
-    await expect(page.getByRole('button',{name:'Admin / Intelligence'})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Admin',exact:true})).toHaveCount(0);
     await signOutAndAssertFailClosed(page);
     await observer.stopAfterQuiescence({quietPeriodMs:POST_SIGN_OUT_QUIET_MS,timeoutMs:POST_SIGN_OUT_TIMEOUT_MS});
     expect(observer.snapshot()).toEqual({totalViolations:0,samples:[]});

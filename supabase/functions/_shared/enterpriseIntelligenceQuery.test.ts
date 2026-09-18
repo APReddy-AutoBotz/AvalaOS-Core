@@ -5,6 +5,14 @@ import {
   type ApplicationRecord,
 } from '../../../services/assessV2/applicationPortfolio.ts';
 import { decodeEnterpriseIntelligenceProjection } from '../../../services/enterpriseIntelligence.ts';
+import {
+  createDeliveryWorkspaceFixture,
+  createMonitorBaselinesFixture,
+} from '../../../services/deliveryMonitor/fixtures.ts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+} from '../../../services/deliveryMonitor/contracts.ts';
 import type { TenantAuthorityDatabase, TenantContext } from './tenantAuthority.ts';
 import {
   buildEnterpriseIntelligenceProjection,
@@ -79,6 +87,13 @@ const HIDDEN_CANARY_VALUES = [
   'HIDDEN_ASSESS_RESOLUTION_CANARY',
   'HIDDEN_ASSESS_RESOLUTION_RATIONALE_CANARY',
 ] as const;
+
+const deliveryProjectionFixture = (organizationId = ORG, workspaceId = WORKSPACE) => decodeDeliveryWorkspaceProjection({
+  ...createDeliveryWorkspaceFixture(), organizationId, workspaceId,
+});
+const monitorProjectionFixture = (organizationId = ORG, workspaceId = WORKSPACE) => decodeMonitorApprovedBaselinesProjection({
+  ...createMonitorBaselinesFixture(), organizationId, workspaceId,
+});
 
 const CANONICAL_MISSING_EVIDENCE_BY_DIMENSION = {
   integration_accessibility: [],
@@ -171,6 +186,18 @@ const raw = (): EnterpriseIntelligenceRawProjection => ({
   transcriptExtractionBindings: [],
   transcriptJobs: [],
   transcriptStalenessEvents: [],
+  mappingCatalogs: [],
+  mappingTargets: [],
+  mappingRuns: [],
+  mappingRunSources: [],
+  mappingProposals: [],
+  mappingReviews: [],
+  mappingPreviewBatches: [],
+  mappingPreviewManifests: [],
+  mappingPreviewItems: [],
+  mappingConflicts: [],
+  mappingConflictResolutions: [],
+  mappingApplications: [],
 });
 
 const projection = buildEnterpriseIntelligenceProjection(authority(), raw(), new Date('2026-08-04T09:00:00.000Z'));
@@ -183,6 +210,73 @@ assert.equal(projection.evidenceCandidates[0].provenanceState, 'anchored');
 assert.equal(projection.assessDrafts[0].versionLabel, 'Draft version 2');
 assert.equal(projection.applications[0].approvedAssessmentLabel, 'Approved assessment v3');
 assert.equal(projection.studioDocuments[0].approvedVersionLabel, 'Approved version 4');
+
+const mappingRaw = raw();
+const mappingCatalog = '19000000-0000-4000-8000-000000000001';
+const mappingSelector = '19000000-0000-4000-8000-000000000002';
+const mappingRun = '19000000-0000-4000-8000-000000000003';
+const mappingBundle = '19000000-0000-4000-8000-000000000004';
+const mappingBundleVersion = '19000000-0000-4000-8000-000000000005';
+const mappingJob = '19000000-0000-4000-8000-000000000006';
+mappingRaw.transcriptFlags = [{ assess_document_mapping_enabled: true }];
+mappingRaw.mappingCatalogs = [{ id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2, assess_schema_version: 'assess-v2-schema-2026-07', catalog_version: 1, catalog_hash: 'f'.repeat(64), status: 'current', created_at: '2026-08-04T08:00:00.000Z' }];
+mappingRaw.mappingTargets = [{ selector_id: mappingSelector, catalog_id: mappingCatalog, target_kind: 'case_field', operation: 'set_field', entity_id: null, field_id: 'case.description', label: 'Description', context_label: 'Synthetic case', value_type: 'text', allowed_values: null, current_value: 'Manual', current_value_hash: 'e'.repeat(64), manual: true, ordinal: 1 }];
+mappingRaw.mappingRuns = [{ id: mappingRun, catalog_id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'committed',
+  safe_result: { proposalCount: 0, targetCount: 1, sourceCount: 1, warnings: ['SOURCE_PARSER_WARNING:HIDDEN_SHEETS_EXCLUDED'], analyzedSources: [{ sourceId: SOURCE, sourceVersionId: SOURCE_VERSION, parserVersion: 'spreadsheet-grid-v1', extractedByteCount: 42, sheetCount: 1, cellCount: 2, warnings: ['HIDDEN_SHEETS_EXCLUDED'] }] }, created_at: '2026-08-04T08:00:00.000Z' }];
+mappingRaw.mappingRunSources = [{ run_id: mappingRun, extraction_binding_id: '19000000-0000-4000-8000-000000000007', extraction_job_id: mappingJob, source_id: SOURCE, source_version_id: SOURCE_VERSION, parser_version: 'spreadsheet-grid-v1', normalized_hash: 'd'.repeat(64), extracted_byte_count: 42, ordinal: 1 }];
+const mappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, mappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(mappingProjection.features.enabled, true);
+assert.equal(mappingProjection.catalogs[0].targets[0].fieldId, 'case.description');
+assert.equal(mappingProjection.runs[0].projectionComplete, true);
+assert.deepEqual(mappingProjection.runs[0].analyzedSources?.[0].warnings, ['HIDDEN_SHEETS_EXCLUDED']);
+const mappingProposal = '19000000-0000-4000-8000-000000000008';
+const mappingPreview = '19000000-0000-4000-8000-000000000009';
+const mappingItemBindingHash = '9'.repeat(64);
+const completeMappingRaw = structuredClone(mappingRaw);
+completeMappingRaw.mappingRuns[0].safe_result = { ...(completeMappingRaw.mappingRuns[0].safe_result as Record<string, unknown>), proposalCount: 1 };
+completeMappingRaw.mappingProposals = [{ id: mappingProposal, run_id: mappingRun, catalog_id: mappingCatalog, target_selector_id: mappingSelector,
+  proposal_version: 1, proposed_value: 'Mapped', confidence: 0.9, rationale: 'Synthetic source statement', source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  extraction_binding_id: '19000000-0000-4000-8000-000000000007', extraction_job_id: mappingJob, parser_version: 'spreadsheet-grid-v1',
+  source_locator: 'sheet:"Sheet1";cell:A1', anchor_hash: '8'.repeat(64), safe_excerpt: 'Mapped', relationship: 'neutral', status: 'suggested', created_at: '2026-08-04T08:01:00.000Z' }];
+completeMappingRaw.mappingReviews = [{ proposal_id: mappingProposal, version: 1, status: 'accepted', reviewed_value: 'Mapped', reviewer_id: USER, created_at: '2026-08-04T08:02:00.000Z' }];
+completeMappingRaw.mappingPreviewBatches = [{ id: mappingPreview, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64), assess_case_id: ASSESS_DRAFT,
+  expected_case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'previewed', expires_at: '2099-08-05T08:00:00.000Z', created_at: '2026-08-04T08:03:00.000Z' }];
+completeMappingRaw.mappingPreviewItems = [{ preview_batch_id: mappingPreview, proposal_id: mappingProposal, target_selector_id: mappingSelector,
+  proposal_version: 1, reviewed_value: 'Mapped', binding_hash: mappingItemBindingHash, ordinal: 1 }];
+completeMappingRaw.mappingPreviewManifests = [{ preview_batch_id: mappingPreview, manifest_version: 1, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64),
+  assess_case_id: ASSESS_DRAFT, case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion,
+  target_count: 1, source_count: 1, item_count: 1, reviewed_count: 1, conflict_count: 0, unresolved_conflict_count: 0,
+  item_set_hash: '7'.repeat(64), conflict_set_hash: '6'.repeat(64), resolution_set_hash: '5'.repeat(64), displayed_set_hash: '4'.repeat(64),
+  item_bindings: [{ ordinal: 1, proposalId: mappingProposal, proposalVersion: 1, targetSelectorId: mappingSelector, reviewedValue: 'Mapped', bindingHash: mappingItemBindingHash }],
+  conflict_bindings: [], resolution_bindings: [] }];
+const completeMappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, completeMappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(completeMappingProjection.runs[0].projectionComplete, true);
+assert.equal(completeMappingProjection.previews[0].projectionComplete, true);
+assert.equal(completeMappingProjection.previews[0].status, 'ready');
+const omittedMappingItemRaw = structuredClone(completeMappingRaw); omittedMappingItemRaw.mappingPreviewItems = [];
+const omittedMappingItemProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, omittedMappingItemRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(omittedMappingItemProjection.previews[0].projectionComplete, false);
+assert.equal(omittedMappingItemProjection.previews[0].status, 'blocked');
+const substitutedMappingItemRaw = structuredClone(completeMappingRaw); substitutedMappingItemRaw.mappingPreviewItems[0].reviewed_value = 'Substituted';
+const substitutedMappingItemProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, substitutedMappingItemRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(substitutedMappingItemProjection.previews[0].projectionComplete, false);
+assert.equal(substitutedMappingItemProjection.previews[0].status, 'blocked');
+const failedMappingRaw = { ...mappingRaw, mappingRuns: [{ ...mappingRaw.mappingRuns[0], status: 'failed',
+  failure_code: 'SECRET_UNAVAILABLE', safe_result: { failureCode: 'SECRET_UNAVAILABLE' }, updated_at: '2026-08-04T08:30:00.000Z' }] };
+const failedMappingProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: [...authority().capabilities, 'assess.v2.read', 'transcript.sources.read'],
+}, failedMappingRaw, new Date('2026-08-04T09:00:00.000Z')).documentMapping;
+assert.equal(failedMappingProjection.runs[0].state, 'failed');
+assert.equal(failedMappingProjection.runs[0].failureCode, 'PROVIDER_UNAVAILABLE');
+assert.equal(failedMappingProjection.runs[0].updatedAt, '2026-08-04T08:30:00.000Z');
 assert.equal(projection.deliveryPackages[0].lineageState, 'complete');
 assert.equal(projection.monitorBaselines[0].liveTelemetryConnected, false);
 assert.equal(projection.modernizationDecisions[0].assembleEligible, true);
@@ -338,7 +432,7 @@ sourceReadOnlyRows.transcriptApplyPreviewBatches = [{
 }];
 sourceReadOnlyRows.transcriptCandidateRelationships = [{
   id: HIDDEN_CANARY_IDS.relationship, candidate_id: HIDDEN_CANARY_IDS.candidate, candidate_version: 1,
-  relationship: 'supporting', rationale: 'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY', created_by: REVIEWER,
+  relationship: 'supporting', rationale: 'HIDDEN_ASSESS_RELATIONSHIP_RATIONALE_CANARY', reviewer_id: REVIEWER,
   created_at: '2026-08-04T08:07:00.000Z',
 }];
 sourceReadOnlyRows.transcriptConflicts = [{
@@ -513,6 +607,38 @@ assert.deepEqual({
   assessApplyPreviews: [], assessRuns: [],
 }, 'mutation capabilities never imply source or Assess collection read authority');
 
+// Check the actual production path, not just a table name or empty mock result.
+// The retained PostgreSQL gate independently validates all selected columns.
+const relationshipReviewColumns = 'id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+const relationshipReviewRow = {
+  id: HIDDEN_CANARY_IDS.relationship, candidate_id: CANDIDATE, candidate_version: 1,
+  relationship: 'supporting', rationale: 'Reviewed synthetic evidence', reviewer_id: REVIEWER,
+  created_at: '2026-08-04T08:07:00.000Z',
+};
+const relationshipReviewRequests: string[] = [];
+const relationshipReviewDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  if (path.startsWith('enterprise_evidence_candidate_relationship_reviews?')) {
+    relationshipReviewRequests.push(path);
+    assert.equal(path, `enterprise_evidence_candidate_relationship_reviews?select=${relationshipReviewColumns}&org_id=eq.${ORG}&workspace_id=eq.${WORKSPACE}&order=created_at.desc,id.desc&limit=1000`,
+      'production relationship query selects the canonical reviewer column within the exact tenant/workspace');
+    return [relationshipReviewRow] as T;
+  }
+  return [] as T;
+});
+const relationshipReviewRows = await relationshipReviewDatabase.loadProjectionRows({
+  ...authority(), capabilities: ['assess.v2.read'],
+});
+assert.equal(relationshipReviewRequests.length, 1, 'canonical Assess authority loads the relationship table exactly once');
+assert.deepEqual(relationshipReviewRows.transcriptCandidateRelationships, [relationshipReviewRow]);
+const reviewedCandidateRows = structuredClone(transcriptOnlyRows);
+reviewedCandidateRows.transcriptCandidateRelationships = relationshipReviewRows.transcriptCandidateRelationships;
+const reviewedCandidateProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, reviewedCandidateRows, new Date('2026-08-04T09:00:00.000Z'));
+assert.equal(reviewedCandidateProjection.availability, 'ready');
+assert.equal(reviewedCandidateProjection.transcriptFlow.assessCandidates[0].relationship, 'supporting',
+  'successfully loaded relationship review reaches the authorized candidate projection');
+
 const transcriptTablesRequestedFor = async (capabilities: string[]) => {
   const requested: string[] = [];
   const query = async <T>(path: string, _init: RequestInit = {}): Promise<T> => {
@@ -579,6 +705,107 @@ assert.deepEqual(
   [...sourceCollectionTables, ...assessCollectionTables].filter(table => mutationOnlyRequests.includes(table)),
   [],
   'mutation-only service-role path requests no transcript read collection',
+);
+
+const scopedMappingPaths: string[] = [];
+const scopedMappingDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  if (path.startsWith('enterprise_assess_document_mapping_')) scopedMappingPaths.push(path);
+  if (path.startsWith('enterprise_assess_document_mapping_catalogs?')) return [{ id: mappingCatalog, assess_case_id: ASSESS_DRAFT, case_version: 2,
+    assess_schema_version: 'assess-v2-schema-2026-07', catalog_version: 1, catalog_hash: 'f'.repeat(64), status: 'current', created_at: '2026-08-04T08:00:00.000Z' }] as T;
+  if (path.startsWith('enterprise_assess_document_mapping_runs?')) return [{ id: mappingRun, catalog_id: mappingCatalog, assess_case_id: ASSESS_DRAFT,
+    case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion, status: 'committed', safe_result: {}, created_at: '2026-08-04T08:00:00.000Z' }] as T;
+  if (path.startsWith('enterprise_assess_document_mapping_preview_batches?')) return [{ id: mappingPreview, catalog_id: mappingCatalog, catalog_hash: 'f'.repeat(64),
+    assess_case_id: ASSESS_DRAFT, expected_case_version: 2, input_bundle_id: mappingBundle, input_bundle_version_id: mappingBundleVersion,
+    status: 'previewed', expires_at: '2099-08-05T08:00:00.000Z', created_at: '2026-08-04T08:03:00.000Z' }] as T;
+  return [] as T;
+});
+await scopedMappingDatabase.loadProjectionRows({ ...authority(), capabilities: ['assess.v2.read', 'transcript.sources.read'] }, {
+  assessDocumentMappingScope: { caseId: ASSESS_DRAFT, caseVersion: 2, inputBundleId: mappingBundle, inputBundleVersionId: mappingBundleVersion },
+});
+const mappingPath = (table: string) => scopedMappingPaths.find(path => path.startsWith(`${table}?`)) || '';
+assert.match(mappingPath('enterprise_assess_document_mapping_catalogs'), new RegExp(`assess_case_id=eq\\.${ASSESS_DRAFT}.*case_version=eq\\.2.*status=eq\\.current.*limit=1`));
+assert.match(mappingPath('enterprise_assess_document_mapping_targets'), new RegExp(`catalog_id=eq\\.${mappingCatalog}.*limit=2000`));
+assert.match(mappingPath('enterprise_assess_document_mapping_runs'), new RegExp(`assess_case_id=eq\\.${ASSESS_DRAFT}.*case_version=eq\\.2.*catalog_id=eq\\.${mappingCatalog}.*input_bundle_id=eq\\.${mappingBundle}.*input_bundle_version_id=eq\\.${mappingBundleVersion}.*limit=1`));
+assert.match(mappingPath('enterprise_assess_document_mapping_preview_batches'), new RegExp(`preview_batches\\?.*assess_case_id=eq\\.${ASSESS_DRAFT}.*expected_case_version=eq\\.2.*catalog_id=eq\\.${mappingCatalog}.*input_bundle_id=eq\\.${mappingBundle}.*input_bundle_version_id=eq\\.${mappingBundleVersion}.*limit=1`));
+assert.ok(scopedMappingPaths.every(path => path.includes(`catalog_id=eq.${mappingCatalog}`) || path.includes(`run_id=eq.${mappingRun}`)
+  || path.includes(`preview_batch_id=eq.${mappingPreview}`) || path.startsWith('enterprise_assess_document_mapping_catalogs?')),
+'case/head/bundle scoped child queries stay usable after unrelated workspace history exceeds the former global limits');
+
+const deliveryProjectionQueries: Array<Record<string, unknown>> = [];
+const boundedDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async (_organizationId, _workspaceId, query = {}) => {
+      deliveryProjectionQueries.push(query);
+      return { ...createDeliveryWorkspaceFixture(), organizationId: ORG, workspaceId: WORKSPACE };
+    },
+    loadMonitorProjection: async () => ({ ...createMonitorBaselinesFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
+  },
+);
+await boundedDeliveryDatabase.loadProjectionRows(authority(), {
+  deliveryItemPage: {
+    packageId: PACKAGE,
+    cursor: { version: 3, id: CANDIDATE },
+    limit: 100,
+  },
+});
+assert.deepEqual(deliveryProjectionQueries, [{
+  actorId: USER,
+  authorizationVersion: 9,
+  itemLimit: 100,
+  baselineEligibilityLimit: 100,
+  packageId: PACKAGE,
+  itemCursorVersion: 3,
+  itemCursorId: CANDIDATE,
+}], 'Enterprise query forwards only the bounded package and cursor selectors after tenant authority resolves');
+await boundedDeliveryDatabase.loadProjectionRows(authority(), {
+  deliveryBaselineEligibilityPage: {
+    cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE },
+    limit: 100,
+  },
+});
+assert.deepEqual(deliveryProjectionQueries[1], {
+  actorId: USER,
+  authorizationVersion: 9,
+  itemLimit: 100,
+  baselineEligibilityLimit: 100,
+  baselineEligibilityCursorUpdatedAt: '2026-08-31T06:30:00.000Z',
+  baselineEligibilityCursorPackageId: PACKAGE,
+}, 'Enterprise query forwards the bounded baseline-eligibility continuation only after tenant authority resolves');
+const foreignDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async () => ({
+      ...createDeliveryWorkspaceFixture(),
+      organizationId: '21000000-0000-4000-8000-000000000021',
+      workspaceId: WORKSPACE,
+    }),
+    loadMonitorProjection: async () => ({ ...createMonitorBaselinesFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
+  },
+);
+await assert.rejects(
+  () => foreignDeliveryDatabase.loadProjectionRows(authority()),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'the service-role Delivery projection adapter rejects a valid foreign nested scope',
+);
+const foreignMonitorDatabase = createEnterpriseIntelligenceQueryDatabase(
+  async <T>() => [] as T,
+  {
+    execute: async () => ({}),
+    loadDeliveryProjection: async () => ({ ...createDeliveryWorkspaceFixture(), organizationId: ORG, workspaceId: WORKSPACE }),
+    loadMonitorProjection: async () => ({
+      ...createMonitorBaselinesFixture(),
+      organizationId: ORG,
+      workspaceId: '22000000-0000-4000-8000-000000000022',
+    }),
+  },
+);
+await assert.rejects(
+  () => foreignMonitorDatabase.loadProjectionRows(authority()),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'the service-role Monitor projection adapter rejects a valid foreign nested scope',
 );
 const transcriptOnlySerialized = JSON.stringify(transcriptOnlyProjection);
 for (const prohibited of ['content_hash', 'extracted_text_hash', 'storage_path', 'provider_config_id', 'secret_ref']) {
@@ -817,6 +1044,98 @@ const allowed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, expe
 assert.equal(allowed.response.status, 200);
 assert.equal(allowed.response.headers.get('cache-control'), 'no-store');
 assert.ok(isProjectionBody(allowed.body));
+
+const foreignNestedRows = raw();
+foreignNestedRows.deliveryWorkspace = {
+  ...deliveryProjectionFixture('21000000-0000-4000-8000-000000000021'),
+};
+assert.throws(
+  () => buildEnterpriseIntelligenceProjection(authority(), foreignNestedRows),
+  /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  'a substituted nested Delivery projection must fail before it can be labeled with outer authority',
+);
+const foreignNested = await invoke(
+  { organizationId: ORG, workspaceId: WORKSPACE, expectedAuthorizationVersion: 9 },
+  { queryDatabase: queryDatabase(foreignNestedRows) },
+);
+assert.deepEqual(
+  { status: foreignNested.response.status, body: foreignNested.body },
+  { status: 503, body: { code: 'ENTERPRISE_PROJECTION_UNAVAILABLE' } },
+  'the HTTP projection boundary fails closed on an outer/nested scope mismatch',
+);
+
+const uppercaseNestedRows = raw();
+uppercaseNestedRows.deliveryWorkspace = {
+  ...deliveryProjectionFixture(ORG.toUpperCase(), WORKSPACE.toUpperCase()),
+};
+uppercaseNestedRows.monitorApprovedBaselines = {
+  ...monitorProjectionFixture(ORG.toUpperCase(), WORKSPACE.toUpperCase()),
+};
+const uppercaseNestedProjection = buildEnterpriseIntelligenceProjection(authority(), uppercaseNestedRows);
+assert.equal(uppercaseNestedProjection.deliveryWorkspace?.organizationId, ORG.toUpperCase());
+assert.equal(uppercaseNestedProjection.monitorApprovedBaselines?.workspaceId, WORKSPACE.toUpperCase());
+
+let parsedDeliveryPage: unknown;
+const paged = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  expectedAuthorizationVersion: 9,
+  deliveryItemPage: { packageId: PACKAGE, cursor: { version: 2, id: CANDIDATE }, limit: 100 },
+}, {
+  queryDatabase: {
+    loadProjectionRows: async (_authority, options) => {
+      parsedDeliveryPage = options?.deliveryItemPage;
+      return raw();
+    },
+  },
+});
+assert.equal(paged.response.status, 200);
+assert.deepEqual(parsedDeliveryPage, {
+  packageId: PACKAGE,
+  cursor: { version: 2, id: CANDIDATE },
+  limit: 100,
+}, 'strict HTTP request decoding preserves the opaque package selector and exact bounded cursor');
+
+const malformedDeliveryPage = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  deliveryItemPage: { packageId: PACKAGE, cursor: { version: 2, id: CANDIDATE }, limit: 101 },
+});
+assert.deepEqual(
+  { status: malformedDeliveryPage.response.status, body: malformedDeliveryPage.body },
+  { status: 400, body: { code: 'INVALID_REQUEST' } },
+  'a page over the decoder maximum fails before tenant query execution',
+);
+
+let parsedBaselineEligibilityPage: unknown;
+const pagedBaselineEligibility = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  expectedAuthorizationVersion: 9,
+  deliveryBaselineEligibilityPage: { cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE }, limit: 100 },
+}, {
+  queryDatabase: {
+    loadProjectionRows: async (_authority, options) => {
+      parsedBaselineEligibilityPage = options?.deliveryBaselineEligibilityPage;
+      return raw();
+    },
+  },
+});
+assert.equal(pagedBaselineEligibility.response.status, 200);
+assert.deepEqual(parsedBaselineEligibilityPage, {
+  cursor: { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: PACKAGE },
+  limit: 100,
+}, 'strict HTTP request decoding preserves the server-issued baseline-eligibility cursor');
+const malformedBaselineEligibilityPage = await invoke({
+  organizationId: ORG,
+  workspaceId: WORKSPACE,
+  deliveryBaselineEligibilityPage: { cursor: { updatedAt: 'not-a-timestamp', workPackageId: PACKAGE }, limit: 100 },
+});
+assert.deepEqual(
+  { status: malformedBaselineEligibilityPage.response.status, body: malformedBaselineEligibilityPage.body },
+  { status: 400, body: { code: 'INVALID_REQUEST' } },
+  'an invalid baseline-eligibility cursor fails before tenant query execution',
+);
 
 const malformed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, role: 'owner' });
 assert.deepEqual({ status: malformed.response.status, body: malformed.body }, { status: 400, body: { code: 'INVALID_REQUEST' } });

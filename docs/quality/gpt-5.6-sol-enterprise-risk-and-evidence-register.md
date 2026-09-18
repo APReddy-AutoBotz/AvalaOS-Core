@@ -1,5 +1,136 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active SQL/Edge mapping contract correction (2026-09-18)
+
+Confirmed source defects: mapping compares database JSONB hashes with compact JS
+hashes, and rejects SQL-stripped null target fields. Hosted synthetic evidence
+shows a committed claim followed by RESOURCE_STALE, zero proposals and zero
+analysis debit. This is fail-closed availability failure, not proven disclosure.
+Source-binding response under-validation is additionally corrected before spend;
+no external attacker path is established. Production status remains unproven.
+
+The bounded decoder and real PostgreSQL-to-production regression pass local
+verification: 23 canonical commands, including 16 focused PostgreSQL scenarios
+and 32 Desktop/Pixel cases. Final quality/security reviews found no blocker;
+the active correction evidence records scope limits and retained failed runs.
+Hosted acceptance remains pending. No global hash/migration change is authorized.
+Provider runtime is disabled during repair; one prior real validation brings the
+conservative campaign charge to USD 1.3407792. Preserve immutable expiry, failed
+records, and existing provider-free environments. See the active AI-output plan.
+
+Active approved safeguards: confirmed source defects are the absence of one
+aggregate currency cap across existing token budgets and separate lifecycle
+secret/validation paths that bypass a generation-only guard. The local correction
+adds exact target-bound one-use permits and immutable debits including prior
+USD 0.86932. Executed local verification covers final-slot concurrency, replay,
+substitution, wrong scope, missing authority, provider-free target denial and
+zero secret/network effects on rejected requests. Independent final review found
+and verified corrections to two trusted-wrapper transport-binding defects;
+no direct external exploit path was established. No hosted activation is proven.
+The previously deferred lifecycle enforcement gap below is now in this bounded
+implementation scope; existing provider-free backend data and flags stay intact.
+
+AP subsequently approved same-branch AI-correction release and a separate
+USD 0/month synthetic AI project. Its target isolation, server-only secrets,
+aggregate USD 10 budget and hosted field-by-field behavior remain planned
+verification. This supersedes the earlier local-only release restriction, not
+the existing provider-free backend restrictions or historical proof boundaries.
+
+## Active synthetic AI-output correction
+
+Executed component evidence on 2026-09-17: corrected Assess mapping passes; PDD
+has exact sections/titles, coverage and canonical citations but altered AP analyst
+to API analyst in a retained live attempt. Structure is not semantic grounding.
+Earlier output also weakened a prohibition and invented compliance wording.
+Encoding causation remains suspected. The reviewed Studio-only JSON-string frame
+keeps all decoded text untrusted and passed bounded security verification. Its one
+live PDD attempt failed required-section completeness (four instead of five).
+Subsequent OpenAI schema enforcement and tested scope-equivalence oracles produced
+passing PDD, BRD and FRD component fixtures. Schema overhead is included in the
+pre-effect reservation; exact IDs/order/titles/anchors and semantic fixture checks
+remain independently enforced after the response. The conservative campaign charge
+is USD 0.86932; further paid calls stopped. General semantic fidelity and hosted
+integration remain unproven despite these successful fixtures.
+Do not weaken provenance validation or infer hosted success. Earlier uncertain
+spend remains conservatively charged; later usage is recorded before business
+validation. The current plan is `docs/planning/assess-studio-ai-output-correction.md`.
+The provider-free target marker's lifecycle enforcement gap remains deferred;
+this continuation does not enable real providers on either hosted target.
+
+
+## Active native Assess document-mapping verification
+
+Current confirmed source defect: STABLE projection RPCs take canonical row locks,
+so actual PostgREST reads fail with 405 / SQLSTATE 25006. Confirmed operator-evidence
+defect: the hosted harness substituted login reservation identity for Auth subject.
+The bounded correction preserves all permissions/locks, adds real HTTP assertions,
+and requires independent reconciliation of the original three committed receipts
+before any resumed mutation. The 484ce7a head's 18 green workflows do not close
+these newly demonstrated gaps. Six accounts and saved manual data remain intact;
+no hosted upload or real-provider success is claimed. Exact current results and
+failed attempts belong to `assess-projection-transaction-correction-evidence.md`.
+Executed local closure: 23 native commands, 32 Desktop/Pixel scenarios, actual
+PostgREST proof with 169-table no-write coverage, 16 migration rejection cases,
+six recovery assertions and 48 evidence-adversary tests passed. Final review
+corrections bind response completion, observed authorization versions and the
+complete approved deployment plan. Residual risk remains at new exact-head CI
+and exploratory execution; no real-provider or broader readiness claim follows.
+
+Release continuation: corrected head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable exact-head workflows; the separate hosted-live workflow remained intentionally skipped. The approved exploratory target received the 77-migration chain, source-verified functions and an immutable draft, preserving its six accounts and zero provider configurations. Actual browser testing then exposed a confirmed query/schema defect: relationship reviews selected `created_by` instead of canonical `reviewer_id`, stopping the projection before upload. The failed attempt and bounded production-query/schema-regression correction are recorded in `docs/quality/assess-document-mapping-projection-correction-evidence.md`. Upload/analysis readiness is not claimed; corrected-source local, CI and exploratory retry gates remain mandatory. The frozen controlled-human backend remains untouched.
+
+Current release hold: projection correction `e3ca6930eca8b79f9f03d5178753331eac8d9124` passed all 18 applicable workflows. Before deployment, source/installed-schema inspection and real PostgreSQL testing confirmed two XLSX omissions: the source-version ingestion trigger and the native Assess document-evidence classifier. The active plan owns one additive atomic correction for both functions and the synthetic identity marker, with real receipt-backed ingestion, applied spreadsheet evidence and upgrade regressions. Earlier mocked/CSV-fixture results do not prove these boundaries. Current-source local validation passed 22/22 commands and 32/32 Desktop/Pixel scenarios; independent source/evidence reviews found no remaining implementation blocker. Results and retained failed attempts are in `docs/quality/assess-document-xlsx-ingestion-correction-evidence.md`. Fresh exact-head CI and resumed exploratory proof remain required. No exploratory upload/provider effects were created; preserve the six accounts, saved manual case and frozen human backend.
+
+AP authorized the coherent slice in `docs/planning/assess-supporting-document-mapping.md` on 2026-09-16. Confirmed source defects in legacy evidence-only targets, label-only structural objects, scalar CaseFact replacement, repeated-text anchors and provider-size handling are addressed by the local typed-mapping implementation. Corrective reviews also drove exact staged recovery, source freshness, complete versioned previews, canonical fact aliases, visible final conflict values and exhaustive new-command lifecycle tests. The final 22-command feature gate passed; current executed results, retained browser checks and failed-attempt history are in `docs/quality/assess-supporting-document-mapping-evidence.md`. Independent bounded reviews found no remaining blocker in their inspected corrections. The completed formal security scan remains a historical pre-correction report, not a rewritten clean post-fix scan. None of the previous PR C assertions is reused to close this slice.
+
+Current proof boundaries: synthetic local tests only; real provider calls, deployed availability, controlled-human acceptance, merge and production remain unproven. Default-off rollback must preserve immutable sources, mappings, previews, receipts and drafts. No silent manual overwrite, missing-field fabrication, AI score/approval authority, destructive migration or legacy unsafe-apply bypass is permitted.
+
+## Active creation-access remediation
+
+Confirmed source defects addressed by the local repair: hosted creation presentation depended on absent legacy
+identity permissions; process creation used a browser insert denied by the canonical
+schema; main Studio/Delivery links opened legacy editors; portfolio reads were
+attempted without their distinct read capability; Admin Users was only a stub.
+The focused approved repair and exact verification requirements are in
+`docs/planning/creation-access-synthetic-admin-remediation.md`.
+
+Local verification and bounded independent reviews passed as recorded in
+`docs/quality/creation-access-remediation-evidence.md`. Executed negative tests cover
+stale/foreign workspace authority, legacy Admin-label bypass, cross-system Auth
+response loss, duplicate provisioning, arbitrary role grants, role revocation with
+an old JWT, secret persistence, stale UI completions and fixed-fixture contamination.
+The current PR264 backend must not receive extra accounts. AP separately approved
+the exploratory target at quoted $0/month and pausing MockMate with data preserved.
+New-target migration/bootstrap and the joined Admin/author/process/V2 save/reopen
+browser journey passed at `3352f5ffeb08d493ec6202ce65dae28608e07502`. Independent SQL
+readback matched actual request, idempotency, tenant, saved-lineage and audit
+bindings; provider configurations and observed provider traffic remained zero.
+Creation-access CI passed on that head. Retained PR C and preview CI found two
+confirmed source defects: a stale fresh-chain expected migration tip and a thrown
+authority exception before blocked-route presentation. Corrections and their own
+exact-source gates subsequently passed at `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`.
+Its full creation-access workflow passed; PR C and preview workflows both stopped
+on ten retained Sandbox fixture failures from obsolete Admin navigation and an
+incorrect Draft expectation before assessment entry. Corrective tests must retain
+separate Admin/Intelligence authority and exercise a real saved incomplete draft
+with no score or decision pack. The corrected fixture exposed and the bounded
+App/Sidebar repair addresses local empty-capability reconciliation rejecting
+Admin. Only canonical local runtime supplies undefined presentation capabilities;
+server arrays, including empty/revoked denial, remain authoritative. Desktop/Pixel
+Sandbox passed 38 cases with 30 unchanged explicit server skips; the complete
+corrective browser pass includes 86 executed checks across five suites.
+All 20 selected canonical authority/regression/static/coverage commands and
+final independent reviews passed. New-head CI remains pending.
+Neither exploratory proof nor synthetic
+accounts replace the independent three-human gate, which remains pending.
+The empty-target setup initially blocked email login through the CLI's provider
+flag; enabling that provider while preserving global signup denial corrected it.
+Hosted advisor warnings about executable security-definer functions require
+function-specific classification; zero ERROR notices is not a security-clean claim.
+The exploratory target must have no provider configurations or real keys. Its
+Admin no-provider marker does not enforce Studio gateway egress; any later
+generation must use a separately verified server-enforced synthetic path or stay
+`not run`. The role grant alone is not generation readiness.
+
 ## Governed multi-source transcript PR A accepted risk boundary
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`; all 15 applicable workflows, Netlify preview, and a fresh independent review passed. The table below records the accepted source/CI boundary. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
@@ -17,7 +148,71 @@ PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merge
 
 Deployment status remains unknown. No hosted/live infrastructure, real provider, secret, customer data, deployment, incident, or production action was inspected or mutated.
 
-## Governed multi-source transcript PR B active risk boundary
+## Governed multi-source transcript PR B accepted source boundary
+
+PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through post-PR-B `main` `5433cad41721355e3ec5a29bc2f87772540c77b5`. PR B's immutable registry remains the authority for its executed results and its 15 explicit `not_run` boundaries. In particular, PR B did not execute or pass PR C Delivery, Monitor, PATH-003/004, PERF-002-B, PERF-003, or PERF-004 results. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
+
+## Governed Delivery and Monitor PR C active risk boundary
+
+The latest complete local candidate matrix executed 80 registered commands but closed at 79/80: all 218 assertion-owned results passed, while the final raw `git diff` scoring check rejected the already-reviewed Edge packaging import correction even though the scoring body, tests and regression runner were unchanged. This is a confirmed release-control defect, not evidence of scoring-law drift and not a full-matrix pass. The same-PR correction replaces only command 80 with a standalone, source-owned scoring-law guard that binds the accepted base and raw baseline hashes, permits exactly the known first-import type-only/extension transform, independently validates the exact TypeScript 5.8.3 AST import contract, and requires full canonical equality for every remaining scorer byte plus unchanged test/regression content. The guard rejects environment, repository, ancestry, source-path, encoding, line-ending, import, body and race substitutions with fixed diagnostics, emits no assertion marker, and is added to the canonical measured inventory, now seventeen sources and nineteen tests while retaining 46 scenarios across eight reports. The failed 79/80 run remains immutable. Fresh focused execution, the complete matrix, provenance regeneration and independent final review are required before exact-head CI, protected testing, merge or readiness.
+
+The canonical npm tooling command exposed a confirmed fixture-isolation defect that a direct Node coverage invocation did not reproduce: npm's source-local executable prefix survives the infrastructure PATH allowlist and is then rejected as a live-source reference during entry-environment construction. A bounded real-fixture comparison confirmed the exact rejection with only that prefix changed, without entrypoint or provider calls, source drift, or temporary residue. The correction removes source/seed PATH authority before construction, preserves unrelated system executable paths, and rejects protected overrides and final composed-environment substitutions instead of exempting PATH from isolation. Native POSIX and Windows path semantics, false-prefix siblings, dot-prefixed descendants, and symlink resolution require adversarial verification. The prior full matrix remains failed; fresh npm-context coverage, complete canonical validation and independent retained evidence are required. A diagnostic-only pass or aggregate suite exit cannot substitute for those gates or controlled-human completion.
+
+Fresh canonical measurement passed its complete assertions but the enclosing temporary-root check failed. A separate isolated metadata reproduction confirmed that the installed Playwright consumer creates its transform cache outside the test-owned cleanup directory when `PWTEST_CACHE_DIR` is unbound. This is a confirmed test-containment defect, not an application or scoring defect. The narrow correction explicitly confines both CLI children's cache to the uniquely owned metadata fixture, rejects inherited/escaped/symlink cache authority, and verifies success/failure teardown. Prior failed attempts remain failed; focused before/after containment, refreshed source provenance, full canonical coverage and the complete matrix are required before acceptance. A separate disk-reserve breach remains an environment constraint and is not attributed to this small cache without evidence.
+
+Final local quality review additionally confirmed an undersized 180-second whole-child coverage limit and stale thirteen-source contract text after expansion to sixteen source owners and forty-six scenarios. The correction pins a 900-second harness-only containment limit, validates child status before measurement, and adversarially binds the active documentation inventory. It does not relax product performance or skip/assertion gates. Review also found that requesting Edge-process termination was being treated as completion without observing closure. The corrected boundary requires a separate bounded direct-child closure observation; unsuccessful or unconfirmed termination remains unknown, with no continuation or retry. Descendant shutdown and provider-side cancellation are not inferred. Fresh focused and complete exact-source verification remain required; neither prior failed local attempt is acceptance evidence.
+
+The later protected Edge attempt applied the controlled migration and failed at the first function with no deployment artifact. Independent read-only reconciliation found the migration installed once, zero functions, zero seeded users/workspaces/exercises and zero unsafe provider state. Its discarded CLI diagnostics cannot establish a hosted root cause. Local Deno inspection independently confirmed unresolved extensionless dependencies in four functions. The coherent correction makes only those imports explicit, expands per-function source ownership to reachable external services/types, adds a pre-secret graph gate and bounded fixed-code failure-only evidence, and introduces version 2 `current_empty` bootstrap/preflight recovery. Recovery requires the installed canonical SQL digest, no mutable controlled-human rows or exercise history, and independently bound signed state/tip/digest; it neither resets the database nor reuses prior-state proof. Coverage expands from thirteen to sixteen exact sources, adding the import graph, deployment wrapper and bootstrap derivation. Full corrected-source execution, fresh reviews and exact-head CI/preview remain required; no deployed-function, human, merge or readiness PASS follows from local resolution.
+
+The subsequent complete committed-head local matrix passed all registered commands and its independent verifier, but final architecture and quality review confirmed one remaining acceptance-evidence defect: the canonical JavaScript coverage inventory omitted the changed execution-profile and hosted-evidence controls. The prior run is retained unchanged and is not measurement for omitted sources. The current corrective scope expands the canonical gate to sixteen exact sources, including its own runner, with independently pinned source/test/scenario inventories and assertion-owned actual-consumer records. Parent LCOV and subprocess entrypoint observations remain separate, actual uncovered branches remain visible, and no numeric percentage floor is invented. Fresh corrected-source execution, exact-head CI/preview and final evidence review remain required; push and controlled-human acceptance stay blocked until that closure is proven.
+
+The third uncommitted motion-focused attempt exposed a confirmed full-page evidence-classification defect: a positive-only coverage guard rejected the Platform Admin Pixel surface before its unresolved diagnostics were retained. The actual missing incomplete counts remain unknown. The corrective contract distinguishes zero evaluated nodes from evaluated-but-unresolved contrast, retains exactly one sanitized summary per persona/device before terminal assertions, and verifies summary identity, completeness, timing and counts in both local and hosted reports. All-incomplete or mixed-incomplete contrast remains `unresolved_manual`, not contrast PASS or WCAG readiness; no product restyle is inferred. Strict Home-target contrast, every persona/device, observed workflows and serious/critical violation gates remain unchanged. Fresh candidate execution, committed-head validation and hosted verification are pending; the failed attempt remains immutable.
+
+Current disposition: **corrective implementation candidate; verification active; merge/readiness NO-GO**. Existing Draft PR #264 contains the source corrections for the confirmed blockers below in one substantial candidate, with verification and acceptance still pending. Fresh review superseded `local-precommit-38` for deletion/rename-aware evidence scope, authorized committed replay before mutable runtime gates, strict requested/outer/nested projection-scope equality, and complete-set recovery-result item-version binding. The next complete matrix, `local-precommit-40`, was then superseded when final security review found that production client adapters mixed the tenant transport envelope into strict action selectors. Current source also isolates that envelope for all Delivery/Monitor methods while keeping every other unknown claim fail closed. Tracked documents describe the stable control contract and canonical CI/artifact pointer; exact run-specific results are authoritative only when independently verified from the committed head and bound in the immutable artifact plus the external PR description.
+
+| Risk | Current classification | Required closure evidence | Remaining boundary |
+| --- | --- | --- | --- |
+| A reviewer-blocked package has no safe production recovery path, and an unchanged, partial-knowledge, duplicate-result-version, or predecessor-version-substitution request can clear the blocker or misrepresent the new snapshot | Confirmed source defect corrected in the candidate; acceptance pending | Production component loads and binds the complete current descendant set, authors only explicitly selected material changes, rejects unchanged/stale/foreign/replay/substitution atomically, and the Edge result decoder requires one unique novel item-version ID per expected aggregate with no predecessor reuse; fresh descendants repeat item decision/review/approval and Monitor remains unchanged until approval | Complete candidate matrix, exact committed-head local/CI evidence, and fresh review pending |
+| Enterprise Intelligence keeps raw BYOK input, private-file bytes, selectors, drafts, previews, pending state, or async finalizers across organization/workspace/actor changes, or accepts a valid nested Delivery/Monitor projection for a different scope | Confirmed source defect corrected in the candidate; acceptance pending | First-commit scope replacement plus post-await fencing; Desktop/Pixel sentinels for all three scope dimensions; strict request/outer/nested UUID-semantic equality at service, client, and server-adapter boundaries; delayed file/mutation isolation without recording sentinel content | Complete candidate matrix, exact committed-head local/CI evidence, and fresh review pending |
+| Production Delivery/Monitor client methods mix organization/workspace envelope fields into strict action selectors, blocking valid governed actions or encouraging a weakened selector | Confirmed source defect corrected in the candidate; acceptance pending | One production boundary removes only `organizationId` and `workspaceId`, pins the method-owned action, and sends the strict normalized payload; all 11 methods and 12 command variants reach mocked transport, while an unrecognized browser claim fails before transport | Complete candidate matrix, exact committed-head local/CI evidence, and fresh review pending |
+| An authorized retry cannot recover its committed canonical result after feature disablement or global read-only activation, encouraging a fresh-key retry and duplicate-effect risk | Confirmed reliability defect corrected in the candidate; acceptance pending | Current actor and target authority plus structural binding precede receipt disclosure; exact committed replay precedes mutable runtime gates; new keys remain blocked before receipt/effect; revoked actors receive no historical disclosure | Complete PostgreSQL matrix, exact committed-head local/CI evidence, and fresh review pending |
+| A manifest, command, assertion, or `not_run` file can be copied from another workflow run/attempt or local bundle, or a base-tracked deletion/rename can disappear from scoped provenance | Confirmed release-integrity defect corrected in the candidate; acceptance pending | Identity independently derived from GitHub built-ins or explicit non-promotable local context and copied into every record; canonical path/run/attempt/base/head/artifact/source/fixture/persona/runtime digests; adversarial cross-attempt/path/record substitutions fail closed; tracked deletions and renames are rejected before collection | Local verifier and exact-head GitHub run/artifact proof pending; local evidence cannot pass hosted proof |
+| Active documents and the external PR description can cite a stale or self-invalidating source/run digest | Confirmed repository/release-record defect corrected in the candidate; acceptance pending | Stable tracked contract with no final self-hash; generated registry/provenance frozen before commit; one exact candidate commit; actual GitHub run ID/attempt/jobs/artifact/digest and same-head preview recorded in PR #264 after execution | PR-body and hosted-check reconciliation follow push; no deployment/readiness inference |
+| A green canonical matrix omits changed critical JavaScript evidence controls, treats an approved import-only packaging correction as scoring-law drift, or synthesizes mandatory completion | Confirmed acceptance-evidence defect; canonical correction active | Seventeen exact source hashes including the profile parser, hosted evidence importer, coverage runner, Edge controls, bootstrap derivation and standalone scoring-law guard; 19 exact tests; independent source/test/scenario inventory expectations; command 81 binds exact base/blobs/AST/canonical scorer body and emits no assertion marker; missing, skipped, substituted or silently unmeasured required controls reject | The earlier successful matrix and later 79/80 run cannot close this correction. Complete fresh exact-head local/CI evidence and final review are required before acceptance or protected phases |
+| The focused main region fades or blurs below readable contrast during entry; an invisible target yields an empty Axe scan; keyboard evidence omits actual focus/motion/contrast-target ownership | Confirmed source and evidence-ownership defects; corrective verification active | Transform-only production motion; all seven personas on Desktop/Pixel with normal/reduced timeline and focus checks; strict positive contrast on the existing opaque Home paragraph, zero scoped violations/incompletes, legacy/empty-scan rejection; exact App/Home/CSS anchors and substitution adversaries; separate unchanged full-page serious/critical gate with nonempty actual coverage and gradient incompletes retained as unresolved_manual, never contrast PASS | Failed Preview QA and first overbroad uncommitted focused candidate stay immutable; full fresh matrix/reviews/exact-head CI/preview remain required. Gradient/pseudo-element indeterminacy is not complete WCAG proof or a confirmed visual defect; no restyle/readiness inference |
+| Controlled-human evidence can be synthesized from automation, copied from a stale run, executed by one person under multiple personas, bound to a foreign backend/preview, omit steps/personas, hide provider egress or negative side effects, accept fake migration/Edge deployment proof, or leave synthetic authority active | Confirmed proof/operations risk; fail-closed source contracts added, execution pending | Four executable JSON contracts; all eight journeys and `CH-01..14` with exact ordered step observations; trusted label-gated prior-terminal PR head/CI run-attempt-artifact/Deploy Preview/backend/exercise/seed/reset binding; raw-byte migration digest with exact prior-tip/additive-or-replay and phase digests; local Edge source set plus provider-observed deployment receipt/bundle/update/runtime attestations without false digest equality; three distinct HMAC-pseudonymized unedited-comment actors revalidated at finalization; zero-egress and unexpected-side-effect counts; post-session bounded deprovision retaining immutable history; material-defect full-session invalidation and full retest | `CONTROLLED-HUMAN` remains `not_run` until an actual signed three-human artifact passes on the exact head; dedicated synthetic target and PR #264 preview only; production, AvalaOS.com/custom domains, customer/external data, real providers, broad reset, promotion, and readiness claims remain prohibited |
+
+The approved controlled Edge attempts exposed a confirmed workflow integration and test defect. The first reusable job received empty target fields; the later sentinel-based attempt failed its database-secret guard before any backend operation. Masked fields do not establish which value class arrived. Fresh read-only reconciliation confirmed unchanged synthetic prior-tip state, with no controlled migration, deployment, or seed. The local source tests encoded an unproven resolver assumption and did not constitute hosted transport evidence. The same-PR corrective architecture removes all eight reusable call boundaries and the five obsolete reusable entrypoints, preserves exact direct protected-job name sets and first-use guards, and binds actual workflow/job/role identities in versioned signed evidence. Direct label and emergency-dispatch recovery must both retain current-code/historical-data separation and bounded target/TLS cleanup authority.
+
+Before another temporary PAT is requested, an AP-approved no-PAT direct preflight must inspect the exact empty synthetic target in an explicitly read-only transaction and produce one fresh public HMAC-signed exact source/command/workflow/job/run/attempt envelope. Version 2 must independently distinguish `prior_empty` from the narrowly verified `current_empty` migration-recovery state; it must never describe an installed migration as still pending. Independent verification must reject absent or duplicate reports, skipped checks under green exit, stale attempts, substituted command/source/target/preview/CI identity, fake installed SQL digests, mutable rows or exercise history, wrong signatures, wrong phase or checkpoint role, secret relay/inheritance, job-global values, displaced guards, weakened TLS, unsafe uploads, or any preflight mutation/provider/Admin path. Service-credential and PAT authentication, deployment, and human completion remain separate `not run` boundaries. Hosted direct secret delivery for corrected source remains `planned verification` until that exact head passes this gate. Preserve failed attempts, remove/revoke unused temporary credentials separately, and never weaken approval or broaden token permissions. Run-specific failure, cleanup, and verification receipts remain immutable external evidence rather than mutable hashes embedded in this document.
+
+`PERF-003` and `PERF-004` remain `not_run` because no AP-approved numeric budgets exist. The AP authorized controlled-human preparation/execution on 2026-09-04 only for a dedicated synthetic `hosted_nonproduction_pilot` backend and the PR #264 Deploy Preview; the gate has not yet been executed and remains `not_run`. All other hosted/live product behavior, real providers, stable/custom-domain deployment, pilot, production, security certification, compliance certification, and readiness remain prohibited, `not_run`, or unproven.
+
+### Direct controller binding correction — active verification
+
+A subsequent approved Edge attempt exposed a confirmed source defect: the job omitted the exact site and Netlify context required by the real controller, and five later jobs shared the omission. Seven normal controller jobs also supplied only the evidence-facing exercise digest, leaving the optional expected-exercise check unbound before effects. The observed attempt rejected before database-adapter construction; only provider-baseline reading completed. No controlled migration, deployment, seed or human completion is established.
+
+The bounded correction supplies the exact preview literals and authority-owned expected-exercise alias without changing controllers, SQL, recovery semantics, secret sets, TLS or approvals. Acceptance requires an independent eighteen-invocation inventory, parsed workflow job/step inputs through the real context derivers, missing/substituted/overridden binding adversaries, the complete fresh matrix, final reviews and a new exact-head hosted chain. Temporary GitHub secret removal does not revoke the Supabase token; both cleanup actions remain separately evidenced. Earlier head-bound results cannot promote the correction and `CONTROLLED-HUMAN` remains `not_run`.
+
+### Superseded local diagnostic history
+
+Wave 1 at exact base `5433cad41721355e3ec5a29bc2f87772540c77b5` confirmed source defects that PR C must correct before merge: Studio authority can create Delivery resources without target acceptance; Delivery lacks immutable logical item versions and terminal human decisions; Monitor treats all package rows as approved instead of binding a canonical accepted set; receipt/effect item identity can differ from committed SQL identity; revocation can race the Delivery/Monitor commit; Studio-only and Monitor-only capability paths over-disclose general Delivery data; Delivery projection currentness is not version-exact; the primary Monitor surface is not the canonical baseline projection; and the existing Studio-only schema cannot be relaxed safely without an exclusive-union Delivery source package and dirty-state preflight.
+
+Wave 1 gives a conditional implementation GO and a merge/readiness NO-GO. Required PR C proof is `planned verification`: additive fresh/exact/populated/dirty PostgreSQL 16 migration scenarios; forced RLS, ACL, FK, tenant/workspace, revocation-race, replay, response-loss, concurrency, accepted-set, and non-disclosure negatives; strict domain/API/client assertions; Desktop Chrome and Pixel 7 browser, accessibility, and `PERF-001` / `PERF-002-B` evidence; retained PR A/PR B/platform regression; exact-head assertion-owned evidence; and fresh security/quality review. `PERF-003` and `PERF-004` remain `not_run` because no AP-approved numeric budgets exist. Controlled-human testing, hosted/live state, real providers, deployment, pilot, production, security certification, compliance certification, and readiness remain `not_run` or unproven.
+
+Fresh precommit review also confirmed two browser-controller defects: an in-flight mutation could repaint a prior workspace after scope change, and a manual-package commit with two lost responses could be retried under a fresh key before reconciliation. Current source binds every completion to actor/organization/workspace epoch and converts bounded double transport loss into a mutation-locked unknown-outcome state requiring authoritative reload. Focused two-profile regressions pass, but the corrected full local matrix, independent verifier, fresh final reviews, exact committed-head run, and hosted checks remain `planned verification`; merge/readiness remains NO-GO.
+
+`local-precommit-24` subsequently passed the complete 72-command, 187-assertion matrix, independent verifier, and raw checksum for its governed working-tree digest. Fresh final review then confirmed two further source defects: the primary Portfolio Monitor omitted actor identity from its presentation-only invalidation key, and a Delivery/Monitor SQL commit followed by Edge-to-PostgreSQL response loss or canonical-result failure could surface as an ordinary 503 and allow a fresh-key retry. Current source adds actor-keyed first-commit suppression without sending actor as a client authority claim, normalizes post-execute uncertainty to `COMMAND_OUTCOME_UNKNOWN`, maps the legacy finalization response to the same client lock, preserves authored input, and requires authoritative reconciliation before any fresh key. Focused application/Edge typechecks, command fault tests, governed coverage, and Desktop Chrome/Pixel 7 actor-switch and one-effect reconciliation tests pass. The corrected complete local matrix, independent verifier, fresh final reviews, exact committed-head run, and hosted checks remain `planned verification`; merge/readiness remains NO-GO.
+
+Diagnostic `local-precommit-26` then found a retained Enterprise browser regression: decoding every structured failed HTTP response changed a generic Assemble failure from the established `COMMAND_UNAVAILABLE` contract to `RESOURCE_STALE`. The client now decodes post-execute outcome codes only for Delivery/Monitor, while bounded double transport loss remains an unknown outcome for every command. Focused governed coverage and the retained Desktop Chrome/Pixel 7 failure-and-reload journey pass. A new complete local matrix remains `planned verification`; merge/readiness remains NO-GO.
+
+`local-precommit-29` completed the refreshed 72-command, 187-assertion matrix with eight explicit `not_run` boundaries; its independent verifier and raw checksum matched the governed working-tree digest. Fresh final quality review cleared the snapshot, but fresh final security review confirmed one remaining duplicate-effect exposure: after a successful Delivery/Monitor SQL commit, a failed handler-level current-authority recheck was preserved as `PERMISSION_DENIED`, so the browser did not enter its reconciliation lock and could issue a fresh idempotency key. Current source maps that post-execution handler uncertainty to non-disclosing `COMMAND_OUTCOME_UNKNOWN` while retaining every pre-execution authorization denial. The focused Enterprise command regression proves the second authority check is reached after one canonical effect and returns only the unknown-outcome contract; application and Edge typechecks, governed coverage, and the Desktop Chrome/Pixel 7 one-effect reconciliation journey pass. The corrected complete local matrix, independent verifier, fresh final reviews, exact committed-head run, and hosted checks remain `planned verification`; merge/readiness remains NO-GO.
+
+### Current rollback and evidence-safety boundary
+
+Rollback disables `module_handoffs_enabled`, `direct_delivery_planning_enabled`, `delivery_item_review_enabled`, and `monitor_approved_baseline_enabled`, or the global Delivery mutation control, while preserving committed handoffs, source packages, item versions/decisions, approvals, receipts/audits, and baselines read-only. New keys remain blocked before receipt or effect; a currently authorized exact retry can recover its already committed response and append attempt evidence without a second receipt, effect, or audit event. Corrections are additive forward migrations only. No secret, raw source, signed URL, customer data, object identifier, raw log, or infrastructure identifier belongs in PR C evidence.
+
+## Governed multi-source transcript PR B pre-merge risk record (superseded)
 
 Wave 1 source review confirmed five PR B defects in the accepted baseline: generation can consume an Assess handoff without target acceptance; Studio bypasses the accepted unified provider/budget gateway; source and template data lack the stronger framed prompt-injection boundary and section provenance; late generation can displace a newer human-controlled head; and response loss can strand an active generation attempt. Tenant-template persistence and lifecycle are a confirmed source gap. No confirmed cross-tenant access path or browser-side provider secret was found.
 
@@ -48,9 +243,9 @@ This is the active source for enterprise security, reliability, quality, migrati
 
 Evidence must never include secrets, tokens, raw logs, signed URLs, customer data, storage object identifiers, or production infrastructure identifiers.
 
-## Enterprise Intelligence Draft PR risk boundary
+## Historical Enterprise Intelligence Draft PR risk boundary
 
-This section records the active source-level boundary for the Draft PR on branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`, based on required source baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5`. It is an executed source evidence record, not deployment or readiness proof.
+This section preserves the superseded source-level boundary for the original Draft candidate on branch `codex/enterprise-intelligence-byok-ingestion-delivery-assemble`, based on required source baseline `cafed0ba8b4790536c4e1305dbbf1cdf6ef2e4f5`. It is a historical executed source evidence record, not the active delivery boundary and not deployment or readiness proof. The accepted PR A and PR B boundaries and the active PR C section above govern current status.
 
 | Risk | Current classification | Executed evidence | Planned verification / closure |
 | --- | --- | --- | --- |

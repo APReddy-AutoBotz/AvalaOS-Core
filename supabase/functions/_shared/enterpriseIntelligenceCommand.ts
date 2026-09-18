@@ -41,7 +41,19 @@ import {
 } from './providerLifecycle.ts';
 import { resolveEnterpriseProviderRoute } from './providerResolver.ts';
 import { buildEnterpriseProviderRouteDbDeps } from './providerResolverDb.ts';
-import { classifyEvidenceExtractionFailure, extractEvidenceText, decodeBase64, sha256Hex } from './enterpriseIntelligenceIngestion.ts';
+import { classifyEvidenceExtractionFailure, extractEvidenceText, extractStructuredSpreadsheet, decodeBase64, sha256Hex } from './enterpriseIntelligenceIngestion.ts';
+import { ASSESS_DOCUMENT_MAPPING_MAX_PROVIDER_BYTES, ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION, isAssessMappingJsonValue, type AssessMappingJsonValue, type AssessMappingPreviewManifest } from '../../../services/assessImport/contracts.ts';
+import { buildAssessMappingTargetBlueprints, type AssessMappingDraft } from '../../../services/assessImport/targetRegistry.ts';
+import { parseAssessV2DraftPayload } from './assessV2Command.ts';
+import {
+  buildAssessDocumentMappingTaskInstruction,
+  buildAssessMappingCatalog,
+  decodeAssessMappingClaimResponse,
+  decodeGroundedAssessMappingProposalResult,
+  frameAssessMappingSources,
+  type AssessMappingDecodedSource,
+  type AssessMappingExpectedSourceBinding,
+} from './assessDocumentMapping.ts';
 import {
   claimEnterpriseReceipt,
   completeEnterpriseReceipt,
@@ -53,6 +65,14 @@ import {
   renewEnterpriseExternalWriteLease,
   type EnterpriseReceiptRow,
 } from './enterpriseReceipt.ts';
+import {
+  DELIVERY_MONITOR_CAPABILITIES,
+  DELIVERY_MONITOR_COMMANDS,
+  DeliveryMonitorCommandError,
+  executeDeliveryMonitorCommand,
+  type DeliveryMonitorCommandType,
+} from './deliveryMonitorCommand.ts';
+import { createDeliveryMonitorDatabase } from './deliveryMonitorDb.ts';
 import { handleOptions, jsonResponse } from './http.ts';
 import {
   getAuthUser,
@@ -95,10 +115,25 @@ export type EnterpriseCommandType =
   | 'transcript.assess.apply.commit'
   | 'transcript.assess.conflict.resolve'
   | 'transcript.journey.set-state'
+  | 'assess.document-map.analyze'
+  | 'assess.document-map.proposal.review'
+  | 'assess.document-map.preview'
+  | 'assess.document-map.conflict.resolve'
+  | 'assess.document-map.commit'
   | 'modernization.evaluate'
   | 'approval.review.record'
   | 'approval.record'
   | 'studio.delivery.handoff'
+  | 'delivery.handoff.request'
+  | 'delivery.handoff.review.resolve'
+  | 'delivery.handoff.approval.resolve'
+  | 'delivery.handoff.withdraw'
+  | 'delivery.handoff.consume'
+  | 'delivery.package.create.manual'
+  | 'delivery.item.review'
+  | 'delivery.package.revision.commit'
+  | 'delivery.package.review.resolve'
+  | 'delivery.package.approval.resolve'
   | 'monitor.baseline.create'
   | 'assemble.blueprint.create';
 
@@ -127,9 +162,14 @@ export class EnterpriseCommandError extends Error {
       | 'INVALID_PAYLOAD'
       | 'COMMAND_BLOCKED'
       | 'COMMAND_UNAVAILABLE'
+      | 'COMMAND_OUTCOME_UNKNOWN'
       | 'SOURCE_SET_LIMIT_EXCEEDED'
       | 'SOURCE_VERSION_NOT_READY'
+      | 'SOURCE_TOO_LARGE'
       | 'CONFLICT_UNRESOLVED'
+      | 'HANDOFF_NOT_ELIGIBLE'
+      | 'HANDOFF_STALE'
+      | 'MODULE_ROUTE_NOT_ALLOWED'
       | 'BUDGET_EXHAUSTED'
       | 'RECEIPT_FINALIZATION_FAILED',
     public readonly status = codeToStatus(code),
@@ -167,19 +207,19 @@ export const shouldPreserveClaimedEnterpriseReceipt = (
 export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandError => {
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_AI_IDEMPOTENCY_CONFLICT', 'ENTERPRISE_AI_EXECUTION_PLAN_CONFLICT',
-    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT',
+    'ENTERPRISE_AI_JOB_IDEMPOTENCY_CONFLICT', 'ENTERPRISE_DELIVERY_IDEMPOTENCY_CONFLICT',
   )) return new EnterpriseCommandError('IDEMPOTENCY_CONFLICT');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_AUTHORIZATION_VERSION_STALE', 'PR1B_AUTHORIZATION_STALE',
   )) return new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_PROVIDER_ORGANIZATION_AUTHORITY_REQUIRED',
-    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED',
+    'ENTERPRISE_PROVIDER_WORKSPACE_AUTHORITY_REQUIRED', 'ENTERPRISE_PROVIDER_PERMISSION_DENIED', 'ENTERPRISE_DELIVERY_PERMISSION_DENIED',
   )) return new EnterpriseCommandError('PERMISSION_DENIED');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_AI_STALE_EXECUTION_FENCE', 'ENTERPRISE_AI_COMMAND_NOT_EXECUTABLE',
     'ENTERPRISE_AI_RECEIPT_NOT_CLAIMED', 'ENTERPRISE_AI_COMMAND_IN_PROGRESS',
-    'ENTERPRISE_AI_JOB_IN_PROGRESS',
+    'ENTERPRISE_AI_JOB_IN_PROGRESS', 'ENTERPRISE_DELIVERY_COMMAND_IN_PROGRESS',
   )) return new EnterpriseCommandError('COMMAND_IN_PROGRESS');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_INTELLIGENCE_PROVIDER_DISABLED', 'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
@@ -197,6 +237,19 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
     'ENTERPRISE_MODERNIZATION_SOURCE_NOT_CURRENT',
     'ENTERPRISE_MODERNIZATION_RESULT_IDENTITY_MISMATCH',
   )) return new EnterpriseCommandError('RESOURCE_STALE');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_HANDOFF_STALE')) {
+    return new EnterpriseCommandError('HANDOFF_STALE');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_RESOURCE_STALE')) {
+    return new EnterpriseCommandError('RESOURCE_STALE');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_DELIVERY_FEATURE_DISABLED', 'ENTERPRISE_DELIVERY_READ_ONLY',
+    'ENTERPRISE_DELIVERY_COMMAND_BLOCKED',
+  )) return new EnterpriseCommandError('COMMAND_BLOCKED');
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_DELIVERY_RESOURCE_UNAVAILABLE')) {
+    return new EnterpriseCommandError('RESOURCE_NOT_FOUND');
+  }
   if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_SOURCE_SET_LIMIT_EXCEEDED')) {
     return new EnterpriseCommandError('SOURCE_SET_LIMIT_EXCEEDED');
   }
@@ -216,6 +269,22 @@ export const mapEnterpriseCommandRpcError = (error: unknown): EnterpriseCommandE
   if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_TRANSCRIPT_FEATURE_DISABLED')) {
     return new EnterpriseCommandError('COMMAND_BLOCKED');
   }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_FEATURE_DISABLED')) {
+    return new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_PROVIDER_INPUT_TOO_LARGE')) {
+    return new EnterpriseCommandError('SOURCE_TOO_LARGE');
+  }
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_STALE', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_SOURCE_STALE',
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_REVIEW_STALE', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_PREVIEW_STALE',
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_CONFLICT_STALE', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_COMMIT_STALE',
+  )) return new EnterpriseCommandError('RESOURCE_STALE');
+  if (supabaseRpcErrorHasSignal(error,
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_INVALID', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_TARGET_INVALID',
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_STAGE_INVALID', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_PROPOSAL_INVALID',
+    'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_REVIEW_INVALID', 'ENTERPRISE_ASSESS_DOCUMENT_MAPPING_NATIVE_SHAPE_INVALID',
+  )) return new EnterpriseCommandError('INVALID_PAYLOAD');
   if (supabaseRpcErrorHasSignal(error,
     'ENTERPRISE_TRANSCRIPT_INVALID_SOURCE_SET', 'ENTERPRISE_TRANSCRIPT_INVALID_BUNDLE',
     'ENTERPRISE_TRANSCRIPT_INVALID_JOURNEY', 'ENTERPRISE_TRANSCRIPT_CANDIDATE_REVIEW_INVALID',
@@ -243,8 +312,11 @@ const codeToStatus = (code: EnterpriseCommandError['code']) => {
   if (code === 'RESOURCE_STALE') return 409;
   if (code === 'COMMAND_IN_PROGRESS') return 409;
   if (code === 'CONFLICT_UNRESOLVED') return 409;
+  if (code === 'HANDOFF_STALE') return 409;
+  if (code === 'HANDOFF_NOT_ELIGIBLE' || code === 'MODULE_ROUTE_NOT_ALLOWED') return 409;
   if (code === 'BUDGET_EXHAUSTED') return 409;
-  if (code === 'COMMAND_UNAVAILABLE' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
+  if (code === 'SOURCE_TOO_LARGE') return 422;
+  if (code === 'COMMAND_UNAVAILABLE' || code === 'COMMAND_OUTCOME_UNKNOWN' || code === 'RECEIPT_FINALIZATION_FAILED') return 503;
   return 400;
 };
 
@@ -267,10 +339,16 @@ const commandTypes = new Set<EnterpriseCommandType>([
   'transcript.assess.apply.commit',
   'transcript.assess.conflict.resolve',
   'transcript.journey.set-state',
+  'assess.document-map.analyze',
+  'assess.document-map.proposal.review',
+  'assess.document-map.preview',
+  'assess.document-map.conflict.resolve',
+  'assess.document-map.commit',
   'modernization.evaluate',
   'approval.review.record',
   'approval.record',
   'studio.delivery.handoff',
+  ...DELIVERY_MONITOR_COMMANDS,
   'monitor.baseline.create',
   'assemble.blueprint.create',
 ]);
@@ -578,6 +656,11 @@ const receiptMutationArgs = (receipt: EnterpriseReceiptRow, result: JsonObject) 
   p_execution_fence: receipt.execution_fence,
   p_result: result,
 });
+const receiptFenceArgs = (receipt: EnterpriseReceiptRow) => ({
+  p_receipt: receipt.id,
+  p_execution_token: receipt.execution_token,
+  p_execution_fence: receipt.execution_fence,
+});
 
 export const resolveEnterpriseCommandResourceId = (
   commandType: EnterpriseCommandType,
@@ -611,6 +694,16 @@ export const resolveEnterpriseCommandResourceId = (
                         ? resultObject.assessDraftId
                         : commandType === 'transcript.assess.conflict.resolve'
                           ? resultObject.conflictId
+                          : commandType === 'assess.document-map.analyze'
+                            ? resultObject.runId
+                            : commandType === 'assess.document-map.proposal.review'
+                              ? resultObject.proposalId
+                              : commandType === 'assess.document-map.preview'
+                                ? resultObject.previewBatchId
+                                : commandType === 'assess.document-map.conflict.resolve'
+                                  ? resultObject.conflictId
+                                  : commandType === 'assess.document-map.commit'
+                                    ? resultObject.caseId
                           : commandType === 'transcript.journey.set-state'
                             ? resultObject.journeyId
             : commandType === 'modernization.evaluate'
@@ -631,8 +724,8 @@ export const enterpriseCommandStatusForTerminalReceipt = (receipt: EnterpriseRec
     'METHOD_NOT_ALLOWED', 'INVALID_COMMAND', 'AUTHENTICATION_REQUIRED', 'TENANT_ACCESS_DENIED',
     'PERMISSION_DENIED', 'AUTHORIZATION_STALE', 'IDEMPOTENCY_CONFLICT', 'COMMAND_IN_PROGRESS',
     'RESOURCE_NOT_FOUND', 'RESOURCE_STALE', 'INVALID_PAYLOAD', 'COMMAND_BLOCKED',
-    'COMMAND_UNAVAILABLE', 'SOURCE_SET_LIMIT_EXCEEDED', 'SOURCE_VERSION_NOT_READY',
-    'CONFLICT_UNRESOLVED', 'BUDGET_EXHAUSTED', 'RECEIPT_FINALIZATION_FAILED',
+    'COMMAND_UNAVAILABLE', 'COMMAND_OUTCOME_UNKNOWN', 'SOURCE_SET_LIMIT_EXCEEDED', 'SOURCE_VERSION_NOT_READY',
+    'CONFLICT_UNRESOLVED', 'SOURCE_TOO_LARGE', 'BUDGET_EXHAUSTED', 'RECEIPT_FINALIZATION_FAILED',
   ]);
   return known.has(responseError as EnterpriseCommandError['code'])
     ? codeToStatus(responseError as EnterpriseCommandError['code'])
@@ -662,11 +755,16 @@ const enterpriseCommandCapabilities: Record<EnterpriseDomainCommandType, readonl
   'transcript.assess.apply.commit': ['transcript.assess.apply'],
   'transcript.assess.conflict.resolve': ['transcript.assess.apply'],
   'transcript.journey.set-state': ['transcript.journeys.manage'],
+  'assess.document-map.analyze': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'evidence.write'],
+  'assess.document-map.proposal.review': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'evidence.review'],
+  'assess.document-map.preview': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
+  'assess.document-map.conflict.resolve': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
+  'assess.document-map.commit': ['assess.v2.read', 'assess.v2.draft.write', 'transcript.sources.read', 'transcript.assess.apply'],
   'modernization.evaluate': ['portfolio.manage'],
   'approval.review.record': ['approvals.review'],
   'approval.record': ['approvals.review'],
   'studio.delivery.handoff': ['docs.approve'],
-  'monitor.baseline.create': ['monitor.manage'],
+  ...DELIVERY_MONITOR_CAPABILITIES,
   'assemble.blueprint.create': ['assemble.manage'],
 };
 
@@ -705,7 +803,22 @@ export const assertEnterpriseCommandOperationAuthority = (
       throw new EnterpriseCommandError('PERMISSION_DENIED');
     }
   }
-  requirePermission(authority, ...requiredCapabilitiesForEnterpriseCommand(commandType, payload));
+  const required = requiredCapabilitiesForEnterpriseCommand(commandType, payload);
+  if (commandType.startsWith('assess.document-map.')) {
+    if (!authority.isAdmin && required.some(capability => !authority.permissions.has(capability))) throw new EnterpriseCommandError('PERMISSION_DENIED');
+    return;
+  }
+  requirePermission(authority, ...required);
+};
+
+const assertFreshAllCapabilities = async (authority: Authority, required: readonly string[]) => {
+  const current = await findOne<{ version: number }>('authorization_versions', `select=version&org_id=eq.${encodeURIComponent(authority.organizationId)}&user_id=eq.${encodeURIComponent(authority.actorId)}`);
+  if (!current || current.version !== authority.authorizationVersion) throw new EnterpriseCommandError('AUTHORIZATION_STALE');
+  const capabilities = authority.isAdmin ? ['org.admin'] : required;
+  if (!authority.isAdmin && required.some(capability => !authority.permissions.has(capability))) throw new EnterpriseCommandError('PERMISSION_DENIED');
+  try {
+    for (const capability of capabilities) await rpc('pr1b_assert_command_authority', { p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_capability: capability, p_version: authority.authorizationVersion });
+  } catch { throw new EnterpriseCommandError('PERMISSION_DENIED'); }
 };
 
 export const assertCurrentEnterpriseCommandAuthority = async (
@@ -726,7 +839,8 @@ export const assertCurrentEnterpriseCommandAuthority = async (
     if (providerOperation) {
       assertProviderLifecycleOperationAuthority(providerOperation, lifecycleAuthority(current));
     } else {
-      await assertFreshAuthority(current, requiredCapabilities!);
+      if (commandType.startsWith('assess.document-map.')) await assertFreshAllCapabilities(current, requiredCapabilities!);
+      else await assertFreshAuthority(current, requiredCapabilities!);
     }
     return current;
   } catch {
@@ -1512,6 +1626,10 @@ const commandEvidenceExtract = async (
       capability: 'assess.evidence.extract',
       taskInstruction,
       untrustedSource: text,
+      providerEffect: {
+        authorizationVersion: authority.authorizationVersion, receiptId: receipt.id, effectId: jobId,
+        executionToken: receipt.execution_token!, executionFence: receipt.execution_fence!,
+      },
       authorization: {
         organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId,
         providerConfigId: routePlan.providerConfigId, capability: 'assess.evidence.extract', routeEnabled: true,
@@ -2286,9 +2404,19 @@ const commandModernizationEvaluate = async (authority: Authority, payload: JsonO
 };
 
 const approvalResourceTypes = new Set([
-  'evidence_candidate', 'modernization_decision', 'delivery_work_package',
-  'monitor_baseline', 'assemble_blueprint',
+  'evidence_candidate', 'modernization_decision', 'assemble_blueprint',
 ]);
+const canonicalPrCApprovalResourceTypes = new Set([
+  'delivery_work_package', 'delivery_work_package_version', 'monitor_baseline',
+]);
+
+const assertNotLegacyPrCApproval = (commandType: EnterpriseCommandType, payload: JsonObject) => {
+  if ((commandType === 'approval.review.record' || commandType === 'approval.record')
+    && typeof payload.resourceType === 'string'
+    && canonicalPrCApprovalResourceTypes.has(payload.resourceType)) {
+    throw new EnterpriseCommandError('COMMAND_BLOCKED');
+  }
+};
 
 const requireApprovalResourceType = (value: unknown) => {
   const resourceType = requireString(value, 80);
@@ -2437,6 +2565,10 @@ const extractStudioSections = (content: JsonObject, artifactType: string) => {
 };
 
 const commandStudioDeliveryHandoff = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  // PR C replaces the legacy one-click Studio -> Delivery mutation with an
+  // explicit request, target review/approval, and one-time consume lifecycle.
+  // Retain the command name only as a fail-closed compatibility boundary.
+  if (authority || payload || receipt) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   requirePermission(authority, 'docs.approve');
   const studioDocumentId = requireUuid(payload.studioDocumentId);
   const aggregate = await findOne<StudioAggregateRow>(
@@ -2654,12 +2786,292 @@ const commandAssembleBlueprintCreate = async (authority: Authority, payload: Jso
   return result;
 };
 
+const requireAssessMappingValue = (value: unknown): AssessMappingJsonValue => {
+  if (!isAssessMappingJsonValue(value)) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return value;
+};
+
+export const requireAssessMappingPreviewManifest = (value: unknown): AssessMappingPreviewManifest => {
+  const manifest = requirePayloadObject(value);
+  requireExactPayload(manifest, ['previewBatchId', 'manifestVersion', 'catalogId', 'catalogHash', 'caseId', 'caseVersion', 'inputBundleId', 'inputBundleVersionId',
+    'targetCount', 'sourceCount', 'itemCount', 'reviewedCount', 'conflictCount', 'unresolvedConflictCount', 'itemSetHash', 'conflictSetHash', 'resolutionSetHash', 'displayedSetHash']);
+  return {
+    previewBatchId: requireUuid(manifest.previewBatchId), manifestVersion: requirePositiveInteger(manifest.manifestVersion), catalogId: requireUuid(manifest.catalogId), catalogHash: requireSha256(manifest.catalogHash),
+    caseId: requireUuid(manifest.caseId), caseVersion: requirePositiveInteger(manifest.caseVersion), inputBundleId: requireUuid(manifest.inputBundleId),
+    inputBundleVersionId: requireUuid(manifest.inputBundleVersionId), targetCount: requirePositiveInteger(manifest.targetCount, true),
+    sourceCount: requirePositiveInteger(manifest.sourceCount, true), itemCount: requirePositiveInteger(manifest.itemCount, true),
+    reviewedCount: requirePositiveInteger(manifest.reviewedCount, true), conflictCount: requirePositiveInteger(manifest.conflictCount, true),
+    unresolvedConflictCount: requirePositiveInteger(manifest.unresolvedConflictCount, true), itemSetHash: requireSha256(manifest.itemSetHash),
+    conflictSetHash: requireSha256(manifest.conflictSetHash), resolutionSetHash: requireSha256(manifest.resolutionSetHash), displayedSetHash: requireSha256(manifest.displayedSetHash),
+  };
+};
+
+const loadAssessMappingDraft = async (authority: Authority, caseId: string, expectedVersion: number) => {
+  const current = await findOne<{ id: string; version: number; head_version_id: string; schema_version: string; status: string }>(
+    'assess_v2_cases', `select=id,version,head_version_id,schema_version,status&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(caseId)}&deleted_at=is.null`,
+  );
+  if (!current || current.status !== 'draft' || current.version !== expectedVersion || !uuidPattern.test(current.head_version_id)) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const scope = `version_id=eq.${encodeURIComponent(current.head_version_id)}&case_id=eq.${encodeURIComponent(caseId)}&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}`;
+  const [version, primitives, edges, decisions, exceptions, assets, interactions, evidence] = await Promise.all([
+    findOne<{ name: string; description: string; agent_necessity: unknown }>('assess_v2_case_versions', `select=name,description,agent_necessity&id=eq.${encodeURIComponent(current.head_version_id)}&case_id=eq.${encodeURIComponent(caseId)}&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}`),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_primitives?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_edges?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_decision_points?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_exception_paths?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_application_assets?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_application_interactions?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+    postgrest<Array<{ payload: unknown }>>(`assess_v2_evidence_links?select=payload&${scope}&order=id.asc`, { method: 'GET' }),
+  ]);
+  if (!version) throw new EnterpriseCommandError('RESOURCE_STALE');
+  try {
+    const parsed = parseAssessV2DraftPayload({ caseId, name: version.name, description: version.description,
+      primitives: primitives.map(item => item.payload), edges: edges.map(item => item.payload), decisionPoints: decisions.map(item => item.payload),
+      exceptionPaths: exceptions.map(item => item.payload), applicationAssets: assets.map(item => item.payload), interactions: interactions.map(item => item.payload),
+      evidenceLinks: evidence.map(item => item.payload), agentNecessity: version.agent_necessity,
+      candidateEvaluations: [], gateResults: [], controlRequirements: [], modernizationDispositions: [] });
+    return { current, draft: { caseId: parsed.caseId, name: parsed.name, description: parsed.description, primitives: parsed.primitives,
+      edges: parsed.edges, decisionPoints: parsed.decisionPoints, exceptionPaths: parsed.exceptionPaths, applicationAssets: parsed.assets,
+      interactions: parsed.interactions, evidenceLinks: parsed.evidence, agentNecessity: parsed.agentNecessity,
+      candidateEvaluations: [] as [], gateResults: [] as [], controlRequirements: [] as [], modernizationDispositions: [] as [] } as unknown as AssessMappingDraft };
+  } catch { throw new EnterpriseCommandError('RESOURCE_STALE'); }
+};
+
+type MappingSourceVersionRow = { id: string; source_id: string; content_hash: string; extracted_text_hash: string | null; parser_version: string; storage_bucket: string; storage_path: string };
+
+export const mapAssessMappingSelectionsSequentially = async <T, R>(items: readonly T[], operation: (item: T, index: number) => Promise<R>): Promise<R[]> => {
+  const results: R[] = [];
+  for (let index = 0; index < items.length; index += 1) results.push(await operation(items[index], index));
+  return results;
+};
+
+type AssessMappingTerminalFailureCode = 'BUDGET_EXHAUSTED' | 'PROVIDER_UNSUPPORTED' | 'SECRET_REFERENCE_UNSAFE'
+  | 'SECRET_UNAVAILABLE' | 'ENDPOINT_UNSAFE' | 'CAPABILITY_UNAVAILABLE' | 'PROMPT_TOO_LARGE';
+
+export const assessMappingTerminalError = (failureCode: unknown): EnterpriseCommandError | null => {
+  if (failureCode === 'BUDGET_EXHAUSTED') return new EnterpriseCommandError('BUDGET_EXHAUSTED');
+  if (failureCode === 'PROMPT_TOO_LARGE') return new EnterpriseCommandError('SOURCE_TOO_LARGE');
+  if (['PROVIDER_UNSUPPORTED', 'SECRET_REFERENCE_UNSAFE', 'SECRET_UNAVAILABLE', 'ENDPOINT_UNSAFE', 'CAPABILITY_UNAVAILABLE'].includes(String(failureCode))) {
+    return new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+  }
+  return null;
+};
+
+const failAssessMappingRun = async (
+  authority: Authority,
+  receipt: EnterpriseReceiptRow,
+  runId: string,
+  failureCode: AssessMappingTerminalFailureCode,
+) => rpc<JsonObject>('enterprise_fail_assess_document_mapping_run_v1', {
+  p_run: runId, p_result: { failureCode }, p_actor: authority.actorId,
+  p_org: authority.organizationId, p_workspace: authority.workspaceId,
+  p_authorization_version: authority.authorizationVersion, p_receipt: receipt.id,
+  p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence,
+});
+
+const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['caseId', 'expectedCaseVersion', 'inputBundleId', 'inputBundleVersionId', 'expectedInputBundleVersion', 'selections'], ['providerConfigId']);
+  const caseId = requireUuid(payload.caseId); const expectedCaseVersion = requirePositiveInteger(payload.expectedCaseVersion);
+  const inputBundleId = requireUuid(payload.inputBundleId); const inputBundleVersionId = requireUuid(payload.inputBundleVersionId);
+  const expectedInputBundleVersion = requirePositiveInteger(payload.expectedInputBundleVersion);
+  if (!Array.isArray(payload.selections) || payload.selections.length < 1 || payload.selections.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const selections = payload.selections.map(raw => {
+    const item = requirePayloadObject(raw); requireExactPayload(item, ['sourceSetId', 'sourceSetVersionId', 'expectedSourceSetVersion', 'sourceId', 'sourceVersionId']);
+    return { sourceSetId: requireUuid(item.sourceSetId), sourceSetVersionId: requireUuid(item.sourceSetVersionId), expectedSourceSetVersion: requirePositiveInteger(item.expectedSourceSetVersion), sourceId: requireUuid(item.sourceId), sourceVersionId: requireUuid(item.sourceVersionId) };
+  });
+  if (new Set(selections.map(item => item.sourceVersionId)).size !== selections.length) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const { current, draft } = await loadAssessMappingDraft(authority, caseId, expectedCaseVersion);
+  const catalogId = plannedUuid(receipt, 'assessDocumentMappingCatalogId'); const runId = plannedUuid(receipt, 'assessDocumentMappingRunId');
+  let selectorIds = Array.isArray(receipt.execution_plan?.assessDocumentMappingTargetSelectorIds)
+    ? receipt.execution_plan!.assessDocumentMappingTargetSelectorIds as unknown[] : [];
+  const blueprintCount = buildAssessMappingTargetBlueprints(draft).length;
+  if (selectorIds.length !== blueprintCount || selectorIds.some(id => typeof id !== 'string' || !uuidPattern.test(id))) selectorIds = Array.from({ length: blueprintCount }, () => crypto.randomUUID());
+  await ensureExecutionPlan(receipt, authority, { assessDocumentMappingCatalogId: catalogId, assessDocumentMappingRunId: runId, assessDocumentMappingTargetSelectorIds: selectorIds });
+  let selectorIndex = 0;
+  const catalog = await buildAssessMappingCatalog({ catalogId, caseId, caseVersion: expectedCaseVersion, assessSchemaVersion: current.schema_version, draft, createSelectorId: () => String(selectorIds[selectorIndex++]) });
+  let cumulativeExtractedBytes = 0;
+  const sourceRows = await mapAssessMappingSelectionsSequentially(selections, async selection => {
+    const [version, source] = await Promise.all([
+      findOne<MappingSourceVersionRow>('enterprise_evidence_source_versions', `select=id,source_id,content_hash,extracted_text_hash,parser_version,storage_bucket,storage_path&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_id=eq.${encodeURIComponent(selection.sourceId)}&id=eq.${encodeURIComponent(selection.sourceVersionId)}&extraction_status=eq.parsed`),
+      findOne<{ id: string; mime_type: SupportedEvidenceMimeType }>('enterprise_evidence_sources', `select=id,mime_type&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(selection.sourceId)}&deleted_at=is.null`),
+    ]);
+    if (!version || !source || !isSupportedEvidenceMimeType(source.mime_type)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    assertSourceUploadsBucket(version.storage_bucket);
+    const bytes = new Uint8Array(await (await downloadStoredFile({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket: version.storage_bucket, storagePath: version.storage_path })).arrayBuffer());
+    if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
+    const structured = source.mime_type === 'text/csv' || source.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ? await extractStructuredSpreadsheet(bytes, source.mime_type) : null;
+    const text = structured?.text ?? await extractEvidenceText(bytes, source.mime_type);
+    if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
+    const parserVersion = structured?.parserVersion ?? version.parser_version; const normalizedHash = await sha256Hex(text); const extractedByteCount = new TextEncoder().encode(text).byteLength;
+    if (source.mime_type !== 'text/csv' && (!version.extracted_text_hash || version.extracted_text_hash !== normalizedHash)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    cumulativeExtractedBytes += extractedByteCount;
+    if (cumulativeExtractedBytes > ASSESS_DOCUMENT_MAPPING_MAX_PROVIDER_BYTES) throw new EnterpriseCommandError('SOURCE_TOO_LARGE');
+    return { selection, source, version, parserVersion, normalizedHash, extractedByteCount, text, warnings: structured?.warnings ?? [],
+      sheets: structured?.sheets ?? [], cells: structured?.cells };
+  });
+  const route = await resolveRoute(authority, 'assess.evidence.extract', payload.providerConfigId === undefined ? undefined : requireUuid(payload.providerConfigId));
+  const promptVersion = ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION;
+  const sourceBindings: AssessMappingExpectedSourceBinding[] = sourceRows.map(row => ({ ...row.selection, parserVersion: row.parserVersion, normalizedHash: row.normalizedHash, extractedByteCount: row.extractedByteCount,
+    warnings: row.warnings, sheetCount: row.sheets.length, cellCount: row.cells?.length ?? 0 }));
+  const mappingClaimArgs = {
+    p_run: runId, p_catalog: catalogId, p_case: caseId, p_expected_case_version: expectedCaseVersion, p_assess_schema_version: current.schema_version,
+    p_catalog_hash: catalog.catalogHash, p_targets: catalog.targets, p_input_bundle: inputBundleId, p_input_bundle_version: inputBundleVersionId,
+    p_expected_input_bundle_version: expectedInputBundleVersion, p_source_bindings: sourceBindings, p_route_id: route.config.route_id,
+    p_provider_config_id: route.config.id, p_provider: route.config.provider, p_model: route.model, p_prompt_version: promptVersion,
+    p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion,
+    p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence,
+  };
+  const decodeClaim = (value: unknown) => {
+    try {
+      return decodeAssessMappingClaimResponse({ value, runId, catalogId, targets: catalog.targets, sourceBindings });
+    } catch {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+  };
+  const claim = decodeClaim(await rpc<unknown>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs));
+  if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
+  if ((claim.state === 'blocked' || claim.state === 'failed') && isRecord(claim.safeResult)) {
+    const terminalError = assessMappingTerminalError(claim.safeResult.failureCode);
+    if (terminalError) throw terminalError;
+    throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+  }
+  if (claim.state === 'staged' && claim.recoveryMode === 'finalize_staged' && isRecord(claim.safeResult)) {
+    return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_result_v1', { p_run: runId, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });
+  }
+  if (!claim.ownsExecution) throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+  const persistedTargets = claim.targets;
+  const decodedSources: AssessMappingDecodedSource[] = sourceRows.map((row, index) => {
+    const binding = claim.sourceBindings[index];
+    return { sourceId: row.selection.sourceId, sourceVersionId: row.selection.sourceVersionId, extractionBindingId: binding.extractionBindingId, extractionJobId: binding.extractionJobId,
+      parserVersion: row.parserVersion, normalizedHash: row.normalizedHash, extractedByteCount: row.extractedByteCount,
+      sheetCount: row.sheets.length, cellCount: row.cells?.length ?? 0, warnings: row.warnings, text: row.text, cells: row.cells };
+  });
+  let framed: string;
+  try {
+    framed = frameAssessMappingSources(decodedSources, persistedTargets);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ASSESS_DOCUMENT_MAPPING_SOURCE_TOO_LARGE') throw new EnterpriseCommandError('SOURCE_TOO_LARGE');
+    throw error;
+  }
+  const taskInstruction = buildAssessDocumentMappingTaskInstruction(persistedTargets); const started = Date.now();
+  let stagedResult: JsonObject | null = null;
+  try {
+    const budgeted = await runBudgetedProviderEffect({ authority: { actorId: authority.actorId, organizationId: authority.organizationId, workspaceId: authority.workspaceId, authorizationVersion: authority.authorizationVersion },
+    execution: { receiptId: receipt.id, jobId: runId, executionToken: receipt.execution_token!, executionFence: receipt.execution_fence!, routeId: route.config.route_id,
+      providerConfigId: route.config.id, provider: route.config.provider, capability: 'assess.evidence.extract', model: route.model },
+    estimatedInputTokens: estimateMaximumProviderInputTokens({ capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed }), maximumOutputTokens: 4_096,
+  }, () => runGovernedProviderRequest({ provider: route.config.provider, endpoint: route.config.endpoint_url || undefined, deployment: route.config.deployment_name || undefined,
+    model: route.model, capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed,
+    providerEffect: { authorizationVersion: authority.authorizationVersion, receiptId: receipt.id, effectId: runId,
+      executionToken: receipt.execution_token!, executionFence: receipt.execution_fence! },
+    authorization: { organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId, providerConfigId: route.config.id,
+      capability: 'assess.evidence.extract', routeEnabled: true, resolverDecision: route.decision } }), {
+    classifyFailure: classifyEnterpriseProviderFailureForBudget,
+    beforeSettle: async providerResult => {
+      const decoded = parseJsonObjectResponse<Record<string, unknown>>(providerResult.output, (value: unknown): value is Record<string, unknown> => isRecord(value) && Array.isArray(value.proposals));
+      const proposalResult = await decodeGroundedAssessMappingProposalResult({ value: decoded, targets: persistedTargets, sources: decodedSources, createProposalId: () => crypto.randomUUID() });
+      const proposals = proposalResult.proposals;
+      const analyzedSources = sourceRows.map(row => ({ sourceId: row.selection.sourceId, sourceVersionId: row.selection.sourceVersionId, parserVersion: row.parserVersion,
+        extractedByteCount: row.extractedByteCount, sheetCount: row.sheets.length, cellCount: row.cells?.length ?? 0, warnings: row.warnings }));
+      const warnings = [...new Set([...catalog.warnings, ...proposalResult.warnings,
+        ...analyzedSources.flatMap(source => source.warnings.map(warning => `SOURCE_PARSER_WARNING:${warning}`))])];
+      const safeResult = { resourceId: runId, runId, catalogId, catalogHash: claim.catalogHash, proposalCount: proposals.length,
+        targetCount: persistedTargets.length, sourceCount: claim.sourceBindings.length,
+        sourceBindings: claim.sourceBindings, analyzedSources, warnings };
+      const outputHash = await sha256Hex(providerResult.output); const latencyMs = Math.max(0, Date.now() - started);
+      const stagedPayloadHash = await sha256Json({ runId, catalogId, outputHash, proposals, safeResult, executionFence: receipt.execution_fence });
+      await rpc('enterprise_stage_assess_document_mapping_result_v1', { p_run: runId, p_catalog: catalogId, p_proposals: proposals, p_result: safeResult,
+        p_output_hash: outputHash, p_token_input: providerResult.usage.inputTokens, p_token_output: providerResult.usage.outputTokens, p_latency_ms: latencyMs,
+        p_staged_payload_hash: stagedPayloadHash, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });
+      stagedResult = safeResult;
+    },
+  });
+    if (budgeted.kind === 'replay' && !stagedResult) {
+      const recovered = decodeClaim(await rpc<unknown>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs));
+      if (recovered.state === 'committed' && isRecord(recovered.safeResult)) return recovered.safeResult;
+      if (recovered.state === 'staged' && isRecord(recovered.safeResult)) {
+        return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_result_v1', { p_run: runId, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });
+      }
+      throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+    }
+  } catch (error) {
+    if (error instanceof RecoverableEnterpriseCommandError) throw error;
+    if (error instanceof ProviderBudgetError) {
+      if (error.code === 'BUDGET_EXHAUSTED') {
+        await failAssessMappingRun(authority, receipt, runId, 'BUDGET_EXHAUSTED');
+        throw new EnterpriseCommandError('BUDGET_EXHAUSTED');
+      }
+      if (error.code === 'AUTHORIZATION_STALE') throw new RecoverableEnterpriseCommandError('AUTHORIZATION_STALE');
+      if (error.code === 'PERMISSION_DENIED') throw new EnterpriseCommandError('PERMISSION_DENIED');
+      throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    }
+    if (error instanceof EnterpriseAiGatewayError) {
+      if (['PROVIDER_UNSUPPORTED', 'SECRET_REFERENCE_UNSAFE', 'SECRET_UNAVAILABLE', 'ENDPOINT_UNSAFE', 'CAPABILITY_UNAVAILABLE'].includes(error.code)) {
+        await failAssessMappingRun(authority, receipt, runId, error.code as AssessMappingTerminalFailureCode);
+        throw new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+      }
+      if (error.code === 'PROMPT_TOO_LARGE') {
+        await failAssessMappingRun(authority, receipt, runId, 'PROMPT_TOO_LARGE');
+        throw new EnterpriseCommandError('SOURCE_TOO_LARGE');
+      }
+      throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+    }
+    throw error;
+  }
+  if (!stagedResult) throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE');
+  return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_result_v1', { p_run: runId, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });
+};
+
+const commandAssessDocumentProposalReview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['proposalId', 'proposalVersion', 'catalogId', 'targetSelectorId', 'caseId', 'expectedCaseVersion', 'status'], ['editedValue', 'reason']);
+  const status = payload.status; if (!['accepted', 'rejected', 'edited'].includes(String(status))) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const result = await rpc<JsonObject>('enterprise_review_assess_document_mapping_proposal_v1', { p_proposal: requireUuid(payload.proposalId), p_expected_proposal_version: requirePositiveInteger(payload.proposalVersion),
+    p_status: status, p_edited_value: status === 'edited' ? requireAssessMappingValue(payload.editedValue) : null, p_reason: typeof payload.reason === 'string' && payload.reason.trim() ? requireString(payload.reason, 2_000) : 'review decision recorded',
+    p_target_selector: requireUuid(payload.targetSelectorId), p_catalog: requireUuid(payload.catalogId), p_case: requireUuid(payload.caseId), p_expected_case_version: requirePositiveInteger(payload.expectedCaseVersion),
+    p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion, ...receiptFenceArgs(receipt), });
+  return result;
+};
+
+const commandAssessDocumentMappingPreview = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['catalogId', 'catalogHash', 'caseId', 'expectedCaseVersion', 'inputBundleId', 'inputBundleVersionId', 'selections']);
+  if (!Array.isArray(payload.selections) || payload.selections.length < 1 || payload.selections.length > 100) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  const selections = payload.selections.map(raw => { const item = requirePayloadObject(raw); requireExactPayload(item, ['proposalId', 'proposalVersion', 'targetSelectorId', 'effectiveValue']); return { proposalId: requireUuid(item.proposalId), proposalVersion: requirePositiveInteger(item.proposalVersion), targetSelectorId: requireUuid(item.targetSelectorId), effectiveValue: requireAssessMappingValue(item.effectiveValue) }; });
+  const batchId = plannedUuid(receipt, 'assessDocumentMappingPreviewBatchId'); await ensureExecutionPlan(receipt, authority, { assessDocumentMappingPreviewBatchId: batchId });
+  return await rpc<JsonObject>('enterprise_create_assess_document_mapping_preview_v1', { p_batch: batchId, p_catalog: requireUuid(payload.catalogId), p_catalog_hash: requireSha256(payload.catalogHash),
+    p_case: requireUuid(payload.caseId), p_expected_case_version: requirePositiveInteger(payload.expectedCaseVersion), p_input_bundle: requireUuid(payload.inputBundleId), p_input_bundle_version: requireUuid(payload.inputBundleVersionId), p_selections: selections,
+    p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion, ...receiptFenceArgs(receipt) });
+};
+
+const commandAssessDocumentMappingConflictResolve = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['conflictId', 'resolutionVersion', 'resolution', 'rationale'], ['proposalId', 'authoredValue']);
+  const resolution = payload.resolution; if (!['choose_candidate', 'retain_manual', 'authored_resolution'].includes(String(resolution))) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+  return await rpc<JsonObject>('enterprise_resolve_assess_document_mapping_conflict_v1', { p_conflict: requireUuid(payload.conflictId), p_expected_resolution_version: requirePositiveInteger(payload.resolutionVersion, true), p_resolution: resolution,
+    p_chosen_proposal: resolution === 'choose_candidate' ? requireUuid(payload.proposalId) : null, p_authored_value: resolution === 'authored_resolution' ? requireAssessMappingValue(payload.authoredValue) : null, p_rationale: requireString(payload.rationale, 2_000),
+    p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion, ...receiptFenceArgs(receipt) });
+};
+
+const commandAssessDocumentMappingCommit = async (authority: Authority, payload: JsonObject, receipt: EnterpriseReceiptRow) => {
+  requireExactPayload(payload, ['previewBatchId', 'catalogId', 'catalogHash', 'caseId', 'expectedCaseVersion', 'inputBundleId', 'inputBundleVersionId', 'previewManifest']);
+  const previewBatchId = requireUuid(payload.previewBatchId); const catalogId = requireUuid(payload.catalogId); const catalogHash = requireSha256(payload.catalogHash);
+  const caseId = requireUuid(payload.caseId); const expectedCaseVersion = requirePositiveInteger(payload.expectedCaseVersion);
+  const inputBundleId = requireUuid(payload.inputBundleId); const inputBundleVersionId = requireUuid(payload.inputBundleVersionId);
+  const previewManifest = requireAssessMappingPreviewManifest(payload.previewManifest);
+  if (previewManifest.previewBatchId !== previewBatchId || previewManifest.catalogId !== catalogId || previewManifest.catalogHash !== catalogHash
+    || previewManifest.caseId !== caseId || previewManifest.caseVersion !== expectedCaseVersion || previewManifest.inputBundleId !== inputBundleId
+    || previewManifest.inputBundleVersionId !== inputBundleVersionId) throw new EnterpriseCommandError('RESOURCE_STALE');
+  return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_preview_v1', { p_batch: previewBatchId, p_catalog: catalogId, p_catalog_hash: catalogHash,
+    p_case: caseId, p_expected_case_version: expectedCaseVersion, p_input_bundle: inputBundleId, p_input_bundle_version: inputBundleVersionId, p_preview_manifest: previewManifest,
+    p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion, ...receiptFenceArgs(receipt) });
+};
+
 const executeEnterpriseCommand = async (authority: Authority, envelope: EnterpriseCommandEnvelope, receipt: EnterpriseReceiptRow) => {
   const providerOperation = enterpriseProviderOperations[envelope.commandType];
   if (providerOperation) {
     assertEnterpriseCommandOperationAuthority(authority, envelope.commandType, envelope.payload);
   } else {
-    await assertFreshAuthority(authority, requiredCapabilitiesForEnterpriseCommand(envelope.commandType, envelope.payload));
+    const required = requiredCapabilitiesForEnterpriseCommand(envelope.commandType, envelope.payload);
+    if (envelope.commandType.startsWith('assess.document-map.')) await assertFreshAllCapabilities(authority, required);
+    else await assertFreshAuthority(authority, required);
   }
   switch (envelope.commandType) {
     case 'provider.register': return commandProviderLifecycle('provider.register', authority, envelope.payload, receipt);
@@ -2679,11 +3091,15 @@ const executeEnterpriseCommand = async (authority: Authority, envelope: Enterpri
     case 'transcript.assess.apply.commit': return commandTranscriptAssessApplyCommit(authority, envelope.payload, receipt);
     case 'transcript.assess.conflict.resolve': return commandTranscriptAssessConflictResolve(authority, envelope.payload, receipt);
     case 'transcript.journey.set-state': return commandTranscriptJourneySetState(authority, envelope.payload, receipt);
+    case 'assess.document-map.analyze': return commandAssessDocumentMapAnalyze(authority, envelope.payload, receipt);
+    case 'assess.document-map.proposal.review': return commandAssessDocumentProposalReview(authority, envelope.payload, receipt);
+    case 'assess.document-map.preview': return commandAssessDocumentMappingPreview(authority, envelope.payload, receipt);
+    case 'assess.document-map.conflict.resolve': return commandAssessDocumentMappingConflictResolve(authority, envelope.payload, receipt);
+    case 'assess.document-map.commit': return commandAssessDocumentMappingCommit(authority, envelope.payload, receipt);
     case 'modernization.evaluate': return commandModernizationEvaluate(authority, envelope.payload, receipt);
     case 'approval.review.record': return commandApprovalReviewRecord(authority, envelope.payload, receipt);
     case 'approval.record': return commandApprovalRecord(authority, envelope.payload, receipt);
     case 'studio.delivery.handoff': return commandStudioDeliveryHandoff(authority, envelope.payload, receipt);
-    case 'monitor.baseline.create': return commandMonitorBaselineCreate(authority, envelope.payload, receipt);
     case 'assemble.blueprint.create': return commandAssembleBlueprintCreate(authority, envelope.payload, receipt);
   }
 };
@@ -2704,6 +3120,7 @@ export type EnterpriseIntelligenceHandlerOverrides = {
   failReceipt?: typeof failEnterpriseReceipt;
   executeCommand?: typeof executeEnterpriseCommand;
   transcriptCommandRequestBindingDependencies?: Partial<TranscriptCommandRequestBindingDependencies>;
+  deliveryMonitorDatabase?: ReturnType<typeof createDeliveryMonitorDatabase>;
 };
 
 export type TranscriptCommandRequestBindingDependencies = {
@@ -2718,6 +3135,31 @@ export const deriveTranscriptCommandRequestBinding = async (
 ): Promise<JsonObject | null> => {
   const findBinding = dependencies.findOne || findOne;
   const findBindingRows = dependencies.findMany || findTranscriptRows;
+  if (envelope.commandType === 'assess.document-map.analyze') {
+    requireExactPayload(envelope.payload, ['caseId', 'expectedCaseVersion', 'inputBundleId', 'inputBundleVersionId', 'expectedInputBundleVersion', 'selections'], ['providerConfigId']);
+    const caseId = requireUuid(envelope.payload.caseId); const expectedCaseVersion = requirePositiveInteger(envelope.payload.expectedCaseVersion);
+    const inputBundleId = requireUuid(envelope.payload.inputBundleId); const inputBundleVersionId = requireUuid(envelope.payload.inputBundleVersionId);
+    const expectedInputBundleVersion = requirePositiveInteger(envelope.payload.expectedInputBundleVersion);
+    const current = await findBinding<{ id: string; version: number; head_version_id: string; schema_version: string; status: string }>(
+      'assess_v2_cases', `select=id,version,head_version_id,schema_version,status&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(caseId)}&deleted_at=is.null`,
+    );
+    if (!current || current.status !== 'draft' || current.version !== expectedCaseVersion || !uuidPattern.test(current.head_version_id)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    if (!Array.isArray(envelope.payload.selections) || envelope.payload.selections.length < 1 || envelope.payload.selections.length > 20) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    const submitted = envelope.payload.selections.map(raw => {
+      const item = requirePayloadObject(raw); requireExactPayload(item, ['sourceSetId', 'sourceSetVersionId', 'expectedSourceSetVersion', 'sourceId', 'sourceVersionId']);
+      return { sourceSetId: requireUuid(item.sourceSetId), sourceSetVersionId: requireUuid(item.sourceSetVersionId), expectedSourceSetVersion: requirePositiveInteger(item.expectedSourceSetVersion), sourceId: requireUuid(item.sourceId), sourceVersionId: requireUuid(item.sourceVersionId) };
+    });
+    if (new Set(submitted.map(item => item.sourceVersionId)).size !== submitted.length) throw new EnterpriseCommandError('INVALID_PAYLOAD');
+    const resolved = await Promise.all(submitted.map(item => resolveTranscriptExtractionSelection(authority, inputBundleId, inputBundleVersionId,
+      expectedInputBundleVersion, item.sourceSetId, item.sourceSetVersionId, item.expectedSourceSetVersion, item.sourceVersionId, findBinding)));
+    if (resolved.some(item => !item) || resolved.some((item, index) => item?.sourceId !== submitted[index].sourceId)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    const first = resolved[0]!;
+    if (resolved.some(item => item!.bundleHash !== first.bundleHash || item!.bundleVersion !== first.bundleVersion)) throw new EnterpriseCommandError('RESOURCE_STALE');
+    return { caseId, caseVersion: current.version, caseHeadVersionId: current.head_version_id, assessSchemaVersion: current.schema_version,
+      inputBundleId, inputBundleVersionId, inputBundleVersion: first.bundleVersion, bundleHash: first.bundleHash,
+      sources: resolved.map(item => ({ sourceSetId: item!.sourceSetId, sourceSetVersionId: item!.sourceSetVersionId,
+        sourceSetVersion: item!.sourceSetVersion, sourceId: item!.sourceId, sourceVersionId: item!.sourceVersionId })) };
+  }
   if (envelope.commandType === 'transcript.assess.extract') {
     requireExactPayload(envelope.payload, [
       'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion',
@@ -2995,6 +3437,7 @@ export const handleEnterpriseIntelligenceRequest = async (
   let claimedAuthority: Authority | null = null;
   let claimedCommandType: EnterpriseCommandType | null = null;
   let claimedCommandPayload: JsonObject | null = null;
+  let deliveryMonitorExecutionAttempted = false;
   try {
     const user = await (overrides.authenticate || getAuthUser)(request);
     const body = await request.json();
@@ -3005,6 +3448,28 @@ export const handleEnterpriseIntelligenceRequest = async (
       user.id, organizationId, envelope.workspaceId,
     );
     const authority = await assertCurrentAuthority(resolvedAuthority, envelope.commandType, envelope.payload);
+    // PR C Delivery/Monitor decisions are terminal only through their canonical
+    // three-person commands. Deny the legacy generic route before any receipt,
+    // execution plan, RPC, effect, or domain mutation can be created.
+    assertNotLegacyPrCApproval(envelope.commandType, envelope.payload);
+    if ((DELIVERY_MONITOR_COMMANDS as readonly string[]).includes(envelope.commandType)) {
+      deliveryMonitorExecutionAttempted = true;
+      const result = await executeDeliveryMonitorCommand({
+        action: envelope.commandType as DeliveryMonitorCommandType,
+        payload: envelope.payload,
+        authority,
+        receipt: {
+          id: crypto.randomUUID(),
+          requestId: envelope.requestId,
+          idempotencyKey: envelope.idempotencyKey,
+          executionToken: crypto.randomUUID(),
+          executionFence: 1,
+        },
+        database: overrides.deliveryMonitorDatabase || createDeliveryMonitorDatabase(),
+      });
+      await assertCurrentAuthority(authority, envelope.commandType, envelope.payload);
+      return jsonResponse(result);
+    }
     const transcriptCommandBinding = await deriveTranscriptCommandRequestBinding(
       authority,
       envelope,
@@ -3064,13 +3529,24 @@ export const handleEnterpriseIntelligenceRequest = async (
     claimedAuthority = await assertCurrentAuthority(finalAuthority, envelope.commandType, envelope.payload);
     return jsonResponse({ ok: true, replayed: false, ...(completed.response || resultObject) });
   } catch (error) {
-    const commandError = error instanceof EnterpriseCommandError
+    // Delivery/Monitor SQL owns its receipt and effect transaction. Once that
+    // execution has been attempted, a later handler-level authority check can
+    // no longer prove whether the durable command committed. Preserve the
+    // pre-execution permission denial above, but force every post-execution
+    // EnterpriseCommandError through reconciliation before any fresh-key retry.
+    const commandError = deliveryMonitorExecutionAttempted && error instanceof EnterpriseCommandError
+      ? new EnterpriseCommandError('COMMAND_OUTCOME_UNKNOWN')
+      : error instanceof EnterpriseCommandError
       ? error
+      : error instanceof DeliveryMonitorCommandError
+        ? new EnterpriseCommandError(error.code === 'INVALID_PAYLOAD' ? 'INVALID_PAYLOAD' : 'COMMAND_OUTCOME_UNKNOWN')
       : error instanceof EnterpriseReceiptError
         ? new EnterpriseCommandError(error.code)
+        : deliveryMonitorExecutionAttempted && isSupabaseRpcTransportError(error)
+          ? new EnterpriseCommandError('COMMAND_OUTCOME_UNKNOWN')
         : isSupabaseRpcError(error)
           ? mapEnterpriseCommandRpcError(error)
-          : new EnterpriseCommandError('COMMAND_UNAVAILABLE');
+          : new EnterpriseCommandError(deliveryMonitorExecutionAttempted ? 'COMMAND_OUTCOME_UNKNOWN' : 'COMMAND_UNAVAILABLE');
     if (claimedReceipt && claimedAuthority && claimedCommandType && claimedCommandPayload) {
       try {
         claimedAuthority = await assertCurrentAuthority(claimedAuthority, claimedCommandType, claimedCommandPayload);

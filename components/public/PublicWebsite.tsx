@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import EnterpriseAccessView from '../auth/EnterpriseAccessView';
 import { AvalaAppIcon, AvalaLifecycleLockup } from '../shared/brand';
+import { isControlledHumanRuntimeEnabled } from '../../services/supabaseClient';
 import {
   ChartPieIcon,
   CheckCircleIcon,
@@ -411,7 +412,9 @@ const PublicWebsite: React.FC = () => {
   }, [dark, route]);
 
   const navigate = (nextRoute: PublicRoute) => {
-    const nextPath = pathForRoute[nextRoute];
+    const nextPath = nextRoute === 'sandbox' && isControlledHumanRuntimeEnabled()
+      ? '/sign-in'
+      : pathForRoute[nextRoute];
     if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath);
     setRoute(nextRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });

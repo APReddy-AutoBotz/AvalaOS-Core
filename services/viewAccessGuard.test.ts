@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  bindAuthoritativePresentationCapabilities,
   hasViewPermission,
   resolveViewAccess,
   VIEW_ACCESS_METADATA,
@@ -267,5 +268,97 @@ const handoffReadRouteResult = resolveViewAccess({
 
 assert.equal(handoffReadRouteResult.allowed, true);
 assert.equal(hasViewPermission(makeUser(['studio.handoff.read']), ['docs.generate']), false);
+
+const serverContext = {
+  userId: capabilityOnlyUser.id,
+  organizationId: 'org-1',
+  organizationName: 'Synthetic Organization',
+  workspaceId: 'workspace-1',
+  workspaceName: 'Governed Delivery',
+  authorizationVersion: 7,
+  capabilities: ['assess.read', 'studio.artifacts.review', 'project.read', 'monitor.read'],
+};
+const boundCapabilities = bindAuthoritativePresentationCapabilities({
+  userId: capabilityOnlyUser.id,
+  organizationId: 'org-1',
+  workspaceId: 'workspace-1',
+  sessionState: 'ready',
+  tenantContext: serverContext,
+});
+
+for (const [view, scope, capability] of [
+  [View.PROCESS_CATALOG, myWorkScope, 'assess.read'],
+  [View.DOCS, projectScope, 'studio.artifacts.review'],
+  [View.BOARDS, projectScope, 'project.read'],
+  [View.PORTFOLIO, myWorkScope, 'monitor.read'],
+] as const) {
+  const result = resolveViewAccess({
+    user: capabilityOnlyUser,
+    authLoading: false,
+    organization: makeOrganization(),
+    authoritativeCapabilities: [capability],
+    view,
+    scope,
+  });
+  assert.equal(result.allowed, true, `${capability} grants ${view} presentation`);
+}
+
+const monitorCannotOpenDelivery = resolveViewAccess({
+  user: capabilityOnlyUser,
+  authLoading: false,
+  organization: makeOrganization(),
+  authoritativeCapabilities: ['monitor.read'],
+  view: View.BOARDS,
+  scope: projectScope,
+});
+assert.equal(monitorCannotOpenDelivery.allowed, false);
+assert.equal(monitorCannotOpenDelivery.reason, 'missing_permission');
+
+const studioApprovalPresentationOnly = resolveViewAccess({
+  user: capabilityOnlyUser,
+  authLoading: false,
+  organization: makeOrganization(),
+  authoritativeCapabilities: ['studio.artifacts.approve'],
+  view: View.DOCS,
+  scope: projectScope,
+});
+assert.equal(studioApprovalPresentationOnly.allowed, true);
+assert.equal(hasViewPermission(capabilityOnlyUser, ['docs.approve']), false);
+
+assert.deepEqual(boundCapabilities, serverContext.capabilities);
+assert.deepEqual(capabilityOnlyUser.permissions, [], 'presentation binding must not add mutation permissions');
+assert.equal(
+  hasViewPermission(capabilityOnlyUser, ['docs.review', 'project.manage', 'portfolio.read']),
+  false,
+  'server capabilities remain separate from legacy mutation permissions',
+);
+
+for (const invalidBinding of [
+  { userId: 'different-user', organizationId: 'org-1', workspaceId: 'workspace-1', sessionState: 'ready' as const },
+  { userId: capabilityOnlyUser.id, organizationId: 'different-org', workspaceId: 'workspace-1', sessionState: 'ready' as const },
+  { userId: capabilityOnlyUser.id, organizationId: 'org-1', workspaceId: 'different-workspace', sessionState: 'ready' as const },
+  { userId: capabilityOnlyUser.id, organizationId: 'org-1', workspaceId: 'workspace-1', sessionState: 'stale' as const },
+  { userId: capabilityOnlyUser.id, organizationId: 'org-1', workspaceId: 'workspace-1', sessionState: 'revoked' as const },
+]) {
+  assert.deepEqual(bindAuthoritativePresentationCapabilities({
+    ...invalidBinding,
+    tenantContext: serverContext,
+  }), []);
+}
+
+assert.deepEqual(bindAuthoritativePresentationCapabilities({
+  userId: capabilityOnlyUser.id,
+  organizationId: 'org-1',
+  workspaceId: 'workspace-1',
+  sessionState: 'ready',
+  tenantContext: { ...serverContext, authorizationVersion: 0 },
+}), []);
+assert.deepEqual(bindAuthoritativePresentationCapabilities({
+  userId: capabilityOnlyUser.id,
+  organizationId: 'org-1',
+  workspaceId: 'workspace-1',
+  sessionState: 'ready',
+  tenantContext: { ...serverContext, capabilities: ['monitor.read '] },
+}), []);
 
 console.log('View access guard regression passed.');

@@ -16,12 +16,13 @@ import {
 import {
   evaluateHostedTest,
   evaluateRetainedTest,
-  flattenPlaywright,
   validateOracleManifest,
   validateRetainedManifest,
   validateServerManifest,
   evaluateCompositeTest,
+  validateHostedPlaywrightReport,
 } from './exhaustiveAcceptanceEvidence.mjs';
+import { deriveExpectedHostedAcceptanceMetadata } from './hostedAcceptanceReportProvenance.mjs';
 
 const root = process.cwd();
 const out = path.resolve(process.env.ACCEPTANCE_RESULTS_DIR || 'acceptance-results');
@@ -36,6 +37,7 @@ const bindings = loadExecutionBindings();
 const provenanceDocument = loadSourceProvenance();
 const inventory = deriveInventory(catalog, loadInventoryDocument(), provenanceDocument, bindings);
 const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
+const hostedMap = hostedBindingMap(bindings);
 const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
 const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
@@ -50,14 +52,50 @@ const retainedManifest = loadOptional(process.env.RETAINED_RESULTS_MANIFEST || '
 const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
 const serverManifest = loadOptional(process.env.SERVER_RESULTS_MANIFEST || 'acceptance-results/server-results.json');
-const executions = flattenPlaywright(playwright);
+const browserExecutionKind = typeof playwright?.config?.metadata?.executionKind === 'string'
+  ? playwright.config.metadata.executionKind
+  : 'unbound';
+const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
+const hostedConfigPath = 'playwright.exhaustive-acceptance.config.ts';
+const hostedSourcePaths = ['tests/browser/exhaustiveHostedAcceptance.spec.ts'];
+const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml';
+let browserEvidenceErrors = [];
+let browserReportValidation = null;
+if (executionDisposition === 'EXECUTED') {
+  try {
+    const expectedMetadata = deriveExpectedHostedAcceptanceMetadata({
+      environment: process.env,
+      exactCommand: hostedCommand,
+      configPath: hostedConfigPath,
+      sourcePaths: hostedSourcePaths,
+      workflowPath,
+    });
+    const allowedSkippedExecutions = new Map();
+    for (const testCase of catalog.cases ?? []) {
+      const binding = hostedMap.get(testCase.testId);
+      if (!binding || binding.scenario !== null) continue;
+      for (const project of binding.projects ?? []) {
+        allowedSkippedExecutions.set(`${canonicalHostedTitle(testCase)}\0${project}`, binding.blockedReason);
+      }
+    }
+    browserReportValidation = validateHostedPlaywrightReport({
+      report: playwright,
+      expectedMetadata,
+      allowedSkippedExecutions,
+    });
+    browserEvidenceErrors = [...browserReportValidation.errors];
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'HOSTED_ACCEPTANCE_EXPECTED_BINDING_REJECTED';
+    browserEvidenceErrors = [`hosted-report-expected-binding:${code}`];
+  }
+}
 
 const expectedBinding = {
   releaseSha,
   workflowRunId,
   workflowAttempt,
   environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release',
-  workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml',
+  workflowPath,
   branchIdsByTestId: new Map((catalog.cases ?? []).map(item => [item.testId, item.branchIds ?? []])),
   provenanceByTestId,
   canonicalCommandBySuiteId: new Map([
@@ -82,7 +120,6 @@ const serverSuiteIndex = new Map((serverManifest?.suites ?? []).map(item => [ite
 const serverResultIndex = new Map((serverManifest?.results ?? []).map(item => [`${item.suiteId}:${item.testId}`, item]));
 const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
 const oracleMap = oracleBindingMap(bindings);
-const hostedMap = hostedBindingMap(bindings);
 
 const results = (catalog.cases ?? []).map(testCase => {
   let evaluation;
@@ -104,7 +141,11 @@ const results = (catalog.cases ?? []).map(testCase => {
     if (binding.components?.includes('hosted')) {
       const hostedBinding = hostedMap.get(testCase.testId);
       const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
-        ? evaluateHostedTest({ title: canonicalHostedTitle(testCase), executions, requiredProjects: hostedBinding.projects })
+        ? evaluateHostedTest({
+            title: canonicalHostedTitle(testCase),
+            requiredProjects: hostedBinding.projects,
+            reportValidation: browserReportValidation,
+          })
         : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
       if (hostedEvaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
         hostedEvaluation.status = 'BLOCKED';
@@ -160,8 +201,8 @@ const results = (catalog.cases ?? []).map(testCase => {
     } else {
       evaluation = evaluateHostedTest({
         title: canonicalHostedTitle(testCase),
-        executions,
         requiredProjects: binding.projects,
+        reportValidation: browserReportValidation,
       });
       if (evaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
         evaluation.status = 'BLOCKED';
@@ -228,6 +269,8 @@ const group = (items, selector) => Object.values(items.reduce((acc, item) => {
 const summary = {
   overall,
   executionDisposition,
+  browserExecutionKind,
+  browserEvidenceErrors,
   releaseSha,
   netlifyDeployId: deployId,
   target,

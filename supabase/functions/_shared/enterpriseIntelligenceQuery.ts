@@ -41,8 +41,28 @@ import {
   type TranscriptFlowProjection,
   type TranscriptSourceRole,
 } from '../../../services/transcriptFlow/contracts.ts';
+import {
+  ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION,
+  emptyAssessDocumentMappingProjection,
+  isAssessMappingJsonValue,
+  type AssessDocumentMappingProjection,
+  type AssessMappingConflictProjection,
+  type AssessMappingJsonValue,
+  type AssessMappingProposalProjection,
+  type AssessMappingTargetDescriptor,
+} from '../../../services/assessImport/contracts.ts';
+import {
+  decodeDeliveryWorkspaceProjection,
+  decodeMonitorApprovedBaselinesProjection,
+  DELIVERY_ITEM_PAGE_MAX,
+  type DeliveryBaselineEligibilityPageRequest,
+  type DeliveryItemPageRequest,
+  type DeliveryWorkspaceProjection,
+  type MonitorApprovedBaselinesProjection,
+} from '../../../services/deliveryMonitor/contracts.ts';
 import { corsHeaders } from './http.ts';
 import { postgrest } from './supabase.ts';
+import { createDeliveryMonitorDatabase } from './deliveryMonitorDb.ts';
 import {
   TenantAuthorityError,
   type TenantAuthorityDatabase,
@@ -70,6 +90,8 @@ export interface EnterpriseIntelligenceRawProjection {
   deliveryVersions: Row[];
   deliveryItems: Row[];
   monitorBaselines: Row[];
+  deliveryWorkspace?: DeliveryWorkspaceProjection | null;
+  monitorApprovedBaselines?: MonitorApprovedBaselinesProjection | null;
   modernizationAssessments: Row[];
   modernizationDecisions: Row[];
   blueprints: Row[];
@@ -96,10 +118,28 @@ export interface EnterpriseIntelligenceRawProjection {
   transcriptExtractionBindings: Row[];
   transcriptJobs: Row[];
   transcriptStalenessEvents: Row[];
+  mappingCatalogs: Row[];
+  mappingTargets: Row[];
+  mappingRuns: Row[];
+  mappingRunSources: Row[];
+  mappingProposals: Row[];
+  mappingReviews: Row[];
+  mappingPreviewBatches: Row[];
+  mappingPreviewManifests: Row[];
+  mappingPreviewItems: Row[];
+  mappingConflicts: Row[];
+  mappingConflictResolutions: Row[];
+  mappingApplications: Row[];
 }
 
 export type EnterpriseIntelligenceQueryDatabase = {
-  loadProjectionRows(authority: TenantContext): Promise<EnterpriseIntelligenceRawProjection>;
+  loadProjectionRows(authority: TenantContext, options?: EnterpriseIntelligenceQueryOptions): Promise<EnterpriseIntelligenceRawProjection>;
+};
+
+export type EnterpriseIntelligenceQueryOptions = {
+  deliveryItemPage?: DeliveryItemPageRequest;
+  deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
+  assessDocumentMappingScope?: { caseId: string; caseVersion: number; inputBundleId?: string; inputBundleVersionId?: string };
 };
 
 export type EnterpriseIntelligenceQueryDependencies = {
@@ -110,7 +150,25 @@ export type EnterpriseIntelligenceQueryDependencies = {
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion'];
+const sameUuid = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+const canonicalProjectionJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalProjectionJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const item = value as Record<string, unknown>;
+    return `{${Object.keys(item).sort().map(key => `${JSON.stringify(key)}:${canonicalProjectionJson(item[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+const assertEmbeddedProjectionScope = (
+  authority: TenantContext,
+  projection: DeliveryWorkspaceProjection | MonitorApprovedBaselinesProjection,
+) => {
+  if (!sameUuid(projection.organizationId, authority.organizationId)
+    || !sameUuid(projection.workspaceId, authority.workspaceId)) {
+    throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
+  }
+};
+const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion', 'deliveryItemPage', 'deliveryBaselineEligibilityPage', 'assessDocumentMappingScope'];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
@@ -236,7 +294,12 @@ const projectionVisibility = (authority: TenantContext) => {
   const assessDraftsVisible = evidenceVisible && hasAny(authority, 'assessment.edit', 'assess.v2.read', 'assess.v2.draft.write');
   const applicationsVisible = hasAny(authority, 'assess.applications.read', 'assess.applications.portfolio.read', 'portfolio.manage');
   const studioVisible = hasAny(authority, 'studio.artifacts.read', 'docs.approve');
-  const deliveryVisible = hasAny(authority, 'project.read', 'project.manage', 'docs.approve');
+  const deliveryVisible = hasAny(
+    authority,
+    'project.read', 'project.manage',
+    'delivery.handoff.request', 'delivery.handoff.review', 'delivery.handoff.approve', 'delivery.handoff.consume',
+    'delivery.package.manage', 'delivery.package.review', 'delivery.package.approve', 'monitor.baseline.create',
+  );
   const monitorVisible = hasAny(authority, 'monitor.read', 'monitor.manage');
   const modernizationVisible = applicationsVisible || hasAny(authority, 'assemble.manage');
   const approvalVisible = hasAny(authority, 'approvals.review');
@@ -262,20 +325,24 @@ const emptyRawProjection = (): EnterpriseIntelligenceRawProjection => ({
   providerConfigs: [], providerRoutes: [], providerRoleOptions: [], providerRoleCapabilities: [], evidenceSources: [], evidenceVersions: [], evidenceCandidates: [], assessDrafts: [],
   applications: [], applicationAssessments: [], studioAggregates: [], studioVersions: [], studioHandoffs: [],
   deliveryPackages: [], deliveryVersions: [], deliveryItems: [], monitorBaselines: [],
+  deliveryWorkspace: null, monitorApprovedBaselines: null,
   modernizationAssessments: [], modernizationDecisions: [], blueprints: [], reviewEvents: [], approvals: [], commandReceipts: [],
   transcriptFlags: [], transcriptSources: [], transcriptSourceVersions: [], transcriptCandidates: [],
   transcriptSourceSets: [], transcriptSourceSetVersions: [], transcriptSourceSetItems: [],
   transcriptInputBundles: [], transcriptInputBundleVersions: [], transcriptInputBundleItems: [], transcriptJourneys: [],
   transcriptApplyPreviews: [], transcriptApplyPreviewBatches: [], transcriptCandidateApplications: [], transcriptCandidateRelationships: [], transcriptConflicts: [], transcriptConflictResolutions: [],
   transcriptExtractionBindings: [], transcriptJobs: [], transcriptStalenessEvents: [],
+  mappingCatalogs: [], mappingTargets: [], mappingRuns: [], mappingRunSources: [], mappingProposals: [], mappingReviews: [],
+    mappingPreviewBatches: [], mappingPreviewManifests: [], mappingPreviewItems: [], mappingConflicts: [], mappingConflictResolutions: [], mappingApplications: [],
 });
 
 const scoped = (authority: TenantContext) => `org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}`;
 
 export const createEnterpriseIntelligenceQueryDatabase = (
   query: typeof postgrest = postgrest,
+  deliveryMonitorDatabase = createDeliveryMonitorDatabase(),
 ): EnterpriseIntelligenceQueryDatabase => ({
-  async loadProjectionRows(authority) {
+  async loadProjectionRows(authority, options = {}) {
     const rows = emptyRawProjection();
     const scope = scoped(authority);
     const {
@@ -294,7 +361,9 @@ export const createEnterpriseIntelligenceQueryDatabase = (
 
     const tasks: Array<Promise<void>> = [];
     const load = (target: keyof EnterpriseIntelligenceRawProjection, path: string) => {
-      tasks.push(query<Row[]>(path, { method: 'GET', headers: { 'Cache-Control': 'no-store' } }).then(result => { rows[target] = result; }));
+      tasks.push(query<Row[]>(path, { method: 'GET', headers: { 'Cache-Control': 'no-store' } }).then(result => {
+        (rows as unknown as Record<string, Row[]>)[target] = result;
+      }));
     };
 
     if (providerVisible) {
@@ -320,12 +389,40 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('studioVersions', `studio_artifact_versions?select=id,artifact_id,version,lifecycle,created_at&${scope}&lifecycle=eq.approved&order=created_at.desc&limit=200`);
       load('studioHandoffs', `enterprise_studio_delivery_handoffs?select=id,studio_document_id,status,created_at&${scope}&order=created_at.desc&limit=200`);
     }
-    if (deliveryVisible || monitorVisible) {
-      load('deliveryPackages', `enterprise_delivery_work_packages?select=id,current_version,status,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
-      load('deliveryVersions', `enterprise_delivery_work_package_versions?select=id,work_package_id,version,artifact_type,studio_version,status,created_at&${scope}&order=created_at.desc&limit=200`);
-      load('deliveryItems', `enterprise_delivery_work_items?select=id,package_version_id,item_type,title,acceptance_criteria,source_section_locator&${scope}&order=created_at.asc&limit=1000`);
-    }
-    if (monitorVisible) load('monitorBaselines', `enterprise_monitor_baselines?select=id,work_package_id,status,readiness,approved_item_ids,live_telemetry_connected,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
+    const deliveryPage = options.deliveryItemPage;
+    const baselineEligibilityPage = options.deliveryBaselineEligibilityPage;
+    if (deliveryVisible) tasks.push(deliveryMonitorDatabase.loadDeliveryProjection(
+      authority.organizationId,
+      authority.workspaceId,
+      {
+        actorId: authority.userId,
+        authorizationVersion: authority.authorizationVersion,
+        itemLimit: deliveryPage?.limit ?? DELIVERY_ITEM_PAGE_MAX,
+        baselineEligibilityLimit: baselineEligibilityPage?.limit ?? 100,
+        ...(deliveryPage ? {
+          packageId: deliveryPage.packageId,
+          itemCursorVersion: deliveryPage.cursor.version,
+          itemCursorId: deliveryPage.cursor.id,
+        } : {}),
+        ...(baselineEligibilityPage ? {
+          baselineEligibilityCursorUpdatedAt: baselineEligibilityPage.cursor.updatedAt,
+          baselineEligibilityCursorPackageId: baselineEligibilityPage.cursor.workPackageId,
+        } : {}),
+      },
+    ).then(value => {
+      const projection = decodeDeliveryWorkspaceProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.deliveryWorkspace = projection;
+    }));
+    if (monitorVisible) tasks.push(deliveryMonitorDatabase.loadMonitorProjection(
+      authority.organizationId,
+      authority.workspaceId,
+      { actorId: authority.userId, authorizationVersion: authority.authorizationVersion, limit: 100 },
+    ).then(value => {
+      const projection = decodeMonitorApprovedBaselinesProjection(value);
+      assertEmbeddedProjectionScope(authority, projection);
+      rows.monitorApprovedBaselines = projection;
+    }));
     if (modernizationVisible) {
       load('modernizationAssessments', `enterprise_modernization_assessments?select=id,application_ref,status,created_at&${scope}&order=created_at.desc&limit=200`);
       load('modernizationDecisions', `enterprise_modernization_decisions?select=id,modernization_assessment_id,primary_disposition,alternative_disposition,eligible_dispositions,blockers,conflicts,status,created_by,created_at&${scope}&order=created_at.desc&limit=200`);
@@ -336,7 +433,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('approvals', `enterprise_high_impact_approvals?select=id,resource_type,resource_id,outcome,created_at&${scope}&order=created_at.desc&limit=400`);
     }
     if (transcriptLineageRequired) {
-      load('transcriptFlags', `enterprise_transcript_workspace_flags?select=transcript_source_sets_enabled,assess_multisource_apply_enabled,governed_journeys_enabled,version,updated_at&${scope}&limit=1`);
+      load('transcriptFlags', `enterprise_transcript_workspace_flags?select=transcript_source_sets_enabled,assess_multisource_apply_enabled,assess_document_mapping_enabled,governed_journeys_enabled,version,updated_at&${scope}&limit=1`);
       load('transcriptSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_at&${scope}&deleted_at=is.null&order=created_at.desc&limit=500`);
       load('transcriptSourceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,extracted_character_count,extraction_status,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=2000`);
       load('transcriptSourceSets', `enterprise_source_sets?select=id,owner_module,display_label,description,current_version,lifecycle_version,status,created_at,updated_at&${scope}&owner_module=eq.assess&order=updated_at.desc&limit=200`);
@@ -352,7 +449,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('transcriptApplyPreviews', `enterprise_assess_apply_previews?select=id,assess_case_id,expected_case_version,input_bundle_version_id,candidate_id,candidate_version,application_intent,target_key,target_id,proposed_value,created_at,expires_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptApplyPreviewBatches', `enterprise_assess_apply_preview_batches?select=id,assess_case_id,expected_case_version,input_bundle_id,input_bundle_version_id,source_set_version_ids,preview_ids,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptCandidateApplications', `enterprise_assess_candidate_applications?select=preview_id,preview_batch_id,assess_case_id,assess_case_version,applied_at&${scope}&order=applied_at.desc&limit=1000`);
-      load('transcriptCandidateRelationships', `enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,created_by,created_at&${scope}&order=created_at.desc,id.desc&limit=1000`);
+      load('transcriptCandidateRelationships', `enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at&${scope}&order=created_at.desc,id.desc&limit=1000`);
       load('transcriptConflicts', `enterprise_assess_evidence_conflicts?select=id,assess_case_id,input_bundle_version_id,application_intent,target_key,candidate_ids,is_material,current_resolution_version,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptConflictResolutions', `enterprise_assess_evidence_conflict_resolutions?select=conflict_id,version,resolution,chosen_candidate_id,authored_value,rationale,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptExtractionBindings', `enterprise_transcript_extraction_bindings?select=id,job_id,input_bundle_version_id,input_bundle_id,source_set_version_id,source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=1000`);
@@ -361,6 +458,33 @@ export const createEnterpriseIntelligenceQueryDatabase = (
     }
     load('commandReceipts', `enterprise_ai_command_receipts?select=command_type,status,completed_at,created_at&${scope}&actor_id=eq.${encodeURIComponent(authority.userId)}&order=created_at.desc&limit=20`);
     await Promise.all(tasks);
+    const mappingScope = options.assessDocumentMappingScope;
+    if (transcriptAssessVisible && mappingScope) {
+      const caseFilter = `${scope}&assess_case_id=eq.${encodeURIComponent(mappingScope.caseId)}&case_version=eq.${mappingScope.caseVersion}`;
+      rows.mappingCatalogs = await query<Row[]>(`enterprise_assess_document_mapping_catalogs?select=id,assess_case_id,case_version,assess_schema_version,catalog_version,catalog_hash,status,created_at&${caseFilter}&status=eq.current&order=created_at.desc&limit=1`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+      const catalogId = text(rows.mappingCatalogs[0]?.id);
+      if (uuid.test(catalogId)) rows.mappingTargets = await query<Row[]>(`enterprise_assess_document_mapping_targets?select=selector_id,catalog_id,target_kind,operation,entity_id,field_id,label,context_label,value_type,allowed_values,current_value,current_value_hash,manual,ordinal&${scope}&catalog_id=eq.${encodeURIComponent(catalogId)}&order=ordinal.asc&limit=2000`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+      if (uuid.test(catalogId) && mappingScope.inputBundleId && mappingScope.inputBundleVersionId) {
+        const bundleFilter = `input_bundle_id=eq.${encodeURIComponent(mappingScope.inputBundleId)}&input_bundle_version_id=eq.${encodeURIComponent(mappingScope.inputBundleVersionId)}`;
+        rows.mappingRuns = await query<Row[]>(`enterprise_assess_document_mapping_runs?select=id,catalog_id,assess_case_id,case_version,input_bundle_id,input_bundle_version_id,status,failure_code,safe_result,created_at,updated_at&${caseFilter}&catalog_id=eq.${encodeURIComponent(catalogId)}&${bundleFilter}&order=created_at.desc&limit=1`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+        rows.mappingPreviewBatches = await query<Row[]>(`enterprise_assess_document_mapping_preview_batches?select=id,catalog_id,catalog_hash,assess_case_id,expected_case_version,input_bundle_id,input_bundle_version_id,status,expires_at,created_at&${scope}&assess_case_id=eq.${encodeURIComponent(mappingScope.caseId)}&expected_case_version=eq.${mappingScope.caseVersion}&catalog_id=eq.${encodeURIComponent(catalogId)}&${bundleFilter}&order=created_at.desc&limit=1`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+        const runId = text(rows.mappingRuns[0]?.id); const previewBatchId = text(rows.mappingPreviewBatches[0]?.id);
+        if (uuid.test(runId)) {
+          rows.mappingRunSources = await query<Row[]>(`enterprise_assess_document_mapping_run_sources?select=run_id,extraction_binding_id,extraction_job_id,source_id,source_version_id,parser_version,normalized_hash,extracted_byte_count,ordinal&${scope}&run_id=eq.${encodeURIComponent(runId)}&order=ordinal.asc&limit=20`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          rows.mappingProposals = await query<Row[]>(`enterprise_assess_document_mapping_proposals?select=id,run_id,catalog_id,target_selector_id,proposal_version,proposed_value,confidence,rationale,source_id,source_version_id,extraction_binding_id,extraction_job_id,parser_version,source_locator,anchor_hash,safe_excerpt,relationship,status,created_at&${scope}&run_id=eq.${encodeURIComponent(runId)}&order=created_at.desc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          const proposalIds = rows.mappingProposals.map(row => text(row.id)).filter(id => uuid.test(id));
+          if (proposalIds.length) rows.mappingReviews = await query<Row[]>(`enterprise_assess_document_mapping_reviews?select=proposal_id,version,status,reviewed_value,reviewer_id,created_at&${scope}&proposal_id=in.(${proposalIds.join(',')})&order=version.desc&limit=2000`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+        }
+        if (uuid.test(previewBatchId)) {
+          rows.mappingPreviewManifests = await query<Row[]>(`enterprise_assess_document_mapping_preview_manifests?select=preview_batch_id,manifest_version,catalog_id,catalog_hash,assess_case_id,case_version,input_bundle_id,input_bundle_version_id,target_count,source_count,item_count,reviewed_count,conflict_count,unresolved_conflict_count,item_set_hash,conflict_set_hash,resolution_set_hash,displayed_set_hash,item_bindings,conflict_bindings,resolution_bindings&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=manifest_version.desc&limit=1`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          rows.mappingPreviewItems = await query<Row[]>(`enterprise_assess_document_mapping_preview_items?select=preview_batch_id,proposal_id,target_selector_id,proposal_version,reviewed_value,binding_hash,ordinal&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=ordinal.asc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          rows.mappingConflicts = await query<Row[]>(`enterprise_assess_document_mapping_conflicts?select=id,preview_batch_id,target_selector_id,proposal_ids,kind,current_value_hash,current_resolution_version,created_at&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=created_at.asc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          const conflictIds = rows.mappingConflicts.map(row => text(row.id)).filter(id => uuid.test(id));
+          if (conflictIds.length) rows.mappingConflictResolutions = await query<Row[]>(`enterprise_assess_document_mapping_conflict_resolutions?select=conflict_id,version,resolution,chosen_proposal_id,authored_value,rationale,created_at&${scope}&conflict_id=in.(${conflictIds.join(',')})&order=version.desc&limit=1000`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+          rows.mappingApplications = await query<Row[]>(`enterprise_assess_document_mapping_applications?select=preview_batch_id,proposal_id,target_selector_id,assess_case_id,assess_case_version,outcome,applied_at&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=applied_at.desc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
+        }
+      }
+    }
     return rows;
   },
 });
@@ -513,6 +637,31 @@ const projectStudio = (raw: EnterpriseIntelligenceRawProjection): EnterpriseStud
 };
 
 const projectDelivery = (raw: EnterpriseIntelligenceRawProjection, actorId: string): EnterpriseDeliveryPackageProjection[] => {
+  if (raw.deliveryWorkspace) {
+    const legacyItemType = {
+      epic: 'Epic', story: 'Story', task: 'Task', milestone: 'Milestone', dependency: 'Dependency', risk: 'Risk',
+    } as const;
+    return raw.deliveryWorkspace.packages.map(item => ({
+      id: item.id,
+      label: item.label,
+      status: item.status === 'approved' ? 'approved'
+        : item.status === 'stale' ? 'stale'
+          : item.status === 'blocked' || item.status === 'rejected' ? 'blocked'
+            : item.status === 'draft' ? 'draft' : 'review',
+      currentVersionLabel: `Version ${item.currentVersion}`,
+      sourceLabel: item.sourcePackage.planningOnly
+        ? `${item.sourcePackage.lineageClassification.replace('_', ' ')} / planning only`
+        : item.sourcePackage.lineageClassification.replace('_', ' '),
+      lineageState: item.status === 'stale' ? 'stale' : item.status === 'blocked' ? 'blocked' : 'complete',
+      items: item.items.map(workItem => ({
+        itemType: legacyItemType[workItem.type],
+        title: workItem.title,
+        acceptanceCriteriaCount: workItem.acceptanceCriteria.length,
+        sourceLocator: workItem.sourceCitation?.sectionLocator || 'manual',
+      })),
+      createdByCurrentActor: false,
+    }));
+  }
   const versionByPackage = latestBy(raw.deliveryVersions, 'work_package_id');
   return raw.deliveryPackages.flatMap(item => {
     if (!includes(['draft', 'review', 'approved', 'stale', 'blocked'] as const, item.status)) return [];
@@ -546,6 +695,20 @@ const projectMonitor = (raw: EnterpriseIntelligenceRawProjection, actorId: strin
     liveTelemetryConnected: false, createdByCurrentActor: text(row.created_by) === actorId,
   }];
 });
+
+const projectCanonicalMonitor = (raw: EnterpriseIntelligenceRawProjection): EnterpriseMonitorProjection[] => (
+  raw.monitorApprovedBaselines?.baselines.map(row => ({
+    id: row.id,
+    label: `Approved Delivery baseline v${row.version}`,
+    workPackageId: row.workPackageId,
+    status: 'approved',
+    readiness: row.readiness,
+    approvedItemCount: row.acceptedItemCount,
+    lineageComplete: true,
+    liveTelemetryConnected: false,
+    createdByCurrentActor: false,
+  })) || []
+);
 
 const projectModernization = (raw: EnterpriseIntelligenceRawProjection, actorId: string, applications: Array<{ id: string; name: string }>): EnterpriseModernizationProjection[] => {
   const assessmentById = new Map(raw.modernizationAssessments.map(row => [text(row.id), row]));
@@ -975,11 +1138,195 @@ const projectTranscriptFlow = (
   };
 };
 
+const projectAssessDocumentMapping = (
+  raw: EnterpriseIntelligenceRawProjection,
+  authority: TenantContext,
+): AssessDocumentMappingProjection => {
+  const canRead = authority.capabilities.includes('assess.v2.read') && authority.capabilities.includes('transcript.sources.read');
+  if (!canRead) return emptyAssessDocumentMappingProjection();
+  const enabled = bool(raw.transcriptFlags[0]?.assess_document_mapping_enabled);
+  const targetsByCatalog = new Map<string, AssessMappingTargetDescriptor[]>();
+  const catalogsById = new Map(raw.mappingCatalogs.map(catalog => [text(catalog.id), catalog]));
+  raw.mappingTargets.forEach(row => {
+    const catalog = catalogsById.get(text(row.catalog_id));
+    const currentValue = row.current_value;
+    const allowedValues = strings(row.allowed_values);
+    if (!catalog || !uuid.test(text(row.selector_id)) || !isAssessMappingJsonValue(currentValue)
+      || !includes(['case_field', 'primitive_field', 'primitive_fact', 'agent_fact', 'asset_field', 'interaction_field', 'interaction_fact', 'create_primitive', 'create_asset', 'create_interaction', 'create_decision_point', 'create_exception_path', 'evidence_only'] as const, row.target_kind)
+      || !includes(['set_field', 'set_fact', 'create_entity', 'link_evidence'] as const, row.operation)
+      || !includes(['text', 'boolean', 'ratio', 'number', 'text_list', 'primitive_type', 'business_disposition', 'interaction_mode', 'data_classification', 'asset_strategic_lifespan', 'asset_technical_health', 'asset_business_criticality', 'asset_ownership_model', 'asset_vendor_roadmap', 'asset_operating_stability', 'primitive_constructor', 'asset_constructor', 'interaction_constructor', 'decision_constructor', 'exception_constructor', 'evidence'] as const, row.value_type)
+      || !/^[0-9a-f]{64}$/.test(text(row.current_value_hash))) return;
+    const descriptor: AssessMappingTargetDescriptor = {
+      selectorId: text(row.selector_id), catalogId: text(catalog.id), caseId: text(catalog.assess_case_id),
+      caseVersion: number(catalog.case_version), assessSchemaVersion: text(catalog.assess_schema_version),
+      targetKind: row.target_kind, operation: row.operation, ...(uuid.test(text(row.entity_id)) ? { entityId: text(row.entity_id) } : {}),
+      fieldId: short(row.field_id, 160), label: short(row.label, 240), contextLabel: short(row.context_label, 240),
+      valueType: row.value_type, ...(allowedValues.length ? { allowedValues } : {}), currentValue, currentValueHash: text(row.current_value_hash), manual: bool(row.manual),
+    };
+    targetsByCatalog.set(descriptor.catalogId, [...(targetsByCatalog.get(descriptor.catalogId) || []), descriptor]);
+  });
+  const catalogs = raw.mappingCatalogs.flatMap(catalog => {
+    const id = text(catalog.id); const targets = targetsByCatalog.get(id) || [];
+    if (!uuid.test(id) || !uuid.test(text(catalog.assess_case_id)) || !Number.isSafeInteger(number(catalog.case_version))
+      || number(catalog.catalog_version) !== 1 || !/^[0-9a-f]{64}$/.test(text(catalog.catalog_hash))
+      || !includes(['current', 'stale'] as const, catalog.status) || !Number.isFinite(Date.parse(text(catalog.created_at)))) return [];
+    return [{ id, caseId: text(catalog.assess_case_id), caseVersion: number(catalog.case_version),
+      assessSchemaVersion: text(catalog.assess_schema_version), catalogVersion: 1 as const,
+      catalogHash: text(catalog.catalog_hash), status: catalog.status, targets, createdAt: text(catalog.created_at) }];
+  });
+  const runById = new Map(raw.mappingRuns.map(run => [text(run.id), run]));
+  const latestReview = new Map<string, Row>();
+  raw.mappingReviews.forEach(review => { const id = text(review.proposal_id); if (id && !latestReview.has(id)) latestReview.set(id, review); });
+  const proposals: AssessMappingProposalProjection[] = raw.mappingProposals.flatMap(row => {
+    const run = runById.get(text(row.run_id)); const catalog = catalogsById.get(text(row.catalog_id)); const review = latestReview.get(text(row.id));
+    const proposedValue = row.proposed_value; const effectiveValue = review?.reviewed_value ?? proposedValue;
+    if (!run || !catalog || !isAssessMappingJsonValue(proposedValue) || !isAssessMappingJsonValue(effectiveValue)
+      || ![row.id, row.catalog_id, row.target_selector_id, catalog.assess_case_id, run.input_bundle_id, run.input_bundle_version_id, row.extraction_job_id, row.extraction_binding_id, row.source_id, row.source_version_id].every(value => uuid.test(text(value)))) return [];
+    const status = review?.status ?? row.status;
+    if (!includes(['suggested', 'accepted', 'rejected', 'edited'] as const, status)
+      || !includes(['neutral', 'supporting', 'contradictory'] as const, row.relationship)
+      || number(row.confidence, -1) < 0 || number(row.confidence, -1) > 1 || !/^[0-9a-f]{64}$/.test(text(row.anchor_hash))) return [];
+    return [{ id: text(row.id), version: Math.max(1, number(review?.version, number(row.proposal_version, 1))),
+      catalogId: text(row.catalog_id), targetSelectorId: text(row.target_selector_id), caseId: text(catalog.assess_case_id),
+      caseVersion: number(catalog.case_version), inputBundleId: text(run.input_bundle_id), inputBundleVersionId: text(run.input_bundle_version_id),
+      extractionJobId: text(row.extraction_job_id), extractionBindingId: text(row.extraction_binding_id), sourceId: text(row.source_id), sourceVersionId: text(row.source_version_id),
+      proposedValue, effectiveValue, confidence: number(row.confidence), rationale: short(row.rationale, 2_000) || undefined,
+      sourceAnchor: { sourceVersionId: text(row.source_version_id), parserVersion: short(row.parser_version, 120), locator: short(row.source_locator, 500), anchorHash: text(row.anchor_hash), safeExcerpt: short(row.safe_excerpt, 1_000) },
+      status, relationship: row.relationship, reviewState: review ? (text(review.reviewer_id) === authority.userId ? 'reviewed_by_you' as const : 'reviewed_by_another' as const) : 'pending' as const,
+      ...(review && Number.isFinite(Date.parse(text(review.created_at))) ? { reviewedAt: text(review.created_at) } : {}) }];
+  });
+  const proposalById = new Map(proposals.map(item => [item.id, item]));
+  const targetById = new Map(catalogs.flatMap(catalog => catalog.targets).map(target => [target.selectorId, target]));
+  const latestResolution = new Map<string, Row>();
+  raw.mappingConflictResolutions.forEach(resolution => { const id = text(resolution.conflict_id); if (id && !latestResolution.has(id)) latestResolution.set(id, resolution); });
+  const conflicts: AssessMappingConflictProjection[] = raw.mappingConflicts.flatMap(row => {
+    const target = targetById.get(text(row.target_selector_id)); const resolution = latestResolution.get(text(row.id));
+    const rawProposalIds = strings(row.proposal_ids); const proposalIds = rawProposalIds.filter(id => proposalById.has(id));
+    if (!target || !uuid.test(text(row.id)) || proposalIds.length < 1 || proposalIds.length !== rawProposalIds.length
+      || number(row.current_resolution_version) > 0 && number(resolution?.version, -1) !== number(row.current_resolution_version)) return [];
+    const resolutionKind = resolution?.resolution ?? 'unresolved';
+    if (!includes(['unresolved', 'choose_candidate', 'retain_manual', 'authored_resolution'] as const, resolutionKind)) return [];
+    const resolvedValue = resolutionKind === 'choose_candidate' ? proposalById.get(text(resolution?.chosen_proposal_id))?.effectiveValue
+      : resolutionKind === 'retain_manual' ? target.currentValue : resolution?.authored_value;
+    return [{ id: text(row.id), targetSelectorId: target.selectorId, label: target.label, proposalIds,
+      ...(target.currentValue !== undefined ? { currentValue: target.currentValue } : {}), material: true,
+      resolution: resolutionKind, ...(resolvedValue !== undefined && isAssessMappingJsonValue(resolvedValue) ? { resolvedValue } : {}),
+      ...(resolution ? { rationale: short(resolution.rationale, 2_000), resolutionVersion: number(resolution.version) } : { resolutionVersion: number(row.current_resolution_version) }) }];
+  });
+  const conflictsByBatch = new Map<string, AssessMappingConflictProjection[]>();
+  raw.mappingConflicts.forEach(row => { const projected = conflicts.find(item => item.id === text(row.id)); if (projected) conflictsByBatch.set(text(row.preview_batch_id), [...(conflictsByBatch.get(text(row.preview_batch_id)) || []), projected]); });
+  const applicationsByBatch = new Set(raw.mappingApplications.map(item => text(item.preview_batch_id)));
+  const manifestByBatch = new Map<string, Row>();
+  raw.mappingPreviewManifests.forEach(item => { const id = text(item.preview_batch_id); if (id && !manifestByBatch.has(id)) manifestByBatch.set(id, item); });
+  const proposalsByRun = new Map<string, AssessMappingProposalProjection[]>();
+  raw.mappingProposals.forEach(row => { const proposal = proposalById.get(text(row.id)); if (proposal) proposalsByRun.set(text(row.run_id), [...(proposalsByRun.get(text(row.run_id)) || []), proposal]); });
+  const sourcesByRun = new Map<string, Row[]>();
+  raw.mappingRunSources.forEach(source => sourcesByRun.set(text(source.run_id), [...(sourcesByRun.get(text(source.run_id)) || []), source]));
+  const runProjectionComplete = new Map<string, boolean>();
+  raw.mappingRuns.forEach(run => {
+    const safeResult = object(run.safe_result); const catalogTargets = targetsByCatalog.get(text(run.catalog_id)) || [];
+    const expectedProposals = number(safeResult.proposalCount, -1); const expectedTargets = number(safeResult.targetCount, -1); const expectedSources = number(safeResult.sourceCount, -1);
+    const sourceRows = sourcesByRun.get(text(run.id)) || []; const displayedProposals = proposalsByRun.get(text(run.id)) || [];
+    runProjectionComplete.set(text(run.id), expectedProposals >= 0 && expectedTargets >= 0 && expectedSources >= 0
+      && displayedProposals.length === expectedProposals && catalogTargets.length === expectedTargets && sourceRows.length === expectedSources);
+  });
+  const previews = raw.mappingPreviewBatches.flatMap(batch => {
+    const items = raw.mappingPreviewItems.filter(item => text(item.preview_batch_id) === text(batch.id));
+    const changes = items.flatMap(item => { const proposal = proposalById.get(text(item.proposal_id)); const target = targetById.get(text(item.target_selector_id));
+      if (!proposal || !target || !isAssessMappingJsonValue(item.reviewed_value) || proposal.version !== number(item.proposal_version)) return [];
+      const related = (conflictsByBatch.get(text(batch.id)) || []).filter(conflict => conflict.targetSelectorId === target.selectorId);
+      return [{ proposalId: proposal.id, targetSelectorId: target.selectorId, label: target.label,
+        ...(target.currentValue !== undefined ? { currentValue: target.currentValue } : {}), proposedValue: item.reviewed_value,
+        conflictState: related.some(conflict => conflict.proposalIds.length > 1) ? 'cross_source_conflict' as const : related.length ? 'manual_conflict' as const : 'none' as const }]; });
+    const manifestRow = manifestByBatch.get(text(batch.id));
+    if (!manifestRow || !uuid.test(text(batch.id)) || !uuid.test(text(batch.catalog_id)) || !uuid.test(text(batch.assess_case_id))
+      || !uuid.test(text(batch.input_bundle_id)) || !uuid.test(text(batch.input_bundle_version_id)) || !/^[0-9a-f]{64}$/.test(text(batch.catalog_hash))
+      || !Number.isFinite(Date.parse(text(batch.expires_at)))) return [];
+    const batchConflicts = conflictsByBatch.get(text(batch.id)) || [];
+    const manifest = { previewBatchId: text(manifestRow.preview_batch_id), manifestVersion: number(manifestRow.manifest_version), catalogId: text(manifestRow.catalog_id), catalogHash: text(manifestRow.catalog_hash),
+      caseId: text(manifestRow.assess_case_id), caseVersion: number(manifestRow.case_version), inputBundleId: text(manifestRow.input_bundle_id),
+      inputBundleVersionId: text(manifestRow.input_bundle_version_id), targetCount: number(manifestRow.target_count), sourceCount: number(manifestRow.source_count),
+      itemCount: number(manifestRow.item_count), reviewedCount: number(manifestRow.reviewed_count), conflictCount: number(manifestRow.conflict_count),
+      unresolvedConflictCount: number(manifestRow.unresolved_conflict_count), itemSetHash: text(manifestRow.item_set_hash),
+      conflictSetHash: text(manifestRow.conflict_set_hash), resolutionSetHash: text(manifestRow.resolution_set_hash), displayedSetHash: text(manifestRow.displayed_set_hash) };
+    const itemBindings = Array.isArray(manifestRow.item_bindings) ? manifestRow.item_bindings.filter(isRow) : [];
+    const conflictBindings = Array.isArray(manifestRow.conflict_bindings) ? manifestRow.conflict_bindings.filter(isRow) : [];
+    const resolutionBindings = Array.isArray(manifestRow.resolution_bindings) ? manifestRow.resolution_bindings.filter(isRow) : [];
+    const itemBindingsComplete = itemBindings.length === items.length && items.every(item => itemBindings.some(binding => canonicalProjectionJson(binding) === canonicalProjectionJson({
+      ordinal: number(item.ordinal), proposalId: text(item.proposal_id), proposalVersion: number(item.proposal_version), targetSelectorId: text(item.target_selector_id),
+      reviewedValue: item.reviewed_value, bindingHash: text(item.binding_hash),
+    })));
+    const conflictBindingsComplete = conflictBindings.length === raw.mappingConflicts.filter(item => text(item.preview_batch_id) === text(batch.id)).length
+      && raw.mappingConflicts.filter(item => text(item.preview_batch_id) === text(batch.id)).every(item => conflictBindings.some(binding => canonicalProjectionJson(binding) === canonicalProjectionJson({
+        conflictId: text(item.id), targetSelectorId: text(item.target_selector_id), kind: text(item.kind), proposalIds: strings(item.proposal_ids),
+        currentValueHash: text(item.current_value_hash), currentResolutionVersion: number(item.current_resolution_version),
+      })));
+    const currentResolutions = raw.mappingConflicts.filter(item => text(item.preview_batch_id) === text(batch.id) && number(item.current_resolution_version) > 0)
+      .map(item => latestResolution.get(text(item.id))).filter((item): item is Row => Boolean(item));
+    const resolutionBindingsComplete = resolutionBindings.length === currentResolutions.length && currentResolutions.every(item => resolutionBindings.some(binding => canonicalProjectionJson(binding) === canonicalProjectionJson({
+      conflictId: text(item.conflict_id), version: number(item.version), resolution: text(item.resolution),
+      chosenProposalId: uuid.test(text(item.chosen_proposal_id)) ? text(item.chosen_proposal_id) : null,
+      authoredValue: item.authored_value ?? null, rationale: text(item.rationale),
+    })));
+    const matchingRun = raw.mappingRuns.find(run => text(run.catalog_id) === text(batch.catalog_id)
+      && text(run.input_bundle_id) === text(batch.input_bundle_id) && text(run.input_bundle_version_id) === text(batch.input_bundle_version_id));
+    const matchingRunComplete = Boolean(matchingRun && runProjectionComplete.get(text(matchingRun.id)) === true);
+    const matchingRunSourceCount = matchingRun ? (sourcesByRun.get(text(matchingRun.id)) || []).length : -1;
+    const projectionComplete = manifest.previewBatchId === text(batch.id) && manifest.catalogId === text(batch.catalog_id)
+      && manifest.catalogHash === text(batch.catalog_hash) && manifest.caseId === text(batch.assess_case_id)
+      && manifest.caseVersion === number(batch.expected_case_version) && manifest.inputBundleId === text(batch.input_bundle_id)
+      && manifest.inputBundleVersionId === text(batch.input_bundle_version_id)
+      && manifest.targetCount === (targetsByCatalog.get(text(batch.catalog_id)) || []).length
+      && manifest.sourceCount === matchingRunSourceCount && manifest.itemCount === items.length
+      && manifest.reviewedCount === changes.length && manifest.conflictCount === batchConflicts.length
+      && manifest.unresolvedConflictCount === batchConflicts.filter(conflict => conflict.resolution === 'unresolved').length
+      && [manifest.itemSetHash, manifest.conflictSetHash, manifest.resolutionSetHash, manifest.displayedSetHash].every(value => /^[0-9a-f]{64}$/.test(value))
+      && manifest.manifestVersion >= 1 && itemBindingsComplete && conflictBindingsComplete && resolutionBindingsComplete
+      && new Set(items.map(item => text(item.proposal_id))).size === items.length && matchingRunComplete;
+    const status = !projectionComplete ? 'blocked' as const : applicationsByBatch.has(text(batch.id)) ? 'applied' as const
+      : Date.parse(text(batch.expires_at)) <= Date.now() ? 'stale' as const
+        : batchConflicts.some(conflict => conflict.resolution === 'unresolved') ? 'blocked' as const : 'ready' as const;
+    return [{ id: text(batch.id), catalogId: text(batch.catalog_id), catalogHash: text(batch.catalog_hash), caseId: text(batch.assess_case_id),
+      expectedCaseVersion: number(batch.expected_case_version), inputBundleId: text(batch.input_bundle_id), inputBundleVersionId: text(batch.input_bundle_version_id),
+      proposalIds: items.map(item => text(item.proposal_id)).filter(id => uuid.test(id)), changes, conflicts: batchConflicts, manifest, projectionComplete, status, expiresAt: text(batch.expires_at) }];
+  });
+  const runs = raw.mappingRuns.flatMap(run => {
+    if (![run.id, run.catalog_id, run.assess_case_id, run.input_bundle_id, run.input_bundle_version_id].every(value => uuid.test(text(value)))) return [];
+    const sourceRows = sourcesByRun.get(text(run.id)) || []; const safeResult = object(run.safe_result);
+    const rawFailure = text(run.failure_code) || text(safeResult.failureCode);
+    const warnings = strings(safeResult.warnings).slice(0, 40).map(warning => short(warning, 500));
+    const analyzedSources = (Array.isArray(safeResult.analyzedSources) ? safeResult.analyzedSources : []).slice(0, 20).flatMap(value => {
+      const source = object(value); const sourceWarnings = strings(source.warnings).slice(0, 40).map(warning => short(warning, 500));
+      if (!uuid.test(text(source.sourceId)) || !uuid.test(text(source.sourceVersionId)) || !short(source.parserVersion, 120)
+        || !Number.isSafeInteger(number(source.extractedByteCount, -1)) || number(source.extractedByteCount, -1) < 0
+        || !Number.isSafeInteger(number(source.sheetCount, -1)) || number(source.sheetCount, -1) < 0
+        || !Number.isSafeInteger(number(source.cellCount, -1)) || number(source.cellCount, -1) < 0) return [];
+      return [{ sourceId: text(source.sourceId), sourceVersionId: text(source.sourceVersionId), parserVersion: short(source.parserVersion, 120),
+        extractedByteCount: number(source.extractedByteCount), sheetCount: number(source.sheetCount), cellCount: number(source.cellCount), warnings: sourceWarnings }];
+    });
+    const state = run.status === 'claimed' ? 'processing' as const : run.status === 'staged' || run.status === 'committed' ? 'review_required' as const : run.status === 'failed' ? 'failed' as const : 'blocked' as const;
+    const failureCode = rawFailure === 'BUDGET_EXHAUSTED' ? 'BUDGET_EXHAUSTED' as const
+      : rawFailure === 'PROMPT_TOO_LARGE' ? 'SOURCE_TOO_LARGE' as const
+      : includes(['PROVIDER_UNSUPPORTED', 'SECRET_REFERENCE_UNSAFE', 'SECRET_UNAVAILABLE', 'ENDPOINT_UNSAFE', 'CAPABILITY_UNAVAILABLE'] as const, rawFailure)
+        ? 'PROVIDER_UNAVAILABLE' as const : undefined;
+    return [{ id: text(run.id), catalogId: text(run.catalog_id), caseId: text(run.assess_case_id), caseVersion: number(run.case_version),
+      inputBundleId: text(run.input_bundle_id), inputBundleVersionId: text(run.input_bundle_version_id), extractionJobIds: sourceRows.map(item => text(item.extraction_job_id)).filter(id => uuid.test(id)),
+      state, proposalCount: Math.max(0, number(safeResult.proposalCount)), projectionComplete: runProjectionComplete.get(text(run.id)) === true,
+      ...(warnings.length ? { warnings } : {}),
+      ...(analyzedSources.length ? { analyzedSources } : {}), ...(failureCode ? { failureCode } : {}), updatedAt: text(run.updated_at) || text(run.created_at) }];
+  });
+  return { schemaVersion: ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION,
+    features: { enabled, ...(!enabled ? { disabledReason: 'Supporting-document mapping is disabled for this workspace.' } : {}) },
+    catalogs, proposals, previews, conflicts, runs };
+};
+
 export const buildEnterpriseIntelligenceProjection = (
   authority: TenantContext,
   raw: EnterpriseIntelligenceRawProjection,
   generatedAt = new Date(),
 ): EnterpriseIntelligenceProjection => {
+  if (raw.deliveryWorkspace) assertEmbeddedProjectionScope(authority, raw.deliveryWorkspace);
+  if (raw.monitorApprovedBaselines) assertEmbeddedProjectionScope(authority, raw.monitorApprovedBaselines);
   const visibility = projectionVisibility(authority);
   const providers = visibility.providerVisible ? projectProviders(raw, authority.capabilities.includes('org.admin')) : [];
   const evidence = visibility.evidenceVisible
@@ -988,12 +1335,15 @@ export const buildEnterpriseIntelligenceProjection = (
   const assessDrafts = visibility.assessDraftsVisible ? projectAssessDrafts(raw) : [];
   const applications = visibility.applicationsVisible ? projectApplications(raw) : [];
   const studioDocuments = visibility.studioVisible ? projectStudio(raw) : [];
-  const deliveryPackages = visibility.deliveryVisible || visibility.monitorVisible ? projectDelivery(raw, authority.userId) : [];
-  const monitorBaselines = visibility.monitorVisible ? projectMonitor(raw, authority.userId) : [];
+  const deliveryPackages = visibility.deliveryVisible ? projectDelivery(raw, authority.userId) : [];
+  const monitorBaselines = visibility.monitorVisible
+    ? (raw.monitorApprovedBaselines ? projectCanonicalMonitor(raw) : projectMonitor(raw, authority.userId))
+    : [];
   const modernizationDecisions = visibility.modernizationVisible ? projectModernization(raw, authority.userId, applications) : [];
   const blueprints = visibility.modernizationVisible ? projectBlueprints(raw, authority.userId) : [];
   const commandActivity = projectCommandActivity(raw, authority);
   const transcriptFlow = projectTranscriptFlow(raw, authority, generatedAt);
+  const documentMapping = projectAssessDocumentMapping(raw, authority);
   const approvalResources = visibility.approvalVisible
     ? projectApprovalResources(raw, authority.userId, evidence.candidates, deliveryPackages, monitorBaselines, modernizationDecisions, blueprints)
     : [];
@@ -1004,8 +1354,9 @@ export const buildEnterpriseIntelligenceProjection = (
     : undefined;
   const projectionCollections = [providers, evidence.sources, evidence.candidates, assessDrafts, applications, studioDocuments, deliveryPackages, monitorBaselines, modernizationDecisions, blueprints,
     approvalResources, commandActivity, transcriptFlow.sourceVersions, transcriptFlow.sourceSets, transcriptFlow.inputBundles, transcriptFlow.journeys,
-    transcriptFlow.assessCandidates, transcriptFlow.assessConflicts, transcriptFlow.assessApplyPreviews, transcriptFlow.assessRuns];
-  const relevantCapabilities = authority.capabilities.filter(capability => /^(?:org|byok|security|evidence|assessment|assess|transcript|docs|studio|project|monitor|assemble|approvals|portfolio)\./.test(capability));
+    transcriptFlow.assessCandidates, transcriptFlow.assessConflicts, transcriptFlow.assessApplyPreviews, transcriptFlow.assessRuns,
+    documentMapping.catalogs, documentMapping.proposals, documentMapping.previews, documentMapping.conflicts, documentMapping.runs];
+  const relevantCapabilities = authority.capabilities.filter(capability => /^(?:org|byok|security|evidence|assessment|assess|transcript|docs|studio|project|delivery|monitor|assemble|approvals|portfolio)\./.test(capability));
   return {
     schemaVersion: ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
     organizationId: authority.organizationId,
@@ -1022,11 +1373,14 @@ export const buildEnterpriseIntelligenceProjection = (
     studioDocuments,
     deliveryPackages,
     monitorBaselines,
+    ...(visibility.deliveryVisible && raw.deliveryWorkspace ? { deliveryWorkspace: raw.deliveryWorkspace } : {}),
+    ...(visibility.monitorVisible && raw.monitorApprovedBaselines ? { monitorApprovedBaselines: raw.monitorApprovedBaselines } : {}),
     modernizationDecisions,
     blueprints,
     approvalResources,
     commandActivity,
     transcriptFlow,
+    documentMapping,
     assessPromotion: assessPromotionAuthorized ? {
       state: promotionActivity?.status === 'committed' ? 'promoted' : promotionActivity ? 'conflict' : 'contract_pending',
       acceptedCandidateCount: accepted.length,
@@ -1047,10 +1401,66 @@ const parseRequest = (value: unknown) => {
   if (!isRow(value) || Object.keys(value).some(key => !requestKeys.includes(key))) return null;
   if (typeof value.organizationId !== 'string' || !uuid.test(value.organizationId) || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)) return null;
   if (value.expectedAuthorizationVersion !== undefined && (!Number.isSafeInteger(value.expectedAuthorizationVersion) || number(value.expectedAuthorizationVersion) < 1)) return null;
+  let deliveryItemPage: DeliveryItemPageRequest | undefined;
+  if (value.deliveryItemPage !== undefined) {
+    if (!isRow(value.deliveryItemPage)
+      || Object.keys(value.deliveryItemPage).some(key => !['packageId', 'cursor', 'limit'].includes(key))
+      || typeof value.deliveryItemPage.packageId !== 'string'
+      || !uuid.test(value.deliveryItemPage.packageId)
+      || !isRow(value.deliveryItemPage.cursor)
+      || Object.keys(value.deliveryItemPage.cursor).some(key => !['version', 'id'].includes(key))
+      || !Number.isSafeInteger(value.deliveryItemPage.cursor.version)
+      || number(value.deliveryItemPage.cursor.version) < 1
+      || typeof value.deliveryItemPage.cursor.id !== 'string'
+      || !uuid.test(value.deliveryItemPage.cursor.id)
+      || !Number.isSafeInteger(value.deliveryItemPage.limit)
+      || number(value.deliveryItemPage.limit) < 1
+      || number(value.deliveryItemPage.limit) > DELIVERY_ITEM_PAGE_MAX) return null;
+    deliveryItemPage = {
+      packageId: value.deliveryItemPage.packageId,
+      cursor: { version: number(value.deliveryItemPage.cursor.version), id: value.deliveryItemPage.cursor.id },
+      limit: number(value.deliveryItemPage.limit),
+    };
+  }
+  let deliveryBaselineEligibilityPage: DeliveryBaselineEligibilityPageRequest | undefined;
+  if (value.deliveryBaselineEligibilityPage !== undefined) {
+    if (!isRow(value.deliveryBaselineEligibilityPage)
+      || Object.keys(value.deliveryBaselineEligibilityPage).some(key => !['cursor', 'limit'].includes(key))
+      || !isRow(value.deliveryBaselineEligibilityPage.cursor)
+      || Object.keys(value.deliveryBaselineEligibilityPage.cursor).some(key => !['updatedAt', 'workPackageId'].includes(key))
+      || typeof value.deliveryBaselineEligibilityPage.cursor.updatedAt !== 'string'
+      || !Number.isFinite(Date.parse(value.deliveryBaselineEligibilityPage.cursor.updatedAt))
+      || typeof value.deliveryBaselineEligibilityPage.cursor.workPackageId !== 'string'
+      || !uuid.test(value.deliveryBaselineEligibilityPage.cursor.workPackageId)
+      || !Number.isSafeInteger(value.deliveryBaselineEligibilityPage.limit)
+      || number(value.deliveryBaselineEligibilityPage.limit) < 1
+      || number(value.deliveryBaselineEligibilityPage.limit) > 100) return null;
+    deliveryBaselineEligibilityPage = {
+      cursor: {
+        updatedAt: value.deliveryBaselineEligibilityPage.cursor.updatedAt,
+        workPackageId: value.deliveryBaselineEligibilityPage.cursor.workPackageId,
+      },
+      limit: number(value.deliveryBaselineEligibilityPage.limit),
+    };
+  }
+  let assessDocumentMappingScope: EnterpriseIntelligenceQueryOptions['assessDocumentMappingScope'];
+  if (value.assessDocumentMappingScope !== undefined) {
+    const scope = value.assessDocumentMappingScope;
+    if (!isRow(scope) || Object.keys(scope).some(key => !['caseId', 'caseVersion', 'inputBundleId', 'inputBundleVersionId'].includes(key))
+      || typeof scope.caseId !== 'string' || !uuid.test(scope.caseId) || !Number.isSafeInteger(scope.caseVersion) || number(scope.caseVersion) < 1
+      || (scope.inputBundleId === undefined) !== (scope.inputBundleVersionId === undefined)
+      || (scope.inputBundleId !== undefined && (typeof scope.inputBundleId !== 'string' || !uuid.test(scope.inputBundleId)))
+      || (scope.inputBundleVersionId !== undefined && (typeof scope.inputBundleVersionId !== 'string' || !uuid.test(scope.inputBundleVersionId)))) return null;
+    assessDocumentMappingScope = { caseId: scope.caseId, caseVersion: number(scope.caseVersion),
+      ...(typeof scope.inputBundleId === 'string' ? { inputBundleId: scope.inputBundleId, inputBundleVersionId: String(scope.inputBundleVersionId) } : {}) };
+  }
   return {
     organizationId: value.organizationId,
     workspaceId: value.workspaceId,
     expectedAuthorizationVersion: value.expectedAuthorizationVersion as number | undefined,
+    ...(deliveryItemPage ? { deliveryItemPage } : {}),
+    ...(deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage } : {}),
+    ...(assessDocumentMappingScope ? { assessDocumentMappingScope } : {}),
   };
 };
 
@@ -1072,7 +1482,11 @@ export const handleEnterpriseIntelligenceQuery = async (request: Request, depend
   if (!parsed) return json(400, { code: 'INVALID_REQUEST' });
   try {
     const authority = await resolveTenantAuthority(user.id, parsed, dependencies.authorityDatabase);
-    const raw = await dependencies.queryDatabase.loadProjectionRows(authority);
+    const raw = await dependencies.queryDatabase.loadProjectionRows(authority, {
+      ...(parsed.deliveryItemPage ? { deliveryItemPage: parsed.deliveryItemPage } : {}),
+      ...(parsed.deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage: parsed.deliveryBaselineEligibilityPage } : {}),
+      ...(parsed.assessDocumentMappingScope ? { assessDocumentMappingScope: parsed.assessDocumentMappingScope } : {}),
+    });
     return json(200, { projection: buildEnterpriseIntelligenceProjection(authority, raw, dependencies.now?.() || new Date()) });
   } catch (error) {
     if (error instanceof TenantAuthorityError) return json(error.code === 'AUTHORIZATION_STALE' ? 409 : 403, { code: error.code });

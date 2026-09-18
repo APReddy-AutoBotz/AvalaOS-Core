@@ -1,10 +1,75 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+AP subsequently approved the local AI correction's same-branch commit/push,
+exact-head CI and separate USD 0/month Mumbai synthetic AI project. Follow
+`docs/planning/assess-studio-ai-output-correction.md` for isolation, aggregate
+USD 10 spending and rollback gates. Existing provider-free targets stay unchanged;
+merge, document approval/handoff and production remain outside scope.
+
+## Local synthetic AI-output continuation
+
+The approved 2026-09-17 correction is owned by
+`docs/planning/assess-studio-ai-output-correction.md`. Correct prompt/output
+contracts and local budget accounting together, retain failed attempts, and test
+production component functions before claiming AI usefulness. No hosted activation
+or readiness promotion follows from local component success.
+
+
+## Native Assess supporting-document implementation
+
+The current exploratory release hold is the PostgREST transaction/actual-actor
+correction in `docs/quality/assess-projection-transaction-correction-evidence.md`.
+Head `484ce7a7bc897180043a395254991b57a05bdbc5` passed all 18 applicable workflows,
+but actual upload remained blocked before any new effects. The same substantial
+PR now adds an atomic two-RPC volatility migration, actual HTTP regression and
+corrected operator identity/receipt proof. The canonical gates expand to 23 native
+commands and 81 PR C commands; current-source results are recorded separately.
+Do not repeat resets or promote prior green suites to hosted upload readiness.
+Final corrected local source passed 23/23 native commands and 32/32 Desktop/Pixel
+scenarios with retained authority/recovery and evidence-adversary gates. Next:
+one coherent same-branch commit, exact-head CI including all 81 PR C commands,
+then only the separately approved exploratory migration/draft/browser proof.
+
+Release continuation: corrected head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable exact-head workflows; the separate hosted-live workflow remained intentionally skipped. The approved exploratory target received the 77-migration chain, source-verified functions and an immutable draft, preserving its six accounts and zero provider configurations. Actual browser testing then exposed a confirmed query/schema defect: relationship reviews selected `created_by` instead of canonical `reviewer_id`, stopping the projection before upload. The failed attempt and bounded production-query/schema-regression correction are recorded in `docs/quality/assess-document-mapping-projection-correction-evidence.md`. Upload/analysis readiness is not claimed; corrected-source local, CI and exploratory retry gates remain mandatory. The frozen controlled-human backend remains untouched.
+
+The approved 2026-09-16 continuation is `docs/planning/assess-supporting-document-mapping.md`: bounded document/CSV/XLSX intake, typed governed AI mapping, native Assess review/edit/conflict UI and exact-version atomic apply. The local implementation and 22-command feature gate are complete; exact results and remaining external proof boundaries are in `docs/quality/assess-supporting-document-mapping-evidence.md`. Keep implementation, forward migration, tests, evidence and rollback in the existing substantial PR boundary. All read-only architecture/security/quality findings were synthesized before each corrective write phase; the controller retains integration and acceptance authority. AP subsequently approved commit/push, exact-head CI and separate exploratory synthetic preview activation; those gates require their own exact-source evidence. Source defaults remain off. No source/test result is a hosted, real-provider, human-acceptance or production claim.
+
+## Current focused continuation
+
+AP's 2026-09-15 creation-access approval is implemented and locally verified under
+`docs/planning/creation-access-synthetic-admin-remediation.md` in the existing
+substantial branch; results are in `docs/quality/creation-access-remediation-evidence.md`.
+The process command, canonical creation routing, permission-aware UI and bounded
+synthetic Admin slice have passed local gates. AP subsequently approved the separate
+exploratory target/cost/bootstrap. Its 75-migration chain and actual joined Admin
+provisioning/author/process/V2 save-and-reopen/signout journey passed on immutable
+draft head `3352f5ffeb08d493ec6202ce65dae28608e07502`, with independently cross-bound
+SQL readback and zero provider traffic. Creation-access CI on that head passed.
+The fresh-tip and blocked-route corrections passed their focused gates at
+`c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c`; all 28 creation-access CI commands passed.
+Corrected Sandbox fixtures now exercise actual separate Admin and Intelligence
+navigation and a real saved incomplete assessment. They exposed a local App
+capability-reconciliation defect; its local-only correction and guarded Admin
+transition passed 86 browser checks, preserving 30 explicit server-only skips.
+All 20 selected canonical authority/regression/static/coverage commands and final
+read-only reviews passed. Next verify the committed correction through the full
+exact-head CI and preview pipelines. Keep the usable exploratory draft
+pinned to its tested source until any replacement independently passes.
+Do not alter the existing
+PR264 twelve-persona backend, interpret exploratory accounts as three independent
+human testers, or promote old exact-head evidence to the changed source.
+
 ## Governed multi-source transcript sequence
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted boundary covers the default-off Source Library, independently versioned Assess source sets and locked bundles, transcript-assisted Assess review/apply, the unified provider registry and atomic budget authority, Desktop/Pixel browser evidence, all 15 applicable workflows, Netlify preview, and fresh independent review. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
 
-Governed multi-source transcript PR B is the active substantial implementation boundary. It owns independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess handoff, governed tenant templates, structured editing and source coverage, Studio adoption of the unified provider gateway, exact lineage/backfill, and feature-owned verification. PR C Delivery/Monitor generalization remains separately gated and is not part of PR B.
+Governed multi-source transcript PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through post-PR-B `main` `5433cad41721355e3ec5a29bc2f87772540c77b5`. It owns independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess handoff, governed tenant templates, structured editing and source coverage, Studio adoption of the unified provider gateway, exact lineage/backfill, and its immutable feature-owned evidence.
+
+Governed Delivery and Monitor PR C is the active substantial implementation boundary from `5433cad41721355e3ec5a29bc2f87772540c77b5`. It owns the additive Delivery source-package union, explicit target-accepted Studio-to-Delivery handoff, manual `not_assessed` / `planning_only` Delivery, immutable item revisions and terminal human decisions, version-bound Delivery review/approval, exact accepted-item-set Monitor baselines, and one read-only canonical Monitor projection. It must preserve PR A/PR B evidence and legacy lineage, remain default off, and complete its feature-owned migration, security, browser, performance, evidence, rollback, and retained-regression gates inside the same substantial PR.
+
+The corrective continuation in PR #264 is merge-blocked until the production UI can recover a reviewer-blocked package from a completely loaded and exactly bound descendant set, only materially changed selected descendants can be authored, and the new package version traverses fresh item decisions, review, and approval before Monitor changes. The same candidate must synchronously isolate all sensitive/draft Enterprise Intelligence browser state across organization/workspace/actor changes and bind every evidence assertion, `not_run` record, and command result to the canonical workflow path, run ID, attempt, base, exact head, runtime context, and artifact path derived independently from the execution environment. Final-review hardening additionally requires deletion/rename-aware evidence scope, currently authorized exact committed replay before mutable runtime gates but after authority checks, UUID-semantic equality across requested/outer/nested Delivery and Monitor projections, unique novel recovery-result item-version identities across the complete predecessor set, and production client adapters that remove only the tenant transport envelope before strict action-selector validation. Stable repository documents define this contract; run-specific acceptance is published through the immutable CI artifact and the existing PR description after commit.
+
+AP authority added on 2026-09-04 is limited to controlled-human preparation and execution for PR #264 on the exact Deploy Preview plus one dedicated synthetic `hosted_nonproduction_pilot` backend. It does not authorize production, AvalaOS.com/custom domains, customer/external-user data, real provider keys/calls, broad reset, promotion, readiness, or merge. The preview client must bind the exact head/deploy/exercise/backend and migration tip `20260904120000` to a server attestation before authentication or server projection; the permanent stable-site production-context guard remains separately fail closed and never activates controlled-human variables. The human gate remains `not_run` until three distinct humans finish every signed checkpoint, bounded deprovision is verified, and all exact-head gates pass. Final merge still requires a new AP confirmation.
 
 ## Studio PR B accepted boundary
 
@@ -15,7 +80,7 @@ Studio PR B is accepted through PR #217 and corrective PR #218 on verified main 
 Studio PR A owns governed artifact generation, immutable revision/review, and separate final approval over exact accepted PR 1E ancestry. PR 1G remains accepted. The accepted Studio PR B boundary above owns private storage, rendition, brokered download, retention, hold, deletion, and reconciliation source authority. Provider execution is staged outside PostgreSQL atomicity; rollback disables mutations/provider use while retaining read-only committed authority. Legacy `document_generations` remains unverified.
 
 
-Status: active plan; the accepted sequence includes PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B is authorized and active; PR C remains separately gated
+Status: active plan; PR #255 is accepted at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized Governed Delivery and Monitor PR C corrective continuation and remains merge NO-GO with exact-head evidence pending
 Rebaseline source: `main` at `4cf0a8c5c566d5bcf9035c87ce456b354bc0ee68`
 Plan date: 2026-07-10
 

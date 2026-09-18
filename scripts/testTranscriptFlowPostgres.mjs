@@ -4,6 +4,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
+import {assertEnterpriseProjectionSchema,assertEnterpriseProjectionDatabaseColumns,extractEnterpriseProjectionSchemaContract} from './enterpriseProjectionSchemaContract.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -83,11 +84,23 @@ try{
   for(const name of migrations)await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
   assert.ok(Number((await database.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000);
 
+  const enterpriseProjectionSource=await readFile('supabase/functions/_shared/enterpriseIntelligenceQuery.ts','utf8');
+  const projectionSchemaContract=await assertEnterpriseProjectionSchema(database,enterpriseProjectionSource);
+  assert.equal(projectionSchemaContract.siteCount,51);
+  const relationshipSelection='enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+  assert.equal(enterpriseProjectionSource.split(relationshipSelection).length-1,1,
+    'Relationship review projection must have one exact reviewer-backed selector');
+  const substitutedProjectionSource=enterpriseProjectionSource.replace(relationshipSelection,
+    relationshipSelection.replace('reviewer_id','created_by'));
+  await assert.rejects(assertEnterpriseProjectionDatabaseColumns(database,extractEnterpriseProjectionSchemaContract(substitutedProjectionSource)),
+    /ENTERPRISE_PROJECTION_SCHEMA_MISSING_COLUMN:enterprise_evidence_candidate_relationship_reviews\.created_by/);
+  console.log('PASS production Enterprise projection selectors match the migrated PostgreSQL schema and reject the reviewer owner substitution');
+
   const fixture=await createEnterpriseIntelligenceFixture(database);
   await database.query(
     `INSERT INTO public.role_capabilities(role_id,capability_key)
      SELECT $1,unnest($2::text[]) ON CONFLICT DO NOTHING`,
-    [fixture.routeRole,['transcript.sources.read','transcript.sources.manage','transcript.assess.apply','transcript.journeys.manage','assess.v2.read','studio.sources.manage']],
+    [fixture.routeRole,['transcript.sources.read','transcript.sources.manage','transcript.assess.apply','transcript.journeys.manage','assess.v2.read','assess.v2.draft.write','studio.sources.manage']],
   );
   const runtimeIdentityResult=await database.query(
     `SELECT
@@ -424,11 +437,11 @@ try{
     const receipt=await claim('transcript.assess.candidate.review',label);
     return (await database.query(
       `SELECT public.enterprise_transcript_review_assess_candidate_v2(
-        $1,$2,$3,$4,1,$5,$6,$7,$8,$9,$10,$11,'neutral','create_primitive',$12,$13,$14,$15,$16,$17,$18,$19
+        $1,$2,$3,$4,1,$5,$6,$7,$8,$9,$10,$11,'neutral','set_case_field',$12,$13,$14,$15,$16,$17,$18,$19
       ) result`,
       [candidate.candidateId,current,candidate.lineage.bundleId,candidate.lineage.bundleVersionId,
         candidate.lineage.sourceSetId,candidate.lineage.sourceSetVersionId,candidate.lineage.sourceSetVersion,
-        candidate.source.sourceVersionId,status,value,'Independent transcript review','primitive',fixture.requester,fixture.org,fixture.workspace,
+        candidate.source.sourceVersionId,status,value,'Independent transcript review','name',fixture.requester,fixture.org,fixture.workspace,
         authorizationVersion,receipt.id,receipt.execution_token,receipt.execution_fence],
     )).rows[0].result;
   };
@@ -454,7 +467,7 @@ try{
     };
   });
 
-  const assessProcess=nextUuid();const assessCase=nextUuid();const assessVersion=nextUuid();const primitiveId=nextUuid();
+  const assessProcess=nextUuid();const assessCase=nextUuid();const assessVersion=nextUuid();
   const sourceSnapshot={preserved:true,source:'manual'};const importedFacts=[{key:'manual',value:'preserved'}];const agentNecessity={irreducibleAmbiguity:true};
   await database.query("INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,'Transcript Assess','Draft')",[assessProcess,fixture.org,fixture.workspace]);
   await database.query(
@@ -473,13 +486,27 @@ try{
   const exactSourceSetLineage=[{
     sourceSetId:firstSetId,sourceSetVersionSelector:firstV2.sourceSetVersionId,expectedVersion:2,ordinal:1,
   }];
+  // Legacy safe scalars retain their actual conflict/replay coverage. Structural
+  // objects must use the new typed catalog, independently exercised by the
+  // supporting-document mapping PG suite, never the old {id,label} adapter.
+  const legacyStructuralReceipt=await claim('transcript.assess.apply.preview','legacy-structural-rejected');
+  await assert.rejects(database.query(
+    `SELECT public.enterprise_transcript_create_assess_apply_preview_batch_v2(
+      $1,$2,1,$3,$4,1,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13
+    )`,
+    [nextUuid(),assessCase,bundleId,bundle.inputBundleVersionId,JSON.stringify(exactSourceSetLineage),JSON.stringify([
+      {candidateId:candidateA.candidateId,candidateVersion:1,intent:'create_primitive',target:nextUuid()},
+    ]),fixture.requester,fixture.org,fixture.workspace,authorizationVersion,legacyStructuralReceipt.id,legacyStructuralReceipt.execution_token,legacyStructuralReceipt.execution_fence],
+  ),/ENTERPRISE_TRANSCRIPT_TYPED_MAPPING_REQUIRED/);
+  assert.equal((await database.query('SELECT count(*)::int n FROM public.enterprise_assess_apply_preview_batches WHERE assess_case_id=$1',[assessCase])).rows[0].n,0);
+  assert.equal((await database.query('SELECT count(*)::int n FROM public.assess_v2_case_versions WHERE case_id=$1',[assessCase])).rows[0].n,1);
   const preview=(await database.query(
     `SELECT public.enterprise_transcript_create_assess_apply_preview_batch_v2(
       $1,$2,1,$3,$4,1,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13
     ) result`,
     [previewBatchId,assessCase,bundleId,bundle.inputBundleVersionId,JSON.stringify(exactSourceSetLineage),JSON.stringify([
-      {candidateId:candidateA.candidateId,candidateVersion:1,intent:'create_primitive',target:primitiveId},
-      {candidateId:candidateB.candidateId,candidateVersion:2,intent:'create_primitive',target:primitiveId},
+      {candidateId:candidateA.candidateId,candidateVersion:1,intent:'set_case_field',target:'name'},
+      {candidateId:candidateB.candidateId,candidateVersion:2,intent:'set_case_field',target:'name'},
     ]),fixture.requester,fixture.org,fixture.workspace,authorizationVersion,previewReceipt.id,previewReceipt.execution_token,previewReceipt.execution_fence],
   )).rows[0].result;
   const materialConflict=(await database.query(
@@ -494,8 +521,8 @@ try{
     candidates:[{id:candidateA.candidateId,version:1},{id:candidateB.candidateId,version:2}].sort((a,b)=>a.id.localeCompare(b.id)),
     previewBatchIds:includePreview?[previewBatchId]:[],assessDrafts:[{id:assessCase,version:draftVersion}],
   });
-  await scenario(['ASSESS-TR-005','ASSESS-TR-006'],'competing source proposals create one unresolved material conflict',async()=>{
-    assert.equal(preview.status,'conflict_unresolved');assert.equal(preview.materialConflictCount,1);
+  await scenario(['ASSESS-TR-005','ASSESS-TR-006'],'safe scalar proposals retain manual and cross-source unresolved conflicts',async()=>{
+    assert.equal(preview.status,'conflict_unresolved');assert.equal(preview.materialConflictCount,3);
     assert.equal(preview.previewBatchId,previewBatchId);
     assert.ok(materialConflict);assert.deepEqual([...materialConflict.candidate_ids].sort(),[candidateA.candidateId,candidateB.candidateId].sort());
     const commitReceipt=await claim('transcript.assess.apply.commit','blocked-commit');
@@ -543,6 +570,21 @@ try{
       resolveReceipt.id,resolveReceipt.execution_token,resolveReceipt.execution_fence],
   )).rows[0].result;
   assert.equal(resolution.status,'resolved');
+  const manualConflicts=(await database.query(
+    'SELECT id,candidate_ids FROM public.enterprise_assess_evidence_conflicts WHERE assess_case_id=$1 AND cardinality(candidate_ids)=1 ORDER BY id',[assessCase],
+  )).rows;
+  assert.equal(manualConflicts.length,2);
+  for(const [index,conflict] of manualConflicts.entries()){
+    const manualReceipt=await claim('transcript.assess.conflict.resolve',`manual-conflict-${index}`);
+    const resolved=(await database.query(
+      `SELECT public.enterprise_transcript_resolve_assess_conflict(
+        $1,0,'choose_candidate',$2,NULL,'Explicitly review the candidate against the current manual name',$3,$4,$5,$6,$7,$8,$9
+      ) result`,
+      [conflict.id,conflict.candidate_ids[0],fixture.requester,fixture.org,fixture.workspace,authorizationVersion,
+        manualReceipt.id,manualReceipt.execution_token,manualReceipt.execution_fence],
+    )).rows[0].result;
+    assert.equal(resolved.status,'resolved');
+  }
   const commitReceipt=await claim('transcript.assess.apply.commit','apply-commit');
   const applied=(await database.query(
     `SELECT public.enterprise_transcript_commit_assess_apply_preview_batch_v2(
@@ -558,7 +600,8 @@ try{
     )).rows[0];
     assert.deepEqual(version.source_snapshot,sourceSnapshot);assert.deepEqual(version.imported_facts,importedFacts);assert.deepEqual(version.agent_necessity,agentNecessity);
     assert.equal(version.description,'Manual-only description');
-    assert.equal((await database.query('SELECT count(*)::int n FROM public.assess_v2_primitives WHERE version_id=$1 AND id=$2',[applied.caseVersionId,primitiveId])).rows[0].n,1);
+    assert.equal(version.name,'Govern review and approval');
+    assert.equal((await database.query('SELECT count(*)::int n FROM public.assess_v2_primitives WHERE version_id=$1',[applied.caseVersionId])).rows[0].n,0);
     assert.deepEqual((await database.query(
       'SELECT application_outcome FROM public.enterprise_assess_candidate_applications WHERE assess_case_id=$1 ORDER BY batch_ordinal',[assessCase],
     )).rows.map(row=>row.application_outcome),['applied','not_applied']);
