@@ -1,5 +1,31 @@
 # Assess and Studio AI output correction
 
+## Active mapping claim correction (2026-09-18)
+
+Executed synthetic UI evidence now proves TXT upload, a locked Assess source set
+and input bundle, and one real OpenAI validation. The mapping attempt failed
+closed before provider debit: PostgreSQL-owned JSONB hashes were compared with
+incompatible compact TypeScript hashes, and SQL omitted null-valued target keys.
+The failed receipt, run and catalog are retained; no proposals were created.
+Three read-only architecture, security and quality reviews have closed.
+
+The bounded correction introduces a production claim decoder shared by initial
+and recovery paths. Preserve database hash authority without changing SQL hashes
+or migrations. Validate exact run/catalog identity, coherent state, every target
+semantic field and ordered source metadata; normalize only an omitted value whose
+expected value is null. Reject substitution before any permit, secret or network
+effect. Add a real TXT-parser/request-binding/PostgreSQL/decoder bridge and
+adversarial tests, then run the canonical local gates and independent review.
+
+Provider execution is disabled during repair. The local paid ledger is sealed;
+the hosted aggregate conservative charge is USD 1.3407792 of USD 10, including
+one USD 0.4714592 validation debit and the USD 0.86932 carry. Invoice cost is not
+proven. Preserve the immutable campaign expiry and budget; no reset or refund.
+Retry only after corrected exact-head checks and synthetic-only source deployment,
+using a fresh idempotency key. Do not rewrite the failed history. Rollback is
+provider-disabled/read-only mapping with retained data, not destructive cleanup.
+Full hosted mapping and Studio UI acceptance remain not run successfully.
+
 ## Approved hosted campaign safeguards continuation
 
 AP approved implementing target authority and aggregate-budget safeguards. The

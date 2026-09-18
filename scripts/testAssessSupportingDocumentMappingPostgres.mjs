@@ -10,6 +10,7 @@ import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.
 import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 import {expectDatabaseError} from './assessDocumentPostgresTestGuards.mjs';
 import {PROJECTION_RPC_CORRECTION} from './projectionRpcPostgrestContract.mjs';
+import {verifyAssessMappingClaimPostgresBridge} from './assessMappingClaimPostgresBridge.mjs';
 
 const adminUrl=validateAssessImportDatabaseUrl(process.env.ASSESS_DOCUMENT_MAPPING_POSTGRES_ADMIN_URL);
 
@@ -313,6 +314,11 @@ try{
   await database.query('UPDATE public.enterprise_transcript_workspace_flags SET assess_document_mapping_enabled=true WHERE org_id=$1 AND workspace_id=$2',[fixture.org,fixture.workspace]);
   pass('MAP-PG-002-default-off-zero-effects','disabled claim rejects before mapping persistence');
 
+  const bridge=await verifyAssessMappingClaimPostgresBridge({database,fixture,caseId,routeId,authorizationVersion,nextUuid,
+    draft:{caseId,name:'Mapping fixture',description:'Manual baseline description',primitives:[primitive],edges:[],decisionPoints:[],exceptionPaths:[],applicationAssets:[asset],interactions:[interaction],evidenceLinks:[{id:oldEvidenceId,claimIds:['primitive.ambiguityCharacterized'],sourceType:'document',status:'submitted',validated:false}],agentNecessity,candidateEvaluations:[],gateResults:[],controlRequirements:[],modernizationDispositions:[]}});
+  assert.ok(bridge.targets>1);assert.equal(bridge.mutants,14);
+  pass('MAP-PG-016-real-claim-edge-contract','production TXT parser, request binding and catalog accept real SQL hash/null semantics; fourteen response mutations and two foreign scopes reject without secret/network/provider effects');
+
   const zeroRun=nextUuid(),zeroCatalog=nextUuid(),zeroReceipt=await receipt('assess.document-map.analyze','zero');const zeroTargets=[target(nextUuid(),{catalogId:zeroCatalog,targetKind:'evidence_only',operation:'link_evidence',fieldId:'evidence',label:'Evidence only',contextLabel:'Fixture',valueType:'evidence',currentValue:null,manual:false})];
   const zeroClaim=await claimRun({runId:zeroRun,catalogId:zeroCatalog,targets:zeroTargets,claimReceipt:zeroReceipt});assert.notEqual(zeroClaim.catalogHash,'f'.repeat(64));
   const zeroAnalyzed=zeroClaim.sourceBindings.map(item=>({sourceId:item.sourceId,sourceVersionId:item.sourceVersionId,parserVersion:item.parserVersion,extractedByteCount:item.extractedByteCount,sheetCount:item.sheetCount,cellCount:item.cellCount,warnings:item.warnings}));
@@ -444,7 +450,7 @@ try{
   const beforeLegacy=Number((await database.query('SELECT count(*) n FROM public.assess_v2_case_versions WHERE case_id=$1',[caseId])).rows[0].n);await expectDatabaseError(()=>database.query(`SELECT public.enterprise_transcript_create_assess_apply_preview_batch_v2($1,$2,2,$3,$4,1,'[]'::jsonb,$5::jsonb,$6,$7,$8,$9,$10,$11,$12)`,[nextUuid(),caseId,bundleId,bundleVersionId,json([{intent:'create_primitive',target:'primitive'}]),fixture.requester,fixture.org,fixture.workspace,authorizationVersion,nextUuid(),nextUuid(),1]),/ENTERPRISE_TRANSCRIPT_TYPED_MAPPING_REQUIRED/);assert.equal(Number((await database.query('SELECT count(*) n FROM public.assess_v2_case_versions WHERE case_id=$1',[caseId])).rows[0].n),beforeLegacy);
   pass('MAP-PG-008-revoked-and-legacy','revoked/stale authority and legacy structural bypass reject with zero Assess effects');
 
-  assert.equal(passed.length,15);console.log(`Assess supporting-document mapping PostgreSQL scenarios: ${passed.length}/${passed.length} passed.`);
+  assert.equal(passed.length,16);console.log(`Assess supporting-document mapping PostgreSQL scenarios: ${passed.length}/${passed.length} passed.`);
 }finally{
   for(const client of clients.slice().reverse())try{await client.end()}catch{}
   if(admin){const cleanup=new Client({connectionString:adminUrl});try{await cleanup.connect();await cleanup.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()',[databaseName]);await cleanup.query(`DROP DATABASE IF EXISTS ${databaseName}`)}finally{await cleanup.end().catch(()=>{})}}

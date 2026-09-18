@@ -42,16 +42,17 @@ import {
 import { resolveEnterpriseProviderRoute } from './providerResolver.ts';
 import { buildEnterpriseProviderRouteDbDeps } from './providerResolverDb.ts';
 import { classifyEvidenceExtractionFailure, extractEvidenceText, extractStructuredSpreadsheet, decodeBase64, sha256Hex } from './enterpriseIntelligenceIngestion.ts';
-import { ASSESS_DOCUMENT_MAPPING_MAX_PROVIDER_BYTES, ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION, isAssessMappingJsonValue, type AssessMappingJsonValue, type AssessMappingPreviewManifest, type AssessMappingTargetDescriptor } from '../../../services/assessImport/contracts.ts';
-import { canonicalAssessMappingValue } from '../../../services/assessImport/mapping.ts';
+import { ASSESS_DOCUMENT_MAPPING_MAX_PROVIDER_BYTES, ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION, isAssessMappingJsonValue, type AssessMappingJsonValue, type AssessMappingPreviewManifest } from '../../../services/assessImport/contracts.ts';
 import { buildAssessMappingTargetBlueprints, type AssessMappingDraft } from '../../../services/assessImport/targetRegistry.ts';
 import { parseAssessV2DraftPayload } from './assessV2Command.ts';
 import {
   buildAssessDocumentMappingTaskInstruction,
   buildAssessMappingCatalog,
+  decodeAssessMappingClaimResponse,
   decodeGroundedAssessMappingProposalResult,
   frameAssessMappingSources,
   type AssessMappingDecodedSource,
+  type AssessMappingExpectedSourceBinding,
 } from './assessDocumentMapping.ts';
 import {
   claimEnterpriseReceipt,
@@ -2910,7 +2911,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
   });
   const route = await resolveRoute(authority, 'assess.evidence.extract', payload.providerConfigId === undefined ? undefined : requireUuid(payload.providerConfigId));
   const promptVersion = ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION;
-  const sourceBindings = sourceRows.map(row => ({ ...row.selection, parserVersion: row.parserVersion, normalizedHash: row.normalizedHash, extractedByteCount: row.extractedByteCount,
+  const sourceBindings: AssessMappingExpectedSourceBinding[] = sourceRows.map(row => ({ ...row.selection, parserVersion: row.parserVersion, normalizedHash: row.normalizedHash, extractedByteCount: row.extractedByteCount,
     warnings: row.warnings, sheetCount: row.sheets.length, cellCount: row.cells?.length ?? 0 }));
   const mappingClaimArgs = {
     p_run: runId, p_catalog: catalogId, p_case: caseId, p_expected_case_version: expectedCaseVersion, p_assess_schema_version: current.schema_version,
@@ -2920,9 +2921,14 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
     p_actor: authority.actorId, p_org: authority.organizationId, p_workspace: authority.workspaceId, p_authorization_version: authority.authorizationVersion,
     p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence,
   };
-  type MappingClaim = { state: string; ownsExecution: boolean; recoveryMode?: 'none' | 'execute_provider' | 'finalize_staged'; runId: string; catalogId: string; catalogHash: string; targets?: unknown[]; sourceBindings?: Array<Record<string, unknown>>; safeResult?: JsonObject };
-  const claim = await rpc<MappingClaim>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs);
-  if (claim.runId !== runId || claim.catalogId !== catalogId || claim.catalogHash !== catalog.catalogHash) throw new EnterpriseCommandError('RESOURCE_STALE');
+  const decodeClaim = (value: unknown) => {
+    try {
+      return decodeAssessMappingClaimResponse({ value, runId, catalogId, targets: catalog.targets, sourceBindings });
+    } catch {
+      throw new EnterpriseCommandError('RESOURCE_STALE');
+    }
+  };
+  const claim = decodeClaim(await rpc<unknown>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs));
   if (claim.state === 'committed' && isRecord(claim.safeResult)) return claim.safeResult;
   if ((claim.state === 'blocked' || claim.state === 'failed') && isRecord(claim.safeResult)) {
     const terminalError = assessMappingTerminalError(claim.safeResult.failureCode);
@@ -2932,14 +2938,11 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
   if (claim.state === 'staged' && claim.recoveryMode === 'finalize_staged' && isRecord(claim.safeResult)) {
     return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_result_v1', { p_run: runId, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });
   }
-  if (!claim.ownsExecution || !['none', 'execute_provider'].includes(String(claim.recoveryMode)) || !Array.isArray(claim.targets)
-    || canonicalAssessMappingValue(claim.targets as AssessMappingJsonValue) !== canonicalAssessMappingValue(catalog.targets as unknown as AssessMappingJsonValue)
-    || !Array.isArray(claim.sourceBindings) || claim.sourceBindings.length !== sourceRows.length) throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
-  const persistedTargets = structuredClone(claim.targets) as AssessMappingTargetDescriptor[];
-  const decodedSources: AssessMappingDecodedSource[] = sourceRows.map(row => {
-    const binding = claim.sourceBindings.find(item => item.sourceVersionId === row.selection.sourceVersionId);
-    if (!binding || typeof binding.extractionBindingId !== 'string' || typeof binding.extractionJobId !== 'string') throw new EnterpriseCommandError('RESOURCE_STALE');
-    return { sourceId: row.selection.sourceId, sourceVersionId: row.selection.sourceVersionId, extractionBindingId: requireUuid(binding.extractionBindingId), extractionJobId: requireUuid(binding.extractionJobId),
+  if (!claim.ownsExecution) throw new RecoverableEnterpriseCommandError('COMMAND_IN_PROGRESS');
+  const persistedTargets = claim.targets;
+  const decodedSources: AssessMappingDecodedSource[] = sourceRows.map((row, index) => {
+    const binding = claim.sourceBindings[index];
+    return { sourceId: row.selection.sourceId, sourceVersionId: row.selection.sourceVersionId, extractionBindingId: binding.extractionBindingId, extractionJobId: binding.extractionJobId,
       parserVersion: row.parserVersion, normalizedHash: row.normalizedHash, extractedByteCount: row.extractedByteCount,
       sheetCount: row.sheets.length, cellCount: row.cells?.length ?? 0, warnings: row.warnings, text: row.text, cells: row.cells };
   });
@@ -2984,7 +2987,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
     },
   });
     if (budgeted.kind === 'replay' && !stagedResult) {
-      const recovered = await rpc<MappingClaim>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs);
+      const recovered = decodeClaim(await rpc<unknown>('enterprise_claim_assess_document_mapping_run_v1', mappingClaimArgs));
       if (recovered.state === 'committed' && isRecord(recovered.safeResult)) return recovered.safeResult;
       if (recovered.state === 'staged' && isRecord(recovered.safeResult)) {
         return await rpc<JsonObject>('enterprise_commit_assess_document_mapping_result_v1', { p_run: runId, p_receipt: receipt.id, p_execution_token: receipt.execution_token, p_execution_fence: receipt.execution_fence });

@@ -1,5 +1,23 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active SQL/Edge mapping contract correction (2026-09-18)
+
+Confirmed source defects: mapping compares database JSONB hashes with compact JS
+hashes, and rejects SQL-stripped null target fields. Hosted synthetic evidence
+shows a committed claim followed by RESOURCE_STALE, zero proposals and zero
+analysis debit. This is fail-closed availability failure, not proven disclosure.
+Source-binding response under-validation is additionally corrected before spend;
+no external attacker path is established. Production status remains unproven.
+
+The bounded decoder and real PostgreSQL-to-production regression pass local
+verification: 23 canonical commands, including 16 focused PostgreSQL scenarios
+and 32 Desktop/Pixel cases. Final quality/security reviews found no blocker;
+the active correction evidence records scope limits and retained failed runs.
+Hosted acceptance remains pending. No global hash/migration change is authorized.
+Provider runtime is disabled during repair; one prior real validation brings the
+conservative campaign charge to USD 1.3407792. Preserve immutable expiry, failed
+records, and existing provider-free environments. See the active AI-output plan.
+
 Active approved safeguards: confirmed source defects are the absence of one
 aggregate currency cap across existing token budgets and separate lifecycle
 secret/validation paths that bypass a generation-only guard. The local correction

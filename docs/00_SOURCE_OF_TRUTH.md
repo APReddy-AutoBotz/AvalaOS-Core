@@ -1,5 +1,19 @@
 # AvalaOS Core Source Of Truth
 
+## Current synthetic AI acceptance correction (2026-09-18)
+
+The dedicated AI target now has executed TXT upload/source-set/bundle UI evidence
+and one real provider validation. Assess mapping failed before provider debit due
+to confirmed SQL/Edge claim hash and null-projection contract defects. The local
+correction passes 23 canonical commands and 32 Desktop/Pixel scenarios; see
+`docs/quality/assess-mapping-claim-contract-correction-evidence.md` for failed
+attempts, source binding and proof limits. Exact-head hosted acceptance is pending.
+Provider execution is disabled during repair. Conservative aggregate charge
+is USD 1.3407792 of the existing USD 10 cap; the local ledger is sealed. These
+bounded results supersede earlier not-run activation statements only for this
+synthetic target. Mapping, Studio end-to-end acceptance and production readiness
+are not proven. Existing provider-free environments remain untouched.
+
 ## Approved hosted AI safeguards implementation
 
 AP approved local implementation of separate synthetic AI target authority and

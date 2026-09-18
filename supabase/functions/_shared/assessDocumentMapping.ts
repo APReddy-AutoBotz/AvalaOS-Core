@@ -38,8 +38,166 @@ export interface AssessMappingCatalogBuild {
 
 const encoder = new TextEncoder();
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const lowercaseSha256 = /^[0-9a-f]{64}$/;
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+
+export interface AssessMappingExpectedSourceBinding {
+  sourceSetId: string;
+  sourceSetVersionId: string;
+  expectedSourceSetVersion: number;
+  sourceId: string;
+  sourceVersionId: string;
+  parserVersion: string;
+  normalizedHash: string;
+  extractedByteCount: number;
+  sheetCount: number;
+  cellCount: number;
+  warnings: readonly string[];
+}
+
+export interface AssessMappingClaimSourceBinding extends AssessMappingExpectedSourceBinding {
+  extractionBindingId: string;
+  extractionJobId: string;
+  warnings: string[];
+}
+
+interface AssessMappingClaimBase {
+  runId: string;
+  catalogId: string;
+  catalogHash: string;
+  targets: AssessMappingTargetDescriptor[];
+  sourceBindings: AssessMappingClaimSourceBinding[];
+}
+
+export type DecodedAssessMappingClaimResponse = AssessMappingClaimBase & (
+  | { state: 'claimed'; ownsExecution: true; recoveryMode: 'none' | 'execute_provider'; safeResult?: never }
+  | { state: 'claimed'; ownsExecution: false; recoveryMode: 'none'; safeResult?: never }
+  | { state: 'staged'; ownsExecution: false; recoveryMode: 'finalize_staged'; safeResult: Record<string, AssessMappingJsonValue> }
+  | { state: 'committed' | 'failed' | 'blocked'; ownsExecution: false; recoveryMode: 'none'; safeResult: Record<string, AssessMappingJsonValue> }
+);
+
+const exactKeys = (value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []) => (
+  required.every(key => Object.hasOwn(value, key))
+  && Object.keys(value).every(key => required.includes(key) || optional.includes(key))
+);
+
+const sameJson = (left: AssessMappingJsonValue, right: AssessMappingJsonValue) => (
+  canonicalAssessMappingValue(left) === canonicalAssessMappingValue(right)
+);
+
+const claimInvalid = (): never => { throw new Error('ASSESS_DOCUMENT_MAPPING_CLAIM_INVALID'); };
+
+/**
+ * Validates the service-only claim RPC as an external trust boundary. PostgreSQL
+ * owns both hashes: JSONB text hashing is deliberately not recomputed in JS.
+ * Rollback disables mapping/provider execution while retaining the failed run,
+ * receipt and this fail-closed decoder for safe replay and diagnosis.
+ */
+export const decodeAssessMappingClaimResponse = (input: {
+  value: unknown;
+  runId: string;
+  catalogId: string;
+  targets: readonly AssessMappingTargetDescriptor[];
+  sourceBindings: readonly AssessMappingExpectedSourceBinding[];
+}): DecodedAssessMappingClaimResponse => {
+  const rawValue = input.value;
+  const baseKeys = ['state', 'ownsExecution', 'recoveryMode', 'runId', 'catalogId', 'catalogHash', 'targets', 'sourceBindings'] as const;
+  if (!uuid.test(input.runId) || !uuid.test(input.catalogId) || !record(rawValue)) claimInvalid();
+  const value = rawValue as Record<string, unknown>;
+  if (!exactKeys(value, baseKeys, ['safeResult']) || value.runId !== input.runId || value.catalogId !== input.catalogId
+    || typeof value.catalogHash !== 'string' || !lowercaseSha256.test(value.catalogHash)) claimInvalid();
+  if (!Array.isArray(value.targets) || !Array.isArray(value.sourceBindings)
+    || value.targets.length !== input.targets.length || value.sourceBindings.length !== input.sourceBindings.length) claimInvalid();
+  const catalogHash = value.catalogHash as string;
+  const rawTargets = value.targets as unknown[];
+  const rawSourceBindings = value.sourceBindings as unknown[];
+
+  const state = value.state;
+  const ownsExecution = value.ownsExecution;
+  const recoveryMode = value.recoveryMode;
+  const hasSafeResult = Object.hasOwn(value, 'safeResult');
+  const safeResult = value.safeResult;
+  const initialClaim = state === 'claimed' && ownsExecution === true && recoveryMode === 'none' && !hasSafeResult;
+  const resumedClaim = state === 'claimed' && ownsExecution === true && recoveryMode === 'execute_provider' && hasSafeResult && safeResult === null;
+  const inProgressClaim = state === 'claimed' && ownsExecution === false && recoveryMode === 'none' && hasSafeResult && safeResult === null;
+  const staged = state === 'staged' && ownsExecution === false && recoveryMode === 'finalize_staged'
+    && hasSafeResult && record(safeResult) && isAssessMappingJsonValue(safeResult);
+  const terminal = ['committed', 'failed', 'blocked'].includes(String(state)) && ownsExecution === false && recoveryMode === 'none'
+    && hasSafeResult && record(safeResult) && isAssessMappingJsonValue(safeResult);
+  if (!initialClaim && !resumedClaim && !inProgressClaim && !staged && !terminal) claimInvalid();
+
+  const targetRequired = ['selectorId', 'catalogId', 'caseId', 'caseVersion', 'assessSchemaVersion', 'targetKind', 'operation', 'fieldId',
+    'label', 'contextLabel', 'valueType', 'currentValueHash', 'manual'] as const;
+  const targetOptional = ['entityId', 'allowedValues', 'currentValue'] as const;
+  const targets = rawTargets.map((candidate, index) => {
+    const expected = input.targets[index];
+    if (!expected || !record(candidate)) claimInvalid();
+    const claimTarget = candidate as Record<string, unknown>;
+    if (!exactKeys(claimTarget, targetRequired, targetOptional)
+      || !Object.hasOwn(expected, 'currentValue') || !isAssessMappingJsonValue(expected.currentValue)
+      || typeof claimTarget.currentValueHash !== 'string' || !lowercaseSha256.test(claimTarget.currentValueHash)) claimInvalid();
+    for (const key of ['selectorId', 'catalogId', 'caseId', 'caseVersion', 'assessSchemaVersion', 'targetKind', 'operation', 'fieldId',
+      'label', 'contextLabel', 'valueType', 'manual'] as const) {
+      if (claimTarget[key] !== expected[key]) claimInvalid();
+    }
+    for (const key of ['entityId', 'allowedValues'] as const) {
+      const candidateHas = Object.hasOwn(claimTarget, key); const expectedHas = Object.hasOwn(expected, key);
+      if (candidateHas !== expectedHas) claimInvalid();
+      if (candidateHas) {
+        const candidateJson = claimTarget[key]; const expectedJson = expected[key];
+        if (!isAssessMappingJsonValue(candidateJson) || !isAssessMappingJsonValue(expectedJson) || !sameJson(candidateJson, expectedJson)) claimInvalid();
+      }
+    }
+    const currentValue = Object.hasOwn(claimTarget, 'currentValue') ? claimTarget.currentValue : null;
+    if (!isAssessMappingJsonValue(currentValue) || !sameJson(currentValue, expected.currentValue)) claimInvalid();
+    return {
+      ...structuredClone(expected),
+      currentValue,
+      currentValueHash: claimTarget.currentValueHash,
+    } as AssessMappingTargetDescriptor;
+  });
+
+  const sourceKeys = ['sourceSetId', 'sourceSetVersionId', 'expectedSourceSetVersion', 'sourceId', 'sourceVersionId', 'extractionBindingId',
+    'extractionJobId', 'parserVersion', 'normalizedHash', 'extractedByteCount', 'sheetCount', 'cellCount', 'warnings'] as const;
+  const generatedIds = new Set<string>();
+  const sourceVersions = new Set<string>();
+  const sourceBindings = rawSourceBindings.map((candidate, index) => {
+    const expected = input.sourceBindings[index];
+    if (!expected || !record(candidate)) claimInvalid();
+    const claimSource = candidate as Record<string, unknown>;
+    if (!exactKeys(claimSource, sourceKeys)
+      || !uuid.test(expected.sourceSetId) || !uuid.test(expected.sourceSetVersionId) || !uuid.test(expected.sourceId) || !uuid.test(expected.sourceVersionId)
+      || !Number.isSafeInteger(expected.expectedSourceSetVersion) || expected.expectedSourceSetVersion < 1
+      || typeof expected.parserVersion !== 'string' || !expected.parserVersion.trim() || expected.parserVersion.length > 120
+      || !lowercaseSha256.test(expected.normalizedHash) || !Number.isSafeInteger(expected.extractedByteCount) || expected.extractedByteCount < 1
+      || !Number.isSafeInteger(expected.sheetCount) || expected.sheetCount < 0 || !Number.isSafeInteger(expected.cellCount) || expected.cellCount < 0
+      || !Array.isArray(expected.warnings) || expected.warnings.some(warning => typeof warning !== 'string')
+      || typeof claimSource.extractionBindingId !== 'string' || !uuid.test(claimSource.extractionBindingId)
+      || typeof claimSource.extractionJobId !== 'string' || !uuid.test(claimSource.extractionJobId)) claimInvalid();
+    const extractionBindingId = claimSource.extractionBindingId as string; const extractionJobId = claimSource.extractionJobId as string;
+    if (sourceVersions.has(expected.sourceVersionId) || generatedIds.has(extractionBindingId) || generatedIds.has(extractionJobId)
+      || extractionBindingId === extractionJobId) claimInvalid();
+    sourceVersions.add(expected.sourceVersionId); generatedIds.add(extractionBindingId); generatedIds.add(extractionJobId);
+    for (const key of ['sourceSetId', 'sourceSetVersionId', 'expectedSourceSetVersion', 'sourceId', 'sourceVersionId', 'parserVersion',
+      'normalizedHash', 'extractedByteCount', 'sheetCount', 'cellCount'] as const) {
+      if (claimSource[key] !== expected[key]) claimInvalid();
+    }
+    if (!Array.isArray(claimSource.warnings) || claimSource.warnings.length !== expected.warnings.length
+      || claimSource.warnings.some((warning, warningIndex) => typeof warning !== 'string' || warning !== expected.warnings[warningIndex])) claimInvalid();
+    return {
+      ...structuredClone(expected), warnings: [...expected.warnings],
+      extractionBindingId, extractionJobId,
+    };
+  });
+
+  const base = { runId: input.runId, catalogId: input.catalogId, catalogHash, targets, sourceBindings };
+  if (initialClaim) return { ...base, state: 'claimed', ownsExecution: true, recoveryMode: 'none' };
+  if (resumedClaim) return { ...base, state: 'claimed', ownsExecution: true, recoveryMode: 'execute_provider' };
+  if (inProgressClaim) return { ...base, state: 'claimed', ownsExecution: false, recoveryMode: 'none' };
+  if (staged) return { ...base, state: 'staged', ownsExecution: false, recoveryMode: 'finalize_staged', safeResult: safeResult as Record<string, AssessMappingJsonValue> };
+  return { ...base, state: state as 'committed' | 'failed' | 'blocked', ownsExecution: false, recoveryMode: 'none', safeResult: safeResult as Record<string, AssessMappingJsonValue> };
+};
 
 export const buildAssessMappingCatalog = async (input: {
   catalogId: string;
