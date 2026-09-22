@@ -44,6 +44,8 @@ export const assessImportScripts = Object.freeze({
   'test:assess-import:migrations': 'node --test scripts/testAssessSupportingDocumentMappingMigration.mjs scripts/prCMigrationTailContract.test.mjs scripts/projectionRpcVolatilityMigrationContract.test.mjs',
   'test:assess-import:postgres': 'node scripts/testAssessSupportingDocumentMappingPostgres.mjs',
   'test:assess-import:budget-pipeline': 'node scripts/assessStudioBudgetPipelinePostgres.mjs',
+  'test:assess-import:campaign-renewal': 'node scripts/testSyntheticAiCampaignRenewalPostgres.mjs',
+  'test:synthetic-ai-renewal-contract': 'node --test scripts/testSyntheticAiCampaignRenewalMigration.mjs',
   'test:assess-import:studio-recovery': `${compile} --coverage=supabase/functions/_shared/studioArtifactDb.ts supabase/functions/deno.d.ts supabase/functions/_shared/studioArtifactDb.ts supabase/functions/_shared/studioArtifactDb.test.ts && ${compile} --coverage=supabase/functions/_shared/studioArtifactGeneration.ts supabase/functions/deno.d.ts services/enterpriseIntelligence.ts services/studioArtifacts/contracts.ts supabase/functions/_shared/studioArtifactPrBTestEvidence.ts supabase/functions/_shared/enterpriseIntelligenceAi.ts supabase/functions/_shared/providerBudget.ts supabase/functions/_shared/studioArtifactProvider.ts supabase/functions/_shared/studioArtifactGeneration.ts supabase/functions/_shared/studioArtifactGeneration.test.ts`,
   'test:assess-import:retained-postgres': 'node scripts/testTranscriptFlowPostgres.mjs',
   'test:assess-import:projection-postgrest': 'node --test scripts/testProjectionRpcPostgrest.mjs',
@@ -72,8 +74,8 @@ export const assessImportScripts = Object.freeze({
   build: 'vite build',
 });
 export const assessImportGroups = Object.freeze({
-  feature: Object.freeze(['test:assess-import:harness', 'test:assess-import:authority', 'test:assess-import:parser', 'test:assess-import:domain', 'test:assess-import:api', 'test:assess-import:client', 'test:assess-import:ui', 'test:assess-import:migrations', 'test:assess-import:parser-coverage', 'test:assess-import:mapping-coverage']),
-  postgres: Object.freeze(['test:assess-import:postgres', 'test:assess-import:budget-pipeline', 'test:assess-import:retained-postgres', 'test:assess-import:projection-postgrest']),
+  feature: Object.freeze(['test:assess-import:harness', 'test:assess-import:authority', 'test:assess-import:parser', 'test:assess-import:domain', 'test:assess-import:api', 'test:assess-import:client', 'test:assess-import:ui', 'test:assess-import:migrations', 'test:synthetic-ai-renewal-contract', 'test:assess-import:parser-coverage', 'test:assess-import:mapping-coverage']),
+  postgres: Object.freeze(['test:assess-import:postgres', 'test:assess-import:budget-pipeline', 'test:assess-import:campaign-renewal', 'test:assess-import:retained-postgres', 'test:assess-import:projection-postgrest']),
   regression: Object.freeze(['test:assess-import:regression', 'test:assess-import:studio-recovery']),
   browser: Object.freeze(['test:assess-import:browser']),
   static: Object.freeze(['typecheck', 'typecheck:edge', 'test:workflow-yaml', 'test:ai-boundary-static', 'test:secret-hygiene', 'test:scoring', 'test:pr-c-scoring-law-drift', 'build']),

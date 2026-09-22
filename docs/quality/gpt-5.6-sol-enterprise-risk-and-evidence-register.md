@@ -1,5 +1,50 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Bounded same-campaign renewal and business proof (2026-09-22)
+
+Confirmed capability gap: the expired test campaign has no safe renewal operation.
+The approved continuation adds one append-only same-campaign window, not an
+expiry edit or replacement ledger. Prior charge USD 1.3407792 stays authoritative;
+six further fixed debits at most yield aggregate USD 4.1695344 within the original
+USD 10 cap. Fresh scope/Admin authority, one-use grants, bounded expiry, no old
+permit revival, no reset and no automatic retry are required. The original
+campaign can still be disabled irreversibly. Focused real-PostgreSQL verification
+passed 35 renewal assertions across eight scenarios and 14 retained budget
+scenarios; static/build passed eight commands. Exact-head deployment gates remain
+unproven. Final-slot concurrency uses seeded debits and is not runtime proof of
+each per-kind effect limit.
+
+Confirmed Studio UI gap: newly uploaded independent sources cannot reach direct
+package eligibility through the current UI because exact-bundle extraction and
+candidate review are absent. Manual-brief generation is an honest alternative
+for independent text-input/document-edit testing, not uploaded-source proof.
+
+Hosted read-only preflight confirms runtime off, the pinned provider/key/target
+metadata matching the saved approved key, stale provider validation, zero mapping
+or Studio debits and no generated Studio artifact. No paid call was made in this
+preflight. The first real business exercise must distinguish source intake,
+mapping, candidate review, immutable application, independent Studio sources and
+editable draft generation. Missing fields or unsupported SDD remain visible
+findings; no regression count establishes hosted workflow completeness. Preserve
+the known contrast/CI and intermittent-font boundaries below separately.
+
+## Active enabled-state Studio contrast correction (2026-09-22)
+
+Confirmed source defect at `c08f42c`: shared ghost-button `transition: all` includes
+opacity, leaving newly enabled Studio downloads temporarily faded. PR C
+`35713213779/1` recorded a serious Pixel contrast violation (3.89:1); deterministic
+production-CSS inspection reproduced 3.41:1 at enabled opacity 0.5. This is an
+accessibility defect, not an authorization bypass. Native disabled/capability/
+committed-availability guards remain required. Closed read-only reviewers support
+an explicit three-color-property transition and actual first-enabled-frame
+regression, never an Axe delay or exception. Corrected-source execution and new-head
+CI remain planned verification. See the active AI-output plan and
+`studio-enabled-contrast-correction-evidence.md` for retained attempts and results.
+The other 17 applicable c08 workflows passed; the failed 81-command PR C campaign
+stopped at command 48 with 33 not run. Preview's separate 28 whole-page contrast
+incompletes are `unresolved_manual`, not accessibility certification. No paid or
+manual hosted-backend action is implied.
+
 ## Active browser navigation-readiness evidence correction (2026-09-22)
 
 Confirmed test-harness defect after domain-budget commit `0bf6571`: Preview QA

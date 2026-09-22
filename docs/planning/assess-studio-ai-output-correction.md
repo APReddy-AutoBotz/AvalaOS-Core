@@ -1,5 +1,108 @@
 # Assess and Studio AI output correction
 
+## Business-workflow-first continuation (2026-09-22)
+
+AP explicitly renewed approval to proceed with the actual synthetic Assess and
+Studio workflow, spending conservatively within the ORIGINAL USD 10 aggregate
+ceiling. This authorizes a bounded renewal implementation and synthetic-only
+rollout, not a reset, new USD 10 allowance, production access, document approval,
+handoff, merge, or waiver of the existing exact-head deployment gates.
+
+Read-only hosted preflight found the approved AI project healthy, runtime off,
+the original campaign expired, and migration tip `20260917173445`. Retained
+charge is exactly 1,340,779,200 USD nanos: 869,320,000 carried plus one consumed
+471,459,200 provider-validation debit. The existing process, case, transcript,
+source set and input bundle remain; two failed mapping runs have no mapping
+debit. There are no Studio artifacts or accepted transcript candidates. Provider
+validation is stale. The saved key exists under its approved server-secret name;
+the absence of a variable literally named OPENAI_API_KEY is not a missing key.
+
+Architecture, security and quality read-only reviews closed before writes. The
+root resolved the proposed three-call shortcut against the actual Studio
+prerequisites: independent Studio sources require extraction before document
+generation. One implementation worker owns an additive renewal migration and
+focused tests; root owns integration, source bindings and the business exercise.
+No descendants and no parallel reviewer writes are permitted.
+
+### Minimal renewal and release
+
+Add one append-only renewal window for the SAME campaign ID, at most 24 hours
+from its explicit invocation. Do not change the original row, expiry, carry,
+cap, debits, failure history or transferred local ledger. Fresh canonical Admin
+authority, exact synthetic target/provider/scope bindings, provider-off controls,
+the reconciled retained charge and no uncertain outstanding effect are required.
+Use forced RLS and service-only execution; reject direct DML, second renewal,
+identity substitution and old-permit revival. Reserve and consume must both
+enforce the same active window, aggregate cap and one-use authority. Limit this
+renewal to SIX additional effects, including validation. At the fixed debit,
+the maximum aggregate after this pass is USD 4.1695344, not USD 10 of new spend.
+
+Verify the actual migration on fresh and populated disposable PostgreSQL,
+including unchanged history, authority negatives, expiry, replay and final-slot
+concurrency. Run only affected tests while editing. Integrate one coherent
+candidate with the retained contrast repair and run the applicable boundary/CI
+gates once; do not repeat broad suites for each edit. No expired paid call or
+deployment around the known CI failure is allowed. After exact-head gates pass,
+apply the existing domain-budget migration and the renewal migration to ONLY the
+approved AI synthetic project, attest the affected command-function sources and
+UI build, then start the renewal immediately before the business walkthrough.
+Keep the other synthetic projects and all production targets untouched.
+
+### Observable business acceptance, not proxy test totals
+
+Final read-only quality review confirmed a current UI gap: the Studio source
+builder has no upload/exact-bundle extraction/candidate-review controls, while
+direct package creation requires accepted candidates bound to every source in
+that exact Studio bundle. Legacy single-source extraction cannot stand in for
+this binding. Record the uploaded independent-Studio journey as blocked by a
+confirmed integration gap; do not insert accepted database rows or claim it
+passed. For useful bounded AI output testing, the supported manual-brief path
+may instead take the different Studio workshop text and create type-specific
+PDD/BRD/FRD planning packages. That proves independent text input, generation and
+draft editing only, not uploaded-source lineage or extraction/candidate/source
+citation proof. Leave the extraction slot unused: five paid effects at most
+would yield a conservative aggregate USD 3.6980752. The six-effect server ceiling
+does not require consuming every slot. The missing Studio UI remains an explicit
+follow-up implementation finding, not a reason to silently expand this renewal.
+
+1. Reuse the saved Assess process/case/transcript. Upload the missing synthetic
+   SOP and existing CSV fixture; create one explicitly selected source set and
+   locked bundle. Save one minimal authored primitive first if scalar primitive
+   fields are to be tested; a blank-case catalog cannot address not-yet-created
+   entity fields. Record this setup rather than claiming AI created it.
+2. Validate the existing provider once, then analyze the exact Assess bundle
+   once. Compare suggestions to source facts and cell/text citations. Preserve
+   unknown values; record missing coverage as unmet rather than regenerate.
+3. Edit one grounded suggestion with a reason, accept/reject other appropriate
+   suggestions, preview without mutation, explicitly resolve any real manual
+   conflict, and apply one batch. Reopen and independently verify the immutable
+   version increment, edited values, provenance and unchanged unrelated fields.
+4. Use the DIFFERENT retained Studio workshop fixture in an independent Studio
+   source set/bundle. Extract once and review candidates; do not substitute
+   fabricated accepted rows. Verify actual route/module compatibility before
+   paying. Create type-specific packages and generate PDD, BRD and FRD once each,
+   reusing the same approved source selection. Edit and reopen draft revisions.
+   SDD is unsupported and must be reported as such, not relabelled FRD.
+   The confirmed UI gap above prevents this direct-bundle branch currently;
+   execute only the explicitly labelled manual-brief alternative for this pass.
+5. Check grounded roles, the strict greater-than-USD-5,000 approval rule, no
+   payment execution, correct template sections, real source citations and no
+   invented interfaces, service targets or compliance claims. No final document
+   approval, review-role impersonation, task handoff or Monitor baseline follows.
+
+Six is a maximum for this first pass, not a target to consume. Reconcile the
+durable debit after every effect. Stop at the first unexpected failure or
+ambiguous result; recover the same receipt/state without an automatic new paid
+attempt. Do not perform another validation if the window expires mid-run.
+Retain sanitized screen/field expected-versus-actual results, source membership,
+versions, receipt outcomes and charge counts. Component outputs and mocked
+browser passes are useful expectations, never hosted business-success proof.
+
+Rollback disables only the renewed campaign/routes/provider runtimes and retains
+all data, authority and spending history. No further paid call was made during
+the read-only preflight; the known CI/contrast and font issues remain separately
+recorded release constraints, not fabricated AI failures.
+
 ## Resumed execution boundary (2026-09-22)
 
 The immutable campaign expired at `2026-09-19T05:07:16.751Z`. Continue the local,
@@ -12,6 +115,43 @@ prior charges and the aggregate USD 10 limit. No hosted mutation or paid call wa
 performed in this resumed local verification phase.
 
 ## Post-push browser evidence repair (2026-09-22)
+
+### Subsequent enabled-state Studio contrast repair
+
+The navigation correction was pushed as `c08f42c`. Seventeen applicable exact-head
+workflows passed, but retained PR C run `35713213779/1` failed command 48,
+`studio-private-browser`: 51/52 browser cases passed; Pixel rendition accessibility
+found enabled download text at 3.89:1 against the unchanged 4.5:1 requirement.
+The remaining 33 commands did not run. This is not a successful PR C campaign.
+
+Root architecture inspection and completed read-only quality/security reviews
+identify a confirmed source defect: `.btn-ghost` animates all properties, so a
+native disabled-to-enabled transition retains disabled opacity for 180 ms.
+A deterministic production-CSS reproduction captured enabled opacity 0.5 and
+3.41:1 contrast without network traffic. All reviewers closed before the managed
+workspace-write phase. One worker owns the shared CSS rule, actual Studio browser
+fixture/regression and component contract; root owns documentation, provenance,
+integration, verification and the existing PR. No nested delegation is permitted.
+
+Limit the shared ghost-button transition to background-color, border-color and
+color, preserving their 180 ms easing. Preserve native disabled state and every
+capability, loading, read-only, stale, committed-availability and reload-failure
+guard. No migration, provider, deterministic-score or authorization change is
+needed. Prove the actual held-projection component regression rejects the old
+rule before accepting the fix: capture the first enabled frame, assert opacity
+one and no opacity transition, then retain the original Axe check. Do not add a
+settling delay, retries, reduced-motion override, injected transition suppression,
+contrast exception or target exclusion. Source-rule adversaries must reject
+restored `all` or explicit opacity transitions.
+
+Require the complete private-artifact client/browser suites, shared Sandbox and
+navigation regressions, preview/evidence contracts, catalog, eight static gates,
+provenance refresh, patch integrity and independent final review. Then commit one
+coherent correction on this branch and require all new exact-head checks. Preserve
+the failed c08 artifact and historical font anomalies. Rollback withholds candidate
+acceptance and keeps provider execution disabled; it never changes permissions or
+loosens contrast checks. No hosted-backend mutation, paid renewal, Ready or merge
+follows. Current results are in `docs/quality/studio-enabled-contrast-correction-evidence.md`.
 
 Exact head `0bf6571` passed native Assess CI, independently verified against its
 artifact. Preview QA run `35703883723`, attempt 1, failed the local Pixel

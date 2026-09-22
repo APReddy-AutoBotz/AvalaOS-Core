@@ -30,6 +30,22 @@ test('complete domain budget lifecycle is a mandatory canonical PostgreSQL gate'
   assert.throws(()=>assessImportCommands('postgres',{...scripts,'test:assess-import:budget-pipeline':'node -e "process.exit(0)"'}),/SUBSTITUTED/);
   assert.match(readFileSync('.github/workflows/assess-document-mapping.yml','utf8'),/run: node scripts\/runAssessImportValidation\.mjs postgres/);
 });
+test('one-time renewal tests are mandatory and cannot be substituted by green exit', () => {
+  const scripts = JSON.parse(readFileSync('package.json','utf8')).scripts;
+  const postgres = assessImportCommands('postgres', scripts);
+  const feature = assessImportCommands('feature', scripts);
+  assert.equal(postgres.filter(command => command.name === 'test:assess-import:campaign-renewal').length, 1);
+  assert.equal(feature.filter(command => command.name === 'test:synthetic-ai-renewal-contract').length, 1);
+  assert.equal(postgres.find(command => command.name === 'test:assess-import:campaign-renewal').script,
+    'node scripts/testSyntheticAiCampaignRenewalPostgres.mjs');
+  assert.equal(feature.find(command => command.name === 'test:synthetic-ai-renewal-contract').script,
+    'node --test scripts/testSyntheticAiCampaignRenewalMigration.mjs');
+  for (const [group, name] of [['postgres','test:assess-import:campaign-renewal'], ['feature','test:synthetic-ai-renewal-contract']]) {
+    assert.throws(() => assessImportCommands(group, {...scripts, [name]: 'node -e "process.exit(0)"'}), /SUBSTITUTED/);
+  }
+  assert.deepEqual(observedAssessImportResults('renewal command exited 0'), []);
+});
+
 test('budget lifecycle assertion evidence requires an actual recognized emitted assertion', () => {
   assert.deepEqual(observedAssessImportResults('budget pipeline exited 0'),[]);
   assert.deepEqual(observedAssessImportResults('ASSESS_DOCUMENT_MAPPING_PG_ASSERTION {"testId":"MAP-PG-BUDGET-STUDIO","result":"not_run"}'),

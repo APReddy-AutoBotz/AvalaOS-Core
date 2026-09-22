@@ -33,7 +33,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1),'20260918082307_synthetic_ai_mapping_studio_budget_authority.sql');
+assert.equal(migrations.at(-1),'20260922112911_synthetic_ai_campaign_one_time_renewal.sql');
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',

@@ -61,8 +61,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260918082307');
-  assert.equal(migrations.length, 81);
+  assert.equal(approvedFullChainTip(migrations), '20260922112911');
+  assert.equal(migrations.length, 82);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -107,7 +107,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20260918082307') => {
+  const assertFinalIdentity = async (db, expectedTip = '20260922112911') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {
@@ -195,7 +195,7 @@ try {
   }
   report.activeScenario='domain-budget-populated-forward-apply';
   await apply(budgetUpgrade.db, [migrations[domainBudgetIndex]]);
-  await assertFinalIdentity(budgetUpgrade.db);
+  await assertFinalIdentity(budgetUpgrade.db, '20260918082307');
   report.activeScenario='domain-budget-preserve-populated-ledgers';
   assert.deepEqual(await budgetSnapshot(), budgetBefore);
   assert.equal((await budgetUpgrade.db.query(`SELECT count(*)::int n FROM synthetic_ai_campaign_effect_debits
@@ -243,7 +243,7 @@ try {
   } finally { await budgetUpgrade.db.query('ROLLBACK'); }
   assert.deepEqual(await budgetSnapshot(), budgetBefore);
   assert.equal(await budgetSchemaSnapshot(),successorSchema);
-  await assertFinalIdentity(budgetUpgrade.db);
+  await assertFinalIdentity(budgetUpgrade.db, '20260918082307');
   report.scenarios.push({ scenario:'populated-domain-budget-upgrade-and-reapply-preserve-all-existing-charge-and-token-authority', status:'passed', retainedDebits:19, rejectedPreconditions:rejectedBudgetPreconditions });
   delete report.activeScenario;
   await budgetUpgrade.db.end();
@@ -660,7 +660,7 @@ try {
   await apply(upgrade.db, [migrations[campaignAuthorityIndex]]);
   await assertFinalIdentity(upgrade.db, '20260917173445');
   await apply(upgrade.db, [migrations[domainBudgetIndex]]);
-  await assertFinalIdentity(upgrade.db);
+  await assertFinalIdentity(upgrade.db, '20260918082307');
   assert.deepEqual(await retained(), before);
   assert.deepEqual(await retainedXlsxUpgradeState(), retainedBeforeXlsx);
   assert.deepEqual(await projectionAuthority(upgrade.db), projectionAfter);

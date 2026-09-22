@@ -419,7 +419,10 @@ header.glass {
   border: 1px solid var(--kp-border);
   color: var(--kp-text);
   border-radius: var(--kp-radius-md);
-  transition: all 180ms ease;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
 }
 
 .dark .btn-ghost {

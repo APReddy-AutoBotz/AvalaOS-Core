@@ -1,5 +1,37 @@
 # Verification Command Matrix
 
+## One-time synthetic AI renewal — focused continuation
+
+AP prioritizes the actual Assess/Studio business walkthrough. While implementing
+the renewal, run its owned migration/PostgreSQL tests and affected canonical
+command/tail contracts; do not repeat unrelated browser suites for every edit.
+`npm run test:synthetic-ai-renewal-contract` is mandatory in the native feature
+group and `npm run test:assess-import:campaign-renewal` in its PostgreSQL group.
+They must verify unchanged original campaign/debits, exact authorization,
+one renewal only, expired/missing-window rejection, old-permit rejection,
+six-effect and original aggregate caps, concurrent last-slot reservation and
+rollback. Missing PostgreSQL is a failure, not a passing skip.
+
+The current native CI matrix is 27 commands: feature 11, PostgreSQL 5,
+regression 2, browser 1 and static 8. The earlier 25-command results below remain
+historical proof of their exact source, not execution of the two new gates.
+Retained domain-budget integration must still pass with the new full-chain tip.
+Source-bound business assertions and paid usage are recorded separately from
+regression counts. All exact-head release gates still apply before hosted writes.
+
+## Studio first-enabled-frame contrast correction
+
+The active AI-output correction includes the real private-projection loading to
+ready transition. `npm run test:studio-private-artifacts-client` must reject
+ghost-button `all`/opacity transition substitutions. The full
+`npm run test:browser:studio-private-artifacts` must capture the actual first enabled
+download frame on Desktop and Pixel, require opacity one/no opacity transition,
+and retain the unchanged serious/critical Axe gate. Native disablement and authority
+negative cases remain mandatory. Shared Sandbox/navigation, catalog, preview and
+PR C evidence contracts, static gates and new exact-head CI must also pass.
+Old-head successes cannot certify this CSS change; the failed c08 PR C artifact is
+retained. Full-page contrast incompletes remain explicitly unresolved manual work.
+
 ## Assess/Studio domain-budget correction — current verification extension
 
 The active AI-output correction adds mandatory

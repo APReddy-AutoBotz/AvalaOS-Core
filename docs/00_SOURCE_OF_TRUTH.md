@@ -1,5 +1,34 @@
 # AvalaOS Core Source Of Truth
 
+## Business-workflow-first AI continuation (2026-09-22)
+
+AP renewed the actual synthetic Assess/Studio testing approval within the
+original USD 10 total cap. Read-only hosted preflight confirms runtime off, one
+expired campaign, USD 1.3407792 retained conservative charge and the domain-budget
+migration not yet installed. Current authority cannot safely renew itself.
+The active AI-output plan owns one append-only, same-campaign, at-most-24-hour
+renewal, limited to six new effects (maximum aggregate USD 4.1695344), with no
+history reset or automatic paid retry. Closed read-only reviews precede this
+bounded implementation. Focused checks accompany fixes; actual observed business
+steps, not regression-suite totals, determine the workflow result. Existing
+exact-head deployment gates remain in force. Hosted mapping, document generation,
+human acceptance and production readiness remain unproven.
+
+## Current Studio accessibility correction hold (2026-09-22)
+
+Navigation correction head `c08f42c` passed 17 applicable workflows, including
+independently verified Native Assess and Preview QA. PR C failed its 48th command:
+51/52 private-artifact browser cases passed, but enabled Pixel download buttons
+briefly had insufficient text contrast. The remaining 33 commands did not run.
+The shared ghost-button opacity transition is a confirmed source defect, with a
+bounded CSS/actual-first-frame regression correction governed by the active
+AI-output plan. Permissions, native disablement and accessibility thresholds stay
+unchanged. PR #264 remains Draft/merge NO-GO pending corrected-source proof and CI.
+Separately, all 28 preview full-page contrast-incomplete summaries remain
+`unresolved_manual`; green automated checks are not full accessibility proof.
+Historical font anomalies remain unresolved. No paid calls or manual hosted-backend
+mutations follow; preserve the expired campaign and existing aggregate charges.
+
 ## Current campaign expiry boundary (2026-09-22)
 
 The approved synthetic AI campaign expired at `2026-09-19T05:07:16.751Z`.
