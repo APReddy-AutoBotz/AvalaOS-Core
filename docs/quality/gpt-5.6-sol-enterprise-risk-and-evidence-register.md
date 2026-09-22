@@ -1,5 +1,46 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active browser navigation-readiness evidence correction (2026-09-22)
+
+Confirmed test-harness defect after domain-budget commit `0bf6571`: Preview QA
+`35703883723/1` retained 37 local Sandbox passes, one Pixel reload failure and
+30 source-owned skips. The helper sampled an absent mobile opener before shell
+mount and selected the intentionally hidden desktop identity. The rendered
+snapshot shows the correct mobile shell and Delivery Pack, not wrong product
+state. Shared semantic readiness must fail closed within the existing timeout;
+exact persona, route, durability, sign-out and network evidence remain mandatory.
+Three read-only reviews closed before this test-only correction. Fresh local
+Sandbox/navigation and new-head CI are required; prior native CI remains valid
+only for its exact `0bf6571` artifact. No hosted mutation or paid retry is implied.
+
+The first corrected local full run passed both reload-reconstruction cases but
+remained failed: Desktop `SANDBOX-003` observed four unexpected-origin GET/font
+requests (37 passed, one failed, 30 unchanged skips). Their opaque evidence cannot
+establish the origin, path or cause. Two fresh diagnostic contexts and the declared
+public font stylesheet exposed only permitted font paths; these do not negate
+the anomaly. Classification: suspected defect requiring deeper validation, not
+a demonstrated provider call or confirmed authorization flaw. Quality/security
+reviews closed before adding fixed-enum, rejected-request-only diagnostics.
+Enforcement, observation lifetime, bounds and the zero-violation assertion remain
+unchanged. No URL, domain, path, query, request body, header or hash is retained.
+The failed attempt stays immutable; a later clean run cannot retrospectively
+explain it or justify a speculative allowlist expansion.
+
+The next full invocation retained 36/2 with 30 skips. Its fixed enums identified
+direct Google font-asset `/l/font` requests, but not their ancestry from the
+declared stylesheet. Both actual-source journey diagnostics subsequently covered
+all seven personas on Desktop/Pixel and observed only permitted declared assets.
+No traffic interception or enforcement change was made. The intermittent font
+question remains suspected and unresolved; canonical final-source and new-head
+checks are still required, and any recurrence is a verification failure.
+
+Final unchanged-enforcement local execution passed 38 Sandbox cases and both
+navigation cases, with 30 unchanged declared skips. All 78 preview contracts,
+catalog/oracle/observer checks and eight static gates passed. Final reviewers
+found no code blocker; the derived provenance must be refreshed after the final
+doc freeze. New-head CI remains unproven. The clean invocation does not resolve
+either retained intermittent-font failure or establish hosted/production safety.
+
 ## Active mapping/Studio budget-authority correction (2026-09-18)
 
 Confirmed source defects at `ca6a616`: mapping uses its own run ID where all four

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
 import { decodeAcceptanceExecutionProfile } from '../../scripts/acceptanceExecutionProfile.mjs';
+import { openProductNavigation } from './productNavigationReadiness';
 
 const executionProfile = decodeAcceptanceExecutionProfile(process.env, {
   expectedCheckoutSha: process.env.ACCEPTANCE_EXECUTION_KIND === 'local_source_fixture'
@@ -79,15 +80,6 @@ const selectCanonicalProject = async (page: Page) => {
   const project = page.getByRole('button', { name: CANONICAL_AP_WORKFLOW_NAME, exact: true });
   await expect(project).toBeVisible();
   await project.click();
-};
-
-const openProductNavigation = async (page: Page) => {
-  const opener = page.getByRole('button', { name: 'Open navigation' });
-  if (!(await opener.isVisible().catch(() => false))) return;
-  const mobileIdentity = page.getByTestId('mobile-current-user');
-  if (await mobileIdentity.isVisible().catch(() => false)) return;
-  await opener.click();
-  await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
 };
 
 const clickProductNav = async (page: Page, label: string) => {

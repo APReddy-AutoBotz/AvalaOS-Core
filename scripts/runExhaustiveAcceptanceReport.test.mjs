@@ -43,7 +43,10 @@ const hostedMetadata = () => ({
   executionKind: 'hosted_preview',
   exactCommand: hostedCommand,
   configPath: 'playwright.exhaustive-acceptance.config.ts',
-  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  sourcePaths: [
+    'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+  ],
   exactHead: releaseSha,
   targetOrigin: 'https://avalaos-pilot.netlify.app',
   deployId,
@@ -245,6 +248,17 @@ test('hostile hosted report provenance substitutions remain blocked under a gree
     ['wrong-head', metadata => ({ ...metadata, exactHead: 'd'.repeat(40) })],
     ['wrong-deploy', metadata => ({ ...metadata, deployId: 'e'.repeat(24) })],
     ['wrong-command', metadata => ({ ...metadata, exactCommand: ['npx', 'playwright', 'test', '--config=substituted.ts', '--workers=1'] })],
+    ['missing-navigation-helper-source', metadata => ({
+      ...metadata,
+      sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+    })],
+    ['substituted-navigation-helper-source', metadata => ({
+      ...metadata,
+      sourcePaths: [
+        'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+        'tests/browser/substitutedNavigationReadiness.ts',
+      ],
+    })],
     ['stale-run', metadata => ({ ...metadata, workflowRuntime: { ...metadata.workflowRuntime, runId: '123455' } })],
     ['stale-attempt', metadata => ({ ...metadata, workflowRuntime: { ...metadata.workflowRuntime, runAttempt: '1' } })],
     ['missing-provenance', () => undefined],

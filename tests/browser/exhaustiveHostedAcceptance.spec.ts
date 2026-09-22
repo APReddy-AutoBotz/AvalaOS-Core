@@ -9,6 +9,7 @@ import {
   summarizeFullPageColorContrast,
 } from '../../scripts/acceptanceExecutionProfile.mjs';
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
+import { openProductNavigation } from './productNavigationReadiness';
 
 const executionProfile = decodeAcceptanceExecutionProfile(process.env, {
   expectedCheckoutSha: process.env.ACCEPTANCE_EXECUTION_KIND === 'local_source_fixture'
@@ -62,7 +63,7 @@ type MainAnimationRestoreState = {
 };
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
-type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string };
+type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string; staticDiagnostic?: ReturnType<typeof rejectedStaticRequestDiagnostic> };
 const MAX_NETWORK_VIOLATION_SAMPLES = 25;
 const POST_SIGN_OUT_QUIET_PERIOD_MS = 750;
 const POST_SIGN_OUT_QUIESCENCE_TIMEOUT_MS = 5_000;
@@ -94,6 +95,26 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
+};
+// Diagnosis only: called after rejection, never by either enforcement classifier.
+// All returned values are fixed enums; URLs and their fields stay in memory.
+const rejectedStaticRequestDiagnostic = (rawUrl: string, redirected: boolean) => {
+  let knownOriginClass = 'opaque-other-origin';
+  let pathClass = 'unclassified-path';
+  try {
+    const url = new URL(rawUrl);
+    if (url.origin === 'https://fonts.googleapis.com') knownOriginClass = 'google-font-styles';
+    else if (url.origin === 'https://fonts.gstatic.com') knownOriginClass = 'google-font-assets';
+    else if (url.origin === 'https://cdn.jsdelivr.net') knownOriginClass = 'jsdelivr-static';
+    else if (url.origin === 'https://aistudiocdn.com') knownOriginClass = 'aistudio-static';
+    if (knownOriginClass === 'google-font-assets') {
+      pathClass = url.pathname.startsWith('/s/') ? 'font-s-prefix'
+        : url.pathname === '/l/font' ? 'font-l-endpoint' : 'other-font-path';
+    }
+  } catch {
+    knownOriginClass = 'unavailable-origin';
+  }
+  return { knownOriginClass, pathClass, redirectState: redirected ? 'redirected' : 'direct' };
 };
 const createDiagnosticOriginClassifier = () => {
   const externalOriginClasses = new Map<string, string>();
@@ -250,6 +271,7 @@ const observeAuthorityRequests = (page: Page) => {
       category: category as NetworkViolationCategory,
       resourceType: request.resourceType(),
       originClass: classifyDiagnosticOrigin(request.url()),
+      staticDiagnostic: rejectedStaticRequestDiagnostic(request.url(), request.redirectedFrom() !== null),
     }),
     webSocket: {
       page,
@@ -295,33 +317,23 @@ const enterPersona = async (page: Page, label: string) => {
   await expect(page.getByRole('button', { name: 'Toggle theme' })).toBeVisible({ timeout: 15_000 });
 };
 
-const openProductNavigation = async (page: Page) => {
-  const opener = page.getByRole('button', { name: 'Open navigation' });
-  if (!(await opener.isVisible().catch(() => false))) return;
-  const mobileIdentity = page.getByTestId('mobile-current-user');
-  if (await mobileIdentity.isVisible().catch(() => false)) return;
-  await opener.click();
-  await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
-};
 const closeProductNavigation = async (page: Page) => {
   const close = page.getByRole('button', { name: 'Close primary navigation' });
   if (await close.isVisible().catch(() => false)) await close.click();
 };
 const assertActivePersona = async (page: Page, userName: string) => {
-  await openProductNavigation(page);
-  const mobileIdentity = page.getByTestId('mobile-current-user');
-  if (await mobileIdentity.isVisible().catch(() => false)) {
-    await expect(mobileIdentity.getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
+  const navigationBranch = await openProductNavigation(page);
+  if (navigationBranch === 'mobile') {
+    await expect(page.getByTestId('mobile-current-user').getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
     return;
   }
   await expect(page.getByTestId('desktop-current-user').getByText(userName, { exact: true })).toBeVisible({ timeout: 15_000 });
 };
 
 const signOutToSandbox = async (page: Page) => {
-  await openProductNavigation(page);
-  const mobileSignOut = page.getByTestId('mobile-sign-out');
-  if (await mobileSignOut.isVisible().catch(() => false)) {
-    await mobileSignOut.click();
+  const navigationBranch = await openProductNavigation(page);
+  if (navigationBranch === 'mobile') {
+    await page.getByTestId('mobile-sign-out').click();
   } else {
     await page.getByTestId('desktop-current-user').getByRole('button', { name: 'Sign Out' }).click();
   }

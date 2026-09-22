@@ -20,6 +20,139 @@ runs, no matching legacy AI jobs, no token reservations, no analysis debit and n
 proposals. The prior validation debit and carried charge remain conservatively
 USD 1.3407792. Runtime is disabled; no automatic paid retry occurred.
 
+## Exact-head push and CI observation
+
+The coherent 26-file correction was committed and pushed to the existing PR #264
+branch as `0bf65716c92c450c0df5859a337020cb8f882e6b`. PR #264 remains Draft.
+Before commit, the exact staged allowlist and `git status --short` were inspected;
+the stash, unrelated generated files and EOL-only recovery-script state were
+preserved. No separate branch or PR was created.
+
+Native Assess workflow `35703883862/1` passed. Artifact `10682934237`, archive
+SHA-256 `a991de3f809280d8716dc37abed4995411cdee18a1e957e195aa380e7d81c36e`,
+was independently downloaded and verified: 25 canonical commands, all 1,106
+source hashes, exact head/run/attempt, 14 explicit budget assertion records,
+32 Desktop/Pixel passes and eight rejected head/attempt/source/command/result
+substitutions. The CLI artifact download returned HTTP 401; the already-connected
+GitHub integration supplied the archive. A Windows HTTP-client TLS error was
+avoided by using Node's normally verified TLS transport, not by disabling TLS.
+No token or temporary download URL was retained in the evidence bundle.
+
+Preview QA `35703883723/1` nevertheless failed in its local Sandbox regression:
+37 passed, one failed (`SAFETY-004`, Pixel reload), 30 declared source-owned skips,
+zero flaky results. Artifact `10683408958` matched archive SHA-256
+`6113e6c17d173d53d30e76b956a683b91352ad0e47428d11a2d63c54eca6e61a`.
+The desktop identity contained the correct name but was intentionally hidden;
+the final page snapshot showed the mobile opener and exact Delivery Pack. The
+helper chose desktop from an eager visibility probe before shell mount. The
+same helper pattern exists in the navigation-history spec. The navigation upload
+failure is consequential: that suite did not run after the Sandbox failure.
+The preceding 12 hosted boundary cases passed in this attempt, but do not make
+the overall workflow pass. Three read-only reviews confirmed the test race and
+closed before the bounded shared-helper correction. Failed evidence is retained.
+
+PR C `35703883729/1` subsequently passed all 81 commands and its CI independent
+verifier. Downloaded artifact `10685230193` matched SHA-256
+`7f001a8dd3186427df7c7734c16f7ea25da4fafefbe73f68cb0e566f8a50642f`.
+Its inspected manifest binds `0bf6571`, 221 assertions, eight explicit `not_run`
+records, zero missing assertions and zero failed commands to working-tree digest
+`8d4aea54f3f5931ac9ad853b1680cc2786821a268bc7ce08d61fef30c2e30e18`.
+This local check verified archive identity and manifest metadata; it did not
+reverify the old artifact against the now-changed worktree. Seventeen applicable
+workflows passed, Preview QA failed and Hosted Pilot Live remained skipped.
+
+The first shared-helper full local invocation, retained under
+`output/playwright/pr264-synthetic-regression/0bf65716c92c450c0df5859a337020cb8f882e6b/sandbox/190fac12d90362add149e34d63b789b7/`,
+passed both `SAFETY-004` reload cases but finished 37 passed, one failed and 30
+unchanged skips. Desktop `SANDBOX-003` rejected four unexpected-origin GET/font
+requests, all one opaque origin class. No raw origin/path was retained, so their
+cause remains unknown. Two independent fresh browser diagnostics and the public
+declared font CSS showed only permitted gstatic font paths; these do not invalidate
+the failure. The owned server was cleaned up and its port checked free.
+
+Read-only quality and security reviews found no navigation/source-binding
+blocker but required privacy-safe investigation without changing enforcement.
+The diagnostic addition returns only fixed known-origin/path/redirect enums after
+rejection. Executable tests compile the actual source functions, preserve allowed
+versus rejected traffic, cover method/header denial, and reject raw-data leakage.
+An initial focused test correctly rejected the newly extended diagnostic type
+against its previous four-field expectation; that exact expectation was updated
+to the approved bounded enum type and the focused test passed. No allowlist,
+retry, timeout, observer-lifetime or product behavior was changed.
+
+The first diagnostics-source static group stopped at AI-boundary scanning:
+the new import moved two existing non-secret navigation-storage inspections
+from lines 48/56 to 49/57. The exact two-line allowlist was advanced; no pattern,
+path prefix, reason or allowed operation was broadened. The failed manifest is
+`output/assess-import/validation/static-30dcc7d0-5668-473d-b848-58d55e837dc9/manifest.json`.
+Application/Edge typechecks and YAML passed before that stop; subsequent checks
+were not inferred as passed. The full static group is rerun after correction.
+
+Final current-source local verification and new-head CI are recorded separately;
+no previous head is promoted to the changed test source. An absent recurrence
+does not retrospectively explain the retained font anomaly.
+
+The second full local invocation, `57d5f67dcde8946854054d492724511f`, retained
+36 passes, two failures and the same 30 skips. Both `SAFETY-007` projects rejected
+two direct GET/font requests classified as Google font assets at the `/l/font`
+endpoint. This identifies the rejected request category, not its stylesheet
+ancestry. Both reload cases passed. The earlier opaque failure remains separate.
+
+Read-only quality/security reviewers rejected a speculative endpoint-wide
+allowlist. The diagnostic contracts were strengthened to assert 13 exact
+origin/path pairs in both redirect states, invalid-input handling and three
+raw-value/origin/path mutants. An ignored, provider-free diagnostic then invoked
+the actual unchanged `SAFETY-007` callback on Desktop and Pixel, completing seven
+persona attachments in each. Natural response observation read 15 exact-declared
+CSS responses per project with zero read failures; all 16 observed font requests
+per project used the existing permitted path and matched a declared response.
+No `/l/font` request recurred, so this cannot prove its ancestry. The diagnostic
+is not a canonical acceptance run. It changed no traffic, allowlist, timeout or
+assertion; raw CSS and URLs existed only in memory. Its owned preview was stopped.
+
+The second static invocation passed all eight commands at source fingerprint
+`8dc4403b79c78098ac3eb5bff9a94c48cf8f698ee461b91f261442f57372eb06`;
+the later semantic diagnostic test additions are not covered by that fingerprint.
+The final-source static and canonical browser checks must run separately. Keep
+the font anomaly unresolved unless new evidence establishes its cause; do not
+turn diagnostic completion or a subsequent clean run into a font-remediation
+claim. No enforcement expansion is included in this correction.
+
+### Final local navigation/diagnostic candidate
+
+The unchanged strict Sandbox suite completed with 38 passes, 30 source-owned
+`not_run` cases, zero failures and zero retries, invocation
+`fe46888a429aa8d170d6c82b2a8f631e`. Both navigation-history projects passed with
+zero skips/failures/retries, invocation `2c69040810771206969eb8b55d083ce3`.
+These reports are working-tree candidates under the `0bf6571` checkout directory,
+not evidence for the earlier committed test source or hosted user acceptance.
+
+All 78 preview/evidence contract tests passed. Acceptance catalog, independent
+oracle and provenance adversaries passed with 108 source-backed branches and
+10 composite cases; these are traceability declarations, not 108 live passes.
+The network-observer regression passed late HTTP and WebSocket traffic after
+sign-out. Final static validation passed all eight canonical commands with every
+source-stability check true, no timeout/spawn failure or truncation:
+`output/assess-import/validation/static-5dffbe1d-b8d0-4cb7-950a-7f39fd1b4515/manifest.json`.
+Its 1,107-source digest is
+`e2f089bea6911662e0da9788db5dfb05b6f0279ae843c1dd232ef6826fe740d7`.
+
+Final bounded read-only security/quality reviews found no remaining code blocker
+in this correction. Quality correctly identified stale derived provenance for
+the five later-edited source/doc files; refresh and canonical verification are
+required after this final documentation freeze. Both reviewers explicitly retain
+the historical font anomaly as unresolved. Owned browser servers were stopped;
+ports 4201/4202 had no listeners. Fresh fetch confirmed the remote still at
+`0bf6571`. New committed-head CI remains required; no paid, hosted, human or
+production acceptance is inferred.
+
+After the final doc freeze, binding refresh and the canonical PR C evidence
+contract passed: 64/64 tests, 81 registered commands, 221 previously executed
+assertion declarations and nine explicit local `not_run` declarations. These
+registry counts do not claim re-execution of the 81-command campaign. Independent
+provenance validation passed all 440 governed paths, closing the reviewer's stale
+hash blocker. Final patch-integrity and exact staged-file checks precede commit.
+
 ## Frozen findings and repair
 
 | Finding | Required correction | Current proof |

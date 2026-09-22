@@ -15,6 +15,7 @@ const metadata = createAcceptanceReportMetadata({
   configPath: 'playwright.local-sandbox-regression.config.ts',
   sourcePaths: [
     'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
     'tests/acceptance/execution-bindings.json',
     'tests/acceptance/catalog/test-catalog.json',
   ],

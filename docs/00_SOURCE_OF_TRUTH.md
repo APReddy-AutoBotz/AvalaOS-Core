@@ -10,6 +10,35 @@ USD 1.3407792 conservative aggregate charge and all retained attempts. A further
 paid acceptance run requires explicit bounded authorization and an implementation
 that preserves the original aggregate cap and prior charges.
 
+## Current post-push browser evidence correction (2026-09-22)
+
+The domain-budget correction was committed and pushed as `0bf6571`. Native Assess
+CI passed and its artifact was independently verified: 25 commands, 14 budget
+assertions, 32 browser cases, 1,106 source hashes and eight rejected verifier
+mutations. Preview QA exposed a separate confirmed test-harness readiness race:
+Pixel reload chose a hidden desktop identity before the mobile header mounted.
+The application snapshot contained the correct Delivery Pack and mobile opener.
+The failed local Sandbox result remains 37 passed, one failed and 30 declared
+skips; it is not accepted as a green preview workflow. A shared fail-closed
+navigation-readiness helper, executable delayed/missing-shell tests and exact
+source bindings are the bounded correction. No product, permission, scoring,
+provider or timeout change is authorized by this harness repair. New-source local
+Sandbox/navigation proof and all new-head checks are required before acceptance.
+
+Local follow-up exposed intermittent rejected external font requests. One run
+retained 37/1 with opaque origins; another retained 36/2 and identified the direct
+Google font-asset `/l/font` category. Its declared dependency ancestry remains
+unproven. Actual-source Desktop/Pixel diagnostics did not reproduce it and cannot
+close it. The correction keeps the strict allowlist unchanged, retains all failed
+attempts and requires canonical final-source validation; no speculative static
+traffic exception or claim of full readiness follows.
+
+The final unchanged-enforcement local candidate subsequently passed 38 Sandbox
+cases (30 explicit skips), both navigation-history cases, 78 preview contracts,
+catalog/oracle/network-observer checks and all eight static commands. Bounded
+security/quality reviews found no code blocker. Final provenance refresh and
+new committed-head CI remain gates; the historical font anomaly stays unresolved.
+
 ## Current domain-budget integration hold (2026-09-18)
 
 Local correction on 2026-09-22 is verified: the final frozen source passed all

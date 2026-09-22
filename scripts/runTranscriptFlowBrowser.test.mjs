@@ -373,7 +373,10 @@ const writeSyntheticNavigationReport = ({
     profile,
     exactCommand: ['node', 'scripts/runTranscriptFlowBrowser.mjs', '--preview-navigation-regression'],
     configPath: 'playwright.local-navigation-regression.config.ts',
-    sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+    sourcePaths: [
+      'tests/browser/controllerNavigationHistory.spec.ts',
+      'tests/browser/productNavigationReadiness.ts',
+    ],
   });
   metadata.invocationId = metadataInvocationId;
   const outputRoot = path.join(
@@ -443,9 +446,11 @@ test('PR #264 synthetic regression modes own distinct loopback configs and full 
   assert.equal(sandbox.port, '4201');
   assert.equal(sandbox.config, 'playwright.local-sandbox-regression.config.ts');
   assert.equal(sandbox.localAcceptance.inventory, 'sandbox');
+  assert.ok(sandbox.localAcceptance.sourcePaths.includes('tests/browser/productNavigationReadiness.ts'));
   assert.equal(navigation.port, '4202');
   assert.equal(navigation.config, 'playwright.local-navigation-regression.config.ts');
   assert.equal(navigation.localAcceptance.inventory, 'navigation');
+  assert.ok(navigation.localAcceptance.sourcePaths.includes('tests/browser/productNavigationReadiness.ts'));
   assert.notEqual(sandbox.localAcceptance.reportArea, navigation.localAcceptance.reportArea);
 });
 

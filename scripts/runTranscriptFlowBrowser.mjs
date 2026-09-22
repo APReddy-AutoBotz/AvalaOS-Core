@@ -59,6 +59,7 @@ export const browserModeByFlag = new Map([
       reportArea: 'sandbox',
       sourcePaths: [
         'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+        'tests/browser/productNavigationReadiness.ts',
         'tests/acceptance/execution-bindings.json',
         'tests/acceptance/catalog/test-catalog.json',
       ],
@@ -73,7 +74,10 @@ export const browserModeByFlag = new Map([
     localAcceptance: {
       flag: '--preview-navigation-regression',
       reportArea: 'navigation',
-      sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+      sourcePaths: [
+        'tests/browser/controllerNavigationHistory.spec.ts',
+        'tests/browser/productNavigationReadiness.ts',
+      ],
       inventory: 'navigation',
     },
   }],

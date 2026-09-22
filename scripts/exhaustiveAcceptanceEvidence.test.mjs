@@ -194,7 +194,10 @@ const hostedMetadata = {
   executionKind: 'hosted_preview',
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
   configPath: 'playwright.exhaustive-acceptance.config.ts',
-  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  sourcePaths: [
+    'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+  ],
   exactHead: 'a'.repeat(40),
   targetOrigin: 'https://avalaos-pilot.netlify.app',
   deployId: 'b'.repeat(24),

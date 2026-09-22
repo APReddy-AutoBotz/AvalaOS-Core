@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import ts from 'typescript';
+import {
+  openProductNavigationWithAdapter,
+  resolveProductNavigationShell,
+} from './productNavigationReadiness.ts';
 
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
+const controllerNavigationSpec = fs.readFileSync(new URL('./controllerNavigationHistory.spec.ts', import.meta.url), 'utf8');
+const productNavigationReadinessSource = fs.readFileSync(new URL('./productNavigationReadiness.ts', import.meta.url), 'utf8');
 const indexCss = fs.readFileSync(new URL('../../index.css', import.meta.url), 'utf8');
 const executionProfileSource = fs.readFileSync(new URL('../../scripts/acceptanceExecutionProfile.mjs', import.meta.url), 'utf8');
 const localSandboxConfig = fs.readFileSync(new URL('../../playwright.local-sandbox-regression.config.ts', import.meta.url), 'utf8');
 const localNavigationConfig = fs.readFileSync(new URL('../../playwright.local-navigation-regression.config.ts', import.meta.url), 'utf8');
+const hostedAcceptanceConfig = fs.readFileSync(new URL('../../playwright.exhaustive-acceptance.config.ts', import.meta.url), 'utf8');
+const hostedNavigationConfig = fs.readFileSync(new URL('../../playwright.controller-navigation-history.config.ts', import.meta.url), 'utf8');
 const executionBindings = JSON.parse(fs.readFileSync(new URL('../acceptance/execution-bindings.json', import.meta.url), 'utf8'));
 const observerSource = fs.readFileSync(new URL('./authorityRequestObserver.ts', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
@@ -17,6 +26,116 @@ const taskListSource = fs.readFileSync(new URL('../../components/delivery/TaskLi
 const boardsSource = fs.readFileSync(new URL('../../components/delivery/BoardsView.tsx', import.meta.url), 'utf8');
 const processCatalogSource = fs.readFileSync(new URL('../../components/assess/ProcessCatalogView.tsx', import.meta.url), 'utf8');
 const processModal = fs.readFileSync(new URL('../../components/assess/ProcessCreationModal.tsx', import.meta.url), 'utf8');
+
+const createNavigationHarness = ({
+  visible = {},
+  revealAfterWait = null,
+  clickOpensMobile = true,
+  clickFails = false,
+  waitFails = false,
+} = {}) => {
+  const state = {
+    mobileIdentity: false,
+    opener: false,
+    desktopIdentity: false,
+    ...visible,
+  };
+  const calls = [];
+  return {
+    calls,
+    state,
+    adapter: {
+      isVisible: async control => Boolean(state[control]),
+      waitForAnyVisible: async timeoutMs => {
+        calls.push(`wait:${timeoutMs}`);
+        if (waitFails) throw new Error('synthetic wait failure');
+        if (revealAfterWait) state[revealAfterWait] = true;
+        if (!Object.values(state).some(Boolean)) throw new Error('synthetic shell missing');
+      },
+      clickOpener: async () => {
+        calls.push('click:opener');
+        if (clickFails) throw new Error('synthetic opener click failed');
+        if (clickOpensMobile) state.mobileIdentity = true;
+      },
+      requireVisible: async (control, timeoutMs) => {
+        calls.push(`require:${control}:${timeoutMs}`);
+        if (!state[control]) throw new Error(`synthetic ${control} missing`);
+      },
+    },
+  };
+};
+
+{
+  const delayedMobile = createNavigationHarness({ revealAfterWait: 'opener' });
+  assert.equal(await openProductNavigationWithAdapter(delayedMobile.adapter), 'mobile',
+    'a green header must not permit desktop fallback before the delayed mobile navigation opener becomes ready');
+  assert.deepEqual(delayedMobile.calls, [
+    'wait:15000',
+    'click:opener',
+    'require:mobileIdentity:15000',
+  ]);
+
+  const delayedDesktop = createNavigationHarness({ revealAfterWait: 'desktopIdentity' });
+  assert.equal(await openProductNavigationWithAdapter(delayedDesktop.adapter), 'desktop');
+  assert.deepEqual(delayedDesktop.calls, ['wait:15000', 'require:desktopIdentity:15000']);
+
+  const missing = createNavigationHarness({ waitFails: true });
+  await assert.rejects(openProductNavigationWithAdapter(missing.adapter), /PRODUCT_NAVIGATION_SHELL_NOT_READY/u);
+  assert.deepEqual(missing.calls, ['wait:15000'], 'permanent absence must fail without guessing the desktop branch');
+
+  const desktop = createNavigationHarness({ visible: { desktopIdentity: true } });
+  assert.equal(await resolveProductNavigationShell(desktop.adapter), 'desktop');
+  assert.equal(await openProductNavigationWithAdapter(desktop.adapter), 'desktop');
+  assert.equal(desktop.calls.includes('click:opener'), false);
+
+  const openMobile = createNavigationHarness({ visible: { mobileIdentity: true, opener: true } });
+  assert.equal(await resolveProductNavigationShell(openMobile.adapter), 'mobile_open');
+  assert.equal(await openProductNavigationWithAdapter(openMobile.adapter), 'mobile');
+  assert.equal(openMobile.calls.includes('click:opener'), false);
+
+  const tablet = createNavigationHarness({ visible: { opener: true, desktopIdentity: true } });
+  assert.equal(await resolveProductNavigationShell(tablet.adapter), 'mobile_closed',
+    'a visible mobile opener must win over a simultaneously rendered desktop identity');
+  assert.equal(await openProductNavigationWithAdapter(tablet.adapter), 'mobile');
+  assert.deepEqual(tablet.calls.slice(-2), ['click:opener', 'require:mobileIdentity:15000']);
+
+  const failedOpen = createNavigationHarness({ visible: { opener: true }, clickOpensMobile: false });
+  await assert.rejects(openProductNavigationWithAdapter(failedOpen.adapter), /synthetic mobileIdentity missing/u);
+  assert.deepEqual(failedOpen.calls, ['click:opener', 'require:mobileIdentity:15000'],
+    'a click without the post-open identity must fail closed');
+
+  const failedClick = createNavigationHarness({ visible: { opener: true }, clickFails: true });
+  await assert.rejects(openProductNavigationWithAdapter(failedClick.adapter), /synthetic opener click failed/u);
+  assert.deepEqual(failedClick.calls, ['click:opener'], 'a failed opener click must not continue to another branch');
+}
+
+const assertSharedProductNavigationWiring = ({ hosted, controller }) => {
+  assert.match(hosted, /import \{ openProductNavigation \} from '\.\/productNavigationReadiness';/u);
+  assert.match(controller, /import \{ openProductNavigation \} from '\.\/productNavigationReadiness';/u);
+  assert.doesNotMatch(hosted, /const openProductNavigation\s*=/u);
+  assert.doesNotMatch(controller, /const openProductNavigation\s*=/u);
+};
+
+assertSharedProductNavigationWiring({ hosted: hostedSpec, controller: controllerNavigationSpec });
+assert.throws(() => assertSharedProductNavigationWiring({
+  hosted: hostedSpec.replace("import { openProductNavigation } from './productNavigationReadiness';", ''),
+  controller: controllerNavigationSpec,
+}), /AssertionError/u, 'omitting the shared helper from the hosted spec must be detected');
+assert.throws(() => assertSharedProductNavigationWiring({
+  hosted: hostedSpec,
+  controller: controllerNavigationSpec.replace('./productNavigationReadiness', './substitutedNavigationHelper'),
+}), /AssertionError/u, 'substituting the shared helper in the controller spec must be detected');
+assert.match(productNavigationReadinessSource, /mobileIdentityVisible[\s\S]*openerVisible[\s\S]*desktopIdentityVisible/u);
+assert.match(productNavigationReadinessSource, /if \(mobileIdentityVisible\) return 'mobile_open';[\s\S]*if \(openerVisible\) return 'mobile_closed';[\s\S]*if \(desktopIdentityVisible\) return 'desktop';/u);
+assert.match(hostedSpec, /getByText\(userName, \{ exact: true \}\)/u,
+  'persona assertions must retain the exact expected user name');
+assert.match(hostedSpec, /heading', \{ name: 'Explore with synthetic data\.' \}\)\)\.toBeVisible\(\{ timeout: 15_000 \}\)/u,
+  'sign-out must retain the exact Sandbox heading assertion');
+
+for (const config of [localSandboxConfig, localNavigationConfig, hostedAcceptanceConfig, hostedNavigationConfig]) {
+  assert.ok(config.includes("'tests/browser/productNavigationReadiness.ts'"),
+    'every affected Playwright evidence config must bind the shared navigation helper source');
+}
 
 const fieldAssociations = [
   ['process-name', 'input'],
@@ -150,6 +269,86 @@ assert.deepEqual(
   'diagnostic changes must not broaden the explicit external static-resource allowlist',
 );
 
+// Execute the actual source-owned classifier and diagnostic functions, not a
+// rewritten allowlist. Only document declarations and the test origin are fixtures.
+const diagnosticDeclaration = hostedSpec.match(/const rejectedStaticRequestDiagnostic = \(rawUrl: string, redirected: boolean\) => \{[\s\S]*?\n\};/u)?.[0];
+const enforcementDeclaration = hostedSpec.match(/const classifyNetworkRequest = \(request: Request\): NetworkViolationCategory \| null => \{[\s\S]*?\n\};/u)?.[0];
+assert.ok(diagnosticDeclaration && enforcementDeclaration);
+const staticStylesheet = 'https://fonts.googleapis.com/css2?family=Inter&display=swap';
+const compileNetworkFunctions = declaration => new Function(
+  'declaredGoogleStylesheetUrls', 'declaredJsDelivrScriptPaths', 'isDeclaredAiStudioScript', 'hostedOrigin',
+  ts.transpileModule([
+    `const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {${allowlistBody[1]}\n};`,
+    "const safeDocumentPath = (value: string) => value === '/sandbox';",
+    "const safeStaticPath = (value: string) => value.startsWith('/assets/');",
+    declaration,
+    enforcementDeclaration,
+  ].join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+    + '\nreturn { rejectedStaticRequestDiagnostic, classifyNetworkRequest };',
+)(new Set([staticStylesheet]), new Set(['/declared-script.js']), () => false, 'http://127.0.0.1:4201');
+const actualNetworkFunctions = compileNetworkFunctions(diagnosticDeclaration);
+const networkRequest = (url, resourceType = 'font', method = 'GET', headers = {}) => ({
+  url: () => url, resourceType: () => resourceType, method: () => method, headers: () => headers,
+});
+const diagnosticKeys = ['knownOriginClass', 'pathClass', 'redirectState'];
+const assertDiagnosticPrivacy = diagnostic => {
+  assert.deepEqual(Object.keys(diagnostic).sort(), diagnosticKeys);
+  assert.ok(['opaque-other-origin', 'google-font-styles', 'google-font-assets', 'jsdelivr-static', 'aistudio-static', 'unavailable-origin'].includes(diagnostic.knownOriginClass));
+  assert.ok(['unclassified-path', 'font-s-prefix', 'font-l-endpoint', 'other-font-path'].includes(diagnostic.pathClass));
+  assert.ok(['direct', 'redirected'].includes(diagnostic.redirectState));
+};
+const assertDiagnosticPair = (diagnostic, knownOriginClass, pathClass) => {
+  assert.equal(diagnostic.knownOriginClass, knownOriginClass);
+  assert.equal(diagnostic.pathClass, pathClass);
+};
+for (const [url, resourceType, expected, expectedOriginClass, expectedPathClass] of [
+  ['https://fonts.gstatic.com/s/inter/test.woff2', 'font', null, 'google-font-assets', 'font-s-prefix'],
+  ['https://fonts.gstatic.com/l/font?private-query=synthetic', 'font', 'unexpected-origin', 'google-font-assets', 'font-l-endpoint'],
+  ['https://fonts.gstatic.com/other/test.woff2', 'font', 'unexpected-origin', 'google-font-assets', 'other-font-path'],
+  ['https://fonts.gstatic.com/s/inter/test.woff2', 'fetch', 'unexpected-origin', 'google-font-assets', 'font-s-prefix'],
+  ['https://fonts.gstatic.com.evil.invalid/s/inter/test.woff2', 'font', 'unexpected-origin', 'opaque-other-origin', 'unclassified-path'],
+  ['https://unknown.invalid/private-path?private-query=synthetic#private-fragment', 'font', 'unexpected-origin', 'opaque-other-origin', 'unclassified-path'],
+  [staticStylesheet, 'stylesheet', null, 'google-font-styles', 'unclassified-path'],
+  [staticStylesheet, 'xhr', null, 'google-font-styles', 'unclassified-path'],
+  [staticStylesheet, 'font', 'unexpected-origin', 'google-font-styles', 'unclassified-path'],
+  ['http://127.0.0.1:4201/assets/local.woff2', 'font', null, 'opaque-other-origin', 'unclassified-path'],
+  ['http://127.0.0.1:4201/api/private', 'xhr', 'authority-request', 'opaque-other-origin', 'unclassified-path'],
+  ['https://cdn.jsdelivr.net/declared-script.js', 'font', 'unexpected-origin', 'jsdelivr-static', 'unclassified-path'],
+  ['https://aistudiocdn.com/private-path', 'font', 'unexpected-origin', 'aistudio-static', 'unclassified-path'],
+]) {
+  const request = networkRequest(url, resourceType);
+  assert.equal(actualNetworkFunctions.classifyNetworkRequest(request), expected);
+  for (const redirected of [false, true]) {
+    const diagnostic = actualNetworkFunctions.rejectedStaticRequestDiagnostic(url, redirected);
+    assertDiagnosticPrivacy(diagnostic);
+    assertDiagnosticPair(diagnostic, expectedOriginClass, expectedPathClass);
+    assert.equal(diagnostic.redirectState, redirected ? 'redirected' : 'direct');
+    assert.equal(actualNetworkFunctions.classifyNetworkRequest(request), expected, 'diagnostics must not alter enforcement');
+    assert.doesNotMatch(JSON.stringify(diagnostic), /private-|https?:|woff2|synthetic/u);
+  }
+}
+assert.deepEqual(actualNetworkFunctions.rejectedStaticRequestDiagnostic('https://fonts.gstatic.com/l/font?private-query=synthetic', true), {
+  knownOriginClass: 'google-font-assets', pathClass: 'font-l-endpoint', redirectState: 'redirected',
+});
+for (const redirected of [false, true]) {
+  const invalidDiagnostic = actualNetworkFunctions.rejectedStaticRequestDiagnostic('not a URL', redirected);
+  assertDiagnosticPrivacy(invalidDiagnostic);
+  assert.deepEqual(invalidDiagnostic, {
+    knownOriginClass: 'unavailable-origin', pathClass: 'unclassified-path', redirectState: redirected ? 'redirected' : 'direct',
+  });
+}
+assert.equal(actualNetworkFunctions.classifyNetworkRequest(networkRequest('https://fonts.gstatic.com/s/inter/test.woff2', 'font', 'POST')), 'non-read-method');
+assert.equal(actualNetworkFunctions.classifyNetworkRequest(networkRequest('https://fonts.gstatic.com/s/inter/test.woff2', 'font', 'GET', { authorization: 'synthetic' })), 'credential-header');
+const leakingDiagnostic = compileNetworkFunctions(diagnosticDeclaration.replace('return { knownOriginClass, pathClass,', 'return { rawUrl, knownOriginClass, pathClass,'));
+assert.throws(() => assertDiagnosticPrivacy(leakingDiagnostic.rejectedStaticRequestDiagnostic('https://unknown.invalid/private-path', false)), /AssertionError/u);
+const substitutedOrigin = compileNetworkFunctions(diagnosticDeclaration.replace('return { knownOriginClass, pathClass,', "return { knownOriginClass: 'google-font-assets', pathClass,"));
+assert.throws(() => assertDiagnosticPair(substitutedOrigin.rejectedStaticRequestDiagnostic('https://unknown.invalid/private-path', false), 'opaque-other-origin', 'unclassified-path'), /AssertionError/u);
+const substitutedPath = compileNetworkFunctions(diagnosticDeclaration.replace('return { knownOriginClass, pathClass,', "return { knownOriginClass, pathClass: 'font-l-endpoint',"));
+assert.throws(() => assertDiagnosticPair(substitutedPath.rejectedStaticRequestDiagnostic('https://fonts.gstatic.com/s/inter/test.woff2', false), 'google-font-assets', 'font-s-prefix'), /AssertionError/u);
+assert.doesNotMatch(enforcementDeclaration, /rejectedStaticRequestDiagnostic/u, 'diagnostics must not influence the enforcement classifier');
+assert.doesNotMatch(allowlistBody[1], /rejectedStaticRequestDiagnostic/u);
+assert.match(observerSource, /const category=classify\(request\);\s*if\(!category\)return;[\s\S]*samples\.push\(sample\(request,category\)\)/u, 'diagnostics must only be constructed after rejection');
+
 assert.match(hostedSpec, /const createDiagnosticOriginClassifier = \(\) => \{/u, 'network diagnostics must use an opaque origin classifier');
 assert.match(hostedSpec, /const externalOriginClasses = new Map<string, string>\(\);/u, 'raw origins may only be grouped in ephemeral in-memory state');
 assert.match(hostedSpec, /url\.protocol !== 'http:' && url\.protocol !== 'https:'/u, 'diagnostics must reject non-HTTP(S) schemes');
@@ -168,6 +367,7 @@ assert.match(sampleBody[1], /method: request\.method\(\)\.toUpperCase\(\)/u, 'vi
 assert.match(sampleBody[1], /category: category as NetworkViolationCategory,/u, 'violation evidence must retain the fail-closed category');
 assert.match(sampleBody[1], /resourceType: request\.resourceType\(\)/u, 'violation evidence may retain the non-sensitive Playwright resource type');
 assert.match(sampleBody[1], /originClass: classifyDiagnosticOrigin\(request\.url\(\)\)/u, 'violation evidence must retain only the opaque origin class');
+assert.match(sampleBody[1], /staticDiagnostic: rejectedStaticRequestDiagnostic\(request\.url\(\), request\.redirectedFrom\(\) !== null\)/u);
 assert.doesNotMatch(sampleBody[1], /\borigin\s*:/u, 'violation evidence must never retain a literal origin field');
 assert.doesNotMatch(sampleBody[1], /request\.headers|request\.postData/u, 'violation evidence must never retain headers or request bodies');
 assert.match(observerSource, /page\.on\('request',inspect\)/u, 'the observer must attach before the bounded workflow');
@@ -360,8 +560,8 @@ assert.match(
 );
 assert.match(
   hostedSpec,
-  /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string \};/u,
-  'violation evidence schema must remain limited to non-sensitive method, category, resource type, and opaque origin class',
+  /type NetworkViolation = \{ method: string; category: NetworkViolationCategory; resourceType: string; originClass: string; staticDiagnostic\?: ReturnType<typeof rejectedStaticRequestDiagnostic> \};/u,
+  'violation evidence schema must remain limited to non-sensitive metadata, opaque origin class, and fixed diagnostic enums',
 );
 assert.doesNotMatch(
   hostedSpec,

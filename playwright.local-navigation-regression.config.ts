@@ -13,7 +13,10 @@ const metadata = createAcceptanceReportMetadata({
   profile,
   exactCommand: ['node', 'scripts/runTranscriptFlowBrowser.mjs', '--preview-navigation-regression'],
   configPath: 'playwright.local-navigation-regression.config.ts',
-  sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+  sourcePaths: [
+    'tests/browser/controllerNavigationHistory.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+  ],
 });
 
 export default defineConfig({

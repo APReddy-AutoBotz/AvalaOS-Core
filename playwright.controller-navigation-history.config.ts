@@ -14,7 +14,10 @@ const reportMetadata = createAcceptanceReportMetadata({
   profile: executionProfile,
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.controller-navigation-history.config.ts', '--workers=1'],
   configPath: 'playwright.controller-navigation-history.config.ts',
-  sourcePaths: ['tests/browser/controllerNavigationHistory.spec.ts'],
+  sourcePaths: [
+    'tests/browser/controllerNavigationHistory.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+  ],
 });
 const metadata = executionProfile.executionKind === 'hosted_preview'
   ? {

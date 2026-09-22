@@ -57,7 +57,10 @@ const browserExecutionKind = typeof playwright?.config?.metadata?.executionKind 
   : 'unbound';
 const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
 const hostedConfigPath = 'playwright.exhaustive-acceptance.config.ts';
-const hostedSourcePaths = ['tests/browser/exhaustiveHostedAcceptance.spec.ts'];
+const hostedSourcePaths = [
+  'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+  'tests/browser/productNavigationReadiness.ts',
+];
 const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml';
 let browserEvidenceErrors = [];
 let browserReportValidation = null;

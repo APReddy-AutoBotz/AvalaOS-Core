@@ -11,6 +11,59 @@ any further paid acceptance requires explicit bounded approval preserving all
 prior charges and the aggregate USD 10 limit. No hosted mutation or paid call was
 performed in this resumed local verification phase.
 
+## Post-push browser evidence repair (2026-09-22)
+
+Exact head `0bf6571` passed native Assess CI, independently verified against its
+artifact. Preview QA run `35703883723`, attempt 1, failed the local Pixel
+`SAFETY-004` reload assertion: an immediate absent-opener probe silently returned
+before the shell was ready, then the test waited on the hidden desktop identity.
+Three bounded read-only reviews confirmed a harness synchronization defect, not
+a product persona or authorization regression. All reviewers closed before writes.
+
+Use one shared test helper for exhaustive Sandbox and controller-navigation
+specs. Poll within the unchanged 15-second bound for actual visible mobile
+identity, mobile opener or desktop identity, in that priority. Open and verify
+mobile navigation when needed, explicitly verify desktop readiness otherwise,
+and reject a permanently absent shell. Persona/sign-out consumers must use the
+selected branch, never repeat an eager visibility guess. Preserve exact persona,
+project durability, denied routes, observer/sign-out/quiescence and source-owned
+skips. Bind the helper into affected report source inventories. Add executable
+delayed-shell, absent-shell, desktop, open-mobile, tablet-priority and failed-open
+regressions; run affected contracts, typechecks, full 38-case Sandbox and two-case
+navigation suites before final read-only review and a same-branch corrective
+commit. Require fresh exact-head CI; do not rerun away the known defect or change
+timeouts, retries, product components or authorization. The expired paid boundary
+above and provider-disabled/read-only rollback remain unchanged.
+
+The first full corrected-source local run exposed an additional unattributed
+GET/font anomaly, while both reload cases passed. Preserve that failed 37/1 run
+and its 30 unchanged skips. The bounded diagnostic addition may return only fixed
+known-origin/path/redirect enums after an enforcement rejection; it must not
+affect allowlist decisions, observer lifetime, sample bounds or zero-violation
+assertions. Execute the actual classifier/diagnostic source in adversarial tests,
+reject raw-data mutations, then perform one fresh no-retry full invocation. A
+non-reproduction remains an unresolved historical anomaly, not a fabricated
+root cause or permission to broaden allowed traffic. No product changes follow.
+
+The diagnostic full run retained 36 passes, two failures and 30 skips: direct
+Google font-asset `/l/font` requests were rejected in both accessibility projects.
+Their declaration ancestry is not established. Subsequent actual-source Desktop
+and Pixel journey diagnostics observed only already-permitted declared assets.
+Quality/security reviews agree not to add a path-wide exception. Preserve both
+failed attempts and the unresolved anomaly. Complete final-source canonical
+validation with enforcement unchanged; stop on a recurrence and investigate its
+same-run dependency evidence rather than retrying until green. A clean run proves
+only that invocation and does not close the historical font question.
+
+Final local execution passed 38 active Sandbox cases with the unchanged 30 skips,
+both navigation projects, 78 contracts, catalog/oracle/observer checks and the
+eight static gates. Refresh derived provenance after final documentation freeze,
+validate the canonical contract, inspect the exact staged allowlist and commit
+the coherent correction on the existing branch. Fresh exact-head CI is required.
+If it fails, keep the draft/acceptance hold; do not disable checks or promote the
+local result to hosted acceptance. Rollback withholds candidate acceptance and
+keeps provider runtime disabled, preserving all failed attempts and prior charges.
+
 ## Active domain-budget integration correction (2026-09-18)
 
 Baseline `ca6a616a659ea678a3b5d9a556d916d96d1b50f2` passed all 18 applicable

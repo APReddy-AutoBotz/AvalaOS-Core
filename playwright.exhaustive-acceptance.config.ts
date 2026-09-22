@@ -19,7 +19,10 @@ const reportMetadata = createAcceptanceReportMetadata({
   profile: executionProfile,
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
   configPath: 'playwright.exhaustive-acceptance.config.ts',
-  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  sourcePaths: [
+    'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+  ],
 });
 const workflowPath = resolveHostedAcceptanceWorkflowPath({
   environment: process.env,
