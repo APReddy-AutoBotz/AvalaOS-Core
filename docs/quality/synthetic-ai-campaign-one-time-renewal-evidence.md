@@ -76,6 +76,27 @@ remain release gates; no previous full-suite result is promoted to this source.
 
 ## Rollback and recovery
 
+### Retained first committed-head integration failure
+
+Commit `ef0cc875798bbddc7a366cba287ede2bc49dc4eb` was pushed to the existing
+PR #264 branch. Creation-access CI run `35726413802`, attempt 1, stopped in its
+PostgreSQL harness before applying any migration: the harness still required the
+domain-budget predecessor to be the final migration. The exact local regression
+executing that runner's preflight reproduced `80 !== 81`. The correction requires
+the renewal immediately after domain-budget and last in the chain; it does not
+weaken the exact chain, change SQL, or touch provider runtime. The regression also
+rejects an omitted, appended, reordered, or restored-stale final migration.
+All 20 focused migration-tail/command-contract tests and the runner syntax check
+passed after the correction. No database or product code changed in that fix.
+This failed CI attempt remains failed; no unchanged retry is a substitute for
+the correction. Hosted rollout and paid business testing remain not run.
+
+The immutable `c08f42c..ef0cc875` security review returned no findings and reviewed
+all changed source, but the sealed tool artifact retained a partial-coverage flag
+and a stale deferred architecture-reconciliation entry after the final semantic
+submission. Preserve this reporting limitation; do not claim complete security
+clearance or rewrite the sealed artifact.
+
 Keep both provider runtimes off or invoke the existing campaign-disable RPC.
 Disable is irreversible and never clears original disabled history. Preserve the
 renewal, all original/new debits, failed attempts and token reservations for

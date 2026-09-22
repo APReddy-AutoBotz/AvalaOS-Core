@@ -14,6 +14,16 @@ steps, not regression-suite totals, determine the workflow result. Existing
 exact-head deployment gates remain in force. Hosted mapping, document generation,
 human acceptance and production readiness remain unproven.
 
+Renewal/contrast candidate `ef0cc875` is on the existing PR #264 branch. Its
+creation-access CI stopped before migrations on a stale test-harness assertion
+that still made the domain-budget predecessor last. A focused regression
+reproduced `80 !== 81`; the correction asserts the renewal successor is last and
+rejects missing/reordered/extra tails. The twenty focused contract tests pass;
+the failed CI attempt remains retained, and corrected-head CI is still required.
+No additional paid call or hosted change was made. The scoped security review
+reported no findings, but its sealed artifact retained a partial-coverage flag;
+it must not be represented as full security clearance.
+
 ## Current Studio accessibility correction hold (2026-09-22)
 
 Navigation correction head `c08f42c` passed 17 applicable workflows, including

@@ -76,7 +76,9 @@ try {
   assert.equal(campaignAuthorityIndex, projectionVolatilityIndex + 1);
   const domainBudgetIndex = migrations.indexOf('20260918082307_synthetic_ai_mapping_studio_budget_authority.sql');
   assert.equal(domainBudgetIndex, campaignAuthorityIndex + 1);
-  assert.equal(domainBudgetIndex, migrations.length - 1);
+  const renewalIndex = migrations.indexOf('20260922112911_synthetic_ai_campaign_one_time_renewal.sql');
+  assert.equal(renewalIndex, domainBudgetIndex + 1);
+  assert.equal(renewalIndex, migrations.length - 1);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import {
   PR_C_APPROVED_SUCCESSOR_TAIL,
   PR_C_CONTROLLED_HUMAN_FROZEN_TIP,
@@ -23,6 +24,25 @@ import {
 } from './projectionRpcVolatilityMigrationContract.mjs';
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
+
+test('creation PostgreSQL runner executes the real migration-order preflight with renewal last', () => {
+  const source = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
+  const start = source.indexOf('  const creationStart =');
+  const end = source.indexOf('  const apply =', start);
+  assert.ok(start >= 0 && end > start, 'Actual runner preflight must be present');
+  const preflight = source.slice(start, end);
+  const migrations = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
+  const execute = (files, code = preflight) => runInNewContext(`(() => {${code}})()`,
+    {migrations: files, assert}, {timeout: 1000});
+  assert.doesNotThrow(() => execute(migrations));
+  for (const files of [migrations.slice(0, -1), [...migrations, '20990101000000_unapproved.sql'],
+    [...migrations.slice(0, -2), migrations.at(-1), migrations.at(-2)]]) {
+    assert.throws(() => execute(files), {code: 'ERR_ASSERTION'});
+  }
+  // Reintroducing the exact CI defect must fail even when count/tip markers pass.
+  assert.throws(() => execute(migrations,
+    preflight + '\nassert.equal(domainBudgetIndex, migrations.length - 1);'), {code: 'ERR_ASSERTION'});
+});
 
 test('domain-budget RPC identifiers fit PostgreSQL without silent API-name truncation', () => {
   const assertNames = source => {
