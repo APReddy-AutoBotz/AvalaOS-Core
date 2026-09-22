@@ -22,8 +22,8 @@ const clients = [];
 const sanitize = value => String(value).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, '[synthetic-id]').replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, '[local-database]');
 const connect = async connectionString => { const c = new pg.Client({ connectionString, connectionTimeoutMillis: 2500 }); await c.connect(); clients.push(c); return c; };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-const child = (script, env) => new Promise((resolveResult, reject) => {
-  const proc = spawn(process.execPath, [script], { cwd: root, env: { ...process.env, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+const child = (script, env, args = []) => new Promise((resolveResult, reject) => {
+  const proc = spawn(process.execPath, [script, ...args], { cwd: root, env: { ...process.env, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
   proc.stdout.on('data', data => { stdout += data; });
   proc.stderr.on('data', data => { stderr += data; });
@@ -32,9 +32,9 @@ const child = (script, env) => new Promise((resolveResult, reject) => {
   proc.once('close', async code => {
     clearTimeout(timeout);
     const output = sanitize(stdout + stderr);
-    await writeFile(join(artifactDir, `${script.split('/').at(-1)}.log`), output);
+    await writeFile(join(artifactDir, `${script.split('/').at(-1)}${args.length ? '-baseline' : ''}.log`), output);
     console.log(output.trim());
-    report.scenarios.push({ command: [process.execPath, script], exitCode: code, status: code === 0 ? 'passed' : 'failed', outputSha256: createHash('sha256').update(output).digest('hex') });
+    report.scenarios.push({ command: [process.execPath, script, ...args], exitCode: code, status: code === 0 ? 'passed' : 'failed', outputSha256: createHash('sha256').update(output).digest('hex') });
     if (code !== 0) reject(new Error(`LOCAL_POSTGRES_SCENARIO_FAILED:${script}`)); else resolveResult();
   });
 });
@@ -61,8 +61,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260917173445');
-  assert.equal(migrations.length, 80);
+  assert.equal(approvedFullChainTip(migrations), '20260918082307');
+  assert.equal(migrations.length, 81);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -74,7 +74,9 @@ try {
     [creationStart + 2, creationStart + 3, creationStart + 4, creationStart + 5, creationStart + 6]);
   const campaignAuthorityIndex = migrations.indexOf('20260917173445_synthetic_ai_campaign_authority.sql');
   assert.equal(campaignAuthorityIndex, projectionVolatilityIndex + 1);
-  assert.equal(campaignAuthorityIndex, migrations.length - 1);
+  const domainBudgetIndex = migrations.indexOf('20260918082307_synthetic_ai_mapping_studio_budget_authority.sql');
+  assert.equal(domainBudgetIndex, campaignAuthorityIndex + 1);
+  assert.equal(domainBudgetIndex, migrations.length - 1);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -105,7 +107,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20260917173445') => {
+  const assertFinalIdentity = async (db, expectedTip = '20260918082307') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {
@@ -134,6 +136,118 @@ try {
   await apply(campaignDb.db, migrations);
   await assertFinalIdentity(campaignDb.db);
   await child('scripts/testSyntheticAiCampaignPostgres.mjs', { SYNTHETIC_AI_CAMPAIGN_DISPOSABLE_DATABASE_URL: campaignDb.dbUrl.toString() });
+
+  // Execute the predecessor's real campaign tests before upgrading its populated
+  // ledger. Snapshot old columns only; adding nullable identity columns must not
+  // rewrite any charge, consumed timestamp, carry, cap, expiry or disabled state.
+  const budgetUpgrade = await createDb('ai_budget_upgrade');
+  await apply(budgetUpgrade.db, migrations.slice(0, domainBudgetIndex));
+  await assertFinalIdentity(budgetUpgrade.db, '20260917173445');
+  await child('scripts/testSyntheticAiCampaignPostgres.mjs', {
+    SYNTHETIC_AI_CAMPAIGN_DISPOSABLE_DATABASE_URL: budgetUpgrade.dbUrl.toString(),
+  }, ['--pre-domain-budget-upgrade']);
+  const debitColumns = (await budgetUpgrade.db.query(`SELECT column_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='synthetic_ai_campaign_effect_debits' ORDER BY ordinal_position`)).rows.map(row=>row.column_name);
+  assert.ok(debitColumns.every(column=>/^[a-z_]+$/.test(column)));
+  const budgetSnapshot = async () => ({
+    campaigns: (await budgetUpgrade.db.query('SELECT * FROM synthetic_ai_campaign_authorities ORDER BY id')).rows,
+    debits: (await budgetUpgrade.db.query(`SELECT ${debitColumns.join(',')} FROM synthetic_ai_campaign_effect_debits ORDER BY id`)).rows,
+    tokens: (await budgetUpgrade.db.query(`SELECT to_jsonb(b)-ARRAY['assess_mapping_run_id','assess_mapping_transfer_count','assess_mapping_last_transfer_at','assess_mapping_transfer_pending'] AS value FROM enterprise_ai_budget_reservations b ORDER BY id`)).rows,
+  });
+  report.activeScenario='domain-budget-predecessor-snapshot';
+  const budgetBefore = await budgetSnapshot();
+  assert.equal(budgetBefore.debits.length, 19);
+  const domainBudgetSql = await readFile(join('supabase/migrations', migrations[domainBudgetIndex]), 'utf8');
+  const budgetSchemaSnapshot = async () => createHash('sha256').update(JSON.stringify({
+    functions:(await budgetUpgrade.db.query(`SELECT p.oid::text,p.proname,pg_get_functiondef(p.oid) definition,
+      p.proacl::text,p.proconfig::text,p.proowner::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' ORDER BY p.oid`)).rows,
+    relations:(await budgetUpgrade.db.query(`SELECT c.oid::text,c.relname,c.relacl::text,c.relowner::text,c.relrowsecurity,c.relforcerowsecurity
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' ORDER BY c.oid`)).rows,
+    constraints:(await budgetUpgrade.db.query(`SELECT c.oid::text,c.conname,pg_get_constraintdef(c.oid) definition
+      FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' ORDER BY c.oid`)).rows,
+  })).digest('hex');
+  const predecessorSchema = await budgetSchemaSnapshot();
+  const rejectedBudgetPreconditions=[];
+  for(const [label,mutation] of [
+    ['wrong-predecessor', "UPDATE hosted_pilot_environment_identity SET migration_tip='20260916203406' WHERE singleton"],
+    ['wrong-product', "UPDATE hosted_pilot_environment_identity SET product_key='foreign-product' WHERE singleton"],
+    ['production-flag', 'UPDATE hosted_pilot_environment_identity SET production_authorized=true WHERE singleton'],
+    ['customer-flag', 'UPDATE hosted_pilot_environment_identity SET customer_data_authorized=true WHERE singleton'],
+    ['provider-flag', 'UPDATE hosted_pilot_environment_identity SET real_provider_calls_authorized=true WHERE singleton'],
+  ]) {
+    report.activeScenario=`domain-budget-precondition-${label}`;
+    await budgetUpgrade.db.query('BEGIN');
+    try {
+      // Deliberate corruption is confined to this disposable transaction; it
+      // proves the migration guards, not merely the predecessor CHECK clauses.
+      const checks=(await budgetUpgrade.db.query(`SELECT conname FROM pg_constraint
+        WHERE conrelid='hosted_pilot_environment_identity'::regclass AND contype='c'`)).rows;
+      for(const {conname} of checks){assert.match(conname,/^[a-z0-9_]+$/);await budgetUpgrade.db.query(`ALTER TABLE hosted_pilot_environment_identity DROP CONSTRAINT ${conname}`);}
+      await budgetUpgrade.db.query(mutation);
+      await assert.rejects(budgetUpgrade.db.query(domainBudgetSql), error=>
+        error.message==='SYNTHETIC_AI_DOMAIN_BUDGET_MIGRATION_PRECONDITION_FAILED');
+      rejectedBudgetPreconditions.push(label);
+    } finally { await budgetUpgrade.db.query('ROLLBACK'); }
+    assert.deepEqual(await budgetSnapshot(),budgetBefore);
+    assert.equal(await budgetSchemaSnapshot(),predecessorSchema);
+    await assertFinalIdentity(budgetUpgrade.db,'20260917173445');
+  }
+  report.activeScenario='domain-budget-populated-forward-apply';
+  await apply(budgetUpgrade.db, [migrations[domainBudgetIndex]]);
+  await assertFinalIdentity(budgetUpgrade.db);
+  report.activeScenario='domain-budget-preserve-populated-ledgers';
+  assert.deepEqual(await budgetSnapshot(), budgetBefore);
+  assert.equal((await budgetUpgrade.db.query(`SELECT count(*)::int n FROM synthetic_ai_campaign_effect_debits
+    WHERE authority_kind='enterprise'`)).rows[0].n, 19);
+  assert.equal((await budgetUpgrade.db.query(`SELECT count(*)::int n FROM enterprise_ai_budget_reservations
+    WHERE assess_mapping_run_id IS NOT NULL OR assess_mapping_transfer_count<>0
+      OR assess_mapping_last_transfer_at IS NOT NULL OR assess_mapping_transfer_pending`)).rows[0].n,0);
+  report.activeScenario='domain-budget-function-privileges';
+  const changedFunctionNames=[...new Set([
+    ...[...domainBudgetSql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.([a-z0-9_]+)/giu)].map(match=>match[1]),
+    // Existing functions receiving drift-guarded body-only forwards must also
+    // appear in the actual deployed privilege inventory.
+    'synthetic_ai_campaign_bootstrap','studio_artifact_generation_claim_v2',
+    'enterprise_ai_reserve_provider_budget','studio_artifact_reserve_provider_budget_v2',
+  ])];
+  assert.ok(changedFunctionNames.length>=7,'The domain lifecycle and currency RPCs must be present.');
+  for(const name of changedFunctionNames)assert.ok(Buffer.byteLength(name,'utf8')<=63,'New RPC names must not be silently truncated');
+  const functionPrivileges=(await budgetUpgrade.db.query(`SELECT p.proname,p.prosecdef,p.proconfig,
+    has_function_privilege('anon',p.oid,'EXECUTE') anon_execute,
+    has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated_execute
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[changedFunctionNames])).rows;
+  assert.deepEqual([...new Set(functionPrivileges.map(row=>row.proname))].sort(),changedFunctionNames.sort());
+  for(const row of functionPrivileges){
+    assert.equal(row.anon_execute,false,`${row.proname} must not be callable by anonymous clients`);
+    assert.equal(row.authenticated_execute,false,`${row.proname} must not be callable by browser clients`);
+    if(row.prosecdef)assert.ok(row.proconfig?.includes('search_path=pg_catalog'),`${row.proname} requires fixed search_path`);
+  }
+  report.activeScenario='domain-budget-ledger-privileges';
+  assert.deepEqual((await budgetUpgrade.db.query(`SELECT relname,relrowsecurity,relforcerowsecurity,
+    has_table_privilege('service_role',oid,'INSERT') service_insert,
+    has_table_privilege('service_role',oid,'UPDATE') service_update,
+    has_table_privilege('service_role',oid,'DELETE') service_delete
+    FROM pg_class WHERE oid IN('public.enterprise_ai_budget_reservations'::regclass,'public.synthetic_ai_campaign_effect_debits'::regclass)
+    ORDER BY relname`)).rows,[
+      {relname:'enterprise_ai_budget_reservations',relrowsecurity:true,relforcerowsecurity:true,service_insert:false,service_update:false,service_delete:false},
+      {relname:'synthetic_ai_campaign_effect_debits',relrowsecurity:true,relforcerowsecurity:true,service_insert:false,service_update:false,service_delete:false},
+    ]);
+  report.activeScenario='domain-budget-reapply-atomicity';
+  const successorSchema=await budgetSchemaSnapshot();
+  await budgetUpgrade.db.query('BEGIN');
+  try {
+    await assert.rejects(budgetUpgrade.db.query(domainBudgetSql), error=>
+      error.message==='SYNTHETIC_AI_DOMAIN_BUDGET_MIGRATION_PRECONDITION_FAILED');
+  } finally { await budgetUpgrade.db.query('ROLLBACK'); }
+  assert.deepEqual(await budgetSnapshot(), budgetBefore);
+  assert.equal(await budgetSchemaSnapshot(),successorSchema);
+  await assertFinalIdentity(budgetUpgrade.db);
+  report.scenarios.push({ scenario:'populated-domain-budget-upgrade-and-reapply-preserve-all-existing-charge-and-token-authority', status:'passed', retainedDebits:19, rejectedPreconditions:rejectedBudgetPreconditions });
+  delete report.activeScenario;
+  await budgetUpgrade.db.end();
+  await admin.query('DROP DATABASE avalaos_creation_access_ai_budget_upgrade');
 
   const upgrade = await createDb('upgrade');
   await apply(upgrade.db, migrations.slice(0, creationStart));
@@ -544,6 +658,8 @@ try {
   report.scenarios.push({ scenario: 'populated-78-to-79-upgrade-preserves-process-flags-source-classifier-projection-metadata-and-default-off-targets', status: 'passed', assertions: 17 });
   console.log('Populated 78-to-79 upgrade: retained process, enabled mapping flag, text source, classifier authority, projection RPC metadata, exact final identity, and unconfigured creation targets are preserved.');
   await apply(upgrade.db, [migrations[campaignAuthorityIndex]]);
+  await assertFinalIdentity(upgrade.db, '20260917173445');
+  await apply(upgrade.db, [migrations[domainBudgetIndex]]);
   await assertFinalIdentity(upgrade.db);
   assert.deepEqual(await retained(), before);
   assert.deepEqual(await retainedXlsxUpgradeState(), retainedBeforeXlsx);

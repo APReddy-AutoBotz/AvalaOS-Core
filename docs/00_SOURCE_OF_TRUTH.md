@@ -1,5 +1,45 @@
 # AvalaOS Core Source Of Truth
 
+## Current campaign expiry boundary (2026-09-22)
+
+The approved synthetic AI campaign expired at `2026-09-19T05:07:16.751Z`.
+Continuation is local and provider-free while the domain-budget correction is
+verified. Runtime remains disabled; no expiry extension, replacement campaign,
+ledger reset or paid retry is authorized by a generic continuation. Preserve the
+USD 1.3407792 conservative aggregate charge and all retained attempts. A further
+paid acceptance run requires explicit bounded authorization and an implementation
+that preserves the original aggregate cap and prior charges.
+
+## Current domain-budget integration hold (2026-09-18)
+
+Local correction on 2026-09-22 is verified: the final frozen source passed all
+25 canonical commands, 32 Desktop/Pixel cases, 14 explicit SQL budget/recovery
+scenarios, fresh/populated migration checks and six local recovery assertions.
+The two defects found after the earlier green run are now corrected: lost mapping
+transfer-claim responses recover only unconsumed ownership, and Studio terminal
+replay finalizes without loading mutable template/provider material. Mandatory
+measured coverage is bound into CI. Final read-only architecture, quality and
+security reviews found no remaining blocker in this correction. The active
+domain-budget evidence record preserves both earlier failed attempts and the final
+source-bound results, including a new completed security scan; the previous scan's
+publication limitation remains disclosed. Same-branch commit/push and new-head CI
+follow. No hosted acceptance, paid retry or readiness claim follows.
+
+Claim correction `ca6a616a659ea678a3b5d9a556d916d96d1b50f2` passed all 18
+applicable exact-head workflows and synthetic command-function source verification.
+The next hosted mapping attempt failed before provider access because its run is
+not a legacy Enterprise AI job required by the token-budget RPCs. Read-only
+architecture, security and quality reviews also confirmed Studio's real receipt
+cannot satisfy the campaign's Enterprise-only receipt authority. The active
+AI-output plan now owns one coherent forward-schema/runtime correction and real
+SQL-to-mocked-provider lifecycle tests for both paths. These are correctness and
+recovery blockers, not demonstrated cross-tenant disclosure. Provider runtime is
+off; charge remains conservatively USD 1.3407792 with no analysis debit. Existing
+charges, failed records, campaign expiry and provider-free targets stay unchanged.
+The correction is proven only at the local synthetic boundary above. Its new-head
+CI, full hosted mapping/Studio acceptance and production readiness remain unproven;
+earlier green tests must not be promoted to these claims.
+
 ## Current synthetic AI acceptance correction (2026-09-18)
 
 The dedicated AI target now has executed TXT upload/source-set/bundle UI evidence

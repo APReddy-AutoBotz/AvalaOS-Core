@@ -1,5 +1,39 @@
 # Verification Command Matrix
 
+## Assess/Studio domain-budget correction — current verification extension
+
+The active AI-output correction adds mandatory
+`npm run test:assess-import:budget-pipeline` to the canonical `postgres` group.
+It must exercise actual PostgreSQL domain receipts, token reservations, campaign
+permits and finalization with production provider adapters and mocked egress.
+Missing configuration is a failure, not a passing skip. The canonical native
+matrix is now 25 commands: feature 10, PostgreSQL 4, regression 2, browser 1,
+static 8. The existing native workflow invokes those exact groups.
+The second regression command binds the production Studio claim decoder and
+response-loss orchestration suites, including completed replay without new provider
+ownership. Its exact canonical script cannot be replaced by an aggregate green exit.
+The feature mapping-coverage command additionally measures
+`assessMappingProviderBudget.ts`; the Studio recovery command measures
+`studioArtifactDb.ts` and `studioArtifactGeneration.ts` through the same mandatory
+90/80/85 line/branch/function thresholds. Removing any measurement, substituting a different source, or
+running only its non-coverage test rejects canonical command validation.
+Recovery acceptance includes unconsumed pending-transfer claim-response loss and
+terminal Studio finalization after mutable template/provider changes. The earlier
+25-command green run did not cover those cases and is retained as a narrower
+pre-review result, not promoted to the corrected source. The 2026-09-22 final
+frozen-source rerun passed all 25 commands, actual 32 Desktop/Pixel cases and
+14 explicit SQL pipeline assertions; exact manifests are retained in the active
+domain-budget correction evidence. The 81-command retained PR C registry is
+contract-validated locally, not claimed as fully executed until new-head CI.
+
+`npm run test:creation-access:postgres` additionally validates the current
+81-migration chain and a populated 80-to-81 upgrade with 19 retained currency
+debits, token reservations, carry/cap/expiry, rejected predecessor/authorization
+markers, reapply rejection and rollback without partial schema changes. The
+current correction evidence records execution results; listing these commands
+does not mean they passed. Retained older counts below describe their original
+boundaries, not the new candidate.
+
 ## Creation access and isolated synthetic Admin — active repair
 
 The approved 2026-09-15 repair is governed by

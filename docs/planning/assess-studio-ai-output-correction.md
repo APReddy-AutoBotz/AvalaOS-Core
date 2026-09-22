@@ -1,5 +1,95 @@
 # Assess and Studio AI output correction
 
+## Resumed execution boundary (2026-09-22)
+
+The immutable campaign expired at `2026-09-19T05:07:16.751Z`. Continue the local,
+provider-free implementation and verification below, followed by the authorized
+same-branch commit/push and exact-head CI. Do not execute the previously planned
+paid UI retry under the expired campaign. A generic continuation does not extend
+expiry, reset charges, or authorize a replacement campaign. Runtime remains off;
+any further paid acceptance requires explicit bounded approval preserving all
+prior charges and the aggregate USD 10 limit. No hosted mutation or paid call was
+performed in this resumed local verification phase.
+
+## Active domain-budget integration correction (2026-09-18)
+
+Baseline `ca6a616a659ea678a3b5d9a556d916d96d1b50f2` passed all 18 applicable
+exact-head workflows and its changed command function was source-verified on the
+dedicated AI target. The one subsequent mapping UI attempt failed before provider
+access: mapping owns a mapping run, but the shared token RPCs require a legacy
+Enterprise job. Independent read-only architecture, security and quality reviews
+also confirmed that Studio's committed Studio receipt cannot satisfy the campaign
+ledger's Enterprise-only receipt FK/assertion. Earlier green checks and claim-only
+bridges do not prove either complete production chain. Both failures are confirmed
+source defects; no external authorization bypass was demonstrated.
+
+All three reviewers closed before the workspace-write implementation phase. One
+worker owns one CLI-created forward migration and the narrow mapping runtime
+adapter; a second owns provider-free real-SQL production-chain regressions. The
+root owns integration, migration-tail reconciliation, CI, active documentation,
+full validation and acceptance. No descendants or concurrent reviewer writes.
+
+The frozen remediation matrix is:
+
+- Add `assess_mapping` to the shared token ledger's exclusive identity union,
+  backed by the actual mapping run and Enterprise receipt. Preserve legacy and
+  Studio identities and the same daily/monthly aggregate limits. A dedicated
+  reserve/settle/uncertain/release quartet must bind exact scope, actor, receipt,
+  authorization version, run, execution fence and provider plan. Reserve checks
+  current case/bundle/source lineage, flags, route, key, validation and role;
+  post-effect accounting must remain possible after mutable authorization changes.
+- Make mapping recovery budget-aware. Reserved/uncertain/settled authority cannot
+  grant another provider effect. Staged output finalizes without a paid retry.
+  Only proven released-before-effect ownership with no campaign debit may transfer
+  to the current fence once. A lost response before consuming that pending grant
+  must remain recoverable on the exact same or a newer valid fence; atomic budget
+  reserve consumes the grant once. Recovery cannot recreate a consumed grant.
+  Existing currency debits remain immutable and may
+  conservatively prevent transfer; no refund or inferred no-effect outcome.
+- Add an explicit campaign identity union for Enterprise, mapping and Studio,
+  with real foreign keys. Derive the kind from exact server-bound operation and
+  command type, never a caller flag or fallback. Mapping and Studio currency
+  reserve/consume recheck the matching reserved token authority and domain
+  currentness. Studio binds its committed request to the actual generating
+  attempt, source package, template and execution fence.
+- Preserve the single aggregate currency cap across all kinds, existing debit
+  contents, carry, fixed charge, expiry, consume-once semantics and provider-free
+  targets. Do not fabricate a legacy job/Enterprise bridge receipt, relax generic
+  RPC checks, grant approval capability to authors or change deterministic scores.
+
+Acceptance requires actual TXT ingestion/catalog/claim through mapping budget,
+campaign permit, mocked production provider, stage, settle and commit; and actual
+Studio request/claim through its corresponding complete chain. Assert exactly one
+effect/debit and zero additions on replay. Adversarial cases cover scope/identity/
+fence/provider/source substitution, missing token authority, shared cap and
+concurrency, cancelled/no-effect transfer, transport ambiguity, invalid output,
+stage failure and settlement/finalization response loss. Fresh and populated
+upgrade, predecessor rejection, reapply rejection, immutable debit preservation,
+grants and RLS must be tested. Run focused suites plus canonical feature,
+PostgreSQL, retained regression, Desktop/Pixel, typechecks, YAML, AI boundary,
+secret hygiene, scoring, build and patch checks. Serialize browser/static builds.
+
+The pre-review frozen source passed all 25 canonical commands, 32 Desktop/Pixel
+cases, full fresh/populated migration checks and six retained recovery assertions.
+Final reviews found two omitted response-loss cases: unconsumed mapping transfer
+recovery and Studio terminal replay after mutable template/provider changes.
+Both are now corrected without new effect authority. Actual SQL/runtime regressions
+013 and 014 cover those cases; adapter, database decoder and terminal-orchestration
+coverage are mandatory. The final frozen source passed all 25 canonical commands,
+32 Desktop/Pixel cases and 14 explicit pipeline assertions, plus the full migration
+and local recovery checks. Final architecture, quality and security reviews closed
+with no remaining blocker in this correction. The active correction evidence
+preserves the earlier green boundary rather than relabelling it to the new repairs.
+Runtime is disabled, and conservative
+aggregate charge remains USD 1.3407792 with zero analysis debit. The immutable
+campaign expiry is not extended. After local gates and independent final review,
+commit/push this same branch and require new exact-head CI. The resumed expiry
+boundary above supersedes the earlier immediate hosted-retry sequence: stop
+before hosted changes or paid execution and obtain bounded renewed authority
+that preserves the existing aggregate cap, charges and failed-attempt history.
+Rollback is provider-disabled/read-only retention, never ledger or failed-record
+deletion. Merge, document approval/handoff and production remain unauthorized.
+
 ## Active mapping claim correction (2026-09-18)
 
 Executed synthetic UI evidence now proves TXT upload, a locked Assess source set

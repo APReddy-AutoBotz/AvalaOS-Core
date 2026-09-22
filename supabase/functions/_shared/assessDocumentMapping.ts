@@ -119,8 +119,12 @@ export const decodeAssessMappingClaimResponse = (input: {
   const hasSafeResult = Object.hasOwn(value, 'safeResult');
   const safeResult = value.safeResult;
   const initialClaim = state === 'claimed' && ownsExecution === true && recoveryMode === 'none' && !hasSafeResult;
-  const resumedClaim = state === 'claimed' && ownsExecution === true && recoveryMode === 'execute_provider' && hasSafeResult && safeResult === null;
-  const inProgressClaim = state === 'claimed' && ownsExecution === false && recoveryMode === 'none' && hasSafeResult && safeResult === null;
+  // jsonb_strip_nulls may omit safeResult on a replay claim. Missing and exact
+  // null are equivalent only for claimed recovery states; staged/terminal
+  // responses still require a concrete safe result.
+  const nullOrOmittedSafeResult = !hasSafeResult || safeResult === null;
+  const resumedClaim = state === 'claimed' && ownsExecution === true && recoveryMode === 'execute_provider' && nullOrOmittedSafeResult;
+  const inProgressClaim = state === 'claimed' && ownsExecution === false && recoveryMode === 'none' && nullOrOmittedSafeResult;
   const staged = state === 'staged' && ownsExecution === false && recoveryMode === 'finalize_staged'
     && hasSafeResult && record(safeResult) && isAssessMappingJsonValue(safeResult);
   const terminal = ['committed', 'failed', 'blocked'].includes(String(state)) && ownsExecution === false && recoveryMode === 'none'
@@ -294,6 +298,7 @@ const issueAnchor = async (source: AssessMappingDecodedSource, locator: string, 
 
 export interface StagedAssessMappingProposal {
   id: string;
+  version: 1;
   targetSelectorId: string;
   proposedValue: AssessMappingJsonValue;
   confidence: number;
@@ -336,7 +341,7 @@ export const decodeGroundedAssessMappingProposalResult = async (input: {
     if (!validateAssessMappingValue(target, raw.proposedValue) || !isAssessMappingJsonValue(raw.proposedValue)) { reject('VALUE_INVALID'); continue; }
     const anchored = await issueAnchor(source, raw.locator, raw.safeExcerpt);
     if (!anchored.anchor) { reject(anchored.reason ?? 'ANCHOR_INVALID'); continue; }
-    result.push({ id: input.createProposalId(), targetSelectorId: target.selectorId, proposedValue: raw.proposedValue,
+    result.push({ id: input.createProposalId(), version: 1, targetSelectorId: target.selectorId, proposedValue: raw.proposedValue,
       confidence: raw.confidence, rationale: raw.rationale.trim(), sourceId: source.sourceId,
       sourceVersionId: source.sourceVersionId, extractionBindingId: source.extractionBindingId,
       extractionJobId: source.extractionJobId, sourceAnchor: anchored.anchor,

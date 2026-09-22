@@ -48,6 +48,9 @@ test('prompt requests grounded mappings while retaining legitimate empty output'
   const grounded = await source({ text: 'Review invoice exceptions against purchase orders.' });
   const decoded = await decodeGroundedAssessMappingProposalResult({ value: { proposals: [{ targetSelectorId: target.selectorId, sourceVersionId: grounded.sourceVersionId, proposedValue: grounded.text, confidence: 0.9, rationale: 'Explicit description', safeExcerpt: grounded.text, locator: 'text', relationship: 'supporting' }] }, targets: [target], sources: [grounded], createProposalId: () => id(80) });
   assert.equal(decoded.proposals.length, 1); assert.equal(decoded.warnings.length, 0);
+  assert.equal(decoded.proposals[0].version, 1);
+  assert.deepEqual(Object.keys(decoded.proposals[0]).sort(), ['confidence', 'extractionBindingId', 'extractionJobId', 'id', 'proposedValue',
+    'rationale', 'relationship', 'sourceAnchor', 'sourceId', 'sourceVersionId', 'targetSelectorId', 'version']);
   assert.deepEqual(await decodeGroundedAssessMappingProposalResult({ value: { proposals: [] }, targets: [target], sources: [grounded], createProposalId: () => id(81) }), { proposals: [], warnings: [] });
 });
 
@@ -124,14 +127,16 @@ test('claim decoder enforces coherent lifecycle states and exact top-level ident
     targets: claimTargets, sourceBindings: expectedSourceBindings });
   assert.equal(decode(sqlClaim()).state, 'claimed');
   assert.equal(decode(sqlClaim({ ownsExecution: true, recoveryMode: 'execute_provider', safeResult: null })).recoveryMode, 'execute_provider');
+  assert.equal(decode(sqlClaim({ ownsExecution: true, recoveryMode: 'execute_provider' })).recoveryMode, 'execute_provider');
   assert.equal(decode(sqlClaim({ ownsExecution: false, safeResult: null })).ownsExecution, false);
+  assert.equal(decode(sqlClaim({ ownsExecution: false })).ownsExecution, false);
   assert.equal(decode(sqlClaim({ state: 'staged', ownsExecution: false, recoveryMode: 'finalize_staged', safeResult: { runId: claimRunId } })).state, 'staged');
   for (const state of ['committed', 'failed', 'blocked']) {
     assert.equal(decode(sqlClaim({ state, ownsExecution: false, recoveryMode: 'none', safeResult: { runId: claimRunId } })).state, state);
   }
   for (const malformed of [
     sqlClaim({ state: 'unknown' }), sqlClaim({ state: 'staged', ownsExecution: true, recoveryMode: 'finalize_staged', safeResult: {} }),
-    sqlClaim({ ownsExecution: false }), sqlClaim({ recoveryMode: 'execute_provider' }), sqlClaim({ safeResult: null }),
+    sqlClaim({ safeResult: null }),
     sqlClaim({ runId: id(90) }), sqlClaim({ catalogId: id(91) }), sqlClaim({ catalogHash: 'A'.repeat(64) }),
     sqlClaim({ catalogHash: 'bad' }), { ...sqlClaim(), unknown: true },
   ]) assert.throws(() => decode(malformed), /CLAIM_INVALID/);

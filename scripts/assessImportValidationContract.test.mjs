@@ -21,6 +21,46 @@ test('every feature command binds independent canonical execution source', () =>
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
   for (const group of Object.keys(assessImportGroups)) assert.equal(assessImportCommands(group, scripts).length, assessImportGroups[group].length);
 });
+test('complete domain budget lifecycle is a mandatory canonical PostgreSQL gate', () => {
+  const scripts=JSON.parse(readFileSync('package.json','utf8')).scripts;
+  const commands=assessImportCommands('postgres',scripts);
+  assert.equal(commands.filter(command=>command.name==='test:assess-import:budget-pipeline').length,1);
+  assert.equal(commands.find(command=>command.name==='test:assess-import:budget-pipeline').script,
+    'node scripts/assessStudioBudgetPipelinePostgres.mjs');
+  assert.throws(()=>assessImportCommands('postgres',{...scripts,'test:assess-import:budget-pipeline':'node -e "process.exit(0)"'}),/SUBSTITUTED/);
+  assert.match(readFileSync('.github/workflows/assess-document-mapping.yml','utf8'),/run: node scripts\/runAssessImportValidation\.mjs postgres/);
+});
+test('budget lifecycle assertion evidence requires an actual recognized emitted assertion', () => {
+  assert.deepEqual(observedAssessImportResults('budget pipeline exited 0'),[]);
+  assert.deepEqual(observedAssessImportResults('ASSESS_DOCUMENT_MAPPING_PG_ASSERTION {"testId":"MAP-PG-BUDGET-STUDIO","result":"not_run"}'),
+    [{kind:'postgres-assertion',testId:'MAP-PG-BUDGET-STUDIO',status:'not_run'}]);
+});
+test('Studio real claim decoder and response-loss orchestration remain mandatory regression gates', () => {
+  const scripts=JSON.parse(readFileSync('package.json','utf8')).scripts;
+  const command=assessImportCommands('regression',scripts).find(item=>item.name==='test:assess-import:studio-recovery');
+  assert.ok(command);
+  assert.match(command.script,/studioArtifactDb\.test\.ts/);
+  assert.match(command.script,/studioArtifactGeneration\.test\.ts/);
+  assert.throws(()=>assessImportCommands('regression',{...scripts,'test:assess-import:studio-recovery':'node -e "process.exit(0)"'}),/SUBSTITUTED/);
+});
+
+test('mapping budget and Studio recovery coverage cannot be replaced by unmeasured tests', () => {
+  const scripts=JSON.parse(readFileSync('package.json','utf8')).scripts;
+  for (const [group,name,path] of [
+    ['feature','test:assess-import:mapping-coverage','supabase/functions/_shared/assessMappingProviderBudget.ts'],
+    ['regression','test:assess-import:studio-recovery','supabase/functions/_shared/studioArtifactDb.ts'],
+    ['regression','test:assess-import:studio-recovery','supabase/functions/_shared/studioArtifactGeneration.ts'],
+  ]) {
+    const command=assessImportCommands(group,scripts).find(item=>item.name===name);
+    assert.ok(command);
+    const coverageFlag=`--coverage=${path}`;
+    assert.equal(command.script.split(coverageFlag).length,2);
+    assert.throws(()=>assessImportCommands(group,{...scripts,[name]:command.script.replace(`${coverageFlag} `,'')}),/SUBSTITUTED/);
+    assert.throws(()=>assessImportCommands(group,{...scripts,[name]:command.script.replace(path,'supabase/functions/_shared/providerBudget.ts')}),/SUBSTITUTED/);
+  }
+  const workflow=readFileSync('.github/workflows/assess-document-mapping.yml','utf8');
+  for (const group of ['feature','regression']) assert.ok(workflow.includes(`run: node scripts/runAssessImportValidation.mjs ${group}`));
+});
 test('substituted command cannot validate by copying its own manifest', () => {
   const changed = { ...assessImportScripts, 'test:assess-import:parser': 'node -e "process.exit(0)"' };
   assert.throws(() => assessImportCommands('feature', changed), /SUBSTITUTED/);

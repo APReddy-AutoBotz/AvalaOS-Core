@@ -1,5 +1,36 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Active mapping/Studio budget-authority correction (2026-09-18)
+
+Confirmed source defects at `ca6a616`: mapping uses its own run ID where all four
+generic token-budget RPCs require a legacy job; Studio supplies a committed Studio
+receipt where campaign currency permits require a claimed Enterprise receipt.
+The hosted mapping retry is executed failed pre-provider evidence, with zero new
+token reservations, analysis debits or proposals. Studio's failure is source-proven,
+not a paid hosted test. No externally exploitable bypass was established.
+
+Three read-only reviews closed before implementation. The active AI-output plan
+freezes additive real-domain ledger unions, a mapping RPC quartet, budget-aware
+recovery and complete real-SQL/mocked-provider regression for both modules. Keep
+current charge USD 1.3407792, immutable campaign expiry and one aggregate USD 10
+cap; never substitute an artificial job/receipt or weaken generic authorization.
+Runtime remains disabled. Pre-review local evidence passed all 25 canonical
+commands and fresh/populated migration/recovery gates on 2026-09-22. Final
+independent review found two confirmed liveness defects despite those passes:
+lost mapping transfer-claim response strands a pending grant; terminal Studio
+replay unnecessarily reloads mutable template/provider material. Both are now
+corrected without new provider authority, with real SQL response-loss assertions
+and mandatory measured adapter/recovery coverage. Corrected-source execution
+passed all 25 canonical commands, 32 Desktop/Pixel cases, 14 explicit pipeline
+assertions and the full fresh/populated migration/local recovery gates. Final
+architecture, quality and security reviews found no remaining correction blocker;
+the new security scan has complete intended-source coverage and no findings.
+This is bounded local evidence, not full-platform or hosted acceptance. New-head
+CI remains planned verification. The campaign has expired; hosted/paid
+retry needs separately renewed bounded authority with all prior charges retained.
+Rollback retains all history and disables provider execution. The previous claim
+correction's green results remain valid only for its narrower documented scope.
+
 ## Active SQL/Edge mapping contract correction (2026-09-18)
 
 Confirmed source defects: mapping compares database JSONB hashes with compact JS

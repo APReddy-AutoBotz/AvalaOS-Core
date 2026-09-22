@@ -4,6 +4,9 @@ import {readFileSync} from 'node:fs';
 import pg from 'pg';
 
 const connectionString=process.env.SYNTHETIC_AI_CAMPAIGN_DISPOSABLE_DATABASE_URL;
+const baselineUpgrade=process.argv[2]==='--pre-domain-budget-upgrade';
+assert.deepEqual(process.argv.slice(2),baselineUpgrade?['--pre-domain-budget-upgrade']:[],'Unknown test mode');
+const domainSignal=predecessorSignal=>baselineUpgrade?predecessorSignal:'SYNTHETIC_AI_CAMPAIGN_DOMAIN_STALE';
 if(!connectionString)throw new Error('SYNTHETIC_AI_CAMPAIGN_DISPOSABLE_DATABASE_URL is required.');
 const targetUrl=new URL(connectionString);
 if(!['127.0.0.1','localhost','::1'].includes(targetUrl.hostname)||!targetUrl.pathname.slice(1).startsWith('avalaos_'))
@@ -107,16 +110,35 @@ const claimReceipt=async({db=client,actor=ids.author,commandType='transcript.ass
   $1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::uuid,$7::text,NULL,$8::uuid
  )).*`,[actor,ids.org,ids.workspace,commandType,`campaign-${label}`,requestId,requestHash,executionToken]);
  check(receipt.status,'claimed');
- return {id:receipt.id,executionToken:receipt.execution_token,executionFence:Number(receipt.execution_fence),requestHash};
+ return {id:receipt.id,executionToken:receipt.execution_token,executionFence:Number(receipt.execution_fence),requestHash,requestId};
 };
 
 const makeAttempt=async({
  db=client,actor=ids.author,authorizationVersion,operation='assess.evidence.extract',routeId=ids.assessRoute,
  commandType='transcript.assess.extract',label,
-})=>({
- actor,authorizationVersion,operation,routeId,receipt:await claimReceipt({db,actor,commandType,label}),
- effectId:uuid(),effectRequestHash:hash(`effect:${label}`),maximumOutputTokens,
-});
+})=>{
+ const attempt={actor,authorizationVersion,operation,routeId,receipt:await claimReceipt({db,actor,commandType,label}),
+  effectId:uuid(),effectRequestHash:hash(`effect:${label}`),maximumOutputTokens};
+ if(operation==='assess.evidence.extract'){
+  // This retained campaign test owns the legacy extraction fixture only. Native
+  // mapping/Studio authority is exercised by the separate production pipeline.
+  await db.query(`INSERT INTO public.enterprise_ai_job_ledger(
+   id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,actor_id,
+   request_id,idempotency_key,status,approval_state,receipt_id,request_hash,execution_token,execution_fence,route_id)
+   VALUES($1,$2,$3,'assess.evidence.extract',$4,'openai',$5,'assess.evidence.extract','campaign-v1',$6,
+   $7,$8,'running','review_required',$9,$10,$11,$12,$13)`,
+   [attempt.effectId,ids.org,ids.workspace,ids.providerConfig,model,actor,attempt.receipt.requestId,
+    `campaign-job-${label}`,attempt.receipt.id,attempt.receipt.requestHash,attempt.receipt.executionToken,
+    attempt.receipt.executionFence,routeId]);
+  attempt.tokenBudget=(await one(db,`SELECT public.enterprise_ai_reserve_provider_budget(
+   $1::uuid,$2::uuid,$3::uuid,$4::bigint,$5::uuid,$6::uuid,$7::uuid,$8::bigint,$9::uuid,$10::uuid,
+   'openai','assess.evidence.extract',$11::text,100,4096) AS value`,
+   [actor,ids.org,ids.workspace,authorizationVersion,attempt.receipt.id,attempt.effectId,
+    attempt.receipt.executionToken,attempt.receipt.executionFence,routeId,ids.providerConfig,model])).value;
+  check([attempt.tokenBudget.state,attempt.tokenBudget.ownsProviderEffect],['reserved',true]);
+ }
+ return attempt;
+};
 
 const reserveSql=`SELECT public.synthetic_ai_campaign_reserve_effect(
  $1::uuid,$2::uuid,$3::uuid,$4::bigint,$5::text,$6::text,$7::uuid,$8::uuid,$9::uuid,$10::bigint,
@@ -159,7 +181,7 @@ try{
  await setRequestHost(client);
 
  phase='default_off_and_schema';
- check((await one(client,`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,'20260917173445');
+ check((await one(client,`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,baselineUpgrade?'20260917173445':'20260918082307');
  check(await count(client,'public.synthetic_ai_campaign_authorities'),0);
  check(await count(client,'public.synthetic_ai_campaign_effect_debits'),0);
  const schema=(await one(client,`SELECT
@@ -236,10 +258,15 @@ try{
   VALUES($1,$2,$3,'active',statement_timestamp(),$4)`,[ids.org,ids.author,roles.member_role,ids.operator]);
  await client.query(`INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status,joined_at,created_by)
   VALUES($1,$2,$3,$4,'active',statement_timestamp(),$5)`,[ids.org,ids.workspace,ids.author,roles.author_role,ids.operator]);
- const authorVersion=Number((await one(client,'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',[ids.org,ids.author])).version);
+ let authorVersion=Number((await one(client,'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',[ids.org,ids.author])).version);
  check(await count(client,'public.role_capabilities',`role_id=$1 AND capability_key IN('evidence.write','docs.approve')`,[roles.author_role]),0);
  check(await count(client,'public.role_capabilities',`role_id=$1 AND capability_key IN('assess.v2.draft.write','studio.artifacts.generate')`,[roles.author_role]),2);
- pass('intended author fixture has generation authority without evidence-write or approval capability inflation');
+ // Legacy evidence extraction requires evidence.write. Do not misrepresent this
+ // legacy job fixture as the native Assess mapping authoring chain.
+ await client.query("INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,'evidence.write')",[roles.author_role]);
+ authorVersion=Number((await one(client,'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',[ids.org,ids.author])).version);
+ check(await count(client,'public.role_capabilities',"role_id=$1 AND capability_key='docs.approve'",[roles.author_role]),0);
+ pass('legacy extraction author has canonical evidence-write authority without document approval');
 
  phase='provider_validation_charge';
  const validation=await makeAttempt({actor:ids.operator,authorizationVersion:operatorVersion,operation:'provider.validate',routeId:null,
@@ -264,23 +291,22 @@ try{
   [ids.org,ids.workspace,ids.providerConfig])).value.mode,'campaign');
  await expectedFailure(client,`SELECT public.synthetic_ai_campaign_assert_legacy_resolver($1::uuid,$2::uuid,$3::uuid,$4::uuid)`,
   [ids.org,ids.workspace,ids.providerConfig,ids.keyRef],'SYNTHETIC_AI_LEGACY_RESOLVER_DENIED');
+ // This denied attempt never obtained a currency permit or invoked a provider.
+ // Release its real token reservation through the canonical transition so the
+ // later currency-cap race is not masked by an unrelated daily-request limit.
+ check(await count(client,'public.synthetic_ai_campaign_effect_debits','receipt_id=$1',[bypassAttempt.receipt.id]),0);
+ const bypassReleased=(await one(client,`SELECT public.enterprise_ai_release_provider_budget_v2(
+  $1::uuid,$2::uuid,$3::uuid,$4::bigint,$5::uuid,$6::uuid,$7::uuid,$8::bigint,$9::uuid,$10::uuid,
+  'openai','assess.evidence.extract',$11::text,$12::uuid,'before_provider_effect') AS value`,
+  [ids.author,ids.org,ids.workspace,authorVersion,bypassAttempt.receipt.id,bypassAttempt.effectId,
+   bypassAttempt.receipt.executionToken,bypassAttempt.receipt.executionFence,ids.assessRoute,ids.providerConfig,
+   model,bypassAttempt.tokenBudget.reservationId])).value;
+ check(bypassReleased.state,'released');
  pass('campaign binding, lifecycle, and legacy resolver bypasses fail closed');
 
  phase='chained_token_and_currency_budget';
  const chained=await makeAttempt({authorizationVersion:authorVersion,label:'assess-token-and-usd'});
- const jobId=uuid();
- await client.query(`INSERT INTO public.enterprise_ai_job_ledger(
-  id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,actor_id,
-  request_id,idempotency_key,status,approval_state,receipt_id,request_hash,execution_token,execution_fence,route_id
- ) VALUES($1,$2,$3,'assess.evidence.extract',$4,'openai',$5,'assess.evidence.extract','campaign-v1',$6,
-  $7,$8,'running','review_required',$9,$10,$11,1,$12)`,
-  [jobId,ids.org,ids.workspace,ids.providerConfig,model,ids.author,uuid(),'campaign-budget-job',chained.receipt.id,
-   chained.receipt.requestHash,chained.receipt.executionToken,ids.assessRoute]);
- const tokenBudget=(await one(client,`SELECT public.enterprise_ai_reserve_provider_budget(
-  $1::uuid,$2::uuid,$3::uuid,$4::bigint,$5::uuid,$6::uuid,$7::uuid,$8::bigint,$9::uuid,$10::uuid,
-  'openai','assess.evidence.extract',$11::text,100,4096
- ) AS value`,[ids.author,ids.org,ids.workspace,authorVersion,chained.receipt.id,jobId,chained.receipt.executionToken,
-  chained.receipt.executionFence,ids.assessRoute,ids.providerConfig,model])).value;
+ const tokenBudget=chained.tokenBudget;
  check([tokenBudget.state,tokenBudget.ownsProviderEffect,tokenBudget.replayed],['reserved',true,false]);
  const chainedCurrency=await reserve(client,chained);
  check([chainedCurrency.mode,chainedCurrency.ownsProviderEffect],['campaign',true]);
@@ -300,14 +326,15 @@ try{
  await expectedFailure(client,reserveSql,reserveArgs(negative,{receiptId:uuid()}),'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE');
  await expectedFailure(client,reserveSql,reserveArgs(negative,{executionToken:uuid()}),'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE');
  await expectedFailure(client,reserveSql,reserveArgs(negative,{executionFence:negative.receipt.executionFence+1}),'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE');
- await expectedFailure(client,reserveSql,reserveArgs(negative,{authorizationVersion:authorVersion+1}),'PR1B_AUTHORIZATION_STALE');
- await expectedFailure(client,reserveSql,reserveArgs(negative,{provider:'groq'}),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
+ await expectedFailure(client,reserveSql,reserveArgs(negative,{authorizationVersion:authorVersion+1}),domainSignal('PR1B_AUTHORIZATION_STALE'));
+ await expectedFailure(client,reserveSql,reserveArgs(negative,{provider:'groq'}),domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'));
  await expectedFailure(client,reserveSql,reserveArgs(negative,{endpoint:'https://example.invalid'}),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
- await expectedFailure(client,reserveSql,reserveArgs(negative,{model:'gpt-4.1-mini'}),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
+ await expectedFailure(client,reserveSql,reserveArgs(negative,{model:'gpt-4.1-mini'}),domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'));
  await expectedFailure(client,reserveSql,reserveArgs(negative,{keyRefId:uuid()}),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
- await expectedFailure(client,reserveSql,reserveArgs(negative,{routeId:ids.studioRoute}),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
+ await expectedFailure(client,reserveSql,reserveArgs(negative,{routeId:ids.studioRoute}),domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'));
  await expectedFailure(client,reserveSql,reserveArgs(negative,{effectRequestHash:'not-a-hash'}),'SYNTHETIC_AI_CAMPAIGN_BINDING_INVALID');
- await expectedFailure(client,reserveSql,reserveArgs(negative,{maximumOutputTokens:32_769}),'SYNTHETIC_AI_CAMPAIGN_NOT_AUTHORIZED');
+ await expectedFailure(client,reserveSql,reserveArgs(negative,{maximumOutputTokens:32_769}),domainSignal('SYNTHETIC_AI_CAMPAIGN_NOT_AUTHORIZED'));
+ await expectedFailure(client,reserveSql,reserveArgs(validation,{maximumOutputTokens:32_769}),'SYNTHETIC_AI_CAMPAIGN_NOT_AUTHORIZED');
  check(await count(client,'public.synthetic_ai_campaign_effect_debits'),beforeNegative);
  pass('wrong target, scope, authority, provider, endpoint, model, key, route, hash, and output bound all deny without debit');
 
@@ -340,11 +367,11 @@ try{
  check([exactReplay.ownsProviderEffect,exactReplay.replayed,exactReplay.reservationId],
   [false,true,replayReservation.reservationId]);
  await expectedFailure(client,reserveSql,reserveArgs(replayAttempt,{effectId:uuid()}),
-  'SYNTHETIC_AI_CAMPAIGN_REPLAY_SUBSTITUTION');
+  domainSignal('SYNTHETIC_AI_CAMPAIGN_REPLAY_SUBSTITUTION'));
  await expectedFailure(client,reserveSql,reserveArgs(replayAttempt,{effectRequestHash:hash('substituted-effect')}),
   'SYNTHETIC_AI_CAMPAIGN_REPLAY_SUBSTITUTION');
  await expectedFailure(client,reserveSql,reserveArgs(replayAttempt,{maximumOutputTokens:4097}),
-  'SYNTHETIC_AI_CAMPAIGN_REPLAY_SUBSTITUTION');
+  domainSignal('SYNTHETIC_AI_CAMPAIGN_REPLAY_SUBSTITUTION'));
  const consumeBoundaryBefore=await one(client,`SELECT
   (SELECT count(*)::integer FROM public.synthetic_ai_campaign_effect_debits) AS debit_count,
   consumed_at FROM public.synthetic_ai_campaign_effect_debits WHERE id=$1`,[replayReservation.reservationId]);
@@ -355,20 +382,20 @@ try{
   ['organization',{org:uuid()},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
   ['workspace',{workspace:uuid()},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
   ['actor',{actor:uuid()},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
-  ['authorization-version',{authorizationVersion:authorVersion+1},'SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED'],
+  ['authorization-version',{authorizationVersion:authorVersion+1},domainSignal('SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED')],
   ['receipt',{receiptId:uuid()},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
-  ['effect',{effectId:uuid()},'SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED'],
+  ['effect',{effectId:uuid()},domainSignal('SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED')],
   ['execution-token',{executionToken:uuid()},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
   ['execution-fence',{executionFence:replayAttempt.receipt.executionFence+1},'SYNTHETIC_AI_CAMPAIGN_RECEIPT_STALE'],
-  ['route',{routeId:ids.studioRoute},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
-  ['provider-config',{providerConfigId:uuid()},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
+  ['route',{routeId:ids.studioRoute},domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE')],
+  ['provider-config',{providerConfigId:uuid()},domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE')],
   ['key-reference',{keyRefId:uuid()},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
-  ['provider',{provider:'groq'},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
+  ['provider',{provider:'groq'},domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE')],
   ['endpoint',{endpoint:'https://example.invalid'},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
-  ['model',{model:'gpt-4.1-mini'},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
-  ['operation',{operation:'studio.document.generate'},'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE'],
+  ['model',{model:'gpt-4.1-mini'},domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE')],
+  ['operation',{operation:'studio.document.generate'},domainSignal('SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE')],
   ['effect-request-hash',{effectRequestHash:hash('consume-substitution')},'SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED'],
-  ['maximum-output',{maximumOutputTokens:4097},'SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED'],
+  ['maximum-output',{maximumOutputTokens:4097},domainSignal('SYNTHETIC_AI_CAMPAIGN_PERMIT_INVALID_OR_REPLAYED')],
  ];
  for(const [,overrides,signal] of consumeSubstitutions){
   await expectedFailure(client,consumeSql,consumeArgs(replayReservation.reservationId,replayAttempt,overrides),signal);
@@ -410,6 +437,10 @@ try{
   const attemptA=await makeAttempt({db:contenderA,authorizationVersion:authorVersion,label:'final-slot-a'});
   const attemptB=await makeAttempt({db:contenderB,authorizationVersion:authorVersion,label:'final-slot-b'});
   const outcomes=await Promise.allSettled([reserve(contenderA,attemptA),reserve(contenderB,attemptB)]);
+  // Retain bounded domain codes only, never raw PostgreSQL diagnostics or IDs.
+  console.log(`Final-slot outcomes: ${outcomes.map(result=>result.status==='fulfilled'
+   ? `fulfilled:owns=${result.value.ownsProviderEffect===true}`
+   : `rejected:${result.reason?.message?.match(/^[A-Z0-9_]{3,100}$/)?.[0]??result.reason?.code??'UNCLASSIFIED'}`).join(',')}`);
   check(outcomes.filter(result=>result.status==='fulfilled'&&result.value.ownsProviderEffect).length,1);
   check(outcomes.filter(result=>result.status==='rejected'&&result.reason?.message==='SYNTHETIC_AI_CAMPAIGN_BUDGET_EXHAUSTED').length,1);
   const winningIndex=outcomes.findIndex(result=>result.status==='fulfilled');
@@ -458,8 +489,9 @@ try{
   {enabled:false,stamped:true});
  check(await count(client,'public.enterprise_ai_capability_routes','enabled'),0);
  check(await count(client,'public.ai_provider_configs',`status='disabled'`),1);
- const afterDisable=await makeAttempt({authorizationVersion:authorVersion,label:'after-disable'});
- await expectedFailure(client,reserveSql,reserveArgs(afterDisable),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
+ // A valid, previously token-reserved effect must lose currency authority when
+ // the provider route is disabled; do not fabricate a new post-disable token.
+ await expectedFailure(client,reserveSql,reserveArgs(negative),'SYNTHETIC_AI_CAMPAIGN_PROVIDER_STALE');
  check(await count(client,'public.synthetic_ai_campaign_effect_debits'),19);
  pass('disable turns off campaign routes/config and preserves all immutable charges');
 

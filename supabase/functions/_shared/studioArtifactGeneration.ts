@@ -19,8 +19,22 @@ export const STUDIO_GENERATION_FAILURE_CODES = [
 ] as const;
 export type StudioGenerationFailureCode = typeof STUDIO_GENERATION_FAILURE_CODES[number];
 
-export type StudioGenerationClaim = Readonly<{
+type StudioGenerationExecutionIdentity = Readonly<{
   attemptId: string;
+  executionToken: string;
+  executionFence: number;
+}>;
+
+export type StudioTerminalGenerationClaim = StudioGenerationExecutionIdentity & Readonly<{
+  claimKind: 'terminal';
+  terminalState: 'completed' | 'stale';
+  leaseExpiresAt: null;
+  providerAllowed: false;
+  reconcileOnly: false;
+}>;
+
+export type StudioExecutableGenerationClaim = StudioGenerationExecutionIdentity & Readonly<{
+  claimKind: 'active';
   artifactId: string;
   receiptId: string;
   organizationId: string;
@@ -28,8 +42,6 @@ export type StudioGenerationClaim = Readonly<{
   actorId: string;
   authorizationVersion: number;
   requestId: string;
-  executionToken: string;
-  executionFence: number;
   leaseExpiresAt: string;
   sourcePackageId: string;
   sourcePackageVersion: number;
@@ -53,6 +65,8 @@ export type StudioGenerationClaim = Readonly<{
   reconcileOnly: boolean;
 }>;
 
+export type StudioGenerationClaim = StudioExecutableGenerationClaim | StudioTerminalGenerationClaim;
+
 export type StudioGenerationFinalization =
   | { state: 'completed'; resource: unknown }
   | { state: 'stale'; resource?: unknown }
@@ -60,16 +74,23 @@ export type StudioGenerationFinalization =
   | { state: 'uncertain'; failureCode: StudioGenerationFailureCode }
   | { state: 'in_progress'; resource?: unknown };
 
+export type StudioGenerationFinalizationInput = StudioGenerationExecutionIdentity & (
+  | Readonly<{
+    claimKind: 'active';
+    sourcePackageHead: number;
+    templateHead: number;
+    expectedArtifactHead: number;
+  }>
+  | Readonly<{ claimKind: 'terminal' }>
+);
+
 export interface StudioGenerationDependencies {
   runProvider(input: Parameters<typeof callStudioArtifactProvider>[0]): Promise<StudioProviderGatewayResult>;
   stage(input: {
     attemptId: string; executionToken: string; executionFence: number;
     providerOperationId?: string; response: JsonObject;
   }): Promise<void>;
-  finalize(input: {
-    attemptId: string; executionToken: string; executionFence: number;
-    sourcePackageHead: number; templateHead: number; expectedArtifactHead: number;
-  }): Promise<{ state: 'completed' | 'stale' | 'in_progress'; resource?: unknown }>;
+  finalize(input: StudioGenerationFinalizationInput): Promise<{ state: 'completed' | 'stale' | 'in_progress'; resource?: unknown }>;
   fail(attemptId: string, failureCode: StudioGenerationFailureCode): Promise<void>;
   runBudgeted?: typeof runBudgetedProviderEffect;
   signal?: AbortSignal;
@@ -197,7 +218,7 @@ const failureCode = (error: unknown): StudioGenerationFailureCode => {
   return 'PROVIDER_REQUEST_FAILED';
 };
 
-const budgetInput = (claim: StudioGenerationClaim): ProviderBudgetReservationInput => ({
+const budgetInput = (claim: StudioExecutableGenerationClaim): ProviderBudgetReservationInput => ({
   authority: {
     actorId: claim.actorId, organizationId: claim.organizationId, workspaceId: claim.workspaceId,
     authorizationVersion: claim.authorizationVersion,
@@ -238,6 +259,27 @@ export const executeClaimedStudioGeneration = async (
   claim: StudioGenerationClaim,
   deps: StudioGenerationDependencies,
 ): Promise<StudioGenerationFinalization> => {
+  if (claim.claimKind === 'terminal') {
+    try {
+      const finalized = await deps.finalize({
+        claimKind: 'terminal',
+        attemptId: claim.attemptId,
+        executionToken: claim.executionToken,
+        executionFence: claim.executionFence,
+      });
+      if (finalized.state !== claim.terminalState || finalized.resource === undefined) {
+        return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' };
+      }
+      return finalized.state === 'completed'
+        ? { state: 'completed', resource: finalized.resource }
+        : { state: 'stale', resource: finalized.resource };
+    } catch {
+      // The durable version may already be committed even when its canonical
+      // acknowledgment is lost again. Never convert that ambiguity into a new
+      // provider effect or a terminal failure write.
+      return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' };
+    }
+  }
   let stagedContent: JsonObject | undefined;
   let postEffectPhase = false;
   const runBudgeted = deps.runBudgeted ?? ((input, effect, options) => runBudgetedProviderEffect(
@@ -249,6 +291,7 @@ export const executeClaimedStudioGeneration = async (
       // finalize ambiguity must preserve that effect for the next fence owner.
       postEffectPhase = true;
       const reconciled = await deps.finalize({
+        claimKind: 'active',
         attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
         sourcePackageHead: claim.sourcePackageHead, templateHead: claim.templateHead,
         expectedArtifactHead: claim.expectedArtifactHead,
@@ -302,6 +345,7 @@ export const executeClaimedStudioGeneration = async (
     // uncertain. Finalize/reconcile from durable server state only.
     if (execution.kind === 'executed' && !stagedContent) throw new Error('stage missing');
     const finalized = await deps.finalize({
+      claimKind: 'active',
       attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
       sourcePackageHead: claim.sourcePackageHead, templateHead: claim.templateHead,
       expectedArtifactHead: claim.expectedArtifactHead,

@@ -54,6 +54,7 @@ import {
   type AssessMappingDecodedSource,
   type AssessMappingExpectedSourceBinding,
 } from './assessDocumentMapping.ts';
+import { runAssessMappingBudgetedProviderEffect } from './assessMappingProviderBudget.ts';
 import {
   claimEnterpriseReceipt,
   completeEnterpriseReceipt,
@@ -2956,7 +2957,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
   const taskInstruction = buildAssessDocumentMappingTaskInstruction(persistedTargets); const started = Date.now();
   let stagedResult: JsonObject | null = null;
   try {
-    const budgeted = await runBudgetedProviderEffect({ authority: { actorId: authority.actorId, organizationId: authority.organizationId, workspaceId: authority.workspaceId, authorizationVersion: authority.authorizationVersion },
+    const budgeted = await runAssessMappingBudgetedProviderEffect({ authority: { actorId: authority.actorId, organizationId: authority.organizationId, workspaceId: authority.workspaceId, authorizationVersion: authority.authorizationVersion },
     execution: { receiptId: receipt.id, jobId: runId, executionToken: receipt.execution_token!, executionFence: receipt.execution_fence!, routeId: route.config.route_id,
       providerConfigId: route.config.id, provider: route.config.provider, capability: 'assess.evidence.extract', model: route.model },
     estimatedInputTokens: estimateMaximumProviderInputTokens({ capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed }), maximumOutputTokens: 4_096,

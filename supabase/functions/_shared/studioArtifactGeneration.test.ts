@@ -1,5 +1,5 @@
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
-import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioGenerationClaim, type StudioGenerationDependencies } from './studioArtifactGeneration.ts';
+import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 
@@ -144,8 +144,9 @@ const decision = {
   mode: 'pilot', orgId: ids[4], workspaceId: ids[5], actorId: ids[6], correlationId: 'safe-correlation',
   evidenceRef: '', policyResult: 'allowed', model: 'governed-model', futureSecretLookupEligible: true,
   auditEvent: {},
-} as StudioGenerationClaim['providerPlan']['resolverDecision'];
-const claim: StudioGenerationClaim = {
+} as StudioExecutableGenerationClaim['providerPlan']['resolverDecision'];
+const claim: StudioExecutableGenerationClaim = {
+  claimKind: 'active',
   attemptId: ids[7], artifactId: ids[8], receiptId: ids[9], organizationId: ids[4], workspaceId: ids[5],
   actorId: ids[6], authorizationVersion: 3, requestId: ids[10], executionToken: ids[11], executionFence: 2,
   leaseExpiresAt: '2026-08-28T12:00:45.000Z', sourcePackageId: ids[12], sourcePackageVersion: 4,
@@ -255,6 +256,65 @@ void (async () => {
   const replay = await executeClaimedStudioGeneration(claim, { ...deps, runBudgeted: replayBudget });
   mark(replay.state === 'completed' && providerEffects === 0 && events.join(',') === 'finalize', 'IDEMP-002-B', 'generation.response-loss-reconciles-staged-effect', 'provider-response-loss-replay');
   mark(providerEffects === 0, 'PROVIDER-009-B', 'generation.replay-zero-provider-effect', 'atomic-budget-provider-replay');
+
+  let terminalProviderEffects = 0; let terminalStages = 0; let terminalBudgetEntries = 0;
+  let terminalFailureWrites = 0; let terminalFinalizations = 0; let terminalIdentityMatches = 0;
+  const terminalClaims: StudioTerminalGenerationClaim[] = [
+    {
+      claimKind: 'terminal', terminalState: 'completed', attemptId: ids[7],
+      executionToken: ids[11], executionFence: 2, leaseExpiresAt: null,
+      providerAllowed: false, reconcileOnly: false,
+    },
+    {
+      claimKind: 'terminal', terminalState: 'stale', attemptId: ids[14],
+      executionToken: ids[15], executionFence: 3, leaseExpiresAt: null,
+      providerAllowed: false, reconcileOnly: false,
+    },
+  ];
+  const terminalStates: string[] = [];
+  for (const terminalClaim of terminalClaims) {
+    const result = await executeClaimedStudioGeneration(terminalClaim, {
+      runProvider: async () => { terminalProviderEffects += 1; throw new Error('provider forbidden'); },
+      stage: async () => { terminalStages += 1; },
+      finalize: async input => {
+        terminalFinalizations += 1;
+        if (input.attemptId === terminalClaim.attemptId
+          && input.executionToken === terminalClaim.executionToken
+          && input.executionFence === terminalClaim.executionFence
+          && input.claimKind === 'terminal'
+          && !('sourcePackageHead' in input)
+          && !('templateHead' in input)
+          && !('expectedArtifactHead' in input)) terminalIdentityMatches += 1;
+        return {
+          state: terminalClaim.terminalState,
+          resource: { attemptId: terminalClaim.attemptId, terminal: terminalClaim.terminalState },
+        };
+      },
+      fail: async () => { terminalFailureWrites += 1; },
+      runBudgeted: (async () => { terminalBudgetEntries += 1; throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+    });
+    terminalStates.push(result.state);
+  }
+  const terminalFinalizeLostAgain = await executeClaimedStudioGeneration(terminalClaims[0], {
+    runProvider: async () => { terminalProviderEffects += 1; throw new Error('provider forbidden'); },
+    stage: async () => { terminalStages += 1; },
+    finalize: async () => { terminalFinalizations += 1; throw new Error('terminal finalizer response lost again'); },
+    fail: async () => { terminalFailureWrites += 1; },
+    runBudgeted: (async () => { terminalBudgetEntries += 1; throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+  });
+  mark(terminalStates.join(',') === 'completed,stale'
+    && terminalFinalizeLostAgain.state === 'uncertain'
+    && terminalFinalizeLostAgain.failureCode === 'GENERATION_UNCERTAIN'
+    && terminalFinalizations === 3 && terminalIdentityMatches === 2
+    && terminalProviderEffects === 0 && terminalStages === 0
+    && terminalBudgetEntries === 0 && terminalFailureWrites === 0,
+  'IDEMP-002-B', 'generation.terminal-recovery-finalize-only-with-loss-retained-uncertain',
+  'completed-and-stale-completed-after-mutable-material-disabled', studioPrBRuntime('studio-author', ['studio.artifacts.generate'], {
+    artifact: 'studio-artifact-v1', provider: 'disabled-after-commit', providerEffects: terminalProviderEffects,
+    materialReads: 0, budgetEntries: terminalBudgetEntries, stageWrites: terminalStages,
+    failureWrites: terminalFailureWrites, finalizerCalls: terminalFinalizations,
+    recoveryState: 'completed,stale,uncertain',
+  }));
 
   const reconcileStates = [
     { final: { state: 'completed' as const, resource: { recovered: true } }, expected: 'completed' },

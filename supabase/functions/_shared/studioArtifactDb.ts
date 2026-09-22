@@ -11,6 +11,7 @@ import {
 import type { StudioArtifactCommandDependencies } from './studioArtifactHandler.ts';
 import {
   executeClaimedStudioGeneration,
+  type StudioExecutableGenerationClaim,
   type StudioGenerationClaim,
   type StudioGenerationFailureCode,
 } from './studioArtifactGeneration.ts';
@@ -365,7 +366,7 @@ export async function loadStudioGenerationMaterial(
   invoke: Rpc = rpc,
 ): Promise<{
   sourcePackage: JsonObject; selectedSourceVersionIds: string[]; sourceAnchors: StudioCanonicalSourceAnchorDto[]; manualBrief: string | null;
-  templatePayload: JsonObject; providerPlan: StudioGenerationClaim['providerPlan'];
+  templatePayload: JsonObject; providerPlan: StudioExecutableGenerationClaim['providerPlan'];
 }> {
   const org = string(field(plan, 'organizationId', 'organization_id'));
   const workspace = string(field(plan, 'workspaceId', 'workspace_id'));
@@ -532,11 +533,11 @@ export async function loadStudioGenerationMaterial(
     capability: 'studio.document.generate', mode: 'pilot', orgId: org, workspaceId: workspace, actorId: actor,
     correlationId: string(field(plan, 'requestId', 'request_id')), evidenceRef: '', policyResult: 'allowed', model,
     endpoint: config.endpoint_url || undefined, deployment: config.deployment_name || undefined, auditEvent: {},
-  } as StudioGenerationClaim['providerPlan']['resolverDecision'];
+  } as StudioExecutableGenerationClaim['providerPlan']['resolverDecision'];
   return {
     sourcePackage, selectedSourceVersionIds, sourceAnchors, manualBrief, templatePayload,
     providerPlan: {
-      provider: provider as StudioGenerationClaim['providerPlan']['provider'], routeId, providerConfigId, model,
+      provider: provider as StudioExecutableGenerationClaim['providerPlan']['provider'], routeId, providerConfigId, model,
       ...(config.endpoint_url ? { endpoint: config.endpoint_url } : {}),
       ...(config.deployment_name ? { deployment: config.deployment_name } : {}), resolverDecision,
     },
@@ -548,7 +549,7 @@ export const claimStudioGeneration = async (
   invoke: Rpc = rpc,
   loadMaterial: (plan: JsonObject) => Promise<{
     sourcePackage: JsonObject; selectedSourceVersionIds: string[]; sourceAnchors: StudioCanonicalSourceAnchorDto[]; manualBrief: string | null;
-    templatePayload: JsonObject; providerPlan: StudioGenerationClaim['providerPlan'];
+    templatePayload: JsonObject; providerPlan: StudioExecutableGenerationClaim['providerPlan'];
   }> = loadStudioGenerationMaterial,
 ): Promise<StudioGenerationClaim> => {
   const attemptId = string(field(initial, 'attemptId', 'attempt_id'));
@@ -557,6 +558,38 @@ export const claimStudioGeneration = async (
   const value = object(await invoke<unknown>(STUDIO_RPC.generationClaim, {
     p_attempt_id: attemptId, p_execution_token: executionToken, p_lease_seconds: 45,
   }));
+  const terminalState = field(value, 'state');
+  const terminalReplay = field(value, 'outcome') === 'replayed'
+    && (terminalState === 'completed' || terminalState === 'stale_completed');
+  if ((terminalState === 'completed' || terminalState === 'stale_completed') && !terminalReplay) {
+    throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  }
+  if (terminalReplay) {
+    exactProjectionKeys(value, [
+      'outcome', 'attemptId', 'state', 'executionToken', 'executionFence',
+      'leaseExpiresAt', 'providerAllowed', 'reconcileOnly',
+    ]);
+    const returnedAttemptId = durableUuid(field(value, 'attemptId', 'attempt_id'));
+    // The terminal SQL projection is exact camelCase and intentionally carries
+    // JSON null. `field` uses nullish fallback, so read this key directly.
+    const returnedLease = value.leaseExpiresAt;
+    if (returnedAttemptId !== attemptId || returnedLease !== null
+      || field(value, 'providerAllowed', 'provider_allowed') !== false
+      || field(value, 'reconcileOnly', 'reconcile_only') !== false) {
+      throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+    }
+    return {
+      claimKind: 'terminal',
+      terminalState: terminalState === 'stale_completed' ? 'stale' : 'completed',
+      attemptId: returnedAttemptId,
+      executionToken: durableUuid(field(value, 'executionToken', 'execution_token')),
+      executionFence: integer(field(value, 'executionFence', 'execution_fence'), 1),
+      leaseExpiresAt: null,
+      providerAllowed: false,
+      reconcileOnly: false,
+    };
+  }
+  const returnedLease = field(value, 'leaseExpiresAt', 'lease_expires_at');
   const plan = { ...initial, ...value };
   const claimed = {
     attemptId: durableUuid(field(plan, 'attemptId', 'attempt_id')),
@@ -570,12 +603,13 @@ export const claimStudioGeneration = async (
   const expectedTemplateVersion = field(initial, 'expectedTemplateVersion', 'expected_template_version');
   if (expectedTemplateVersion !== undefined && String(expectedTemplateVersion) !== templateVersion) throw new StudioArtifactError('TEMPLATE_NOT_APPROVED');
   return {
+    claimKind: 'active',
     attemptId: claimed.attemptId, artifactId: string(field(plan, 'artifactId', 'artifact_id')),
     receiptId: string(field(plan, 'receiptId', 'receipt_id')), organizationId: string(field(plan, 'organizationId', 'organization_id')),
     workspaceId: string(field(plan, 'workspaceId', 'workspace_id')), actorId: string(field(plan, 'actorId', 'actor_id')),
     authorizationVersion: integer(field(plan, 'authorizationVersion', 'authorization_version'), 1), requestId: string(field(plan, 'requestId', 'request_id')),
     executionToken: claimed.executionToken, executionFence: claimed.executionFence,
-    leaseExpiresAt: string(field(value, 'leaseExpiresAt', 'lease_expires_at')),
+    leaseExpiresAt: string(returnedLease),
     sourcePackageId: string(field(plan, 'sourcePackageId', 'source_package_id')),
     sourcePackageVersion: integer(field(initial, 'sourcePackageVersion', 'source_package_version'), 1),
     sourcePackage: material.sourcePackage, sourcePackageHash: string(field(plan, 'sourcePackageHash', 'source_package_hash')),
