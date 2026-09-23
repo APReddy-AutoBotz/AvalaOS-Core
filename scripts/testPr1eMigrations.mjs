@@ -17,6 +17,11 @@ try{
   await tx(test,"CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid'; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;");
   const migrations=fs.readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort();
   for(const name of migrations)await tx(test,fs.readFileSync(path.join('supabase/migrations',name),'utf8'));
+  const operatorFix=fs.readFileSync('supabase/migrations/20260923133000_pr1e_evidence_claim_operator_binding.sql','utf8');
+  await tx(test,operatorFix);
+  const reviewCommandDefinition=(await test.query("SELECT pg_get_functiondef('public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb)'::regprocedure) AS source")).rows[0].source;
+  assert.match(reviewCommandDefinition,/\(e\.payload->'claimIds'\) @> \(p_payload->'claimIds'\) AND \(e\.payload->'claimIds'\) <@ \(p_payload->'claimIds'\)/);
+  assert.doesNotMatch(reviewCommandDefinition,/e\.payload->'claimIds' @> p_payload->'claimIds'/);
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);
