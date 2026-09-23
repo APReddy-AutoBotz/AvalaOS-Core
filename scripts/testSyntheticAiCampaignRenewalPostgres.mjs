@@ -14,8 +14,9 @@ const migrationName='20260922112911_synthetic_ai_campaign_one_time_renewal.sql';
 const predecessor='20260918082307_synthetic_ai_mapping_studio_budget_authority.sql';
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1),migrationName);
-assert.equal(migrations.at(-2),predecessor);
+assert.equal(migrations.at(-2),migrationName);
+assert.equal(migrations.at(-3),predecessor);
+assert.equal(migrations.at(-1),'20260923062439_studio_server_helper_permissions.sql');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];
@@ -58,8 +59,9 @@ try{
   assert.ok(version>=160000&&version<180000);
   for(const name of names)await admin.query(`CREATE DATABASE ${name}`);
 
-  // Fresh-chain proof: every migration applies once and the new objects remain
-  // default-empty, forced-RLS and service-read-only.
+  // Renewal-chain proof through its own tip: the new objects remain
+  // default-empty, forced-RLS and service-read-only. The later Studio helper
+  // successor is covered by the full fresh-chain creation-access runner.
   const fresh=new Client({connectionString:urlFor(names[0])});opened.push(fresh);await fresh.connect();
   await transaction(fresh,'auth-bootstrap',authBootstrap);
   await applyChain(fresh);
