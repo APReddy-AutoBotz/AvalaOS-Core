@@ -9,6 +9,7 @@ import {
   type StudioArtifactAuthority,
   type StudioAtomicCommandResult,
 } from './studioArtifactCommand.ts';
+import { jsonResponse } from './http.ts';
 
 export interface StudioArtifactCommandDependencies {
   authenticate(request: Request): Promise<{ id: string }>;
@@ -100,9 +101,9 @@ export const handleStudioArtifactCommand = async (
     }
 
     assertAuthority(await deps.loadFreshAuthority(authorityInput), actor.id, capability);
-    return Response.json({ ok: true, ...payload }, { status });
+    return jsonResponse({ ok: true, ...payload }, status);
   } catch (error) {
     const safe = asStudioArtifactError(error);
-    return Response.json(studioArtifactErrorBody(safe), { status: safe.status });
+    return jsonResponse(studioArtifactErrorBody(safe), safe.status);
   }
 };

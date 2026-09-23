@@ -61,8 +61,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260922112911');
-  assert.equal(migrations.length, 82);
+  assert.equal(approvedFullChainTip(migrations), '20260923062439');
+  assert.equal(migrations.length, 83);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -78,7 +78,8 @@ try {
   assert.equal(domainBudgetIndex, campaignAuthorityIndex + 1);
   const renewalIndex = migrations.indexOf('20260922112911_synthetic_ai_campaign_one_time_renewal.sql');
   assert.equal(renewalIndex, domainBudgetIndex + 1);
-  assert.equal(renewalIndex, migrations.length - 1);
+  assert.equal(migrations[renewalIndex + 1], '20260923062439_studio_server_helper_permissions.sql');
+  assert.equal(renewalIndex, migrations.length - 2);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -109,7 +110,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20260922112911') => {
+  const assertFinalIdentity = async (db, expectedTip = '20260923062439') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {
@@ -125,6 +126,19 @@ try {
   const processDb = await createDb('process');
   await apply(processDb.db, migrations);
   await assertFinalIdentity(processDb.db);
+  for (const signature of [
+    'public.enterprise_sha256_jsonb(jsonb)',
+    'public.studio_pr_b_anchor_manifest(jsonb,uuid,text)',
+    'public.studio_pr_b_anchor_manifest_safe(jsonb)',
+    'public.enterprise_direct_studio_route_policy()',
+  ]) {
+    const grants = (await processDb.db.query(`SELECT
+      has_function_privilege('service_role',$1,'EXECUTE') service,
+      has_function_privilege('authenticated',$1,'EXECUTE') authenticated,
+      has_function_privilege('anon',$1,'EXECUTE') anonymous`, [signature])).rows[0];
+    assert.deepEqual(grants, { service: true, authenticated: false, anonymous: false },
+      `Studio helper permission boundary: ${signature}`);
+  }
   console.log(`Fresh PostgreSQL 16 migration chain applied: ${migrations.length} migrations.`);
   await child('scripts/testProcessCreationPostgres.mjs', { PROCESS_CREATION_DISPOSABLE_DATABASE_URL: processDb.dbUrl.toString() });
   const adminDb = await createDb('admin');

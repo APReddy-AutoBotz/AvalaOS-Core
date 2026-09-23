@@ -179,7 +179,8 @@ void (async () => {
     executeAtomicCommand: async () => { effects += 1; return committed; },
   };
   const ok = await handleStudioArtifactCommand(requestFor(), deps);
-  mark(ok.status === 201 && effects === 1 && authorityLoads === 2, 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
+  mark(ok.status === 201 && effects === 1 && authorityLoads === 2
+    && ok.headers.get('Access-Control-Allow-Origin') === '*', 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
 
   const methodDenied = await handleStudioArtifactCommand(new Request('https://local/studio', { method: 'GET' }), deps);
   const authDenied = await handleStudioArtifactCommand(requestFor(), {
@@ -201,6 +202,8 @@ void (async () => {
     .map(response => response.json()));
   mark(methodDenied.status === 405 && authDenied.status === 401 && malformedJson.status === 400
     && actorMismatch.status === 404 && capabilityDenied.status === 403 && transportFailure.status === 503
+    && [methodDenied, authDenied, malformedJson, actorMismatch, capabilityDenied, transportFailure]
+      .every(response => response.headers.get('Access-Control-Allow-Origin') === '*')
     && precommitBodies.every(body => body.ok === false && body.outcome === 'failed_before_commit'
       && body.error?.message === 'The command could not be completed.'
       && !JSON.stringify(body).includes('private database')),

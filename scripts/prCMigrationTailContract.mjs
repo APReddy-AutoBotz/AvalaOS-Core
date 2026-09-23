@@ -12,6 +12,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260917173445_synthetic_ai_campaign_authority.sql',
   '20260918082307_synthetic_ai_mapping_studio_budget_authority.sql',
   '20260922112911_synthetic_ai_campaign_one_time_renewal.sql',
+  '20260923062439_studio_server_helper_permissions.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
