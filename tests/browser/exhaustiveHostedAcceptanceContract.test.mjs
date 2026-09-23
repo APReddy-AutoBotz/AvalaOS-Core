@@ -9,6 +9,8 @@ import {
 const hostedSpec = fs.readFileSync(new URL('./exhaustiveHostedAcceptance.spec.ts', import.meta.url), 'utf8');
 const controllerNavigationSpec = fs.readFileSync(new URL('./controllerNavigationHistory.spec.ts', import.meta.url), 'utf8');
 const productNavigationReadinessSource = fs.readFileSync(new URL('./productNavigationReadiness.ts', import.meta.url), 'utf8');
+const indexHtml = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+const indexEntry = fs.readFileSync(new URL('../../index.tsx', import.meta.url), 'utf8');
 const indexCss = fs.readFileSync(new URL('../../index.css', import.meta.url), 'utf8');
 const executionProfileSource = fs.readFileSync(new URL('../../scripts/acceptanceExecutionProfile.mjs', import.meta.url), 'utf8');
 const localSandboxConfig = fs.readFileSync(new URL('../../playwright.local-sandbox-regression.config.ts', import.meta.url), 'utf8');
@@ -257,6 +259,11 @@ assert.match(
 
 const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
 assert.ok(allowlistBody, 'safeExternalStaticResource must remain structurally inspectable');
+assert.doesNotMatch(indexHtml, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/iu, 'the shipped page must not initiate external Google Fonts requests');
+assert.match(indexEntry, /@fontsource-variable\/inter\/wght\.css/u);
+assert.match(indexEntry, /@fontsource-variable\/outfit\/wght\.css/u);
+assert.match(indexCss, /--kp-font-ui:\s*"Inter Variable"/u);
+assert.match(indexCss, /--kp-font-display:\s*"Outfit Variable"/u);
 const allowedOrigins = [...allowlistBody[1].matchAll(/url\.origin === '([^']+)'/gu)].map(([, origin]) => origin);
 assert.deepEqual(
   allowedOrigins,
