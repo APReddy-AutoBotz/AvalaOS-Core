@@ -78,7 +78,7 @@ const validates = value => validatePrCRegistryStructure(process.cwd(), value.reg
 test('the canonical fresh PostgreSQL marker binds the independently approved full migration tail', () => {
   const provenance = makeContract().provenance;
   const result = validates({ registry: structuredClone(canonicalRegistry), provenance });
-  assert.equal(result.assertionCount, 221);
+  assert.equal(result.assertionCount, 223);
 });
 
 for (const [name, mutate, reason] of [
@@ -157,7 +157,7 @@ test('the 81-command registry retains the standalone scoring-law source guard an
     id: 'scoring-drift', command: 'node scripts/checkPrCScoringLawDrift.mjs', environment: 'controlled-git',
   });
   assert.deepEqual(canonicalRegistry.commands, expected);
-  assert.equal(canonicalRegistry.assertions.length, 221);
+  assert.equal(canonicalRegistry.assertions.length, 223);
   assert.equal(canonicalRegistry.assertions.some(assertion => assertion.commandId === 'scoring-drift'), false);
   const substituted = structuredClone(canonicalRegistry);
   substituted.commands.at(-1).command = `git diff --exit-code ${PR_C_BASE_SHA} -- ${['services/scoringEngine.ts', 'services/scoringEngine.test.ts', 'scripts/runScoringRegression.mjs'].join(' ')}`;

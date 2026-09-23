@@ -4,7 +4,9 @@ import {assertPrCMigrationTail} from './prCMigrationTailContract.mjs';
 
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
 const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercise_authority.sql';
+const deferredAuthorityMigrationName='20260923190853_pr_c_deferred_binding_authority.sql';
 const sql=readFileSync(`supabase/migrations/${migrationName}`,'utf8');
+const deferredAuthoritySql=readFileSync(`supabase/migrations/${deferredAuthorityMigrationName}`,'utf8');
 const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')).sort();
 const emit=(testId,assertionId,lineage)=>console.log(`PR_C_ASSERTION ${JSON.stringify({
   testId,assertionId,fixture:'pr-c-migration-sql-contract',owner:'migration-static',result:'passed',runtimeContext:{
@@ -18,8 +20,19 @@ const body=name=>{
 
 assert.equal(migrations.filter(name=>name===migrationName).length,1);
 assert.equal(migrations.filter(name=>name===controlledHumanMigrationName).length,1);
+assert.equal(migrations.filter(name=>name===deferredAuthorityMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
+assert.equal(migrations.at(-1),deferredAuthorityMigrationName);
 assertPrCMigrationTail(migrations);
+assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
+assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);
+assert.match(deferredAuthoritySql,/SET CONSTRAINTS public\.enterprise_pr_c_package_binding, public\.enterprise_pr_c_item_current_binding, public\.enterprise_pr_c_baseline_item_binding, public\.enterprise_pr_c_baseline_manifest_binding IMMEDIATE;/u);
+assert.match(deferredAuthoritySql,/old_count=1 AND new_count=0/u);
+assert.match(deferredAuthoritySql,/old_count=1 AND new_count=1/u);
+assert.match(deferredAuthoritySql,/command\.prosecdef/u);
+assert.match(deferredAuthoritySql,/NOT validator\.prosecdef/u);
+assert.doesNotMatch(deferredAuthoritySql,/GRANT\s+(?:SELECT|ALL)\s+ON\s+(?:TABLE\s+)?public\.enterprise_delivery_/iu);
+assert.doesNotMatch(deferredAuthoritySql,/ALTER FUNCTION public\.enterprise_pr_c_\w+\(\) SECURITY DEFINER/iu);
 assert.ok(sql.indexOf('DO $pr_c_preflight$')<sql.indexOf('INSERT INTO public.capabilities'));
 assert.match(sql,/PR_C_DIRTY_SCHEMA/);assert.match(sql,/PR_C_BACKFILL_PRECONDITION_FAILED/);assert.match(sql,/PR_C_BACKFILL_CARDINALITY_MISMATCH/);
 assert.match(sql,/SET migration_tip='20260831062024'/);assert.match(sql,/CHECK\(migration_tip='20260831062024'\)/);

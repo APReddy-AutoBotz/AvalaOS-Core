@@ -454,11 +454,11 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "d66b334d80e23da643d60bc5b408afb73c3be4c1a976f9eed247240dea202aad"
+      "sha256": "31726abdf4358a03f7af65d97746c4af587794025e21de58483fed6191b97463"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
-      "sha256": "c2939e56d1ba3df1d05f55b6abcd3bb16dc6259f68cf7ac9f48bf280632eb99f"
+      "sha256": "6022538e3d0fee92460b11aab7ad89e4c91cc3e5058e6db208a16f387c73127b"
     },
     "postgrest": {
       "path": "scripts/testProjectionRpcPostgrest.mjs",
@@ -498,7 +498,7 @@
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "d7873c5ffa94f2a2c355fb1febd680147898161e62d0aa92646d32ce896050c6"
+      "sha256": "31f71646d38d42f6002ffce310022fa735056e46655f04f82fc44212f1b5e344"
     }
   },
   "assertions": [
@@ -2146,7 +2146,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260923151115",
+        "migrationTip": "20260923190853",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -2205,6 +2205,89 @@
         "acceptedSet": null,
         "baseline": null,
         "classification": "assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-postgres",
+      "owner": "postgres",
+      "testId": "AUTH-002",
+      "assertionId": "PG16-SERVICE-ROLE-DEFERRED-BINDING-LIFECYCLE",
+      "fixture": "service-role-deferred-pg16",
+      "testName": "AUTH-002 — PG16 SERVICE ROLE DEFERRED BINDING LIFECYCLE",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000013-0000-4000-8000-000000000013",
+          "state": "active",
+          "capabilities": []
+        },
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011",
+        "migrationTip": "20260923190853",
+        "roleBoundary": {
+          "executionRole": "service_role",
+          "directSourceSelect": false,
+          "directValidatorExecute": false,
+          "validatorDefiner": false,
+          "commands": [
+            "delivery.package.create.manual",
+            "delivery.item.review",
+            "delivery.package.review.resolve",
+            "delivery.package.approval.resolve",
+            "monitor.baseline.create"
+          ],
+          "receipts": 5,
+          "effects": 5,
+          "audits": 5
+        },
+        "sourcePackage": {
+          "id": {
+            "$uuid": true
+          },
+          "hash": {
+            "$sha256": true
+          }
+        },
+        "package": {
+          "id": {
+            "$uuid": true
+          },
+          "versionId": {
+            "$uuid": true
+          },
+          "reviewId": {
+            "$uuid": true
+          },
+          "approvalId": {
+            "$uuid": true
+          },
+          "reviewEvents": 1,
+          "approvalEvents": 1
+        },
+        "item": {
+          "aggregateId": {
+            "$uuid": true
+          },
+          "versionId": {
+            "$uuid": true
+          },
+          "accepted": true
+        },
+        "acceptedSet": {
+          "hash": {
+            "$sha256": true
+          },
+          "itemCount": 1
+        },
+        "baseline": {
+          "id": {
+            "$uuid": true
+          },
+          "hash": {
+            "$sha256": true
+          },
+          "itemCount": 1
+        },
+        "classification": "not_assessed"
       }
     },
     {
@@ -2420,6 +2503,54 @@
           }
         },
         "item": null,
+        "acceptedSet": null,
+        "baseline": null,
+        "classification": "not_assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-postgres",
+      "owner": "postgres",
+      "testId": "AUTH-002",
+      "assertionId": "PG16-OLD-DEFERRED-SERVICE-ROLE-FAIL-CLOSED",
+      "fixture": "old-deferred-service-role-pg16",
+      "testName": "AUTH-002 — PG16 OLD DEFERRED SERVICE ROLE FAIL CLOSED",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "30000013-0000-4000-8000-000000000013",
+          "state": "active",
+          "capabilities": []
+        },
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "96000000-0000-4000-8000-000000000200",
+        "roleBoundary": {
+          "executionRole": "service_role",
+          "sqlstate": "42501",
+          "reviewEvents": 0,
+          "receipts": 0,
+          "effects": 0,
+          "audits": 0
+        },
+        "sourcePackage": {
+          "id": {
+            "$uuid": true
+          },
+          "hash": {
+            "$sha256": true
+          }
+        },
+        "package": {
+          "id": {
+            "$uuid": true
+          },
+          "versionId": {
+            "$uuid": true
+          },
+          "unchanged": true
+        },
+        "item": {
+          "terminalDecisions": 2
+        },
         "acceptedSet": null,
         "baseline": null,
         "classification": "not_assessed"

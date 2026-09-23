@@ -240,7 +240,7 @@ for (const commandId of refreshBindingsOnly ? [] : selectedCommandIds) {
   }
   process.stdout.write(`[PR C registry] ${commandId}: ${markers.length} assertion markers\n`);
 }
-if (refreshBindingsOnly) process.stdout.write(`[PR C registry] refreshed bindings for ${assertions.length} previously executed assertion markers\n`);
+if (refreshBindingsOnly) process.stdout.write(`[PR C registry] refreshed bindings for ${assertions.length} registered assertion expectations; no command execution is implied\n`);
 
 const owners = Object.fromEntries(Object.entries(ownerPaths).map(([owner, relative]) => {
   const absolute = path.join(root, relative);

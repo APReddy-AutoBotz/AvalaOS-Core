@@ -28,6 +28,15 @@ const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);await
 const persona={id:'30000013-0000-4000-8000-000000000013',state:'active',capabilities:[]};
 const emit=(testId,assertionId,fixture,runtimeContext)=>console.log(`PR_C_ASSERTION ${JSON.stringify({testId,assertionId,fixture,owner:'postgres',result:'passed',runtimeContext:{persona,organizationId:runtimeContext.organizationId??'97000000-0000-4000-8000-000000000010',workspaceId:runtimeContext.workspaceId??'97000000-0000-4000-8000-000000000011',...runtimeContext}})}`);
 const uuid=n=>`96000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const invokeAsServiceRole=async(client,command)=>{
+ await client.query('BEGIN');
+ try{
+  await client.query('SET LOCAL ROLE service_role');
+  const result=(await client.query('SELECT public.enterprise_delivery_monitor_command($1::jsonb) result',[JSON.stringify(command)])).rows[0].result;
+  await client.query('COMMIT');
+  return result;
+ }catch(error){await client.query('ROLLBACK');throw error}
+};
 
 let admin;
 try{
@@ -51,7 +60,53 @@ try{
  assert.equal((await fresh.query("SELECT has_function_privilege('service_role','public.enterprise_commit_monitor_baseline(jsonb,uuid,uuid,uuid,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
  assert.equal((await fresh.query("SELECT has_function_privilege('authenticated','public.enterprise_delivery_package_projection(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false);
  assert.equal((await fresh.query("SELECT has_function_privilege('authenticated','public.enterprise_monitor_projection(uuid,uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false);
+ assert.equal((await fresh.query("SELECT has_table_privilege('service_role','public.enterprise_delivery_source_packages','SELECT') allowed")).rows[0].allowed,false);
+ for(const trigger of ['enterprise_pr_c_package_binding','enterprise_pr_c_item_current_binding','enterprise_pr_c_baseline_item_binding','enterprise_pr_c_baseline_manifest_binding']){
+  const binding=(await fresh.query('SELECT validator.prosecdef,has_function_privilege($1,validator.oid,\'EXECUTE\') AS callable FROM pg_trigger binding JOIN pg_proc validator ON validator.oid=binding.tgfoid WHERE binding.tgname=$2',['service_role',trigger])).rows[0];
+  assert.deepEqual(binding,{prosecdef:false,callable:false});
+ }
  emit('AUTH-002','FRESH-PG16-RLS-ACL-TENANT-BOUNDARY','fresh-pg16',{tenantBoundary:{forcedRlsTables:rls.map(row=>row.relname),authenticatedDirectTables:false,serviceMutationRpc:true,safeProjection:true},sourcePackage:null,package:null,item:null,acceptedSet:null,baseline:null,classification:'assessed'});
+
+ // Exercise the real API execution role, not only the fixture administrator.
+ // The old command left deferred constraint triggers to run after its definer
+ // context ended, causing a 42501 on protected source-package tables.
+ const freshStudio=await createApprovedStudioFixture(fresh);
+ await fresh.query(`INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability FROM unnest($2::text[]) capability ON CONFLICT DO NOTHING`,
+  [freshStudio.role,['delivery.package.manage','delivery.package.review','delivery.package.approve','monitor.baseline.create']]);
+ await fresh.query(`INSERT INTO enterprise_transcript_workspace_flags(org_id,workspace_id,module_handoffs_enabled,direct_delivery_planning_enabled,delivery_item_review_enabled,monitor_approved_baseline_enabled,updated_by)
+  VALUES($1,$2,true,true,true,true,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET module_handoffs_enabled=true,direct_delivery_planning_enabled=true,
+  delivery_item_review_enabled=true,monitor_approved_baseline_enabled=true,updated_by=excluded.updated_by`,[freshStudio.org,freshStudio.workspace,freshStudio.requester]);
+ const freshAuth={};for(const actor of [freshStudio.requester,freshStudio.reviewer,freshStudio.approver])freshAuth[actor]=Number((await fresh.query('SELECT version FROM authorization_versions WHERE org_id=$1 AND user_id=$2',[freshStudio.org,actor])).rows[0].version);
+ let freshOrdinal=20000;
+ const freshCommand=(actor,action,payload,key)=>{const ordinal=freshOrdinal++;return {action,actorId:actor,organizationId:freshStudio.org,workspaceId:freshStudio.workspace,
+  authorizationVersion:freshAuth[actor],receiptId:uuid(ordinal),requestId:uuid(ordinal+1000),idempotencyKey:key,executionToken:uuid(ordinal+2000),executionFence:ordinal,...payload}};
+ const serviceCommands=[];
+ const invokeFresh=async command=>{const result=await invokeAsServiceRole(fresh,command);serviceCommands.push(command);return result};
+ const servicePackage=await invokeFresh(freshCommand(freshStudio.requester,'delivery.package.create.manual',{manualBrief:'Service-role exact deferred authority',items:[{clientKey:'service-item',itemType:'Task',title:'Synthetic service-role item',description:'Plan only',acceptanceCriteria:['independent review'],nonFunctionalRequirements:[]}]},'service-role-package'));
+ const serviceItem=await invokeFresh(freshCommand(freshStudio.requester,'delivery.item.review',{itemAggregateId:servicePackage.items[0].aggregateId,expectedAggregateVersion:1,expectedItemVersionId:servicePackage.items[0].versionId,outcome:'accepted',rationale:'Synthetic item accepted.'},'service-role-item'));
+ const serviceReview=await invokeFresh(freshCommand(freshStudio.reviewer,'delivery.package.review.resolve',{workPackageId:servicePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:servicePackage.packageVersionId,expectedPackageAggregateVersion:2,outcome:'approved',rationale:'Independent synthetic reviewer.'},'service-role-review'));
+ const serviceApproval=await invokeFresh(freshCommand(freshStudio.approver,'delivery.package.approval.resolve',{workPackageId:servicePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:servicePackage.packageVersionId,expectedPackageAggregateVersion:2,outcome:'approved',rationale:'Independent synthetic approver.'},'service-role-approval'));
+ const serviceBaseline=await invokeFresh(freshCommand(freshStudio.requester,'monitor.baseline.create',{workPackageId:servicePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:servicePackage.packageVersionId},'service-role-baseline'));
+ assert.equal(serviceReview.acceptedItemCount,1);assert.equal(serviceApproval.acceptedSetHash,serviceReview.acceptedSetHash);
+ assert.equal(serviceBaseline.acceptedSetHash,serviceApproval.acceptedSetHash);assert.equal(serviceBaseline.acceptedItemCount,1);
+ assert.equal((await fresh.query('SELECT item_version_id FROM enterprise_monitor_baseline_items WHERE baseline_id=$1',[serviceBaseline.resourceId])).rows[0].item_version_id,serviceItem.itemVersionId);
+ for(const command of serviceCommands){
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM enterprise_delivery_monitor_command_receipts WHERE id=$1',[command.receiptId])).rows[0].n),1);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM enterprise_delivery_monitor_effects WHERE receipt_id=$1',[command.receiptId])).rows[0].n),1);
+  assert.equal(Number((await fresh.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1',[command.requestId])).rows[0].n),1);
+ }
+ assert.equal(Number((await fresh.query('SELECT count(*) n FROM enterprise_delivery_package_review_events WHERE work_package_id=$1',[servicePackage.resourceId])).rows[0].n),1);
+ assert.equal(Number((await fresh.query('SELECT count(*) n FROM enterprise_delivery_package_approval_events WHERE work_package_id=$1',[servicePackage.resourceId])).rows[0].n),1);
+ assert.equal(Number((await fresh.query('SELECT count(*) n FROM enterprise_monitor_baselines WHERE id=$1',[serviceBaseline.resourceId])).rows[0].n),1);
+ emit('AUTH-002','PG16-SERVICE-ROLE-DEFERRED-BINDING-LIFECYCLE','service-role-deferred-pg16',{
+  organizationId:freshStudio.org,workspaceId:freshStudio.workspace,migrationTip:tip,
+  roleBoundary:{executionRole:'service_role',directSourceSelect:false,directValidatorExecute:false,validatorDefiner:false,commands:serviceCommands.map(command=>command.action),receipts:5,effects:5,audits:5},
+  sourcePackage:{id:servicePackage.sourcePackageId,hash:servicePackage.sourcePackageHash},
+  package:{id:servicePackage.resourceId,versionId:servicePackage.packageVersionId,reviewId:serviceReview.resourceId,approvalId:serviceApproval.resourceId,reviewEvents:1,approvalEvents:1},
+  item:{aggregateId:servicePackage.items[0].aggregateId,versionId:serviceItem.itemVersionId,accepted:true},
+  acceptedSet:{hash:serviceApproval.acceptedSetHash,itemCount:1},baseline:{id:serviceBaseline.resourceId,hash:serviceBaseline.resourceHash,itemCount:1},classification:'not_assessed',
+ });
+ console.log('PR C service-role package review, approval, and Monitor baseline committed with one receipt, effect, and audit per command.');
 
  const upgrade=await createDatabase(admin,names.upgrade);await apply(upgrade,baseline);await apply(upgrade,[migrationName]);
  assert.equal((await upgrade.query("SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton")).rows[0].migration_tip,'20260831062024');
@@ -168,6 +223,19 @@ try{
  await assert.rejects(invoke(populated,staleSnapshotReview),/ENTERPRISE_DELIVERY_RESOURCE_STALE/);
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_package_review_events WHERE work_package_id=$1',[manualResult.resourceId])).rows[0].n),0);
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_monitor_effects WHERE receipt_id=$1',[staleSnapshotReview.receiptId])).rows[0].n),0);
+ const deferredOldReview=makeCommand(studio.reviewer,targetWorkspace,'delivery.package.review.resolve',{workPackageId:manualResult.resourceId,expectedPackageVersion:1,expectedPackageVersionId:manualResult.packageVersionId,expectedPackageAggregateVersion:3,outcome:'approved',rationale:'Service-role deferred-trigger oracle.'},'manual-package-review-old-service-role');
+ await assert.rejects(invokeAsServiceRole(populated,deferredOldReview),error=>error.code==='42501'&&/enterprise_delivery_source_packages/.test(error.message));
+ assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_package_review_events WHERE work_package_id=$1',[manualResult.resourceId])).rows[0].n),0);
+ assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_monitor_command_receipts WHERE id=$1',[deferredOldReview.receiptId])).rows[0].n),0);
+ assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_monitor_effects WHERE receipt_id=$1',[deferredOldReview.receiptId])).rows[0].n),0);
+ assert.equal(Number((await populated.query('SELECT count(*) n FROM privileged_audit_events WHERE request_id=$1',[deferredOldReview.requestId])).rows[0].n),0);
+ emit('AUTH-002','PG16-OLD-DEFERRED-SERVICE-ROLE-FAIL-CLOSED','old-deferred-service-role-pg16',{
+  organizationId:studio.org,workspaceId:targetWorkspace,
+  roleBoundary:{executionRole:'service_role',sqlstate:'42501',reviewEvents:0,receipts:0,effects:0,audits:0},
+  sourcePackage:{id:manualResult.sourcePackageId,hash:manualResult.sourcePackageHash},
+  package:{id:manualResult.resourceId,versionId:manualResult.packageVersionId,unchanged:true},
+  item:{terminalDecisions:2},acceptedSet:null,baseline:null,classification:'not_assessed',
+ });
  const packageReview=await invoke(populated,makeCommand(studio.reviewer,targetWorkspace,'delivery.package.review.resolve',{workPackageId:manualResult.resourceId,expectedPackageVersion:1,expectedPackageVersionId:manualResult.packageVersionId,expectedPackageAggregateVersion:3,outcome:'approved',rationale:'Independent package review.'},'manual-package-review'));
  const packageApproval=await invoke(populated,makeCommand(studio.approver,targetWorkspace,'delivery.package.approval.resolve',{workPackageId:manualResult.resourceId,expectedPackageVersion:1,expectedPackageVersionId:manualResult.packageVersionId,expectedPackageAggregateVersion:3,outcome:'approved',rationale:'Separate package approval.'},'manual-package-approval'));
  assert.equal(packageReview.acceptedSetHash,packageApproval.acceptedSetHash);
