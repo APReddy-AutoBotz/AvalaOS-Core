@@ -223,7 +223,13 @@ try{
  await assert.rejects(invoke(populated,staleSnapshotReview),/ENTERPRISE_DELIVERY_RESOURCE_STALE/);
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_package_review_events WHERE work_package_id=$1',[manualResult.resourceId])).rows[0].n),0);
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_monitor_effects WHERE receipt_id=$1',[staleSnapshotReview.receiptId])).rows[0].n),0);
- const deferredOldReview=makeCommand(studio.reviewer,targetWorkspace,'delivery.package.review.resolve',{workPackageId:manualResult.resourceId,expectedPackageVersion:1,expectedPackageVersionId:manualResult.packageVersionId,expectedPackageAggregateVersion:3,outcome:'approved',rationale:'Service-role deferred-trigger oracle.'},'manual-package-review-old-service-role');
+ const deferredOldReview={
+  action:'delivery.package.review.resolve',actorId:studio.reviewer,organizationId:studio.org,workspaceId:targetWorkspace,
+  authorizationVersion:authorizationVersions[studio.reviewer],receiptId:uuid(19000),requestId:uuid(19001),
+  idempotencyKey:'manual-package-review-old-service-role',executionToken:uuid(19002),executionFence:19000,
+  workPackageId:manualResult.resourceId,expectedPackageVersion:1,expectedPackageVersionId:manualResult.packageVersionId,
+  expectedPackageAggregateVersion:3,outcome:'approved',rationale:'Service-role deferred-trigger oracle.',
+ };
  await assert.rejects(invokeAsServiceRole(populated,deferredOldReview),error=>error.code==='42501'&&/enterprise_delivery_source_packages/.test(error.message));
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_package_review_events WHERE work_package_id=$1',[manualResult.resourceId])).rows[0].n),0);
  assert.equal(Number((await populated.query('SELECT count(*) n FROM enterprise_delivery_monitor_command_receipts WHERE id=$1',[deferredOldReview.receiptId])).rows[0].n),0);
