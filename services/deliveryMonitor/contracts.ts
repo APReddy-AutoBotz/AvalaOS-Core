@@ -590,3 +590,175 @@ export const decodeMonitorApprovedBaselinesProjection = (value: unknown): Monito
     actions: [],
   };
 };
+
+// The Edge query removes private database fields before returning these DTOs. Its
+// output is not the database RPC wire shape above, so validate the minimized DTO
+// separately on the browser boundary instead of decoding the RPC shape twice.
+const canonicalItemType = (value: unknown): DeliveryItemType => literal(value, DELIVERY_ITEM_TYPES);
+const canonicalItemContent = (row: JsonRecord) => {
+  canonicalItemType(row.type);
+  string(row.title, 400);
+  string(row.description, 20_000, 0);
+  strings(row.acceptanceCriteria, 100, 2_000);
+  strings(row.nonFunctionalRequirements, 100, 2_000);
+};
+const canonicalItemVersion = (value: unknown) => {
+  const row = exact(record(value), ['version', 'status', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements', 'createdAt'], ['rationale']);
+  integer(row.version);
+  literal(row.status, ['proposed', 'edited', 'accepted', 'rejected', 'superseded'] as const);
+  string(row.title, 400);
+  string(row.description, 20_000, 0);
+  strings(row.acceptanceCriteria, 100, 2_000);
+  strings(row.nonFunctionalRequirements, 100, 2_000);
+  timestamp(row.createdAt);
+  if (row.rationale !== undefined) string(row.rationale, 4_000);
+};
+const canonicalItem = (value: unknown) => {
+  const row = exact(record(value), ['aggregateId', 'currentVersionId', 'aggregateVersion', 'version', 'status', 'type', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements', 'history', 'diffs', 'actions'], ['sourceCitation', 'parentAggregateId', 'decision']);
+  id(row.aggregateId); id(row.currentVersionId); integer(row.aggregateVersion); integer(row.version);
+  literal(row.status, ['proposed', 'edited', 'accepted', 'rejected', 'superseded'] as const);
+  canonicalItemContent(row);
+  if (row.sourceCitation !== undefined) decodeCitation(row.sourceCitation);
+  if (row.parentAggregateId !== undefined) id(row.parentAggregateId);
+  if (row.decision !== undefined) {
+    const decision = exact(record(row.decision), ['outcome', 'rationale']);
+    literal(decision.outcome, ['accepted', 'rejected'] as const); string(decision.rationale, 4_000);
+  }
+  array(row.history, 250, 1).forEach(canonicalItemVersion);
+  array(row.diffs, 250).forEach(value => {
+    const diff = exact(record(value), ['fromVersion', 'toVersion', 'changedFields']);
+    if (integer(diff.fromVersion) >= integer(diff.toVersion)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+    array(diff.changedFields, 5).forEach(field => literal(field, ['type', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements'] as const));
+  });
+  actions(row.actions);
+};
+const canonicalHandoff = (value: unknown, direction: 'inbox' | 'outbox') => {
+  const row = exact(record(value), ['id', 'version', 'direction', 'status', 'sourceArtifactVersion', 'targetWorkspaceId', 'lineageClassification', 'planningOnly', 'preview', 'actions', 'createdAt', 'targetItems', 'history', 'reviewHistory', 'approvalHistory', 'historyPage']);
+  id(row.id); integer(row.version); id(row.targetWorkspaceId); integer(row.sourceArtifactVersion);
+  if (literal(row.direction, ['inbox', 'outbox'] as const) !== direction) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  literal(row.status, ['requested', 'target_review', 'changes_requested', 'rejected', 'approval_ready', 'approved', 'consumed', 'withdrawn', 'stale'] as const);
+  lineage(row.lineageClassification, row.planningOnly); timestamp(row.createdAt); actions(row.actions);
+  const preview = exact(record(row.preview), ['artifactType', 'proposedItemCount', 'sourceCoverageLabel', 'blockers']);
+  const artifactType = literal(preview.artifactType, ['brd', 'frd', 'pdd'] as const);
+  const count = integer(preview.proposedItemCount, 1, 250);
+  const coverage = `${count}/${count} exact cited ${artifactType.toUpperCase()} proposal${count === 1 ? '' : 's'}`;
+  if (preview.sourceCoverageLabel !== coverage) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  strings(preview.blockers, 250, 500);
+  const keys = new Set<string>();
+  const targetItems = array(row.targetItems, 250, 1);
+  if (targetItems.length !== count) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  targetItems.forEach((value, index) => {
+    const item = exact(record(value), ['clientKey', 'type', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements', 'sourceSectionLocator', 'ordinal'], ['parentClientKey']);
+    canonicalItemContent(item);
+    const key = string(item.clientKey, 120);
+    if (keys.has(key) || integer(item.ordinal) !== index + 1) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+    if (item.parentClientKey !== undefined && !keys.has(string(item.parentClientKey, 120))) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+    keys.add(key); string(item.sourceSectionLocator, 1_000);
+  });
+  array(row.history, 250, 1).forEach(value => {
+    const event = exact(record(value), ['version', 'status', 'createdAt'], ['rationale']);
+    integer(event.version); literal(event.status, ['requested', 'target_review', 'changes_requested', 'rejected', 'approval_ready', 'approved', 'consumed', 'withdrawn', 'stale'] as const); timestamp(event.createdAt);
+    if (event.rationale !== undefined) string(event.rationale, 4_000);
+  });
+  array(row.reviewHistory, 250).forEach(value => {
+    const event = exact(record(value), ['handoffVersion', 'outcome', 'rationale', 'createdAt']);
+    integer(event.handoffVersion); literal(event.outcome, ['approved', 'changes_requested', 'rejected'] as const); string(event.rationale, 4_000); timestamp(event.createdAt);
+  });
+  array(row.approvalHistory, 250).forEach(value => {
+    const event = exact(record(value), ['handoffVersion', 'outcome', 'rationale', 'createdAt']);
+    integer(event.handoffVersion); literal(event.outcome, ['approved', 'rejected'] as const); string(event.rationale, 4_000); timestamp(event.createdAt);
+  });
+  const historyPage = exact(record(row.historyPage), ['eventLimit', 'historyHasMore', 'reviewHasMore', 'approvalHasMore']);
+  integer(historyPage.eventLimit, 1, 250); boolean(historyPage.historyHasMore); boolean(historyPage.reviewHasMore); boolean(historyPage.approvalHasMore);
+};
+const canonicalPackage = (value: unknown) => {
+  const row = exact(record(value), ['id', 'currentVersionId', 'currentVersion', 'aggregateVersion', 'status', 'label', 'sourcePackage', 'items', 'itemPage', 'historyPage', 'reviewState', 'approvalState', 'blockers', 'blockerCount', 'reviewHistory', 'approvalHistory', 'actions'], ['acceptedItemCount']);
+  id(row.id); id(row.currentVersionId); integer(row.currentVersion); integer(row.aggregateVersion);
+  literal(row.status, ['draft', 'review', 'approved', 'rejected', 'stale', 'blocked'] as const);
+  if (row.label !== `Delivery package v${row.currentVersion}`) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  decodeSourcePackage(row.sourcePackage);
+  array(row.items, DELIVERY_ITEM_PAGE_MAX).forEach(canonicalItem);
+  const page = exact(record(row.itemPage), ['limit', 'hasMore', 'cursorApplied', 'isComplete'], ['nextCursor']);
+  integer(page.limit, 1, DELIVERY_ITEM_PAGE_MAX);
+  const hasMore = boolean(page.hasMore); const cursorApplied = boolean(page.cursorApplied); const isComplete = boolean(page.isComplete);
+  if (isComplete !== (!cursorApplied && !hasMore) || hasMore !== Boolean(page.nextCursor)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  if (page.nextCursor !== undefined) { const cursor = exact(record(page.nextCursor), ['version', 'id']); integer(cursor.version); id(cursor.id); }
+  const historyPage = exact(record(row.historyPage), ['limit', 'reviewHasMore', 'approvalHasMore']);
+  integer(historyPage.limit, 1, 250); boolean(historyPage.reviewHasMore); boolean(historyPage.approvalHasMore);
+  if (row.acceptedItemCount !== undefined) integer(row.acceptedItemCount, 1, 250);
+  literal(row.reviewState, ['not_requested', 'in_review', 'changes_requested', 'approved', 'rejected'] as const);
+  literal(row.approvalState, ['not_requested', 'pending', 'approved', 'rejected'] as const);
+  const blockers = strings(row.blockers, 250, 500); const blockerCount = integer(row.blockerCount, 0);
+  if (blockerCount < blockers.length || (blockerCount === 0) !== (blockers.length === 0)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  array(row.reviewHistory, 50).forEach(value => {
+    const event = exact(record(value), ['packageVersion', 'acceptedItemCount', 'outcome', 'rationale', 'createdAt']);
+    integer(event.packageVersion); integer(event.acceptedItemCount, 0, 250); literal(event.outcome, ['approved', 'changes_requested', 'rejected'] as const); string(event.rationale, 4_000); timestamp(event.createdAt);
+  });
+  array(row.approvalHistory, 50).forEach(value => {
+    const event = exact(record(value), ['packageVersion', 'acceptedItemCount', 'outcome', 'rationale', 'createdAt']);
+    integer(event.packageVersion); integer(event.acceptedItemCount, 0, 250); literal(event.outcome, ['approved', 'rejected'] as const); string(event.rationale, 4_000); timestamp(event.createdAt);
+  });
+  actions(row.actions);
+};
+
+export const validateCanonicalDeliveryWorkspaceProjection = (value: unknown): DeliveryWorkspaceProjection => {
+  const row = exact(record(value), ['contractVersion', 'organizationId', 'workspaceId', 'featureFlags', 'readOnly', 'page', 'eligibleStudioArtifacts', 'inbox', 'outbox', 'packages', 'baselineEligibility', 'actions']);
+  if (row.contractVersion !== DELIVERY_WORKSPACE_CONTRACT_VERSION) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  id(row.organizationId); id(row.workspaceId); decodeFlags(row.featureFlags); boolean(row.readOnly);
+  const page = exact(record(row.page), ['packageLimit', 'packageHasMore', 'handoffLimit', 'handoffHasMore', 'itemHistoryLimit', 'eventHistoryLimit', 'handoffTargetItemLimit', 'baselineEligibilityLimit', 'baselineEligibilityHasMore', 'baselineEligibilityCursorApplied'], ['baselineEligibilityNextCursor']);
+  integer(page.packageLimit, 1, 100); boolean(page.packageHasMore); integer(page.handoffLimit, 1, 100); boolean(page.handoffHasMore);
+  integer(page.itemHistoryLimit, 1, 250); integer(page.eventHistoryLimit, 1, 250); integer(page.handoffTargetItemLimit, 1, 250);
+  const eligibilityLimit = integer(page.baselineEligibilityLimit, 1, 100);
+  const eligibilityHasMore = boolean(page.baselineEligibilityHasMore); boolean(page.baselineEligibilityCursorApplied);
+  if (eligibilityHasMore !== Boolean(page.baselineEligibilityNextCursor)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  if (page.baselineEligibilityNextCursor !== undefined) {
+    const cursor = exact(record(page.baselineEligibilityNextCursor), ['updatedAt', 'workPackageId']);
+    timestamp(cursor.updatedAt); id(cursor.workPackageId);
+  }
+  array(row.eligibleStudioArtifacts, 25).forEach(value => {
+    const candidate = exact(record(value), ['studioArtifactId', 'artifactType', 'aggregateVersion', 'studioArtifactVersionId', 'studioArtifactVersion', 'lineageClassification', 'planningOnly', 'proposalItems']);
+    id(candidate.studioArtifactId); id(candidate.studioArtifactVersionId); integer(candidate.aggregateVersion); integer(candidate.studioArtifactVersion);
+    const artifactType = literal(candidate.artifactType, ['brd', 'frd', 'pdd'] as const);
+    lineage(candidate.lineageClassification, candidate.planningOnly);
+    const keys = new Set<string>();
+    array(candidate.proposalItems, 250, 1).forEach(value => {
+      const item = exact(record(value), ['clientKey', 'type', 'title', 'description', 'acceptanceCriteria', 'nonFunctionalRequirements', 'sourceSectionLocator']);
+      canonicalItemContent(item);
+      const key = string(item.clientKey, 120); const locator = string(item.sourceSectionLocator, 1_000);
+      if (keys.has(key) || !locator.startsWith(`${artifactType}.sections.`)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+      keys.add(key);
+    });
+  });
+  array(row.inbox, 100).forEach(value => canonicalHandoff(value, 'inbox'));
+  array(row.outbox, 100).forEach(value => canonicalHandoff(value, 'outbox'));
+  array(row.packages, 100).forEach(canonicalPackage);
+  const eligibility = array(row.baselineEligibility, 100);
+  if (eligibilityHasMore && eligibility.length !== eligibilityLimit) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  eligibility.forEach(value => {
+    const item = exact(record(value), ['workPackageId', 'workPackageVersionId', 'workPackageVersion', 'acceptedItemCount', 'lineageClassification', 'planningOnly', 'action']);
+    id(item.workPackageId); id(item.workPackageVersionId); integer(item.workPackageVersion); integer(item.acceptedItemCount, 1, 250);
+    lineage(item.lineageClassification, item.planningOnly);
+    if (item.action !== 'monitor.baseline.create') throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  });
+  actions(row.actions);
+  return value as DeliveryWorkspaceProjection;
+};
+
+export const validateCanonicalMonitorApprovedBaselinesProjection = (value: unknown): MonitorApprovedBaselinesProjection => {
+  const row = exact(record(value), ['contractVersion', 'organizationId', 'workspaceId', 'featureFlags', 'readOnly', 'liveTelemetryConnected', 'baselines', 'actions']);
+  if (row.contractVersion !== MONITOR_BASELINE_CONTRACT_VERSION || row.readOnly !== true || row.liveTelemetryConnected !== false || !Array.isArray(row.actions) || row.actions.length !== 0) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+  id(row.organizationId); id(row.workspaceId);
+  const flags = exact(record(row.featureFlags), ['monitorApprovedBaselineEnabled']); boolean(flags.monitorApprovedBaselineEnabled);
+  array(row.baselines, 100).forEach(value => {
+    const baseline = exact(record(value), ['id', 'version', 'status', 'readiness', 'lineageClassification', 'planningOnly', 'workPackageId', 'workPackageVersion', 'acceptedItemCount', 'acceptedItems', 'milestones', 'dependencies', 'blockers', 'risks']);
+    id(baseline.id); integer(baseline.version); literal(baseline.status, ['approved'] as const); id(baseline.workPackageId); integer(baseline.workPackageVersion);
+    const baselineLineage = lineage(baseline.lineageClassification, baseline.planningOnly);
+    const readiness = literal(baseline.readiness, ['not_ready', 'review_required'] as const);
+    if (readiness !== (baselineLineage.planningOnly ? 'not_ready' : 'review_required')) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+    const acceptedItems = array(baseline.acceptedItems, 250, 1); const count = integer(baseline.acceptedItemCount, 1, 250);
+    if (acceptedItems.length !== count) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
+    acceptedItems.forEach(value => { const item = exact(record(value), ['version', 'type', 'title', 'status']); integer(item.version); canonicalItemType(item.type); string(item.title, 400); literal(item.status, ['accepted'] as const); });
+    strings(baseline.milestones, 250, 500); strings(baseline.dependencies, 250, 500); strings(baseline.blockers, 250, 500); strings(baseline.risks, 250, 500);
+  });
+  return value as MonitorApprovedBaselinesProjection;
+};

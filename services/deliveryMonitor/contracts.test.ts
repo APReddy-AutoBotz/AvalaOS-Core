@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection, DeliveryMonitorContractError } from './contracts';
+import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection, validateCanonicalDeliveryWorkspaceProjection, validateCanonicalMonitorApprovedBaselinesProjection, DeliveryMonitorContractError } from './contracts';
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture, DELIVERY_MONITOR_FIXTURE_HASHES, DELIVERY_MONITOR_FIXTURE_IDS } from './fixtures';
 import { baselineMatchesDeliveryPackage, currentAcceptedDeliveryItems, packageDecisionBlockers } from './workspace';
 import { emitPrCAssertion } from '../../supabase/functions/_shared/deliveryMonitorPrCTestEvidence';
@@ -38,6 +38,22 @@ marker('DELIVERY-TR-006', 'domain-planning-only-lineage-preserved');
 marker('PATH-003', 'domain-direct-studio-planning-lineage');
 
 const monitor = decodeMonitorApprovedBaselinesProjection(createMonitorBaselinesFixture());
+assert.deepEqual(validateCanonicalDeliveryWorkspaceProjection(workspace), workspace);
+assert.deepEqual(validateCanonicalMonitorApprovedBaselinesProjection(monitor), monitor);
+for (const changed of [
+  (value: typeof workspace) => { (value.eligibleStudioArtifacts[0].proposalItems[0] as unknown as Record<string, unknown>).itemType = 'Epic'; },
+  (value: typeof workspace) => { (value.eligibleStudioArtifacts[0].proposalItems[0] as unknown as Record<string, unknown>).type = 'Epic'; },
+  (value: typeof workspace) => { value.outbox[0].preview.proposedItemCount = 2; },
+  (value: typeof workspace) => { value.packages[0].label = 'Verified package'; },
+  (value: typeof workspace) => { value.packages[0].items[0].sourceCitation!.sectionLocator = ''; },
+]) {
+  const mutated = structuredClone(workspace);
+  changed(mutated);
+  assert.throws(() => validateCanonicalDeliveryWorkspaceProjection(mutated), DeliveryMonitorContractError);
+}
+const forgedCanonicalBaseline = structuredClone(monitor);
+forgedCanonicalBaseline.baselines[0].readiness = 'review_required';
+assert.throws(() => validateCanonicalMonitorApprovedBaselinesProjection(forgedCanonicalBaseline), DeliveryMonitorContractError);
 assert.equal(monitor.baselines[0].acceptedItems.length, 1);
 assert.equal(baselineMatchesDeliveryPackage(monitor.baselines[0], workspace.packages[0]), true);
 monitorMarker('MONITOR-TR-001', 'domain-baseline-exact-package-accepted-set');

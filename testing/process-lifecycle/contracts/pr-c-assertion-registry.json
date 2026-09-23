@@ -466,7 +466,7 @@
     },
     "domain": {
       "path": "services/deliveryMonitor/contracts.test.ts",
-      "sha256": "39bacef583c91b5222b8bf960b477eb9a78417f6494c72bee2e5981d4fd61200"
+      "sha256": "ad766409313710eba81f787d389ee3ef83e03fe92fdfebd08f08dd149d191312"
     },
     "pagination-domain": {
       "path": "services/deliveryMonitor/pagination.test.ts",

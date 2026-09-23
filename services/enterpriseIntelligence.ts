@@ -17,8 +17,8 @@ import {
   type AssessDocumentMappingProjection,
 } from './assessImport/contracts.ts';
 import {
-  decodeDeliveryWorkspaceProjection,
-  decodeMonitorApprovedBaselinesProjection,
+  validateCanonicalDeliveryWorkspaceProjection,
+  validateCanonicalMonitorApprovedBaselinesProjection,
   type DeliveryWorkspaceProjection,
   type MonitorApprovedBaselinesProjection,
 } from './deliveryMonitor/contracts.ts';
@@ -648,8 +648,8 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   const documentMapping = row.documentMapping === undefined
     ? emptyAssessDocumentMappingProjection()
     : decodeAssessDocumentMappingProjection(row.documentMapping);
-  const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : decodeDeliveryWorkspaceProjection(row.deliveryWorkspace);
-  const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : decodeMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
+  const deliveryWorkspace = row.deliveryWorkspace === undefined ? undefined : validateCanonicalDeliveryWorkspaceProjection(row.deliveryWorkspace);
+  const monitorApprovedBaselines = row.monitorApprovedBaselines === undefined ? undefined : validateCanonicalMonitorApprovedBaselinesProjection(row.monitorApprovedBaselines);
   const organizationId = row.organizationId as string;
   const workspaceId = row.workspaceId as string;
   if ((deliveryWorkspace && (

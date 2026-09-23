@@ -17,6 +17,7 @@ import {
   type ModernizationFactors,
 } from './enterpriseIntelligence';
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from './deliveryMonitor/fixtures';
+import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection } from './deliveryMonitor/contracts';
 import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
 
 const completeFactors: ModernizationFactors = {
@@ -241,8 +242,8 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
     assessPromotion: { state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [] },
   };
   assert.equal(decodeEnterpriseIntelligenceProjection(baseProjection).authorizationVersion, 7);
-  const deliveryWorkspace = createDeliveryWorkspaceFixture();
-  const monitorApprovedBaselines = createMonitorBaselinesFixture();
+  const deliveryWorkspace = decodeDeliveryWorkspaceProjection(createDeliveryWorkspaceFixture());
+  const monitorApprovedBaselines = decodeMonitorApprovedBaselinesProjection(createMonitorBaselinesFixture());
   const decodedDelivery = decodeEnterpriseIntelligenceProjection({
     ...baseProjection,
     deliveryWorkspace: { ...deliveryWorkspace, organizationId: baseProjection.organizationId, workspaceId: baseProjection.workspaceId },
@@ -250,8 +251,10 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
   });
   assert.equal(decodedDelivery.deliveryWorkspace?.outbox.length, 1);
   assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].label, 'Delivery package v1');
-  assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].items[0].aggregateId, deliveryWorkspace.packages[0].items[0].itemAggregateId);
+  assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].items[0].aggregateId, deliveryWorkspace.packages[0].items[0].aggregateId);
   assert.equal(decodedDelivery.monitorApprovedBaselines?.baselines.length, 1);
+  assert.throws(() => decodeEnterpriseIntelligenceProjection({ ...baseProjection, deliveryWorkspace: createDeliveryWorkspaceFixture() }));
+  assert.throws(() => decodeEnterpriseIntelligenceProjection({ ...baseProjection, monitorApprovedBaselines: createMonitorBaselinesFixture() }));
   const uppercaseEquivalent = decodeEnterpriseIntelligenceProjection({
     ...baseProjection,
     deliveryWorkspace: {
