@@ -16,15 +16,20 @@ try{
   await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);await admin.query(`CREATE DATABASE ${dbName}`);test=await connect(urlFor(dbName));
   await tx(test,"CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid'; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;");
   const migrations=fs.readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort();
-  for(const name of migrations)await tx(test,fs.readFileSync(path.join('supabase/migrations',name),'utf8'));
-  const operatorFix=fs.readFileSync('supabase/migrations/20260923133000_pr1e_evidence_claim_operator_binding.sql','utf8');
-  await tx(test,operatorFix);
+  for(const name of migrations){
+    const sql=fs.readFileSync(path.join('supabase/migrations',name),'utf8');
+    await tx(test,sql);
+    if(name==='20260923133000_pr1e_evidence_claim_operator_binding.sql'
+      ||name==='20260923142120_pr1e_govern_control_alias_binding.sql') await tx(test,sql);
+  }
   const reviewCommandDefinition=(await test.query("SELECT pg_get_functiondef('public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb)'::regprocedure) AS source")).rows[0].source;
   assert.match(reviewCommandDefinition,/\(e\.payload->'claimIds'\) @> \(p_payload->'claimIds'\) AND \(e\.payload->'claimIds'\) <@ \(p_payload->'claimIds'\)/);
   assert.doesNotMatch(reviewCommandDefinition,/e\.payload->'claimIds' @> p_payload->'claimIds'/);
+  assert.match(reviewCommandDefinition,/jsonb_agg\(required\.control ORDER BY required\.control->>'controlId'\)/);
+  assert.doesNotMatch(reviewCommandDefinition,/jsonb_agg\(control ORDER BY control->>'controlId'\) INTO v_required_controls/);
   const bootstrapDefinition=(await test.query("SELECT pg_get_functiondef('public.synthetic_ai_campaign_bootstrap(uuid,uuid,uuid,bigint,text,text,text,text,uuid,uuid,uuid,uuid,timestamptz)'::regprocedure) AS source")).rows[0].source;
-  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923133000'/);
-  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923133000');
+  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923142120'/);
+  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923142120');
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);
