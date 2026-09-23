@@ -22,7 +22,8 @@ try{
     if(name==='20260923133000_pr1e_evidence_claim_operator_binding.sql'
       ||name==='20260923142120_pr1e_govern_control_alias_binding.sql'
       ||name==='20260923144653_studio_command_authority_capabilities.sql'
-      ||name==='20260923151115_studio_handoff_receipt_binding.sql') await tx(test,sql);
+      ||name==='20260923151115_studio_handoff_receipt_binding.sql'
+      ||name==='20260923190853_pr_c_deferred_binding_authority.sql') await tx(test,sql);
   }
   const reviewCommandDefinition=(await test.query("SELECT pg_get_functiondef('public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb)'::regprocedure) AS source")).rows[0].source;
   assert.match(reviewCommandDefinition,/\(e\.payload->'claimIds'\) @> \(p_payload->'claimIds'\) AND \(e\.payload->'claimIds'\) <@ \(p_payload->'claimIds'\)/);
@@ -38,8 +39,8 @@ try{
   assert.match(handoffCommandDefinition,/receipt\.response\|\|jsonb_build_object\('outcome','replayed','receiptId',receipt\.id\)/);
   assert.match(handoffCommandDefinition,/result:=result\|\|jsonb_build_object\('handoffVersionId',handoff_version\.id,'expiresAt',handoff\.expires_at,'receiptId',receipt\.id\)/);
   const bootstrapDefinition=(await test.query("SELECT pg_get_functiondef('public.synthetic_ai_campaign_bootstrap(uuid,uuid,uuid,bigint,text,text,text,text,uuid,uuid,uuid,uuid,timestamptz)'::regprocedure) AS source")).rows[0].source;
-  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923151115'/);
-  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923151115');
+  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923190853'/);
+  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923190853');
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);
