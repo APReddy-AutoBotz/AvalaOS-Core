@@ -426,7 +426,7 @@
     "tests/acceptance/catalog/test-catalog.json": "sha256:7dedd16179c3e16fceeb970f5dfe317b8c32805f2b5dc840ab80395e1c62febe",
     "tests/acceptance/proof-owner-registry.json": "sha256:8b946bd87e68df9c4aa1f1e95caee4aa7f24a3862ab94dab99eb3dfd35bb88ee",
     "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:ff337cb2a00c084973db059c48eb63cf1423497d5fa0a798171ee5cdb383fb85",
-    "tests/acceptance/source-provenance.json": "sha256:7b6256f59e380f5d93b44e18cf72c46c25b26ecdb9106ff8a57f644b343fe767",
+    "tests/acceptance/source-provenance.json": "sha256:c60a05122409080a0484f2aecd42e52b0cf970ea48a7149c138a9a39877eb39d",
     "tests/acceptance/validators/inventory-provenance.test.mjs": "sha256:26c579a973cd7ec1cb90435a61b127cffceda2fa4b4483322be358024485a93c",
     "tests/browser/assessImport.spec.ts": "sha256:bd0a87efc6654f80f6dbbec375c6171fb8211dc11681b4345ae179475cbfec48",
     "tests/browser/assessImportNetworkFixture.ts": "sha256:509e2c93673ad8fee3a0b8f7e7d9e541ddb9add3de1bdb076ec007e3b47225ae",
