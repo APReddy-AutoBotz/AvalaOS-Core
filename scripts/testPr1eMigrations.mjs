@@ -22,6 +22,9 @@ try{
   const reviewCommandDefinition=(await test.query("SELECT pg_get_functiondef('public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb)'::regprocedure) AS source")).rows[0].source;
   assert.match(reviewCommandDefinition,/\(e\.payload->'claimIds'\) @> \(p_payload->'claimIds'\) AND \(e\.payload->'claimIds'\) <@ \(p_payload->'claimIds'\)/);
   assert.doesNotMatch(reviewCommandDefinition,/e\.payload->'claimIds' @> p_payload->'claimIds'/);
+  const bootstrapDefinition=(await test.query("SELECT pg_get_functiondef('public.synthetic_ai_campaign_bootstrap(uuid,uuid,uuid,bigint,text,text,text,text,uuid,uuid,uuid,uuid,timestamptz)'::regprocedure) AS source")).rows[0].source;
+  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923133000'/);
+  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923133000');
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);

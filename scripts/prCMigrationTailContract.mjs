@@ -14,6 +14,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260922112911_synthetic_ai_campaign_one_time_renewal.sql',
   '20260923062439_studio_server_helper_permissions.sql',
   '20260923082000_studio_frd_section_id_contract.sql',
+  '20260923133000_pr1e_evidence_claim_operator_binding.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -22,7 +23,7 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, and Studio FRD section-ID successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, and PR 1E claim-operator successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners must validate the approved tail before deriving its

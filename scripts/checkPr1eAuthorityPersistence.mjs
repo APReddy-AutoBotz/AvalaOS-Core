@@ -4,6 +4,10 @@ const migration=fs.readFileSync(new URL('../supabase/migrations/20260720160000_p
 const operatorFix=fs.readFileSync(new URL('../supabase/migrations/20260923133000_pr1e_evidence_claim_operator_binding.sql',import.meta.url),'utf8');
 assert.match(operatorFix,/\(e\.payload->''claimIds''\) @> \(p_payload->''claimIds''\) AND \(e\.payload->''claimIds''\) <@ \(p_payload->''claimIds''\)/);
 assert.match(operatorFix,/PR1E_EVIDENCE_CLAIM_OPERATOR_SOURCE_MISMATCH/);
+assert.match(operatorFix,/marker\.migration_tip = '20260923082000'/);
+assert.match(operatorFix,/marker\.migration_tip = '20260923133000'/);
+assert.match(operatorFix,/old_bootstrap_count = 1 AND new_bootstrap_count = 0/);
+assert.match(operatorFix,/CHECK \(migration_tip='20260923133000'\)/);
 assert.doesNotMatch(operatorFix,/GRANT |INSERT INTO public\.role_capabilities|DROP FUNCTION/i,'the operator fix must not expand authority');
 for(const capability of ['assess.v2.review','assess.v2.evidence.attest','assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff'])assert.ok(migration.includes(capability),capability);
 for(const command of ['review.assign','evidence.attest','review.resolve','revision.start','govern.resolve','studio.handoff'])assert.ok(migration.includes(`assessment_v2.${command}`),command);
