@@ -16,7 +16,7 @@ const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
 assert.equal(migrations.at(-2),migrationName);
 assert.equal(migrations.at(-3),predecessor);
-assert.equal(migrations.at(-1),'20260923062439_studio_server_helper_permissions.sql');
+assert.equal(migrations.at(-1),'20260923082000_studio_frd_section_id_contract.sql');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];

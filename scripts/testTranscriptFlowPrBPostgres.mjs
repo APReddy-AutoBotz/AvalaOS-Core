@@ -297,6 +297,14 @@ try{
     package.anchor_count=jsonb_array_length(package.anchor_manifest) anchor_count_safe
     FROM public.studio_artifact_source_packages package WHERE package.id=$2`,[JSON.stringify(directContent),directPackageId])).rows[0];
   assert.equal(directContentSafety.safe,true,JSON.stringify({directContent,...directContentSafety}));
+  const camelCaseFrdContent={...directContent,sections:[{...directContent.sections[0],id:'functionalRequirements'}]};
+  const invalidFrdContent={...directContent,sections:[{...directContent.sections[0],id:'functional requirements'}]};
+  const frdSectionIdSafety=(await fresh.query(`SELECT
+    public.studio_pr_b_structured_artifact_content_safe($1::jsonb,package) camel_case_safe,
+    public.studio_pr_b_structured_artifact_content_safe($2::jsonb,package) invalid_id_safe
+    FROM public.studio_artifact_source_packages package WHERE package.id=$3`,
+    [JSON.stringify(camelCaseFrdContent),JSON.stringify(invalidFrdContent),directPackageId])).rows[0];
+  assert.deepEqual(frdSectionIdSafety,{camel_case_safe:true,invalid_id_safe:false});
   const invalidDirectContent={...directContent,sections:[{...directContent.sections[0],sourceAnchors:[]}]};
   await assert.rejects(fresh.query(`INSERT INTO public.studio_artifact_versions(id,artifact_id,org_id,workspace_id,version,template_id,content_schema_version,renderer_version,content,content_hash,lifecycle,author_id,author_authorization_version) VALUES($1,$2,$3,$4,1,$5,$6,$7,$8::jsonb,public.enterprise_sha256_jsonb($8::jsonb),'draft',$9,$10)`,[runtime.uuid(7079),directArtifactId,runtime.org,runtime.workspace,directSystemTemplate.id,directSystemTemplate.content_schema_version,directSystemTemplate.renderer_version,JSON.stringify(invalidDirectContent),runtime.requester,authVersion]),/STUDIO_STRUCTURED_CONTENT_INVALID/);
   for(const [ordinalValue,driftedAnchor] of [[1,{...exactStudioAnchor,sourceVersionId:runtime.sources[0].sourceVersionId}],[2,{...exactStudioAnchor,locator:`${exactStudioAnchor.locator}:drift`}],[3,{...exactStudioAnchor,anchorHash:'f'.repeat(64)}]]){
