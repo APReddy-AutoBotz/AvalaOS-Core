@@ -1,5 +1,30 @@
 # AvalaOS Core Source Of Truth
 
+## Current synthetic business walkthrough (2026-09-23)
+
+PR #264 head `a89030d` passed all 18 applicable exact-head workflows, including
+independently verified native Assess and PR C evidence. Only the separately
+approved `avalaos-ai-synthetic` target was used. The same-campaign renewal and
+domain-budget migrations, two affected Edge functions and private preview were
+source-verified. A second real provider-validation call succeeded; the original
+USD 10 cap now retains USD 1.8122384 conservative charge (two consumed
+validation debits including the earlier one, plus the USD 0.86932 carry).
+Invoice cost is not independently verified.
+
+The Assess screen uploaded and parsed the synthetic transcript, SOP and CSV,
+then locked their three-source bundle. The first mapping attempt failed closed
+before a campaign debit or provider network call: its token reservation allowed
+4,096 output tokens while the gateway request used its 2,000-token default.
+The failed receipt and uncertain token reservation remain retained, with zero
+mapping proposals and no Assess apply. Both provider runtimes are off. A
+one-line request-limit correction is under focused verification; only its new
+exact-head CI and source-verified synthetic deployment may precede a deliberate
+fresh attempt. No automatic replay, ledger rewrite, approval or handoff follows.
+Studio's synthetic author preset also omitted two read capabilities; the
+approved target alone received those two narrowly guarded read grants, without
+approval authority. Studio generation remains untested. Controlled-human and
+production readiness remain unproven.
+
 ## Business-workflow-first AI continuation (2026-09-22)
 
 AP renewed the actual synthetic Assess/Studio testing approval within the

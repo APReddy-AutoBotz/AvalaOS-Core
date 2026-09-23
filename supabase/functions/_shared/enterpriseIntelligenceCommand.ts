@@ -2962,7 +2962,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
       providerConfigId: route.config.id, provider: route.config.provider, capability: 'assess.evidence.extract', model: route.model },
     estimatedInputTokens: estimateMaximumProviderInputTokens({ capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed }), maximumOutputTokens: 4_096,
   }, () => runGovernedProviderRequest({ provider: route.config.provider, endpoint: route.config.endpoint_url || undefined, deployment: route.config.deployment_name || undefined,
-    model: route.model, capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed,
+    model: route.model, capability: 'assess.evidence.extract', taskInstruction, untrustedSource: framed, maxOutputTokens: 4_096,
     providerEffect: { authorizationVersion: authority.authorizationVersion, receiptId: receipt.id, effectId: runId,
       executionToken: receipt.execution_token!, executionFence: receipt.execution_fence! },
     authorization: { organizationId: authority.organizationId, workspaceId: authority.workspaceId, actorId: authority.actorId, providerConfigId: route.config.id,

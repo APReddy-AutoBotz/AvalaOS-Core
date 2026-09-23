@@ -1,5 +1,39 @@
 # Synthetic AI Campaign One-Time Renewal Evidence
 
+## Hosted continuation and bounded runtime correction (2026-09-23)
+
+On the separately approved `avalaos-ai-synthetic` target only, head `a89030d`
+passed all 18 applicable exact-head workflows; the PR C and native Assess
+artifacts were independently checked. Both migrations were installed, and the
+two affected Edge functions were downloaded and source-hash verified. The
+private preview uploaded and parsed the synthetic transcript, SOP and CSV,
+locked a three-source Assess bundle, and reopened the same case. A second real
+provider validation passed. Independent database readback found exactly two
+consumed campaign debits, USD 1.8122384 aggregate conservative charge of the
+original USD 10 cap, and no mapping debit. Invoice cost is not proven.
+
+The first Assess Analyze attempt failed without proposals or case application.
+The retained run is claimed, its receipt failed, and its token reservation is
+uncertain (`provider_request_failed`). Read-only source/SQL inspection found the
+exact mismatch: the handler reserved `maximumOutputTokens: 4_096` but omitted
+`maxOutputTokens` from the governed gateway call, which defaulted to 2,000.
+The atomic campaign binding rejected the inconsistent output limit before a
+currency debit, secret access or provider network effect. The correction passes
+the same explicit 4,096 limit to the gateway. It does not clear the uncertain
+reservation or reuse the failed attempt; both provider runtimes are off during
+repair. Focused Assess API tests (23/23), Edge typecheck and patch integrity
+pass. New committed-head CI and source-verified deployment are still required
+before one deliberate fresh UI attempt. No broad suite result is promoted to
+hosted business success.
+
+Studio's synthetic author role could not read its source library or templates
+despite having source management permission. The approved target alone received
+`studio.sources.read` and `studio.templates.read` through a guarded, narrow role
+configuration correction; the reopened UI displayed the source builder and
+approved template. No document was generated, approved or handed off. The
+deployed role repair is target-specific; a source-level bootstrap successor for
+future test projects is not claimed here.
+
 ## Boundary
 
 This PR-owned forward migration permits one bounded continuation of the already

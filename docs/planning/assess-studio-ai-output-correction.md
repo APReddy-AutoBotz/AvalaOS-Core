@@ -1,5 +1,20 @@
 # Assess and Studio AI output correction
 
+## Focused hosted correction (2026-09-23)
+
+The first renewed-campaign Assess Analyze UI attempt on the approved synthetic
+target failed before currency reservation/provider egress because the token
+budget reserved 4,096 output tokens while the request used the gateway's
+2,000-token default. Preserve its failed receipt and uncertain token
+reservation. Keep both runtimes off. The one-line handler correction makes the
+request limit equal the existing reservation limit; run focused Assess API,
+Edge typecheck, source provenance and exact-head CI once, then deploy only the
+changed function with source verification. A fresh user-visible attempt must
+use a new operation identity and pass the unchanged aggregate USD 10 guard.
+Do not replay, refund or erase the first attempt. Studio's approved-target
+author role has separately received only its missing source/template read
+permissions; this does not authorize approvals or handoffs.
+
 ## Business-workflow-first continuation (2026-09-22)
 
 AP explicitly renewed approval to proceed with the actual synthetic Assess and
