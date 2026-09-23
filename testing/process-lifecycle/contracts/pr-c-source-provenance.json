@@ -241,7 +241,7 @@
     "scripts/testSyntheticAdminPostgres.mjs": "sha256:1a34af98505dc58e0313b3a4835d4b4928512aed7d8a160e5c690a94591b5172",
     "scripts/testSyntheticAiCampaignPostgres.mjs": "sha256:214829ff117e47285dbcebd0cdbfe653a1cfe01f788f5c88c7372ec230ed63b1",
     "scripts/testSyntheticAiCampaignRenewalMigration.mjs": "sha256:7db7452b4b441803282048cd33970ae0df8fd0b5dd6ab40647ba3549dbf63752",
-    "scripts/testSyntheticAiCampaignRenewalPostgres.mjs": "sha256:912c623b55a7509b9e2923251b7f343a76a59b6abdb1e617e7d1f51bb05a7d80",
+    "scripts/testSyntheticAiCampaignRenewalPostgres.mjs": "sha256:036860a29295cc5bfba978f36bf5e1458092955b03f0e7b7a53a85a8bfcf7075",
     "scripts/testTranscriptFlowPostgres.mjs": "sha256:c3070043180c21423d84bc19795585eb1ccd7afa89e144c098493294a4b35f1c",
     "scripts/testTranscriptFlowPrBPostgres.mjs": "sha256:df3cbdb6b5b6ff81e10f1460e74d80a1cc0c028a27f5d05da45652a2d020641e",
     "scripts/testTranscriptFlowPrCPostgres.mjs": "sha256:c2939e56d1ba3df1d05f55b6abcd3bb16dc6259f68cf7ac9f48bf280632eb99f",
