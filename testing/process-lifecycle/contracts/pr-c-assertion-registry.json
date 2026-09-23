@@ -2146,7 +2146,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260923142120",
+        "migrationTip": "20260923144653",
         "sourcePackage": {
           "modes": [
             "studio_handoff",

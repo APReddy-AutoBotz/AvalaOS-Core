@@ -20,16 +20,22 @@ try{
     const sql=fs.readFileSync(path.join('supabase/migrations',name),'utf8');
     await tx(test,sql);
     if(name==='20260923133000_pr1e_evidence_claim_operator_binding.sql'
-      ||name==='20260923142120_pr1e_govern_control_alias_binding.sql') await tx(test,sql);
+      ||name==='20260923142120_pr1e_govern_control_alias_binding.sql'
+      ||name==='20260923144653_studio_command_authority_capabilities.sql') await tx(test,sql);
   }
   const reviewCommandDefinition=(await test.query("SELECT pg_get_functiondef('public.pr1e_review_command(text,uuid,uuid,uuid,uuid,uuid,bigint,uuid,text,bigint,jsonb)'::regprocedure) AS source")).rows[0].source;
   assert.match(reviewCommandDefinition,/\(e\.payload->'claimIds'\) @> \(p_payload->'claimIds'\) AND \(e\.payload->'claimIds'\) <@ \(p_payload->'claimIds'\)/);
   assert.doesNotMatch(reviewCommandDefinition,/e\.payload->'claimIds' @> p_payload->'claimIds'/);
   assert.match(reviewCommandDefinition,/jsonb_agg\(required\.control ORDER BY required\.control->>'controlId'\)/);
   assert.doesNotMatch(reviewCommandDefinition,/jsonb_agg\(control ORDER BY control->>'controlId'\) INTO v_required_controls/);
+  const studioAuthorityDefinition=(await test.query("SELECT pg_get_functiondef('public.studio_artifact_authority(uuid,uuid,uuid)'::regprocedure) AS source")).rows[0].source;
+  for(const family of ['studio.artifacts.%','studio.handoffs.%','studio.templates.%'])assert.ok(studioAuthorityDefinition.includes(family),family);
+  for(const readCapability of ['studio.artifacts.read','studio.handoffs.read','studio.templates.read'])assert.ok(studioAuthorityDefinition.includes(readCapability),readCapability);
+  assert.doesNotMatch(studioAuthorityDefinition,/WHERE c\.capability_key LIKE 'studio\.artifacts\.%' AND public\.pr1e_actor_has_workspace_capability/);
+  assert.doesNotMatch(studioAuthorityDefinition,/AND public\.pr1e_actor_has_workspace_capability\(p_actor_id,p_organization_id,p_workspace_id,'studio\.artifacts\.read'\)\s*\$function\$/);
   const bootstrapDefinition=(await test.query("SELECT pg_get_functiondef('public.synthetic_ai_campaign_bootstrap(uuid,uuid,uuid,bigint,text,text,text,text,uuid,uuid,uuid,uuid,timestamptz)'::regprocedure) AS source")).rows[0].source;
-  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923142120'/);
-  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923142120');
+  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923144653'/);
+  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923144653');
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);
