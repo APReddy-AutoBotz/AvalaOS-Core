@@ -282,7 +282,7 @@ const diagnosticDeclaration = hostedSpec.match(/const rejectedStaticRequestDiagn
 const enforcementDeclaration = hostedSpec.match(/const classifyNetworkRequest = \(request: Request\): NetworkViolationCategory \| null => \{[\s\S]*?\n\};/u)?.[0];
 assert.ok(diagnosticDeclaration && enforcementDeclaration);
 const staticStylesheet = 'https://fonts.googleapis.com/css2?family=Inter&display=swap';
-const compileNetworkFunctions = declaration => new Function(
+const compileNetworkFunctions = (declaration, googleStylesheets = new Set([staticStylesheet])) => new Function(
   'declaredGoogleStylesheetUrls', 'declaredJsDelivrScriptPaths', 'isDeclaredAiStudioScript', 'hostedOrigin',
   ts.transpileModule([
     `const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {${allowlistBody[1]}\n};`,
@@ -292,11 +292,14 @@ const compileNetworkFunctions = declaration => new Function(
     enforcementDeclaration,
   ].join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
     + '\nreturn { rejectedStaticRequestDiagnostic, classifyNetworkRequest };',
-)(new Set([staticStylesheet]), new Set(['/declared-script.js']), () => false, 'http://127.0.0.1:4201');
+)(googleStylesheets, new Set(['/declared-script.js']), () => false, 'http://127.0.0.1:4201');
 const actualNetworkFunctions = compileNetworkFunctions(diagnosticDeclaration);
+const bundledFontNetworkFunctions = compileNetworkFunctions(diagnosticDeclaration, new Set());
 const networkRequest = (url, resourceType = 'font', method = 'GET', headers = {}) => ({
   url: () => url, resourceType: () => resourceType, method: () => method, headers: () => headers,
 });
+assert.equal(bundledFontNetworkFunctions.classifyNetworkRequest(networkRequest('https://fonts.gstatic.com/s/inter/test.woff2')), 'unexpected-origin');
+assert.equal(bundledFontNetworkFunctions.classifyNetworkRequest(networkRequest(staticStylesheet, 'stylesheet')), 'unexpected-origin');
 const diagnosticKeys = ['knownOriginClass', 'pathClass', 'redirectState'];
 const assertDiagnosticPrivacy = diagnostic => {
   assert.deepEqual(Object.keys(diagnostic).sort(), diagnosticKeys);

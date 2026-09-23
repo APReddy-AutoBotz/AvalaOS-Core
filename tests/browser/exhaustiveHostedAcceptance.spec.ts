@@ -91,7 +91,7 @@ const safeExternalStaticResource = (url: URL, resourceType: string): boolean => 
     // and must still match the URL declared in index.html exactly.
     return (resourceType === 'stylesheet' || resourceType === 'xhr') && declaredGoogleStylesheetUrls.has(url.toString());
   }
-  if (url.origin === 'https://fonts.gstatic.com') return resourceType === 'font' && url.pathname.startsWith('/s/');
+  if (url.origin === 'https://fonts.gstatic.com') return declaredGoogleStylesheetUrls.size > 0 && resourceType === 'font' && url.pathname.startsWith('/s/');
   if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
   if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
   return false;
@@ -163,7 +163,7 @@ test.beforeAll(() => {
     expect(hostedOrigin, 'local source fixture must bind the owned loopback origin').toMatch(/^http:\/\/127\.0\.0\.1:/u);
     expect(executionProfile.checkoutSha, 'local source fixture must bind the exact checkout').toBe(releaseSha);
   }
-  expect(declaredGoogleStylesheetUrls.size, 'hosted acceptance must bind Google Fonts to index.html stylesheet declarations').toBeGreaterThan(0);
+  expect(declaredGoogleStylesheetUrls.size, 'the bundled-font build must not declare an external Google Fonts stylesheet').toBe(0);
   expect(declaredJsDelivrScriptPaths.size, 'hosted acceptance must bind jsDelivr to index.html script declarations').toBeGreaterThan(0);
   expect(declaredAiStudioScriptRules.length, 'hosted acceptance must bind AI Studio CDN to index.html import-map declarations').toBeGreaterThan(0);
 });
